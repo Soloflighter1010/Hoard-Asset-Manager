@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0
+
+### Hoard Downloader
+- Downloads Booth purchases and gifts. Files come straight from Booth, interrupted downloads resume,
+  and new versions a creator uploads are downloaded and listed as updated.
+- Downloads Payhip purchases in a visible browser window, waiting while you complete Payhip's bot check.
+  If Payhip won't let it in, it can read your library from a page you saved, and lists the rest in
+  `Payhip/_download-yourself.html`; files you save there are recorded on the next sync.
+- Stores you haven't signed in to are skipped instead of reported as failures.
+- The menu has a single **Sign in to a store** entry covering all four stores.
+- The downloads browser shows Booth and Payhip.
+
+### Hoard
+- No changes; version raised to match Hoard Downloader.
+
 ## 1.0.0
 
 First release.

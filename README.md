@@ -14,8 +14,8 @@ without opening four tabs.
 | | Hoard | Hoard Downloader |
 |---|---|---|
 | What it does | Shows everything you own in one searchable page, with links to each store's download page | Downloads everything you own into tidy folders and keeps it up to date |
-| Stores | Booth, Gumroad, Jinxxy, Payhip | Gumroad, Jinxxy |
-| Downloads files | No | Yes, into `Gumroad/<Creator>/<Product>` and `Jinxxy/<Creator>/<Product>` |
+| Stores | Booth, Gumroad, Jinxxy, Payhip | Booth, Gumroad, Jinxxy, Payhip |
+| Downloads files | No | Yes, into `<Store>/<Creator>/<Product>` folders |
 | Also | Spots products you own on more than one store | Flags files a creator has updated, suggests tags, has its own browser for your downloads |
 
 Start with **Hoard** to see what you own. Add **Hoard Downloader** when you want local copies.
@@ -23,7 +23,7 @@ Start with **Hoard** to see what you own. Add **Hoard Downloader** when you want
 ## Install (Windows)
 
 1. Install [Python 3.10 or newer](https://www.python.org/downloads/) and tick **Add python.exe to PATH**.
-2. Download a zip from [Releases](https://github.com/Soloflighter1010/hoard/releases/latest):
+2. Download a zip from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest):
    `Hoard`, `HoardDownloader`, or `Hoard-Bundle` for both.
 3. Extract it somewhere you can write to, such as `D:\Tools` (not Program Files).
 4. Double-click `Setup.bat` in each tool's folder once. It sets up a private Python environment in
@@ -53,8 +53,8 @@ Each tool has its own README with the details: [Hoard](Hoard/README.md),
 - These are unofficial tools, not affiliated with or endorsed by Booth (pixiv), Gumroad, Jinxxy or
   Payhip. They only read purchases in your own accounts, with your own sign-in.
 - Stores change their websites. When one does, its reader can stop working until it's updated.
-  Payhip already blocks automated browsers; the library can import a page you save from your own
-  browser instead.
+  Payhip already checks for automated browsers: both tools work around it with your help (a visible
+  window you can complete the check in, or a page you save from your own browser).
 - Downloading doesn't change what you're allowed to do with an asset. Follow each creator's license
   and each store's terms.
 
