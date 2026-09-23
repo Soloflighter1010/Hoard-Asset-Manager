@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.3.0
+
+Ready for a public release: safer pages, clear policies and documented code.
+
+### Both tools
+- A footer with the version and links to the project on GitHub, updates, problem reports, the privacy
+  policy, the terms of use and the AI disclosure.
+- Links from store pages and imported pages only open when they're ordinary web addresses. A crafted
+  listing can't turn a link into a script.
+- Product images are only fetched from public internet addresses, never from your home network or from
+  files on your computer.
+- The pages are sent with a strict Content-Security-Policy and headers that stop other websites from
+  embedding them or reading their responses.
+- With `--host 0.0.0.0`, other devices on your network need the access key the tool prints when it
+  starts. Actions still only work from the computer running the tool.
+- Outbound links no longer tell the store which page you came from.
+
+### Project
+- New documents: privacy policy, terms of use, copyright and credits, security policy and AI disclosure.
+  Each release zip includes them.
+- A developer guide in `docs/ARCHITECTURE.md`, and every function in the code now has a docstring.
+- Dependency versions are capped at their current major versions.
+
 ## 1.2.1
 
 Maintenance release; Hoard and Hoard Downloader work the same as in 1.2.0.

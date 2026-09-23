@@ -34,9 +34,12 @@ TOOLS = {
     },
 }
 BUNDLE = "Hoard-Bundle"
+# Shipped with each tool so users have the license, terms and policies alongside the program.
+DOCS = ("LICENSE", "TERMS.md", "PRIVACY.md", "COPYRIGHT.md", "SECURITY.md", "AI-DISCLOSURE.md")
 
 
 def version_of(path: Path) -> str:
+    """The __version__ string in a tool's main file."""
     m = re.search(r'^__version__ = "([^"]+)"', path.read_text("utf-8"), re.M)
     if not m:
         sys.exit(f"No __version__ in {path}")
@@ -44,6 +47,7 @@ def version_of(path: Path) -> str:
 
 
 def add(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
+    """Add a file to a zip with a fixed date and the right permissions, so identical input gives an identical zip."""
     info = zipfile.ZipInfo(arcname, date_time=(2026, 1, 1, 0, 0, 0))  # stable zips for identical input
     info.compress_type = zipfile.ZIP_DEFLATED
     info.external_attr = (0o755 if src.suffix == ".sh" else 0o644) << 16
@@ -51,6 +55,7 @@ def add(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
 
 
 def release_notes(version: str) -> str:
+    """The CHANGELOG.md section for version, used as the release's notes."""
     text = (REPO / "CHANGELOG.md").read_text("utf-8")
     m = re.search(rf"^## {re.escape(version)}\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
     if not m:
@@ -59,6 +64,7 @@ def release_notes(version: str) -> str:
 
 
 def main() -> None:
+    """Check the versions, compile the Python and build the zips, release notes and checksums in dist/."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", help="release tag, e.g. v1.0.0")
     args = ap.parse_args()
@@ -71,6 +77,9 @@ def main() -> None:
         sys.exit(f"Tag {args.tag} doesn't match version {version}")
 
     scratch = Path(tempfile.mkdtemp())
+    for doc in DOCS:
+        if not (REPO / doc).exists():
+            sys.exit(f"Missing {doc}")
     for name, t in TOOLS.items():
         for f in t["files"]:
             path = REPO / name / f
@@ -88,14 +97,15 @@ def main() -> None:
         with zipfile.ZipFile(out, "w") as zf:
             for f in t["files"]:
                 add(zf, REPO / name / f, f"{name}/{f}")
-            add(zf, REPO / "LICENSE", f"{name}/LICENSE")
+            for doc in DOCS:
+                add(zf, REPO / doc, f"{name}/{doc}")
         built.append(out)
     out = DIST / f"{BUNDLE}-{version}.zip"
     with zipfile.ZipFile(out, "w") as zf:
         for name, t in TOOLS.items():
             for f in t["files"]:
                 add(zf, REPO / name / f, f"{BUNDLE}/{name}/{f}")
-        for f in ("README.md", "LICENSE", "CHANGELOG.md"):
+        for f in ("README.md", "CHANGELOG.md", *DOCS):
             add(zf, REPO / f, f"{BUNDLE}/{f}")
     built.append(out)
 

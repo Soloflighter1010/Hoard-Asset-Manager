@@ -45,7 +45,7 @@ try:
 except ImportError:  # progress bars are optional
     tqdm = None
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 HERE = Path(__file__).resolve().parent
 PROBE_DIR = HERE / "probe-output"
@@ -105,16 +105,19 @@ WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), 
 
 
 class NotLoggedIn(Exception):
+    """The store sent its sign-in page instead of your purchases."""
     pass
 
 
 # ----------------------------------------------------------------------------- helpers
 
 def log(msg: str) -> None:
+    """Print a progress line straight away, so it shows up while long downloads run."""
     print(msg, flush=True)
 
 
 def now_iso() -> str:
+    """The current time in UTC, as an ISO 8601 string with seconds."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
@@ -137,10 +140,12 @@ def safe_name(value, maxlen: int = 80) -> str:
 
 
 def rel_to_path(base: Path, rel: str) -> Path:
+    """Turn a manifest path (always written with /) into a real path under base."""
     return base.joinpath(*rel.split("/"))
 
 
 def deep_merge(dst: dict, src: dict) -> dict:
+    """Copy src into dst, merging nested dicts instead of replacing them. Returns dst."""
     for k, v in src.items():
         if isinstance(v, dict) and isinstance(dst.get(k), dict):
             deep_merge(dst[k], v)
@@ -150,6 +155,7 @@ def deep_merge(dst: dict, src: dict) -> dict:
 
 
 def load_config(path: Path) -> dict:
+    """The built-in defaults, overlaid with config.json when it exists."""
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     if path.exists():
         deep_merge(cfg, json.loads(path.read_text("utf-8")))
@@ -159,12 +165,14 @@ def load_config(path: Path) -> dict:
 
 
 def root_dir(cfg: dict) -> Path:
+    """The download folder from config.json. A relative path is taken from this program's folder."""
     root = Path(os.path.expandvars(cfg["root"])).expanduser()
     return root if root.is_absolute() else HERE / root
 
 
 @dataclass
 class Report:
+    """Tally of one sync: new, updated, skipped and failed items, printed as a summary at the end."""
     new_assets: list = field(default_factory=list)
     new_files: list = field(default_factory=list)
     updated: list = field(default_factory=list)
@@ -172,6 +180,7 @@ class Report:
     failed: list = field(default_factory=list)
 
     def print(self) -> None:
+        """Print the summary, then the updated, skipped and failed items one per line."""
         log("\n=== Summary ===")
         log(f"New assets: {len(self.new_assets)}   New files: {len(self.new_files)}   "
             f"Updated files: {len(self.updated)}   Skipped: {len(self.skipped)}   Failed: {len(self.failed)}")
@@ -187,12 +196,14 @@ class Manifest:
     """Per-store record of what's been downloaded and where."""
 
     def __init__(self, store_dir: Path):
+        """Load a store's manifest, or start an empty one."""
         self.store_dir = store_dir
         self.path = store_dir / "_manifest.json"
         self.data = json.loads(self.path.read_text("utf-8")) if self.path.exists() else {}
         self.assets: dict = self.data.setdefault("assets", {})
 
     def save(self) -> None:
+        """Write the manifest through a temporary file, so a crash can't leave it half-written."""
         self.store_dir.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.data, indent=2, ensure_ascii=False), "utf-8")
@@ -255,6 +266,7 @@ def http_download(sess: requests.Session, url: str, dest: Path, desc: str = "") 
 # ----------------------------------------------------------------------------- browser
 
 def _playwright():
+    """Import Playwright's sync API, or exit with a clear message when setup hasn't been run."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -293,6 +305,7 @@ class ProfileBusy(Exception):
 
 
 def app_data_dir() -> Path:
+    """Hoard's folder in this user account's private app-data location, per operating system."""
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     elif sys.platform == "darwin":
@@ -303,6 +316,10 @@ def app_data_dir() -> Path:
 
 
 def _custom_profile(cfg: dict):
+    """The sign-in folder named in config.json, or None to use the private default.
+
+    An empty value, or one ending in the pre-1.2 name .browser-profile, means the default.
+    """
     value = (cfg.get("profile_dir") or "").strip()
     if not value or Path(value).name == ".browser-profile":  # empty, or an old default: use the private folder
         return None
@@ -311,10 +328,12 @@ def _custom_profile(cfg: dict):
 
 
 def profile_dir(cfg: dict) -> Path:
+    """Where Hoard keeps its browser profile, which holds your store sign-ins."""
     return _custom_profile(cfg) or app_data_dir() / "sign-ins"
 
 
 def _lock_down(path: Path) -> None:
+    """Create a folder and, on Linux and macOS, make it readable only by you."""
     path.mkdir(parents=True, exist_ok=True)
     if os.name == "posix":  # only you can open it; Windows keeps app-data private to your account already
         os.chmod(path, 0o700)
@@ -326,10 +345,12 @@ class ProfileLock:
     """Keeps two Hoard programs from using the sign-ins at once. The OS drops it if a program crashes."""
 
     def __init__(self, profile: Path):
+        """Prepare a lock file next to the sign-in folder; nothing is locked until acquire()."""
         self.path = profile.parent / (profile.name + ".lock")
         self.fh = None
 
     def acquire(self) -> None:
+        """Lock the sign-ins for this program, or raise ProfileBusy if another program has them."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(self.path, "a+")
         try:
@@ -347,6 +368,7 @@ class ProfileLock:
                               "Try again when it has finished.")
 
     def release(self) -> None:
+        """Unlock the sign-ins. Safe to call more than once."""
         if self.fh:
             try:
                 if os.name == "nt":
@@ -360,6 +382,7 @@ class ProfileLock:
 
 
 def _remove_tree(path: Path) -> None:
+    """Delete a folder tree, clearing read-only flags that would otherwise stop Windows deleting it."""
     def retry(func, p, _exc):
         os.chmod(p, 0o700)
         func(p)
@@ -466,6 +489,7 @@ def browser_cookies(cfg: dict, domain: str) -> tuple[list, str]:
 
 
 def cmd_login(cfg: dict, args) -> None:
+    """Open Hoard's browser at a store's sign-in page and wait while you sign in."""
     url = {"booth": BOOTH_LIBRARY, "gumroad": GR_LOGIN, "jinxxy": JX_INVENTORY, "payhip": PAYHIP_LOGIN}[args.store]
     with _playwright()() as p:
         ctx = launch_context(p, cfg, headless=False)
@@ -478,6 +502,7 @@ def cmd_login(cfg: dict, args) -> None:
 
 
 def cmd_logout(cfg: dict, args) -> None:
+    """Sign out of one store, or of every store, in Hoard."""
     with _playwright()() as p:
         log(sign_out(p, cfg, args.store))
 
@@ -504,6 +529,11 @@ def extract_page_json(text: str):
 
 
 def gumroad_session(cfg: dict) -> requests.Session:
+    """An HTTP session signed in to Gumroad.
+
+    Uses the HOARD_GUMROAD_SESSION environment variable when set (for machines without a display),
+    otherwise the cookies from Hoard's browser profile.
+    """
     s = requests.Session()
     s.headers["User-Agent"] = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                                "(KHTML, like Gecko) Chrome/140.0 Safari/537.36")
@@ -525,11 +555,14 @@ def gumroad_session(cfg: dict) -> requests.Session:
 
 
 class Gumroad:
+    """Reads Gumroad pages. Gumroad embeds each page's data as JSON, so no scraping is needed."""
     def __init__(self, cfg: dict, sess: requests.Session):
+        """Wrap a signed-in session; request_delay from the config spaces out page loads."""
         self.cfg, self.sess = cfg, sess
         self.delay = float(cfg.get("request_delay", 1.0))
 
     def page(self, url: str, params: dict | None = None) -> dict:
+        """Load a Gumroad page and return its embedded page data (component and props)."""
         time.sleep(self.delay)
         r = self.sess.get(url, params=params, timeout=60)
         if "/login" in urlparse(r.url).path:
@@ -572,6 +605,7 @@ class Gumroad:
 
 
 def gumroad_files(items, prefix: str = ""):
+    """Yield (sub-folder, file) for every file on a download page, following Gumroad's folders."""
     for it in items or []:
         if it.get("type") == "folder":
             yield from gumroad_files(it.get("children"), prefix + safe_name(it.get("name") or "Folder") + "/")
@@ -580,6 +614,7 @@ def gumroad_files(items, prefix: str = ""):
 
 
 def gumroad_filename(f: dict) -> str:
+    """A safe local name for a Gumroad file: its name plus its extension, in lower case."""
     name = (f.get("file_name") or f.get("id") or "file").strip()
     ext = (f.get("extension") or "").strip().lower().lstrip(".")
     if ext and not name.lower().endswith("." + ext):
@@ -587,8 +622,32 @@ def gumroad_filename(f: dict) -> str:
     return safe_name(name, 150)
 
 
+def public_http_url(url: str) -> bool:
+    """True when url is http(s) and every address its host resolves to is on the public internet.
+
+    Thumbnail addresses come from store pages (and from Payhip pages you save yourself), so they
+    are never allowed to point at this computer or at devices on your home network.
+    """
+    import ipaddress
+    import socket
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if (not ip.is_global or ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
+                or ip.is_reserved or ip.is_unspecified):
+            return False
+    return True
+
+
 def save_thumbnail(get_bytes, url: str | None, folder: Path) -> None:
-    if not url or any(folder.glob("_thumbnail.*")):
+    """Save a product's store image as _thumbnail.<ext> in its folder, once. Failures are only logged."""
+    if not url or any(folder.glob("_thumbnail.*")) or not public_http_url(url):
         return
     try:
         data, ctype = get_bytes(url)
@@ -600,6 +659,7 @@ def save_thumbnail(get_bytes, url: str | None, folder: Path) -> None:
 
 
 def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
+    """Download everything new or changed in your Gumroad library."""
     store_dir = root / "Gumroad"
     man = Manifest(store_dir)
     gr = Gumroad(cfg, gumroad_session(cfg))
@@ -754,6 +814,7 @@ JX_INFO_JS = r"""
 
 
 def settle(page, ms: int = 800) -> None:
+    """Give a page time to finish loading: wait for the network to go quiet (at most 15 s), then ms more."""
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
     except Exception:
@@ -762,6 +823,7 @@ def settle(page, ms: int = 800) -> None:
 
 
 def jinxxy_require_login(page) -> None:
+    """Raise NotLoggedIn when Jinxxy is showing its sign-in form."""
     path = urlparse(page.url).path.lower()
     if "login" in path or "signin" in path or page.locator("input[type=password]").count():
         raise NotLoggedIn("Not signed in to Jinxxy")
@@ -854,6 +916,7 @@ def jinxxy_click_download(ctx, page, idx: int, timeout_s: int):
 
 
 def close_if_popup(page, main_page) -> None:
+    """Close a tab a download opened, leaving the main tab alone."""
     try:
         if page is not main_page:
             page.close()
@@ -862,6 +925,7 @@ def close_if_popup(page, main_page) -> None:
 
 
 def label_key(label: str) -> str:
+    """The part of a download button's row that identifies the file, without the word "download"."""
     return re.sub(r"\s+", " ", re.sub(r"\bdownload\b|ダウンロード", "", label, flags=re.I)).strip()
 
 
@@ -931,6 +995,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
 
 
 def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
+    """Download everything new or changed in your Jinxxy inventory."""
     jcfg = cfg["jinxxy"]
     store_dir = root / "Jinxxy"
     man = Manifest(store_dir)
@@ -965,6 +1030,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
 
 
 def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, get_bytes) -> None:
+    """Open one Jinxxy item and download the files its page offers."""
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
     jinxxy_require_login(page)
@@ -1041,12 +1107,14 @@ BOOTH_JS = r"""
 
 
 def booth_require_login(page) -> None:
+    """Raise NotLoggedIn when Booth has sent the browser to its sign-in page."""
     u = urlparse(page.url)
     if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or page.locator("input[type=password]").count():
         raise NotLoggedIn("Not signed in to Booth")
 
 
 def booth_library(page, cfg: dict) -> list[dict]:
+    """Every purchase (and, if enabled, gift) in your Booth library, one dict per item."""
     items: dict[str, dict] = {}
     delay = float(cfg.get("request_delay", 1.0))
     sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else [])
@@ -1097,6 +1165,7 @@ def booth_file_location(sess: requests.Session, url: str) -> str:
 
 
 def booth_filename(label: str, location: str, fallback: str) -> str:
+    """A safe local name for a Booth file: the name Booth shows, or the one in its download address."""
     name = (label or "").strip()
     if not re.search(r"\.[A-Za-z0-9]{1,12}$", name):  # Booth shows the file name; if not, use the download address
         name = unquote(Path(urlparse(location).path).name) or name or fallback
@@ -1104,6 +1173,7 @@ def booth_filename(label: str, location: str, fallback: str) -> str:
 
 
 def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
+    """Download everything new or changed in your Booth library and gifts."""
     bcfg = cfg["booth"]
     store_dir = root / "Booth"
     man = Manifest(store_dir)
@@ -1254,6 +1324,7 @@ class Blocked(Exception):
 
 
 def is_bot_check(page) -> bool:
+    """True when the page is a bot check (Cloudflare's "Just a moment" and similar)."""
     try:
         title = page.title().lower()
         return any(t in title for t in BOT_CHECK_TITLES) or page.locator(
@@ -1281,11 +1352,13 @@ def open_past_bot_check(page, url: str, wait_s: int, headed: bool) -> None:
 
 
 def payhip_require_login(page) -> None:
+    """Raise NotLoggedIn when Payhip is showing its sign-in form."""
     if "/auth/login" in urlparse(page.url).path or page.locator("input[type=password]").count():
         raise NotLoggedIn("Not signed in to Payhip")
 
 
 def payhip_library_url(page, cfg: dict, wait_s: int, headed: bool) -> str:
+    """The address of your Payhip library: from config.json, a link on your account page, or a known path."""
     if cfg["payhip"].get("library_url"):
         return cfg["payhip"]["library_url"]
     open_past_bot_check(page, PAYHIP_LOGIN, wait_s, headed)
@@ -1303,6 +1376,7 @@ def payhip_library_url(page, cfg: dict, wait_s: int, headed: bool) -> str:
 
 
 def payhip_products(page, cfg: dict, wait_s: int, headed: bool) -> list[dict]:
+    """Every product in your Payhip library, following its pages."""
     url = payhip_library_url(page, cfg, wait_s, headed)
     cards: dict[str, dict] = {}
     for _ in range(100):
@@ -1379,6 +1453,7 @@ def adopt_files_on_disk(rec: dict, folder: Path) -> int:
 
 
 def write_payhip_todo(store_dir: Path, pending: list) -> Path:
+    """Write Payhip/_download-yourself.html, listing products Payhip wouldn't let the tool open."""
     esc = lambda v: html.escape(str(v or ""))  # noqa: E731
     rows = "".join(
         f"<li><b>{esc(c['name'])}</b> <span>by {esc(c['creator'] or 'Unknown creator')}</span>"
@@ -1401,6 +1476,7 @@ into the folder shown, then run a sync again. It records whatever you saved.</p>
 
 
 def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
+    """Download everything new in your Payhip library, in a visible window so you can pass Payhip's bot check."""
     pcfg = cfg["payhip"]
     store_dir = root / "Payhip"
     man = Manifest(store_dir)
@@ -1478,6 +1554,7 @@ REDACT_QS = re.compile(r'((?:X-Amz-[A-Za-z-]+|Signature|Key-Pair-Id|Policy|token
 
 
 def redact(s: str) -> str:
+    """Mask emails, tokens, passwords and signed-URL parts in text saved for troubleshooting."""
     return REDACT_QS.sub(r"\1***", REDACT_KEYS.sub(r'\1"***"', s or ""))
 
 
@@ -1532,6 +1609,7 @@ def cmd_probe(cfg: dict, args) -> None:
 # ----------------------------------------------------------------------------- tags & catalog
 
 def name_tokens(name: str, min_len: int, stop: set) -> set[str]:
+    """The words in an asset name that could become tags, lower-cased and without filler or version numbers."""
     name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)  # FoxyHoodie -> Foxy Hoodie
     out = set()
     for t in re.findall(r"[^\W_]+", name.lower()):
@@ -1543,6 +1621,7 @@ def name_tokens(name: str, min_len: int, stop: set) -> set[str]:
 
 
 def read_manifests(root: Path) -> list[dict]:
+    """Every downloaded asset from every store's manifest, each tagged with its store."""
     assets = []
     for store in STORE_DIRS.values():
         mpath = root / store / "_manifest.json"
@@ -1622,6 +1701,7 @@ STORE_DIRS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhi
 
 
 def cmd_sync(cfg: dict, args) -> None:
+    """Sync the chosen stores, then rebuild the catalog and print a summary, even after Ctrl+C."""
     root = root_dir(cfg)
     root.mkdir(parents=True, exist_ok=True)
     log(f"Downloading into {root}")
@@ -1652,6 +1732,7 @@ def cmd_sync(cfg: dict, args) -> None:
 
 
 def main() -> None:
+    """Read the command line and run the chosen command."""
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     ap = argparse.ArgumentParser(prog="hoard-downloader", description=f"Hoard Downloader {__version__}: download what you own on Booth, Gumroad, Jinxxy and Payhip.")
@@ -1696,7 +1777,7 @@ def main() -> None:
         from asset_browser import serve
         root = root_dir(cfg)
         serve(root, lambda: collect_catalog(cfg, root)[0], args.host, args.port,
-              open_browser=not args.no_open, config_path=args.config)
+              open_browser=not args.no_open, config_path=args.config, version=__version__)
     elif args.cmd == "probe":
         cmd_probe(cfg, args)
 
