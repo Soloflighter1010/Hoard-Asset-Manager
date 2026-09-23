@@ -39,6 +39,8 @@ the sign-ins are in use, and you can try again when the other tool has finished.
 - When you own the same product on more than one store, its details say so, and
   **Show all copies** lists them side by side. The corner mark on each tile shows the store.
 - Gifts (Booth) and archived purchases (Gumroad) are labelled on their tiles.
+- Works offline: every product image is saved after a refresh, and search, filters and details all work
+  without a connection. Refreshing and signing in need one; while offline, Hoard says so instead.
 
 ## How each store is read
 

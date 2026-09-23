@@ -66,9 +66,16 @@ program; the first run of 1.2 moves them to the private folder automatically and
 
 ## Privacy
 
-Everything stays on your computer. The tools talk only to the stores you use (and Google Fonts, for
-the pages' typeface), with no accounts, analytics or tracking. [PRIVACY.md](PRIVACY.md) has the details,
+Everything stays on your computer. The tools talk only to the stores you use, with no accounts,
+analytics or tracking. [PRIVACY.md](PRIVACY.md) has the details,
 including what's stored where and how to delete it.
+
+## Offline
+
+Both tools work without an internet connection for everything except refreshing, signing in and
+downloading. Hoard saves every product image after each refresh, so your whole library, its search and
+its images work offline, and the typefaces come with the tools. When a store can't be reached, the tools
+say so and leave your saved library and downloads as they were.
 
 ## Things to know
 

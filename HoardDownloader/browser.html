@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hoard Downloader</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cg%20transform%3D%22translate%280%200%29%20scale%281.0%29%22%3E%0A%20%20%3Crect%20x%3D%225%22%20y%3D%2230%22%20width%3D%2227%22%20height%3D%2227%22%20rx%3D%227%22%20fill%3D%22%2356D1DC%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%28-9%2018.5%2043.5%29%22/%3E%0A%20%20%3Crect%20x%3D%2231%22%20y%3D%2231%22%20width%3D%2227%22%20height%3D%2227%22%20rx%3D%227%22%20fill%3D%22%23FF8AD8%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%287%2044.5%2044.5%29%22/%3E%0A%20%20%3Crect%20x%3D%2217.5%22%20y%3D%228%22%20width%3D%2228%22%20height%3D%2228%22%20rx%3D%227%22%20fill%3D%22%23F0B429%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%28-4%2031.5%2022%29%22/%3E%0A%20%20%3Cpath%20d%3D%22M38%2013.5%20l1.6%203.9%203.9%201.6%20-3.9%201.6%20-1.6%203.9%20-1.6%20-3.9%20-3.9%20-1.6%203.9%20-1.6z%22%20fill%3D%22%23FFF8E6%22/%3E%0A%3C/g%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
 <style>
+/* Fonts are bundled with Hoard (fonts/, served by the tool), so the pages look the same offline. */
+@font-face { font-family: "Dela Gothic One"; src: url("/fonts/DelaGothicOne-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Zen Maru Gothic"; src: url("/fonts/ZenMaruGothic-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Zen Maru Gothic"; src: url("/fonts/ZenMaruGothic-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 /* Hoard: warm cave neutrals so the art is the loudest thing on screen; gold means "yours" or "do this". */
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
@@ -266,6 +267,11 @@ a.ghost { height: 42px; }
 .foot-links a { color: var(--dust); text-decoration: none; }
 .foot-links a:hover { color: var(--gold); text-decoration: underline; }
 .foot-note { flex-basis: 100%; margin: 0; }
+
+/* offline notice */
+.offline { display: flex; align-items: center; gap: 10px; padding: 9px 24px; font-size: 13px; font-weight: 700;
+  background: var(--ledge); color: var(--bone); border-bottom: 1px solid var(--seam); }
+.offline::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
 </style>
 </head>
 <body>
@@ -303,6 +309,7 @@ a.ghost { height: 42px; }
   <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip</button>
 </div>
 
+<div id="offline" class="offline" role="status" hidden>You're offline. Browsing your downloads still works; store links need a connection.</div>
 <div class="layout">
   <nav id="filters" class="side" aria-label="Filters">
     <h2>Tags</h2>
@@ -643,6 +650,11 @@ document.addEventListener("keydown", e => {
 });
 
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h", e.target.offsetHeight + "px")).observe($(".bar"));
+/* ---------- offline notice: everything here works offline except the store links and refreshing */
+const showConnection = () => { $("#offline").hidden = navigator.onLine; };
+addEventListener("online", showConnection);
+addEventListener("offline", showConnection);
+showConnection();
 readHash();
 load();
 </script>

@@ -35,13 +35,14 @@ import urllib.error
 import urllib.request
 import webbrowser
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 HERE = Path(__file__).resolve().parent
 LIBRARY_FILE = HERE / "library.json"
@@ -59,6 +60,7 @@ DEFAULT_CONFIG = {
     "jinxxy": {"item_link_pattern": r"^/my/(inventory|purchases|library)/[^/]+/?$"},
     "payhip": {"library_url": ""},       # leave empty to find it automatically
     "tags": {"min_count": 3, "max_share": 0.4, "blocklist": []},
+    "offline_images": True,              # save every product image after a refresh, so the library works offline
 }
 
 STORES = {
@@ -1014,10 +1016,19 @@ class Jobs:
         """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty."""
         if skip_imported:
             stores = [s for s in stores if self.lib.data["stores"].get(s, {}).get("source") != "import"]
+        self._set(task="refresh", message="Checking your connection")
+        online = [s for s in stores if reachable(s)]
+        for store in stores:
+            if store not in online:
+                self.lib.set_error(store, unreachable_message(store))
+        if not online:
+            self._set(message="You're offline. Your saved library still works.")
+            return
+        refreshed = []
         with _playwright()() as p:
             ctx = launch(p, self.cfg, headless=True)
             try:
-                for store in stores:
+                for store in online:
                     label = STORES[store]["label"]
                     self._set(task="refresh", store=store, message=f"Reading {label}")
                     try:
@@ -1028,6 +1039,7 @@ class Jobs:
                                                       f"Try again, or run the command: debug {store}")
                         else:
                             self.lib.replace_store(store, items)
+                            refreshed.append(store)
                     except NotLoggedIn:
                         self.lib.set_error(store, "Not signed in. Choose Sign in, then close the browser window when you're done.")
                     except Blocked as e:
@@ -1037,15 +1049,24 @@ class Jobs:
                             f"File\", then choose Import page here.") if store in IMPORTABLE
                             else f"{label} blocked the automated browser ({e}). Try again later.")
                     except Exception as e:
-                        self.lib.set_error(store, f"Couldn't read the library: {e}")
+                        self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
+                                           else f"Couldn't read the library: {e}")
             finally:
                 ctx.close()
+        if refreshed and self.cfg.get("offline_images", True):
+            with self.lib.lock:
+                keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
+            cache_images(self.lib, keys, lambda m: self._set(message=m))
         self._set(message="Library updated")
 
     def _login_then_refresh(self, stores: list[str]) -> None:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""
         store = stores[0]
         label = STORES[store]["label"]
+        if not reachable(store):
+            self.lib.set_error(store, unreachable_message(store, "opened for signing in"))
+            self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
+            return
         with _playwright()() as p:
             ctx = launch(p, self.cfg, headless=False)
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -1067,6 +1088,64 @@ class Jobs:
 
 
 # ----------------------------------------------------------------------------- server
+
+# ----------------------------------------------------------------------------- offline
+#
+# Everything the page needs is served from this computer: the page, its fonts (bundled in fonts/),
+# your library list and saved product images. Only refreshing, signing in and the store links need
+# a connection, and those check first and say so plainly when a store can't be reached.
+
+STORE_HOSTS = {"booth": "accounts.booth.pm", "gumroad": "app.gumroad.com", "jinxxy": "jinxxy.com", "payhip": "payhip.com"}
+FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
+NETWORK_ERRORS = ("ERR_INTERNET_DISCONNECTED", "ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED",
+                  "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_TIMED_OUT", "ERR_TIMED_OUT",
+                  "ERR_NETWORK_CHANGED", "ERR_ADDRESS_UNREACHABLE", "ERR_PROXY_CONNECTION_FAILED",
+                  "getaddrinfo", "Name or service not known", "Temporary failure in name resolution")
+
+
+def font_path(name: str) -> Path | None:
+    """A bundled font file: next to the program (release zips) or one folder up (the repository and the bundle)."""
+    if name not in FONT_FILES:
+        return None
+    for folder in (HERE / "fonts", HERE.parent / "fonts"):
+        if (folder / name).is_file():
+            return folder / name
+    return None
+
+
+def reachable(store: str, timeout: float = 5.0) -> bool:
+    """True when a connection to the store's website can be opened right now."""
+    try:
+        with socket.create_connection((STORE_HOSTS[store], 443), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def unreachable_message(store: str, what: str = "refreshed") -> str:
+    """What to tell you when a store's website can't be reached."""
+    host = STORE_HOSTS[store].replace("accounts.", "").replace("app.", "")
+    return (f"Couldn't reach {host}, so {STORES[store]['label']} wasn't {what}. You may be offline, or the store may "
+            "be down. Your saved list is unchanged; try again when you're connected.")
+
+
+def is_network_error(error: Exception) -> bool:
+    """True when an error means the store couldn't be reached, rather than something going wrong on it."""
+    return any(code in str(error) for code in NETWORK_ERRORS)
+
+
+def cache_images(lib: "Library", keys: list[str], progress) -> int:
+    """Fetch and keep the images for these items, so they show without a connection. Returns how many are saved."""
+    keys = [k for k in keys if lib.thumbnail_for(k)]
+    done = saved = 0
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for got in pool.map(lambda k: fetch_thumbnail(k, lib), keys):
+            done += 1
+            saved += bool(got)
+            if done % 10 == 0 or done == len(keys):
+                progress(f"Saving images for offline use: {done} of {len(keys)}")
+    return saved
+
 
 # ----------------------------------------------------------------------------- web safety
 #
@@ -1151,8 +1230,8 @@ def content_security_policy(page: bytes) -> str:
         script_src = hashes or "'none'"
         _csp_cache[key] = ("default-src 'none'; "
                            f"script-src {script_src}; "
-                           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                           "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
+                           "style-src 'self' 'unsafe-inline'; "
+                           "font-src 'self'; img-src 'self' data:; connect-src 'self'; "
                            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
     return _csp_cache[key]
 
@@ -1279,6 +1358,11 @@ class Handler(BaseHTTPRequestHandler):
             with self.server.lib.lock:
                 stores = json.loads(json.dumps(self.server.lib.data["stores"]))
             return self._json({"job": self.server.jobs.state, "stores": stores})
+        if path.startswith("/fonts/"):
+            font = font_path(unquote(path[len("/fonts/"):]))
+            if not font:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), self.server.lib)
             if not got:
@@ -1308,6 +1392,9 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, RuntimeError) as e:
                 return self._json({"error": f"Couldn't import: {e}"}, 422)
             total = self.server.lib.merge_store(store, items)
+            if self.server.cfg.get("offline_images", True):
+                threading.Thread(target=cache_images, args=(self.server.lib, [i["key"] for i in items], lambda m: None),
+                                 daemon=True).start()
             return self._json({"ok": True, "store": store, "label": STORES[store]["label"],
                                "count": len(items), "total": total})
         stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]

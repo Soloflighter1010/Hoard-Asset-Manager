@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
 UI_FILE = HERE / "browser.html"
+FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 PREVIEW_HINT = re.compile(r"preview|thumb|cover|icon|promo|banner", re.I)
 VERSION_RX = re.compile(r"\bv?\d+(?:\.\d+)*\b", re.I)
@@ -240,8 +241,8 @@ def content_security_policy(page: bytes) -> str:
         script_src = hashes or "'none'"
         _csp_cache[key] = ("default-src 'none'; "
                            f"script-src {script_src}; "
-                           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                           "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
+                           "style-src 'self' 'unsafe-inline'; "
+                           "font-src 'self'; img-src 'self' data:; connect-src 'self'; "
                            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
     return _csp_cache[key]
 
@@ -282,6 +283,16 @@ def check_access(handler, lan: bool, key: str | None) -> bool:
 
 
 # ----------------------------------------------------------------------------- server
+
+def font_path(name: str) -> Path | None:
+    """A bundled font file: next to the program (release zips) or one folder up (the repository and the bundle)."""
+    if name not in FONT_FILES:
+        return None
+    for folder in (HERE / "fonts", HERE.parent / "fonts"):
+        if (folder / name).is_file():
+            return folder / name
+    return None
+
 
 def safe_join(root: Path, rel: str) -> Path | None:
     """Resolve a /-separated path inside root; None if it would escape root."""
@@ -381,6 +392,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, UI_FILE.read_bytes(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
         if u.path == "/api/assets":
             return self._json({**self.server.index(rescan="rescan" in parse_qs(u.query)), "version": self.server.version})
+        if u.path.startswith("/fonts/"):
+            font = font_path(unquote(u.path[len("/fonts/"):]))
+            if not font:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
         if u.path.startswith("/files/"):
             p = safe_join(self.server.root, unquote(u.path[len("/files/"):]))
             if not p or p.suffix.lower() not in IMAGE_EXT or not p.is_file():

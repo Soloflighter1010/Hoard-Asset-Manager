@@ -16,8 +16,9 @@ The wordmark is drawn from the Dela Gothic One typeface (SIL Open Font License 1
 
 ## Typefaces
 
-The tools' pages load Dela Gothic One and Zen Maru Gothic from Google Fonts. Both are licensed under the
-SIL Open Font License 1.1.
+The tools include the Dela Gothic One and Zen Maru Gothic typefaces (in `fonts/`), converted to WOFF2
+without other changes. Both are licensed under the SIL Open Font License 1.1, and their license texts
+come with them: `fonts/DelaGothicOne-OFL.txt` and `fonts/ZenMaruGothic-OFL.txt`.
 
 ## Software the tools use
 

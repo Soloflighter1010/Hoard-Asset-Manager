@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.0
+
+Works offline.
+
+### Both tools
+- The typefaces are bundled, so the pages look right without an internet connection, and they no longer
+  load anything from Google Fonts. Nothing is fetched from outside your computer just to show a page.
+- A notice appears when you're offline, saying what still works.
+- A store that can't be reached is now reported as "couldn't reach", with your saved data left
+  unchanged, instead of a raw browser error.
+
+### Hoard
+- After each refresh, every product image is saved, so your whole library shows its images offline.
+  Turn this off with `"offline_images": false` in `config.json`.
+- Refresh and Sign in say you're offline instead of trying. Signing out still works offline.
+
+### Hoard Downloader
+- Stores that can't be reached are skipped with a clear message, and the rest still sync.
+
 ## 1.3.0
 
 Ready for a public release: safer pages, clear policies and documented code.
