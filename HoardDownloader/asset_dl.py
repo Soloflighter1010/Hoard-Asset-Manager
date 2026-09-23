@@ -45,7 +45,7 @@ try:
 except ImportError:  # progress bars are optional
     tqdm = None
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 HERE = Path(__file__).resolve().parent
 PROBE_DIR = HERE / "probe-output"

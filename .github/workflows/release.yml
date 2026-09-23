@@ -1,27 +1,45 @@
 name: Release
 
+# Builds the three zips and publishes them as a GitHub release.
+# Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
+# already exists (say an earlier build failed), open Actions > Release > Run workflow and enter the tag.
+
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to build a release for, for example v1.2.0"
+        required: true
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Build zips
-        run: python scripts/build_release.py --tag "${GITHUB_REF_NAME}"
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Hoard ${{ github.ref_name }}
-          body_path: dist/RELEASE_NOTES.md
-          files: |
-            dist/*.zip
-            dist/SHA256SUMS.txt
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build the zips
+        run: python3 scripts/build_release.py --tag "$TAG"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --notes-file dist/RELEASE_NOTES.md --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" \
+              --title "Hoard $TAG" --notes-file dist/RELEASE_NOTES.md --verify-tag
+          fi
