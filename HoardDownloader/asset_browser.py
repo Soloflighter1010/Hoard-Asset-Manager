@@ -140,7 +140,7 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             "name": e["name"],
             "creator": e["creator"],
             "variants": e.get("variants"),
-            "url": safe_url(e.get("url")),
+            "url": store_link(e["store"], e.get("url")),
             "folder": e["folder"],
             "abs_folder": str(folder),
             "tag_key": tag_key(e["store"], e["name"]),
@@ -471,6 +471,135 @@ def write_file_safely(path: Path, data, root: Path | None = None) -> None:
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+
+# Every link to a store must lead to that store's own website (or a subdomain of it, such as a Booth
+# shop's <shop>.booth.pm), over HTTPS. Hoard never downloads from a stored link; they're only for you to
+# open, so this is what stops an edited record turning "Open on Booth" into a lookalike sign-in page.
+STORE_LINK_SITES = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com",), "payhip": ("payhip.com",)}
+
+
+def store_link(store, url) -> str | None:
+    """url if it's an https address on the given store's own website, otherwise None."""
+    if not isinstance(url, str) or not isinstance(store, str):
+        return None
+    url = url.strip()
+    try:
+        u = urlparse(url)
+        port = u.port
+    except ValueError:
+        return None
+    host = (u.hostname or "").rstrip(".")
+    if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii():
+        return None
+    return url if any(host == s or host.endswith("." + s) for s in STORE_LINK_SITES.get(store.lower(), ())) else None
+
+
+# Seals. The tools seal each data file they write (manifests, the catalog files, Hoard's library list)
+# with an HMAC-SHA256 keyed by a random key kept private to your user account. Reading a file back, a
+# broken or missing seal means something else edited it, so its links aren't trusted until they're
+# fetched from the store again. docs/DATA-FORMATS.md describes the seal for other programs.
+_integrity_key: bytes | None = None
+_sealed_ids: set | None = None
+
+
+def _hoard_folder() -> Path:
+    """Hoard's private folder in this user account's app data."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "Hoard"
+
+
+def integrity_key() -> bytes:
+    """This install's sealing key: 32 random bytes, made on first use, readable only by your account."""
+    global _integrity_key
+    if _integrity_key:
+        return _integrity_key
+    path = _hoard_folder() / "integrity.key"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        os.chmod(path.parent, 0o700)
+    for _attempt in range(3):
+        try:
+            key = bytes.fromhex(path.read_text("ascii").strip())
+            if len(key) == 32:
+                _integrity_key = key
+                return key
+            set_aside(path)  # not a key these tools made: keep it, and make a new one
+        except FileNotFoundError:
+            pass
+        except (ValueError, UnicodeDecodeError):
+            set_aside(path)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(secrets.token_hex(32))
+        except FileExistsError:
+            pass  # the other tool made one a moment ago: use theirs
+    raise OSError(f"Couldn't read or create {path}")
+
+
+def _canonical(obj) -> bytes:
+    """The exact bytes a seal covers: JSON with sorted keys, no spaces, UTF-8."""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _key_id(key: bytes) -> str:
+    return hashlib.sha256(key).hexdigest()[:16]
+
+
+def seal(obj: dict) -> dict:
+    """obj plus an "integrity" field sealing everything else in it."""
+    body = {k: v for k, v in obj.items() if k != "integrity"}
+    key = integrity_key()
+    return {**body, "integrity": {"alg": "HMAC-SHA256", "key_id": _key_id(key),
+                                  "mac": hmac.new(key, _canonical(body), hashlib.sha256).hexdigest()}}
+
+
+def _path_id(path: Path) -> str:
+    return hashlib.sha256(os.path.normcase(os.path.realpath(path)).encode("utf-8", "surrogatepass")).hexdigest()[:32]
+
+
+def _sealed_file_ids() -> set:
+    """Which files this install has sealed (by a hash of their location), so a removed seal is noticed."""
+    global _sealed_ids
+    if _sealed_ids is None:
+        try:
+            data = read_json_file(_hoard_folder() / "sealed-files.json", 4 * 1024 * 1024)
+            _sealed_ids = {x for x in data.get("files", []) if isinstance(x, str)} if isinstance(data, dict) else set()
+        except (OSError, DataFileError):
+            _sealed_ids = set()
+    return _sealed_ids
+
+
+def remember_sealed(path: Path) -> None:
+    """Note that this install has sealed the file at path."""
+    ids = _sealed_file_ids()
+    pid = _path_id(path)
+    if pid not in ids:
+        ids.add(pid)
+        write_file_safely(_hoard_folder() / "sealed-files.json", json.dumps({"files": sorted(ids)[-20000:]}))
+
+
+def check_seal(obj, path: Path | None = None) -> str:
+    """How far to trust a data file just read.
+
+    "sealed": this install wrote it and nothing has changed it. "unsealed": it has no seal and this install
+    never sealed it (written by an older version). "foreign": another install sealed it (say, Hoard on a
+    second computer sharing the folder). "changed": edited after this install sealed it, or its seal removed.
+    """
+    if not isinstance(obj, dict) or not isinstance(obj.get("integrity"), dict):
+        return "changed" if path is not None and _path_id(path) in _sealed_file_ids() else "unsealed"
+    info, key = obj["integrity"], integrity_key()
+    if info.get("key_id") != _key_id(key):
+        return "foreign"
+    body = {k: v for k, v in obj.items() if k != "integrity"}
+    expected = hmac.new(key, _canonical(body), hashlib.sha256).hexdigest()
+    return "sealed" if hmac.compare_digest(expected, str(info.get("mac"))) else "changed"
 
 
 # ----------------------------------------------------------------------------- tags

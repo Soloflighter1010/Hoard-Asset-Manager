@@ -436,6 +436,15 @@ let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
 const safeUrl = u => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch (e) { return ""; } };
+// Links to a store only open when they lead to that store's own website (the same rule the tool applies).
+const STORE_SITES = { booth: ["booth.pm"], gumroad: ["gumroad.com"], jinxxy: ["jinxxy.com"], payhip: ["payhip.com"] };
+const storeUrl = (store, u) => {
+  const s = safeUrl(u); if (!s) return "";
+  const x = new URL(s), host = x.hostname.replace(/\.$/, "");
+  const sites = STORE_SITES[String(store).toLowerCase()] || [];
+  return x.protocol === "https:" && !x.username && !x.password && (!x.port || x.port === "443") &&
+    sites.some(d => host === d || host.endsWith("." + d)) ? s : "";
+};
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const norm = s => String(s || "").normalize("NFKC").toLowerCase();
 const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -590,7 +599,7 @@ function syncControls() {
 /* ---------- detail */
 function showDetail(a, focus = true) {
   openId = a.id;
-  const storeLink = safeUrl(a.url) ? `<a href="${esc(safeUrl(a.url))}" target="_blank" rel="noopener noreferrer">Open on ${a.store}</a>` : "";
+  const storeLink = storeUrl(a.store, a.url) ? `<a href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer" title="${esc(storeUrl(a.store, a.url))}">Open on ${a.store}</a>` : "";
   detail.innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
     `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="">` : placeholder(a)}</div>` +

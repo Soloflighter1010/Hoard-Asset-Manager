@@ -71,6 +71,13 @@ Every sync, and the `tags` command, writes your tags alongside the downloads so 
 - `catalog.json` lists every asset with both
 - `tags.json` maps each of your tags (`tags`) and each suggestion (`suggested`) to its asset folders
 
+Every data file is sealed, so an edit made by another program is noticed. `verify` checks them all, tells
+you about any that were changed, and rebuilds the catalog files from the downloader's own records:
+
+```
+.venv\Scripts\python asset_dl.py verify
+```
+
 [docs/DATA-FORMATS.md](../docs/DATA-FORMATS.md) describes these files exactly and what they promise
 (clean text, plain relative paths, web-only links), for anyone writing a program that reads them.
 

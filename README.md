@@ -71,6 +71,11 @@ the program) are split into one folder per store automatically on first run, and
 
 [SECURITY.md](SECURITY.md) explains what Hoard protects against and what no desktop app can.
 
+**Using one download folder from two computers** (say, a NAS): each computer's Hoard seals its data files
+with its own key, so each would treat the other's changes as unverified and fetch store links again. To
+share the folder, copy `integrity.key` from Hoard's app-data folder on one computer to the same place on
+the other.
+
 ## Privacy
 
 Everything stays on your computer. The tools talk only to the stores you use, with no accounts,

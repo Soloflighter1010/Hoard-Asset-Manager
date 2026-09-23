@@ -79,8 +79,22 @@ It can't fully protect against:
   file goes is replaced rather than followed, and nothing reads half a file.
 - Tags may only contain letters, digits, spaces and a little punctuation, so they're safe wherever they
   end up. Your tag file is private to your account and has hard limits on its size.
-- `catalog.json`, `tags.json` and `asset.json` promise clean text, plain relative paths and web-only
+- `catalog.json`, `tags.json` and `asset.json` promise clean text, plain relative paths and store-only
   links, and are checked against that before they're written ([docs/DATA-FORMATS.md](docs/DATA-FORMATS.md)).
+
+**Links and seals**
+- Hoard never downloads from a link stored in a data file. Every download address comes from the
+  store itself, at the time of the sync.
+- Every link you can open (**Open on Booth**, **Open download page**, a creator's page) must be an https
+  address on that item's own store, checked when data is read, when it's written, and again in the page.
+  An edited record can't send you to a lookalike sign-in page.
+- Each data file the tools write (manifests, `catalog.json`, `tags.json`, `asset.json`, Hoard's library
+  list) is sealed with a keyed signature (HMAC-SHA256) using a random key private to your user account.
+  If something else edits a file, the tools notice when they next read it: they keep the data but not its
+  links, tell you, keep a copy of the changed file, and fetch the links from the store again on the next
+  sync or refresh. Removing the seal doesn't hide an edit.
+- `python asset_dl.py verify` checks every data file in the download folder and rebuilds the catalog files.
+- The seal can't stop malware already running as you, which could read the key too (see above).
 - Setup limits who can change the program folder to your account (plus Windows itself and
   administrators), so no other account can swap in code that would run with your sign-ins. For the
   same reason, keep Hoard in a folder of your own, such as one inside your user folder.

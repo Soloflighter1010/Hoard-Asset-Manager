@@ -41,3 +41,10 @@ A review of the tag file and the downloader's data files found further gaps, fix
 | Tag names allowed any character; the tag file had no limits and was trusted on load | **Fixed.** Strict tag characters and reserved names, product keys checked, limits, private file, checked on load; old names are converted rather than lost. |
 | The downloads browser read request bodies of any size | **Fixed.** Actions accept at most 1 MB (imports 80 MB); nested or non-object JSON is refused. |
 | Other programs had no stated contract for the catalog files | **Fixed.** `docs/DATA-FORMATS.md`, with `format` and `version` fields; entries are checked before writing. |
+
+## Follow-up: edited links (1.6.2)
+
+| Finding | Status |
+|---|---|
+| A program could edit a record's `url` in `_manifest.json`, `asset.json` or Hoard's list; any https address was accepted, so **Open on Booth** could lead to a lookalike sign-in page | **Fixed.** Links must be https addresses on the item's own store, checked on read, on write and in the pages. Downloads never used stored links, and still don't. |
+| Edits by other programs went unnoticed | **Fixed.** Data files are sealed (HMAC-SHA256, key private to the user account). A changed or unsealed-after-sealing file keeps its data but loses its links until the store is read again, a copy is kept, and the user is told. `verify` checks everything and rebuilds the catalog. |
