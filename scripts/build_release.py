@@ -36,6 +36,10 @@ TOOLS = {
 BUNDLE = "Hoard-Bundle"
 # Shipped with each tool so users have the license, terms and policies alongside the program.
 DOCS = ("LICENSE", "TERMS.md", "PRIVACY.md", "COPYRIGHT.md", "SECURITY.md", "AI-DISCLOSURE.md")
+# The pages' typefaces and their licenses, so the tools look right offline. Each tool's zip gets a copy in
+# its own fonts/ folder; the bundle keeps one shared copy, which both tools find one folder up.
+FONTS = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2",
+         "DelaGothicOne-OFL.txt", "ZenMaruGothic-OFL.txt", "README.md")
 
 
 def version_of(path: Path) -> str:
@@ -49,7 +53,7 @@ def version_of(path: Path) -> str:
 def add(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
     """Add a file to a zip with a fixed date and the right permissions, so identical input gives an identical zip."""
     info = zipfile.ZipInfo(arcname, date_time=(2026, 1, 1, 0, 0, 0))  # stable zips for identical input
-    info.compress_type = zipfile.ZIP_DEFLATED
+    info.compress_type = zipfile.ZIP_STORED if src.suffix == ".woff2" else zipfile.ZIP_DEFLATED
     info.external_attr = (0o755 if src.suffix == ".sh" else 0o644) << 16
     zf.writestr(info, src.read_bytes())
 
@@ -80,6 +84,9 @@ def main() -> None:
     for doc in DOCS:
         if not (REPO / doc).exists():
             sys.exit(f"Missing {doc}")
+    for font in FONTS:
+        if not (REPO / "fonts" / font).exists():
+            sys.exit(f"Missing fonts/{font}")
     for name, t in TOOLS.items():
         for f in t["files"]:
             path = REPO / name / f
@@ -99,6 +106,8 @@ def main() -> None:
                 add(zf, REPO / name / f, f"{name}/{f}")
             for doc in DOCS:
                 add(zf, REPO / doc, f"{name}/{doc}")
+            for font in FONTS:
+                add(zf, REPO / "fonts" / font, f"{name}/fonts/{font}")
         built.append(out)
     out = DIST / f"{BUNDLE}-{version}.zip"
     with zipfile.ZipFile(out, "w") as zf:
@@ -107,6 +116,8 @@ def main() -> None:
                 add(zf, REPO / name / f, f"{BUNDLE}/{name}/{f}")
         for f in ("README.md", "CHANGELOG.md", *DOCS):
             add(zf, REPO / f, f"{BUNDLE}/{f}")
+        for font in FONTS:
+            add(zf, REPO / "fonts" / font, f"{BUNDLE}/fonts/{font}")
     built.append(out)
 
     (DIST / "RELEASE_NOTES.md").write_text(release_notes(version), "utf-8")

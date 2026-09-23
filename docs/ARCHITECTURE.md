@@ -14,6 +14,7 @@ HoardDownloader/       the downloader: keeps local copies of everything you own
   asset_browser.py     the local server behind "Browse your downloads"
   browser.html         that page
 brand/                 logo files (the wordmark is outlined, so no font is needed)
+fonts/                 the pages' typefaces (WOFF2) and their licenses, bundled for offline use
 scripts/build_release.py   builds the release zips
 .github/workflows/     check.yml runs the build on every push; release.yml publishes tagged versions
 docs/                  this guide
@@ -105,6 +106,21 @@ Both servers share the rules in their "web safety" section:
 - Store text is always escaped (`esc()` in the pages), and links pass `safeUrl()` in the page as well as
   `safe_url()` on the server. Server-side fetches go through `fetch_public`, which refuses anything that
   isn't a public internet address, including after redirects.
+
+## Offline
+
+Nothing a page needs comes from outside the computer:
+
+- The typefaces are in `fonts/`, served at `/fonts/<file>` by both tools. `font_path()` looks next to the
+  program first (single-tool zips carry their own copy) and then one folder up (the repository, and the
+  bundle, which keeps one shared copy). `build_release.py` places them.
+- Hoard saves every product image after each refresh (`cache_images`), and after an import, in
+  `.cache/thumbs`. `/thumb/` serves the saved copy without going online.
+- Before refreshing, signing in or syncing, `reachable(store)` opens a connection to that store only. An
+  unreachable store gets `unreachable_message()`, and its saved data is left alone. Browser errors that
+  mean the connection dropped part-way (`is_network_error`, `NETWORK_ERRORS`) are reported the same way.
+- The pages show a notice while the browser reports being offline, and Hoard's Refresh and Sign in
+  buttons explain instead of trying. Sign out works offline because it only touches local files.
 
 ## The pages
 

@@ -45,7 +45,7 @@ try:
 except ImportError:  # progress bars are optional
     tqdm = None
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 HERE = Path(__file__).resolve().parent
 PROBE_DIR = HERE / "probe-output"
@@ -1698,6 +1698,29 @@ def build_catalog(cfg: dict, root: Path) -> None:
 # ----------------------------------------------------------------------------- CLI
 
 STORE_DIRS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip"}
+STORE_HOSTS = {"booth": "accounts.booth.pm", "gumroad": "app.gumroad.com", "jinxxy": "jinxxy.com", "payhip": "payhip.com"}
+NETWORK_ERRORS = ("ERR_INTERNET_DISCONNECTED", "ERR_NAME_NOT_RESOLVED", "ERR_NAME_RESOLUTION_FAILED",
+                  "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_TIMED_OUT", "ERR_TIMED_OUT",
+                  "ERR_NETWORK_CHANGED", "ERR_ADDRESS_UNREACHABLE", "ERR_PROXY_CONNECTION_FAILED",
+                  "getaddrinfo", "Name or service not known", "Temporary failure in name resolution",
+                  "Failed to establish a new connection", "Max retries exceeded")
+
+
+def reachable(store: str, timeout: float = 5.0) -> bool:
+    """True when a connection to the store's website can be opened right now."""
+    import socket
+    try:
+        with socket.create_connection((STORE_HOSTS[store], 443), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def unreachable_message(store: str) -> str:
+    """What to tell you when a store's website can't be reached."""
+    host = STORE_HOSTS[store].replace("accounts.", "").replace("app.", "")
+    return (f"{STORE_DIRS[store]}: couldn't reach {host}, so nothing was synced from it. You may be offline, or the "
+            "store may be down. Your downloads are unchanged; try again when you're connected.")
 
 
 def cmd_sync(cfg: dict, args) -> None:
@@ -1713,6 +1736,9 @@ def cmd_sync(cfg: dict, args) -> None:
             label = STORE_DIRS[store]
             if not cfg[store].get("enabled", True):
                 continue
+            if not reachable(store):
+                report.failed.append(unreachable_message(store))
+                continue
             try:
                 syncers[store](cfg, root, args, report)
             except ProfileBusy as e:
@@ -1724,7 +1750,10 @@ def cmd_sync(cfg: dict, args) -> None:
                 else:
                     report.skipped.append(f"{label}: not signed in, so skipped. Sign in from the menu to include it.")
             except Exception as e:
-                report.failed.append(f"{label}: sync stopped - {e}")
+                if any(code in str(e) for code in NETWORK_ERRORS):
+                    report.failed.append(unreachable_message(store))
+                else:
+                    report.failed.append(f"{label}: sync stopped - {e}")
     finally:  # also runs after Ctrl+C, so what did download is catalogued
         if not args.dry_run:
             build_catalog(cfg, root)
