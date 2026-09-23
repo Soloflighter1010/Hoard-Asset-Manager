@@ -91,6 +91,25 @@ own browser. The file is read offline in a browser with every network request bl
 - `asset_browser.py` serves the downloads browser (`/`, `/api/assets`, `/files/<image>`, and
   `POST /api/open` to open a folder). It reads the manifests fresh on every rescan.
 
+## Tags
+
+Your tags live in `tags.json` in the app-data `Hoard` folder, shared by both tools. Each Python file carries
+the same "tags" section:
+
+- `tag_key(store, name)` identifies a product by store and normalised name. That's the one identifier
+  both tools can compute, since they number Gumroad products differently.
+- `TagStore` holds `tags` (every tag, with an optional word to match), `items` (tags put on products),
+  `excluded` (matched tags taken off a product) and `hidden` (dismissed suggestions). `tags_for()` works
+  out a product's tags: assigned, plus matched, minus excluded.
+- `TagStore.change()` applies one change from a page (`assign`, `create`, `keep`, `match`, `rename`,
+  `delete`, `hide`, `unhide`). It re-reads the file under a thread lock and an OS file lock, so both tools
+  can save at once without losing anything.
+- Suggestions are still worked out fresh for each response (`enrich()` in Hoard, `collect_catalog()` in the
+  downloader). Hidden words and words that are already your tags are left out.
+- Both servers accept changes at `POST /api/tags`, under the same rules as other actions: only from the
+  computer itself, only as JSON. The pages share one block of tag code (from "tags: your own tags" to the
+  end of `wireTags`), connected to each page through a small adapter object `T`.
+
 ## Web safety
 
 Both servers share the rules in their "web safety" section:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import email
 import hashlib
 import hmac
@@ -42,7 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 HERE = Path(__file__).resolve().parent
 LIBRARY_FILE = HERE / "library.json"
@@ -927,8 +928,9 @@ def _norm(s: str) -> str:
     return key if len(key) >= 4 else re.sub(r"[\W_]+", "", s)
 
 
-def enrich(items: list[dict], tcfg: dict) -> list[dict]:
-    """Add suggested tags (words shared by several names) and cross-store matches."""
+def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
+    """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
+    tagdata = tagdata or TagStore.empty()
     def tokens(name):
         name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
         return {t for t in re.findall(r"[^\W_]+", name.lower())
@@ -939,14 +941,17 @@ def enrich(items: list[dict], tcfg: dict) -> list[dict]:
     plural = {w: w[:-1] for w in df if len(w) > 3 and w.endswith("s") and not w.endswith("ss") and w[:-1] in df}
     toks = [{plural.get(t, t) for t in ts} for ts in toks]
     df = Counter(t for ts in toks for t in ts)
-    n, block = len(items), {w.lower() for w in tcfg.get("blocklist", [])}
+    n, block = len(items), {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
     keep = {w for w, c in df.items() if c >= int(tcfg.get("min_count", 3)) and w not in block
             and (n < 10 or c / n <= float(tcfg.get("max_share", 0.4)))}
 
     groups: dict[str, list] = {}
     out = []
     for i, ts in zip(items, toks):
-        e = {**i, "tags": sorted(ts & keep), "also_in": [], "match_key": _norm(i["name"])}
+        key = tag_key(i["store"], i["name"])
+        mine = TagStore.tags_for(tagdata, key, i["name"])
+        e = {**i, "tag_key": key, "tags": mine, "suggested": sorted((ts & keep) - set(mine)),
+             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"])}
         for k in ("creator_url", "thumbnail", "url", "download_url"):  # also covers lists saved by older versions
             e[k] = safe_url(e.get(k))
         e["files"] = [f for f in e.get("files", []) if safe_url(f.get("url"))]
@@ -956,7 +961,240 @@ def enrich(items: list[dict], tcfg: dict) -> list[dict]:
         if len({e["store"] for e in g}) > 1:
             for e in g:
                 e["also_in"] = sorted({o["store"] for o in g if o["store"] != e["store"]})
+                e["copy_keys"] = sorted({o["tag_key"] for o in g if o["store"] != e["store"]})
     return out
+
+
+# ----------------------------------------------------------------------------- tags
+#
+# Your own tags are shared by Hoard and Hoard Downloader, in tags.json in Hoard's app-data folder, so a
+# product you tag in one shows the same tags in the other. Both tools know a product by its store and
+# its name (tag_key), even though they number products differently.
+#
+# A tag can carry a word to match: every item whose name contains that word gets the tag, including
+# items you buy later, unless you've removed it from that item. Keeping a suggested tag creates one.
+# Suggested tags (words that turn up in several item names) are worked out fresh each time; hiding one
+# stops it being suggested.
+
+TAG_MAX_LENGTH = 40
+_tag_lock = threading.Lock()
+
+
+def tags_file() -> Path:
+    """Where your tags are saved: tags.json in Hoard's folder in this user account's app data."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "Hoard" / "tags.json"
+
+
+def tag_key(store: str, name: str) -> str:
+    """How both tools identify a product for tagging: its store and its name, without versions or [labels]."""
+    s = unicodedata.normalize("NFKC", name or "").lower()
+    core = re.sub(r"【[^】]*】|\[[^\]]*\]|\([^)]*\)", " ", s)
+    key = re.sub(r"[\W_]+", "", re.sub(r"\bv?\d+(?:\.\d+)*\b", " ", core))
+    if len(key) < 4:
+        key = re.sub(r"[\W_]+", "", s)
+    return f"{store.lower()}:{key}"
+
+
+def clean_tag(value) -> str:
+    """A tag as it's stored: lower case, single spaces, no commas or #, at most 40 characters."""
+    t = unicodedata.normalize("NFKC", str(value or "")).lower().replace(",", " ").replace("#", " ")
+    return re.sub(r"\s+", " ", t).strip()[:TAG_MAX_LENGTH].strip()
+
+
+def name_has_word(name: str, word: str) -> bool:
+    """True when an item's name contains word on its own (plurals and joined-up CamelCase count)."""
+    text = unicodedata.normalize("NFKC", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name or "")).lower()
+    if word.isascii():
+        return re.search(rf"(?<![a-z0-9]){re.escape(word)}(?:s|es)?(?![a-z0-9])", text) is not None
+    return word in text  # Japanese and other scripts don't separate words with spaces
+
+
+@contextlib.contextmanager
+def _file_lock(path: Path, timeout: float = 10.0):
+    """Hold an OS lock on path for the duration, so the two tools never save tags at the same moment."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(path, "a+")
+    deadline = time.time() + timeout
+    try:
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.time() > deadline:
+                    raise TimeoutError("The other Hoard tool is saving tags right now. Try again in a moment.")
+                time.sleep(0.05)
+        yield
+    finally:
+        if os.name == "nt":
+            try:
+                import msvcrt
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        fh.close()
+
+
+class TagStore:
+    """Your tags. Every change re-reads tags.json under a lock, so both tools can edit them safely.
+
+    tags.json holds:
+      tags      {name: {"match": word or null}}   every tag you have, even ones on no items yet
+      items     {tag_key: [tag, ...]}              tags you put on items
+      excluded  {tag_key: [tag, ...]}              matched tags you took off an item
+      hidden    [word, ...]                        suggestions you hid
+    """
+
+    def __init__(self, path: Path | None = None):
+        """Use tags.json in Hoard's app-data folder, or another file (for tests)."""
+        self.path = path or tags_file()
+
+    @staticmethod
+    def empty() -> dict:
+        """A tag file with nothing in it."""
+        return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": []}
+
+    def load(self) -> dict:
+        """The saved tags, or an empty set when there's no file yet (or it can't be read)."""
+        try:
+            data = json.loads(self.path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return self.empty()
+        base = self.empty()
+        for k in base:
+            if isinstance(data.get(k), type(base[k])):
+                base[k] = data[k]
+        return base
+
+    def _save(self, data: dict) -> None:
+        """Write tags.json through a temporary file, so a crash can't leave it half-written."""
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True), "utf-8")
+        for attempt in range(10):
+            try:
+                os.replace(tmp, self.path)
+                return
+            except PermissionError:  # Windows: the other tool is reading it this instant
+                if attempt == 9:
+                    raise
+                time.sleep(0.1)
+
+    @staticmethod
+    def tags_for(data: dict, key: str, name: str) -> list[str]:
+        """The tags an item has: the ones you gave it, plus matching ones, minus any you took off it."""
+        mine = {t for t in data["items"].get(key, []) if t in data["tags"]}
+        auto = {t for t, info in data["tags"].items() if (info or {}).get("match") and name_has_word(name, info["match"])}
+        return sorted((mine | auto) - set(data["excluded"].get(key, [])))
+
+    def change(self, body: dict) -> None:
+        """Apply one change from the page. Raises ValueError with a readable message when it doesn't make sense."""
+        action = body.get("action")
+        with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
+            data = self.load()
+            self._apply(data, action, body)
+            self._save(data)
+
+    @staticmethod
+    def _apply(data: dict, action, body: dict) -> None:
+        """Make one change to the loaded tags. See change() for the actions."""
+        tags, items, excluded = data["tags"], data["items"], data["excluded"]
+        name = clean_tag(body.get("name"))
+
+        def need(value, what="a tag name"):
+            if not value:
+                raise ValueError(f"Give {what}.")
+            return value
+
+        def drop(mapping, key, tag):
+            left = [t for t in mapping.get(key, []) if t != tag]
+            if left:
+                mapping[key] = left
+            else:
+                mapping.pop(key, None)
+
+        if action == "assign":
+            keys = [str(k) for k in (body.get("keys") or []) if isinstance(k, str) and ":" in k][:5000]
+            add = [t for t in (clean_tag(v) for v in body.get("add") or []) if t]
+            remove = [t for t in (clean_tag(v) for v in body.get("remove") or []) if t]
+            if not keys or not (add or remove):
+                raise ValueError("Choose items and a tag.")
+            for t in add:
+                tags.setdefault(t, {"match": None})
+            for key in keys:
+                for t in add:
+                    items[key] = sorted(set(items.get(key, [])) | {t})
+                    drop(excluded, key, t)
+                for t in remove:
+                    drop(items, key, t)
+                    if (tags.get(t) or {}).get("match"):  # keep a matching tag off this item from now on
+                        excluded[key] = sorted(set(excluded.get(key, [])) | {t})
+        elif action == "create":
+            tags.setdefault(need(name), {"match": None})
+            if len(tags) > 1000:
+                raise ValueError("That's more tags than Hoard can keep. Delete some first.")
+        elif action == "keep":  # a suggestion becomes your tag, matched by its word
+            tags[need(name)] = {"match": name}
+            data["hidden"] = [w for w in data["hidden"] if w != name]
+        elif action == "match":
+            if need(name) not in tags:
+                raise ValueError(f"There's no tag called {name}.")
+            tags[name] = {"match": clean_tag(body.get("match")) or None}
+        elif action == "rename":
+            new = need(clean_tag(body.get("to")), "a new name")
+            if need(name) not in tags:
+                raise ValueError(f"There's no tag called {name}.")
+            if new != name:
+                old_info = tags.pop(name)
+                tags.setdefault(new, old_info)  # renaming onto an existing tag merges the two
+                if not (tags[new] or {}).get("match") and (old_info or {}).get("match"):
+                    tags[new] = old_info
+                for mapping in (items, excluded):
+                    for key in list(mapping):
+                        if name in mapping[key]:
+                            mapping[key] = sorted((set(mapping[key]) - {name}) | {new})
+        elif action == "delete":
+            tags.pop(need(name), None)
+            for mapping in (items, excluded):
+                for key in list(mapping):
+                    drop(mapping, key, name)
+        elif action == "hide":
+            if need(name) not in data["hidden"]:
+                data["hidden"] = sorted(data["hidden"] + [name])
+        elif action == "unhide":
+            data["hidden"] = [w for w in data["hidden"] if w != need(name)]
+        else:
+            raise ValueError("Unknown tag change.")
+
+
+def tag_overview(data: dict, entries: list[dict]) -> dict:
+    """What the page's tag manager shows: every tag with its item count and match word, suggestions, hidden words."""
+    counts: dict[str, int] = {}
+    sugg: dict[str, int] = {}
+    for e in entries:
+        for t in e["tags"]:
+            counts[t] = counts.get(t, 0) + 1
+        for t in e["suggested"]:
+            sugg[t] = sugg.get(t, 0) + 1
+    return {
+        "file": str(tags_file()),
+        "tags": sorted(({"name": t, "match": (info or {}).get("match"), "count": counts.get(t, 0)}
+                        for t, info in data["tags"].items()), key=lambda x: (-x["count"], x["name"])),
+        "suggestions": sorted(({"name": t, "count": n} for t, n in sugg.items()), key=lambda x: (-x["count"], x["name"])),
+        "hidden": sorted(data["hidden"]),
+    }
 
 
 # ----------------------------------------------------------------------------- background jobs
@@ -1351,7 +1589,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/library":
             with self.server.lib.lock:
                 data = json.loads(json.dumps(self.server.lib.data))
-            return self._json({"items": enrich(data["items"], self.server.cfg["tags"]), "stores": data["stores"],
+            tagdata = TagStore().load()
+            items = enrich(data["items"], self.server.cfg["tags"], tagdata)
+            return self._json({"items": items, "tagset": tag_overview(tagdata, items), "stores": data["stores"],
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": self.server.jobs.state,
                                "signins": str(profile_dir(self.server.cfg)), "version": __version__})
         if path == "/api/status":
@@ -1373,7 +1613,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Run an action. Only requests from this computer, sent as JSON, are accepted."""
         path = urlparse(self.path).path
-        if path not in ("/api/refresh", "/api/login", "/api/import", "/api/logout"):
+        if path not in ("/api/refresh", "/api/login", "/api/import", "/api/logout", "/api/tags"):
             return self._send(404, b"Not found", "text/plain")
         if (not self._host_ok() or self.client_address[0] not in LOOPBACK
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
@@ -1385,6 +1625,12 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
             return self._json({"error": "Bad request."}, 400)
+        if path == "/api/tags":
+            try:
+                TagStore().change(body)
+            except (ValueError, TimeoutError) as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json({"ok": True})
         if path == "/api/import":
             try:
                 store, items = import_saved_page(self.server.cfg, body.get("store"), str(body.get("filename") or ""),

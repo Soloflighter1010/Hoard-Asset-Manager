@@ -70,6 +70,30 @@ Everything stays on your computer. The tools talk only to the stores you use, wi
 analytics or tracking. [PRIVACY.md](PRIVACY.md) has the details,
 including what's stored where and how to delete it.
 
+## Tags
+
+Hoard has two kinds of tags:
+
+- **Your tags**, which you create and put on items yourself.
+- **Suggested tags**: words that turn up in several item names (`FoxyHoodie v2` gives `foxy` and
+  `hoodie`), with filler words and version numbers left out.
+
+Ways to tag:
+
+- **One item:** open it, then type a tag under **Tags**, or click a suggestion to add it. Remove a tag
+  with the × next to it. A tag you add applies to every copy of that product you own on other stores.
+- **Many items:** choose **Select**, click the items (or **Select all shown** after filtering, say by a
+  creator), type a tag, then **Add tag** or **Remove tag**.
+- **The Tags panel** (the **Tags** button) lists all your tags and the suggestions:
+  - **Keep** a suggestion to make it your tag on every item whose name has that word, including items
+    you buy later. **Hide** one to stop it being suggested.
+  - **Rename** a tag. Renaming it to an existing tag's name merges the two.
+  - **Match names** gives any tag that automatic matching. **Delete** removes a tag.
+
+Your tags are saved in Hoard's private app-data folder (`%LOCALAPPDATA%\Hoard\tags.json` on
+Windows), and Hoard and Hoard Downloader share them: tag something in one and it's tagged in the other.
+Filter by any tag from the sidebar; filters combine.
+
 ## Offline
 
 Both tools work without an internet connection for everything except refreshing, signing in and

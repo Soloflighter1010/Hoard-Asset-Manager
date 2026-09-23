@@ -18,6 +18,7 @@ Hoard, and I never receive any of your information.
 | Your library list: names, creators, links and image links for the items you own | To show your library | `library.json` in the Hoard folder |
 | Product images, saved after each refresh (turn off with `"offline_images": false`) | So the library loads quickly and works offline | `.cache/thumbs` in the Hoard folder |
 | Downloaded files and their records (`_manifest.json`, `catalog.json`, `tags.json`, `asset.json`) | So nothing is downloaded twice, and for search and tags | The download folder you choose |
+| Your tags | So you can sort and find things your way, in both tools | `tags.json` in the same private `Hoard` folder as your sign-ins |
 | Your settings | So the tools remember your choices | `config.json` in each tool's folder |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug/` or `probe-output/` in the tool's folder |
 
