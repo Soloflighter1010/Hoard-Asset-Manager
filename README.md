@@ -66,10 +66,9 @@ program; the first run of 1.2 moves them to the private folder automatically and
 
 ## Privacy
 
-- The tools talk to the stores you use and to nothing else. The library pages run on your own PC at
-  `127.0.0.1`; the only other thing they load is the page typeface from Google Fonts.
-- Everything they save (your library list, downloads, thumbnails) stays in the tool's folder or the
-  download folder you choose.
+Everything stays on your computer. The tools talk only to the stores you use (and Google Fonts, for
+the pages' typeface), with no accounts, analytics or tracking. [PRIVACY.md](PRIVACY.md) has the details,
+including what's stored where and how to delete it.
 
 ## Things to know
 
@@ -87,23 +86,31 @@ Open an issue with what you did and what happened. If a store isn't being read c
 `debug <store>` (Hoard) or `probe jinxxy` (Hoard Downloader) and attach the output, after
 checking it: those files show your purchases, and screenshots can show your account name.
 
-## Making a release
+Found a security problem? Please report it privately, as [SECURITY.md](SECURITY.md) describes.
 
-Bump `__version__` in `HoardDownloader/asset_dl.py` and `Hoard/library.py`, add a section to
-`CHANGELOG.md`, then push a tag such as `v1.0.1`. GitHub Actions builds the three zips and publishes
-the release with that version's changelog. `python scripts/build_release.py` builds the same zips
-locally into `dist/`.
+## Made with AI
 
-## Thanks
+Most of Hoard's code, design and documentation was written by an AI assistant (Anthropic's Claude),
+directed and tested by the maintainer. [AI-DISCLOSURE.md](AI-DISCLOSURE.md) explains what that means
+for you. Hoard itself doesn't use AI, and your data never goes to one.
 
-The Gumroad reader follows the data shapes in Gumroad's open-source code (antiwork/gumroad), and the
-Booth reader was informed by ribeKim's booth-library-manager.
+## For developers
 
-## Brand
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the tools are built: the store readers, sign-ins,
+the local servers and their safety rules, and how releases are made.
 
-The logo files are in `brand/`: the mark on its own, and the full logo for dark and light
-backgrounds. The wordmark is outlined from Dela Gothic One, so the files need no fonts installed.
+To make a release, raise `__version__` in `HoardDownloader/asset_dl.py` and `Hoard/library.py`, add a
+section to `CHANGELOG.md`, then push a tag such as `v1.3.1`. GitHub Actions builds the three zips and
+publishes the release with that version's changelog. `python scripts/build_release.py` builds the same
+zips locally into `dist/`.
 
-## License
+## Legal
 
-MIT. See [LICENSE](LICENSE).
+- [LICENSE](LICENSE): MIT
+- [TERMS.md](TERMS.md): terms of use
+- [PRIVACY.md](PRIVACY.md): privacy policy
+- [COPYRIGHT.md](COPYRIGHT.md): copyright, the name and logo, third-party software and credits
+- [SECURITY.md](SECURITY.md): reporting security problems
+
+The logo files are in `brand/`. The wordmark is outlined from Dela Gothic One, so the files need no fonts
+installed.

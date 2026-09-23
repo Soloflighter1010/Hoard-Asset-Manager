@@ -15,26 +15,33 @@ back to each store's download page.
 from __future__ import annotations
 
 import argparse
+import base64
 import email
 import hashlib
+import hmac
 import html
+import ipaddress
 import json
 import os
 import re
+import secrets
 import shutil
+import socket
 import sys
 import threading
 import time
 import unicodedata
+import urllib.error
 import urllib.request
 import webbrowser
 from collections import Counter
 from datetime import datetime, timezone
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 HERE = Path(__file__).resolve().parent
 LIBRARY_FILE = HERE / "library.json"
@@ -63,6 +70,7 @@ STORES = {
 
 
 class NotLoggedIn(Exception):
+    """The store sent its sign-in page instead of your purchases."""
     pass
 
 
@@ -71,10 +79,12 @@ class Blocked(Exception):
 
 
 def now_iso() -> str:
+    """The current time in UTC, as an ISO 8601 string with seconds."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def load_config() -> dict:
+    """The built-in defaults, overlaid with config.json when it exists."""
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     path = HERE / "config.json"
     if path.exists():
@@ -89,10 +99,15 @@ def load_config() -> dict:
 
 
 def item(store: str, id_, **fields) -> dict:
+    """One library item in the shape every store reader produces. Links that aren't http(s) are dropped."""
     d = {"key": f"{store}:{id_}", "store": store, "id": str(id_), "name": "", "creator": "",
          "creator_url": None, "thumbnail": None, "url": None, "download_url": None, "files": [],
          "variants": None, "archived": False, "gift": False}
     d.update({k: v for k, v in fields.items() if v not in (None, "")})
+    for k in ("creator_url", "thumbnail", "url", "download_url"):
+        d[k] = safe_url(d[k])
+    d["files"] = [{"name": str(f.get("name") or "File"), "url": safe_url(f.get("url"))}
+                  for f in d["files"] if safe_url(f.get("url"))]
     d["name"] = re.sub(r"\s+", " ", d["name"] or "").strip() or "Untitled"
     d["creator"] = re.sub(r"\s+", " ", d["creator"] or "").strip() or "Unknown creator"
     return d
@@ -101,6 +116,7 @@ def item(store: str, id_, **fields) -> dict:
 # ----------------------------------------------------------------------------- browser
 
 def _playwright():
+    """Import Playwright's sync API, or exit with a clear message when setup hasn't been run."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -139,6 +155,7 @@ class ProfileBusy(Exception):
 
 
 def app_data_dir() -> Path:
+    """Hoard's folder in this user account's private app-data location, per operating system."""
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     elif sys.platform == "darwin":
@@ -149,6 +166,10 @@ def app_data_dir() -> Path:
 
 
 def _custom_profile(cfg: dict):
+    """The sign-in folder named in config.json, or None to use the private default.
+
+    An empty value, or one ending in the pre-1.2 name .browser-profile, means the default.
+    """
     value = (cfg.get("profile_dir") or "").strip()
     if not value or Path(value).name == ".browser-profile":  # empty, or an old default: use the private folder
         return None
@@ -157,10 +178,12 @@ def _custom_profile(cfg: dict):
 
 
 def profile_dir(cfg: dict) -> Path:
+    """Where Hoard keeps its browser profile, which holds your store sign-ins."""
     return _custom_profile(cfg) or app_data_dir() / "sign-ins"
 
 
 def _lock_down(path: Path) -> None:
+    """Create a folder and, on Linux and macOS, make it readable only by you."""
     path.mkdir(parents=True, exist_ok=True)
     if os.name == "posix":  # only you can open it; Windows keeps app-data private to your account already
         os.chmod(path, 0o700)
@@ -172,10 +195,12 @@ class ProfileLock:
     """Keeps two Hoard programs from using the sign-ins at once. The OS drops it if a program crashes."""
 
     def __init__(self, profile: Path):
+        """Prepare a lock file next to the sign-in folder; nothing is locked until acquire()."""
         self.path = profile.parent / (profile.name + ".lock")
         self.fh = None
 
     def acquire(self) -> None:
+        """Lock the sign-ins for this program, or raise ProfileBusy if another program has them."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(self.path, "a+")
         try:
@@ -193,6 +218,7 @@ class ProfileLock:
                               "Try again when it has finished.")
 
     def release(self) -> None:
+        """Unlock the sign-ins. Safe to call more than once."""
         if self.fh:
             try:
                 if os.name == "nt":
@@ -206,6 +232,7 @@ class ProfileLock:
 
 
 def _remove_tree(path: Path) -> None:
+    """Delete a folder tree, clearing read-only flags that would otherwise stop Windows deleting it."""
     def retry(func, p, _exc):
         os.chmod(p, 0o700)
         func(p)
@@ -302,6 +329,7 @@ launch = launch_context
 
 
 def settle(page, ms: int = 700) -> None:
+    """Give a page time to finish loading: wait for the network to go quiet (at most 15 s), then ms more."""
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
     except Exception:
@@ -330,6 +358,7 @@ def goto(page, url: str):
 
 
 def has_password_field(page) -> bool:
+    """True when the page shows a password box, which here means a sign-in form."""
     try:
         return page.locator("input[type=password]").count() > 0
     except Exception:
@@ -342,6 +371,7 @@ GR_LIBRARY = "https://app.gumroad.com/library"
 
 
 def extract_page_json(text: str):
+    """The page data Gumroad embeds in its HTML (component and props), or None."""
     m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
     if m:
         return json.loads(m.group(1))
@@ -352,6 +382,7 @@ def extract_page_json(text: str):
 
 
 def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
+    """Every purchase in your Gumroad library, archived ones included when configured."""
     items, seen = [], set()
     delay = float(cfg.get("request_delay", 0.8))
     for archived in ([False, True] if cfg["gumroad"].get("include_archived", True) else [False]):
@@ -433,12 +464,14 @@ BOOTH_JS = r"""
 
 
 def booth_item(b: dict, gift: bool, library_url: str) -> dict:
+    """Turn a card read from Booth's library page into a library item."""
     return item("booth", b["id"], name=b["name"], creator=b["creator"], creator_url=b["creator_url"],
                 thumbnail=b["thumbnail"], url=b["url"], download_url=b["order_url"] or library_url,
                 files=b["files"], gift=gift)
 
 
 def fetch_booth(ctx, cfg, progress) -> list[dict]:
+    """Every item in your Booth library and gifts, page by page."""
     page = ctx.new_page()
     delay = float(cfg.get("request_delay", 0.8))
     items: dict[str, dict] = {}
@@ -556,6 +589,7 @@ JX_CARDS_JS = r"""
 
 
 def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
+    """Every item in your Jinxxy inventory, scrolling and following pages until nothing new appears."""
     page = ctx.new_page()
     pattern = cfg["jinxxy"]["item_link_pattern"]
     found: dict[str, dict] = {}
@@ -603,6 +637,7 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
 
 
 def jinxxy_item(c: dict) -> dict:
+    """Turn a card read from Jinxxy's inventory page into a library item."""
     return item("jinxxy", c["key"].rsplit("/", 1)[-1], name=c["name"], creator=c["creator"],
                 creator_url=c.get("creator_url"), thumbnail=c["thumbnail"], url=c["url"], download_url=c["url"])
 
@@ -671,6 +706,7 @@ PAYHIP_CARDS_JS = r"""
 
 
 def payhip_library_url(page, cfg) -> str:
+    """The address of your Payhip library: from config.json, a link on your account page, or a known path."""
     if cfg["payhip"].get("library_url"):
         return cfg["payhip"]["library_url"]
     goto(page, "https://payhip.com/auth/login")
@@ -691,6 +727,7 @@ def payhip_library_url(page, cfg) -> str:
 
 
 def fetch_payhip(ctx, cfg, progress) -> list[dict]:
+    """Every product in your Payhip library, following its pages."""
     page = ctx.new_page()
     cards: dict[str, dict] = {}
     try:
@@ -716,6 +753,7 @@ def fetch_payhip(ctx, cfg, progress) -> list[dict]:
 
 
 def payhip_item(c: dict) -> dict:
+    """Turn a card read from Payhip's library page into a library item."""
     return item("payhip", c["id"].strip("/").replace("/", "-"), name=c["name"], creator=c["creator"],
                 creator_url=c["creator_url"], thumbnail=c["thumbnail"], url=c["url"], download_url=c["download_url"])
 
@@ -754,11 +792,17 @@ def read_saved_page(filename: str, text: str) -> tuple[str, str | None, dict]:
 
 
 def store_for_url(url: str | None) -> str | None:
+    """Which store an address belongs to, or None."""
     host = urlparse(url or "").hostname or ""
     return next((s for s, h in STORE_HOSTS.items() if host == h or host.endswith("." + h)), None)
 
 
 def import_saved_page(cfg: dict, store: str | None, filename: str, text: str) -> tuple[str, list[dict]]:
+    """Read a store page saved from your own browser and return (store, items).
+
+    The file is read offline: scripts are stripped and every network request is blocked. Images saved
+    inside a single-file (.mhtml) page are cached so the library can show them.
+    """
     page_html, source_url, images = read_saved_page(filename, text)
     detected = store_for_url(source_url)
     if not store or store == "auto":
@@ -811,7 +855,9 @@ def import_saved_page(cfg: dict, store: str | None, filename: str, text: str) ->
 # ----------------------------------------------------------------------------- library data
 
 class Library:
+    """Your combined library, kept in library.json. Safe to use from several threads."""
     def __init__(self, path: Path):
+        """Load library.json, or start empty."""
         self.path = path
         self.lock = threading.Lock()
         self.data = {"items": [], "stores": {}}
@@ -819,6 +865,7 @@ class Library:
             self.data = json.loads(path.read_text("utf-8"))
 
     def save(self) -> None:
+        """Write library.json through a temporary file, retrying if Windows has it open elsewhere."""
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.data, indent=1, ensure_ascii=False), "utf-8")
         for attempt in range(10):
@@ -831,6 +878,7 @@ class Library:
                 time.sleep(0.2)
 
     def replace_store(self, store: str, items: list[dict]) -> None:
+        """Swap in a store's freshly read items and record the refresh."""
         with self.lock:
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store] + items
             self.data["stores"][store] = {"updated": now_iso(), "count": len(items), "error": None, "source": "refresh"}
@@ -847,12 +895,14 @@ class Library:
             return len(merged)
 
     def set_error(self, store: str, message: str) -> None:
+        """Note a problem with a store without touching its items."""
         with self.lock:
             s = self.data["stores"].setdefault(store, {"updated": None, "count": 0})
             s["error"] = message
             self.save()
 
     def thumbnail_for(self, key: str) -> tuple[str, str] | None:
+        """(image address, referrer) for an item's thumbnail, or None."""
         with self.lock:
             for i in self.data["items"]:
                 if i["key"] == key and i.get("thumbnail"):
@@ -895,6 +945,9 @@ def enrich(items: list[dict], tcfg: dict) -> list[dict]:
     out = []
     for i, ts in zip(items, toks):
         e = {**i, "tags": sorted(ts & keep), "also_in": [], "match_key": _norm(i["name"])}
+        for k in ("creator_url", "thumbnail", "url", "download_url"):  # also covers lists saved by older versions
+            e[k] = safe_url(e.get(k))
+        e["files"] = [f for f in e.get("files", []) if safe_url(f.get("url"))]
         out.append(e)
         groups.setdefault(e["match_key"], []).append(e)
     for g in groups.values():
@@ -910,14 +963,17 @@ class Jobs:
     """One browser job at a time: refreshing stores, or waiting for you to sign in."""
 
     def __init__(self, cfg: dict, lib: Library):
+        """No job is running at first."""
         self.cfg, self.lib = cfg, lib
         self.busy = threading.Lock()
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None}
 
     def _set(self, **kw):
+        """Update the job state the page polls."""
         self.state.update(kw)
 
     def start(self, task: str, stores: list[str], skip_imported: bool = False) -> bool:
+        """Start a job in the background. False when one is already running."""
         if not self.busy.acquire(blocking=False):
             return False
         self.state["error"] = None
@@ -931,6 +987,7 @@ class Jobs:
         return True
 
     def _wrap(self, fn, stores):
+        """Run a job, recording any error for the page, and always free the runner afterwards."""
         try:
             self._set(running=True)
             fn(stores)
@@ -943,6 +1000,7 @@ class Jobs:
             self.busy.release()
 
     def _logout(self, stores: list[str]) -> None:
+        """Sign out of one store, or of every store, and mark the affected stores as signed out."""
         store = stores[0]
         self._set(task="logout", store=store, message="Signing out")
         with _playwright()() as p:
@@ -953,6 +1011,7 @@ class Jobs:
         self._set(message=done)
 
     def _refresh(self, stores: list[str], skip_imported: bool = False) -> None:
+        """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty."""
         if skip_imported:
             stores = [s for s in stores if self.lib.data["stores"].get(s, {}).get("source") != "import"]
         with _playwright()() as p:
@@ -984,6 +1043,7 @@ class Jobs:
         self._set(message="Library updated")
 
     def _login_then_refresh(self, stores: list[str]) -> None:
+        """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""
         store = stores[0]
         label = STORES[store]["label"]
         with _playwright()() as p:
@@ -1008,6 +1068,130 @@ class Jobs:
 
 # ----------------------------------------------------------------------------- server
 
+# ----------------------------------------------------------------------------- web safety
+#
+# The page runs on your own computer, but the text and links it shows come from store pages and
+# from saved pages you import, so none of it is trusted:
+#   - links are only kept when they are ordinary http(s) addresses (no javascript: or file:),
+#   - server-side fetches only go to public internet addresses, never your home network or this PC,
+#   - every page is sent with a Content-Security-Policy that only runs the page's own script, and
+#     with headers that stop other sites from framing it or reading its responses,
+#   - on your network (--host 0.0.0.0) other devices need the access key printed at start-up.
+
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+}
+_csp_cache: dict = {}
+
+
+def safe_url(value) -> str | None:
+    """Return value if it's a plain http(s) address, otherwise None."""
+    if not isinstance(value, str):
+        return None
+    u = urlparse(value.strip())
+    return value.strip() if u.scheme in ("http", "https") and u.netloc else None
+
+
+def public_http_url(url: str) -> bool:
+    """True when url is http(s) and every address its host resolves to is on the public internet."""
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if (not ip.is_global or ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
+                or ip.is_reserved or ip.is_unspecified):
+            return False
+    return True
+
+
+class _PublicRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only if it leads to another public http(s) address."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Refuse the redirect unless it leads to a public http(s) address."""
+        if not public_http_url(newurl):
+            raise urllib.error.URLError(f"refused a redirect to {urlparse(newurl).hostname}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> tuple[bytes, str] | None:
+    """Download a small file from a public http(s) address. Returns (data, content type) or None."""
+    if not public_http_url(url):
+        return None
+    opener = urllib.request.OpenerDirector()  # http(s) only: no file://, ftp:// or data: handlers
+    for handler in (urllib.request.HTTPHandler(), urllib.request.HTTPSHandler(), _PublicRedirects(),
+                    urllib.request.HTTPErrorProcessor(), urllib.request.HTTPDefaultErrorHandler()):
+        opener.add_handler(handler)
+    try:
+        with opener.open(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
+            data = r.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                return None
+            return data, r.headers.get_content_type()
+    except Exception:
+        return None
+
+
+def content_security_policy(page: bytes) -> str:
+    """A policy that runs only the page's own inline script (by its hash) and loads nothing unexpected."""
+    key = hashlib.sha256(page).hexdigest()
+    if key not in _csp_cache:
+        scripts = re.findall(rb"<script>(.*?)</script>", page, re.S)
+        hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(s).digest()).decode() + "'" for s in scripts)
+        script_src = hashes or "'none'"
+        _csp_cache[key] = ("default-src 'none'; "
+                           f"script-src {script_src}; "
+                           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                           "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
+                           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+    return _csp_cache[key]
+
+
+def check_access(handler, lan: bool, key: str | None) -> bool:
+    """On the network (--host 0.0.0.0), let a device in only with the access key. True when allowed.
+
+    The key arrives once in the address (?key=...); after that it's kept in a cookie. Sends the reply
+    itself (a redirect that sets the cookie, or a refusal) when it returns False.
+    """
+    if not lan or not key:
+        return True
+    host = (handler.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+    if handler.client_address[0] in LOOPBACK and host in LOOPBACK:
+        return True  # this computer itself
+    cookies = SimpleCookie(handler.headers.get("Cookie") or "")
+    if "hoard_key" in cookies and hmac.compare_digest(cookies["hoard_key"].value, key):
+        return True
+    given = (parse_qs(urlparse(handler.path).query).get("key") or [""])[0]
+    if given and hmac.compare_digest(given, key):
+        handler.send_response(303)
+        handler.send_header("Location", urlparse(handler.path).path or "/")
+        handler.send_header("Set-Cookie", f"hoard_key={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000")
+        handler.send_header("Content-Length", "0")
+        handler.end_headers()
+        return False
+    body = (b"<!doctype html><meta charset=utf-8><title>Access key needed</title>"
+            b"<p style='font:16px system-ui;margin:40px'>Open the address shown in the Hoard window on the computer "
+            b"running it. It includes the access key.</p>")
+    handler.send_response(401)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    for k, v in SECURITY_HEADERS.items():
+        handler.send_header(k, v)
+    handler.end_headers()
+    handler.wfile.write(body)
+    return False
+
+
 def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     """Store images, fetched once with the right referrer and cached on disk."""
     found = lib.thumbnail_for(key)
@@ -1018,15 +1202,11 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     for p in THUMB_DIR.glob(h + ".*"):
         ext = p.suffix.lstrip(".")
         return p.read_bytes(), {"jpg": "image/jpeg", "svg": "image/svg+xml"}.get(ext, f"image/{ext}")
-    req = urllib.request.Request(url, headers={
-        "Referer": referer,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            ctype = r.headers.get_content_type()
-            data = r.read(15 * 1024 * 1024)
-    except Exception:
+    got = fetch_public(url, {"Referer": referer, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"}, 15 * 1024 * 1024)
+    if not got:
         return None
+    data, ctype = got
     if not ctype.startswith("image/"):
         return None
     ext = {"image/jpeg": "jpg", "image/svg+xml": "svg"}.get(ctype, ctype.split("/")[1])
@@ -1036,41 +1216,55 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
 
 
 class Server(ThreadingHTTPServer):
+    """The local server behind the library page."""
     daemon_threads = True
 
     def __init__(self, addr, cfg, lib, jobs, lan):
+        """Start listening; with lan=True, also create the access key other devices need."""
         super().__init__(addr, Handler)
         self.cfg, self.lib, self.jobs, self.lan = cfg, lib, jobs, lan
+        self.key = secrets.token_urlsafe(18) if lan else None
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Answers the page's requests. Only this computer is served unless the tool was started with --host."""
     server: Server
 
     def log_message(self, *args):
+        """Keep the console quiet: individual requests aren't logged."""
         pass
 
     def _send(self, status, body: bytes, ctype: str, headers: dict | None = None):
+        """Send a reply with the security headers, adding the page's Content-Security-Policy to HTML."""
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in SECURITY_HEADERS.items():
+            self.send_header(k, v)
+        if ctype.startswith("text/html"):
+            self.send_header("Content-Security-Policy", content_security_policy(body))
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
     def _json(self, obj, status=200):
+        """Send obj as JSON that the browser won't cache."""
         self._send(status, json.dumps(obj, ensure_ascii=False).encode(), "application/json; charset=utf-8",
                    {"Cache-Control": "no-store"})
 
     def _host_ok(self) -> bool:
+        """False when a request names a host other than this computer (a DNS-rebinding attempt)."""
         if self.server.lan:
             return True
         return (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]") in LOOPBACK
 
     def do_GET(self):
+        """Serve the page, its data and images."""
         if not self._host_ok():
             return self._send(403, b"Forbidden", "text/plain")
+        if not check_access(self, self.server.lan, self.server.key):
+            return
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
             return self._send(200, (HERE / "library.html").read_bytes(), "text/html; charset=utf-8",
@@ -1080,7 +1274,7 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(json.dumps(self.server.lib.data))
             return self._json({"items": enrich(data["items"], self.server.cfg["tags"]), "stores": data["stores"],
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": self.server.jobs.state,
-                               "signins": str(profile_dir(self.server.cfg))})
+                               "signins": str(profile_dir(self.server.cfg)), "version": __version__})
         if path == "/api/status":
             with self.server.lib.lock:
                 stores = json.loads(json.dumps(self.server.lib.data["stores"]))
@@ -1093,6 +1287,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b"Not found", "text/plain")
 
     def do_POST(self):
+        """Run an action. Only requests from this computer, sent as JSON, are accepted."""
         path = urlparse(self.path).path
         if path not in ("/api/refresh", "/api/login", "/api/import", "/api/logout"):
             return self._send(404, b"Not found", "text/plain")
@@ -1126,6 +1321,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(cfg: dict, host: str, port: int, open_browser: bool) -> None:
+    """Start the library page and open it in the default web browser."""
     lib = Library(LIBRARY_FILE)
     jobs = Jobs(cfg, lib)
     try:
@@ -1133,6 +1329,9 @@ def serve(cfg: dict, host: str, port: int, open_browser: bool) -> None:
     except OSError as e:
         sys.exit(f"Couldn't start on port {port} ({e}). Try the command: --port {port + 1}")
     url = f"http://127.0.0.1:{port}/"
+    if srv.key:
+        print(f"Other devices on your network: http://<this computer's address>:{port}/?key={srv.key}")
+        print("That key is needed to see your library from another device. Share it only with devices you trust.")
     counts = ", ".join(f"{STORES[s]['label']} {v.get('count', 0)}" for s, v in lib.data["stores"].items()) or "no stores yet"
     print(f"Hoard {__version__}: {url}   ({len(lib.data['items'])} items: {counts})")
     print("Press Ctrl+C to stop.")
@@ -1149,6 +1348,7 @@ def serve(cfg: dict, host: str, port: int, open_browser: bool) -> None:
 # ----------------------------------------------------------------------------- CLI
 
 def cmd_login(cfg, store):
+    """Open Hoard's browser at a store's sign-in page and wait while you sign in."""
     with _playwright()() as p:
         ctx = launch(p, cfg, headless=False)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -1159,6 +1359,7 @@ def cmd_login(cfg, store):
 
 
 def cmd_refresh(cfg, stores):
+    """Refresh stores from the command line, printing progress as it goes."""
     lib = Library(LIBRARY_FILE)
     jobs = Jobs(cfg, lib)
     last = [""]
@@ -1176,6 +1377,7 @@ def cmd_refresh(cfg, stores):
 
 
 def cmd_debug(cfg, store):
+    """Save what a store's library page looks like and what the reader found, for troubleshooting."""
     DEBUG_DIR.mkdir(exist_ok=True)
     with _playwright()() as p:
         ctx = launch(p, cfg, headless=False)
@@ -1211,6 +1413,7 @@ def cmd_debug(cfg, store):
 
 
 def main():
+    """Read the command line and run the chosen command, or start the library page."""
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     cfg = load_config()

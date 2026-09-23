@@ -256,6 +256,16 @@ a.ghost { height: 42px; }
 .detail h3 .muted { font-weight: 500; color: var(--dust); margin-left: 8px; }
 .path { font-size: 12.5px; color: var(--dust); overflow-wrap: anywhere; user-select: all; margin-top: 22px; }
 .empty ul { text-align: left; padding-left: 20px; }
+
+/* footer */
+.foot { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--seam); display: flex; flex-wrap: wrap;
+  align-items: center; gap: 10px 24px; font-size: 13px; color: var(--dust); }
+.foot-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--bone); }
+.foot-brand svg { width: 22px; height: 22px; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.foot-links a { color: var(--dust); text-decoration: none; }
+.foot-links a:hover { color: var(--gold); text-decoration: underline; }
+.foot-note { flex-basis: 100%; margin: 0; }
 </style>
 </head>
 <body>
@@ -310,6 +320,23 @@ a.ghost { height: 42px; }
     <div id="status" class="status"></div>
     <div id="grid" class="grid" aria-label="Assets"></div>
     <div id="empty" class="empty" hidden></div>
+    <footer class="foot">
+      <div class="foot-brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0 0) scale(1.0)">
+  <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
+  <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
+  <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
+  <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
+</g></svg><span>Hoard Downloader <span id="version"></span></span></div>
+      <nav class="foot-links" aria-label="About Hoard Downloader">
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues" target="_blank" rel="noopener noreferrer">Report a problem</a>
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy</a>
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/TERMS.md" target="_blank" rel="noopener noreferrer">Terms</a>
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/AI-DISCLOSURE.md" target="_blank" rel="noopener noreferrer">Made with AI</a>
+      </nav>
+      <p class="foot-note">Free and open source under the MIT license. Not affiliated with Booth, Gumroad, Jinxxy or Payhip.</p>
+    </footer>
   </main>
 </div>
 
@@ -324,6 +351,8 @@ const grid = $("#grid"), detail = $("#detail");
 const state = { q: "", store: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
+// Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
+const safeUrl = u => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch (e) { return ""; } };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const norm = s => String(s || "").normalize("NFKC").toLowerCase();
 const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -359,6 +388,7 @@ async function load(rescan = false) {
   } catch (e) {
     DATA = { assets: [], error: e instanceof TypeError ? "Hoard Downloader isn't running. Start it again from its menu (Browse your downloads)." : e.message };
   }
+  $("#version").textContent = DATA.version || "";
   for (const a of DATA.assets) {
     a.hay = norm([a.name, a.creator, a.store, a.variants, ...a.tags, ...a.files.map(f => f.path)].join(" "));
   }
@@ -486,7 +516,7 @@ function syncControls() {
 /* ---------- detail */
 function showDetail(a, focus = true) {
   openId = a.id;
-  const storeLink = a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Open on ${a.store}</a>` : "";
+  const storeLink = safeUrl(a.url) ? `<a href="${esc(safeUrl(a.url))}" target="_blank" rel="noopener noreferrer">Open on ${a.store}</a>` : "";
   detail.innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
     `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="">` : placeholder(a)}</div>` +
