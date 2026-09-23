@@ -9,7 +9,7 @@
 Booth, Gumroad, Jinxxy and Payhip purchases in a single library you can search, filter and keep.</p>
 
 You bought that hoodie. Was it on Booth or Gumroad? Did the creator update it? Hoard answers those
-without opening four tabs.
+questions without opening four tabs.
 
 | | Hoard | Hoard Downloader |
 |---|---|---|
