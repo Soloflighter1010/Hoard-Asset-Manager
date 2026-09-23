@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+Maintenance release; Hoard and Hoard Downloader work the same as in 1.2.0.
+- Release builds no longer depend on a third-party GitHub Action, and the release for an existing
+  version can be built again from the Actions tab.
+
 ## 1.2.0
 
 Safer sign-ins, in both tools.
