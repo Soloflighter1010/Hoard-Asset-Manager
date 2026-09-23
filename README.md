@@ -39,48 +39,89 @@ aren't in the zip, and your sign-ins are kept elsewhere, so everything stays.
 Each tool has its own README with the details: [Hoard](Hoard/README.md),
 [Hoard Downloader](HoardDownloader/README.md).
 
+## How Hoard keeps you safe
+
+In plain words, here's what protects you. [SECURITY.md](SECURITY.md) has the technical details.
+
+**Your store accounts**
+- **Hoard never sees your passwords.** You sign in on the store's own page. Hoard only keeps the
+  "stay signed in" pass the store hands out, the same thing your browser keeps.
+- **That pass is locked by your computer.** It's encrypted with your Windows account, your Mac's
+  Keychain or your Linux keyring, so copying Hoard's files to another computer doesn't give anyone access.
+- **Each store is kept separate.** Your Booth sign-in and your Gumroad sign-in never mix.
+- **Signing out really signs you out.** Hoard asks the store to end the session, deletes what it saved,
+  checks nothing is left behind, and tells you what it did.
+
+**Your computer**
+- **Only you can see Hoard's pages.** They only open on the computer running Hoard. Sharing them with
+  your other devices is something you have to switch on, and it then needs a secure connection and a key.
+- **Websites can't use Hoard against you.** Other sites can't read Hoard's pages, press its buttons, or
+  hide it inside their own pages.
+- **Nothing from a store can run on your computer.** Names, links and pictures from stores are shown as
+  plain text and ordinary images, never as code.
+- **Hoard stays out of your home network.** It only fetches product pictures from the public internet,
+  never from your router, NAS or other devices.
+
+**Your files**
+- **Downloads stay in your download folder.** Nothing a store sends, and nothing written into Hoard's
+  records, can make it save a file anywhere else.
+- **File names can't pretend to be something else.** Hidden characters that can make a program's name
+  look like a picture's (so a file really named `Hoodie…exe` shows up as `Hoodie…jpg`) are removed.
+- **Store buttons only go to the real store.** An **Open on Booth** button can only ever open booth.pm,
+  so no one can swap it for a fake sign-in page.
+- **Tampering gets noticed.** Hoard seals every record it writes. If another program changes one, Hoard
+  tells you, keeps a copy to look at, and doesn't trust the changed links.
+- **A damaged file doesn't break anything.** It's set aside for you to look at, and Hoard carries on.
+
+**Hoard itself**
+- **Other people on your computer can't change Hoard.** Setup makes sure only your account can change
+  the program's files.
+- **What Setup installs is checked.** Every package is compared against a fingerprint recorded in
+  advance, so a tampered one won't install. The browser comes from its official source, at a fixed version.
+- **Releases are built in the open.** GitHub builds each release straight from the source code and
+  publishes checksums with it, so you can confirm your download is genuine.
+- **Every change is security-tested** automatically before it's released.
+
+**Your privacy**
+- **Nothing is sent to the developer.** No accounts, no tracking, no analytics, no ads. Hoard only talks
+  to the stores you use. [PRIVACY.md](PRIVACY.md) lists everything it keeps and how to delete it.
+- **It works offline** for everything except refreshing, signing in and downloading.
+
+**What no app can protect you from**
+- **Malware already on your computer.** A virus running as you could use your signed-in stores just as
+  you can. Keep your computer up to date and scanned.
+- **Someone with administrator access** to your computer.
+- **Problems on the stores' own websites.**
+
+**Staying safe yourself**
+- Keep Hoard in a folder of your own, such as one inside your user folder.
+- Never share Hoard's app-data folder (listed below); it holds your sign-ins.
+- Before sharing troubleshooting files, read them: they can show what you've bought.
+- Update when a new version comes out (the **Updates** link at the bottom of every page).
+
 ## Your sign-ins
 
-You sign in to each store once, on the store's own page, in a browser window that belongs to Hoard alone
-(never your everyday browser). Hoard never sees or keeps your store passwords, only the sign-in the store
-gives that window. Here's how those sign-ins are kept safe:
+You sign in to each store once, in a browser window that belongs to Hoard alone (never your everyday
+browser). Both tools share the sign-ins, so you sign in once for both. They're kept here, one folder per
+store:
 
-- **Kept apart, out of the program folder.** Each store's sign-in has its own folder in your user
-  account's private app-data folder, so zipping, sharing, syncing or committing the program folder never
-  carries them, and one store's pages never share a browser with another store's sign-in. Both Hoard
-  tools use them, so you sign in once for both.
+| Windows | macOS | Linux |
+|---|---|---|
+| `%LOCALAPPDATA%\Hoard\sign-ins` | `~/Library/Application Support/Hoard/sign-ins` | `~/.local/share/Hoard/sign-ins` |
 
-  | Windows | macOS | Linux |
-  |---|---|---|
-  | `%LOCALAPPDATA%\Hoard\sign-ins` | `~/Library/Application Support/Hoard/sign-ins` | `~/.local/share/Hoard/sign-ins` |
+- **macOS** asks once whether Hoard's browser may use the Keychain. Choose **Always Allow**.
+- **Linux** needs a keyring to protect them: GNOME Keyring, KeePassXC with its Secret Service turned on, or
+  KWallet. Without one, Hoard won't save sign-ins. On a computer without a desktop, such as a NAS, you
+  can allow it with `"allow_unprotected_signins": true` in `config.json`; they're then protected only by
+  being readable by your user account alone.
+- **Signing out:** from the Hoard Downloader menu, or **Stores** in Hoard, for one store or all of them.
+- **Older versions' sign-ins** (one shared folder, or `.browser-profile` next to the program) are split
+  into one folder per store automatically on first run, and the old copies removed.
 
-- **Encrypted by your operating system.** Windows ties them to your Windows account. On macOS they're
-  protected by the Keychain (macOS asks once whether Hoard's browser may use it; choose Always Allow).
-  On Linux they need a keyring: GNOME Keyring, KeePassXC with its Secret Service turned on, or KWallet.
-  Without one Hoard won't save sign-ins. On a computer without a desktop, such as a NAS, you can allow
-  it with `"allow_unprotected_signins": true` in `config.json`; they're then protected only by being
-  readable by your user account alone.
-- **One program at a time** per store, which keeps the saved cookies from getting damaged.
-- **Sign out properly.** Sign out of one store, or of every store, from the Hoard Downloader menu or
-  Hoard's Stores panel. Hoard asks the store to end the session where it can, deletes that store's
-  saved sign-in, checks nothing is left, and tells you what it did.
-
-Anyone who gets that folder while you're logged in to your computer could use your store accounts, so
-never copy it anywhere. Sign-ins saved by older versions (one shared folder, or `.browser-profile` next to
-the program) are split into one folder per store automatically on first run, and the old copies removed.
-
-[SECURITY.md](SECURITY.md) explains what Hoard protects against and what no desktop app can.
-
-**Using one download folder from two computers** (say, a NAS): each computer's Hoard seals its data files
+**Using one download folder from two computers** (say, a NAS): each computer's Hoard seals its records
 with its own key, so each would treat the other's changes as unverified and fetch store links again. To
 share the folder, copy `integrity.key` from Hoard's app-data folder on one computer to the same place on
 the other.
-
-## Privacy
-
-Everything stays on your computer. The tools talk only to the stores you use, with no accounts,
-analytics or tracking. [PRIVACY.md](PRIVACY.md) has the details,
-including what's stored where and how to delete it.
 
 ## Tags
 
