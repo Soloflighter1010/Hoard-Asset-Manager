@@ -15,3 +15,5 @@
 - Create an installer
 - Allow Offline Compatibility
 - Mac and Linux Compatibility
+- Add in daily update checking for asset updates
+- Add in Hoard Update checking for new App versions
