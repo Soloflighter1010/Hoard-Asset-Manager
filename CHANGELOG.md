@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.2
+
+Stops edited links from sending you anywhere but the store.
+
+- Links you can open (**Open on Booth**, **Open download page**, a creator's page) must now be https
+  addresses on the item's own store, checked when data is read, when it's written, and in the pages. Before,
+  any https address was accepted, so a program editing a record could point a button at a lookalike
+  sign-in page. Downloads never came from stored links, and still don't.
+- Data files (manifests, `catalog.json`, `tags.json`, `asset.json` and Hoard's library list) are sealed with a
+  keyed signature. When something else edits one, the tools tell you, keep a copy, and don't use its links
+  until the store is read again.
+- New `verify` command in Hoard Downloader: checks every data file and rebuilds the catalog files.
+- The catalog files are now format version 3 (docs/DATA-FORMATS.md). Using one download folder from two
+  computers? Copy `integrity.key` between them (see the README).
+
 ## 1.6.1
 
 Hardens tags and the downloader's data files. docs/security-review-2026-09.md lists each finding.

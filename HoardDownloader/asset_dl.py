@@ -25,9 +25,12 @@ from __future__ import annotations
 import argparse
 import email
 import html
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -47,7 +50,7 @@ try:
 except ImportError:  # progress bars are optional
     tqdm = None
 
-__version__ = "1.6.1"
+__version__ = "1.6.2"
 
 HERE = Path(__file__).resolve().parent
 PROBE_DIR = HERE / "probe-output"
@@ -216,6 +219,135 @@ def write_file_safely(path: Path, data, root: Path | None = None) -> None:
             os.unlink(tmp)
 
 
+# Every link to a store must lead to that store's own website (or a subdomain of it, such as a Booth
+# shop's <shop>.booth.pm), over HTTPS. Hoard never downloads from a stored link; they're only for you to
+# open, so this is what stops an edited record turning "Open on Booth" into a lookalike sign-in page.
+STORE_LINK_SITES = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com",), "payhip": ("payhip.com",)}
+
+
+def store_link(store, url) -> str | None:
+    """url if it's an https address on the given store's own website, otherwise None."""
+    if not isinstance(url, str) or not isinstance(store, str):
+        return None
+    url = url.strip()
+    try:
+        u = urlparse(url)
+        port = u.port
+    except ValueError:
+        return None
+    host = (u.hostname or "").rstrip(".")
+    if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii():
+        return None
+    return url if any(host == s or host.endswith("." + s) for s in STORE_LINK_SITES.get(store.lower(), ())) else None
+
+
+# Seals. The tools seal each data file they write (manifests, the catalog files, Hoard's library list)
+# with an HMAC-SHA256 keyed by a random key kept private to your user account. Reading a file back, a
+# broken or missing seal means something else edited it, so its links aren't trusted until they're
+# fetched from the store again. docs/DATA-FORMATS.md describes the seal for other programs.
+_integrity_key: bytes | None = None
+_sealed_ids: set | None = None
+
+
+def _hoard_folder() -> Path:
+    """Hoard's private folder in this user account's app data."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "Hoard"
+
+
+def integrity_key() -> bytes:
+    """This install's sealing key: 32 random bytes, made on first use, readable only by your account."""
+    global _integrity_key
+    if _integrity_key:
+        return _integrity_key
+    path = _hoard_folder() / "integrity.key"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        os.chmod(path.parent, 0o700)
+    for _attempt in range(3):
+        try:
+            key = bytes.fromhex(path.read_text("ascii").strip())
+            if len(key) == 32:
+                _integrity_key = key
+                return key
+            set_aside(path)  # not a key these tools made: keep it, and make a new one
+        except FileNotFoundError:
+            pass
+        except (ValueError, UnicodeDecodeError):
+            set_aside(path)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as fh:
+                fh.write(secrets.token_hex(32))
+        except FileExistsError:
+            pass  # the other tool made one a moment ago: use theirs
+    raise OSError(f"Couldn't read or create {path}")
+
+
+def _canonical(obj) -> bytes:
+    """The exact bytes a seal covers: JSON with sorted keys, no spaces, UTF-8."""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _key_id(key: bytes) -> str:
+    return hashlib.sha256(key).hexdigest()[:16]
+
+
+def seal(obj: dict) -> dict:
+    """obj plus an "integrity" field sealing everything else in it."""
+    body = {k: v for k, v in obj.items() if k != "integrity"}
+    key = integrity_key()
+    return {**body, "integrity": {"alg": "HMAC-SHA256", "key_id": _key_id(key),
+                                  "mac": hmac.new(key, _canonical(body), hashlib.sha256).hexdigest()}}
+
+
+def _path_id(path: Path) -> str:
+    return hashlib.sha256(os.path.normcase(os.path.realpath(path)).encode("utf-8", "surrogatepass")).hexdigest()[:32]
+
+
+def _sealed_file_ids() -> set:
+    """Which files this install has sealed (by a hash of their location), so a removed seal is noticed."""
+    global _sealed_ids
+    if _sealed_ids is None:
+        try:
+            data = read_json_file(_hoard_folder() / "sealed-files.json", 4 * 1024 * 1024)
+            _sealed_ids = {x for x in data.get("files", []) if isinstance(x, str)} if isinstance(data, dict) else set()
+        except (OSError, DataFileError):
+            _sealed_ids = set()
+    return _sealed_ids
+
+
+def remember_sealed(path: Path) -> None:
+    """Note that this install has sealed the file at path."""
+    ids = _sealed_file_ids()
+    pid = _path_id(path)
+    if pid not in ids:
+        ids.add(pid)
+        write_file_safely(_hoard_folder() / "sealed-files.json", json.dumps({"files": sorted(ids)[-20000:]}))
+
+
+def check_seal(obj, path: Path | None = None) -> str:
+    """How far to trust a data file just read.
+
+    "sealed": this install wrote it and nothing has changed it. "unsealed": it has no seal and this install
+    never sealed it (written by an older version). "foreign": another install sealed it (say, Hoard on a
+    second computer sharing the folder). "changed": edited after this install sealed it, or its seal removed.
+    """
+    if not isinstance(obj, dict) or not isinstance(obj.get("integrity"), dict):
+        return "changed" if path is not None and _path_id(path) in _sealed_file_ids() else "unsealed"
+    info, key = obj["integrity"], integrity_key()
+    if info.get("key_id") != _key_id(key):
+        return "foreign"
+    body = {k: v for k, v in obj.items() if k != "integrity"}
+    expected = hmac.new(key, _canonical(body), hashlib.sha256).hexdigest()
+    return "sealed" if hmac.compare_digest(expected, str(info.get("mac"))) else "changed"
+
+
 class UnsafePath(ValueError):
     """A path from a data file that isn't a plain relative path inside its folder."""
 
@@ -252,12 +384,14 @@ def no_link(path: Path) -> Path:
     return path
 
 
-def clean_manifest(data, store_dir: Path) -> tuple[dict, int]:
+def clean_manifest(data, store_dir: Path, trust_links: bool = True) -> tuple[dict, int]:
     """Keep only well-formed manifest records whose folder and files stay inside the store's folder.
 
-    Text is cleaned and store links must be http(s). Returns the cleaned data and how many records were dropped.
+    Text is cleaned, and a record's link is kept only when it leads to that store's own website and the
+    manifest is trusted (see check_seal); otherwise it's dropped until the next sync fetches it again.
+    Returns the cleaned data and how many entries were dropped.
     """
-    from asset_browser import safe_url
+    store = store_dir.name.lower()
     assets = data.get("assets") if isinstance(data, dict) and isinstance(data.get("assets"), dict) else {}
     kept, dropped = {}, 0
     for key, rec in assets.items():
@@ -278,11 +412,12 @@ def clean_manifest(data, store_dir: Path) -> tuple[dict, int]:
                     dropped += 1
         rec = {**rec, "files": files, "name": clean_text(rec.get("name"), 300) or "Untitled",
                "creator": clean_text(rec.get("creator"), 200) or "Unknown creator",
-               "url": safe_url(rec.get("url"))}
+               "url": store_link(store, rec.get("url")) if trust_links else None}
         if rec.get("variants") is not None:
             rec["variants"] = clean_text(rec["variants"], 300) or None
         kept[key] = rec
-    return {**(data if isinstance(data, dict) else {}), "assets": kept}, dropped
+    rest = {k: v for k, v in (data.items() if isinstance(data, dict) else []) if k not in ("assets", "integrity")}
+    return {**rest, "assets": kept}, dropped
 
 
 def deep_merge(dst: dict, src: dict) -> dict:
@@ -340,23 +475,41 @@ class Manifest:
         """Load a store's manifest, or start an empty one."""
         self.store_dir = store_dir
         self.path = store_dir / "_manifest.json"
-        raw = {}
+        raw, trusted = {}, True
         if self.path.exists():
             try:
                 raw = read_json_file(self.path)
+                trusted = self._check(raw)
             except DataFileError as e:
                 aside = set_aside(self.path)
                 log(f"{store_dir.name}: {e}, so it was kept as {aside.name} and a new record started. "
                     "Files already on disk are kept.")
-        self.data, dropped = clean_manifest(raw, store_dir)
+        self.data, dropped = clean_manifest(raw, store_dir, trust_links=trusted)
         if dropped:
             log(f"{store_dir.name}: ignored {dropped} entries in _manifest.json that pointed outside {store_dir} "
                 "or weren't valid. Check who else can change that folder.")
         self.assets: dict = self.data.setdefault("assets", {})
 
+    def _check(self, raw) -> bool:
+        """Check the manifest's seal, say what it means, and return whether its links can be trusted."""
+        status = check_seal(raw, self.path)
+        name = self.store_dir.name
+        if status == "changed":
+            copy = self.path.with_name(f"_manifest.changed-{time.strftime('%Y%m%d-%H%M%S')}.json")
+            shutil.copy2(self.path, copy)
+            log(f"{name}: _manifest.json was changed by something other than Hoard Downloader since it last saved it. "
+                f"Its store links won't be used until this sync fetches them from {name} again. A copy is kept as "
+                f"{copy.name}. Check what else can change {self.store_dir}.")
+        elif status == "foreign":
+            log(f"{name}: _manifest.json was last saved by Hoard Downloader on another computer, so its store links will "
+                f"be fetched from {name} again. To share this folder between computers, copy integrity.key from Hoard's "
+                "app-data folder on one to the other.")
+        return status in ("sealed", "unsealed")
+
     def save(self) -> None:
-        """Write the manifest through a temporary file, so a crash can't leave it half-written."""
-        write_file_safely(self.path, json.dumps(self.data, indent=2, ensure_ascii=False))
+        """Seal the manifest and write it through a temporary file, so a crash can't leave it half-written."""
+        write_file_safely(self.path, json.dumps(seal(self.data), indent=2, ensure_ascii=False))
+        remember_sealed(self.path)
 
     def record(self, key: str, creator: str, name: str) -> dict:
         """Existing record for a product, or a new one with a folder no other product uses."""
@@ -1964,6 +2117,9 @@ def name_tokens(name: str, min_len: int, stop: set) -> set[str]:
     return out
 
 
+_warned_changed: set = set()
+
+
 def read_manifests(root: Path) -> list[dict]:
     """Every downloaded asset from every store's manifest, each tagged with its store."""
     assets = []
@@ -1972,10 +2128,16 @@ def read_manifests(root: Path) -> list[dict]:
         if not mpath.exists():
             continue
         try:
-            data, dropped = clean_manifest(read_json_file(mpath), root / store)
+            raw = read_json_file(mpath)
         except (DataFileError, PermissionError) as e:
             log(f"{store}: skipped its _manifest.json ({e})")
             continue
+        status = check_seal(raw, mpath)
+        if status == "changed" and mpath not in _warned_changed:
+            _warned_changed.add(mpath)
+            log(f"{store}: _manifest.json was changed by something other than Hoard Downloader, so its store links "
+                "aren't shown. The next sync fetches them again.")
+        data, dropped = clean_manifest(raw, root / store, trust_links=status in ("sealed", "unsealed"))
         for rec in data["assets"].values():
             if rec.get("files"):
                 assets.append({"store": store, **rec})
@@ -2012,7 +2174,7 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
         a_tags = sorted((ts & tags) - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,
-                        "url": a.get("url"), "variants": a.get("variants"), "added": added,
+                        "url": store_link(a["store"], a.get("url")), "variants": a.get("variants"), "added": added,
                         "files": sorted(f["path"] for f in a["files"].values()),
                         "tags": mine, "suggested_tags": a_tags})
         for t in a_tags:
@@ -2022,14 +2184,14 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
 
 
 # What catalog.json, tags.json and asset.json promise (docs/DATA-FORMATS.md describes them in full).
-CATALOG_FORMAT = {"catalog": {"format": "hoard-catalog", "version": 2},
-                  "asset": {"format": "hoard-asset", "version": 2},
-                  "tags": {"format": "hoard-tags", "version": 2}}
+CATALOG_FORMAT = {"catalog": {"format": "hoard-catalog", "version": 3},
+                  "asset": {"format": "hoard-asset", "version": 3},
+                  "tags": {"format": "hoard-tags", "version": 3}}
 
 
 def validate_catalog_entry(entry: dict) -> list[str]:
     """Problems with one catalog entry, measured against the promises in docs/DATA-FORMATS.md (empty when fine)."""
-    from asset_browser import clean_tag, safe_url
+    from asset_browser import clean_tag
     problems = []
     label = str(entry.get("folder"))[:80]
     if entry.get("store") not in STORE_DIRS.values():
@@ -2044,8 +2206,8 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: folder isn't a plain relative path")
     if not isinstance(entry.get("files"), list) or not all(valid_rel(f) for f in entry["files"]):
         problems.append(f"{label}: a file path isn't a plain relative path")
-    if entry.get("url") is not None and safe_url(entry["url"]) != entry["url"]:
-        problems.append(f"{label}: url isn't an http(s) address")
+    if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
+        problems.append(f"{label}: url isn't an https address on the store's own website")
     for field in ("tags", "suggested_tags"):
         if not isinstance(entry.get(field), list) or any(not isinstance(t, str) or clean_tag(t) != t or not t for t in entry[field]):
             problems.append(f"{label}: {field} has a tag that isn't clean")
@@ -2071,22 +2233,60 @@ def build_catalog(cfg: dict, root: Path) -> None:
         except UnsafePath:
             continue
         if adir.is_dir():
-            write_file_safely(adir / "asset.json", json.dumps({**CATALOG_FORMAT["asset"], **entry}, indent=2,
+            write_file_safely(adir / "asset.json", json.dumps(seal({**CATALOG_FORMAT["asset"], **entry}), indent=2,
                                                               ensure_ascii=False), root)
-    write_file_safely(root / "catalog.json", json.dumps({**CATALOG_FORMAT["catalog"], "generated_at": now_iso(),
-                                                         "assets": catalog}, indent=2, ensure_ascii=False), root)
+    write_file_safely(root / "catalog.json", json.dumps(seal({**CATALOG_FORMAT["catalog"], "generated_at": now_iso(),
+                                                              "assets": catalog}), indent=2, ensure_ascii=False), root)
     yours: dict[str, list] = {}
     for entry in catalog:
         for t in entry["tags"]:
             yours.setdefault(t, []).append(entry["folder"])
-    write_file_safely(root / "tags.json", json.dumps({
+    write_file_safely(root / "tags.json", json.dumps(seal({
         **CATALOG_FORMAT["tags"], "generated_at": now_iso(), "total_assets": len(catalog),
         "tags": {t: {"count": len(v), "assets": v} for t, v in sorted(yours.items(), key=lambda kv: (-len(kv[1]), kv[0]))},
         "suggested": {t: {"count": len(v), "assets": v} for t, v in ordered.items()},
-    }, indent=2, ensure_ascii=False), root)
+    }), indent=2, ensure_ascii=False), root)
     top = ", ".join(f"{t} ({len(v)})" for t, v in list(ordered.items())[:25])
     log(f"\nTagged {len(catalog)} assets with {len(ordered)} suggested tags. Top: {top or '-'}")
     log("Prune noisy ones via tags.blocklist in config.json, then run `tags` again.")
+
+
+def cmd_verify(cfg: dict, root: Path) -> int:
+    """Check the seal on every data file in the download folder, then rebuild the catalog files. 1 if any were changed."""
+    labels = {"sealed": "fine", "unsealed": "not sealed yet (saved by an older version; sealed on the next sync)",
+              "foreign": "sealed by Hoard Downloader on another computer",
+              "changed": "CHANGED by something other than Hoard Downloader"}
+    changed = 0
+    files = [root / d / "_manifest.json" for d in STORE_DIRS.values()] + [root / "catalog.json", root / "tags.json"]
+    files += sorted(root.glob("*/*/*/asset.json"))
+    counts: Counter = Counter()
+    for path in files:
+        if not path.is_file():
+            continue
+        try:
+            status = check_seal(read_json_file(path), path if path.name == "_manifest.json" else None)
+        except DataFileError as e:
+            status = "changed"
+            log(f"  {path.relative_to(root)}: {e}")
+        counts[status] += 1
+        if status != "sealed":
+            log(f"  {path.relative_to(root)}: {labels[status]}")
+        changed += status == "changed"
+    log(f"Checked {sum(counts.values())} files: " + ", ".join(f"{n} {labels[k].split(' (')[0]}" for k, n in counts.items()))
+    for store in STORE_DIRS.values():  # keep changed manifests' records, without their links, and seal them again
+        mpath = root / store / "_manifest.json"
+        if mpath.is_file():
+            try:
+                changed_here = check_seal(read_json_file(mpath), mpath) == "changed"
+            except DataFileError:
+                changed_here = True
+            if changed_here:
+                Manifest(root / store).save()
+                log(f"  {store}/_manifest.json: kept its records without their links and sealed it again. "
+                    f"The next {store} sync fetches the links from the store.")
+    log("Rebuilding catalog.json, tags.json and every asset.json from the records...")
+    build_catalog(cfg, root)
+    return 1 if changed else 0
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -2179,6 +2379,7 @@ def main() -> None:
                    help="read your Payhip products from a library page saved in your own browser (.mhtml or .html)")
 
     sub.add_parser("tags", help="rebuild catalog.json and tags.json from what's downloaded")
+    sub.add_parser("verify", help="check whether any data file was changed outside Hoard Downloader, and rebuild the catalog")
 
     s = sub.add_parser("browse", help="open a searchable asset browser in your web browser")
     s.add_argument("--port", type=int, default=8765)
@@ -2200,6 +2401,8 @@ def main() -> None:
         cmd_logout(cfg, args)
     elif args.cmd == "sync":
         cmd_sync(cfg, args)
+    elif args.cmd == "verify":
+        sys.exit(cmd_verify(cfg, root_dir(cfg)))
     elif args.cmd == "tags":
         build_catalog(cfg, root_dir(cfg))
     elif args.cmd == "browse":

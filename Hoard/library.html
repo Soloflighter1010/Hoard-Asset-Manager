@@ -439,6 +439,15 @@ let DATA = { items: [], stores: {}, labels: {}, job: {} }, byKey = new Map(), op
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
 const safeUrl = u => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch (e) { return ""; } };
+// Links to a store only open when they lead to that store's own website (the same rule the tool applies).
+const STORE_SITES = { booth: ["booth.pm"], gumroad: ["gumroad.com"], jinxxy: ["jinxxy.com"], payhip: ["payhip.com"] };
+const storeUrl = (store, u) => {
+  const s = safeUrl(u); if (!s) return "";
+  const x = new URL(s), host = x.hostname.replace(/\.$/, "");
+  const sites = STORE_SITES[String(store).toLowerCase()] || [];
+  return x.protocol === "https:" && !x.username && !x.password && (!x.port || x.port === "443") &&
+    sites.some(d => host === d || host.endsWith("." + d)) ? s : "";
+};
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const norm = s => String(s || "").normalize("NFKC").toLowerCase();
 const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
@@ -645,10 +654,10 @@ function openStores(open) {
 /* ---------- detail */
 function showDetail(a, focus = true) {
   openKey = a.key;
-  const by = safeUrl(a.creator_url) ? `<a href="${esc(safeUrl(a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
+  const by = storeUrl(a.store, a.creator_url) ? `<a href="${esc(storeUrl(a.store, a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
   const extra = [a.variants && esc(a.variants), a.gift && "gift", a.archived && "archived on Gumroad"].filter(Boolean).join(", ");
   const store = label(a.store);
-  const pageLink = safeUrl(a.url) && a.url !== a.download_url ? `<a class="ghost" href="${esc(safeUrl(a.url))}" target="_blank" rel="noopener noreferrer">Open store page</a>` : "";
+  const pageLink = storeUrl(a.store, a.url) && a.url !== a.download_url ? `<a class="ghost" href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer">Open store page</a>` : "";
   $("#detail").innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
     `<div class="d-art">${a.thumbnail ? `<img src="/thumb/${encodeURIComponent(a.key)}" alt="">` : placeholder(a)}</div>` +
@@ -658,11 +667,11 @@ function showDetail(a, focus = true) {
     (a.also_in.length ? `<p class="note">You also own this on ${a.also_in.map(label).join(" and ")}. ` +
       `<button class="linkish" data-act="others">Show all copies</button></p>` : "") +
     `<div class="actions">` +
-      (safeUrl(a.download_url) ? `<a class="primary" href="${esc(safeUrl(a.download_url))}" target="_blank" rel="noopener noreferrer">Open download page</a>` : "") +
+      (storeUrl(a.store, a.download_url) ? `<a class="primary" href="${esc(storeUrl(a.store, a.download_url))}" target="_blank" rel="noopener noreferrer">Open download page</a>` : "") +
       pageLink + `</div>` +
     tagSection(a) +
-    (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => safeUrl(f.url)).map(f =>
-      `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(safeUrl(f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
+    (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
+      `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
   if (focus) $("#detail .x").focus();

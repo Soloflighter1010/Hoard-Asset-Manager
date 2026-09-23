@@ -159,6 +159,14 @@ Each Python file carries the same "data files" section (a test checks the copies
   `build_catalog()` leaves out any entry that fails it.
 - `TagStore.sanitize()` checks every entry of the tag file on load, converting names the rules don't
   allow; `TAG_LIMITS` caps its size.
+- `store_link(store, url)` is the only way a link reaches a page or a data file: https, on that store's
+  own site (`STORE_LINK_SITES`). The pages repeat the rule in `storeUrl()`, and a test keeps the two lists
+  identical. Downloads never use stored links.
+- `seal()` adds an HMAC-SHA256 `integrity` field keyed by `integrity_key()` (random, in the app-data
+  folder); `check_seal()` answers `sealed`, `unsealed`, `foreign` or `changed`, using
+  `remember_sealed()`'s list of files this install has sealed so a removed seal counts as `changed`.
+  `Manifest` and `Library` drop links from anything not `sealed` or `unsealed`; `cmd_verify` reports and
+  re-seals changed manifests without their links, then rebuilds the catalog.
 
 ## Tests and dependencies
 

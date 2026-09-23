@@ -14,14 +14,37 @@ against them (`validate_catalog_entry`) before writing, and leaves out any entry
 - **Paths are plain and relative.** `folder` and every entry in `files` use `/`, never start with `/`,
   and have no `..`, `.` or empty parts, no drive letters, no `:` and none of `<>"\|?*`. `folder` is
   relative to the download folder; `files` are relative to `folder`.
-- **Links are web addresses.** `url` is `null` or an `http://` or `https://` address.
+- **Links lead to the store.** `url` is `null` or an `https://` address on the asset's own store: `booth.pm`,
+  `gumroad.com`, `jinxxy.com` or `payhip.com`, or a subdomain of it (such as a Booth shop's `<shop>.booth.pm`),
+  with no user name, password or port. These links are for people to open; Hoard never downloads from them.
+- **They're sealed.** Each file carries an `integrity` field (below), so an edit made by any other program
+  is detectable.
 - **Tags follow the tag rules.** Lower case; letters, marks and digits in any script, plus space and
   `- _ . + & '`; at most 40 characters; never `constructor`, `prototype` or `__proto__`.
 - **Files are complete.** Each file is written to a temporary file and swapped in, so a reader never
   sees half of one.
 
-Still, treat them as data from outside your program: check `format` and `version`, and before opening
-a path, confirm it resolves inside the download folder. Never run anything named in them.
+Still, treat them as data from outside your program: check `format` and `version`, check the seal if you
+can, re-check `url` against the rule above before showing it as a link, and before opening a path,
+confirm it resolves inside the download folder. Never run anything named in them.
+
+## The seal
+
+```json
+"integrity": { "alg": "HMAC-SHA256", "key_id": "<16 hex digits>", "mac": "<64 hex digits>" }
+```
+
+`mac` is HMAC-SHA256, keyed with the 32 bytes hex-encoded in `integrity.key` in Hoard's app-data folder
+(`%LOCALAPPDATA%\Hoard` on Windows, `~/Library/Application Support/Hoard` on macOS, `~/.local/share/Hoard`
+on Linux), over the file's JSON with the `integrity` field removed, serialised with keys sorted by code
+point, no spaces (`,` and `:` separators), non-ASCII characters written as UTF-8 rather than escaped, and
+encoded as UTF-8. `key_id` is the first 16 hex digits of the key's SHA-256.
+
+A program running as the same user on the same computer (such as a Unity plugin) can read the key and
+check the seal: if the `mac` doesn't match, something other than Hoard edited the file, and it shouldn't
+be trusted. The key is private to your user account, so programs that can't read it can't produce a valid
+seal. When a file has been edited, `python asset_dl.py verify` reports it and rebuilds the catalog files
+from Hoard Downloader's own records.
 
 ## `catalog.json` (in the download folder)
 
@@ -66,6 +89,13 @@ The same fields as one `<asset>` above, plus `"format": "hoard-asset"` and `"ver
 }
 ```
 
+## Records Hoard Downloader keeps for itself
+
+`_manifest.json` in each store folder records what's downloaded and where. It's sealed the same way.
+Other programs shouldn't write to it: when the seal shows it was changed, Hoard Downloader keeps its
+records but stops using their store links, keeps a copy of the changed file as
+`_manifest.changed-<date>.json`, and fetches the links from the store again on the next sync.
+
 ## Your tags (`tags.json` in Hoard's app-data folder)
 
 This one belongs to the tools. Don't write to it; use Hoard's Tags panel. It's private to your user
@@ -74,5 +104,6 @@ account, both tools check every entry when they read it, and a damaged copy is k
 
 ## Version history
 
+- **3** (1.6.2): the `integrity` seal; `url` must be an https address on the asset's own store.
 - **2** (1.6.1): `format` and `version` fields; the promises above are checked before writing.
 - **1** (1.5.0): `tags` (yours) and `suggested` in `tags.json`; `tags` and `suggested_tags` per asset.

@@ -32,6 +32,19 @@ import asset_browser  # noqa: E402  Hoard Downloader's browser
 import asset_dl  # noqa: E402  Hoard Downloader
 import library  # noqa: E402  Hoard
 
+_TEST_HOME = Path(tempfile.mkdtemp(prefix="hoard-tests-"))
+for _m in (asset_dl, library, asset_browser):
+    _m._hoard_folder = lambda: _TEST_HOME / "Hoard"
+
+
+def reset_keys():
+    """Start with no sealing key and no record of sealed files (as on a fresh install)."""
+    import shutil
+    shutil.rmtree(_TEST_HOME / "Hoard", ignore_errors=True)
+    for m in (asset_dl, library, asset_browser):
+        m._integrity_key, m._sealed_ids = None, None
+
+
 WEB_SAFETY = (library, asset_browser)       # both servers carry the web-safety code
 SIGN_INS = (library, asset_dl)              # both tools carry the sign-in code
 PAGES = (REPO / "Hoard" / "library.html", REPO / "HoardDownloader" / "browser.html")
@@ -60,7 +73,8 @@ class SharedCodeStaysIdentical(unittest.TestCase):
             self.assertEqual(inspect.getsource(getattr(library, name)), inspect.getsource(getattr(asset_browser, name)), name)
 
     def test_data_file_code_matches(self):
-        for name in ("clean_text", "read_json_file", "set_aside", "write_file_safely", "DataFileError"):
+        for name in ("clean_text", "read_json_file", "set_aside", "write_file_safely", "DataFileError", "store_link",
+                     "integrity_key", "_canonical", "seal", "check_seal", "remember_sealed", "_sealed_file_ids"):
             src = inspect.getsource(getattr(asset_dl, name))
             self.assertEqual(src, inspect.getsource(getattr(library, name)), name)
             self.assertEqual(src, inspect.getsource(getattr(asset_browser, name)), name)
@@ -83,7 +97,7 @@ class Links(unittest.TestCase):
     def test_pages_only_link_checked_addresses(self):
         for page in PAGES:
             html = page.read_text("utf-8")
-            unchecked = re.findall(r'href="\$\{esc\((?!safeUrl)[^)]*\)\}"', html)
+            unchecked = re.findall(r'href="\$\{esc\((?!safeUrl|storeUrl)[^)]*\)\}"', html)
             self.assertEqual(unchecked, [], f"{page.name} builds links without safeUrl: {unchecked}")
             self.assertNotRegex(html, r'rel="noopener"(?! noreferrer)', f"{page.name}: links should use noopener noreferrer")
 
@@ -474,7 +488,7 @@ class DataFiles(unittest.TestCase):
         with mock.patch.dict(os.environ, {"XDG_DATA_HOME": self.tmp.name, "LOCALAPPDATA": self.tmp.name}):
             asset_dl.build_catalog(cfg, self.root)
         catalog = json.loads((self.root / "catalog.json").read_text("utf-8"))
-        self.assertEqual((catalog["format"], catalog["version"]), ("hoard-catalog", 2))
+        self.assertEqual((catalog["format"], catalog["version"]), ("hoard-catalog", 3))
         self.assertEqual(len(catalog["assets"]), 1)
         for entry in catalog["assets"]:
             self.assertEqual(asset_dl.validate_catalog_entry(entry), [])
@@ -629,6 +643,149 @@ class TagHardening(unittest.TestCase):
             finally:
                 srv.shutdown()
                 srv.server_close()
+
+
+class StoreLinks(unittest.TestCase):
+    """An edited record can't send you anywhere but the item's own store."""
+
+    def test_rule(self):
+        for m in (asset_dl, library, asset_browser):
+            ok = [("booth", "https://booth.pm/ja/items/1"), ("Booth", "https://kitsu.booth.pm/items/2"),
+                  ("gumroad", "https://app.gumroad.com/d/abc"), ("gumroad", "https://creator.gumroad.com/l/x"),
+                  ("jinxxy", "https://jinxxy.com/creator/item"), ("payhip", "https://payhip.com/b/AbC1")]
+            bad = [("booth", "https://booth.pm.evil.example/"), ("booth", "https://evil.example/booth.pm"),
+                   ("booth", "https://booth.pm@evil.example/"), ("booth", "http://booth.pm/items/1"),
+                   ("booth", "https://b\u043e\u043eth.pm/"), ("booth", "https://xn--bth-ted.pm/"),
+                   ("booth", "https://app.gumroad.com/d/x"), ("payhip", "https://payhip.com:8443/b/x"),
+                   ("booth", "javascript:alert(1)"), ("nowhere", "https://booth.pm/"), ("booth", None)]
+            for store, url in ok:
+                self.assertEqual(m.store_link(store, url), url, (m.__name__, url))
+            for store, url in bad:
+                self.assertIsNone(m.store_link(store, url), (m.__name__, store, url))
+
+    def test_pages_use_the_same_rule(self):
+        for page in PAGES:
+            html = page.read_text("utf-8")
+            js = re.search(r"const STORE_SITES = (\{.*?\});", html).group(1)
+            sites = json.loads(re.sub(r"(\w+):", r'"\1":', js))
+            self.assertEqual({k: tuple(v) for k, v in sites.items()}, asset_dl.STORE_LINK_SITES, page.name)
+            for field in ("a.url", "a.download_url", "a.creator_url", "f.url"):
+                for use in re.findall(r"href=\"\$\{esc\((\w+)\([^)]*" + re.escape(field) + r"\)\)\}", html):
+                    self.assertEqual(use, "storeUrl", f"{page.name}: {field} must be checked with storeUrl")
+
+
+class Seals(unittest.TestCase):
+    """Edits made by other programs are noticed, and their links aren't trusted."""
+
+    def setUp(self):
+        reset_keys()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_states(self):
+        for m in (asset_dl, library, asset_browser):
+            reset_keys()
+            path = self.dir / f"{m.__name__}.json"
+            sealed = m.seal({"assets": {"1": {"url": "https://booth.pm/ja/items/1"}}})
+            self.assertEqual(m.check_seal(sealed, path), "sealed")
+            edited = json.loads(json.dumps(sealed))
+            edited["assets"]["1"]["url"] = "https://booth.pm/ja/items/666"
+            self.assertEqual(m.check_seal(edited, path), "changed")
+            stripped = {k: v for k, v in sealed.items() if k != "integrity"}
+            self.assertEqual(m.check_seal(stripped, path), "unsealed")   # never sealed there: an older version's file
+            m.remember_sealed(path)
+            self.assertEqual(m.check_seal(stripped, path), "changed")    # sealed there before: the seal was removed
+            other = json.loads(json.dumps(sealed))
+            other["integrity"]["key_id"] = "0" * 16
+            self.assertEqual(m.check_seal(other, path), "foreign")
+
+    def test_key_is_private_and_shared_by_the_tools(self):
+        key = asset_dl.integrity_key()
+        self.assertEqual(library.integrity_key(), key)
+        self.assertEqual(asset_browser.integrity_key(), key)
+        if os.name == "posix":
+            self.assertEqual(stat.S_IMODE((_TEST_HOME / "Hoard" / "integrity.key").stat().st_mode), 0o600)
+
+    def _download_folder(self):
+        root = self.dir / "downloads"
+        folder = root / "Booth" / "Kitsu Studio" / "Rusk"
+        folder.mkdir(parents=True)
+        (folder / "rusk.zip").write_bytes(b"zip")
+        man = asset_dl.Manifest(root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec.update(name="Rusk", creator="Kitsu Studio", url="https://booth.pm/ja/items/111")
+        rec["files"]["f1"] = {"path": "rusk.zip", "size": 3}
+        man.save()
+        return root
+
+    def test_a_tool_changing_a_manifest_link_is_caught(self):
+        root = self._download_folder()
+        path = root / "Booth" / "_manifest.json"
+        data = json.loads(path.read_text("utf-8"))
+        data["assets"]["111"]["url"] = "https://booth.pm/ja/items/666"   # same store, different page: only the seal notices
+        path.write_text(json.dumps(data))
+        cfg = json.loads(json.dumps(asset_dl.DEFAULT_CONFIG))
+        self.assertEqual(asset_dl.cmd_verify(cfg, root), 1, "verify reports the change")
+        self.assertEqual(asset_dl.cmd_verify(cfg, root), 0, "and settles it: records kept, links dropped, sealed again")
+        man = asset_dl.Manifest(root / "Booth")
+        self.assertIsNone(man.assets["111"]["url"], "a changed manifest's links must not be used")
+        self.assertIn("rusk.zip", [f["path"] for f in man.assets["111"]["files"].values()], "records are kept")
+        self.assertTrue(list((root / "Booth").glob("_manifest.changed-*.json")), "a copy is kept to look at")
+
+    def test_older_unsealed_manifests_keep_only_store_links(self):
+        root = self.dir / "downloads"
+        (root / "Booth" / "A" / "B").mkdir(parents=True)
+        (root / "Booth" / "_manifest.json").write_text(json.dumps({"assets": {
+            "1": {"folder": "A/B", "name": "Good", "creator": "A", "url": "https://booth.pm/ja/items/1", "files": {}},
+            "2": {"folder": "A/B", "name": "Phish", "creator": "A", "url": "https://booth-login.example/", "files": {}}}}))
+        man = asset_dl.Manifest(root / "Booth")
+        self.assertEqual(man.assets["1"]["url"], "https://booth.pm/ja/items/1")
+        self.assertIsNone(man.assets["2"]["url"])
+
+    def test_a_tool_changing_asset_json_is_caught_and_repaired(self):
+        root = self._download_folder()
+        cfg = json.loads(json.dumps(asset_dl.DEFAULT_CONFIG))
+        asset_dl.build_catalog(cfg, root)
+        asset_path = root / "Booth" / "Kitsu Studio" / "Rusk" / "asset.json"
+        for name in ("catalog.json", "tags.json"):
+            self.assertEqual(asset_dl.check_seal(json.loads((root / name).read_text("utf-8"))), "sealed", name)
+        asset = json.loads(asset_path.read_text("utf-8"))
+        self.assertEqual(asset_dl.check_seal(asset), "sealed")
+        asset["url"] = "https://booth-login.example/"
+        asset_path.write_text(json.dumps(asset))
+        self.assertEqual(asset_dl.check_seal(json.loads(asset_path.read_text("utf-8"))), "changed")
+        self.assertEqual(asset_dl.cmd_verify(cfg, root), 1, "verify reports the change")
+        repaired = json.loads(asset_path.read_text("utf-8"))
+        self.assertEqual(repaired["url"], "https://booth.pm/ja/items/111")
+        self.assertEqual(asset_dl.check_seal(repaired), "sealed")
+        self.assertEqual(asset_dl.cmd_verify(cfg, root), 0)
+
+    def test_a_tool_changing_hoards_list_is_caught(self):
+        path = self.dir / "library.json"
+        lib = library.Library(path)
+        lib.data["items"] = [library.item("booth", "1", name="Rusk", url="https://booth.pm/ja/items/1",
+                                          download_url="https://accounts.booth.pm/orders/1", thumbnail="https://booth.pximg.net/x.jpg")]
+        lib.data["stores"] = {"booth": {"count": 1}}
+        lib.save()
+        self.assertEqual(library.Library(path).data["items"][0]["url"], "https://booth.pm/ja/items/1")
+        data = json.loads(path.read_text("utf-8"))
+        data["items"][0]["download_url"] = "https://booth.pm/ja/items/666"
+        path.write_text(json.dumps(data))
+        reloaded = library.Library(path)
+        item = reloaded.data["items"][0]
+        self.assertEqual((item["url"], item["download_url"], item["thumbnail"]), (None, None, None))
+        self.assertIn("changed by something other than Hoard", reloaded.data["stores"]["booth"]["error"])
+
+    def test_hoard_drops_links_to_other_sites_even_in_old_lists(self):
+        path = self.dir / "old-library.json"
+        path.write_text(json.dumps({"items": [{"store": "booth", "id": "1", "name": "X",
+                                               "url": "https://booth-login.example/", "download_url": "https://booth.pm/ja/items/1"}]}))
+        item = library.Library(path).data["items"][0]
+        self.assertIsNone(item["url"])
+        self.assertEqual(item["download_url"], "https://booth.pm/ja/items/1")
 
 
 class SupplyChain(unittest.TestCase):
