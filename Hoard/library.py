@@ -34,7 +34,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+<<<<<<< HEAD
 __version__ = "1.2.0"
+=======
+__version__ = "1.1.0"
+>>>>>>> refs/remotes/origin/main
 
 HERE = Path(__file__).resolve().parent
 LIBRARY_FILE = HERE / "library.json"
