@@ -8,8 +8,8 @@
 - Add Privacy Policy, Copyright and Terms of Service Documents in the Repo: **Done** (1.3.0)
 - Add Ai Disclaimer: **Done** (1.3.0)
 - Allow Offline Compatibility: **Done** (1.4.0)
+- Create a Tag Manager: **Done** (1.5.0)
 ---
-- Create a Tag Manager
 - Implement a Unity Plugin and VPM Package
 - Link VPM Package with Repo on Pages
 - Set up both versions to be standalone apps that don't need a command prompt or bat files
