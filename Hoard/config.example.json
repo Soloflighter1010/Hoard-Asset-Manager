@@ -1,6 +1,6 @@
 {
   "port": 8766,
-  "profile_dir": ".browser-profile",
+  "profile_dir": "",
   "browser_channel": "",
   "request_delay": 0.8,
   "gumroad": { "include_archived": true },

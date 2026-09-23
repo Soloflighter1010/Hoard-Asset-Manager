@@ -32,17 +32,40 @@ Start with **Hoard** to see what you own. Add **Hoard Downloader** when you want
 
 On Linux or macOS, run `./setup.sh` and then `./run.sh` in each tool's folder.
 
-**Updating:** extract the new zip over the old folder. Your settings (`config.json`), sign-ins
-(`.browser-profile`) and library data aren't in the zip, so they stay.
+**Updating:** extract the new zip over the old folder. Your settings (`config.json`) and library data
+aren't in the zip, and your sign-ins are kept elsewhere, so everything stays.
 
 Each tool has its own README with the details: [Hoard](Hoard/README.md),
 [Hoard Downloader](HoardDownloader/README.md).
 
-## Privacy and safety
+## Your sign-ins
 
-- You sign in to each store in a real browser window. Your sign-ins are saved only in that tool's
-  `.browser-profile` folder on your PC. Anyone with that folder can use your store accounts, so never
-  share it or put it in a synced or public folder.
+You sign in to each store once, in a browser window that belongs to Hoard alone (never your everyday
+browser). Here's how those sign-ins are kept safe:
+
+- **Kept out of the program folder.** They live in your user account's private app-data folder, so
+  zipping, sharing, syncing or committing the program folder never carries them. Both Hoard tools share
+  them, so you sign in once for both.
+
+  | Windows | macOS | Linux |
+  |---|---|---|
+  | `%LOCALAPPDATA%\Hoard\sign-ins` | `~/Library/Application Support/Hoard/sign-ins` | `~/.local/share/Hoard/sign-ins` |
+
+- **Encrypted by your operating system.** Windows ties them to your Windows account. On macOS they're
+  protected by the Keychain (macOS asks once whether Hoard's browser may use it; choose Always Allow).
+  On Linux they use your desktop keyring. A Linux machine with no keyring, like a headless NAS, can't
+  encrypt them, so there the folder is locked to your user account instead.
+- **One program at a time.** The two tools never use your sign-ins at the same moment, which keeps the
+  saved cookies from getting damaged.
+- **Easy to remove.** Sign out of one store, or of every store, from the Hoard Downloader menu or
+  Hoard's Stores panel. That only removes Hoard's copy; your store account isn't affected.
+
+Anyone who gets that folder while you're logged in to your computer could use your store accounts, so
+never copy it anywhere. Versions before 1.2 kept sign-ins in a `.browser-profile` folder next to the
+program; the first run of 1.2 moves them to the private folder automatically and removes the old one.
+
+## Privacy
+
 - The tools talk to the stores you use and to nothing else. The library pages run on your own PC at
   `127.0.0.1`; the only other thing they load is the page typeface from Google Fonts.
 - Everything they save (your library list, downloads, thumbnails) stays in the tool's folder or the

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0
+
+Safer sign-ins, in both tools.
+- Sign-ins moved out of the program folder into your user account's private app-data folder, so sharing,
+  syncing or committing the program folder can't carry them. The first run moves existing sign-ins
+  automatically and removes the old copy. Both tools now share one set of sign-ins.
+- Saved sign-ins are encrypted by the operating system on every platform. On Linux and macOS the
+  browser previously used a fixed, publicly known key, which made them readable to anything that could
+  read the files. macOS users need to sign in again once.
+- The two tools can no longer use the sign-ins at the same moment, which could damage them.
+- Sign out of a store, or of every store, from the Hoard Downloader menu, Hoard's Stores panel, or the
+  `logout` command.
+- A Gumroad session cookie for headless use now comes from the `HOARD_GUMROAD_SESSION` environment
+  variable. Keeping it in `config.json` still works but shows a warning.
+
 ## 1.1.0
 
 ### Hoard Downloader

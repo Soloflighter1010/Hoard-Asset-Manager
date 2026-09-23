@@ -26,9 +26,12 @@ Then double-click `Hoard Downloader.bat` (or run `./run.sh`), choose **Sign in t
 to each store you buy from. A browser window opens; sign in there, then press Enter in the menu window.
 Stores you never sign in to are skipped.
 
-Logins are saved in `.browser-profile/` in this folder. Treat that folder like a password and never
-share it. If Google sign-in refuses the automated browser, sign in with email and password instead, or
-set `"browser_channel": "chrome"` in `config.json` to use your installed Chrome.
+Your sign-ins are encrypted by your operating system and kept in a private folder outside this one,
+shared with Hoard; the main README's "Your sign-ins" section has the details. **Sign out of a store** in
+the menu removes Hoard's copy of a sign-in, for one store or for all of them.
+
+If Google sign-in refuses the automated browser, sign in with email and password instead, or set
+`"browser_channel": "chrome"` in `config.json` to use your installed Chrome.
 
 ## Use
 
@@ -121,9 +124,10 @@ for, open the receipt's download link and choose **Get Started** to add it.
 
 ## Notes
 
-- Runs on Windows and Linux. On a headless machine, Gumroad works with `gumroad.session_cookie`
-  (your `_gumroad_app_session` cookie); Booth and Jinxxy need one `login` with a display, and Payhip
-  needs a display every time.
+- Runs on Windows and Linux. On a headless machine, Gumroad can use your `_gumroad_app_session` cookie
+  from the `HOARD_GUMROAD_SESSION` environment variable. Keep it out of `config.json`, which is easy to
+  share by accident. Booth and Jinxxy need one `login` with a display, and Payhip needs a display every
+  time.
 - Sessions expire now and then (Gumroad's after about a month). When sync says a store isn't signed in,
   sign in to it again from the menu.
 - Folder and file names are cleaned for Windows and capped in length. If you still hit path-length

@@ -2,11 +2,11 @@
   "root": "downloads",
   "request_delay": 1.0,
   "browser_channel": "",
+  "profile_dir": "",
   "gumroad": {
     "enabled": true,
     "include_archived": true,
-    "save_thumbnails": true,
-    "session_cookie": ""
+    "save_thumbnails": true
   },
   "jinxxy": {
     "enabled": true,

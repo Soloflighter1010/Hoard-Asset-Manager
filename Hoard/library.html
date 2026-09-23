@@ -112,6 +112,10 @@ a { color: var(--gold); text-underline-offset: 3px; }
 .store-row .nm { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 9px; }
 .store-row .meta { grid-column: 1; font-size: 13px; color: var(--dust); }
 .store-row .err { grid-column: 1 / -1; font-size: 13px; color: var(--warn); line-height: 1.45; }
+.store-row .err.info { color: var(--dust); }
+.stores .hint.safe { border-top: 1px solid var(--seam); padding-top: 12px; }
+.stores .hint.safe .linkish { display: block; margin-top: 8px; font-size: 13px; }
+.stores .hint.safe span { overflow-wrap: anywhere; }
 .store-row .btns { grid-row: 1 / span 2; grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 260px; }
 .ghost.sm { height: 32px; padding: 0 11px; font-size: 13px; }
 .primary {
@@ -280,6 +284,9 @@ a.ghost { height: 42px; }
   <p>Sign in to each store once. Refresh reads what you've bought; nothing is downloaded.</p>
   <div id="storeRows"></div>
   <button id="refreshAll" class="primary">Refresh all stores</button>
+  <p class="hint safe">Your sign-ins stay on this computer, encrypted by your operating system, in a folder only
+    Hoard uses<span id="signinsPath"></span>. Never share that folder.
+    <button class="linkish" id="signOutAll">Sign out of every store</button></p>
   <p class="hint">If a store blocks the automatic refresh, open your library there in your usual browser, scroll to
     the bottom, press Ctrl+S and save it as "Webpage, Single File". Then choose Import page, or drop the file on this window.</p>
   <input id="importFile" type="file" accept=".mhtml,.mht,.html,.htm" hidden>
@@ -399,11 +406,14 @@ function renderStores() {
       `<span class="meta">${esc(meta)}</span>` +
       `<span class="btns"><button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>Sign in</button>` +
       `<button class="ghost sm" data-refresh="${s}" ${busy ? "disabled" : ""}>Refresh</button>` +
-      (IMPORTABLE.includes(s) ? `<button class="ghost sm" data-import="${s}">Import page</button>` : "") + `</span>` +
-      (info.error ? `<span class="err">${esc(info.error)}</span>` : "") + `</div>`;
+      (IMPORTABLE.includes(s) ? `<button class="ghost sm" data-import="${s}">Import page</button>` : "") +
+      `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button></span>` +
+      (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}</span>` : "") + `</div>`;
   }).join("");
   $("#refreshAll").disabled = !!job.running;
-  $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error);
+  $("#signOutAll").disabled = !!job.running;
+  $("#signinsPath").textContent = DATA.signins ? ` (${DATA.signins})` : "";
+  $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
 }
 function renderGrid(list) {
   $("#grid").innerHTML = list.map(a =>
@@ -492,9 +502,11 @@ function startPolling() {
       else renderStores();
       if (!s.job.running) {
         clearInterval(polling); polling = null; await load();
-        const errs = Object.entries(DATA.stores).filter(([, v]) => v.error).map(([k]) => label(k));
-        toast(errs.length ? `Updated. ${errs.join(" and ")} need attention in Stores.` : "Hoard updated");
-        if (errs.length) openStores(true);
+        const errs = Object.entries(DATA.stores).filter(([, v]) => v.error && !/^Signed out/.test(v.error)).map(([k]) => label(k));
+        if (s.job.error) toast(s.job.error);
+        else if (s.job.message && /^Signed out/.test(s.job.message)) toast(s.job.message);
+        else toast(errs.length ? `Updated. ${errs.join(" and ")} need attention in Stores.` : "Hoard updated");
+        if (errs.length || s.job.error) openStores(true);
       }
     } catch (e) { clearInterval(polling); polling = null; showJob(null); }
   }, 1000);
@@ -502,9 +514,9 @@ function startPolling() {
 async function runJob(url, stores, all = false) {
   try {
     await post(url, { stores, all });
-    DATA.job = { running: true, message: url.endsWith("login") ? "Opening a browser window" : "Starting" };
+    DATA.job = { running: true, message: url.endsWith("/login") ? "Opening a browser window" : url.endsWith("logout") ? "Signing out" : "Starting" };
     showJob(DATA.job); renderStores(); startPolling();
-    if (url.endsWith("login")) toast(`Sign in to ${label(stores[0])} in the window that opened, then close it.`);
+    if (url.endsWith("/login")) toast(`Sign in to ${label(stores[0])} in the window that opened, then close it.`);
   } catch (e) { toast(e.message); }
 }
 function openStores(open) {
@@ -571,9 +583,14 @@ $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", STORE_ORDER, true));
+$("#signOutAll").addEventListener("click", () => {
+  if (confirm("Sign out of every store? Hoard deletes all its saved sign-ins. Your library list stays.")) runJob("/api/logout", ["all"]);
+});
 $("#storeRows").addEventListener("click", e => {
   const l = e.target.closest("[data-login]"), r = e.target.closest("[data-refresh]"), i = e.target.closest("[data-import]");
-  if (l) runJob("/api/login", [l.dataset.login]);
+  const o = e.target.closest("[data-logout]");
+  if (o) runJob("/api/logout", [o.dataset.logout]);
+  else if (l) runJob("/api/login", [l.dataset.login]);
   else if (r) runJob("/api/refresh", [r.dataset.refresh]);
   else if (i) { importStore = i.dataset.import; $("#importFile").value = ""; $("#importFile").click(); }
 });

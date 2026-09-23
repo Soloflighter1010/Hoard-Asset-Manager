@@ -19,11 +19,15 @@ After that, **Refresh all stores** picks up new purchases.
 Everything also works from a terminal by passing a command to the launcher:
 `"Hoard.bat" login booth`, `"Hoard.bat" refresh`, `"Hoard.bat" import page.mhtml`.
 
-### Sharing logins with Hoard Downloader
+### Your sign-ins
 
-If both tools sit side by side (as in the combined download), set this in `config.json` to reuse the
-downloader's sign-ins: `"profile_dir": "../HoardDownloader/.browser-profile"`. Only one program can use
-a profile at a time, so don't refresh here while a download is running there.
+Sign-ins are encrypted by your operating system and kept in a private folder outside this one, shared
+with Hoard Downloader, so you sign in once for both. **Sign out** on a store's row in **Stores**, or
+**Sign out of every store** at the bottom, removes Hoard's copy; your library list stays. The main
+README's "Your sign-ins" section has the details.
+
+While one tool is using your sign-ins (a download running, say), the other waits: a refresh then says
+the sign-ins are in use, and you can try again when the other tool has finished.
 
 ## Using the library
 
@@ -81,7 +85,7 @@ A refresh that fails, or suddenly finds nothing, keeps that store's previous lis
 
 - `library.json`: your combined library (refresh rewrites it per store)
 - `.cache/thumbs/`: store images, fetched once and kept for offline browsing
-- `.browser-profile/`: your store logins; treat it like a password
+- Your sign-ins aren't here; see "Your sign-ins" above.
 
 `--port` changes the port. `--host 0.0.0.0` lets other devices on your network browse it;
 signing in and refreshing still only work on the PC running it.

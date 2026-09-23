@@ -21,6 +21,7 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -33,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 
 HERE = Path(__file__).resolve().parent
 LIBRARY_FILE = HERE / "library.json"
@@ -43,7 +44,7 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 DEFAULT_CONFIG = {
     "port": 8766,
-    "profile_dir": ".browser-profile",   # point at the full downloader's profile to share its logins
+    "profile_dir": "",                   # "" = Hoard's private sign-in folder, shared with Hoard Downloader
     "browser_channel": "",               # "chrome" or "msedge" to use an installed browser
     "request_delay": 0.8,
     "gumroad": {"include_archived": True},
@@ -107,14 +108,197 @@ def _playwright():
     return sync_playwright
 
 
-def launch(p, cfg: dict, headless: bool):
-    profile = Path(os.path.expandvars(cfg["profile_dir"])).expanduser()
-    if not profile.is_absolute():
-        profile = HERE / profile
-    kwargs = dict(user_data_dir=str(profile), headless=headless, viewport={"width": 1400, "height": 950})
-    if cfg.get("browser_channel"):
-        kwargs["channel"] = cfg["browser_channel"]
-    return p.chromium.launch_persistent_context(**kwargs)
+# ----------------------------------------------------------------------------- sign-ins
+#
+# Store sign-ins live in a browser profile that belongs to Hoard alone, never your everyday browser.
+# It sits in your user account's private app-data folder instead of next to the program, so zipping,
+# sharing, syncing or committing the program folder never carries your sign-ins, and both Hoard tools
+# share one set. The browser encrypts the saved cookies with the operating system's own protection:
+# your Windows account (DPAPI), the macOS Keychain, or the Linux keyring when one is available.
+
+LEGACY_PROFILE = HERE / ".browser-profile"   # where versions before 1.2 kept sign-ins
+STORE_SITES = {
+    "booth": ["booth.pm", "pixiv.net"],        # Booth signs in through pixiv
+    "gumroad": ["gumroad.com"],
+    "jinxxy": ["jinxxy.com"],
+    "payhip": ["payhip.com"],
+}
+STORE_ORIGINS = {
+    "booth": ["https://booth.pm", "https://accounts.booth.pm", "https://www.pixiv.net", "https://accounts.pixiv.net"],
+    "gumroad": ["https://gumroad.com", "https://app.gumroad.com"],
+    "jinxxy": ["https://jinxxy.com", "https://www.jinxxy.com"],
+    "payhip": ["https://payhip.com"],
+}
+# Playwright normally starts Chromium with a fixed, publicly known cookie key on Linux and macOS.
+# Dropping these two switches lets Chromium use the real keyring / Keychain instead.
+WEAK_KEY_SWITCHES = ["--password-store=basic", "--use-mock-keychain"]
+
+
+class ProfileBusy(Exception):
+    """The other Hoard tool is using the sign-ins right now."""
+
+
+def app_data_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "Hoard"
+
+
+def _custom_profile(cfg: dict):
+    value = (cfg.get("profile_dir") or "").strip()
+    if not value or Path(value).name == ".browser-profile":  # empty, or an old default: use the private folder
+        return None
+    p = Path(os.path.expandvars(value)).expanduser()
+    return p if p.is_absolute() else HERE / p
+
+
+def profile_dir(cfg: dict) -> Path:
+    return _custom_profile(cfg) or app_data_dir() / "sign-ins"
+
+
+def _lock_down(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":  # only you can open it; Windows keeps app-data private to your account already
+        os.chmod(path, 0o700)
+        if path.parent.name == "Hoard":
+            os.chmod(path.parent, 0o700)
+
+
+class ProfileLock:
+    """Keeps two Hoard programs from using the sign-ins at once. The OS drops it if a program crashes."""
+
+    def __init__(self, profile: Path):
+        self.path = profile.parent / (profile.name + ".lock")
+        self.fh = None
+
+    def acquire(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.fh = open(self.path, "a+")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.fh.seek(0)
+                msvcrt.locking(self.fh.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.fh.close()
+            self.fh = None
+            raise ProfileBusy("Your store sign-ins are in use by the other Hoard tool right now. "
+                              "Try again when it has finished.")
+
+    def release(self) -> None:
+        if self.fh:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    self.fh.seek(0)
+                    msvcrt.locking(self.fh.fileno(), msvcrt.LK_UNLCK, 1)
+                self.fh.close()
+            except OSError:
+                pass
+            self.fh = None
+
+
+def _remove_tree(path: Path) -> None:
+    def retry(func, p, _exc):
+        os.chmod(p, 0o700)
+        func(p)
+    shutil.rmtree(path, onerror=retry)
+
+
+_migrated = False
+
+
+def _migrate_legacy_profiles(p, cfg: dict, target: Path) -> None:
+    """Move sign-ins that older versions kept next to the program into the private folder."""
+    global _migrated
+    if _migrated or _custom_profile(cfg):
+        return
+    _migrated = True
+    old_places = [LEGACY_PROFILE]
+    value = (cfg.get("profile_dir") or "").strip()
+    if value and Path(value).name == ".browser-profile":
+        old = Path(os.path.expandvars(value)).expanduser()
+        old_places.append(old if old.is_absolute() else HERE / old)
+    for old in dict.fromkeys(o.resolve() for o in old_places):
+        if not old.is_dir() or old == target.resolve():
+            continue
+        if not (target / "Default").exists():  # nothing saved in the private folder yet: move it all
+            if target.exists():
+                _remove_tree(target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(target))
+            print(f"Moved your store sign-ins out of the program folder, to {target}", flush=True)
+            continue
+        # Both places have sign-ins (each tool had its own): copy the store cookies across, then remove the old one.
+        src = p.chromium.launch_persistent_context(str(old), headless=True)  # old profiles used the old cookie key
+        try:
+            cookies = [c for c in src.cookies() if any(c["domain"].lstrip(".").endswith(d)
+                                                       for sites in STORE_SITES.values() for d in sites)]
+        finally:
+            src.close()
+        if cookies:
+            dst = p.chromium.launch_persistent_context(str(target), headless=True, ignore_default_args=WEAK_KEY_SWITCHES)
+            try:
+                dst.add_cookies(cookies)
+            finally:
+                dst.close()
+        _remove_tree(old)
+        print(f"Merged the store sign-ins from {old} into {target} and removed the old copy.", flush=True)
+
+
+def launch_context(p, cfg: dict, headless: bool):
+    """Open Hoard's own browser with your saved sign-ins. Close it with ctx.close()."""
+    target = profile_dir(cfg)
+    lock = ProfileLock(target)
+    lock.acquire()
+    try:
+        _migrate_legacy_profiles(p, cfg, target)
+        _lock_down(target)
+        kwargs = dict(user_data_dir=str(target), headless=headless, accept_downloads=True,
+                      viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
+        if cfg.get("browser_channel"):
+            kwargs["channel"] = cfg["browser_channel"]
+        ctx = p.chromium.launch_persistent_context(**kwargs)
+    except BaseException:
+        lock.release()
+        raise
+    ctx.on("close", lambda _ctx: lock.release())
+    return ctx
+
+
+def sign_out(p, cfg: dict, store: str) -> str:
+    """Remove Hoard's saved sign-in for one store, or delete every saved sign-in ("all")."""
+    target = profile_dir(cfg)
+    if store == "all":
+        lock = ProfileLock(target)
+        lock.acquire()
+        try:
+            if target.exists():
+                _remove_tree(target)
+        finally:
+            lock.release()
+        return "Signed out of every store. Hoard's saved sign-ins are deleted."
+    ctx = launch_context(p, cfg, headless=True)
+    try:
+        for site in STORE_SITES[store]:
+            ctx.clear_cookies(domain=re.compile(rf"(^|\.){re.escape(site)}$"))
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        cdp = ctx.new_cdp_session(page)
+        for origin in STORE_ORIGINS[store]:  # sites can also keep sign-in tokens in their own storage
+            cdp.send("Storage.clearDataForOrigin", {"origin": origin, "storageTypes": "all"})
+    finally:
+        ctx.close()
+    return f"Signed out of {store.title()} in Hoard. Your account itself isn't affected."
+
+
+launch = launch_context
 
 
 def settle(page, ms: int = 700) -> None:
@@ -728,7 +912,7 @@ class Jobs:
     def __init__(self, cfg: dict, lib: Library):
         self.cfg, self.lib = cfg, lib
         self.busy = threading.Lock()
-        self.state = {"running": False, "task": None, "store": None, "message": ""}
+        self.state = {"running": False, "task": None, "store": None, "message": "", "error": None}
 
     def _set(self, **kw):
         self.state.update(kw)
@@ -736,8 +920,11 @@ class Jobs:
     def start(self, task: str, stores: list[str], skip_imported: bool = False) -> bool:
         if not self.busy.acquire(blocking=False):
             return False
+        self.state["error"] = None
         if task == "login":
             target = self._login_then_refresh
+        elif task == "logout":
+            target = self._logout
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         threading.Thread(target=self._wrap, args=(target, stores), daemon=True).start()
@@ -747,11 +934,23 @@ class Jobs:
         try:
             self._set(running=True)
             fn(stores)
+        except ProfileBusy as e:
+            self._set(message=str(e), error=str(e))
         except Exception as e:
-            self._set(message=f"Stopped: {e}")
+            self._set(message=f"Stopped: {e}", error=f"Stopped: {e}")
         finally:
             self._set(running=False, task=None, store=None)
             self.busy.release()
+
+    def _logout(self, stores: list[str]) -> None:
+        store = stores[0]
+        self._set(task="logout", store=store, message="Signing out")
+        with _playwright()() as p:
+            done = sign_out(p, self.cfg, store)
+        for s in (list(STORES) if store == "all" else [store]):
+            if s in self.lib.data["stores"]:
+                self.lib.set_error(s, "Signed out. Choose Sign in to refresh this store again.")
+        self._set(message=done)
 
     def _refresh(self, stores: list[str], skip_imported: bool = False) -> None:
         if skip_imported:
@@ -880,7 +1079,8 @@ class Handler(BaseHTTPRequestHandler):
             with self.server.lib.lock:
                 data = json.loads(json.dumps(self.server.lib.data))
             return self._json({"items": enrich(data["items"], self.server.cfg["tags"]), "stores": data["stores"],
-                               "labels": {k: v["label"] for k, v in STORES.items()}, "job": self.server.jobs.state})
+                               "labels": {k: v["label"] for k, v in STORES.items()}, "job": self.server.jobs.state,
+                               "signins": str(profile_dir(self.server.cfg))})
         if path == "/api/status":
             with self.server.lib.lock:
                 stores = json.loads(json.dumps(self.server.lib.data["stores"]))
@@ -894,7 +1094,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/refresh", "/api/login", "/api/import"):
+        if path not in ("/api/refresh", "/api/login", "/api/import", "/api/logout"):
             return self._send(404, b"Not found", "text/plain")
         if (not self._host_ok() or self.client_address[0] not in LOOPBACK
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
@@ -915,11 +1115,11 @@ class Handler(BaseHTTPRequestHandler):
             total = self.server.lib.merge_store(store, items)
             return self._json({"ok": True, "store": store, "label": STORES[store]["label"],
                                "count": len(items), "total": total})
-        stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES]
+        stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]
         if not stores:
             return self._json({"error": "Unknown store."}, 400)
-        task = "login" if path == "/api/login" else "refresh"
-        if not self.server.jobs.start(task, stores[:1] if task == "login" else stores,
+        task = {"/api/login": "login", "/api/logout": "logout"}.get(path, "refresh")
+        if not self.server.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
                                       skip_imported=bool(body.get("all"))):
             return self._json({"error": "Already busy. Wait for the current refresh or sign-in to finish."}, 409)
         self._json({"ok": True}, 202)
@@ -955,6 +1155,7 @@ def cmd_login(cfg, store):
         page.goto(STORES[store]["login"])
         input(f"Sign in to {STORES[store]['label']} in the browser window, then press Enter here... ")
         ctx.close()
+    print(f"Saved. Your sign-ins are kept in {profile_dir(cfg)}, encrypted by your operating system.")
 
 
 def cmd_refresh(cfg, stores):
@@ -1021,6 +1222,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("login", help="sign in to a store from the terminal")
     s.add_argument("store", choices=list(STORES))
+    s = sub.add_parser("logout", help="remove Hoard's saved sign-in for a store, or for every store")
+    s.add_argument("store", choices=[*STORES, "all"])
     s = sub.add_parser("refresh", help="refresh stores from the terminal")
     s.add_argument("--store", choices=list(STORES), action="append", help="repeat for several; default all")
     s = sub.add_parser("import", help="add a library page you saved from your own browser (.mhtml or .html)")
@@ -1032,6 +1235,9 @@ def main():
 
     if args.cmd == "login":
         cmd_login(cfg, args.store)
+    elif args.cmd == "logout":
+        with _playwright()() as p:
+            print(sign_out(p, cfg, args.store))
     elif args.cmd == "refresh":
         cmd_refresh(cfg, args.store or list(STORES))
     elif args.cmd == "import":

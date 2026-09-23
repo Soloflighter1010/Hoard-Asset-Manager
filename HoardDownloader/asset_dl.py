@@ -28,6 +28,7 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import unicodedata
@@ -44,10 +45,9 @@ try:
 except ImportError:  # progress bars are optional
     tqdm = None
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 HERE = Path(__file__).resolve().parent
-PROFILE_DIR = HERE / ".browser-profile"   # holds your store logins; never share this folder
 PROBE_DIR = HERE / "probe-output"
 
 GR_BASE = "https://app.gumroad.com"
@@ -60,6 +60,7 @@ DEFAULT_CONFIG = {
     "root": "downloads",
     "request_delay": 1.0,
     "browser_channel": "",  # "" = Playwright's Chromium; "chrome" / "msedge" = your installed browser
+    "profile_dir": "",      # "" = Hoard's private sign-in folder, shared by both Hoard tools
     "gumroad": {
         "enabled": True,
         "include_archived": True,
@@ -261,13 +262,194 @@ def _playwright():
     return sync_playwright
 
 
+# ----------------------------------------------------------------------------- sign-ins
+#
+# Store sign-ins live in a browser profile that belongs to Hoard alone, never your everyday browser.
+# It sits in your user account's private app-data folder instead of next to the program, so zipping,
+# sharing, syncing or committing the program folder never carries your sign-ins, and both Hoard tools
+# share one set. The browser encrypts the saved cookies with the operating system's own protection:
+# your Windows account (DPAPI), the macOS Keychain, or the Linux keyring when one is available.
+
+LEGACY_PROFILE = HERE / ".browser-profile"   # where versions before 1.2 kept sign-ins
+STORE_SITES = {
+    "booth": ["booth.pm", "pixiv.net"],        # Booth signs in through pixiv
+    "gumroad": ["gumroad.com"],
+    "jinxxy": ["jinxxy.com"],
+    "payhip": ["payhip.com"],
+}
+STORE_ORIGINS = {
+    "booth": ["https://booth.pm", "https://accounts.booth.pm", "https://www.pixiv.net", "https://accounts.pixiv.net"],
+    "gumroad": ["https://gumroad.com", "https://app.gumroad.com"],
+    "jinxxy": ["https://jinxxy.com", "https://www.jinxxy.com"],
+    "payhip": ["https://payhip.com"],
+}
+# Playwright normally starts Chromium with a fixed, publicly known cookie key on Linux and macOS.
+# Dropping these two switches lets Chromium use the real keyring / Keychain instead.
+WEAK_KEY_SWITCHES = ["--password-store=basic", "--use-mock-keychain"]
+
+
+class ProfileBusy(Exception):
+    """The other Hoard tool is using the sign-ins right now."""
+
+
+def app_data_dir() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "Hoard"
+
+
+def _custom_profile(cfg: dict):
+    value = (cfg.get("profile_dir") or "").strip()
+    if not value or Path(value).name == ".browser-profile":  # empty, or an old default: use the private folder
+        return None
+    p = Path(os.path.expandvars(value)).expanduser()
+    return p if p.is_absolute() else HERE / p
+
+
+def profile_dir(cfg: dict) -> Path:
+    return _custom_profile(cfg) or app_data_dir() / "sign-ins"
+
+
+def _lock_down(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":  # only you can open it; Windows keeps app-data private to your account already
+        os.chmod(path, 0o700)
+        if path.parent.name == "Hoard":
+            os.chmod(path.parent, 0o700)
+
+
+class ProfileLock:
+    """Keeps two Hoard programs from using the sign-ins at once. The OS drops it if a program crashes."""
+
+    def __init__(self, profile: Path):
+        self.path = profile.parent / (profile.name + ".lock")
+        self.fh = None
+
+    def acquire(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.fh = open(self.path, "a+")
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.fh.seek(0)
+                msvcrt.locking(self.fh.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.fh.close()
+            self.fh = None
+            raise ProfileBusy("Your store sign-ins are in use by the other Hoard tool right now. "
+                              "Try again when it has finished.")
+
+    def release(self) -> None:
+        if self.fh:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    self.fh.seek(0)
+                    msvcrt.locking(self.fh.fileno(), msvcrt.LK_UNLCK, 1)
+                self.fh.close()
+            except OSError:
+                pass
+            self.fh = None
+
+
+def _remove_tree(path: Path) -> None:
+    def retry(func, p, _exc):
+        os.chmod(p, 0o700)
+        func(p)
+    shutil.rmtree(path, onerror=retry)
+
+
+_migrated = False
+
+
+def _migrate_legacy_profiles(p, cfg: dict, target: Path) -> None:
+    """Move sign-ins that older versions kept next to the program into the private folder."""
+    global _migrated
+    if _migrated or _custom_profile(cfg):
+        return
+    _migrated = True
+    old_places = [LEGACY_PROFILE]
+    value = (cfg.get("profile_dir") or "").strip()
+    if value and Path(value).name == ".browser-profile":
+        old = Path(os.path.expandvars(value)).expanduser()
+        old_places.append(old if old.is_absolute() else HERE / old)
+    for old in dict.fromkeys(o.resolve() for o in old_places):
+        if not old.is_dir() or old == target.resolve():
+            continue
+        if not (target / "Default").exists():  # nothing saved in the private folder yet: move it all
+            if target.exists():
+                _remove_tree(target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(target))
+            print(f"Moved your store sign-ins out of the program folder, to {target}", flush=True)
+            continue
+        # Both places have sign-ins (each tool had its own): copy the store cookies across, then remove the old one.
+        src = p.chromium.launch_persistent_context(str(old), headless=True)  # old profiles used the old cookie key
+        try:
+            cookies = [c for c in src.cookies() if any(c["domain"].lstrip(".").endswith(d)
+                                                       for sites in STORE_SITES.values() for d in sites)]
+        finally:
+            src.close()
+        if cookies:
+            dst = p.chromium.launch_persistent_context(str(target), headless=True, ignore_default_args=WEAK_KEY_SWITCHES)
+            try:
+                dst.add_cookies(cookies)
+            finally:
+                dst.close()
+        _remove_tree(old)
+        print(f"Merged the store sign-ins from {old} into {target} and removed the old copy.", flush=True)
+
+
 def launch_context(p, cfg: dict, headless: bool):
-    kwargs = dict(user_data_dir=str(PROFILE_DIR), headless=headless, accept_downloads=True,
-                  viewport={"width": 1400, "height": 950})
-    channel = cfg.get("browser_channel")
-    if channel:
-        kwargs["channel"] = channel
-    return p.chromium.launch_persistent_context(**kwargs)
+    """Open Hoard's own browser with your saved sign-ins. Close it with ctx.close()."""
+    target = profile_dir(cfg)
+    lock = ProfileLock(target)
+    lock.acquire()
+    try:
+        _migrate_legacy_profiles(p, cfg, target)
+        _lock_down(target)
+        kwargs = dict(user_data_dir=str(target), headless=headless, accept_downloads=True,
+                      viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
+        if cfg.get("browser_channel"):
+            kwargs["channel"] = cfg["browser_channel"]
+        ctx = p.chromium.launch_persistent_context(**kwargs)
+    except BaseException:
+        lock.release()
+        raise
+    ctx.on("close", lambda _ctx: lock.release())
+    return ctx
+
+
+def sign_out(p, cfg: dict, store: str) -> str:
+    """Remove Hoard's saved sign-in for one store, or delete every saved sign-in ("all")."""
+    target = profile_dir(cfg)
+    if store == "all":
+        lock = ProfileLock(target)
+        lock.acquire()
+        try:
+            if target.exists():
+                _remove_tree(target)
+        finally:
+            lock.release()
+        return "Signed out of every store. Hoard's saved sign-ins are deleted."
+    ctx = launch_context(p, cfg, headless=True)
+    try:
+        for site in STORE_SITES[store]:
+            ctx.clear_cookies(domain=re.compile(rf"(^|\.){re.escape(site)}$"))
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        cdp = ctx.new_cdp_session(page)
+        for origin in STORE_ORIGINS[store]:  # sites can also keep sign-in tokens in their own storage
+            cdp.send("Storage.clearDataForOrigin", {"origin": origin, "storageTypes": "all"})
+    finally:
+        ctx.close()
+    return f"Signed out of {store.title()} in Hoard. Your account itself isn't affected."
 
 
 def browser_cookies(cfg: dict, domain: str) -> tuple[list, str]:
@@ -291,7 +473,13 @@ def cmd_login(cfg: dict, args) -> None:
         page.goto(url)
         input(f"\nSign in to {args.store.title()} in the browser window, then press Enter here... ")
         ctx.close()
-    log("Saved. You can run `sync` now.")
+    log(f"Saved. Your sign-ins are kept in {profile_dir(cfg)}")
+    log("They're encrypted by your operating system and only used by Hoard. Never share that folder.")
+
+
+def cmd_logout(cfg: dict, args) -> None:
+    with _playwright()() as p:
+        log(sign_out(p, cfg, args.store))
 
 
 # ----------------------------------------------------------------------------- Gumroad
@@ -319,7 +507,11 @@ def gumroad_session(cfg: dict) -> requests.Session:
     s = requests.Session()
     s.headers["User-Agent"] = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                                "(KHTML, like Gecko) Chrome/140.0 Safari/537.36")
-    manual = cfg["gumroad"].get("session_cookie")
+    manual = os.environ.get("HOARD_GUMROAD_SESSION", "").strip()
+    if not manual and cfg["gumroad"].get("session_cookie"):
+        manual = cfg["gumroad"]["session_cookie"]
+        log("Note: your Gumroad session cookie is stored in config.json, where anyone you share that file with can "
+            "use it. Move it to the HOARD_GUMROAD_SESSION environment variable and clear it from config.json.")
     if manual:
         s.cookies.set("_gumroad_app_session", manual, domain=".gumroad.com", path="/")
         return s
@@ -1443,6 +1635,9 @@ def cmd_sync(cfg: dict, args) -> None:
                 continue
             try:
                 syncers[store](cfg, root, args, report)
+            except ProfileBusy as e:
+                report.failed.append(str(e))
+                break
             except NotLoggedIn as e:
                 if (root / label / "_manifest.json").exists():
                     report.failed.append(f"{label}: {e} - sign in to {label} again from the menu (or the command: login {store})")
@@ -1466,6 +1661,8 @@ def main() -> None:
 
     s = sub.add_parser("login", help="sign in to a store in a browser window (one-time)")
     s.add_argument("store", choices=list(STORE_DIRS))
+    s = sub.add_parser("logout", help="remove Hoard's saved sign-in for a store, or for every store")
+    s.add_argument("store", choices=[*STORE_DIRS, "all"])
 
     s = sub.add_parser("sync", help="download new/changed files and rebuild tags")
     s.add_argument("--store", choices=[*STORE_DIRS, "all"], default="all")
@@ -1489,6 +1686,8 @@ def main() -> None:
     cfg = load_config(args.config)
     if args.cmd == "login":
         cmd_login(cfg, args)
+    elif args.cmd == "logout":
+        cmd_logout(cfg, args)
     elif args.cmd == "sync":
         cmd_sync(cfg, args)
     elif args.cmd == "tags":
@@ -1506,4 +1705,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log("\nStopped. Partial downloads resume (Gumroad) or restart (Jinxxy) next run.")
+        log("\nStopped. Partial downloads resume (Booth, Gumroad) or restart (Jinxxy, Payhip) next run.")
+    except ProfileBusy as e:
+        log(f"\n{e}")
