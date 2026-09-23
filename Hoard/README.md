@@ -32,7 +32,10 @@ the sign-ins are in use, and you can try again when the other tool has finished.
 ## Using the library
 
 - Search matches names, creators and tags. Press `/` to jump to the search box.
-- Filter by store, suggested tags (words shared by several item names) and creator.
+- Filter by store, by your tags and suggested tags, and by creator.
+- Tag items one at a time from their details, or many at once with **Select**. The **Tags** button
+  manages your tags. They're shared with Hoard Downloader; the main README's "Tags" section explains
+  how tags work.
   The address bar keeps your filters, so you can bookmark a view.
 - Click an item for its links. **Open download page** goes to that item on its store.
   Booth items also list their files, each with its own download link.

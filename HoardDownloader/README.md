@@ -57,11 +57,19 @@ stores is kept once per store, on purpose.
 
 ## Tags
 
-Asset names from every store are split into words (`FoxyHoodie v2` gives `foxy`, `hoodie`), filler words
-and version numbers are dropped, and plurals are folded (`textures` becomes `texture`). A word becomes a
-suggested tag when it appears in at least `min_count` names but not in more than `max_share` of them.
-Suggestions land in `tags.json`, `catalog.json` and each product's `asset.json`. Add words you don't
-want to `tags.blocklist` and run the `tags` command.
+Tag your downloads in **Browse your downloads**: open an item to tag it, or choose **Select** to tag many
+at once, and use the **Tags** button to keep or hide suggestions and to rename, merge or delete tags. Your
+tags are shared with Hoard. The main README's "Tags" section explains how they work.
+
+Suggested tags are words that turn up in several asset names (`FoxyHoodie v2` gives `foxy` and `hoodie`),
+with filler words and version numbers left out and plurals folded (`textures` becomes `texture`). A word is
+suggested when it appears in at least `tags.min_count` names but not in more than `tags.max_share` of them.
+
+Every sync, and the `tags` command, writes your tags alongside the downloads so other programs can use them:
+
+- each product's `asset.json` has `tags` (yours) and `suggested_tags`
+- `catalog.json` lists every asset with both
+- `tags.json` maps each of your tags (`tags`) and each suggestion (`suggested`) to its asset folders
 
 ## Browsing
 

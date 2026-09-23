@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5.0
+
+Tag manager.
+
+### Both tools
+- Your own tags, alongside the suggested ones. Tag an item from its details, or many items at once with
+  **Select** (including **Select all shown** after filtering).
+- A **Tags** panel to create, rename, merge and delete tags, and to keep or hide suggestions. Keeping a
+  suggestion makes it your tag on every item whose name has that word, including ones you buy later, and
+  any tag can match names that way.
+- Hoard and Hoard Downloader share your tags, so tagging in one shows in the other. Tags added to a
+  product apply to every copy you own on other stores.
+- The sidebar lists your tags first, then suggestions.
+
+### Hoard Downloader
+- `asset.json` and `catalog.json` include your tags (`tags`) next to the suggestions (`suggested_tags`),
+  and `tags.json` now lists your tags under `tags` and suggestions under `suggested`.
+
 ## 1.4.0
 
 Works offline.

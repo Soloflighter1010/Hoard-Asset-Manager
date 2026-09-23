@@ -264,6 +264,55 @@ a.ghost { height: 42px; }
 .offline { display: flex; align-items: center; gap: 10px; padding: 9px 24px; font-size: 13px; font-weight: 700;
   background: var(--ledge); color: var(--bone); border-bottom: 1px solid var(--seam); }
 .offline::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+
+/* tags */
+.sidehead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sidehead .linkish { font: 700 12px var(--body); margin: 0; }
+.chip.sugg { color: var(--dust); font-weight: 500; }
+.chip.sugg:hover { color: var(--gold); }
+.chip.add { color: var(--dust); font-weight: 500; border: 1px dashed var(--seam); padding: 1px 8px; }
+.chip.add::before { content: "+ #"; }
+.chip.add:hover { color: var(--gold); border-color: var(--gold); }
+.tagpill { display: inline-flex; align-items: center; gap: 1px; }
+.untag { border: 0; background: none; color: var(--dust); width: 20px; height: 20px; border-radius: 5px; font-size: 15px; line-height: 1; padding: 0; }
+.untag:hover { background: var(--stone); color: var(--bone); }
+.detail .sub { font-size: 12px; color: var(--dust); margin: 12px 0 6px; }
+.tagadd, .newtag { display: flex; gap: 6px; margin-top: 12px; }
+.tagadd input, .bulk input, .newtag input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 0;
+  background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+.tagadd input:focus, .bulk input:focus, .newtag input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.headrow .ghost { flex: none; }
+.headrow .ghost[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); box-shadow: none; font-weight: 700; }
+
+/* selecting several items */
+.slot .tick { position: absolute; right: 8px; top: 8px; width: 24px; height: 24px; border-radius: 7px; display: none;
+  background: rgb(20 16 12 / .55); box-shadow: inset 0 0 0 2px #F4EDE3; }
+body.selecting .slot .tick { display: grid; place-items: center; }
+body.selecting .slot[aria-pressed="true"] .tick { background: var(--gold); box-shadow: none; }
+body.selecting .slot[aria-pressed="true"] .tick::after { content: ""; width: 10px; height: 5px; margin-top: -3px;
+  border: solid var(--gold-ink); border-width: 0 0 2.5px 2.5px; transform: rotate(-45deg); }
+body.selecting .slot[aria-pressed="true"] .art { outline: 3px solid var(--gold); outline-offset: 2px; }
+body.selecting main { padding-bottom: 140px; }
+body.selecting .toast { bottom: 96px; }
+.bulk { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 22; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 8px 10px; width: min(820px, calc(100vw - 24px)); padding: 10px 14px; background: var(--ledge);
+  border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
+.bulk .count-sel { font-weight: 700; }
+.bulk input { flex: 1 1 160px; }
+.primary.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+
+/* the tag manager */
+.tagpanel h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 4px; }
+.tagrows { list-style: none; margin: 0; padding: 0; }
+.tagrows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 0;
+  border-top: 1px solid var(--seam); }
+.tagrows li.none { display: block; color: var(--dust); font-size: 13px; }
+.tagrows .tname { font-weight: 700; overflow-wrap: anywhere; }
+.tagrows .tname::before { content: "#"; color: var(--dust); }
+.tagrows .tmeta { grid-column: 1; font-size: 12px; color: var(--dust); }
+.tagrows .tbtns { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.tagpanel details summary { cursor: pointer; font: 700 13px var(--body); color: var(--dust); margin-top: 18px; }
 </style>
 </head>
 <body>
@@ -288,6 +337,7 @@ a.ghost { height: 42px; }
       </select>
     </label>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
+    <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
     <button id="storesBtn" class="ghost stores-btn" aria-expanded="false" aria-controls="stores">Stores<span class="warn-dot" id="warnDot" hidden></span></button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
@@ -295,6 +345,19 @@ a.ghost { height: 42px; }
 </header>
 <div class="seg" role="radiogroup" aria-label="Store" id="storeSeg"></div>
 
+<section id="tagPanel" class="stores tagpanel" hidden aria-labelledby="tagPanelTitle">
+  <h2 id="tagPanelTitle">Tags</h2>
+  <p>Your tags are yours to name and use. Suggested tags are words that turn up in several item names:
+    keep one and it becomes your tag on every item whose name has that word.</p>
+  <div class="newtag"><input id="newTag" maxlength="40" placeholder="New tag" aria-label="New tag">
+    <button class="ghost sm" id="newTagBtn">Create</button></div>
+  <h3>Your tags</h3>
+  <ul id="tagRows" class="tagrows"></ul>
+  <h3>Suggested</h3>
+  <ul id="suggRows" class="tagrows"></ul>
+  <details><summary>Hidden suggestions (<span id="hiddenCount">0</span>)</summary><ul id="hiddenRows" class="tagrows"></ul></details>
+  <p class="hint" id="tagFile"></p>
+</section>
 <section id="stores" class="stores" hidden aria-labelledby="storesTitle">
   <h2 id="storesTitle">Stores</h2>
   <p>Sign in to each store once. Refresh reads what you've bought; nothing is downloaded.</p>
@@ -312,16 +375,20 @@ a.ghost { height: 42px; }
 <div id="offline" class="offline" role="status" hidden>You're offline. Your library, search and saved images still work; refreshing and store links need a connection.</div>
 <div class="layout">
   <nav id="filters" class="side" aria-label="Filters">
-    <h2>Tags</h2>
+    <h2 class="sidehead">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
+    <div id="myTags" class="chips"></div>
+    <h2>Suggested</h2>
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
+    <datalist id="tagList"></datalist>
     <h2>Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
     <ul id="creators" class="creators"></ul>
     <p id="totals" class="totals"></p>
   </nav>
   <main>
-    <h2 id="count" class="count" aria-live="polite"></h2>
+    <div class="headrow"><h2 id="count" class="count" aria-live="polite"></h2>
+      <button id="selectBtn" class="ghost sm" aria-pressed="false" title="Select several items to tag them together">Select</button></div>
     <div id="status" class="status"></div>
     <div id="grid" class="grid" aria-label="Your assets"></div>
     <div id="empty" class="empty" hidden></div>
@@ -347,6 +414,15 @@ a.ghost { height: 42px; }
 
 <div id="scrim" class="scrim" hidden></div>
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
+<div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
+  <span class="count-sel" id="bulkCount">0 selected</span>
+  <button class="linkish" id="bulkAll">Select all shown</button>
+  <button class="linkish" id="bulkNone">Clear</button>
+  <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
+  <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
+  <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
+  <button class="ghost sm" id="bulkDone">Done</button>
+</div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -397,7 +473,7 @@ async function load() {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Start it again with Hoard.bat (or ./run.sh)." : e.message };
   }
   $("#version").textContent = DATA.version || "";
-  for (const a of DATA.items) a.hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags].join(" "));
+  for (const a of DATA.items) a.hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
   renderStoreSeg(); renderStores(); render(); showJob(DATA.job);
   if (DATA.job && DATA.job.running) startPolling();
@@ -409,7 +485,7 @@ function matches(a, skip) {
   if (state.copies && a.match_key !== state.copies.key) return false;
   if (state.store && a.store !== state.store) return false;
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
-  for (const t of state.tags) if (!a.tags.includes(t)) return false;
+  for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
 }
@@ -423,7 +499,7 @@ const filtersActive = () => state.q || state.store || state.creator || state.tag
 /* ---------- rendering */
 function render() {
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
-  renderGrid(list); renderFacets(list); renderStatus(list); syncControls(); saveHash();
+  renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
 function renderStoreSeg() {
   const counts = {};
@@ -455,7 +531,7 @@ function renderStores() {
 function renderGrid(list) {
   $("#grid").innerHTML = list.map(a =>
     `<button class="slot" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}">` +
-      `<span class="art">${thumb(a)}<i class="notch ${a.store}"></i>` +
+      `<span class="art">${thumb(a)}<i class="notch ${a.store}"></i><i class="tick" aria-hidden="true"></i>` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span>` +
       `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`).join("");
   const empty = $("#empty");
@@ -476,15 +552,7 @@ function renderGrid(list) {
   empty.hidden = list.length > 0;
 }
 function renderFacets(list) {
-  const tc = new Map();
-  for (const a of list) for (const t of a.tags) tc.set(t, (tc.get(t) || 0) + 1);
-  for (const t of state.tags) if (!tc.has(t)) tc.set(t, 0);
-  const tags = [...tc].sort((x, y) => state.tags.has(y[0]) - state.tags.has(x[0]) || y[1] - x[1] || coll.compare(x[0], y[0]));
-  $("#tags").innerHTML = (state.allTags ? tags : tags.slice(0, 36)).map(([t, n]) =>
-    `<button class="chip" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}<span class="n">${n}</span></button>`).join("")
-    || `<span class="none">No tags here yet</span>`;
-  const more = $("#moreTags"); more.hidden = tags.length <= 36;
-  more.textContent = state.allTags ? "Show fewer tags" : `Show all ${tags.length} tags`;
+  renderTagFacets(list);
 
   const cc = new Map();
   for (const a of DATA.items) if (matches(a, "creator")) cc.set(a.creator, (cc.get(a.creator) || 0) + 1);
@@ -563,6 +631,7 @@ async function runJob(url, stores, all = false) {
 function openStores(open) {
   const p = $("#stores"); const show = open ?? p.hidden;
   p.hidden = !show; $("#storesBtn").setAttribute("aria-expanded", String(show));
+  if (show) openTagPanel(false);
 }
 
 /* ---------- detail */
@@ -583,8 +652,7 @@ function showDetail(a, focus = true) {
     `<div class="actions">` +
       (safeUrl(a.download_url) ? `<a class="primary" href="${esc(safeUrl(a.download_url))}" target="_blank" rel="noopener noreferrer">Open download page</a>` : "") +
       pageLink + `</div>` +
-    (a.tags.length ? `<h3>Tags</h3><div class="chips">${a.tags.map(t =>
-      `<button class="chip" data-act="tag" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}</button>`).join("")}</div>` : "") +
+    tagSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => safeUrl(f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(safeUrl(f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
@@ -683,6 +751,7 @@ document.addEventListener("click", e => {
 });
 $("#grid").addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
+  if (sel.on) { toggleSelected(s.dataset.key); return; }
   lastFocus = s; showDetail(byKey.get(s.dataset.key));
 });
 $("#grid").addEventListener("error", e => {
@@ -695,6 +764,7 @@ $("#detail").addEventListener("error", e => {
 $("#detail").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = byKey.get(openKey);
+  if (tagDetailAction(b.dataset.act, b, a)) return;
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); render(); }
@@ -704,20 +774,202 @@ document.addEventListener("keydown", e => {
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
   if (e.key === "/" && !typing) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
   else if (e.key === "Escape") {
-    if (!$("#stores").hidden) openStores(false);
+    if (!$("#tagPanel").hidden) openTagPanel(false);
+    else if (sel.on) setSelecting(false);
+    else if (!$("#stores").hidden) openStores(false);
     else if (openKey) closeDetail();
     else if (document.activeElement === $("#q")) { state.q = ""; render(); }
   }
 });
 document.addEventListener("pointerdown", e => {
-  if (!$("#stores").hidden && !e.target.closest("#stores, #storesBtn, #toast")) openStores(false);
+  if (!$("#stores").hidden && !e.target.closest("#stores, #storesBtn, #toast, #tagPanel")) openStores(false);
 });
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h", e.target.offsetHeight + "px")).observe($(".bar"));
+/* ---------- how the tag code below finds its way around this page */
+const T = {
+  slotKey: "key",
+  id: a => a.key,
+  byId: id => byKey.get(id),
+  open: () => (openKey ? byKey.get(openKey) : null),
+  shown: () => DATA.items.filter(a => matches(a)),
+  reload: () => load(),
+  closeDetail: () => closeDetail(),
+  closeOtherPanels: () => openStores(false),
+};
+/* ---------- tags: your own tags, suggestions you can keep or hide, and tagging many items at once.
+   Tags are saved by the tool (POST /api/tags) in a file both Hoard tools share. T (defined above)
+   connects this code to the page it's in. */
+const sel = { on: false, ids: new Set() };
+const keysOf = list => [...new Set(list.flatMap(a => [a.tag_key, ...(a.copy_keys || [])]))];
+
+async function changeTags(body, done) {
+  try {
+    const r = await fetch("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.error || "That tag change wasn't saved."); return false; }
+  } catch (e) { toast("That tag change wasn't saved, because the tool isn't running."); return false; }
+  await T.reload();
+  if (done) toast(done);
+  return true;
+}
+const tagChip = ([t, n], kind) =>
+  `<button class="chip ${kind}" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}<span class="n">${n}</span></button>`;
+
+function renderTagFacets(list) {
+  const mine = new Map(), sugg = new Map();
+  for (const a of list) {
+    for (const t of a.tags) mine.set(t, (mine.get(t) || 0) + 1);
+    for (const t of a.suggested) sugg.set(t, (sugg.get(t) || 0) + 1);
+  }
+  const yours = new Set(((DATA.tagset || {}).tags || []).map(x => x.name));
+  for (const t of state.tags) if (!mine.has(t) && !sugg.has(t)) (yours.has(t) ? mine : sugg).set(t, 0);
+  const order = (x, y) => state.tags.has(y[0]) - state.tags.has(x[0]) || y[1] - x[1] || coll.compare(x[0], y[0]);
+  const m = [...mine].sort(order), s = [...sugg].sort(order);
+  $("#myTags").innerHTML = m.map(x => tagChip(x, "mine")).join("") ||
+    `<span class="none">${yours.size ? "None on these items" : "Add tags from an item's details, or select several items at once."}</span>`;
+  $("#tags").innerHTML = (state.allTags ? s : s.slice(0, 36)).map(x => tagChip(x, "sugg")).join("") ||
+    `<span class="none">No suggestions here</span>`;
+  const more = $("#moreTags"); more.hidden = s.length <= 36;
+  more.textContent = state.allTags ? "Show fewer" : `Show all ${s.length}`;
+  $("#tagList").innerHTML = [...yours].sort(coll.compare).map(t => `<option value="${esc(t)}">`).join("");
+}
+
+function tagSection(a) {
+  const mine = a.tags.map(t => `<span class="tagpill"><button class="chip" data-act="tag" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}</button>` +
+    `<button class="untag" data-act="untag" data-tag="${esc(t)}" aria-label="Remove the tag ${esc(t)}">×</button></span>`).join("");
+  const sugg = a.suggested.map(t => `<button class="chip add" data-act="addtag" data-tag="${esc(t)}" aria-label="Add the tag ${esc(t)}">${esc(t)}</button>`).join("");
+  return `<h3>Tags</h3><div class="chips">${mine || '<span class="none">No tags yet</span>'}</div>` +
+    (sugg ? `<p class="sub">Suggested for this item</p><div class="chips">${sugg}</div>` : "") +
+    `<div class="tagadd"><input id="tagInput" list="tagList" maxlength="40" placeholder="Add a tag" aria-label="Add a tag">` +
+    `<button class="ghost sm" data-act="addtyped">Add</button></div>` +
+    ((a.copy_keys || []).length ? `<p class="sub">Tags apply to every copy of this product you own.</p>` : "");
+}
+function addTyped(a) {
+  const input = $("#tagInput"), t = input ? input.value.trim() : "";
+  if (!t) { if (input) input.focus(); return; }
+  changeTags({ action: "assign", keys: keysOf([a]), add: [t] });
+}
+function tagDetailAction(act, b, a) {  // true when the click was a tag action
+  if (act === "untag") changeTags({ action: "assign", keys: keysOf([a]), remove: [b.dataset.tag] });
+  else if (act === "addtag") changeTags({ action: "assign", keys: keysOf([a]), add: [b.dataset.tag] });
+  else if (act === "addtyped") addTyped(a);
+  else return false;
+  return true;
+}
+
+/* selecting several items */
+function setSelecting(on) {
+  sel.on = on;
+  if (!on) sel.ids.clear();
+  document.body.classList.toggle("selecting", on);
+  $("#selectBtn").textContent = on ? "Done" : "Select";
+  $("#selectBtn").setAttribute("aria-pressed", String(on));
+  $("#bulk").hidden = !on;
+  if (on) T.closeDetail();
+  render();
+}
+function markSelected() {
+  for (const s of document.querySelectorAll(".slot")) {
+    if (sel.on) s.setAttribute("aria-pressed", String(sel.ids.has(s.dataset[T.slotKey])));
+    else s.removeAttribute("aria-pressed");
+  }
+  if (!sel.on) return;
+  $("#bulkCount").textContent = `${sel.ids.size} selected`;
+  for (const b of $("#bulk").querySelectorAll("[data-needs]")) b.disabled = !sel.ids.size;
+}
+function toggleSelected(id) { sel.ids.has(id) ? sel.ids.delete(id) : sel.ids.add(id); markSelected(); }
+async function bulkTag(mode) {
+  const t = $("#bulkTag").value.trim();
+  if (!t) { $("#bulkTag").focus(); toast("Type a tag first."); return; }
+  const chosen = [...sel.ids].map(T.byId).filter(Boolean);
+  if (!chosen.length) { toast("Select some items first."); return; }
+  const n = chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
+  if (await changeTags({ action: "assign", keys: keysOf(chosen), [mode]: [t] },
+      mode === "add" ? `Added ${tag} to ${what}.` : `Removed ${tag} from ${what}.`)) $("#bulkTag").value = "";
+}
+
+/* the tag manager */
+function openTagPanel(open) {
+  const p = $("#tagPanel"), show = open ?? p.hidden;
+  p.hidden = !show;
+  $("#tagsBtn").setAttribute("aria-expanded", String(show));
+  if (show) { T.closeOtherPanels(); renderTagPanel(); }
+}
+function renderTagPanel() {
+  if ($("#tagPanel").hidden) return;
+  const ts = DATA.tagset || { tags: [], suggestions: [], hidden: [] };
+  const btn = (act, t, text, extra = "") => `<button class="ghost sm" data-tact="${act}" data-tag="${esc(t)}" ${extra}>${text}</button>`;
+  const items = n => `${n} ${n === 1 ? "item" : "items"}`;
+  $("#tagRows").innerHTML = ts.tags.map(x => `<li><span class="tname">${esc(x.name)}</span>` +
+    `<span class="tmeta">${items(x.count)}${x.match ? `, including every name with “${esc(x.match)}”` : ""}</span>` +
+    `<span class="tbtns">${btn("rename", x.name, "Rename")}` +
+    `${btn("match", x.name, x.match ? "Change match" : "Match names", `data-match="${esc(x.match || "")}"`)}` +
+    `${btn("delete", x.name, "Delete", `data-count="${x.count}"`)}</span></li>`).join("") ||
+    `<li class="none">No tags yet. Create one above, keep a suggestion below, or add one from an item's details.</li>`;
+  $("#suggRows").innerHTML = ts.suggestions.slice(0, 60).map(x => `<li><span class="tname">${esc(x.name)}</span>` +
+    `<span class="tmeta">in ${x.count} ${x.count === 1 ? "name" : "names"}</span>` +
+    `<span class="tbtns">${btn("keep", x.name, "Keep")}${btn("hide", x.name, "Hide")}</span></li>`).join("") ||
+    `<li class="none">No suggestions right now.</li>`;
+  $("#hiddenCount").textContent = ts.hidden.length;
+  $("#hiddenRows").innerHTML = ts.hidden.map(w => `<li><span class="tname">${esc(w)}</span>` +
+    `<span class="tbtns">${btn("unhide", w, "Suggest again")}</span></li>`).join("") || `<li class="none">Nothing hidden.</li>`;
+  $("#tagFile").textContent = ts.file ? `Saved in ${ts.file}, shared by Hoard and Hoard Downloader.` : "";
+}
+async function tagPanelAction(b) {
+  const t = b.dataset.tag, act = b.dataset.tact;
+  if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
+  if (act === "hide") return changeTags({ action: "hide", name: t }, `#${t} won't be suggested again.`);
+  if (act === "unhide") return changeTags({ action: "unhide", name: t });
+  if (act === "delete") {
+    const n = +b.dataset.count;
+    if (!confirm(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""))) return;
+    state.tags.delete(t);
+    return changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
+  }
+  if (act === "rename") {
+    const to = prompt(`Rename #${t} to (an existing tag's name merges the two):`, t);
+    if (!to || !to.trim() || to.trim().toLowerCase() === t) return;
+    const filtered = state.tags.delete(t);
+    if (await changeTags({ action: "rename", name: t, to }, `Renamed #${t}.`) && filtered) { state.tags.add(to.trim().toLowerCase()); render(); }
+    return;
+  }
+  if (act === "match") {
+    const word = prompt(`Also tag every item whose name contains this word, including ones you buy later. Leave it empty to stop.`, b.dataset.match || t);
+    if (word !== null) return changeTags({ action: "match", name: t, match: word });
+  }
+}
+async function createTag() {
+  const v = $("#newTag").value.trim();
+  if (!v) { $("#newTag").focus(); return; }
+  if (await changeTags({ action: "create", name: v }, `Created #${v.toLowerCase()}.`)) $("#newTag").value = "";
+}
+function wireTags() {
+  $("#tagsBtn").addEventListener("click", () => openTagPanel());
+  $("#manageTags").addEventListener("click", () => openTagPanel(true));
+  $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
+  $("#newTagBtn").addEventListener("click", createTag);
+  $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
+  $("#selectBtn").addEventListener("click", () => setSelecting(!sel.on));
+  $("#bulkDone").addEventListener("click", () => setSelecting(false));
+  $("#bulkAll").addEventListener("click", () => { for (const a of T.shown()) sel.ids.add(T.id(a)); markSelected(); });
+  $("#bulkNone").addEventListener("click", () => { sel.ids.clear(); markSelected(); });
+  $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
+  $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
+  $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
+  });
+  document.addEventListener("pointerdown", e => {
+    if (!$("#tagPanel").hidden && !e.target.closest("#tagPanel, #tagsBtn, #manageTags, #toast")) openTagPanel(false);
+  });
+}
+
 /* ---------- offline notice: everything here works offline except the store links and refreshing */
 const showConnection = () => { $("#offline").hidden = navigator.onLine; };
 addEventListener("online", showConnection);
 addEventListener("offline", showConnection);
 showConnection();
+wireTags();
 readHash();
 load();
 </script>

@@ -45,7 +45,7 @@ try:
 except ImportError:  # progress bars are optional
     tqdm = None
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 HERE = Path(__file__).resolve().parent
 PROBE_DIR = HERE / "probe-output"
@@ -1643,9 +1643,11 @@ def read_manifests(root: Path) -> list[dict]:
 
 def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     """Catalog entries + tag index, computed from the manifests on disk. Writes nothing."""
+    from asset_browser import TagStore, tag_key  # your tags, shared with Hoard
     tcfg = cfg["tags"]
     stop = STOPWORDS | {w.lower() for w in tcfg.get("extra_stopwords", [])}
-    block = {w.lower() for w in tcfg.get("blocklist", [])}
+    tagdata = TagStore().load()
+    block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
     assets = read_manifests(root)
     if not assets:
         return [], {}
@@ -1665,10 +1667,12 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     catalog = []
     for a, ts in zip(assets, toks):
         folder = f"{a['store']}/{a['folder']}"
-        a_tags = sorted(ts & tags)
+        mine = TagStore.tags_for(tagdata, tag_key(a["store"], a["name"]), a["name"])
+        a_tags = sorted((ts & tags) - set(mine))
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,
                         "url": a.get("url"), "variants": a.get("variants"), "added": a.get("first_seen"),
-                        "files": sorted(f["path"] for f in a["files"].values()), "suggested_tags": a_tags})
+                        "files": sorted(f["path"] for f in a["files"].values()),
+                        "tags": mine, "suggested_tags": a_tags})
         for t in a_tags:
             index.setdefault(t, []).append(folder)
     catalog.sort(key=lambda e: (e["store"], e["creator"].lower(), e["name"].lower()))
@@ -1687,9 +1691,15 @@ def build_catalog(cfg: dict, root: Path) -> None:
             (adir / "asset.json").write_text(json.dumps(entry, indent=2, ensure_ascii=False), "utf-8")
     (root / "catalog.json").write_text(json.dumps({"generated_at": now_iso(), "assets": catalog},
                                                   indent=2, ensure_ascii=False), "utf-8")
-    (root / "tags.json").write_text(json.dumps({"generated_at": now_iso(), "total_assets": len(catalog),
-                                                "tags": {t: {"count": len(v), "assets": v} for t, v in ordered.items()}},
-                                               indent=2, ensure_ascii=False), "utf-8")
+    yours: dict[str, list] = {}
+    for entry in catalog:
+        for t in entry["tags"]:
+            yours.setdefault(t, []).append(entry["folder"])
+    (root / "tags.json").write_text(json.dumps({
+        "generated_at": now_iso(), "total_assets": len(catalog),
+        "tags": {t: {"count": len(v), "assets": v} for t, v in sorted(yours.items(), key=lambda kv: (-len(kv[1]), kv[0]))},
+        "suggested": {t: {"count": len(v), "assets": v} for t, v in ordered.items()},
+    }, indent=2, ensure_ascii=False), "utf-8")
     top = ", ".join(f"{t} ({len(v)})" for t, v in list(ordered.items())[:25])
     log(f"\nTagged {len(catalog)} assets with {len(ordered)} suggested tags. Top: {top or '-'}")
     log("Prune noisy ones via tags.blocklist in config.json, then run `tags` again.")
