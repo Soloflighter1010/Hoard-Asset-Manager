@@ -3,6 +3,7 @@
   "request_delay": 1.0,
   "browser_channel": "",
   "profile_dir": "",
+  "allow_unprotected_signins": false,
   "gumroad": {
     "enabled": true,
     "include_archived": true,

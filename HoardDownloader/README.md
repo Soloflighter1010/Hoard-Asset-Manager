@@ -71,6 +71,9 @@ Every sync, and the `tags` command, writes your tags alongside the downloads so 
 - `catalog.json` lists every asset with both
 - `tags.json` maps each of your tags (`tags`) and each suggestion (`suggested`) to its asset folders
 
+[docs/DATA-FORMATS.md](../docs/DATA-FORMATS.md) describes these files exactly and what they promise
+(clean text, plain relative paths, web-only links), for anyone writing a program that reads them.
+
 ## Browsing
 
 **Browse your downloads** in the menu (or `browse`) opens them at http://127.0.0.1:8765. It's read-only: it never
@@ -86,8 +89,17 @@ moves, renames or deletes anything.
 - Assets you have from more than one store are pointed out on each copy. Files deleted from disk are flagged.
 - After a `sync`, click **Rescan** instead of restarting.
 
-`--host 0.0.0.0` makes it reachable from other devices on your network (opening folders still only
-works on the PC itself). `--port` changes the port.
+**Using it from other devices.** The downloads browser only serves your own computer unless you start it with `--host 0.0.0.0`.
+Because your library and its access key would then cross your network, that needs one of:
+
+- **HTTPS:** add `--tls-cert cert.pem --tls-key key.pem`, a certificate for this computer (the free tool
+  mkcert makes one your devices will trust).
+- **An encrypted network:** if your devices reach this computer over a VPN such as Tailscale or WireGuard,
+  add `--plain-http`.
+
+Other devices then open the address the tool prints, which includes an access key. Signing in,
+refreshing, signing out, changing tags and opening folders still only work on the computer running it.
+`--port` changes the port.
 
 ## How each store is handled
 
@@ -132,10 +144,11 @@ for, open the receipt's download link and choose **Get Started** to add it.
 
 ## Notes
 
-- Runs on Windows and Linux. On a headless machine, Gumroad can use your `_gumroad_app_session` cookie
-  from the `HOARD_GUMROAD_SESSION` environment variable. Keep it out of `config.json`, which is easy to
-  share by accident. Booth and Jinxxy need one `login` with a display, and Payhip needs a display every
-  time.
+- Runs on Windows, macOS and Linux. Every store needs one `login` in a browser window, and Payhip needs a
+  window every time. On Linux, sign-ins need a keyring (see the main README's "Your sign-ins").
+- Versions before 1.6 could read a copied Gumroad session cookie from `config.json` or
+  `HOARD_GUMROAD_SESSION`. That's no longer supported, because anyone who sees that value can use your
+  account: delete it, sign out of Gumroad on its website to end that session, and use `login gumroad`.
 - Sessions expire now and then (Gumroad's after about a month). When sync says a store isn't signed in,
   sign in to it again from the menu.
 - Folder and file names are cleaned for Windows and capped in length. If you still hit path-length

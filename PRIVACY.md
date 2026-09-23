@@ -14,7 +14,7 @@ Hoard, and I never receive any of your information.
 
 | What | Why | Where |
 |---|---|---|
-| Your store sign-ins (the cookies and site data a store sets when you sign in in Hoard's browser window) | To read your purchase list and download your files without asking you to sign in every time | Hoard's private sign-in folder: `%LOCALAPPDATA%\Hoard\sign-ins` on Windows, `~/Library/Application Support/Hoard/sign-ins` on macOS, `~/.local/share/Hoard/sign-ins` on Linux. Encrypted by your operating system where it can be. |
+| Your store sign-ins (the cookies and site data a store sets when you sign in in Hoard's browser window, one folder per store; never your passwords) | To read your purchase list and download your files without asking you to sign in every time | Hoard's private sign-in folder: `%LOCALAPPDATA%\Hoard\sign-ins` on Windows, `~/Library/Application Support/Hoard/sign-ins` on macOS, `~/.local/share/Hoard/sign-ins` on Linux. Encrypted by your operating system where it can be. |
 | Your library list: names, creators, links and image links for the items you own | To show your library | `library.json` in the Hoard folder |
 | Product images, saved after each refresh (turn off with `"offline_images": false`) | So the library loads quickly and works offline | `.cache/thumbs` in the Hoard folder |
 | Downloaded files and their records (`_manifest.json`, `catalog.json`, `tags.json`, `asset.json`) | So nothing is downloaded twice, and for search and tags | The download folder you choose |
@@ -39,8 +39,9 @@ refreshing, signing in and downloading.
 ## Using the tools on your network
 
 If you start a tool with `--host 0.0.0.0`, other devices on your network can view your library, but only
-with the access key the tool prints when it starts. Those devices can't sign in, refresh, sign out or
-open folders; only the computer running the tool can.
+over HTTPS (or a VPN you've said is encrypted) and only with the access key the tool prints when it
+starts. Those devices can't sign in, refresh, sign out, change tags or open folders; only the computer
+running the tool can.
 
 ## Sharing troubleshooting files
 

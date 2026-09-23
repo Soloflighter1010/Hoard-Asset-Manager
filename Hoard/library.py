@@ -22,13 +22,17 @@ import hashlib
 import hmac
 import html
 import ipaddress
+import http.client
 import json
 import os
 import re
 import secrets
 import shutil
 import socket
+import ssl
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unicodedata
@@ -43,7 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-__version__ = "1.5.0"
+__version__ = "1.6.1"
 
 HERE = Path(__file__).resolve().parent
 LIBRARY_FILE = HERE / "library.json"
@@ -53,7 +57,8 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 DEFAULT_CONFIG = {
     "port": 8766,
-    "profile_dir": "",                   # "" = Hoard's private sign-in folder, shared with Hoard Downloader
+    "profile_dir": "",                   # "" = Hoard's private sign-in folder (one profile per store), shared with Hoard Downloader
+    "allow_unprotected_signins": False,  # Linux without a keyring only: save sign-ins protected by folder permissions
     "browser_channel": "",               # "chrome" or "msedge" to use an installed browser
     "request_delay": 0.8,
     "gumroad": {"include_archived": True},
@@ -109,10 +114,12 @@ def item(store: str, id_, **fields) -> dict:
     d.update({k: v for k, v in fields.items() if v not in (None, "")})
     for k in ("creator_url", "thumbnail", "url", "download_url"):
         d[k] = safe_url(d[k])
-    d["files"] = [{"name": str(f.get("name") or "File"), "url": safe_url(f.get("url"))}
-                  for f in d["files"] if safe_url(f.get("url"))]
-    d["name"] = re.sub(r"\s+", " ", d["name"] or "").strip() or "Untitled"
-    d["creator"] = re.sub(r"\s+", " ", d["creator"] or "").strip() or "Unknown creator"
+    d["files"] = [{"name": clean_text(f.get("name"), 200) or "File", "url": safe_url(f.get("url"))}
+                  for f in d["files"][:500] if safe_url(f.get("url"))]
+    d["name"] = clean_text(d["name"], 300) or "Untitled"
+    d["creator"] = clean_text(d["creator"], 200) or "Unknown creator"
+    d["variants"] = clean_text(d["variants"], 300) or None
+    d["archived"], d["gift"] = d["archived"] is True, d["gift"] is True
     return d
 
 
@@ -129,13 +136,17 @@ def _playwright():
 
 # ----------------------------------------------------------------------------- sign-ins
 #
-# Store sign-ins live in a browser profile that belongs to Hoard alone, never your everyday browser.
-# It sits in your user account's private app-data folder instead of next to the program, so zipping,
-# sharing, syncing or committing the program folder never carries your sign-ins, and both Hoard tools
-# share one set. The browser encrypts the saved cookies with the operating system's own protection:
-# your Windows account (DPAPI), the macOS Keychain, or the Linux keyring when one is available.
+# Each store's sign-in lives in its own browser profile, used by Hoard alone (never your everyday
+# browser), in your user account's private app-data folder: Hoard/sign-ins/<store>. Keeping stores
+# apart means one store's pages never share a browser with another store's sign-in, signing out of a
+# store deletes that store's folder outright, and the two tools can work with different stores at once.
+#
+# The browser encrypts saved cookies with the operating system's protection: your Windows account
+# (DPAPI), the macOS Keychain, or a Linux keyring (the Secret Service or KWallet). On a Linux computer
+# without a keyring the browser would fall back to a publicly known key, so Hoard refuses to save
+# sign-ins there unless you allow it in config.json ("allow_unprotected_signins").
 
-LEGACY_PROFILE = HERE / ".browser-profile"   # where versions before 1.2 kept sign-ins
+LEGACY_PROFILE = HERE / ".browser-profile"   # before 1.2: one profile next to the program
 STORE_SITES = {
     "booth": ["booth.pm", "pixiv.net"],        # Booth signs in through pixiv
     "gumroad": ["gumroad.com"],
@@ -148,13 +159,36 @@ STORE_ORIGINS = {
     "jinxxy": ["https://jinxxy.com", "https://www.jinxxy.com"],
     "payhip": ["https://payhip.com"],
 }
+# Pages that show whether you're signed in (a sign-in form means you're not), and where to sign out.
+STORE_ACCOUNT_PAGES = {
+    "booth": "https://accounts.booth.pm/library",
+    "gumroad": "https://app.gumroad.com/library",
+    "jinxxy": "https://jinxxy.com/my/inventory",
+    "payhip": "https://payhip.com/account",
+}
+GUMROAD_SIGN_OUT = "https://app.gumroad.com/logout"   # Gumroad's own sign-out address
+SIGN_OUT_JS = r"""
+() => {
+  const label = /^(log ?out|sign ?out|ログアウト)$/i;
+  const items = [...document.querySelectorAll('a, button, [role="menuitem"], input[type="submit"]')];
+  const el = items.find(e => label.test((e.innerText || e.value || e.getAttribute('aria-label') || '').trim()))
+    || items.find(e => /log_?out|sign_?out/i.test(e.getAttribute('href') || ''));
+  if (!el) return false;
+  setTimeout(() => el.click(), 0);
+  return true;
+}
+"""
 # Playwright normally starts Chromium with a fixed, publicly known cookie key on Linux and macOS.
-# Dropping these two switches lets Chromium use the real keyring / Keychain instead.
+# Dropping these two switches lets Chromium use the real keyring or Keychain instead.
 WEAK_KEY_SWITCHES = ["--password-store=basic", "--use-mock-keychain"]
 
 
 class ProfileBusy(Exception):
-    """The other Hoard tool is using the sign-ins right now."""
+    """The other Hoard tool is using this store's sign-in right now."""
+
+
+class SigninsUnprotected(Exception):
+    """This computer has no keyring to protect sign-ins, and unprotected ones aren't allowed."""
 
 
 def app_data_dir() -> Path:
@@ -168,42 +202,39 @@ def app_data_dir() -> Path:
     return base / "Hoard"
 
 
-def _custom_profile(cfg: dict):
-    """The sign-in folder named in config.json, or None to use the private default.
-
-    An empty value, or one ending in the pre-1.2 name .browser-profile, means the default.
-    """
+def signins_root(cfg: dict) -> Path:
+    """The folder holding one profile per store. config.json's profile_dir can move it."""
     value = (cfg.get("profile_dir") or "").strip()
-    if not value or Path(value).name == ".browser-profile":  # empty, or an old default: use the private folder
-        return None
-    p = Path(os.path.expandvars(value)).expanduser()
-    return p if p.is_absolute() else HERE / p
+    if value and Path(value).name != ".browser-profile":  # that name was the pre-1.2 default: ignore it
+        p = Path(os.path.expandvars(value)).expanduser()
+        return p if p.is_absolute() else HERE / p
+    return app_data_dir() / "sign-ins"
 
 
-def profile_dir(cfg: dict) -> Path:
-    """Where Hoard keeps its browser profile, which holds your store sign-ins."""
-    return _custom_profile(cfg) or app_data_dir() / "sign-ins"
+def profile_dir(cfg: dict, store: str) -> Path:
+    """Where one store's sign-in is kept."""
+    return signins_root(cfg) / store
 
 
 def _lock_down(path: Path) -> None:
-    """Create a folder and, on Linux and macOS, make it readable only by you."""
+    """Create a folder and, on Linux and macOS, make it and Hoard's folder readable only by you."""
     path.mkdir(parents=True, exist_ok=True)
-    if os.name == "posix":  # only you can open it; Windows keeps app-data private to your account already
-        os.chmod(path, 0o700)
-        if path.parent.name == "Hoard":
-            os.chmod(path.parent, 0o700)
+    if os.name == "posix":  # Windows keeps app data private to your account already
+        for p in (path, path.parent, path.parent.parent):
+            if p.name in ("Hoard", "sign-ins") or p == path:
+                os.chmod(p, 0o700)
 
 
 class ProfileLock:
-    """Keeps two Hoard programs from using the sign-ins at once. The OS drops it if a program crashes."""
+    """Keeps two Hoard programs from using one store's sign-in at once. The OS drops it if a program crashes."""
 
     def __init__(self, profile: Path):
-        """Prepare a lock file next to the sign-in folder; nothing is locked until acquire()."""
+        """Prepare a lock file next to the profile; nothing is locked until acquire()."""
         self.path = profile.parent / (profile.name + ".lock")
         self.fh = None
 
     def acquire(self) -> None:
-        """Lock the sign-ins for this program, or raise ProfileBusy if another program has them."""
+        """Lock the sign-in for this program, or raise ProfileBusy if another program has it."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(self.path, "a+")
         try:
@@ -217,11 +248,11 @@ class ProfileLock:
         except OSError:
             self.fh.close()
             self.fh = None
-            raise ProfileBusy("Your store sign-ins are in use by the other Hoard tool right now. "
+            raise ProfileBusy(f"The other Hoard tool is using your {self.path.stem.title()} sign-in right now. "
                               "Try again when it has finished.")
 
     def release(self) -> None:
-        """Unlock the sign-ins. Safe to call more than once."""
+        """Unlock the sign-in. Safe to call more than once."""
         if self.fh:
             try:
                 if os.name == "nt":
@@ -242,60 +273,183 @@ def _remove_tree(path: Path) -> None:
     shutil.rmtree(path, onerror=retry)
 
 
+def _dbus_names() -> set[str]:
+    """Names on the desktop's D-Bus session bus, running or startable on demand. Empty without one."""
+    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+        return set()
+    names: set[str] = set()
+    for method in ("ListNames", "ListActivatableNames"):
+        for cmd in (["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path",
+                     "/org/freedesktop/DBus", "--method", f"org.freedesktop.DBus.{method}"],
+                    ["dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.DBus",
+                     "/org/freedesktop/DBus", f"org.freedesktop.DBus.{method}"]):
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+            except (OSError, subprocess.SubprocessError):
+                continue
+            names |= {a or b for a, b in re.findall(r"'([\w.]+)'|\"([\w.]+)\"", out)}
+            break
+    return names
+
+
+def linux_keyring() -> str | None:
+    """The keyring Chromium can use on this Linux desktop ("gnome-libsecret" or "kwallet5/6"), or None."""
+    if not sys.platform.startswith("linux"):
+        return None
+    names = _dbus_names()
+    if "org.freedesktop.secrets" in names:        # GNOME Keyring, KeePassXC and other Secret Service keyrings
+        return "gnome-libsecret"
+    if "org.kde.kwalletd6" in names:
+        return "kwallet6"
+    if "org.kde.kwalletd5" in names:
+        return "kwallet5"
+    return None
+
+
+def signin_protection(cfg: dict) -> str:
+    """How saved sign-ins are protected on this computer, in words."""
+    if sys.platform == "win32":
+        return "encrypted by your Windows account"
+    if sys.platform == "darwin":
+        return "encrypted with your macOS Keychain"
+    keyring = linux_keyring()
+    if keyring:
+        return "encrypted with your " + ("KWallet" if keyring.startswith("kwallet") else "Secret Service keyring")
+    if cfg.get("allow_unprotected_signins"):
+        return "protected only by folder permissions, because this computer has no keyring"
+    return "not saved, because this computer has no keyring to protect them"
+
+
+def _cookie_rows(profile: Path, query: str) -> list:
+    """Run a read-only query on a profile's cookie database (a copy, so a running browser isn't disturbed)."""
+    import sqlite3
+    import tempfile
+    for rel in ("Default/Network/Cookies", "Default/Cookies"):
+        db = profile / rel
+        if db.is_file():
+            with tempfile.TemporaryDirectory() as tmp:
+                copy = Path(tmp) / "Cookies"
+                shutil.copyfile(db, copy)
+                con = sqlite3.connect(f"file:{copy}?mode=ro", uri=True)
+                try:
+                    return con.execute(query).fetchall()
+                except sqlite3.Error:
+                    return []
+                finally:
+                    con.close()
+    return []
+
+
+def unprotected_cookie_count(profile: Path) -> int:
+    """On Linux, how many saved cookies use the browser's fixed fallback key ("v10") instead of a keyring ("v11")."""
+    if not sys.platform.startswith("linux"):
+        return 0
+    rows = _cookie_rows(profile, "SELECT encrypted_value, value FROM cookies")
+    return sum(1 for enc, plain in rows if (bytes(enc or b"")[:3] == b"v10") or (plain or ""))
+
+
+def _cookie_hosts(profile: Path) -> set[str]:
+    """The sites a profile holds cookies for."""
+    return {h.lstrip(".") for (h,) in _cookie_rows(profile, "SELECT DISTINCT host_key FROM cookies")}
+
+
+def _on_sites(host: str, sites: list[str]) -> bool:
+    """True when host is one of the sites, or a subdomain of one."""
+    host = host.lstrip(".")
+    return any(host == s or host.endswith("." + s) for s in sites)
+
+
+def _launch(p, cfg: dict, profile: Path, headless: bool):
+    """Start Chromium on a profile with the strongest cookie protection this computer offers."""
+    kwargs = dict(user_data_dir=str(profile), headless=headless, accept_downloads=True,
+                  viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
+    if sys.platform.startswith("linux"):
+        keyring = linux_keyring()
+        if keyring:
+            kwargs["args"] = [f"--password-store={keyring}"]
+        elif cfg.get("allow_unprotected_signins"):
+            kwargs["args"] = ["--password-store=basic"]   # the user chose this in config.json
+        else:
+            raise SigninsUnprotected(
+                "This computer has no keyring to protect store sign-ins, so Hoard won't save them. Install and "
+                "unlock one (GNOME Keyring, KeePassXC with Secret Service turned on, or KWallet), then try again. "
+                "On a computer without a desktop you can instead set \"allow_unprotected_signins\": true in "
+                "config.json; sign-ins are then protected only by your user account's folder permissions.")
+    if cfg.get("browser_channel"):
+        kwargs["channel"] = cfg["browser_channel"]
+    return p.chromium.launch_persistent_context(**kwargs)
+
+
 _migrated = False
 
 
-def _migrate_legacy_profiles(p, cfg: dict, target: Path) -> None:
-    """Move sign-ins that older versions kept next to the program into the private folder."""
+def _migrate_old_signins(p, cfg: dict) -> None:
+    """Split sign-ins saved by older versions (one profile for every store) into a profile per store."""
     global _migrated
-    if _migrated or _custom_profile(cfg):
+    if _migrated:
         return
-    _migrated = True
-    old_places = [LEGACY_PROFILE]
-    value = (cfg.get("profile_dir") or "").strip()
-    if value and Path(value).name == ".browser-profile":
-        old = Path(os.path.expandvars(value)).expanduser()
-        old_places.append(old if old.is_absolute() else HERE / old)
-    for old in dict.fromkeys(o.resolve() for o in old_places):
-        if not old.is_dir() or old == target.resolve():
-            continue
-        if not (target / "Default").exists():  # nothing saved in the private folder yet: move it all
-            if target.exists():
-                _remove_tree(target)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(old), str(target))
-            print(f"Moved your store sign-ins out of the program folder, to {target}", flush=True)
-            continue
-        # Both places have sign-ins (each tool had its own): copy the store cookies across, then remove the old one.
-        src = p.chromium.launch_persistent_context(str(old), headless=True)  # old profiles used the old cookie key
+    root = signins_root(cfg)
+    old_places = []   # (folder, how it was started)
+    if (root / "Local State").exists() or (root / "Default").exists():   # 1.2 to 1.5: one shared profile
+        shared = root.parent / (root.name + ".old")
+        guard = ProfileLock(root)                     # the lock those versions used
+        guard.acquire()
         try:
-            cookies = [c for c in src.cookies() if any(c["domain"].lstrip(".").endswith(d)
-                                                       for sites in STORE_SITES.values() for d in sites)]
+            if shared.exists():
+                _remove_tree(shared)
+            staging = root.parent / (root.name + ".moving")
+            os.replace(root, staging)
+            root.mkdir(parents=True, exist_ok=True)
+            os.replace(staging, shared)
+        finally:
+            guard.release()
+        old_places.append((shared, "1.2"))
+    elif (root.parent / (root.name + ".old")).exists():  # an earlier move that stopped part-way
+        old_places.append((root.parent / (root.name + ".old"), "1.2"))
+    value = (cfg.get("profile_dir") or "").strip()
+    legacy = [LEGACY_PROFILE]
+    if value and Path(value).name == ".browser-profile":
+        v = Path(os.path.expandvars(value)).expanduser()
+        legacy.append(v if v.is_absolute() else HERE / v)
+    old_places += [(o, "1.0") for o in dict.fromkeys(x.resolve() for x in legacy) if o.is_dir()]
+
+    for old, era in old_places:
+        start = {} if era == "1.0" else {"ignore_default_args": WEAK_KEY_SWITCHES}  # read with the key it was saved under
+        src = p.chromium.launch_persistent_context(str(old), headless=True, **start)
+        try:
+            cookies = src.cookies()
         finally:
             src.close()
-        if cookies:
-            dst = p.chromium.launch_persistent_context(str(target), headless=True, ignore_default_args=WEAK_KEY_SWITCHES)
+        for store, sites in STORE_SITES.items():
+            mine = [c for c in cookies if _on_sites(c["domain"], sites)]
+            if not mine:
+                continue
+            target = profile_dir(cfg, store)
+            lock = ProfileLock(target)
+            lock.acquire()
             try:
-                dst.add_cookies(cookies)
+                _lock_down(target)
+                dst = _launch(p, cfg, target, headless=True)
+                try:
+                    dst.add_cookies(mine)
+                finally:
+                    dst.close()
             finally:
-                dst.close()
+                lock.release()
         _remove_tree(old)
-        print(f"Merged the store sign-ins from {old} into {target} and removed the old copy.", flush=True)
+        print(f"Moved your sign-ins from {old} into a separate folder for each store under {root}", flush=True)
+    _migrated = True
 
 
-def launch_context(p, cfg: dict, headless: bool):
-    """Open Hoard's own browser with your saved sign-ins. Close it with ctx.close()."""
-    target = profile_dir(cfg)
+def launch_context(p, cfg: dict, headless: bool, store: str):
+    """Open Hoard's browser with one store's saved sign-in. Close it with ctx.close()."""
+    _migrate_old_signins(p, cfg)
+    target = profile_dir(cfg, store)
     lock = ProfileLock(target)
     lock.acquire()
     try:
-        _migrate_legacy_profiles(p, cfg, target)
         _lock_down(target)
-        kwargs = dict(user_data_dir=str(target), headless=headless, accept_downloads=True,
-                      viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
-        if cfg.get("browser_channel"):
-            kwargs["channel"] = cfg["browser_channel"]
-        ctx = p.chromium.launch_persistent_context(**kwargs)
+        ctx = _launch(p, cfg, target, headless)
     except BaseException:
         lock.release()
         raise
@@ -303,29 +457,95 @@ def launch_context(p, cfg: dict, headless: bool):
     return ctx
 
 
-def sign_out(p, cfg: dict, store: str) -> str:
-    """Remove Hoard's saved sign-in for one store, or delete every saved sign-in ("all")."""
-    target = profile_dir(cfg)
-    if store == "all":
-        lock = ProfileLock(target)
-        lock.acquire()
-        try:
-            if target.exists():
-                _remove_tree(target)
-        finally:
-            lock.release()
-        return "Signed out of every store. Hoard's saved sign-ins are deleted."
-    ctx = launch_context(p, cfg, headless=True)
+def check_saved_signin(cfg: dict, store: str) -> None:
+    """After signing in: make sure the saved sign-in really is encrypted, or delete it and say why."""
+    target = profile_dir(cfg, store)
+    if cfg.get("allow_unprotected_signins") or not unprotected_cookie_count(target):
+        return
+    _remove_tree(target)
+    raise SigninsUnprotected(
+        f"Your {store.title()} sign-in was saved without your keyring's protection (the keyring may be locked), so "
+        "Hoard deleted it. Unlock your keyring and sign in again.")
+
+
+def _signed_out_page(page) -> bool:
+    """True when the open page is a sign-in page."""
+    url = page.url.lower()
+    return any(w in url for w in ("login", "sign_in", "signin")) or page.locator("input[type=password]").count() > 0
+
+
+def _end_store_session(p, cfg: dict, profile: Path, store: str) -> bool:
+    """Ask the store to end the session (best effort). True when the store then shows this browser as signed out."""
     try:
-        for site in STORE_SITES[store]:
-            ctx.clear_cookies(domain=re.compile(rf"(^|\.){re.escape(site)}$"))
+        ctx = _launch(p, cfg, profile, headless=True)
+    except Exception:
+        return False
+    try:
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        cdp = ctx.new_cdp_session(page)
-        for origin in STORE_ORIGINS[store]:  # sites can also keep sign-in tokens in their own storage
-            cdp.send("Storage.clearDataForOrigin", {"origin": origin, "storageTypes": "all"})
+        if store == "gumroad":
+            page.goto(GUMROAD_SIGN_OUT, wait_until="domcontentloaded", timeout=20000)
+        else:
+            page.goto(STORE_ACCOUNT_PAGES[store], wait_until="domcontentloaded", timeout=20000)
+            settle(page)
+            if _signed_out_page(page):
+                return True  # the store already treats this browser as signed out
+            if not page.evaluate(SIGN_OUT_JS):
+                return False
+        settle(page, 1500)
+        page.goto(STORE_ACCOUNT_PAGES[store], wait_until="domcontentloaded", timeout=20000)
+        settle(page)
+        return _signed_out_page(page)
+    except Exception:
+        return False
     finally:
-        ctx.close()
-    return f"Signed out of {store.title()} in Hoard. Your account itself isn't affected."
+        try:
+            ctx.close()
+        except Exception:
+            pass
+
+
+def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
+    """Sign out of a store (or "all"): end the session on the store's side when possible, delete the saved
+    sign-in, check nothing is left behind, and say what was done."""
+    if store == "all":
+        done = [sign_out(p, cfg, s, online) for s in STORE_SITES]
+        root = signins_root(cfg)
+        for extra in (root.parent / (root.name + ".old"), LEGACY_PROFILE):
+            if extra.exists():
+                _remove_tree(extra)
+        return "\n".join(done)
+    label = store.title()
+    target = profile_dir(cfg, store)
+    if not target.exists():
+        return f"{label}: no saved sign-in."
+    if online is None:
+        online = reachable(store)
+    lock = ProfileLock(target)
+    lock.acquire()
+    try:
+        count = (_cookie_rows(target, "SELECT COUNT(*) FROM cookies") or [(0,)])[0][0]
+        remote = _end_store_session(p, cfg, target, store) if online else None
+        _remove_tree(target)
+    finally:
+        lock.release()
+    if target.exists():
+        raise RuntimeError(f"Couldn't delete {target}. Close any Hoard window using it and try again.")
+    # no other store's folder should hold this store's cookies; if one somehow does, clear them there too
+    for other in STORE_SITES:
+        other_dir = profile_dir(cfg, other)
+        if other != store and other_dir.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(other_dir)):
+            ctx = launch_context(p, cfg, True, other)
+            try:
+                for site in STORE_SITES[store]:
+                    ctx.clear_cookies(domain=re.compile(rf"(^|\.){re.escape(site)}$"))
+            finally:
+                ctx.close()
+    said = f"{label}: deleted the saved sign-in ({count} {'cookie' if count == 1 else 'cookies'}, plus the store's site data)."
+    if remote:
+        return said + f" {label} also confirmed you're signed out."
+    if remote is None:
+        return said + f" You're offline, so {label} wasn't told; sign out on its website to end that session."
+    return said + f" Couldn't sign out on {label}'s side; sign out on its website to end that session there too."
 
 
 launch = launch_context
@@ -846,12 +1066,13 @@ def import_saved_page(cfg: dict, store: str | None, filename: str, text: str) ->
     if not items:
         raise ValueError(f"no {label} items in that page. Save your library page itself, after everything "
                          "on it has loaded (scroll to the bottom first).")
-    for i in items:  # keep the images that came inside the file
+    for i in items:  # keep the images that came inside the file (plain raster images only)
         if i.get("thumbnail") in images:
             data, ctype = images[i["thumbnail"]]
+            if ctype not in IMAGE_TYPES:
+                continue
             THUMB_DIR.mkdir(parents=True, exist_ok=True)
-            ext = {"image/jpeg": "jpg", "image/svg+xml": "svg"}.get(ctype, ctype.split("/")[1])
-            (THUMB_DIR / f"{hashlib.sha1(i['thumbnail'].encode()).hexdigest()}.{ext}").write_bytes(data)
+            write_file_safely(THUMB_DIR / f"{hashlib.sha1(i['thumbnail'].encode()).hexdigest()}.{IMAGE_TYPES[ctype]}", data)
     return store, items
 
 
@@ -865,20 +1086,42 @@ class Library:
         self.lock = threading.Lock()
         self.data = {"items": [], "stores": {}}
         if path.exists():
-            self.data = json.loads(path.read_text("utf-8"))
+            try:
+                self.data = self.sanitize(read_json_file(path, 256 * 1024 * 1024))
+            except DataFileError as e:
+                aside = set_aside(path)
+                print(f"{e}, so it was kept as {aside.name}. Refresh your stores to rebuild the list.", flush=True)
+
+    @staticmethod
+    def sanitize(raw) -> dict:
+        """Keep only well-formed items and store notes from library.json, rebuilt through item() so they're clean."""
+        out = {"items": [], "stores": {}}
+        if not isinstance(raw, dict):
+            return out
+        seen = set()
+        for i in (raw.get("items") if isinstance(raw.get("items"), list) else [])[:200000]:
+            if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
+                continue
+            fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
+                                             "variants", "archived", "gift")}
+            fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
+            clean = item(i["store"], clean_text(i["id"], 200), **fields)
+            if clean["key"] not in seen:
+                seen.add(clean["key"])
+                out["items"].append(clean)
+        for store, info in (raw.get("stores") if isinstance(raw.get("stores"), dict) else {}).items():
+            if store in STORES and isinstance(info, dict):
+                out["stores"][store] = {
+                    "count": info["count"] if isinstance(info.get("count"), int) else 0,
+                    "error": clean_text(info.get("error"), 600) or None,
+                    **{k: clean_text(info[k], 40) for k in ("refreshed", "updated") if isinstance(info.get(k), str)},
+                    **({"source": info["source"]} if info.get("source") in ("import", "refresh") else {}),
+                }
+        return out
 
     def save(self) -> None:
-        """Write library.json through a temporary file, retrying if Windows has it open elsewhere."""
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, indent=1, ensure_ascii=False), "utf-8")
-        for attempt in range(10):
-            try:
-                os.replace(tmp, self.path)
-                return
-            except PermissionError:  # Windows: something is reading the file right now
-                if attempt == 9:
-                    raise
-                time.sleep(0.2)
+        """Write library.json safely (see write_file_safely)."""
+        write_file_safely(self.path, json.dumps(self.data, indent=1, ensure_ascii=False))
 
     def replace_store(self, store: str, items: list[dict]) -> None:
         """Swap in a store's freshly read items and record the refresh."""
@@ -965,6 +1208,78 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
     return out
 
 
+# ----------------------------------------------------------------------------- data files
+#
+# Everything these tools write (manifests, catalog.json, tags.json, asset.json, the library list, your
+# tags, images) may be read back later, by these tools or by other programs such as a Unity plugin, and
+# may sit somewhere others can reach, like a shared drive. So text from stores is cleaned before it's
+# stored, data files are read defensively, and files are written in a way that can't be redirected.
+
+MAX_DATA_FILE = 64 * 1024 * 1024  # no data file these tools write is anywhere near this
+
+
+class DataFileError(ValueError):
+    """A data file that's too large, isn't valid JSON, or is nested absurdly deep."""
+
+
+def clean_text(value, limit: int = 300) -> str:
+    """Text from a store or a data file, made safe to show and to store.
+
+    Control characters and invisible formatting characters (such as right-to-left overrides and
+    zero-width spaces, which can make a name look like something else) are removed, runs of
+    whitespace become single spaces, and the result is at most `limit` characters.
+    """
+    s = unicodedata.normalize("NFC", value if isinstance(value, str) else "" if value is None else str(value))
+    s = "".join(" " if unicodedata.category(c) == "Cc" else "" if unicodedata.category(c)[0] == "C" else c for c in s)
+    return re.sub(r"\s+", " ", s).strip()[:limit].strip()
+
+
+def read_json_file(path: Path, max_bytes: int = MAX_DATA_FILE):
+    """Read a JSON data file defensively, raising DataFileError when it's too big or damaged."""
+    size = path.stat().st_size
+    if size > max_bytes:
+        raise DataFileError(f"{path.name} is unexpectedly large ({size // 1048576} MB)")
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except (ValueError, RecursionError, UnicodeDecodeError) as e:
+        raise DataFileError(f"{path.name} is damaged ({e.__class__.__name__})") from None
+
+
+def set_aside(path: Path) -> Path:
+    """Rename a damaged data file out of the way (keeping it, in case it matters) and return its new path."""
+    aside = path.with_name(f"{path.stem}.damaged-{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}")
+    os.replace(path, aside)
+    return aside
+
+
+def write_file_safely(path: Path, data, root: Path | None = None) -> None:
+    """Write a file through a new temporary file in the same folder, then swap it into place.
+
+    A reader never sees half a file, and a symlink planted where the file goes is replaced rather than
+    followed. With root, the file's folder must also really be inside root (checked after resolving links).
+    """
+    if root is not None:
+        base, folder = root.resolve(), path.parent.resolve()
+        if folder != base and base not in folder.parents:
+            raise PermissionError(f"refused to write {path}: its folder leads outside {root}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=path.parent)  # created new, so never a planted link
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data.encode("utf-8") if isinstance(data, str) else data)
+        for attempt in range(10):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # Windows: another program is reading the old file this instant
+                if attempt == 9:
+                    raise
+                time.sleep(0.2)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 # ----------------------------------------------------------------------------- tags
 #
 # Your own tags are shared by Hoard and Hoard Downloader, in tags.json in Hoard's app-data folder, so a
@@ -977,6 +1292,12 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
 # stops it being suggested.
 
 TAG_MAX_LENGTH = 40
+TAG_LIMITS = {"tags": 1000, "matching": 200, "per_item": 100, "tagged_items": 50000, "keys_per_change": 5000}
+# Characters a tag may contain besides letters, marks and digits (in any script, so Japanese works).
+TAG_PUNCTUATION = " -_.+&'"
+# Names that can confuse JavaScript programs reading tags.json into plain objects.
+TAG_RESERVED = {"__proto__", "constructor", "prototype", "__defineGetter__", "__defineSetter__", "__lookupGetter__"}
+TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip):[^\W_]{1,300}$")
 _tag_lock = threading.Lock()
 
 
@@ -998,13 +1319,21 @@ def tag_key(store: str, name: str) -> str:
     key = re.sub(r"[\W_]+", "", re.sub(r"\bv?\d+(?:\.\d+)*\b", " ", core))
     if len(key) < 4:
         key = re.sub(r"[\W_]+", "", s)
-    return f"{store.lower()}:{key}"
+    if not key:  # a name made only of symbols
+        key = "x" + hashlib.sha1(s.encode()).hexdigest()[:16]
+    return f"{store.lower()}:{key[:300]}"
 
 
 def clean_tag(value) -> str:
-    """A tag as it's stored: lower case, single spaces, no commas or #, at most 40 characters."""
-    t = unicodedata.normalize("NFKC", str(value or "")).lower().replace(",", " ").replace("#", " ")
-    return re.sub(r"\s+", " ", t).strip()[:TAG_MAX_LENGTH].strip()
+    """A tag as it's stored: lower case, letters, digits, spaces and - _ . + & ' only, at most 40 characters.
+
+    Everything else, including invisible characters, commas, # and angle brackets, becomes a space, so
+    tags are safe wherever they end up (the pages, the address bar, asset.json and other programs).
+    """
+    t = unicodedata.normalize("NFKC", value if isinstance(value, str) else "").lower()
+    t = "".join(c if unicodedata.category(c)[0] in "LMN" or c in TAG_PUNCTUATION else " " for c in t)
+    t = re.sub(r"\s+", " ", t).strip(TAG_PUNCTUATION)[:TAG_MAX_LENGTH].strip(TAG_PUNCTUATION)
+    return "" if t in TAG_RESERVED else t
 
 
 def name_has_word(name: str, word: str) -> bool:
@@ -1067,30 +1396,53 @@ class TagStore:
         """A tag file with nothing in it."""
         return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": []}
 
+    @staticmethod
+    def sanitize(raw) -> dict:
+        """Keep only well-formed content from a tags file: clean names, valid product keys, within the limits."""
+        data = TagStore.empty()
+        if not isinstance(raw, dict):
+            return data
+        tags = raw.get("tags") if isinstance(raw.get("tags"), dict) else {}
+        matching, renamed = 0, {}
+        for name, info in list(tags.items())[:TAG_LIMITS["tags"]]:
+            # a name older versions allowed but the rules no longer do is converted, not lost ("fox/dog" -> "fox dog")
+            new = clean_tag(name) if isinstance(name, str) else ""
+            if not new:
+                continue
+            renamed[name] = new
+            match = info.get("match") if isinstance(info, dict) else None
+            match = clean_tag(match) if isinstance(match, str) else ""
+            if match and matching >= TAG_LIMITS["matching"]:
+                match = ""
+            if new in data["tags"]:  # two old names became one: keep the first's match unless it had none
+                match = data["tags"][new]["match"] or match
+                matching -= bool(data["tags"][new]["match"])
+            matching += bool(match)
+            data["tags"][new] = {"match": match or None}
+        for field in ("items", "excluded"):
+            mapping = raw.get(field) if isinstance(raw.get(field), dict) else {}
+            for key, names in list(mapping.items())[:TAG_LIMITS["tagged_items"]]:
+                if isinstance(key, str) and TAG_KEY_RX.match(key) and isinstance(names, list):
+                    keep = sorted({renamed[t] for t in names[:TAG_LIMITS["per_item"]] if isinstance(t, str) and t in renamed})
+                    if keep:
+                        data[field][key] = keep
+        hidden = raw.get("hidden") if isinstance(raw.get("hidden"), list) else []
+        data["hidden"] = sorted({w for w in hidden[:TAG_LIMITS["tags"]] if isinstance(w, str) and w and clean_tag(w) == w})
+        return data
+
     def load(self) -> dict:
-        """The saved tags, or an empty set when there's no file yet (or it can't be read)."""
+        """The saved tags, checked, or an empty set when there's no file yet or it can't be read."""
         try:
-            data = json.loads(self.path.read_text("utf-8"))
-        except (OSError, ValueError):
+            return self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
+        except (OSError, DataFileError):
             return self.empty()
-        base = self.empty()
-        for k in base:
-            if isinstance(data.get(k), type(base[k])):
-                base[k] = data[k]
-        return base
 
     def _save(self, data: dict) -> None:
-        """Write tags.json through a temporary file, so a crash can't leave it half-written."""
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True), "utf-8")
-        for attempt in range(10):
-            try:
-                os.replace(tmp, self.path)
-                return
-            except PermissionError:  # Windows: the other tool is reading it this instant
-                if attempt == 9:
-                    raise
-                time.sleep(0.1)
+        """Write tags.json safely; on Linux and macOS only you can read it."""
+        write_file_safely(self.path, json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True))
+        if os.name == "posix":
+            os.chmod(self.path, 0o600)
+            os.chmod(self.path.parent, 0o700)
 
     @staticmethod
     def tags_for(data: dict, key: str, name: str) -> list[str]:
@@ -1101,9 +1453,16 @@ class TagStore:
 
     def change(self, body: dict) -> None:
         """Apply one change from the page. Raises ValueError with a readable message when it doesn't make sense."""
+        if not isinstance(body, dict):
+            raise ValueError("Unknown tag change.")
         action = body.get("action")
         with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
-            data = self.load()
+            data = self.empty()
+            if self.path.exists():
+                try:
+                    data = self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
+                except DataFileError:
+                    set_aside(self.path)  # keep the damaged file rather than overwrite it
             self._apply(data, action, body)
             self._save(data)
 
@@ -1126,27 +1485,39 @@ class TagStore:
                 mapping.pop(key, None)
 
         if action == "assign":
-            keys = [str(k) for k in (body.get("keys") or []) if isinstance(k, str) and ":" in k][:5000]
-            add = [t for t in (clean_tag(v) for v in body.get("add") or []) if t]
-            remove = [t for t in (clean_tag(v) for v in body.get("remove") or []) if t]
+            given = body.get("keys") if isinstance(body.get("keys"), list) else []
+            if len(given) > TAG_LIMITS["keys_per_change"]:
+                raise ValueError(f"Tag at most {TAG_LIMITS['keys_per_change']} items at a time.")
+            keys = [k for k in given if isinstance(k, str) and TAG_KEY_RX.match(k)]
+            add = [t for t in (clean_tag(v) for v in (body.get("add") or [])[:20]) if t]
+            remove = [t for t in (clean_tag(v) for v in (body.get("remove") or [])[:20]) if t]
             if not keys or not (add or remove):
                 raise ValueError("Choose items and a tag.")
+            if len(set(tags) | set(add)) > TAG_LIMITS["tags"]:
+                raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
+            if len(set(items) | set(keys)) > TAG_LIMITS["tagged_items"] and add:
+                raise ValueError("That's more tagged items than Hoard can keep.")
             for t in add:
                 tags.setdefault(t, {"match": None})
             for key in keys:
                 for t in add:
                     items[key] = sorted(set(items.get(key, [])) | {t})
                     drop(excluded, key, t)
+                if len(items.get(key, [])) > TAG_LIMITS["per_item"]:
+                    raise ValueError(f"An item can have at most {TAG_LIMITS['per_item']} tags.")
                 for t in remove:
                     drop(items, key, t)
                     if (tags.get(t) or {}).get("match"):  # keep a matching tag off this item from now on
                         excluded[key] = sorted(set(excluded.get(key, [])) | {t})
         elif action == "create":
             tags.setdefault(need(name), {"match": None})
-            if len(tags) > 1000:
-                raise ValueError("That's more tags than Hoard can keep. Delete some first.")
+            if len(tags) > TAG_LIMITS["tags"]:
+                raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
         elif action == "keep":  # a suggestion becomes your tag, matched by its word
-            tags[need(name)] = {"match": name}
+            need(name)
+            if len(set(tags) | {name}) > TAG_LIMITS["tags"]:
+                raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
+            tags[name] = {"match": name}
             data["hidden"] = [w for w in data["hidden"] if w != name]
         elif action == "match":
             if need(name) not in tags:
@@ -1177,6 +1548,10 @@ class TagStore:
             data["hidden"] = [w for w in data["hidden"] if w != need(name)]
         else:
             raise ValueError("Unknown tag change.")
+        if sum(1 for info in tags.values() if (info or {}).get("match")) > TAG_LIMITS["matching"]:
+            raise ValueError(f"At most {TAG_LIMITS['matching']} tags can match names. Turn matching off on some first.")
+        if len(data["hidden"]) > TAG_LIMITS["tags"]:
+            raise ValueError("That's too many hidden suggestions.")
 
 
 def tag_overview(data: dict, entries: list[dict]) -> dict:
@@ -1231,7 +1606,7 @@ class Jobs:
         try:
             self._set(running=True)
             fn(stores)
-        except ProfileBusy as e:
+        except (ProfileBusy, SigninsUnprotected) as e:
             self._set(message=str(e), error=str(e))
         except Exception as e:
             self._set(message=f"Stopped: {e}", error=f"Stopped: {e}")
@@ -1241,14 +1616,22 @@ class Jobs:
 
     def _logout(self, stores: list[str]) -> None:
         """Sign out of one store, or of every store, and mark the affected stores as signed out."""
-        store = stores[0]
-        self._set(task="logout", store=store, message="Signing out")
+        chosen = list(STORES) if stores[0] == "all" else [stores[0]]
         with _playwright()() as p:
-            done = sign_out(p, self.cfg, store)
-        for s in (list(STORES) if store == "all" else [store]):
-            if s in self.lib.data["stores"]:
-                self.lib.set_error(s, "Signed out. Choose Sign in to refresh this store again.")
-        self._set(message=done)
+            for store in chosen:
+                label = STORES[store]["label"]
+                self._set(task="logout", store=store, message=f"Signing out of {label}")
+                done = sign_out(p, self.cfg, store)
+                if store in self.lib.data["stores"]:  # what was done, shown on the store's row in Stores
+                    self.lib.set_error(store, "Signed out. " + done.split(": ", 1)[-1])
+        if stores[0] == "all":
+            root = signins_root(self.cfg)
+            for extra in (root.parent / (root.name + ".old"), LEGACY_PROFILE):
+                if extra.exists():
+                    _remove_tree(extra)
+            self._set(message="Signed out of every store. Each store's row in Stores says what was done.")
+        else:
+            self._set(message="Signed out. " + done.split(": ", 1)[-1])
 
     def _refresh(self, stores: list[str], skip_imported: bool = False) -> None:
         """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty."""
@@ -1264,11 +1647,15 @@ class Jobs:
             return
         refreshed = []
         with _playwright()() as p:
-            ctx = launch(p, self.cfg, headless=True)
-            try:
-                for store in online:
-                    label = STORES[store]["label"]
-                    self._set(task="refresh", store=store, message=f"Reading {label}")
+            for store in online:
+                label = STORES[store]["label"]
+                self._set(task="refresh", store=store, message=f"Reading {label}")
+                try:
+                    ctx = launch(p, self.cfg, True, store)   # each store has its own sign-in
+                except (ProfileBusy, SigninsUnprotected) as e:
+                    self.lib.set_error(store, str(e))
+                    continue
+                try:
                     try:
                         items = FETCHERS[store](ctx, self.cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
@@ -1289,8 +1676,8 @@ class Jobs:
                     except Exception as e:
                         self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
                                            else f"Couldn't read the library: {e}")
-            finally:
-                ctx.close()
+                finally:
+                    ctx.close()
         if refreshed and self.cfg.get("offline_images", True):
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
@@ -1306,7 +1693,7 @@ class Jobs:
             self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
             return
         with _playwright()() as p:
-            ctx = launch(p, self.cfg, headless=False)
+            ctx = launch(p, self.cfg, False, store)
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             page.goto(STORES[store]["login"])
             self._set(task="login", store=store,
@@ -1322,6 +1709,11 @@ class Jobs:
                 ctx.close()
             except Exception:
                 pass
+        try:
+            check_saved_signin(self.cfg, store)
+        except SigninsUnprotected as e:
+            self.lib.set_error(store, str(e))
+            raise
         self._refresh([store])
 
 
@@ -1414,39 +1806,108 @@ def safe_url(value) -> str | None:
     return value.strip() if u.scheme in ("http", "https") and u.netloc else None
 
 
+def _is_public(ip) -> bool:
+    """True for addresses on the public internet (not this computer, your network, or reserved ranges)."""
+    return ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
+                                 or ip.is_reserved or ip.is_unspecified)
+
+
+def _public_addresses(host: str, port: int) -> list[tuple]:
+    """Look host up once and return its addresses, provided every one of them is public."""
+    found = []
+    for family, _type, _proto, _name, sockaddr in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+        if not _is_public(ipaddress.ip_address(sockaddr[0].split("%")[0])):
+            raise PermissionError(f"{host} points at an address on this computer or your network")
+        found.append((family, sockaddr))
+    if not found:
+        raise OSError(f"{host} has no address")
+    return found
+
+
 def public_http_url(url: str) -> bool:
-    """True when url is http(s) and every address its host resolves to is on the public internet."""
+    """True when url is http(s) and its host currently resolves only to public addresses."""
     u = urlparse(url)
     if u.scheme not in ("http", "https") or not u.hostname:
         return False
     try:
-        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
-    except (OSError, UnicodeError):
+        _public_addresses(u.hostname, u.port or (443 if u.scheme == "https" else 80))
+        return True
+    except (OSError, UnicodeError, ValueError):
         return False
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%")[0])
-        if (not ip.is_global or ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
-                or ip.is_reserved or ip.is_unspecified):
-            return False
-    return True
+
+
+def _connect_public(host: str, port: int, timeout) -> socket.socket:
+    """Connect to one of the public addresses host resolved to, using exactly the address that was checked.
+
+    Checking a name and then letting the connection look it up again would leave a gap that DNS rebinding
+    can use (a name that answers with a public address for the check and a private one for the connection).
+    """
+    last: Exception | None = None
+    for family, sockaddr in _public_addresses(host, port):
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        if timeout is not None and timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+            sock.settimeout(timeout)
+        try:
+            sock.connect(sockaddr)
+            return sock
+        except OSError as e:
+            last = e
+            sock.close()
+    raise last or OSError(f"couldn't connect to {host}")
+
+
+class _PublicHTTPConnection(http.client.HTTPConnection):
+    """An HTTP connection that only ever reaches a checked public address."""
+
+    def connect(self):
+        """Connect to a checked public address instead of looking the host up again."""
+        self.sock = _connect_public(self.host, self.port, self.timeout)
+
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    """An HTTPS connection that only ever reaches a checked public address, with the certificate checked for the host."""
+
+    def connect(self):
+        """Connect to a checked public address, then start TLS for the original host name."""
+        sock = _connect_public(self.host, self.port, self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PublicHTTPHandler(urllib.request.HTTPHandler):
+    """urllib's http:// handler, using the public-only connection."""
+
+    def http_open(self, req):
+        """Open http:// addresses through the public-only connection."""
+        return self.do_open(_PublicHTTPConnection, req)
+
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    """urllib's https:// handler, using the public-only connection."""
+
+    def https_open(self, req):
+        """Open https:// addresses through the public-only connection, verifying certificates."""
+        return self.do_open(_PublicHTTPSConnection, req, context=ssl.create_default_context())
 
 
 class _PublicRedirects(urllib.request.HTTPRedirectHandler):
-    """Follows a redirect only if it leads to another public http(s) address."""
+    """Follows a redirect only to another http(s) address; the connection itself then checks it's public."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        """Refuse the redirect unless it leads to a public http(s) address."""
-        if not public_http_url(newurl):
-            raise urllib.error.URLError(f"refused a redirect to {urlparse(newurl).hostname}")
+        """Refuse redirects to anything but http(s)."""
+        if urlparse(newurl).scheme not in ("http", "https"):
+            raise urllib.error.URLError(f"refused a redirect to {urlparse(newurl).scheme}:")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> tuple[bytes, str] | None:
-    """Download a small file from a public http(s) address. Returns (data, content type) or None."""
-    if not public_http_url(url):
+    """Download a small file from a public http(s) address. Returns (data, content type) or None.
+
+    Every connection, including each redirect, goes only to an address that was checked to be public.
+    """
+    if urlparse(url).scheme not in ("http", "https"):
         return None
-    opener = urllib.request.OpenerDirector()  # http(s) only: no file://, ftp:// or data: handlers
-    for handler in (urllib.request.HTTPHandler(), urllib.request.HTTPSHandler(), _PublicRedirects(),
+    opener = urllib.request.OpenerDirector()  # http(s) only: no file://, ftp:// or data: handlers, no proxies
+    for handler in (_PublicHTTPHandler(), _PublicHTTPSHandler(), _PublicRedirects(),
                     urllib.request.HTTPErrorProcessor(), urllib.request.HTTPDefaultErrorHandler()):
         opener.add_handler(handler)
     try:
@@ -1457,6 +1918,43 @@ def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> 
             return data, r.headers.get_content_type()
     except Exception:
         return None
+
+
+def network_tls(host: str, tls_cert: str | None, tls_key: str | None, plain_http: bool) -> "ssl.SSLContext | None":
+    """What to use when serving beyond this computer: an HTTPS context from your certificate, or None for
+    plain HTTP when you've said the network is already encrypted. Stops with an explanation otherwise."""
+    if host in LOOPBACK:
+        return None
+    if tls_cert and tls_key:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        try:
+            context.load_cert_chain(tls_cert, tls_key)
+        except (OSError, ssl.SSLError) as e:
+            sys.exit(f"Couldn't load the certificate or its key: {e}")
+        return context
+    if plain_http:
+        return None
+    sys.exit("Showing this to other devices sends your library and its access key across your network, so it needs "
+             "HTTPS. Start it with --tls-cert and --tls-key (a certificate for this computer; the free tool mkcert "
+             "makes one). If the other devices reach this computer over an encrypted VPN such as Tailscale or "
+             "WireGuard, add --plain-http instead.")
+
+
+class TLSServerMixin:
+    """Adds HTTPS to a ThreadingHTTPServer. The TLS handshake happens in each request's own thread."""
+    tls_context = None
+    tls = False
+
+    def finish_request(self, request, client_address):
+        """Wrap the connection in TLS (when enabled) before handling it."""
+        if self.tls_context:
+            request.settimeout(30)
+            try:
+                request = self.tls_context.wrap_socket(request, server_side=True)
+            except (ssl.SSLError, OSError):
+                return
+        super().finish_request(request, client_address)
 
 
 def content_security_policy(page: bytes) -> str:
@@ -1492,7 +1990,8 @@ def check_access(handler, lan: bool, key: str | None) -> bool:
     if given and hmac.compare_digest(given, key):
         handler.send_response(303)
         handler.send_header("Location", urlparse(handler.path).path or "/")
-        handler.send_header("Set-Cookie", f"hoard_key={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000")
+        secure = "; Secure" if getattr(handler.server, "tls", False) else ""
+        handler.send_header("Set-Cookie", f"hoard_key={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000{secure}")
         handler.send_header("Content-Length", "0")
         handler.end_headers()
         return False
@@ -1509,6 +2008,10 @@ def check_access(handler, lan: bool, key: str | None) -> bool:
     return False
 
 
+# Only plain raster images are kept. SVG can carry script, so it's never fetched, cached or served.
+IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif"}
+
+
 def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     """Store images, fetched once with the right referrer and cached on disk."""
     found = lib.thumbnail_for(key)
@@ -1517,22 +2020,24 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     url, referer = found
     h = hashlib.sha1(url.encode()).hexdigest()
     for p in THUMB_DIR.glob(h + ".*"):
-        ext = p.suffix.lstrip(".")
-        return p.read_bytes(), {"jpg": "image/jpeg", "svg": "image/svg+xml"}.get(ext, f"image/{ext}")
+        ctype = next((t for t, e in IMAGE_TYPES.items() if e == p.suffix.lstrip(".")), None)
+        if ctype:
+            return p.read_bytes(), ctype
+        p.unlink(missing_ok=True)  # e.g. an SVG saved by an older version
     got = fetch_public(url, {"Referer": referer, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"}, 15 * 1024 * 1024)
     if not got:
         return None
     data, ctype = got
-    if not ctype.startswith("image/"):
+    if ctype not in IMAGE_TYPES:
         return None
-    ext = {"image/jpeg": "jpg", "image/svg+xml": "svg"}.get(ctype, ctype.split("/")[1])
+    ext = IMAGE_TYPES[ctype]
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
-    (THUMB_DIR / f"{h}.{ext}").write_bytes(data)
+    write_file_safely(THUMB_DIR / f"{h}.{ext}", data)
     return data, ctype
 
 
-class Server(ThreadingHTTPServer):
+class Server(TLSServerMixin, ThreadingHTTPServer):
     """The local server behind the library page."""
     daemon_threads = True
 
@@ -1560,6 +2065,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(k, v)
         if ctype.startswith("text/html"):
             self.send_header("Content-Security-Policy", content_security_policy(body))
+        else:
+            self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -1593,7 +2100,8 @@ class Handler(BaseHTTPRequestHandler):
             items = enrich(data["items"], self.server.cfg["tags"], tagdata)
             return self._json({"items": items, "tagset": tag_overview(tagdata, items), "stores": data["stores"],
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": self.server.jobs.state,
-                               "signins": str(profile_dir(self.server.cfg)), "version": __version__})
+                               "signins": str(signins_root(self.server.cfg)),
+                               "signins_note": signin_protection(self.server.cfg), "version": __version__})
         if path == "/api/status":
             with self.server.lib.lock:
                 stores = json.loads(json.dumps(self.server.lib.data["stores"]))
@@ -1618,12 +2126,19 @@ class Handler(BaseHTTPRequestHandler):
         if (not self._host_ok() or self.client_address[0] not in LOOPBACK
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
             return self._json({"error": "Signing in and refreshing only work on the computer running the library."}, 403)
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > 80 * 1024 * 1024:
-            return self._json({"error": "That file is too large to be a library page."}, 413)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self._json({"error": "Bad request."}, 400)
+        # an imported page can be large; every other action is a few hundred bytes
+        if length > (80 * 1024 * 1024 if path == "/api/import" else 1024 * 1024):
+            return self._json({"error": "That's too large." if path != "/api/import"
+                               else "That file is too large to be a library page."}, 413)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
-        except ValueError:
+        except (ValueError, RecursionError):
+            return self._json({"error": "Bad request."}, 400)
+        if not isinstance(body, dict):
             return self._json({"error": "Bad request."}, 400)
         if path == "/api/tags":
             try:
@@ -1653,18 +2168,24 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True}, 202)
 
 
-def serve(cfg: dict, host: str, port: int, open_browser: bool) -> None:
+def serve(cfg: dict, host: str, port: int, open_browser: bool, tls_cert: str | None = None,
+          tls_key: str | None = None, plain_http: bool = False) -> None:
     """Start the library page and open it in the default web browser."""
+    tls = network_tls(host, tls_cert, tls_key, plain_http)
     lib = Library(LIBRARY_FILE)
     jobs = Jobs(cfg, lib)
     try:
         srv = Server((host, port), cfg, lib, jobs, lan=host not in LOOPBACK)
     except OSError as e:
         sys.exit(f"Couldn't start on port {port} ({e}). Try the command: --port {port + 1}")
-    url = f"http://127.0.0.1:{port}/"
+    srv.tls_context, srv.tls = tls, bool(tls)
+    scheme = "https" if tls else "http"
+    url = f"{scheme}://127.0.0.1:{port}/"
     if srv.key:
-        print(f"Other devices on your network: http://<this computer's address>:{port}/?key={srv.key}")
+        print(f"Other devices on your network: {scheme}://<this computer's address>:{port}/?key={srv.key}")
         print("That key is needed to see your library from another device. Share it only with devices you trust.")
+        if not tls:
+            print("This is plain HTTP: only use it where the connection is already encrypted, such as over Tailscale.")
     counts = ", ".join(f"{STORES[s]['label']} {v.get('count', 0)}" for s, v in lib.data["stores"].items()) or "no stores yet"
     print(f"Hoard {__version__}: {url}   ({len(lib.data['items'])} items: {counts})")
     print("Press Ctrl+C to stop.")
@@ -1683,12 +2204,13 @@ def serve(cfg: dict, host: str, port: int, open_browser: bool) -> None:
 def cmd_login(cfg, store):
     """Open Hoard's browser at a store's sign-in page and wait while you sign in."""
     with _playwright()() as p:
-        ctx = launch(p, cfg, headless=False)
+        ctx = launch(p, cfg, False, store)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(STORES[store]["login"])
         input(f"Sign in to {STORES[store]['label']} in the browser window, then press Enter here... ")
         ctx.close()
-    print(f"Saved. Your sign-ins are kept in {profile_dir(cfg)}, encrypted by your operating system.")
+    check_saved_signin(cfg, store)
+    print(f"Saved in {profile_dir(cfg, store)}, {signin_protection(cfg)}. Never share that folder.")
 
 
 def cmd_refresh(cfg, stores):
@@ -1713,7 +2235,7 @@ def cmd_debug(cfg, store):
     """Save what a store's library page looks like and what the reader found, for troubleshooting."""
     DEBUG_DIR.mkdir(exist_ok=True)
     with _playwright()() as p:
-        ctx = launch(p, cfg, headless=False)
+        ctx = launch(p, cfg, False, store)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         if store == "payhip":
             try:
@@ -1754,6 +2276,10 @@ def main():
     ap.add_argument("--version", action="version", version=f"Hoard {__version__}")
     ap.add_argument("--port", type=int, default=cfg["port"])
     ap.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to also browse from other devices on your network")
+    ap.add_argument("--tls-cert", help="with --host: your HTTPS certificate file (PEM)")
+    ap.add_argument("--tls-key", help="with --host: the certificate's private key file (PEM)")
+    ap.add_argument("--plain-http", action="store_true",
+                    help="with --host: serve plain HTTP, only when the network is already encrypted (a VPN such as Tailscale)")
     ap.add_argument("--no-open", action="store_true", help="don't open a browser tab")
     sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("login", help="sign in to a store from the terminal")
@@ -1784,7 +2310,8 @@ def main():
     elif args.cmd == "debug":
         cmd_debug(cfg, args.store)
     else:
-        serve(cfg, args.host, args.port, open_browser=not args.no_open)
+        serve(cfg, args.host, args.port, open_browser=not args.no_open, tls_cert=args.tls_cert,
+              tls_key=args.tls_key, plain_http=args.plain_http)
 
 
 if __name__ == "__main__":

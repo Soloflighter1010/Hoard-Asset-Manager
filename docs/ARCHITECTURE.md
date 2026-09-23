@@ -28,15 +28,24 @@ change the other.
 
 ## Sign-ins
 
-Both tools drive a real Chromium browser through Playwright, with a profile that belongs to Hoard
-alone. The "sign-ins" section near the top of each Python file handles it:
+Both tools drive a real Chromium browser through Playwright, with one profile per store that belongs
+to Hoard alone. The "sign-ins" section near the top of each Python file handles it (the copies in
+`library.py` and `asset_dl.py` must stay identical; a test checks):
 
-- `profile_dir()` picks the folder: the user's app-data `Hoard/sign-ins`, shared by both tools.
-- `launch_context()` takes a `ProfileLock` (an OS file lock released automatically on exit), moves
-  profiles left over from before 1.2 (`_migrate_legacy_profiles`), and starts Chromium **without**
-  Playwright's `--password-store=basic` and `--use-mock-keychain` switches, so cookies are encrypted by
-  the operating system rather than a well-known key.
-- `sign_out()` clears one store's cookies and site storage, or deletes the whole profile.
+- `profile_dir(cfg, store)` is `Hoard/sign-ins/<store>` in the user's app data, shared by both tools.
+- `launch_context(p, cfg, headless, store)` moves sign-ins saved by older versions into per-store
+  profiles (`_migrate_old_signins`, keeping only each store's own cookies), takes that store's
+  `ProfileLock` (an OS file lock released automatically on exit), and starts Chromium through `_launch`.
+- `_launch` drops Playwright's `--password-store=basic` and `--use-mock-keychain` switches, so cookies are
+  encrypted by the operating system. On Linux it asks D-Bus for a Secret Service or KWallet keyring
+  (`linux_keyring`) and passes it explicitly; with none it raises `SigninsUnprotected` unless
+  `allow_unprotected_signins` is set. After signing in, `check_saved_signin` reads the cookie database
+  and deletes the profile if any cookie used Chromium's fixed fallback key.
+- `sign_out()` asks the store to end the session (Gumroad's `/logout`, or the store's own sign-out
+  control via `SIGN_OUT_JS`), deletes the store's profile, checks no other profile holds its cookies,
+  and returns a sentence saying what happened.
+- Only store cookies are ever copied out of the browser (Gumroad and Booth downloads use them for
+  resumable HTTP), and those copies are cleared when the run ends.
 
 ## Reading stores
 
@@ -123,8 +132,43 @@ Both servers share the rules in their "web safety" section:
   (`content_security_policy`). If you edit the script, the hash updates by itself. Don't add inline
   event handlers (`onclick="..."`); they'd be blocked.
 - Store text is always escaped (`esc()` in the pages), and links pass `safeUrl()` in the page as well as
-  `safe_url()` on the server. Server-side fetches go through `fetch_public`, which refuses anything that
-  isn't a public internet address, including after redirects.
+  `safe_url()` on the server.
+- Server-side fetches go through `fetch_public`. Its connection classes (`_PublicHTTPConnection`,
+  `_PublicHTTPSConnection`) look the host up once, refuse it if any address isn't public, and connect to
+  exactly the checked address (TLS still verifies the certificate against the host name), so DNS
+  rebinding can't slip in between check and connection. Every redirect opens a new, checked connection.
+- Only raster images are cached or served (`IMAGE_TYPES`); every response that isn't a page is sent with
+  `Content-Security-Policy: default-src 'none'; sandbox`.
+- With `--host 0.0.0.0`, `network_tls` requires `--tls-cert`/`--tls-key` (served through
+  `TLSServerMixin`, handshake in each request's thread) or an explicit `--plain-http`.
+
+## Data files
+
+Each Python file carries the same "data files" section (a test checks the copies match):
+
+- `clean_text()` removes control and invisible formatting characters from any text from a store or a
+  data file; `safe_name()` does the same for file and folder names.
+- `read_json_file()` reads with a size limit and turns damage (bad JSON, absurd nesting) into
+  `DataFileError`; callers `set_aside()` a damaged file under a new name and carry on.
+- `write_file_safely()` writes through `tempfile.mkstemp` and `os.replace`, so a planted symlink is
+  replaced rather than followed. With `root`, the target folder must resolve inside it.
+- In the downloader, `rel_to_path()` only accepts plain relative paths (`valid_rel`) that resolve inside
+  their base, and `clean_manifest()` applies it, plus text and link cleaning, to every record read from
+  `_manifest.json`. `no_link()` clears planted links before `.part` files are written.
+- `validate_catalog_entry()` states the promises in [DATA-FORMATS.md](DATA-FORMATS.md);
+  `build_catalog()` leaves out any entry that fails it.
+- `TagStore.sanitize()` checks every entry of the tag file on load, converting names the rules don't
+  allow; `TAG_LIMITS` caps its size.
+
+## Tests and dependencies
+
+`tests/test_security.py` covers each finding from the September 2026 reviews
+([security-review-2026-09.md](security-review-2026-09.md)) and checks that the code the two tools share
+hasn't drifted apart. It needs no network or browser: `python -m unittest discover -s tests -v`.
+
+Dependencies are listed in each tool's `requirements.in` and locked, with hashes, in `requirements.txt`:
+`pip-compile --generate-hashes --strip-extras --no-emit-index-url requirements.in`. Setup installs with
+`--require-hashes`, so a changed package fails to install rather than running.
 
 ## Offline
 
