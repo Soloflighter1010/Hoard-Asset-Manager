@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build zips
+        run: python scripts/build_release.py --tag "${GITHUB_REF_NAME}"
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Hoard ${{ github.ref_name }}
+          body_path: dist/RELEASE_NOTES.md
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt

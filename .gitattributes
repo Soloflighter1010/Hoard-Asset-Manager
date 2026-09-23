@@ -1,0 +1,13 @@
+# Keep line endings right on every machine. The release build and Windows both need
+# CRLF in the .bat launchers; the shell scripts must stay LF to run on Linux and macOS.
+* text=auto
+*.bat  text eol=crlf
+*.sh   text eol=lf
+*.py   text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.svg  text eol=lf
+*.png  binary
+*.zip  binary

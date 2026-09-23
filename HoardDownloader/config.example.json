@@ -1,0 +1,27 @@
+{
+  "root": "downloads",
+  "request_delay": 1.0,
+  "browser_channel": "",
+
+  "gumroad": {
+    "enabled": true,
+    "include_archived": true,
+    "save_thumbnails": true,
+    "session_cookie": ""
+  },
+
+  "jinxxy": {
+    "enabled": true,
+    "item_link_pattern": "^/my/(inventory|purchases|library)/[^/]+/?$",
+    "save_thumbnails": true,
+    "download_start_timeout": 90
+  },
+
+  "tags": {
+    "min_count": 3,
+    "max_share": 0.4,
+    "min_length": 2,
+    "extra_stopwords": [],
+    "blocklist": []
+  }
+}
