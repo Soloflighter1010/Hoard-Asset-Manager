@@ -363,8 +363,11 @@ body.selecting .toast { bottom: 96px; }
   <p>Sign in to each store once. Refresh reads what you've bought; nothing is downloaded.</p>
   <div id="storeRows"></div>
   <button id="refreshAll" class="primary">Refresh all stores</button>
-  <p class="hint safe">Your sign-ins stay on this computer, encrypted by your operating system, in a folder only
-    Hoard uses<span id="signinsPath"></span>. Never share that folder.
+  <p class="hint safe"><span id="signinsText">Your sign-ins stay on this computer, a separate one for each store,
+    <span id="signinsNote">encrypted by your operating system</span>, in a folder only Hoard uses<span id="signinsPath"></span>.
+    Hoard never keeps your store passwords. Never share that folder.</span>
+    <span id="signinsMissing" hidden>Store sign-ins aren't saved on this computer, because it has no keyring to protect
+    them. Install and unlock one (GNOME Keyring, KeePassXC or KWallet), then sign in again.</span>
     <button class="linkish" id="signOutAll">Sign out of every store</button></p>
   <p class="hint">If a store blocks the automatic refresh, open your library there in your usual browser, scroll to
     the bottom, press Ctrl+S and save it as "Webpage, Single File". Then choose Import page, or drop the file on this window.</p>
@@ -526,6 +529,11 @@ function renderStores() {
   $("#refreshAll").disabled = !!job.running;
   $("#signOutAll").disabled = !!job.running;
   $("#signinsPath").textContent = DATA.signins ? ` (${DATA.signins})` : "";
+  // switch between the two messages; never replace them, since every refresh updates the parts inside
+  const unprotected = (DATA.signins_note || "").startsWith("not saved");
+  $("#signinsText").hidden = unprotected;
+  $("#signinsMissing").hidden = !unprotected;
+  if (DATA.signins_note && !unprotected) $("#signinsNote").textContent = DATA.signins_note;
   $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
 }
 function renderGrid(list) {
@@ -693,7 +701,7 @@ $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags;
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", STORE_ORDER, true));
 $("#signOutAll").addEventListener("click", () => {
-  if (confirm("Sign out of every store? Hoard deletes all its saved sign-ins. Your library list stays.")) runJob("/api/logout", ["all"]);
+  if (confirm("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.")) runJob("/api/logout", ["all"]);
 });
 $("#storeRows").addEventListener("click", e => {
   const l = e.target.closest("[data-login]"), r = e.target.closest("[data-refresh]"), i = e.target.closest("[data-import]");

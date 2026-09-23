@@ -3,6 +3,9 @@ name: Release
 # Builds the three zips and publishes them as a GitHub release.
 # Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
 # already exists (say an earlier build failed), open Actions > Release > Run workflow and enter the tag.
+#
+# Every action is pinned to an exact commit (the version tag is in the comment), so a changed or
+# compromised tag upstream can't alter what runs here. Update them deliberately.
 
 on:
   push:
@@ -13,8 +16,7 @@ on:
         description: "Version tag to build a release for, for example v1.2.0"
         required: true
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -22,15 +24,29 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write        # create the release and upload the zips
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
 
       - name: Build the zips
         run: python3 scripts/build_release.py --tag "$TAG"
+
+      # A signed record that these exact zips were built here, from this repository and tag.
+      # Anyone can check a download with:  gh attestation verify <zip> -R <owner>/<repo>
+      # (GitHub only offers this for public repositories on free plans.)
+      - name: Sign build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.zip
 
       - name: Publish the release
         env:

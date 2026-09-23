@@ -1,17 +1,31 @@
 name: Check
 
+# On every push and pull request: install the locked dependencies (checking every hash), run the
+# security tests, and build the zips. Actions are pinned to exact commits; the version is in the comment.
+
 on:
   push:
     branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.10"
-      - name: Compile and build zips
+      - name: Install the locked dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r HoardDownloader/requirements.txt
+          python -m pip install --disable-pip-version-check --require-hashes -r Hoard/requirements.txt
+      - name: Security tests
+        run: python -m unittest discover -s tests -v
+      - name: Build the zips
         run: python scripts/build_release.py

@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.6.1
+
+Hardens tags and the downloader's data files. docs/security-review-2026-09.md lists each finding.
+
+- Paths read from `_manifest.json` must stay inside their folder, through symlinks too, so a tampered
+  manifest can't make a sync write anywhere else. Records that don't are ignored.
+- File, folder and item names no longer carry invisible characters such as right-to-left overrides,
+  which could make one kind of file look like another.
+- Data files are written through a temporary file and swapped in, so a planted symlink can't redirect a
+  write and nothing reads half a file.
+- Data files are read with size limits and checked entry by entry. A damaged manifest, library list or
+  tag file is kept aside under a new name and the tool carries on, instead of stopping.
+- Tags may only use letters, digits, spaces and `- _ . + & '`. Existing tags that used anything else are
+  converted, not lost. The tag file is private to your account and has size limits.
+- `catalog.json`, `tags.json` and `asset.json` now carry `format` and `version`, and each entry is
+  checked against the promises in the new docs/DATA-FORMATS.md before it's written.
+- Requests to the tools are limited in size, and malformed ones are refused.
+- Fixed: on Linux without a keyring, Hoard's page stopped updating after the first refresh.
+
+## 1.6.0
+
+Security release, answering two independent reviews. docs/security-review-2026-09.md lists every finding
+and what was done.
+
+### Your sign-ins
+- Each store's sign-in is now kept separately. Existing sign-ins are split between stores automatically on
+  first run, keeping only each store's own cookies.
+- On Linux, sign-ins are only saved when a keyring can encrypt them, and Hoard checks after you sign in that
+  they really were. Computers without a desktop can opt out with `"allow_unprotected_signins": true`.
+- Sign out now asks the store to end the session where it can, deletes that store's sign-in, checks nothing
+  is left, and tells you what it did.
+- A copied Gumroad session cookie in `config.json` or `HOARD_GUMROAD_SESSION` is no longer read. Sign in
+  with `login gumroad` instead.
+
+### Network and pages
+- Product images are fetched over a connection that goes only to the public address that was checked, so
+  DNS rebinding can't point it at your network. Store download links are only followed on the store's own
+  website.
+- Only raster images are kept (no SVG), and everything the tools serve apart from the page is sandboxed.
+- Using the tools from other devices now needs HTTPS (`--tls-cert`, `--tls-key`), or `--plain-http` to
+  say the connection is already encrypted, such as over Tailscale.
+
+### Installation and releases
+- Setup limits who can change the program folder to your account.
+- Every Python package is pinned to an exact version and checked against its hash when installed.
+  `requests` is now at least 2.32.4.
+- GitHub Actions are pinned to exact commits with minimal permissions, and release zips carry signed
+  build provenance once the repository is public (`gh attestation verify`).
+- Security tests run on every change. SECURITY.md now explains what Hoard protects against and what no
+  desktop app can.
+
 ## 1.5.0
 
 Tag manager.

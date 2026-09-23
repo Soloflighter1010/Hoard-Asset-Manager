@@ -92,5 +92,14 @@ A refresh that fails, or suddenly finds nothing, keeps that store's previous lis
 - `.cache/thumbs/`: store images, fetched once and kept for offline browsing
 - Your sign-ins aren't here; see "Your sign-ins" above.
 
-`--port` changes the port. `--host 0.0.0.0` lets other devices on your network browse it;
-signing in and refreshing still only work on the PC running it.
+**Using it from other devices.** Hoard only serves your own computer unless you start it with `--host 0.0.0.0`.
+Because your library and its access key would then cross your network, that needs one of:
+
+- **HTTPS:** add `--tls-cert cert.pem --tls-key key.pem`, a certificate for this computer (the free tool
+  mkcert makes one your devices will trust).
+- **An encrypted network:** if your devices reach this computer over a VPN such as Tailscale or WireGuard,
+  add `--plain-http`.
+
+Other devices then open the address the tool prints, which includes an access key. Signing in,
+refreshing, signing out, changing tags and opening folders still only work on the computer running it.
+`--port` changes the port.

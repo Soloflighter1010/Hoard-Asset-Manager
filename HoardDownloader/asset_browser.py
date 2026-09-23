@@ -17,14 +17,17 @@ import contextlib
 import hashlib
 import hmac
 import ipaddress
+import http.client
 import json
 import mimetypes
 import os
 import re
 import secrets
 import socket
+import ssl
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unicodedata
@@ -114,11 +117,16 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
     """The data behind the page: every downloaded asset with its files, sizes, image and matches."""
     assets = []
     for i, e in enumerate(catalog):
-        folder = root.joinpath(*e["folder"].split("/"))
+        folder = safe_join(root, e["folder"])
+        if folder is None:  # a folder that would lead outside the downloads isn't shown
+            continue
         files, total, missing, newest = [], 0, 0, 0.0
         for rel in e.get("files", []):
             try:
-                st = folder.joinpath(*rel.split("/")).stat()
+                target = safe_join(folder, rel)
+                if target is None:
+                    continue
+                st = target.stat()
                 total += st.st_size
                 newest = max(newest, st.st_mtime)
                 files.append({"path": rel, "size": st.st_size})
@@ -191,39 +199,108 @@ def safe_url(value) -> str | None:
     return value.strip() if u.scheme in ("http", "https") and u.netloc else None
 
 
+def _is_public(ip) -> bool:
+    """True for addresses on the public internet (not this computer, your network, or reserved ranges)."""
+    return ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
+                                 or ip.is_reserved or ip.is_unspecified)
+
+
+def _public_addresses(host: str, port: int) -> list[tuple]:
+    """Look host up once and return its addresses, provided every one of them is public."""
+    found = []
+    for family, _type, _proto, _name, sockaddr in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+        if not _is_public(ipaddress.ip_address(sockaddr[0].split("%")[0])):
+            raise PermissionError(f"{host} points at an address on this computer or your network")
+        found.append((family, sockaddr))
+    if not found:
+        raise OSError(f"{host} has no address")
+    return found
+
+
 def public_http_url(url: str) -> bool:
-    """True when url is http(s) and every address its host resolves to is on the public internet."""
+    """True when url is http(s) and its host currently resolves only to public addresses."""
     u = urlparse(url)
     if u.scheme not in ("http", "https") or not u.hostname:
         return False
     try:
-        infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
-    except (OSError, UnicodeError):
+        _public_addresses(u.hostname, u.port or (443 if u.scheme == "https" else 80))
+        return True
+    except (OSError, UnicodeError, ValueError):
         return False
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%")[0])
-        if (not ip.is_global or ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
-                or ip.is_reserved or ip.is_unspecified):
-            return False
-    return True
+
+
+def _connect_public(host: str, port: int, timeout) -> socket.socket:
+    """Connect to one of the public addresses host resolved to, using exactly the address that was checked.
+
+    Checking a name and then letting the connection look it up again would leave a gap that DNS rebinding
+    can use (a name that answers with a public address for the check and a private one for the connection).
+    """
+    last: Exception | None = None
+    for family, sockaddr in _public_addresses(host, port):
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        if timeout is not None and timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+            sock.settimeout(timeout)
+        try:
+            sock.connect(sockaddr)
+            return sock
+        except OSError as e:
+            last = e
+            sock.close()
+    raise last or OSError(f"couldn't connect to {host}")
+
+
+class _PublicHTTPConnection(http.client.HTTPConnection):
+    """An HTTP connection that only ever reaches a checked public address."""
+
+    def connect(self):
+        """Connect to a checked public address instead of looking the host up again."""
+        self.sock = _connect_public(self.host, self.port, self.timeout)
+
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    """An HTTPS connection that only ever reaches a checked public address, with the certificate checked for the host."""
+
+    def connect(self):
+        """Connect to a checked public address, then start TLS for the original host name."""
+        sock = _connect_public(self.host, self.port, self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PublicHTTPHandler(urllib.request.HTTPHandler):
+    """urllib's http:// handler, using the public-only connection."""
+
+    def http_open(self, req):
+        """Open http:// addresses through the public-only connection."""
+        return self.do_open(_PublicHTTPConnection, req)
+
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    """urllib's https:// handler, using the public-only connection."""
+
+    def https_open(self, req):
+        """Open https:// addresses through the public-only connection, verifying certificates."""
+        return self.do_open(_PublicHTTPSConnection, req, context=ssl.create_default_context())
 
 
 class _PublicRedirects(urllib.request.HTTPRedirectHandler):
-    """Follows a redirect only if it leads to another public http(s) address."""
+    """Follows a redirect only to another http(s) address; the connection itself then checks it's public."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        """Refuse the redirect unless it leads to a public http(s) address."""
-        if not public_http_url(newurl):
-            raise urllib.error.URLError(f"refused a redirect to {urlparse(newurl).hostname}")
+        """Refuse redirects to anything but http(s)."""
+        if urlparse(newurl).scheme not in ("http", "https"):
+            raise urllib.error.URLError(f"refused a redirect to {urlparse(newurl).scheme}:")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> tuple[bytes, str] | None:
-    """Download a small file from a public http(s) address. Returns (data, content type) or None."""
-    if not public_http_url(url):
+    """Download a small file from a public http(s) address. Returns (data, content type) or None.
+
+    Every connection, including each redirect, goes only to an address that was checked to be public.
+    """
+    if urlparse(url).scheme not in ("http", "https"):
         return None
-    opener = urllib.request.OpenerDirector()  # http(s) only: no file://, ftp:// or data: handlers
-    for handler in (urllib.request.HTTPHandler(), urllib.request.HTTPSHandler(), _PublicRedirects(),
+    opener = urllib.request.OpenerDirector()  # http(s) only: no file://, ftp:// or data: handlers, no proxies
+    for handler in (_PublicHTTPHandler(), _PublicHTTPSHandler(), _PublicRedirects(),
                     urllib.request.HTTPErrorProcessor(), urllib.request.HTTPDefaultErrorHandler()):
         opener.add_handler(handler)
     try:
@@ -234,6 +311,43 @@ def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> 
             return data, r.headers.get_content_type()
     except Exception:
         return None
+
+
+def network_tls(host: str, tls_cert: str | None, tls_key: str | None, plain_http: bool) -> "ssl.SSLContext | None":
+    """What to use when serving beyond this computer: an HTTPS context from your certificate, or None for
+    plain HTTP when you've said the network is already encrypted. Stops with an explanation otherwise."""
+    if host in LOOPBACK:
+        return None
+    if tls_cert and tls_key:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        try:
+            context.load_cert_chain(tls_cert, tls_key)
+        except (OSError, ssl.SSLError) as e:
+            sys.exit(f"Couldn't load the certificate or its key: {e}")
+        return context
+    if plain_http:
+        return None
+    sys.exit("Showing this to other devices sends your library and its access key across your network, so it needs "
+             "HTTPS. Start it with --tls-cert and --tls-key (a certificate for this computer; the free tool mkcert "
+             "makes one). If the other devices reach this computer over an encrypted VPN such as Tailscale or "
+             "WireGuard, add --plain-http instead.")
+
+
+class TLSServerMixin:
+    """Adds HTTPS to a ThreadingHTTPServer. The TLS handshake happens in each request's own thread."""
+    tls_context = None
+    tls = False
+
+    def finish_request(self, request, client_address):
+        """Wrap the connection in TLS (when enabled) before handling it."""
+        if self.tls_context:
+            request.settimeout(30)
+            try:
+                request = self.tls_context.wrap_socket(request, server_side=True)
+            except (ssl.SSLError, OSError):
+                return
+        super().finish_request(request, client_address)
 
 
 def content_security_policy(page: bytes) -> str:
@@ -269,7 +383,8 @@ def check_access(handler, lan: bool, key: str | None) -> bool:
     if given and hmac.compare_digest(given, key):
         handler.send_response(303)
         handler.send_header("Location", urlparse(handler.path).path or "/")
-        handler.send_header("Set-Cookie", f"hoard_key={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000")
+        secure = "; Secure" if getattr(handler.server, "tls", False) else ""
+        handler.send_header("Set-Cookie", f"hoard_key={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000{secure}")
         handler.send_header("Content-Length", "0")
         handler.end_headers()
         return False
@@ -286,6 +401,78 @@ def check_access(handler, lan: bool, key: str | None) -> bool:
     return False
 
 
+# ----------------------------------------------------------------------------- data files
+#
+# Everything these tools write (manifests, catalog.json, tags.json, asset.json, the library list, your
+# tags, images) may be read back later, by these tools or by other programs such as a Unity plugin, and
+# may sit somewhere others can reach, like a shared drive. So text from stores is cleaned before it's
+# stored, data files are read defensively, and files are written in a way that can't be redirected.
+
+MAX_DATA_FILE = 64 * 1024 * 1024  # no data file these tools write is anywhere near this
+
+
+class DataFileError(ValueError):
+    """A data file that's too large, isn't valid JSON, or is nested absurdly deep."""
+
+
+def clean_text(value, limit: int = 300) -> str:
+    """Text from a store or a data file, made safe to show and to store.
+
+    Control characters and invisible formatting characters (such as right-to-left overrides and
+    zero-width spaces, which can make a name look like something else) are removed, runs of
+    whitespace become single spaces, and the result is at most `limit` characters.
+    """
+    s = unicodedata.normalize("NFC", value if isinstance(value, str) else "" if value is None else str(value))
+    s = "".join(" " if unicodedata.category(c) == "Cc" else "" if unicodedata.category(c)[0] == "C" else c for c in s)
+    return re.sub(r"\s+", " ", s).strip()[:limit].strip()
+
+
+def read_json_file(path: Path, max_bytes: int = MAX_DATA_FILE):
+    """Read a JSON data file defensively, raising DataFileError when it's too big or damaged."""
+    size = path.stat().st_size
+    if size > max_bytes:
+        raise DataFileError(f"{path.name} is unexpectedly large ({size // 1048576} MB)")
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except (ValueError, RecursionError, UnicodeDecodeError) as e:
+        raise DataFileError(f"{path.name} is damaged ({e.__class__.__name__})") from None
+
+
+def set_aside(path: Path) -> Path:
+    """Rename a damaged data file out of the way (keeping it, in case it matters) and return its new path."""
+    aside = path.with_name(f"{path.stem}.damaged-{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}")
+    os.replace(path, aside)
+    return aside
+
+
+def write_file_safely(path: Path, data, root: Path | None = None) -> None:
+    """Write a file through a new temporary file in the same folder, then swap it into place.
+
+    A reader never sees half a file, and a symlink planted where the file goes is replaced rather than
+    followed. With root, the file's folder must also really be inside root (checked after resolving links).
+    """
+    if root is not None:
+        base, folder = root.resolve(), path.parent.resolve()
+        if folder != base and base not in folder.parents:
+            raise PermissionError(f"refused to write {path}: its folder leads outside {root}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=path.parent)  # created new, so never a planted link
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data.encode("utf-8") if isinstance(data, str) else data)
+        for attempt in range(10):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # Windows: another program is reading the old file this instant
+                if attempt == 9:
+                    raise
+                time.sleep(0.2)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 # ----------------------------------------------------------------------------- tags
 #
 # Your own tags are shared by Hoard and Hoard Downloader, in tags.json in Hoard's app-data folder, so a
@@ -298,6 +485,12 @@ def check_access(handler, lan: bool, key: str | None) -> bool:
 # stops it being suggested.
 
 TAG_MAX_LENGTH = 40
+TAG_LIMITS = {"tags": 1000, "matching": 200, "per_item": 100, "tagged_items": 50000, "keys_per_change": 5000}
+# Characters a tag may contain besides letters, marks and digits (in any script, so Japanese works).
+TAG_PUNCTUATION = " -_.+&'"
+# Names that can confuse JavaScript programs reading tags.json into plain objects.
+TAG_RESERVED = {"__proto__", "constructor", "prototype", "__defineGetter__", "__defineSetter__", "__lookupGetter__"}
+TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip):[^\W_]{1,300}$")
 _tag_lock = threading.Lock()
 
 
@@ -319,13 +512,21 @@ def tag_key(store: str, name: str) -> str:
     key = re.sub(r"[\W_]+", "", re.sub(r"\bv?\d+(?:\.\d+)*\b", " ", core))
     if len(key) < 4:
         key = re.sub(r"[\W_]+", "", s)
-    return f"{store.lower()}:{key}"
+    if not key:  # a name made only of symbols
+        key = "x" + hashlib.sha1(s.encode()).hexdigest()[:16]
+    return f"{store.lower()}:{key[:300]}"
 
 
 def clean_tag(value) -> str:
-    """A tag as it's stored: lower case, single spaces, no commas or #, at most 40 characters."""
-    t = unicodedata.normalize("NFKC", str(value or "")).lower().replace(",", " ").replace("#", " ")
-    return re.sub(r"\s+", " ", t).strip()[:TAG_MAX_LENGTH].strip()
+    """A tag as it's stored: lower case, letters, digits, spaces and - _ . + & ' only, at most 40 characters.
+
+    Everything else, including invisible characters, commas, # and angle brackets, becomes a space, so
+    tags are safe wherever they end up (the pages, the address bar, asset.json and other programs).
+    """
+    t = unicodedata.normalize("NFKC", value if isinstance(value, str) else "").lower()
+    t = "".join(c if unicodedata.category(c)[0] in "LMN" or c in TAG_PUNCTUATION else " " for c in t)
+    t = re.sub(r"\s+", " ", t).strip(TAG_PUNCTUATION)[:TAG_MAX_LENGTH].strip(TAG_PUNCTUATION)
+    return "" if t in TAG_RESERVED else t
 
 
 def name_has_word(name: str, word: str) -> bool:
@@ -388,30 +589,53 @@ class TagStore:
         """A tag file with nothing in it."""
         return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": []}
 
+    @staticmethod
+    def sanitize(raw) -> dict:
+        """Keep only well-formed content from a tags file: clean names, valid product keys, within the limits."""
+        data = TagStore.empty()
+        if not isinstance(raw, dict):
+            return data
+        tags = raw.get("tags") if isinstance(raw.get("tags"), dict) else {}
+        matching, renamed = 0, {}
+        for name, info in list(tags.items())[:TAG_LIMITS["tags"]]:
+            # a name older versions allowed but the rules no longer do is converted, not lost ("fox/dog" -> "fox dog")
+            new = clean_tag(name) if isinstance(name, str) else ""
+            if not new:
+                continue
+            renamed[name] = new
+            match = info.get("match") if isinstance(info, dict) else None
+            match = clean_tag(match) if isinstance(match, str) else ""
+            if match and matching >= TAG_LIMITS["matching"]:
+                match = ""
+            if new in data["tags"]:  # two old names became one: keep the first's match unless it had none
+                match = data["tags"][new]["match"] or match
+                matching -= bool(data["tags"][new]["match"])
+            matching += bool(match)
+            data["tags"][new] = {"match": match or None}
+        for field in ("items", "excluded"):
+            mapping = raw.get(field) if isinstance(raw.get(field), dict) else {}
+            for key, names in list(mapping.items())[:TAG_LIMITS["tagged_items"]]:
+                if isinstance(key, str) and TAG_KEY_RX.match(key) and isinstance(names, list):
+                    keep = sorted({renamed[t] for t in names[:TAG_LIMITS["per_item"]] if isinstance(t, str) and t in renamed})
+                    if keep:
+                        data[field][key] = keep
+        hidden = raw.get("hidden") if isinstance(raw.get("hidden"), list) else []
+        data["hidden"] = sorted({w for w in hidden[:TAG_LIMITS["tags"]] if isinstance(w, str) and w and clean_tag(w) == w})
+        return data
+
     def load(self) -> dict:
-        """The saved tags, or an empty set when there's no file yet (or it can't be read)."""
+        """The saved tags, checked, or an empty set when there's no file yet or it can't be read."""
         try:
-            data = json.loads(self.path.read_text("utf-8"))
-        except (OSError, ValueError):
+            return self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
+        except (OSError, DataFileError):
             return self.empty()
-        base = self.empty()
-        for k in base:
-            if isinstance(data.get(k), type(base[k])):
-                base[k] = data[k]
-        return base
 
     def _save(self, data: dict) -> None:
-        """Write tags.json through a temporary file, so a crash can't leave it half-written."""
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True), "utf-8")
-        for attempt in range(10):
-            try:
-                os.replace(tmp, self.path)
-                return
-            except PermissionError:  # Windows: the other tool is reading it this instant
-                if attempt == 9:
-                    raise
-                time.sleep(0.1)
+        """Write tags.json safely; on Linux and macOS only you can read it."""
+        write_file_safely(self.path, json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True))
+        if os.name == "posix":
+            os.chmod(self.path, 0o600)
+            os.chmod(self.path.parent, 0o700)
 
     @staticmethod
     def tags_for(data: dict, key: str, name: str) -> list[str]:
@@ -422,9 +646,16 @@ class TagStore:
 
     def change(self, body: dict) -> None:
         """Apply one change from the page. Raises ValueError with a readable message when it doesn't make sense."""
+        if not isinstance(body, dict):
+            raise ValueError("Unknown tag change.")
         action = body.get("action")
         with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
-            data = self.load()
+            data = self.empty()
+            if self.path.exists():
+                try:
+                    data = self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
+                except DataFileError:
+                    set_aside(self.path)  # keep the damaged file rather than overwrite it
             self._apply(data, action, body)
             self._save(data)
 
@@ -447,27 +678,39 @@ class TagStore:
                 mapping.pop(key, None)
 
         if action == "assign":
-            keys = [str(k) for k in (body.get("keys") or []) if isinstance(k, str) and ":" in k][:5000]
-            add = [t for t in (clean_tag(v) for v in body.get("add") or []) if t]
-            remove = [t for t in (clean_tag(v) for v in body.get("remove") or []) if t]
+            given = body.get("keys") if isinstance(body.get("keys"), list) else []
+            if len(given) > TAG_LIMITS["keys_per_change"]:
+                raise ValueError(f"Tag at most {TAG_LIMITS['keys_per_change']} items at a time.")
+            keys = [k for k in given if isinstance(k, str) and TAG_KEY_RX.match(k)]
+            add = [t for t in (clean_tag(v) for v in (body.get("add") or [])[:20]) if t]
+            remove = [t for t in (clean_tag(v) for v in (body.get("remove") or [])[:20]) if t]
             if not keys or not (add or remove):
                 raise ValueError("Choose items and a tag.")
+            if len(set(tags) | set(add)) > TAG_LIMITS["tags"]:
+                raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
+            if len(set(items) | set(keys)) > TAG_LIMITS["tagged_items"] and add:
+                raise ValueError("That's more tagged items than Hoard can keep.")
             for t in add:
                 tags.setdefault(t, {"match": None})
             for key in keys:
                 for t in add:
                     items[key] = sorted(set(items.get(key, [])) | {t})
                     drop(excluded, key, t)
+                if len(items.get(key, [])) > TAG_LIMITS["per_item"]:
+                    raise ValueError(f"An item can have at most {TAG_LIMITS['per_item']} tags.")
                 for t in remove:
                     drop(items, key, t)
                     if (tags.get(t) or {}).get("match"):  # keep a matching tag off this item from now on
                         excluded[key] = sorted(set(excluded.get(key, [])) | {t})
         elif action == "create":
             tags.setdefault(need(name), {"match": None})
-            if len(tags) > 1000:
-                raise ValueError("That's more tags than Hoard can keep. Delete some first.")
+            if len(tags) > TAG_LIMITS["tags"]:
+                raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
         elif action == "keep":  # a suggestion becomes your tag, matched by its word
-            tags[need(name)] = {"match": name}
+            need(name)
+            if len(set(tags) | {name}) > TAG_LIMITS["tags"]:
+                raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
+            tags[name] = {"match": name}
             data["hidden"] = [w for w in data["hidden"] if w != name]
         elif action == "match":
             if need(name) not in tags:
@@ -498,6 +741,10 @@ class TagStore:
             data["hidden"] = [w for w in data["hidden"] if w != need(name)]
         else:
             raise ValueError("Unknown tag change.")
+        if sum(1 for info in tags.values() if (info or {}).get("match")) > TAG_LIMITS["matching"]:
+            raise ValueError(f"At most {TAG_LIMITS['matching']} tags can match names. Turn matching off on some first.")
+        if len(data["hidden"]) > TAG_LIMITS["tags"]:
+            raise ValueError("That's too many hidden suggestions.")
 
 
 def tag_overview(data: dict, entries: list[dict]) -> dict:
@@ -570,7 +817,7 @@ def reveal(p: Path) -> str:
     return "your file manager"
 
 
-class BrowserServer(ThreadingHTTPServer):
+class BrowserServer(TLSServerMixin, ThreadingHTTPServer):
     """The local server for "Browse your downloads". Holds the index and rebuilds it on request."""
     daemon_threads = True
 
@@ -614,6 +861,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(k, v)
         if ctype.startswith("text/html"):
             self.send_header("Content-Security-Policy", content_security_policy(body))
+        else:
+            self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -666,8 +915,16 @@ class Handler(BaseHTTPRequestHandler):
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
             return self._json({"error": "Opening folders and changing tags only work on the computer running this."}, 403)
         try:
-            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
+            return self._json({"error": "Bad request."}, 400)
+        if length > 1024 * 1024:  # tag changes and folder requests are tiny
+            return self._json({"error": "That request is too large."}, 413)
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, RecursionError):
+            return self._json({"error": "Bad request."}, 400)
+        if not isinstance(body, dict):
             return self._json({"error": "Bad request."}, 400)
         if path == "/api/tags":
             try:
@@ -702,19 +959,25 @@ def print_status(root: Path, count: int, config_path: Path | None) -> None:
 
 
 def serve(root: Path, collect, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True,
-          config_path: Path | None = None, version: str = "") -> None:
+          config_path: Path | None = None, version: str = "", tls_cert: str | None = None,
+          tls_key: str | None = None, plain_http: bool = False) -> None:
     """Start the downloads browser and open it in the default web browser."""
     lan = host not in LOOPBACK
+    tls = network_tls(host, tls_cert, tls_key, plain_http)
     try:
         srv = BrowserServer((host, port), root, collect, lan, version)
     except OSError as e:
         sys.exit(f"Couldn't start on port {port} ({e}). Try the command: browse --port {port + 1}")
-    url = f"http://127.0.0.1:{port}/"
+    srv.tls_context, srv.tls = tls, bool(tls)
+    scheme = "https" if tls else "http"
+    url = f"{scheme}://127.0.0.1:{port}/"
     print_status(root, len(srv.index()["assets"]), config_path)
     print(f"\nYour downloads: {url}")
     if lan:
-        print(f"Other devices on your network: http://<this computer's address>:{port}/?key={srv.key}")
+        print(f"Other devices on your network: {scheme}://<this computer's address>:{port}/?key={srv.key}")
         print("That key is needed to browse from another device. Opening folders only works on this computer.")
+        if not tls:
+            print("This is plain HTTP: only use it where the connection is already encrypted, such as over Tailscale.")
     print("Press Ctrl+C to stop.")
     if open_browser:
         threading.Timer(0.6, webbrowser.open, (url,)).start()
