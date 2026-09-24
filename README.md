@@ -24,6 +24,9 @@ files? Hoard answers those without opening four tabs.
 3. Extract it into a folder of your own, such as one inside your user folder (not Program Files).
 4. Double-click `Hoard.bat`. The first time, it sets Hoard up: a private Python environment in that
    folder, with every package checked against a recorded fingerprint. Hoard then opens in your browser.
+5. A short setup assistant walks you through the rest: which stores you use, signing in to each one,
+   your Payhip shops, and where downloads go. If Hoard needs its own browser, the assistant installs it
+   with one button. Run it again any time from **Settings**, then **Set up Hoard again**.
 
 Keep the small Hoard window open while you use it; closing it quits Hoard. (A proper installer and a
 Hoard window of its own are coming next.)
@@ -53,6 +56,10 @@ Hoard.bat migrate "D:\Tools\Hoard-Bundle"
   **Settings** under **Payhip shops** (its address is in your purchase email: a shop's own domain such as
   `myshop.store`, or `payhip.com/ShopName`), then sign in to Payhip. Hoard opens a tab for each shop.
   Importing a shop's saved page adds that shop for you.
+- **Signing in without your saved passwords:** Hoard's window is its own browser, so it doesn't have
+  the passwords your usual browser saved. The assistant shows where to find and copy them in Chrome,
+  Edge, Firefox, Safari or a password manager. If a store emails you a sign-in or confirmation link,
+  paste it into the assistant instead of clicking it, and it opens in Hoard's window.
 - **Settings** chooses where downloads go (a `Hoard` folder in Documents unless you pick another), which
   stores to include, and the browser used for store sign-ins (Microsoft Edge, unless you choose otherwise).
 - **Tags** works the same in both views; see [Tags](#tags) below.
