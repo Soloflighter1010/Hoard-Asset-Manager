@@ -135,6 +135,59 @@ class Downloading(unittest.TestCase):
         done.wait(10)
 
 
+class SigningOut(unittest.TestCase):
+    """Signing out of a store forgets what that account owns, so the next account never sees it."""
+
+    def test_clear_store(self):
+        tmp = Path(tempfile.mkdtemp())
+        lib = library.Library(tmp / "library.json")
+        lib.data["items"] = [library.item("jinxxy", "a", name="Paw Suit", thumbnail="https://cdn.jinxxy.com/a.png"),
+                             library.item("booth", "1", name="Rusk")]
+        lib.data["stores"] = {"jinxxy": {"count": 1}, "booth": {"count": 1}}
+        lib.save()
+        import hashlib
+        library.THUMB_DIR.mkdir(parents=True, exist_ok=True)
+        cached = library.THUMB_DIR / (hashlib.sha1(b"https://cdn.jinxxy.com/a.png").hexdigest() + ".png")
+        cached.write_bytes(b"png")
+        self.assertEqual(lib.clear_store("jinxxy", "Signed out."), 1)
+        self.assertEqual([i["store"] for i in library.Library(tmp / "library.json").data["items"]], ["booth"])
+        self.assertFalse(cached.exists(), "the cached picture shows what was bought, so it goes too")
+        self.assertEqual(lib.data["stores"]["jinxxy"]["count"], 0)
+
+    def test_sign_out_job_clears_the_list(self):
+        tmp = Path(tempfile.mkdtemp())
+        lib = library.Library(tmp / "library.json")
+        lib.data["items"] = [library.item("gumroad", "x", name="Hoodie")]
+        lib.data["stores"] = {"gumroad": {"count": 1}}
+        job = jobs.Jobs(config.load_config(), lib)
+        saved = jobs.sign_out, jobs._playwright
+        jobs.sign_out = lambda p, cfg, store: "Gumroad: deleted the saved sign-in (3 cookies, plus the store's site data)."
+
+        class NoBrowser:
+            def __enter__(self): return None
+            def __exit__(self, *a): return False
+        jobs._playwright = lambda: NoBrowser
+        try:
+            job._logout(["gumroad"])
+        finally:
+            jobs.sign_out, jobs._playwright = saved
+        self.assertEqual(lib.data["items"], [])
+        self.assertIn("Removed 1 items", lib.data["stores"]["gumroad"]["error"])
+        self.assertIn("downloaded files are still on disk", lib.data["stores"]["gumroad"]["error"])
+
+
+class JinxxyBanners(unittest.TestCase):
+    """Copies of Jinxxy's default banner saved as product pictures by older versions are removed."""
+
+    def test_repeated_pictures_are_forgotten(self):
+        store = Path(tempfile.mkdtemp()) / "Jinxxy"
+        for creator, product, data in (("A", "One", b"BANNER"), ("B", "Two", b"BANNER"), ("C", "Three", b"REAL")):
+            (store / creator / product).mkdir(parents=True)
+            (store / creator / product / "_thumbnail.png").write_bytes(data)
+        self.assertEqual(downloader.forget_repeated_thumbnails(store), 2)
+        self.assertEqual(sorted(p.parent.name for p in store.rglob("_thumbnail.png")), ["Three"])
+
+
 class ComingFrom1x(unittest.TestCase):
     """`migrate` brings over a 1.x library list and downloads folder, without overwriting anything."""
 

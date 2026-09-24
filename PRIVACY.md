@@ -50,7 +50,7 @@ purchases and your account name, so remove anything you don't want public before
 
 ## Deleting your information
 
-- **Sign-ins:** choose **Sign out of every store** in Hoard's Stores panel or in the Stores panel.
+- **Sign-ins and library list:** choose **Sign out of every store** in the Stores panel. It also removes every store's items from your library.
 - **Everything else:** delete the Hoard program folder, your downloads folder, and the `Hoard` folder in your
   app-data folder (see the table above).
 
