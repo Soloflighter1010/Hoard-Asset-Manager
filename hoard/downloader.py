@@ -1679,8 +1679,12 @@ def cmd_sync(cfg: dict, args) -> None:
                 else:
                     report.skipped.append(f"{label}: not signed in, so skipped. Sign in from Stores to include it.")
             except Exception as e:
+                from .setup import browser_problem   # (setup imports this module's neighbours; imported here to keep it light)
                 if any(code in str(e) for code in NETWORK_ERRORS):
                     report.failed.append(unreachable_message(store))
+                elif browser_problem(e):
+                    report.failed.append(f"{label}: {browser_problem(e)}")
+                    break
                 else:
                     report.failed.append(f"{label}: sync stopped - {e}")
     finally:  # also runs after Ctrl+C, so what did download is catalogued

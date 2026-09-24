@@ -344,6 +344,41 @@ body.selecting .toast { bottom: 96px; }
 .ondisk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--bone); }
 .ondisk::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #4CC38A; }
 body.selecting .dlpanel { bottom: 96px; }
+
+/* the setup assistant */
+.setup { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: rgb(10 8 6 / .72); }
+.setup[hidden] { display: none; }
+.setup-card { width: min(760px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 28px 32px; border-radius: 18px;
+  background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 30px 80px rgb(0 0 0 / .5); }
+.setup-steps { display: flex; gap: 6px; margin-bottom: 20px; }
+.setup-steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--seam); }
+.setup-steps span.done { background: var(--gold); }
+.setup h2 { font: 400 26px var(--display); margin: 0 0 10px; }
+.setup p { line-height: 1.55; margin: 8px 0; }
+.setup .muted { color: var(--dust); font-size: 13.5px; }
+.setup .actions { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 26px; }
+.setup .status { display: flex; align-items: center; gap: 10px; margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-weight: 700; }
+.setup .status::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
+.setup .status.ok::before { background: #4CC38A; }
+.setup .storepick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.setup .storepick label { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 12px; cursor: pointer; font-weight: 700;
+  background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+.setup .storepick input { width: 18px; height: 18px; accent-color: var(--gold); }
+.setup .signrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--seam); }
+.setup .signrow .who { flex: 1; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.setup .signrow .state { font-size: 13px; color: var(--dust); }
+.setup .signrow .state.ok { color: #4CC38A; }
+.setup details { margin-top: 12px; padding: 10px 14px; border-radius: 12px; background: var(--stone); }
+.setup details summary { cursor: pointer; font-weight: 700; }
+.setup details ul { padding-left: 18px; margin: 8px 0; }
+.setup details li { margin: 7px 0; line-height: 1.5; font-size: 14px; }
+.setup code { padding: 1px 6px; border-radius: 5px; background: var(--cave); font-size: 13px; }
+.setup .field { display: flex; gap: 8px; margin-top: 10px; }
+.setup .field input, .setup textarea { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 0; border-radius: 8px;
+  background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 14px var(--body); }
+.setup textarea { width: 100%; height: auto; min-height: 84px; padding: 8px 10px; resize: vertical; }
+.setup .field input:focus, .setup textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.setup .progress { margin-top: 8px; font-size: 13px; color: var(--dust); overflow-wrap: anywhere; min-height: 1.4em; }
 </style>
 </head>
 <body>
@@ -475,6 +510,7 @@ body.selecting .dlpanel { bottom: 96px; }
   </select>
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
   <div class="actions"><button class="primary" id="setSave">Save</button><button class="ghost" id="setCancel">Cancel</button></div>
+  <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
 </section>
 <section id="dlPanel" class="dlpanel" hidden aria-labelledby="dlTitle">
   <div class="dlhead"><h2 id="dlTitle">Downloading</h2>
@@ -483,6 +519,16 @@ body.selecting .dlpanel { bottom: 96px; }
   <ul id="dlProblems" class="problems" hidden></ul>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
 </section>
+<div id="setup" class="setup" hidden role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+  <div class="setup-card">
+    <div class="setup-steps" id="setupSteps" aria-hidden="true"></div>
+    <div id="setupBody"></div>
+    <div class="actions">
+      <button class="linkish" id="setupSkip">Skip setup</button>
+      <span><button class="ghost" id="setupBack">Back</button> <button class="primary" id="setupNext">Next</button></span>
+    </div>
+  </div>
+</div>
 <div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
   <button class="linkish" id="bulkAll">Select all shown</button>
@@ -498,6 +544,8 @@ body.selecting .dlpanel { bottom: 96px; }
 "use strict";
 const $ = s => document.querySelector(s);
 const STORE_ORDER = ["booth", "gumroad", "jinxxy", "payhip"];
+const shown = s => (DATA.enabled || {})[s] !== false;   // stores you don't use (Settings, or setup) are hidden
+const usedStores = () => STORE_ORDER.filter(shown);
 const IMPORTABLE = ["booth", "jinxxy", "payhip"];
 let importStore = null;
 const state = { q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null };
@@ -564,6 +612,7 @@ function matches(a, skip) {
   if (state.copies && a.match_key !== state.copies.key) return false;
   if (state.store && a.store !== state.store) return false;
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
+  if (!shown(a.store)) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
@@ -584,13 +633,13 @@ function renderStoreSeg() {
   const counts = {};
   for (const a of DATA.items) counts[a.store] = (counts[a.store] || 0) + 1;
   $("#storeSeg").innerHTML = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${DATA.items.length}</span></button>` +
-    STORE_ORDER.filter(s => counts[s] || DATA.stores[s]).map(s =>
+    usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
       `<span class="dot ${s}"></span>${label(s)}<span class="n">${counts[s] || 0}</span></button>`).join("");
 }
 function renderStores() {
   const job = DATA.job || {};
-  $("#storeRows").innerHTML = STORE_ORDER.map(s => {
+  $("#storeRows").innerHTML = usedStores().map(s => {
     const info = DATA.stores[s] || {};
     const busy = job.running;
     const meta = info.updated ? `${info.count} items, ${info.source === "import" ? "imported" : "refreshed"} ${ago(info.updated)}` : "Not refreshed yet";
@@ -779,8 +828,8 @@ $("#sort").addEventListener("change", e => { state.sort = e.target.value; render
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
-$("#refreshAll").addEventListener("click", () => runJob("/api/refresh", STORE_ORDER, true));
-$("#downloadAll").addEventListener("click", () => startDownload(STORE_ORDER));
+$("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
+$("#downloadAll").addEventListener("click", () => startDownload(usedStores()));
 $("#signOutAll").addEventListener("click", () => {
   if (confirm("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.")) runJob("/api/logout", ["all"]);
 });
@@ -1149,6 +1198,9 @@ function wireApp() {
   $("#settingsBtn").addEventListener("click", () => openSettings());
   $("#setSave").addEventListener("click", saveSettings);
   $("#setCancel").addEventListener("click", closeSettings);
+  $("#setupAgain").addEventListener("click", () => {
+    if (typeof openSetup === "function") openSetup(); else location.href = "/#setup";
+  });
   $("#setRootDefault").addEventListener("click", () => { if (SETTINGS) $("#setRoot").value = SETTINGS.default_root; });
   $("#dlStop").addEventListener("click", async () => {
     const r = await apiPost("/api/cancel");
@@ -1162,6 +1214,183 @@ function wireApp() {
   pollDownload();  // a download started from the other view, or before this page opened
 }
 
+/* ---------- the setup assistant: on first start, and from Settings (Set up Hoard) */
+const SETUP = { step: 0, st: null, timer: null, busy: false };
+const setupSteps = () => ["welcome", "browser", "older", "stores",
+  ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
+async function setupStatus() {
+  SETUP.st = await (await fetch("/api/setup", { cache: "no-store" })).json();
+  return SETUP.st;
+}
+async function openSetup() {
+  try { await setupStatus(); } catch (e) { toast("Hoard isn't running. Open it again."); return; }
+  closeSettings(); openStores(false); openTagPanel(false);
+  SETUP.step = 0;
+  $("#setup").hidden = false;
+  renderSetup();
+}
+function closeSetup() { $("#setup").hidden = true; clearTimeout(SETUP.timer); }
+
+const PASSWORD_HELP = `<details><summary>Where are my saved passwords?</summary>
+  <p class="muted">Hoard's window is its own browser, so it doesn't have the passwords your usual browser saved. Copy yours from there:</p>
+  <ul><li><strong>Chrome:</strong> type <code>chrome://password-manager</code> in Chrome's address bar and search for the store.</li>
+  <li><strong>Edge:</strong> go to <code>edge://settings/passwords</code> in Edge.</li>
+  <li><strong>Firefox:</strong> go to <code>about:logins</code>.</li>
+  <li><strong>Safari or iPhone:</strong> open the Passwords app.</li>
+  <li><strong>A password manager</strong> such as Bitwarden or 1Password: open it and search for the store.</li></ul>
+  <p class="muted">Paste it into the store's page in Hoard's window. It goes straight to the store; Hoard doesn't read or keep it.</p></details>
+  <details><summary>Other ways to sign in</summary><ul>
+  <li><strong>Forgot the password?</strong> Use the store's own "Forgot password" link in Hoard's window. The new password works everywhere.</li>
+  <li><strong>Signed up with Google, Discord or X?</strong> Try the same button in Hoard's window. If it says the browser isn't supported, set a password for your store account in your usual browser, then sign in here with that.</li>
+  <li><strong>Passkeys</strong> on Windows Hello or your phone work in Hoard's window too: choose the passkey option and follow the prompt.</li></ul></details>`;
+
+const SETUP_VIEWS = {
+  welcome: () => `<h2 id="setupTitle">Welcome to Hoard</h2>
+    <p>Let's get Hoard ready: choose your stores, sign in to them, and pick where downloads go. It takes a few minutes, and you can run this again from Settings.</p>
+    <p class="muted">Hoard runs only on this computer. It never sees your passwords: you sign in on each store's own page, in a browser window that belongs to Hoard alone.</p>`,
+  browser: st => `<h2 id="setupTitle">The browser Hoard signs in with</h2>
+    <p>Hoard reads your stores through a browser it controls, kept apart from the one you browse with.</p>
+    <div class="status${st.browser.ready ? " ok" : ""}">${esc(st.browser.name)} ${st.browser.ready ? "is ready." : "isn't installed yet."}</div>
+    ${!st.browser.ready && st.browser.can_install ? `<button class="primary" id="installBrowser">Install Hoard's browser</button>
+      <span class="muted">About 150 MB, downloaded once.</span><div class="progress" id="installProgress" aria-live="polite"></div>` : ""}
+    ${st.browser.note ? `<p class="muted">${esc(st.browser.note)}</p>` : ""}`,
+  stores: st => `<h2 id="setupTitle">Which stores have you bought from?</h2>
+    <p>Hoard only shows and reads the stores you pick. You can change this later in Settings.</p>
+    <div class="storepick">${STORE_ORDER.map(s => `<label><input type="checkbox" data-pick="${s}"${st.stores[s].enabled ? " checked" : ""}>
+      <span class="dot ${s}"></span>${esc(st.stores[s].label)}</label>`).join("")}</div>`,
+  payhip: st => `<h2 id="setupTitle">Your Payhip shops</h2>
+    <p>Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address, one per line.
+      It's in your purchase email: a shop's own address such as <code>myshop.store</code>, or <code>payhip.com/ShopName</code>.</p>
+    <textarea id="setupShops" spellcheck="false" aria-label="Payhip shops" placeholder="myshop.store">${esc(st.payhip_shops.map(s => s.replace(/^https:\/\//, "")).join("\n"))}</textarea>
+    <p class="muted">Importing a shop's saved page from the Stores panel adds that shop for you too.</p>`,
+  signin: st => `<h2 id="setupTitle">Sign in to your stores</h2>
+    <p>Each store opens in Hoard's own window. Sign in there as usual, then close the window, and Hoard reads what you own.</p>
+    ${STORE_ORDER.filter(s => st.stores[s].enabled).map(s => `<div class="signrow"><span class="who"><span class="dot ${s}"></span>${esc(st.stores[s].label)}</span>
+      <span class="state${st.stores[s].signed_in ? " ok" : ""}">${st.stores[s].signed_in ? "Signed in" : "Not signed in yet"}</span>
+      <button class="ghost sm" data-signin="${s}">${st.stores[s].signed_in ? "Sign in again" : "Sign in"}</button></div>`).join("")
+      || `<p class="muted">You haven't picked any stores. Go back a step to choose some.</p>`}
+    <div class="progress" id="signinProgress" aria-live="polite"></div>
+    <div id="linkBox" hidden><p class="muted">Did the store email you a link to sign in, or to confirm it's you? Paste it here instead of clicking it, and Hoard opens it in its window.</p>
+      <div class="field"><input id="signinLink" placeholder="Paste the link from the email" aria-label="Link from the email"><button class="ghost" id="openLink">Open</button></div></div>
+    ${PASSWORD_HELP}`,
+  folder: st => `<h2 id="setupTitle">Where should downloads go?</h2>
+    <p>Hoard keeps local copies of what you own, in folders by store, creator and product.</p>
+    <div class="field"><input id="setupRoot" spellcheck="false" aria-label="Downloads folder" value="${esc(st.root)}"><button class="ghost sm" id="setupRootDefault">Default</button></div>
+    <p class="muted">Pick a drive with room to spare; VRChat assets add up. You can change this later in Settings.</p>`,
+  older: () => `<h2 id="setupTitle">Used Hoard before?</h2>
+    <p>If you used Hoard 1.x, bring over your library list and downloads folder. Your sign-ins and tags carry over by themselves.</p>
+    <div class="field"><input id="oldFolder" spellcheck="false" aria-label="Folder you ran Hoard 1.x from" placeholder="The folder you ran Hoard 1.x from, such as D:\\Tools\\Hoard-Bundle">
+      <button class="ghost" id="bringOver">Bring it over</button></div>
+    <p class="progress" id="bringResult" aria-live="polite"></p>
+    <p class="muted">New to Hoard? Skip this step.</p>`,
+  done: () => `<h2 id="setupTitle">Hoard's ready</h2>
+    <p>When you choose Finish, Hoard reads what you own from your stores. After that, choose <strong>Download everything new</strong> in Stores, or <strong>Download new</strong> in Downloads, whenever you want local copies.</p>
+    <p class="muted">Run this again any time from Settings.</p>`,
+};
+
+function pollSetup(onDone, show) {
+  clearTimeout(SETUP.timer);
+  SETUP.timer = setTimeout(async () => {
+    let st;
+    try { st = await setupStatus(); } catch (e) { return pollSetup(onDone, show); }
+    if (st.job && st.job.running) { show(st.job); pollSetup(onDone, show); }
+    else onDone(st);
+  }, 1000);
+}
+const SETUP_WIRES = {
+  browser: () => {
+    const b = $("#installBrowser");
+    if (!b) return;
+    b.addEventListener("click", async () => {
+      const r = await apiPost("/api/setup/browser");
+      if (!r.ok) { toast(r.data.error || "The browser didn't start installing."); return; }
+      b.disabled = true;
+      pollSetup(st => { if (st.browser.ready) toast("Hoard's browser is installed."); else toast(st.job.error || st.job.message || "The browser didn't install."); renderSetup(); },
+                job => { $("#installProgress").textContent = job.message || ""; });
+    });
+  },
+  signin: () => {
+    for (const b of document.querySelectorAll("#setupBody [data-signin]")) {
+      b.addEventListener("click", async () => {
+        const r = await apiPost("/api/login", { stores: [b.dataset.signin] });
+        if (!r.ok) { toast(r.data.error || "Signing in didn't start."); return; }
+        document.querySelectorAll("#setupBody [data-signin]").forEach(x => { x.disabled = true; });
+        $("#signinProgress").textContent = `Opening ${SETUP.st.stores[b.dataset.signin].label}'s sign-in window...`;
+        $("#linkBox").hidden = false;
+        pollSetup(st => { if (st.job && st.job.error) toast(st.job.error); renderSetup(); load(); },
+                  job => { $("#signinProgress").textContent = job.message || ""; $("#linkBox").hidden = job.task !== "login"; });
+      });
+    }
+    $("#openLink").addEventListener("click", async () => {
+      const r = await apiPost("/api/signin-link", { url: $("#signinLink").value.trim() });
+      toast(r.ok ? "Opening that link in Hoard's window." : (r.data.error || "That link didn't open."));
+      if (r.ok) $("#signinLink").value = "";
+    });
+  },
+  folder: st => { $("#setupRootDefault").addEventListener("click", () => { $("#setupRoot").value = st.default_root; }); },
+  older: () => {
+    $("#bringOver").addEventListener("click", async () => {
+      const r = await apiPost("/api/setup/migrate", { folder: $("#oldFolder").value.trim() });
+      $("#bringResult").textContent = r.ok ? r.data.message : (r.data.error || "That didn't work.");
+      if (r.ok) { load(); await setupStatus(); }   // the next steps show what came across
+    });
+  },
+};
+function renderSetup() {
+  const list = setupSteps(), name = list[Math.min(SETUP.step, list.length - 1)];
+  $("#setupSteps").innerHTML = list.map((_, i) => `<span class="${i <= SETUP.step ? "done" : ""}"></span>`).join("");
+  $("#setupBody").innerHTML = SETUP_VIEWS[name](SETUP.st);
+  $("#setupBack").hidden = SETUP.step === 0;
+  $("#setupSkip").hidden = name === "done";
+  $("#setupNext").textContent = name === "welcome" ? "Start" : name === "done" ? "Finish" : "Next";
+  (SETUP_WIRES[name] || (() => {}))(SETUP.st);
+  $("#setupNext").focus();
+}
+async function setupSave(name) {   // what leaving a step saves; false keeps you on the step
+  let body = null;
+  if (name === "stores") {
+    body = { stores: {} };
+    for (const c of document.querySelectorAll("#setupBody [data-pick]")) body.stores[c.dataset.pick] = { enabled: c.checked };
+  } else if (name === "payhip") {
+    body = { payhip_shops: $("#setupShops").value.split("\n").map(x => x.trim()).filter(Boolean) };
+  } else if (name === "folder") {
+    const root = $("#setupRoot").value.trim();
+    body = { root: root === SETUP.st.default_root ? "" : root };
+  }
+  if (!body) return true;
+  const r = await apiPost("/api/settings", body);
+  if (!r.ok) { toast(r.data.error || "That wasn't saved."); return false; }
+  await setupStatus();
+  return true;
+}
+function wireSetup() {
+  $("#setupNext").addEventListener("click", async () => {
+    if (SETUP.busy) return;
+    SETUP.busy = true;
+    try {
+      const list = setupSteps(), name = list[SETUP.step];
+      if (!(await setupSave(name))) return;
+      if (name === "done") {
+        await apiPost("/api/setup/done", { done: true });
+        closeSetup();
+        await load();
+        const on = STORE_ORDER.filter(s => SETUP.st.stores[s].enabled);
+        if (on.length) runJob("/api/refresh", on, true);
+        return;
+      }
+      SETUP.step += 1;
+      renderSetup();
+    } finally { SETUP.busy = false; }
+  });
+  $("#setupBack").addEventListener("click", () => { SETUP.step = Math.max(0, SETUP.step - 1); renderSetup(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#setup").hidden) closeSetup(); });
+  $("#setupSkip").addEventListener("click", async () => {
+    await apiPost("/api/setup/done", { done: true });
+    closeSetup();
+    toast("Setup skipped. Run it any time from Settings.");
+  });
+}
+
 /* ---------- offline notice: everything here works offline except the store links and refreshing */
 const showConnection = () => { $("#offline").hidden = navigator.onLine; };
 addEventListener("online", showConnection);
@@ -1169,8 +1398,11 @@ addEventListener("offline", showConnection);
 showConnection();
 wireTags();
 wireApp();
+wireSetup();
 readHash();
-load();
+load().then(() => {   // someone new (nothing set up, nothing in the library) is walked through setting up
+  if (/(^|[#&])setup\b/.test(location.hash) || (!DATA.setup_done && !DATA.items.length && !DATA.error)) openSetup();
+});
 </script>
 </body>
 </html>

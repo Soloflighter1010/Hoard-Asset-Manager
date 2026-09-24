@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from .safety import DataFileError, read_json_file, set_extra_sites, write_file_safely
 
 DEFAULT_CONFIG = {
+    "setup_done": False,           # set once the onboarding assistant has been completed (or skipped)
     "root": "",                    # where downloads go; "" = a Hoard folder in Documents
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
     "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "chromium", "msedge" or "chrome"

@@ -26,12 +26,14 @@ from .library import IMPORTABLE, STORES, Library, cache_images, enrich, fetch_th
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
                      safe_join, store_sites)
+from .setup import migrate_from, setup_status
 from .tags import TagStore, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
 FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
-           "/api/download", "/api/cancel", "/api/settings")
+           "/api/download", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
+           "/api/setup/migrate", "/api/signin-link")
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 
 
@@ -192,7 +194,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"items": items, "tagset": tag_overview(tagdata, items), "stores": data["stores"],
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
-                               "store_sites": store_sites(), "version": __version__})
+                               "store_sites": store_sites(), "version": __version__,
+                               "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
+                               "setup_done": bool(srv.cfg.get("setup_done"))})
         if path == "/api/status":
             with srv.lib.lock:
                 stores = json.loads(json.dumps(srv.lib.data["stores"]))
@@ -202,6 +206,8 @@ class Handler(BaseHTTPRequestHandler):
                                "job": srv.jobs.state, "store_sites": store_sites()})
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
+        if path == "/api/setup":
+            return self._json({**setup_status(srv.cfg), "job": srv.jobs.state})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))
             if not font:
@@ -285,6 +291,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "store": store, "label": STORES[store]["label"], "count": len(items), "total": total})
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
+        if path == "/api/signin-link":
+            why = srv.jobs.open_link(str(body.get("url") or "").strip()[:2000])
+            return self._json({"error": why}, 400) if why else self._json({"ok": True})
+        if path == "/api/setup/browser":
+            if not srv.jobs.start("install-browser", []):
+                return self._json({"error": "Hoard is busy. Wait for the current job to finish."}, 409)
+            return self._json({"ok": True}, 202)
+        if path == "/api/setup/done":
+            srv.cfg["setup_done"] = bool(body.get("done", True))
+            save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            return self._json({"ok": True})
+        if path == "/api/setup/migrate":
+            folder = str(body.get("folder") or "").strip().strip('"')[:1000]
+            if not folder or not Path(folder).expanduser().is_absolute():
+                return self._json({"error": "Enter the full path of the folder you ran Hoard 1.x from."}, 400)
+            said = migrate_from(srv.cfg, Path(folder), srv.config_path, srv.lib)
+            srv.forget_index()
+            return self._json({"ok": True, "message": said})
 
         stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]
         if not stores:

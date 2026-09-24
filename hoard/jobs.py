@@ -4,6 +4,8 @@ from __future__ import annotations
 import threading
 
 from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
+from .safety import store_link
+from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
 from .library import FETCHERS, IMPORTABLE, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
@@ -20,6 +22,7 @@ class Jobs:
         self.on_download_done = on_download_done or (lambda: None)
         self.busy = threading.Lock()
         self.stop = threading.Event()
+        self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
                       "log": [], "report": None}
 
@@ -35,6 +38,8 @@ class Jobs:
         self.state.update(error=None, log=[], report=None)
         if task == "download":
             target = lambda s: self._download(s, only)  # noqa: E731
+        elif task == "install-browser":
+            target = self._install_browser
         elif task == "login":
             target = self._login_then_refresh
         elif task == "logout":
@@ -52,10 +57,39 @@ class Jobs:
         except (ProfileBusy, SigninsUnprotected) as e:
             self._set(message=str(e), error=str(e))
         except Exception as e:
-            self._set(message=f"Stopped: {e}", error=f"Stopped: {e}")
+            why = browser_problem(e) or f"Stopped: {e}"
+            self._set(message=why, error=why)
         finally:
             self._set(running=False, task=None, store=None)
             self.busy.release()
+
+    def open_link(self, url: str) -> str | None:
+        """Open a link from an email (a sign-in or "is this you?" link) in the sign-in window that's open now.
+        Returns None when it will open, or why it won't. Only links on that store's own site are accepted."""
+        store = self.state.get("store")
+        if not (self.state["running"] and self.state["task"] == "login" and store):
+            return "Start signing in to the store first, then paste the link while its window is open."
+        if not store_link(store, url):
+            return f"That link isn't on {STORES[store]['label']}'s own site, so Hoard won't open it."
+        self.pending_link = url
+        return None
+
+    def _install_browser(self, stores: list[str]) -> None:
+        """Download Hoard's own browser, passing progress to the page."""
+        self._set(task="install-browser", message="Downloading Hoard's browser")
+        lines: list[str] = []
+
+        def progress(line: str) -> None:
+            lines.append(line)
+            del lines[:-40]
+            self._set(message=line, log=lines[-20:])
+        try:
+            install_browser(progress)
+        except RuntimeError as e:   # already a plain explanation
+            why = str(e)[:1].upper() + str(e)[1:]
+            self._set(message=why, error=why)
+            return
+        self._set(message="Hoard's browser is installed.")
 
     def cancel(self) -> bool:
         """Stop the running download after the file it's on. False when no download is running."""
@@ -186,6 +220,11 @@ class Jobs:
                 try:
                     if not ctx.pages:
                         break
+                    if self.pending_link:   # a link you pasted from an email: open it in this window
+                        link, self.pending_link = self.pending_link, None
+                        ctx.pages[0].goto(link)
+                        self._set(message=f"Opened the link from your email in the {label} window. Finish there, "
+                                          "then close the window.")
                     ctx.pages[0].wait_for_timeout(500)
                 except Exception:
                     break

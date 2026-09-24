@@ -10,13 +10,14 @@ from urllib.parse import urlparse
 from . import __version__
 from .browser import ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
 from .common import log
-from .config import load_config, root_dir, save_config
+from .config import load_config, root_dir
 from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify
 from .jobs import Jobs
 from .library import BOOTH_JS, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY, Library, PAYHIP_CARDS_JS, STORES, import_saved_page, open_sign_in_pages, payhip_library_url
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
-from .safety import read_json_file
+
 from .server import serve
+from .setup import install_browser, migrate_from
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -126,6 +127,7 @@ def main(argv=None) -> None:
     sub.add_parser("verify", help="check whether any data file was changed outside Hoard, and rebuild the catalog")
     s = sub.add_parser("debug", help="save a store's library page, for troubleshooting")
     s.add_argument("store", choices=list(STORES))
+    sub.add_parser("install-browser", help="download Hoard's own browser (only needed without Microsoft Edge)")
     s = sub.add_parser("migrate", help="bring over the library list and downloads folder from Hoard 1.x")
     s.add_argument("folder", type=Path, help="the folder you ran Hoard 1.x from")
     s = sub.add_parser("probe", help="record what the Jinxxy site loads, for troubleshooting")
@@ -154,6 +156,9 @@ def main(argv=None) -> None:
             sys.exit(cmd_verify(cfg, root_dir(cfg)))
         elif args.cmd == "debug":
             cmd_debug(cfg, args.store)
+        elif args.cmd == "install-browser":
+            install_browser(print)
+            print("Hoard's browser is installed.")
         elif args.cmd == "migrate":
             cmd_migrate(cfg, args.folder, args.config)
         elif args.cmd == "probe":
@@ -165,38 +170,6 @@ def main(argv=None) -> None:
 
 
 def cmd_migrate(cfg: dict, folder: Path, config_path: Path) -> None:
-    """Bring a Hoard 1.x setup across: its library list and its downloads folder. (Sign-ins and tags already
-    live in Hoard's app-data folder, so they carry over by themselves.)"""
-    folder = folder.expanduser().resolve()
-    places = [folder, folder / "Hoard", folder / "HoardDownloader", folder.parent / "Hoard", folder.parent / "HoardDownloader"]
-    done = []
-    old_list = next((p / "library.json" for p in places if (p / "library.json").is_file()), None)
-    if old_list:
-        new = Library(LIBRARY_FILE)
-        if new.data["items"]:
-            print(f"Hoard already has a library list here ({len(new.data['items'])} items), so {old_list} wasn't copied.")
-        else:
-            new.data = Library(old_list).data   # checked and cleaned as it's read
-            new.save()
-            done.append(f"your library list ({len(new.data['items'])} items)")
-    old_cfg = next((p / "config.json" for p in places if (p / "asset_dl.py").is_file() and (p / "config.json").is_file()), None)
-    if old_cfg:
-        old = read_json_file(old_cfg, 1024 * 1024)
-        value = str(old.get("root") or "downloads") if isinstance(old, dict) else "downloads"
-        root = Path(value).expanduser()
-        root = root if root.is_absolute() else (old_cfg.parent / root).resolve()
-        if root.is_dir():
-            cfg["root"] = str(root)
-            for store in STORES:
-                if isinstance(old.get(store), dict):
-                    cfg[store].update({k: v for k, v in old[store].items() if k in ("enabled", "include_gifts", "include_archived")
-                                       and isinstance(v, bool)})
-            save_config(cfg, config_path)
-            done.append(f"your downloads folder ({root})")
-        else:
-            print(f"The downloads folder in {old_cfg} ({root}) doesn't exist, so it wasn't used.")
-    if done:
-        print("Brought over " + " and ".join(done) + ". Your sign-ins and tags were already shared, so everything's here.")
-    else:
-        print(f"Found no Hoard 1.x library list or downloader settings in or next to {folder}.")
+    """Bring over a Hoard 1.x library list and downloads folder."""
+    print(migrate_from(cfg, folder, config_path))
 

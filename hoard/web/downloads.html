@@ -474,6 +474,7 @@ body.selecting .dlpanel { bottom: 96px; }
   </select>
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
   <div class="actions"><button class="primary" id="setSave">Save</button><button class="ghost" id="setCancel">Cancel</button></div>
+  <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
 </section>
 <section id="dlPanel" class="dlpanel" hidden aria-labelledby="dlTitle">
   <div class="dlhead"><h2 id="dlTitle">Downloading</h2>
@@ -1075,6 +1076,9 @@ function wireApp() {
   $("#settingsBtn").addEventListener("click", () => openSettings());
   $("#setSave").addEventListener("click", saveSettings);
   $("#setCancel").addEventListener("click", closeSettings);
+  $("#setupAgain").addEventListener("click", () => {
+    if (typeof openSetup === "function") openSetup(); else location.href = "/#setup";
+  });
   $("#setRootDefault").addEventListener("click", () => { if (SETTINGS) $("#setRoot").value = SETTINGS.default_root; });
   $("#dlStop").addEventListener("click", async () => {
     const r = await apiPost("/api/cancel");

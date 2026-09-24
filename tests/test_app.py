@@ -226,9 +226,10 @@ class PayhipShops(unittest.TestCase):
 
 
 class ComingFrom1x(unittest.TestCase):
-    """`migrate` brings over a 1.x library list and downloads folder, without overwriting anything."""
+    """Bringing over a 1.x library list and downloads folder, without overwriting anything."""
 
     def test_migrate(self):
+        from hoard import setup
         old = Path(tempfile.mkdtemp())
         (old / "Hoard").mkdir()
         (old / "HoardDownloader" / "downloads").mkdir(parents=True)
@@ -236,19 +237,74 @@ class ComingFrom1x(unittest.TestCase):
         (old / "HoardDownloader" / "config.json").write_text(json.dumps({"root": "downloads", "booth": {"enabled": False}}))
         (old / "Hoard" / "library.json").write_text(json.dumps({"items": [
             {"store": "booth", "id": "1", "name": "Rusk", "url": "https://booth.pm/ja/items/1"}], "stores": {}}))
-        library_file = Path(tempfile.mkdtemp()) / "library.json"
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
         config_file = Path(tempfile.mkdtemp()) / "config.json"
         cfg = config.load_config(config_file)
-        saved = cli.LIBRARY_FILE
-        cli.LIBRARY_FILE = library_file
-        try:
-            cli.cmd_migrate(cfg, old / "Hoard", config_file)
-        finally:
-            cli.LIBRARY_FILE = saved
-        self.assertEqual([i["name"] for i in library.Library(library_file).data["items"]], ["Rusk"])
+        said = setup.migrate_from(cfg, old / "Hoard", config_file, lib)
+        self.assertIn("1 item)", said)
+        self.assertEqual([i["name"] for i in lib.data["items"]], ["Rusk"])
         moved = config.load_config(config_file)
         self.assertEqual(Path(moved["root"]), (old / "HoardDownloader" / "downloads").resolve())
         self.assertFalse(moved["booth"]["enabled"])
+        self.assertIn("already has a library list", setup.migrate_from(cfg, old, config_file, lib), "nothing is overwritten")
+        self.assertIn("no folder", setup.migrate_from(cfg, old / "missing", config_file, lib))
+
+
+class SetupAssistant(unittest.TestCase):
+    """What the onboarding assistant relies on."""
+
+    def test_links_from_emails(self):
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        self.assertIn("Start signing in", job.open_link("https://accounts.booth.pm/confirm"))
+        job.state.update(running=True, task="login", store="booth")
+        self.assertIn("isn't on Booth's own site", job.open_link("https://booth.pm.login-check.example/"))
+        self.assertIn("isn't on Booth's own site", job.open_link("http://accounts.booth.pm/confirm"))
+        self.assertIn("isn't on Booth's own site", job.open_link("https://app.gumroad.com/confirm"))
+        self.assertIsNone(job.open_link("https://accounts.booth.pm/users/confirmation?token=x"))
+        self.assertEqual(job.pending_link, "https://accounts.booth.pm/users/confirmation?token=x")
+
+    def test_missing_browser_is_explained(self):
+        from hoard import setup
+        self.assertIn("Set up Hoard", setup.browser_problem(RuntimeError(
+            "BrowserType.launch: Executable doesn't exist at /x/chrome\nPlease run: playwright install")))
+        self.assertIn("isn't installed", setup.browser_problem(RuntimeError('Chromium distribution "msedge" is not found at /x')))
+        self.assertIsNone(setup.browser_problem(RuntimeError("net::ERR_TIMED_OUT")))
+
+    def test_status(self):
+        from hoard import browser, setup
+        cfg = {**config.load_config(), "profile_dir": tempfile.mkdtemp()}
+        st = setup.setup_status(cfg)
+        self.assertEqual(set(st), {"done", "browser", "stores", "payhip_shops", "root", "default_root"})
+        self.assertFalse(st["stores"]["booth"]["signed_in"])
+        db = browser.profile_dir(cfg, "booth") / "Default" / "Network" / "Cookies"
+        db.parent.mkdir(parents=True)
+        import sqlite3
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE cookies (host_key TEXT, encrypted_value BLOB, value TEXT)")
+        con.execute("INSERT INTO cookies VALUES ('.booth.pm', x'7631', '')")
+        con.commit(); con.close()
+        self.assertTrue(setup.signed_in(cfg, "booth"))
+
+    def test_endpoints(self):
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            def call(method, path, body=None):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                c.request(method, path, body=json.dumps(body) if body is not None else None,
+                          headers={"Content-Type": "application/json"} if body is not None else {})
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return r.status, data
+            status, st = call("GET", "/api/setup")
+            self.assertEqual(status, 200)
+            self.assertIn("browser", st)
+            self.assertEqual(call("POST", "/api/signin-link", {"url": "https://accounts.booth.pm/x"})[0], 400)
+            self.assertEqual(call("POST", "/api/setup/migrate", {"folder": "relative/folder"})[0], 400)
+            self.assertEqual(call("POST", "/api/setup/done", {"done": True})[0], 200)
+            self.assertTrue(srv.cfg["setup_done"])
+        finally:
+            srv.shutdown()
+            srv.server_close()
 
 
 class CommandLine(unittest.TestCase):

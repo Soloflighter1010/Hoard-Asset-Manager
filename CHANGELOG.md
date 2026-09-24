@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.0
+
+A setup assistant, so nobody needs a command line or has to guess what to do first.
+
+- **The setup assistant** opens the first time you start Hoard, and any time from Settings. It covers
+  the browser Hoard signs in with, which stores you use, your Payhip shops, signing in to each store,
+  where downloads go, and bringing over Hoard 1.x.
+- **No more `playwright install`:** if Hoard needs its own browser, one button installs it, with
+  progress. On Windows, Hoard uses Microsoft Edge, which is already there. If a store is ever read
+  without the browser installed, the message says what to do instead of showing Playwright's error.
+- **Signing in without your saved passwords:** Hoard's window is its own browser, so it doesn't have
+  what your usual browser saved. The assistant shows where to copy your password from (Chrome, Edge,
+  Firefox, Safari, password managers) and other ways in: password reset, Google or Discord sign-in, and
+  passkeys on Windows Hello or your phone.
+- **Links from emails:** when a store emails a sign-in or "is this you?" link, paste it into the
+  assistant and it opens in Hoard's window, rather than signing in your usual browser. Only links on
+  that store's own site are accepted.
+- **Stores you don't use are hidden**, from the tabs, the Stores panel, the grid and **Refresh all**.
+- New `install-browser` command, for the command line.
+
 ## 2.0.2
 
 Fixes from real Booth and Payhip library pages.

@@ -14,6 +14,7 @@ with `./run.sh`. Without a command, Hoard opens.
 | `tags` | Rebuild `catalog.json` and `tags.json` from what's downloaded |
 | `verify` | Check whether any data file was changed outside Hoard, then rebuild the catalog files. Exits with 1 if anything was changed |
 | `migrate <folder>` | Bring over the library list and downloads folder from Hoard 1.x |
+| `install-browser` | Download Hoard's own browser (only needed without Microsoft Edge; the setup assistant does this too) |
 | `debug <store>` | Save a store's library page and what Hoard read from it, for troubleshooting |
 | `probe jinxxy` | Record what the Jinxxy site loads, for troubleshooting |
 
