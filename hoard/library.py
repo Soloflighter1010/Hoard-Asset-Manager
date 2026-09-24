@@ -202,6 +202,17 @@ JX_CARDS_JS = r"""
   // Controls and screen-reader-only labels ("More options" on the card menu) aren't part of the name
   const SKIP = 'button, [role="button"], [role="menu"], [role="menuitem"], [aria-haspopup], [aria-hidden="true"], svg, script, style';
   const JUNK = /^(more options|options|menu|download|view|open|details|see more|share|free|new)$/i;
+  // Page furniture, never an item's name
+  const GENERIC = /^(navigation|menu|profile|likes|lists|wishlist|inventory|marketplace|popular|leaderboard|product details|details|support info|my review)$/i;
+  // The site's menus, header, footer and sidebars: an item's card never reaches into them
+  const LANDMARKS = 'nav, aside, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+  // You, the signed-in user: the profile your "Profile" link points to is never an item's creator
+  const own = new Set();
+  for (const l of document.querySelectorAll('a[href]')) {
+    const t = (l.innerText || l.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+    if (!/^(profile|my profile|view profile|account|my account)$/i.test(t)) continue;
+    try { const segs = new URL(l.href).pathname.split('/').filter(Boolean); if (segs.length === 1) own.add(segs[0].toLowerCase()); } catch (e) {}
+  }
   const keyOf = a => { try { return new URL(a.href).pathname.replace(/\/$/, ''); } catch (e) { return null; } };
   const onJinxxy = u => /(^|\.)jinxxy\.com$/.test(u.hostname);
   const anchors = [...document.querySelectorAll('a[href]')].filter(a => {
@@ -241,9 +252,12 @@ JX_CARDS_JS = r"""
   for (const a of anchors) {
     let c = a;
     while (c.parentElement && c.parentElement !== document.body) {
-      const keys = new Set([...c.parentElement.querySelectorAll('a[href]')].filter(x => set.has(x)).map(keyOf));
-      if (keys.size > 1) break;
-      c = c.parentElement;
+      const p = c.parentElement;
+      if (p.matches('main, [role="main"]')) break;               // never past the page's content
+      if ([...p.querySelectorAll(LANDMARKS)].some(l => !c.contains(l))) break;  // never into menus or sidebars
+      const keys = new Set([...p.querySelectorAll('a[href]')].filter(x => set.has(x)).map(keyOf));
+      if (keys.size > 1) break;                                    // never into a second item
+      c = p;
     }
     // Creator: a link to their store page (jinxxy.com/<name>), else a "by ..." line
     let creator = '', creatorUrl = '';
@@ -252,15 +266,15 @@ JX_CARDS_JS = r"""
       let u; try { u = new URL(s.href); } catch (e) { continue; }
       const segs = u.pathname.split('/').filter(Boolean);
       if (onJinxxy(u) && (segs.length === 1 || (segs.length === 2 && segs[1] === 'products'))
-          && !RESERVED.has(segs[0].toLowerCase())) {
+          && !RESERVED.has(segs[0].toLowerCase()) && !own.has(segs[0].toLowerCase()) && !s.closest(LANDMARKS)) {
         creator = linesOf(s)[0] || segs[0]; creatorUrl = u.origin + '/' + segs[0]; break;
       }
     }
-    const lines = linesOf(c);
+    const lines = linesOf(c).filter(s => !GENERIC.test(s));
     const byLine = lines.find(s => /^by\s+/i.test(s));
     if (!creator && byLine) creator = byLine.replace(/^by\s+/i, '');
     const heading = [...c.querySelectorAll('h1, h2, h3, h4, h5, h6, [class*="title" i]')]
-      .map(h => linesOf(h)[0]).find(Boolean);
+      .map(h => linesOf(h)[0]).find(t => t && !GENERIC.test(t));
     const img = c.querySelector('img');
     const name = heading || lines.find(s => s !== byLine && s !== creator) || (img && img.alt) || '';
     if (!creator) creator = lines.find(s => s !== name && s !== byLine) || '';
@@ -610,6 +624,20 @@ class Library:
             self.data["stores"][store] = {"updated": now_iso(), "count": len(merged), "error": None, "source": "import"}
             self.save()
             return len(merged)
+
+    def clear_store(self, store: str, note: str) -> int:
+        """Forget a store's items and their cached pictures (after signing out, so the next account on this
+        computer never sees them). Downloaded files aren't touched. Returns how many items were removed."""
+        with self.lock:
+            gone = [i for i in self.data["items"] if i["store"] == store]
+            self.data["items"] = [i for i in self.data["items"] if i["store"] != store]
+            self.data["stores"][store] = {"updated": None, "count": 0, "error": note}
+            self.save()
+        for i in gone:
+            if i.get("thumbnail"):
+                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode()).hexdigest() + ".*"):
+                    cached.unlink(missing_ok=True)
+        return len(gone)
 
     def set_error(self, store: str, message: str) -> None:
         """Note a problem with a store without touching its items."""

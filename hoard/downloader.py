@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import email
+import hashlib
 import html
 import json
 import os
@@ -491,8 +492,25 @@ JX_HOSTS = ["jinxxy\\.com"]
 JX_INFO_JS = r"""
 () => {
   const meta = p => (document.querySelector(`meta[property="${p}"]`) || {}).content || '';
-  const h1 = document.querySelector('main h1') || document.querySelector('h1');
-  const name = ((h1 && h1.innerText) || meta('og:title') || document.title || '').trim();
+  const LANDMARKS = 'nav, aside, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
+  const GENERIC = /^(navigation|menu|profile|likes|lists|wishlist|inventory|marketplace|popular|leaderboard|product details|details|support info|my review|instructions from the creator.*)$/i;
+  // A heading's own words, without its buttons and icons (a back arrow, a menu)
+  const words = h => { const c = h.cloneNode(true); c.querySelectorAll('button, svg, [aria-hidden="true"]').forEach(x => x.remove());
+    return c.textContent.replace(/\s+/g, ' ').trim(); };
+  const bare = t => t.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  // The product's title: the first heading in the page's content that isn't page furniture
+  const h1 = [...document.querySelectorAll('main h1, main h2, h1, h2, h3')]
+    .find(h => !h.closest(LANDMARKS) && bare(words(h)) && !GENERIC.test(bare(words(h))));
+  const ogTitle = meta('og:title');
+  const name = ((h1 && words(h1)) || (ogTitle && !/^jinxxy$/i.test(ogTitle.trim()) ? ogTitle : '')
+    || (document.title || '').replace(/\s*[|\-\u2013]\s*jinxxy\s*$/i, '') || '').trim();
+  // You, the signed-in user: your "Profile" link is never the creator
+  const own = new Set();
+  for (const l of document.querySelectorAll('a[href]')) {
+    const t = (l.innerText || l.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+    if (!/^(profile|my profile|view profile|account|my account)$/i.test(t)) continue;
+    try { const segs = new URL(l.href).pathname.split('/').filter(Boolean); if (segs.length === 1) own.add(segs[0].toLowerCase()); } catch (e) {}
+  }
   const reserved = new Set(['my','login','signin','signup','register','market','marketplace','search','help',
     'about','terms','privacy','discover','cart','checkout','settings','creators','categories','tags','blog',
     'api','dashboard','products','inventory','support','faq','legal']);
@@ -502,12 +520,19 @@ JX_INFO_JS = r"""
     if (!/(^|\.)jinxxy\.com$/.test(u.hostname)) continue;
     const segs = u.pathname.split('/').filter(Boolean);
     if (!(segs.length === 1 || (segs.length === 2 && segs[1] === 'products'))) continue;
-    if (reserved.has(segs[0].toLowerCase())) continue;
+    if (reserved.has(segs[0].toLowerCase()) || own.has(segs[0].toLowerCase()) || a.closest(LANDMARKS)) continue;
     const after = h1 ? !!(h1.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) : true;
     links.push({ after, creator: (a.innerText || '').trim() || segs[0] });
   }
   const pick = links.find(l => l.after) || links[0];
-  return { name, creator: pick ? pick.creator : '', thumbnail: meta('og:image') };
+  const big = img => { const r = img.getBoundingClientRect(); return r.width >= 100 && r.height >= 100; };
+  const usable = img => !img.closest(LANDMARKS) && big(img) && (img.currentSrc || img.src || '').startsWith('http');
+  let thumbnail = '';
+  for (let box = h1; box && box !== document.body && !thumbnail; box = box.parentElement) {
+    const imgs = [...box.querySelectorAll('img')].filter(usable);
+    if (imgs.length) thumbnail = imgs[0].currentSrc || imgs[0].src;   // the nearest picture to the title
+  }
+  return { name, creator: pick ? pick.creator : '', thumbnail };
 }
 """
 
@@ -693,11 +718,32 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
     return got_any
 
 
+def forget_repeated_thumbnails(store_dir: Path) -> int:
+    """Delete product pictures that are byte-for-byte identical across different products: that's a site's
+    default banner, not a product. (Versions before 2.0.1 saved Jinxxy's.) Returns how many were removed."""
+    by_hash: dict = {}
+    for p in store_dir.glob("*/*/_thumbnail.*"):
+        if p.is_file() and not p.is_symlink():
+            by_hash.setdefault(hashlib.sha256(p.read_bytes()).hexdigest(), []).append(p)
+    removed = 0
+    for same in by_hash.values():
+        if len(same) > 1:
+            for p in same:
+                p.unlink()
+                removed += 1
+    return removed
+
+
 def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your Jinxxy inventory."""
     jcfg = cfg["jinxxy"]
     store_dir = root / "Jinxxy"
     man = Manifest(store_dir)
+    if store_dir.is_dir() and not args.dry_run:
+        banners = forget_repeated_thumbnails(store_dir)
+        if banners:
+            log(f"Jinxxy: removed {banners} copies of Jinxxy's default banner saved as product pictures; "
+                "the real pictures are saved this time.")
     delay = float(cfg.get("request_delay", 1.0))
 
     with _playwright()() as p:
@@ -868,82 +914,135 @@ def booth_filename(label: str, location: str, fallback: str) -> str:
     return safe_name(name, 150)
 
 
+BOOTH_CLICK_JS = """url => { const a = document.createElement('a'); a.href = url; a.rel = 'noreferrer';
+  document.body.appendChild(a); a.click(); a.remove(); }"""
+
+
+def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, timeout_s: float) -> tuple[str, int]:
+    """Download one Booth file through the signed-in browser, just as clicking its download button would.
+
+    Returns (file name, size). Raises NotLoggedIn when Booth answers with its sign-in page instead.
+    """
+    started: list = []
+
+    def on_download(download):
+        started.append(download)
+
+    page.on("download", on_download)
+    try:
+        page.evaluate(BOOTH_CLICK_JS, url)
+        deadline = time.time() + timeout_s
+        while not started and time.time() < deadline:
+            page.wait_for_timeout(250)
+            if "sign_in" in page.url or urlparse(page.url).path.startswith("/users"):
+                raise NotLoggedIn("Booth session expired")
+    finally:
+        page.remove_listener("download", on_download)
+    if not started:
+        raise RuntimeError("Booth didn't start the download")
+    dl = started[0]
+    fname = booth_filename(label, dl.suggested_filename or dl.url, f"file-{fid}")
+    target = folder / fname
+    folder.mkdir(parents=True, exist_ok=True)
+    part = no_link(target.with_name(target.name + ".part"))
+    dl.save_as(str(part))
+    if dl.failure():
+        raise RuntimeError(f"the download failed ({dl.failure()})")
+    os.replace(part, target)
+    return fname, target.stat().st_size
+
+
+def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeout_s: float) -> tuple[str, int]:
+    """Download one Booth file. The direct route is fastest and resumes where it stopped; if Booth turns it away
+    (sites often screen out anything that isn't a real browser), the rest of the run goes through the browser."""
+    if route["direct"]:
+        try:
+            loc = booth_file_location(sess, f["url"])
+            fname = booth_filename(f["name"], loc, f"file-{fid}")
+            return fname, http_download(sess, loc, folder / fname, desc=fname)
+        except (NotLoggedIn, RuntimeError, requests.RequestException) as e:
+            route["direct"] = False
+            log(f"    Booth turned the direct download away ({e}), so Hoard downloads through the browser instead.")
+    return booth_browser_download(page, f["url"], folder, f["name"], fid, timeout_s)
+
+
 def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your Booth library and gifts."""
     bcfg = cfg["booth"]
     store_dir = root / "Booth"
     man = Manifest(store_dir)
     delay = float(cfg.get("request_delay", 1.0))
+    timeout_s = float(bcfg.get("download_start_timeout", 90))
+    route = {"direct": True}
     with _playwright()() as p:
         ctx = launch_context(p, cfg, not args.headed, "booth")
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             items = booth_library(page, cfg)
             sess = session_from_context(ctx, "booth.pm")
+            log(f"Booth: {len(items)} items in your library")
+            try:
+                for b in items:
+                    name = (b["name"] or f"Booth item {b['id']}").strip()
+                    creator = (b["creator"] or "Unknown Creator").strip()
+                    if args.only and args.only.lower() not in f"{name} {creator}".lower():
+                        continue
+                    rec = man.record(b["id"], creator, name)
+                    is_new_asset, had_files = not rec["files"], bool(rec["files"])
+                    rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
+                    folder = rel_to_path(store_dir, rec["folder"])
+                    log(f"\n[Booth] {creator} / {name}")
+                    if not b["files"]:
+                        report.skipped.append(f"Booth: {name} - no files listed in your library")
+                        continue
+
+                    got_any = False
+                    for f in b["files"]:
+                        if not store_url(f["url"], ["booth.pm"]):
+                            report.skipped.append(f"Booth: {name} - a file link that isn't on booth.pm was ignored")
+                            continue
+                        m = re.search(r"/downloadables/(\d+)", f["url"])
+                        fid = m.group(1) if m else f["url"]
+                        old = rec["files"].get(fid)
+                        if old and rel_to_path(folder, old["path"]).exists():
+                            continue
+                        guess = booth_filename(f["name"], "", f"file-{fid}")
+                        replaces = next((k for k, v in rec["files"].items() if v.get("path") == guess), None)
+                        if not old and not replaces and (folder / guess).exists():  # already on disk, e.g. downloaded by hand
+                            rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
+                            continue
+                        if args.dry_run:
+                            log(f"    would download: {guess}")
+                            continue
+                        on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
+                        try:
+                            fname, got = booth_fetch(page, sess, f, folder, fid, route, timeout_s)
+                            prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
+                            is_update = had_files or prev is not None or fname in on_disk
+                        except NotLoggedIn:
+                            raise
+                        except Exception as e:
+                            report.failed.append(f"Booth: {creator} / {name} / {f['name']} - {e}")
+                            continue
+                        if prev:
+                            rec["files"].pop(prev, None)
+                        rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
+                        log(f"    {'updated' if is_update else 'saved'}: {fname}")
+                        (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
+                        got_any = True
+                        man.save()
+                        time.sleep(delay)
+
+                    if got_any and is_new_asset:
+                        report.new_assets.append(f"Booth: {creator} / {name}")
+                    if bcfg.get("save_thumbnails", True) and not args.dry_run:
+                        save_thumbnail(b["thumbnail"], folder, "https://booth.pm/")
+                    man.save()
+            finally:
+                sess.cookies.clear()  # the copied sign-in only lives for this sync
+                sess.close()
         finally:
             ctx.close()
-    log(f"Booth: {len(items)} items in your library")
-
-    for b in items:
-        name = (b["name"] or f"Booth item {b['id']}").strip()
-        creator = (b["creator"] or "Unknown Creator").strip()
-        if args.only and args.only.lower() not in f"{name} {creator}".lower():
-            continue
-        rec = man.record(b["id"], creator, name)
-        is_new_asset, had_files = not rec["files"], bool(rec["files"])
-        rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
-        folder = rel_to_path(store_dir, rec["folder"])
-        log(f"\n[Booth] {creator} / {name}")
-        if not b["files"]:
-            report.skipped.append(f"Booth: {name} - no files listed in your library")
-            continue
-
-        got_any = False
-        for f in b["files"]:
-            if not store_url(f["url"], ["booth.pm"]):
-                report.skipped.append(f"Booth: {name} - a file link that isn't on booth.pm was ignored")
-                continue
-            m = re.search(r"/downloadables/(\d+)", f["url"])
-            fid = m.group(1) if m else f["url"]
-            old = rec["files"].get(fid)
-            if old and rel_to_path(folder, old["path"]).exists():
-                continue
-            guess = booth_filename(f["name"], "", f"file-{fid}")
-            replaces = next((k for k, v in rec["files"].items() if v.get("path") == guess), None)
-            if not old and not replaces and (folder / guess).exists():  # already on disk, e.g. downloaded by hand
-                rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
-                continue
-            if args.dry_run:
-                log(f"    would download: {guess}")
-                continue
-            try:
-                loc = booth_file_location(sess, f["url"])
-                fname = booth_filename(f["name"], loc, f"file-{fid}")
-                target = folder / fname
-                prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
-                is_update = had_files or prev is not None or target.exists()
-                got = http_download(sess, loc, target, desc=fname)
-            except NotLoggedIn:
-                raise
-            except Exception as e:
-                report.failed.append(f"Booth: {creator} / {name} / {f['name']} - {e}")
-                continue
-            if prev:
-                rec["files"].pop(prev, None)
-            rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
-            log(f"    {'updated' if is_update else 'saved'}: {fname}")
-            (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
-            got_any = True
-            man.save()
-            time.sleep(delay)
-
-        if got_any and is_new_asset:
-            report.new_assets.append(f"Booth: {creator} / {name}")
-        if bcfg.get("save_thumbnails", True) and not args.dry_run:
-            save_thumbnail(b["thumbnail"], folder, "https://booth.pm/")
-        man.save()
-    sess.cookies.clear()  # the copied sign-in only lives for this sync
-    sess.close()
 
 
 # ----------------------------------------------------------------------------- Payhip

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.0.1
+
+Fixes for new testers' reports.
+
+- **Jinxxy, new accounts:** items showed as "Navigation", by your own account name. With only one item in
+  the inventory, the reader took the whole page as that item's card, sidebar and all. Cards now stop
+  before the page's menus and sidebars, your own "Profile" link is never read as a creator, and page
+  headings such as "Navigation" or "Product Details" are never read as names.
+- **Jinxxy, pictures:** downloaded items got Jinxxy's default site banner as their picture, because it
+  came from the page's share image. Hoard now takes the product's own picture beside its title. Copies of
+  the banner saved by earlier versions are removed on the next sync and replaced with the real pictures.
+- **Booth downloads:** when Booth turns away Hoard's direct download, as sites often do with anything
+  that isn't a real browser, Hoard now downloads through the signed-in browser instead, as if you'd
+  clicked the download button. The direct route is still tried first, since it's faster and resumes
+  where it stopped.
+- **Signing out** of a store now also removes that store's items and their cached pictures from your
+  library, so whoever signs in next never sees them. Your downloaded files stay where they are.
+- Store readers are now tested in a real browser, against pages copied from the layouts that broke, on
+  every change.
+
 ## 2.0.0
 
 Hoard and Hoard Downloader are now one app, and nothing needs a command prompt or a settings file.

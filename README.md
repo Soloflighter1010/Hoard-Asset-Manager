@@ -67,7 +67,8 @@ In plain words, here's what protects you. [SECURITY.md](SECURITY.md) has the tec
   Keychain or your Linux keyring, so copying Hoard's files to another computer doesn't give anyone access.
 - **Each store is kept separate.** Your Booth sign-in and your Gumroad sign-in never mix.
 - **Signing out really signs you out.** Hoard asks the store to end the session, deletes what it saved,
-  checks nothing is left behind, and tells you what it did.
+  checks nothing is left behind, and tells you what it did. That store's items leave your library too, so
+  the next person to sign in never sees what you bought. Your downloaded files stay.
 
 **Your computer**
 - **Only you can see Hoard's pages.** They only open on the computer running Hoard. Sharing them with
@@ -131,7 +132,8 @@ store:
   KWallet. Without one, Hoard won't save sign-ins. On a computer without a desktop, such as a NAS, you
   can allow it with `"allow_unprotected_signins": true` in Hoard's `config.json`; they're then protected only by
   being readable by your user account alone.
-- **Signing out:** from **Stores**, for one store or all of them.
+- **Signing out:** from **Stores**, for one store or all of them. That store's items leave your library
+  (your downloaded files stay), so sharing a computer doesn't mix two people's purchases.
 - **Older versions' sign-ins** (one shared folder, or `.browser-profile` next to the program) are split
   into one folder per store automatically on first run, and the old copies removed.
 

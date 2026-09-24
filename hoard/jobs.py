@@ -102,8 +102,12 @@ class Jobs:
                 label = STORES[store]["label"]
                 self._set(task="logout", store=store, message=f"Signing out of {label}")
                 done = sign_out(p, self.cfg, store)
-                if store in self.lib.data["stores"]:  # what was done, shown on the store's row in Stores
-                    self.lib.set_error(store, "Signed out. " + done.split(": ", 1)[-1])
+                # The list of what that account owns goes too, so whoever signs in next never sees it.
+                # Downloaded files stay where they are.
+                forgot = self.lib.clear_store(store, "Signed out. " + done.split(": ", 1)[-1])
+                if forgot:
+                    self.lib.set_error(store, f"Signed out. {done.split(': ', 1)[-1]} Removed {forgot} items from the "
+                                              "library; your downloaded files are still on disk.")
         if stores[0] == "all":
             root = signins_root(self.cfg)
             for extra in (root.parent / (root.name + ".old"), LEGACY_PROFILE):
