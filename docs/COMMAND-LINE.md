@@ -9,14 +9,14 @@ with `./run.sh`. Without a command, Hoard opens.
 | `login <store>` | Sign in to a store (`booth`, `gumroad`, `jinxxy` or `payhip`) in a browser window |
 | `logout <store>` | Sign out of a store in Hoard, or of every store with `all` |
 | `refresh [--store <store>]` | Read what you own from the stores (repeat `--store` for several; default: all) |
-| `import <file> [--store <store>]` | Add a library page you saved from your own browser (`.mhtml` or `.html`) |
+| `import <file> [--store <store>] [--trust-shop <address>]` | Add a library page you saved from your own browser (`.mhtml` or `.html`). A Payhip shop that isn't in your list is only added with `--trust-shop` and its exact address |
 | `sync` | Download everything new or changed (options below) |
 | `tags` | Rebuild `catalog.json` and `tags.json` from what's downloaded |
 | `verify` | Check whether any data file was changed outside Hoard, then rebuild the catalog files. Exits with 1 if anything was changed |
 | `migrate <folder>` | Bring over the library list and downloads folder from Hoard 1.x |
 | `install-browser` | Download Hoard's own browser (only needed without Microsoft Edge; the setup assistant does this too) |
-| `debug <store>` | Save a store's library page and what Hoard read from it, for troubleshooting |
-| `probe jinxxy` | Record what the Jinxxy site loads, for troubleshooting |
+| `debug <store> [--raw]` | Save a store's library page and a summary of what Hoard read from it, for troubleshooting. Personal details are removed; `--raw` keeps everything, with a screenshot |
+| `probe jinxxy [--raw]` | Record what the Jinxxy site loads, for troubleshooting (scrubbed the same way) |
 
 `sync` options:
 
@@ -41,7 +41,9 @@ its access key would then cross your network, that needs one of:
 - **An encrypted network:** if your devices reach this computer over a VPN such as Tailscale or WireGuard,
   add `--plain-http`.
 
-Other devices then open the address Hoard prints, which includes an access key. Signing in, refreshing,
+Other devices then open the address Hoard prints, which includes an access key. The key is new every
+time Hoard starts. It stops people who don't have it, but it isn't encryption: that's why HTTPS or an
+encrypted network is required. Signing in, refreshing,
 downloading, signing out, changing tags or settings and opening folders still only work on the computer
 running Hoard. `--port` picks the port (by default Hoard uses any free one), and `--no-open` starts Hoard
 without opening its page.
@@ -55,6 +57,7 @@ macOS, `~/.local/share/Hoard` on Linux):
 | Setting | Default | Meaning |
 |---|---|---|
 | `allow_unprotected_signins` | `false` | Linux without a keyring only: keep sign-ins protected by folder permissions alone |
+| `profile_dir` with `advanced_signin_location` | `""`, `false` | Keep sign-ins somewhere other than Hoard's private folder. Used only when `advanced_signin_location` is `true`, never on a network share; how well they're protected then depends on that drive |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `payhip.shops` | `[]` | The Payhip shops you've bought from (also in Settings). Payhip keeps purchases per shop |
 | `booth.include_free` | `true` | Also read Booth's free downloads (also in Settings) |

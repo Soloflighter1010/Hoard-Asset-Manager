@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import socket
+import stat
 import ssl
 import sys
 import tempfile
@@ -524,6 +525,185 @@ def rel_to_path(base: Path, rel: str) -> Path:
     if target != inside and inside not in target.parents:
         raise UnsafePath(f"refused {rel!r}: it leads outside {base}")
     return path
+
+
+# ----------------------------------------------------------------------------- opening files without being redirected
+#
+# Checking "is this a link?" and then opening the path leaves a gap in which another process with write access to
+# the folder could swap in a link. These functions make the decision and the opening one step (POSIX: O_NOFOLLOW,
+# O_EXCL, and folder handles), and on Windows, where os.open can't refuse links, confirm afterwards where the open
+# file really is (GetFinalPathNameByHandle) and refuse it if that isn't the expected place.
+
+_REPARSE = 0x400   # FILE_ATTRIBUTE_REPARSE_POINT: Windows links and junctions
+
+
+def _is_link(st: os.stat_result) -> bool:
+    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & _REPARSE)
+
+
+def _final_path(fd: int) -> str | None:
+    """Windows: the real, fully resolved path of an open file. None elsewhere, or if it can't be found."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+    import msvcrt
+    buf = ctypes.create_unicode_buffer(32768)
+    n = ctypes.windll.kernel32.GetFinalPathNameByHandleW(msvcrt.get_osfhandle(fd), buf, 32768, 0)
+    if not n:
+        return None
+    path = buf.value
+    if path.startswith("\\\\?\\UNC\\"):      # \\?\UNC\server\share\... -> \\server\share\...
+        return "\\\\" + path[8:]
+    return path.removeprefix("\\\\?\\")
+
+
+def _same_place(a: str, b: Path) -> bool:
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(str(b)))
+
+
+def open_part(path: Path, resume: bool):
+    """Open a download's .part file for writing: a fresh file created exclusively, or (resume) the existing one.
+    Never follows a link. Returns (file object, identity), identity being what move_into_place checks."""
+    base = os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+    if resume:
+        flags = base | os.O_APPEND
+    else:
+        try:
+            os.unlink(path)     # whatever is there, a link included, is removed, never followed
+        except FileNotFoundError:
+            pass
+        flags = base | os.O_CREAT | os.O_EXCL
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as e:
+        raise UnsafePath(f"{path.name} couldn't be opened safely ({e.strerror or e})") from None
+    try:
+        st, here = os.fstat(fd), os.stat(path, follow_symlinks=False)
+        real = _final_path(fd)
+        if (not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or _is_link(here)
+                or (st.st_dev, st.st_ino) != (here.st_dev, here.st_ino)
+                or (real is not None and not _same_place(real, path.resolve()))):
+            raise UnsafePath(f"{path.name} isn't a plain file of its own, so it wasn't written")
+    except BaseException:
+        os.close(fd)
+        raise
+    return os.fdopen(fd, "ab" if resume else "wb"), (st.st_dev, st.st_ino)
+
+
+def move_into_place(part: Path, dest: Path, identity: tuple) -> None:
+    """Rename a finished .part file to its final name, provided it's still the very file that was written."""
+    here = os.stat(part, follow_symlinks=False)
+    if _is_link(here) or (here.st_dev, here.st_ino) != identity:
+        raise UnsafePath(f"{part.name} was replaced while downloading, so it wasn't used")
+    os.replace(part, dest)
+    now = os.stat(dest, follow_symlinks=False)
+    if _is_link(now) or (now.st_dev, now.st_ino) != identity:
+        os.unlink(dest)   # something was swapped in between the check and the rename: remove it, never follow it
+        raise UnsafePath(f"{dest.name} was replaced while being saved, so it was removed")
+
+
+def open_under(root: Path, rel: str):
+    """Open a plain file inside root for reading, without following a link anywhere below root.
+    Returns a binary file object, or raises UnsafePath."""
+    parts = [p for p in rel.split("/") if p]
+    if not parts or not valid_rel(rel):
+        raise UnsafePath("not a plain relative path")
+    if os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY"):
+        folder = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for name in parts[:-1]:
+                inner = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=folder)
+                os.close(folder)
+                folder = inner
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=folder)
+        except OSError:
+            raise UnsafePath("not a plain file inside the folder") from None
+        finally:
+            os.close(folder)
+    else:   # Windows: open, then confirm the file really is where it should be
+        path = Path(root).resolve().joinpath(*parts)
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        except OSError:
+            raise UnsafePath("not a plain file inside the folder") from None
+        real = _final_path(fd)
+        if real is None or not _same_place(real, path):
+            os.close(fd)
+            raise UnsafePath("that file is somewhere else than it appears")
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise UnsafePath("not a plain file")
+    return os.fdopen(fd, "rb")
+
+
+# ----------------------------------------------------------------------------- pages you saved
+
+_ACTIVE = [
+    re.compile(r"<script\b[^>]*>.*?</script\s*>", re.S | re.I),
+    re.compile(r"<(iframe|frame|object|embed)\b[^>]*>.*?</\1\s*>", re.S | re.I),
+    re.compile(r"<(iframe|frame|object|embed|base|meta\s+http-equiv)\b[^>]*>", re.I),
+]
+_HANDLERS = re.compile(r"""\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I)
+_JS_LINKS = re.compile(r"""(\s(?:href|src|action|formaction|xlink:href)\s*=\s*["']?)\s*javascript:""", re.I)
+
+
+def inert_html(page_html: str) -> str:
+    """A saved page with everything that could run removed: scripts, frames and plugins, inline event handlers
+    (onerror=, onload=, ...), and javascript: links. Imported pages are also opened with scripts switched off;
+    this is the second layer."""
+    for pattern in _ACTIVE:
+        page_html = pattern.sub("", page_html)
+    page_html = _HANDLERS.sub("", page_html)
+    return _JS_LINKS.sub(r"\1about:blank#", page_html)
+
+
+def offline_page(browser):
+    """A page for reading a saved file: scripts off, and no network at all."""
+    page = browser.new_context(java_script_enabled=False, service_workers="block").new_page()
+    page.route("**/*", lambda route: route.abort())
+    return page
+
+
+# ----------------------------------------------------------------------------- diagnostics
+
+_SCRUB = [
+    (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "[email]"),
+    (re.compile(r'(?i)(<input\b[^>]*?\bvalue=)(["\'])[^"\']*\2'), r"\1\2[value]\2"),     # form values: keys, codes
+    (re.compile(r'(?i)(<meta\b[^>]*?name=["\']csrf[^"\']*["\'][^>]*?content=)(["\'])[^"\']*\2'), r"\1\2[token]\2"),
+    (re.compile(r'(?i)([?&][\w.%-]+=)[^&"\'\s<>#]+'), r"\1[value]"),                    # every URL query value
+    (re.compile(r'(?i)(data-[\w-]*(?:key|token|id|encrypted)[\w-]*=)(["\'])[^"\']*\2'), r"\1\2[value]\2"),
+    (re.compile(r"\b[A-Za-z0-9_-]{32,}\b"), "[token]"),                                 # long opaque tokens
+]
+
+
+def scrub(text: str) -> str:
+    """A page with the personal and secret parts replaced: email addresses, form values (license keys, codes),
+    security tokens, every URL query value (signed download addresses) and long opaque tokens. The page's
+    structure, which is what troubleshooting needs, is kept."""
+    for pattern, replacement in _SCRUB:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def save_browser_download(dl, folder: Path, fname: str) -> Path:
+    """Save a download the browser made, into folder/fname. The browser writes it into a new private folder first
+    (created by Hoard with only-you permissions), and only that very file is then moved into place."""
+    folder.mkdir(parents=True, exist_ok=True)
+    private = Path(tempfile.mkdtemp(prefix=".hoard-", dir=folder))
+    try:
+        staged = private / "download"
+        dl.save_as(str(staged))
+        if dl.failure():
+            raise RuntimeError(f"the download failed ({dl.failure()})")
+        here = os.stat(staged, follow_symlinks=False)
+        if _is_link(here) or not stat.S_ISREG(here.st_mode):
+            raise UnsafePath(f"{fname} wasn't saved as a plain file")
+        move_into_place(staged, folder / fname, (here.st_dev, here.st_ino))
+        return folder / fname
+    finally:
+        for leftover in private.glob("*"):
+            leftover.unlink(missing_ok=True)
+        private.rmdir()
 
 
 def no_link(path: Path) -> Path:

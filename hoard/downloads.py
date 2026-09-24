@@ -1,7 +1,6 @@
 """The downloads view: what's on disk, with files, sizes, images and matches across stores."""
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
@@ -10,7 +9,7 @@ import unicodedata
 from pathlib import Path
 
 from .paths import HERE
-from .safety import safe_join, store_link
+from .safety import DataFileError, read_json_file, safe_join, store_link
 from .tags import TagStore, tag_key, tag_overview
 
 
@@ -65,8 +64,11 @@ def library_status(root: Path) -> dict:
         count = 0
         if m.exists():
             try:
-                count = sum(1 for a in json.loads(m.read_text("utf-8")).get("assets", {}).values() if a.get("files"))
-            except (ValueError, OSError):
+                data = read_json_file(m, 64 * 1024 * 1024)   # the same size-limited reader as everywhere else
+                assets = data.get("assets") if isinstance(data, dict) else None
+                count = sum(1 for a in assets.values() if isinstance(a, dict) and isinstance(a.get("files"), dict)
+                            and a["files"]) if isinstance(assets, dict) else -1
+            except (DataFileError, ValueError, OSError, RecursionError):
                 count = -1
         stores[store] = {"manifest": str(m), "found": m.exists(), "assets": count}
     def subdirs(d: Path) -> list[Path]:

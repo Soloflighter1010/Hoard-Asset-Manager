@@ -18,14 +18,14 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
 from .browser import signin_protection, signins_root
-from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
+from .config import DEFAULT_CONFIG, NewShop, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog
 from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
 from .jobs import Jobs
 from .library import IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_page
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
-                     safe_join, store_sites)
+                     open_under, safe_join, store_sites, UnsafePath)
 from .setup import migrate_from, setup_status
 from .tags import TagStore, tag_overview
 
@@ -102,13 +102,32 @@ def apply_settings(cfg: dict, body: dict) -> dict:
     return change
 
 
+MAX_SERVED_IMAGE = 30 * 1024 * 1024
+MAX_CONNECTIONS = 64      # at once; more are closed straight away, so held-open connections can't pile up
+
+
 class AppServer(TLSServerMixin, ThreadingHTTPServer):
     """Holds everything the pages work with: settings, your library, the downloads index and the job runner."""
     daemon_threads = True
+    request_queue_size = 32
+
+    def process_request(self, request, client_address):
+        """Serve each connection on its own thread, but never more than MAX_CONNECTIONS at once."""
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
 
     def __init__(self, addr, cfg: dict, lan: bool, config_path: Path | None = None):
         """Start listening; with lan=True, also create the access key other devices need."""
         super().__init__(addr, Handler)
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
         self.key = secrets.token_urlsafe(18) if lan else None
         self.lib = Library(LIBRARY_FILE)
@@ -140,6 +159,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
+    timeout = 30   # seconds a connection may sit idle or trickle a request before it's closed
     """Answers the pages' requests."""
     server: AppServer
 
@@ -219,11 +239,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
         if path.startswith("/files/"):
-            p = safe_join(root_dir(srv.cfg), unquote(path[len("/files/"):]))
-            if not p or p.suffix.lower() not in IMAGE_EXT or not p.is_file():
+            rel = unquote(path[len("/files/"):])
+            if Path(rel).suffix.lower() not in IMAGE_EXT or not safe_join(root_dir(srv.cfg), rel):
                 return self._send(404, b"Not found", "text/plain")
-            ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-            return self._send(200, p.read_bytes(), ctype, {"Cache-Control": "max-age=3600"})
+            try:   # opened without following any link below the downloads folder; what's served is what was opened
+                with open_under(root_dir(srv.cfg), rel) as fh:
+                    data = fh.read(MAX_SERVED_IMAGE + 1)
+            except (UnsafePath, OSError):
+                return self._send(404, b"Not found", "text/plain")
+            if len(data) > MAX_SERVED_IMAGE:
+                return self._send(404, b"Not found", "text/plain")
+            ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"
+            return self._send(200, data, ctype, {"Cache-Control": "max-age=3600"})
         self._send(404, b"Not found", "text/plain")
 
     # ---- acting
@@ -279,7 +306,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/import":
             try:
                 store, items = import_saved_page(srv.cfg, body.get("store"), str(body.get("filename") or ""),
-                                                 str(body.get("content") or ""))
+                                                 str(body.get("content") or ""), trust_shop=body.get("trust_shop"))
+            except NewShop as e:   # the page names a shop you haven't added: ask first, showing its exact address
+                return self._json({"error": str(e), "confirm_shop": e.shop}, 409)
             except (ValueError, RuntimeError) as e:
                 return self._json({"error": f"Couldn't import: {e}"}, 422)
             total = srv.lib.merge_store(store, items)

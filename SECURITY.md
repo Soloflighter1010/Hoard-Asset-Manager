@@ -63,7 +63,31 @@ It can't fully protect against:
   addresses, and the connection goes to exactly the address that was checked, so a name that changes
   its answer (DNS rebinding) can't redirect it to your network. Only ordinary raster images (JPEG, PNG,
   WebP, GIF, AVIF) are kept; SVG never is.
-- Imported pages are read in a browser with scripts removed and all network access blocked.
+- Imported pages are read in a browser with scripts switched off and all network access blocked, after
+  scripts, frames, inline event handlers (`onerror=` and the like) and `javascript:` links are removed.
+- A Payhip shop named inside an imported page is only added to your shops after you confirm its exact
+  address. Shop addresses must be plain domain names: no IP addresses, ports, user names, or
+  internationalised (`xn--`) names that can imitate another.
+
+**Downloads and store requests**
+- Every request Hoard makes for a store's pages, data or files goes through one path (`hoard/egress.py`).
+  Redirects are followed one hop at a time, and every hop must be https to a public internet address:
+  never your computer, your network, link-local or reserved addresses. The connection goes to exactly
+  the address that was checked. System proxies and `.netrc` logins are never used.
+- A store's cookies are only ever sent to that store's own sites. A file host it redirects to (a CDN, a
+  storage bucket) gets a separate session with no cookies at all. A store page or API that redirects
+  off the store's own sites is refused.
+- Download files are created exclusively and opened without following links. The finished file is
+  moved into place only if it is still the very file that was written; anything swapped in meanwhile is
+  refused. Downloads the store window makes are saved into a new private folder first.
+- Pictures from your downloads folder are opened one folder at a time without following links (on
+  Windows, by checking where the opened file really is), and what's served is exactly what was opened.
+- Two products or files whose names clean up alike never share a folder or overwrite each other.
+
+**Troubleshooting files**
+- `debug` and `probe` save pages with email addresses, form values (license keys, codes), tokens and
+  signed links removed, a summary of what was found instead of your purchases, and no screenshots.
+  `--raw` saves everything as it is, marked as sensitive.
 
 **Files and data**
 - File and folder names from stores are cleaned before anything is saved, including invisible
