@@ -18,14 +18,14 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
 from .browser import signin_protection, signins_root
-from .config import DEFAULT_CONFIG, deep_merge, root_dir, save_config
+from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog
 from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
 from .jobs import Jobs
 from .library import IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_page
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
-                     safe_join)
+                     safe_join, store_sites)
 from .tags import TagStore, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
@@ -45,9 +45,10 @@ def public_settings(cfg: dict) -> dict:
     return {
         "root": str(root_dir(cfg)), "default_root": str(default_downloads()),
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
-        "request_delay": cfg.get("request_delay", 1.0),
+        "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "stores": {s: {"enabled": bool(cfg[s].get("enabled", True)),
-                       **({"include_gifts": bool(cfg[s].get("include_gifts", True))} if s == "booth" else {}),
+                       **({"include_gifts": bool(cfg[s].get("include_gifts", True)),
+                           "include_free": bool(cfg[s].get("include_free", True))} if s == "booth" else {}),
                        **({"include_archived": bool(cfg[s].get("include_archived", True))} if s == "gumroad" else {})}
                    for s in STORES},
     }
@@ -79,12 +80,23 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if not 0.3 <= delay <= 10:
             raise ValueError("Keep the delay between page loads between 0.3 and 10 seconds.")
         change["request_delay"] = delay
+    if "payhip_shops" in body:
+        given = body["payhip_shops"] if isinstance(body["payhip_shops"], list) else []
+        shops, bad = [], []
+        for value in given[:200]:
+            if str(value or "").strip():
+                shop = clean_payhip_shop(value)
+                (shops.append(shop) if shop else bad.append(str(value)[:80]))
+        if bad:
+            raise ValueError("These aren't Payhip shop addresses: " + ", ".join(bad) +
+                             ". Use the shop's own address, such as myshop.store or payhip.com/MyShop.")
+        change.setdefault("payhip", {})["shops"] = list(dict.fromkeys(shops))
     for store, opts in (body.get("stores") or {}).items():
         if store not in STORES or not isinstance(opts, dict):
             raise ValueError("Unknown store.")
-        allowed = {"enabled"} | ({"include_gifts"} if store == "booth" else set()) | \
+        allowed = {"enabled"} | ({"include_gifts", "include_free"} if store == "booth" else set()) | \
                   ({"include_archived"} if store == "gumroad" else set())
-        change[store] = {k: bool(v) for k, v in opts.items() if k in allowed}
+        change.setdefault(store, {}).update({k: bool(v) for k, v in opts.items() if k in allowed})
     return change
 
 
@@ -180,14 +192,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"items": items, "tagset": tag_overview(tagdata, items), "stores": data["stores"],
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
-                               "version": __version__})
+                               "store_sites": store_sites(), "version": __version__})
         if path == "/api/status":
             with srv.lib.lock:
                 stores = json.loads(json.dumps(srv.lib.data["stores"]))
             return self._json({"job": srv.jobs.state, "stores": stores})
         if path == "/api/assets":
             return self._json({**with_tags(srv.index(rescan="rescan" in parse_qs(u.query))), "version": __version__,
-                               "job": srv.jobs.state})
+                               "job": srv.jobs.state, "store_sites": store_sites()})
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path.startswith("/fonts/"):
@@ -246,6 +258,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
             deep_merge(srv.cfg, change)
+            apply_store_sites(srv.cfg)   # added or removed Payhip shops count (or stop counting) straight away
             save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
             srv.forget_index()
             return self._json({"ok": True, "settings": public_settings(srv.cfg)})
@@ -264,6 +277,8 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, RuntimeError) as e:
                 return self._json({"error": f"Couldn't import: {e}"}, 422)
             total = srv.lib.merge_store(store, items)
+            if store == "payhip":   # importing a shop's page adds that shop to your list
+                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
             if srv.cfg.get("offline_images", True):
                 threading.Thread(target=cache_images, args=(srv.lib, [i["key"] for i in items], lambda m: None),
                                  daemon=True).start()

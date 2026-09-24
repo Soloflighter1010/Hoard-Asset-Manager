@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.2
+
+Fixes from real Booth and Payhip library pages.
+
+- **Booth downloads:** nothing downloaded, because Booth now draws its download buttons with a script. The
+  addresses sit in placeholders, not links, so every item looked like it had no files. Hoard now reads
+  them; the "Open in Browser" and Booth Library Manager variants of each file are skipped.
+- **Booth's free downloads** are now included, with a switch in Settings.
+- **Payhip shops:** Payhip keeps your purchases in each shop you bought from, on the shop's own address,
+  with no single library. Add your shops in Settings under **Payhip shops**, and Hoard reads each one's
+  library page and downloads from it. Signing in to Payhip opens a tab per shop. Importing a shop's
+  saved page adds that shop for you.
+- Only the shops you list count as Payhip's own sites, for links and downloads alike. Any other address
+  is still refused.
+
 ## 2.0.1
 
 Fixes for new testers' reports.

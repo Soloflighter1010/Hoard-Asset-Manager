@@ -90,5 +90,81 @@ class Jinxxy(unittest.TestCase):
         self.assertTrue(info["thumbnail"].endswith("/paw.png"), info["thumbnail"])
 
 
+# Booth's library, as served in September 2026: each file's buttons are drawn from placeholders with the address in
+# data-href. "Download" is the file; "Open in Browser" (?browse=1) and "Other Downloads" (the Library Manager app)
+# are other routes to the same file.
+def booth_item(item_id, files):
+    rows = "".join(
+        f'<div class="mt-16"><div class="min-w-0"><div class="text-14">{name}</div></div><div class="flex gap-8">'
+        + (f'<div class="js-download-button" data-href="https://booth.pm/downloadables/{fid}?browse=1" data-label="Open in Browser" data-test="browsable"></div>' if browse else "")
+        + f'<div class="js-download-button" data-href="https://booth.pm/downloadables/{fid}" data-label="Download" data-test="downloadable"></div>'
+        f'<div class="js-download-button" data-label="Other Downloads" data-test="other-downloads-button" data-dropdown-items=\'[{{"deeplinkDownloadableUrl":"https://booth.pm/downloadables/{fid}/deeplink?client=booth-library-manager"}}]\'></div>'
+        '</div></div>' for fid, name, browse in files)
+    return (f'<div class="bg-white p-16"><div class="flex"><a href="https://booth.pm/en/items/{item_id}"><img src="https://booth.pximg.net/{item_id}.jpg" width="80" height="80"></a>'
+            f'<div><a href="https://booth.pm/en/items/{item_id}"><div class="font-bold">Item {item_id}</div></a>'
+            f'<a href="https://shop{item_id}.booth.pm/"><div class="text-14 text-text-gray600">Shop {item_id}</div></a></div></div>{rows}</div>')
+
+
+BOOTH_2026 = ('<html><head><meta charset="utf-8"></head><body><main>'
+              + booth_item(111, [(501, "Avatar.unitypackage", False), (502, "Manual.pdf", True)])
+              + booth_item(222, [(601, "Textures.zip", False)]) + '</main></body></html>')
+
+# A Payhip shop's own library page (September 2026), on the shop's own domain.
+PAYHIP_SHOP = ('<html><head><meta charset="utf-8"><title>Dashboard - Test Shop</title></head><body>'
+               '<header><a class="logo-link" href="https://testshop.store/b-account">Test Shop</a>'
+               '<a href="https://testshop.store/b-account/settings">Settings</a></header><h1>Your Products</h1><div class="grid-list">'
+               + "".join(f'<div class="grid-item"><div class="product-card-wrapper"><div class="card__media"><img src="https://images.payhip.com/{c}.gif" width="200" height="200"></div>'
+                         f'<h4 class="card__heading product-name"><a href="https://testshop.store/b-account/digital/{c}">Product {c}</a></h4>'
+                         f'<div class="card-meta">September 11, 2026</div></div></div>' for c in ("aB1", "cD2"))
+               + '</div></body></html>')
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class BoothAndPayhip(unittest.TestCase):
+
+    def page_at(self, url, html):
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        browser = pw.chromium.launch()
+        self.addCleanup(browser.close)
+        pg = browser.new_page()
+        pg.route("**/*", lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+                 if r.request.url.split("?")[0].rstrip("/") == url else r.abort())
+        pg.goto(url)
+        return pg
+
+    def test_booth_files_come_from_the_download_placeholders(self):
+        """With Booth's 2026 markup the old reader found every item but no files, so nothing could download."""
+        pg = self.page_at("https://accounts.booth.pm/library", BOOTH_2026)
+        for js in (library.BOOTH_JS, downloader.BOOTH_JS):
+            items = {i["id"]: i for i in pg.evaluate(js)}
+            self.assertEqual(sorted(items), ["111", "222"])
+            self.assertEqual([(f["name"], f["url"]) for f in items["111"]["files"]],
+                             [("Avatar.unitypackage", "https://booth.pm/downloadables/501"),
+                              ("Manual.pdf", "https://booth.pm/downloadables/502")])  # no preview or app duplicates
+            self.assertEqual(len(items["222"]["files"]), 1)
+
+    def test_payhip_shop_library(self):
+        pg = self.page_at("https://testshop.store/b-account", PAYHIP_SHOP)
+        cards = pg.evaluate(library.PAYHIP_SHOP_JS)["cards"]
+        self.assertEqual([(c["name"], c["creator"], c["url"]) for c in cards],
+                         [("Product aB1", "Test Shop", "https://testshop.store/b-account/digital/aB1"),
+                          ("Product cD2", "Test Shop", "https://testshop.store/b-account/digital/cD2")])
+        self.assertEqual(cards[0]["creator_url"], "https://testshop.store")
+
+    def test_importing_a_shop_page_adds_the_shop(self):
+        mhtml = ("From: <Saved by Blink>\r\nSnapshot-Content-Location: https://testshop.store/b-account\r\nSubject: Dashboard\r\n"
+                 "MIME-Version: 1.0\r\nContent-Type: multipart/related; type=\"text/html\"; boundary=\"B\"\r\n\r\n--B\r\n"
+                 "Content-Type: text/html\r\nContent-Location: https://testshop.store/b-account\r\n\r\n" + PAYHIP_SHOP + "\r\n--B--\r\n")
+        cfg = config.load_config()
+        cfg["payhip"]["shops"] = []
+        config.apply_store_sites(cfg)
+        store, items = library.import_saved_page(cfg, "auto", "Dashboard.mhtml", mhtml)
+        self.assertEqual(store, "payhip")
+        self.assertEqual(cfg["payhip"]["shops"], ["https://testshop.store"])
+        self.assertEqual([i["url"] for i in items], ["https://testshop.store/b-account/digital/aB1",
+                                                     "https://testshop.store/b-account/digital/cD2"])
+
+
 if __name__ == "__main__":
     unittest.main()

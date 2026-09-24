@@ -49,6 +49,10 @@ Hoard.bat migrate "D:\Tools\Hoard-Bundle"
   **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads.
 - **Downloads** shows what's on your computer, with its files, sizes and folders. **Download new** fetches
   anything new or updated, with progress as it goes; **Stop** pauses safely, and it carries on next time.
+- **Payhip** keeps your purchases in each shop you bought from, not in one library. Add each shop in
+  **Settings** under **Payhip shops** (its address is in your purchase email: a shop's own domain such as
+  `myshop.store`, or `payhip.com/ShopName`), then sign in to Payhip. Hoard opens a tab for each shop.
+  Importing a shop's saved page adds that shop for you.
 - **Settings** chooses where downloads go (a `Hoard` folder in Documents unless you pick another), which
   stores to include, and the browser used for store sign-ins (Microsoft Edge, unless you choose otherwise).
 - **Tags** works the same in both views; see [Tags](#tags) below.

@@ -55,7 +55,8 @@ macOS, `~/.local/share/Hoard` on Linux):
 |---|---|---|
 | `allow_unprotected_signins` | `false` | Linux without a keyring only: keep sign-ins protected by folder permissions alone |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
-| `payhip.library_url` | `""` | Your Payhip library's address, if Hoard can't find it |
+| `payhip.shops` | `[]` | The Payhip shops you've bought from (also in Settings). Payhip keeps purchases per shop |
+| `booth.include_free` | `true` | Also read Booth's free downloads (also in Settings) |
 | `payhip.bot_check_wait` | `180` | Seconds to wait for you to complete Payhip's bot check |
 | `jinxxy.item_link_pattern` | | Which links on Jinxxy's inventory page are your items |
 | `tags.min_count`, `tags.max_share` | `3`, `0.4` | When a word becomes a suggested tag |

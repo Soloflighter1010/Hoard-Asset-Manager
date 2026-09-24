@@ -61,9 +61,9 @@ all in `browser.py`):
 | Store | How purchases are found | Notes |
 |---|---|---|
 | Gumroad | The library page's embedded Inertia data (`data-page` JSON), 15 purchases a page, archived ones read separately | The most dependable reader; the data shapes follow Gumroad's open-source code |
-| Booth | `BOOTH_JS` reads each card on `accounts.booth.pm/library` and `/library/gifts`, page by page, until a page adds nothing new | File links (`/downloadables/<id>`) answer with a redirect to a short-lived download address |
+| Booth | `BOOTH_JS` reads each card on `accounts.booth.pm/library`, `/library/gifts` and `/library/free_downloads`, page by page | Files come from the download-button placeholders' `data-href` (`test=downloadable`). They redirect to a short-lived address; if Booth refuses the direct request, `booth_fetch` downloads through the browser |
 | Jinxxy | `JX_CARDS_JS` reads the inventory cards, scrolling and clicking "load more" until nothing new appears | No buyer API. Card text skips buttons, menus and screen-reader labels |
-| Payhip | `PAYHIP_CARDS_JS` finds product cards by their cover image and links | Payhip shows automated browsers a bot check, so the downloader uses a visible window and waits for the user to complete it |
+| Payhip | Purchases live in each shop (`<shop>/b-account`, often on the shop's own domain). `PAYHIP_SHOP_JS` reads each shop listed in settings (`payhip.shops`), which `config.apply_store_sites` also adds to Payhip's trusted sites | Payhip shows automated browsers a bot check, so the downloader uses a visible window and waits for the user to complete it |
 
 The readers are JavaScript strings evaluated inside the store page, so they see what the user sees.
 When a store changes its layout, the `debug <store>` and `probe jinxxy` commands save the

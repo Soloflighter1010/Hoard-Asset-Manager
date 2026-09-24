@@ -13,7 +13,7 @@ from .common import log
 from .config import load_config, root_dir, save_config
 from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify
 from .jobs import Jobs
-from .library import BOOTH_JS, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY, Library, PAYHIP_CARDS_JS, STORES, import_saved_page, payhip_library_url
+from .library import BOOTH_JS, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY, Library, PAYHIP_CARDS_JS, STORES, import_saved_page, open_sign_in_pages, payhip_library_url
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 from .safety import read_json_file
 from .server import serve
@@ -25,8 +25,7 @@ def cmd_login(cfg, store):
     """Open Hoard's browser at a store's sign-in page and wait while you sign in."""
     with _playwright()() as p:
         ctx = launch(p, cfg, False, store)
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto(STORES[store]["login"])
+        open_sign_in_pages(ctx, cfg, store)
         input(f"Sign in to {STORES[store]['label']} in the browser window, then press Enter here... ")
         ctx.close()
     check_saved_signin(cfg, store)

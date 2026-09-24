@@ -5,7 +5,7 @@ import threading
 
 from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
 from .common import Cancelled, NotLoggedIn, capture_log
-from .library import FETCHERS, IMPORTABLE, Library, STORES, cache_images, unreachable_message
+from .library import FETCHERS, IMPORTABLE, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
 
 
@@ -178,10 +178,10 @@ class Jobs:
             return
         with _playwright()() as p:
             ctx = launch(p, self.cfg, False, store)
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            page.goto(STORES[store]["login"])
+            open_sign_in_pages(ctx, self.cfg, store)
+            tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(ctx.pages) > 1 else ""
             self._set(task="login", store=store,
-                      message=f"Sign in to {label} in the browser window that opened, then close that window.")
+                      message=f"Sign in to {label} in the browser window that opened{tabs}, then close that window.")
             while True:  # wait for the window to be closed
                 try:
                     if not ctx.pages:
