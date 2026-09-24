@@ -198,6 +198,19 @@ def distinct_name(name: str, fid: str, rec: dict, offered: set) -> str:
     return folder + slash + tagged
 
 
+def removed_product(store: str, name: str, report: "Report") -> bool:
+    """True (and noted in the report) for a product you removed from your library: it isn't downloaded."""
+    if tag_key(store, name) in _removed_keys():
+        report.skipped.append(f"{store.capitalize()}: {name} - removed from your library, so not downloaded")
+        return True
+    return False
+
+
+def _removed_keys() -> set:
+    from .marks import MarkStore   # read fresh: removing something takes effect on the next product
+    return MarkStore().load()["removed"]
+
+
 def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
     """A store's cookies (only that store's) and a matching User-Agent, from its saved sign-in.
 
@@ -399,6 +412,8 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
         seen.add(key)
 
         variants = (pur.get("variants") or "").strip()
+        if removed_product("gumroad", name, report):
+            continue
         rec = man.record(key, creator, f"{name} - {variants}" if variants else name)
         is_new_asset = not rec["files"]
         rec.update(name=name, creator=creator, variants=variants or None, url=p.get("product_long_url"),
@@ -464,9 +479,15 @@ DOWNLOAD_BUTTONS_JS = r"""
     if (!h || h.startsWith('#') || h.startsWith('javascript:') || h.startsWith('blob:')) return true;
     try { return hostOk.test(new URL(h, location.href).hostname); } catch (x) { return false; }
   };
+  // Never these, whatever they say about downloading: resetting download credits or limits, and the like
+  const never = /reset|credit|limit|remove|delete|archive|report|refund|review|how to|instruction/i;
   document.querySelectorAll('[data-adl-idx]').forEach(e => e.removeAttribute('data-adl-idx'));
-  const cands = [...document.querySelectorAll('button, a, [role="button"]')]
-    .filter(e => visible(e) && onSite(e) && dl.test(text(e)) && (allowAll || !all.test(text(e))));
+  // Payhip marks each file's own button; when a page has them, only those are used, even on content pages
+  // that aren't showing (they're clicked through the page's own code).
+  const fileButtons = [...document.querySelectorAll('.js-file-download-button')].filter(e => !never.test(text(e) + ' ' + e.className));
+  const cands = fileButtons.length ? fileButtons : [...document.querySelectorAll('button, a, [role="button"]')]
+    .filter(e => visible(e) && onSite(e) && dl.test(text(e)) && !never.test(text(e) + ' ' + (e.className || ''))
+                 && (allowAll || !all.test(text(e))));
   const leaf = cands.filter(e => !cands.some(o => o !== e && e.contains(o)));
   const set = new Set(leaf);
   return leaf.map((e, i) => {
@@ -478,7 +499,9 @@ DOWNLOAD_BUTTONS_JS = r"""
       if (n > 1 || (p.innerText || '').length > 500) break;
       row = p;
     }
-    return { idx: i, label: (row.innerText || text(e)).replace(/\s+/g, ' ').trim().slice(0, 300) };
+    const named = row.querySelector('input.js-file-row-input-name, input[class*="file-row"]');   // Payhip: the file's name
+    const label = (named && named.value) || row.innerText || text(e);
+    return { idx: i, label: label.replace(/\s+/g, ' ').trim().slice(0, 300) };
   });
 }
 """
@@ -617,7 +640,11 @@ def jinxxy_click_download(ctx, page, idx: int, timeout_s: int):
         pg.on("download", on_download)
     ctx.on("page", on_page)
     try:
-        page.locator(f'[data-adl-idx="{idx}"]').first.click()
+        button = page.locator(f'[data-adl-idx="{idx}"]').first
+        try:
+            button.click(timeout=5000)
+        except Exception:   # on a content page that isn't showing: click it through the page's own code
+            button.evaluate("e => e.click()")
         deadline = time.time() + timeout_s
         while not captured and time.time() < deadline:
             page.wait_for_timeout(250)
@@ -776,7 +803,8 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report) -> None:
     creator = (info.get("creator") or "Unknown Creator").strip()
     if args.only and args.only.lower() not in f"{name} {creator}".lower():
         return
-
+    if removed_product("jinxxy", name, report):
+        return
     rec = man.record(key, creator, name)
     is_new_asset = not rec["files"]
     rec.update(name=name, creator=creator, url=url, last_synced=now_iso())
@@ -996,6 +1024,8 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     name = (b["name"] or f"Booth item {b['id']}").strip()
                     creator = (b["creator"] or "Unknown Creator").strip()
                     if args.only and args.only.lower() not in f"{name} {creator}".lower():
+                        continue
+                    if removed_product("booth", name, report):
                         continue
                     rec = man.record(b["id"], creator, name)
                     is_new_asset, had_files = not rec["files"], bool(rec["files"])
@@ -1342,6 +1372,8 @@ def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
                 if args.only and args.only.lower() not in f"{name} {creator}".lower():
                     continue
                 key = c["id"].strip("/").replace("/", "-")
+                if removed_product("payhip", name, report):
+                    continue
                 rec = man.record(key, creator, name)
                 is_new_asset = not rec["files"]
                 rec.update(name=name, creator=creator, url=c["url"], last_synced=now_iso())

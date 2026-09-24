@@ -52,14 +52,22 @@ Hoard.bat migrate "D:\Tools\Hoard-Bundle"
   **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads.
 - **Downloads** shows what's on your computer, with its files, sizes and folders. **Download new** fetches
   anything new or updated, with progress as it goes; **Stop** pauses safely, and it carries on next time.
-- **Payhip** keeps your purchases in each shop you bought from, not in one library. Add each shop in
-  **Settings** under **Payhip shops** (its address is in your purchase email: a shop's own domain such as
-  `myshop.store`, or `payhip.com/ShopName`), then sign in to Payhip. Hoard opens a tab for each shop.
-  Importing a shop's saved page adds that shop for you.
+- **Payhip** keeps your purchases under the shops you bought from. Add a shop in **Settings** under
+  **Payhip shops** (its address is in your purchase email). A shop on payhip.com
+  (`payhip.com/ShopName`) lists your purchases from every shop, so one is often enough. Shops on their
+  own domains (`myshop.store`) that turn up are offered in **Stores** to review and add. Payhip checks
+  for automated browsers, so refreshing it opens a window where you can complete the check.
 - **Signing in without your saved passwords:** Hoard's window is its own browser, so it doesn't have
   the passwords your usual browser saved. The assistant shows where to find and copy them in Chrome,
   Edge, Firefox, Safari or a password manager. If a store emails you a sign-in or confirmation link,
   paste it into the assistant instead of clicking it, and it opens in Hoard's window.
+- **Archive, Removed and Hidden** (on the left): open an item, or choose several with **Select**, and
+  **Archive** older products you want out of the way (Gumroad's archived purchases start there),
+  **Remove** things that don't belong (they stay out, even after a refresh; delete them for good from
+  **Removed**), or **Hide** them behind a PIN. Hidden items stay out of view everywhere, Downloads
+  included, until you unlock them in that browser. It's a privacy screen, not encryption: the files on
+  your disk are still ordinary files. When you set your PIN, Hoard shows 6 recovery words once: write
+  them down, because they're how you reset a forgotten PIN without losing your hidden items.
 - **Settings** chooses where downloads go (a `Hoard` folder in Documents unless you pick another), which
   stores to include, and the browser used for store sign-ins (Microsoft Edge, unless you choose otherwise).
 - **Tags** works the same in both views; see [Tags](#tags) below.

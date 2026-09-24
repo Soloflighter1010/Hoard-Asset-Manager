@@ -84,6 +84,25 @@ It can't fully protect against:
   Windows, by checking where the opened file really is), and what's served is exactly what was opened.
 - Two products or files whose names clean up alike never share a folder or overwrite each other.
 
+**The hidden library**
+- It's a privacy screen for Hoard, not encryption. Hidden items are left out of everything Hoard's pages
+  receive (library, Downloads, counts, tags) until you unlock it, but the files and records on your disk
+  aren't encrypted, so anyone who can open your folders can still find them.
+- The PIN is kept only as an scrypt hash with its own random salt, and checked in constant time. After
+  five wrong tries each further try waits longer (30 seconds, doubling, up to an hour), and that survives
+  restarting Hoard.
+- Unlocking works in one browser: it gets a random, HttpOnly, SameSite=Strict cookie that lasts 15
+  minutes past its last use, kept only in Hoard's memory, so restarting locks everything. Unlocking is
+  only possible on the computer running Hoard.
+- A forgotten PIN is reset with a recovery phrase: 6 words from the BIP-39 list of 2,048 (about 66 bits),
+  made when the PIN is first set and shown only then. It's kept, like the PIN, only as an scrypt hash, and
+  wrong phrases count toward the same waits as wrong PINs. Resetting sets a new PIN; hidden items stay
+  hidden, and every browser is locked. A new phrase can only be made while unlocked, and replaces the
+  old one. Without the phrase, the only way out deletes the hidden items from Hoard's list, never
+  showing them.
+- The phrase only unlocks Hoard's hidden library. It isn't a crypto wallet phrase, and Hoard never asks
+  for a wallet's recovery words.
+
 **Troubleshooting files**
 - `debug` and `probe` save pages with email addresses, form values (license keys, codes), tokens and
   signed links removed, a summary of what was found instead of your purchases, and no screenshots.

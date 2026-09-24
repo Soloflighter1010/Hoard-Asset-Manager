@@ -169,7 +169,9 @@ class Jobs:
                 label = STORES[store]["label"]
                 self._set(task="refresh", store=store, message=f"Reading {label}")
                 try:
-                    ctx = launch(p, self.cfg, True, store)   # each store has its own sign-in
+                    # each store has its own sign-in; Payhip checks for automated browsers, so it gets a visible
+                    # window you can complete its check in
+                    ctx = launch(p, self.cfg, not (store == "payhip" and self.cfg["payhip"].get("headed", True)), store)
                 except (ProfileBusy, SigninsUnprotected) as e:
                     self.lib.set_error(store, str(e))
                     continue
@@ -182,6 +184,10 @@ class Jobs:
                                                       f"Try again, or run the command: debug {store}")
                         else:
                             self.lib.replace_store(store, items)
+                            if store == "payhip":   # shops on their own domains, found in your library, to review
+                                with self.lib.lock:
+                                    self.lib.data["stores"]["payhip"]["found_shops"] = self.cfg.pop("_found_payhip_shops", [])[:200]
+                                    self.lib.save()
                             refreshed.append(store)
                     except NotLoggedIn:
                         self.lib.set_error(store, "Not signed in. Choose Sign in, then close the browser window when you're done.")

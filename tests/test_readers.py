@@ -189,5 +189,33 @@ class BoothAndPayhip(unittest.TestCase):
             page.wait_for_timeout(600)
             self.assertEqual(page.title(), "untouched")
 
+# A Payhip product page (September 2026): each file's own button, its name in a box beside it, a "Reset download
+# credits" link that must never be clicked, and a second content page that isn't showing.
+PAYHIP_PRODUCT = """<html><head><meta charset="utf-8"></head><body><main>
+<div class="page" style="display:block"><div class="file-row"><input class="js-file-row-input-name" value="Avatar_v1.2">
+  <a href="#!" class="btn js-reset-download-credits-button">Reset download credits</a>
+  <button class="file-download-button js-file-download-button" data-file-id="aaa">Download</button></div></div>
+<div class="page" style="display:none"><div class="file-row"><input class="js-file-row-input-name" value="Textures">
+  <a href="#!" class="btn js-reset-download-credits-button">Reset download credits</a>
+  <button class="file-download-button js-file-download-button" data-file-id="bbb">Download</button></div></div>
+<a href="#!">How to download</a></main></body></html>"""
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class PayhipProductPage(unittest.TestCase):
+
+    def test_only_the_file_buttons(self):
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        browser = pw.chromium.launch()
+        self.addCleanup(browser.close)
+        pg = browser.new_page()
+        pg.set_content(PAYHIP_PRODUCT)
+        found = pg.evaluate(downloader.DOWNLOAD_BUTTONS_JS, {"allowAll": False, "hosts": ["payhip\\.com"]})
+        self.assertEqual([f["label"] for f in found], ["Avatar_v1.2", "Textures"], "both files, the hidden page's too")
+        classes = [pg.locator(f'[data-adl-idx="{f["idx"]}"]').first.get_attribute("class") for f in found]
+        self.assertTrue(all("js-file-download-button" in c for c in classes), "never the reset-credits links")
+
+
 if __name__ == "__main__":
     unittest.main()
