@@ -10,6 +10,6 @@ chmod -R go-w . && echo "Only your account can change the files in this folder n
 echo "Installing packages (each one checked against the hash recorded in requirements.txt)..."
 .venv/bin/python -m pip install --disable-pip-version-check -q --require-hashes -r requirements.txt
 .venv/bin/python -m playwright install chromium
-[ -f config.json ] || cp config.example.json config.json
-echo "Setup finished. On Linux, if the browser won't start: .venv/bin/python -m playwright install-deps chromium"
+echo "Setup finished. Start Hoard with ./run.sh"
+echo "On Linux, if the browser won't start: .venv/bin/python -m playwright install-deps chromium"
 echo "On Linux, sign-ins are only saved when a keyring (GNOME Keyring, KeePassXC or KWallet) can protect them."

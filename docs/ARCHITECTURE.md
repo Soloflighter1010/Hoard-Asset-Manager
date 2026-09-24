@@ -6,33 +6,42 @@ page is a single HTML file with its styles and script inline, served by the tool
 ## Repository layout
 
 ```
-Hoard/                 the library: everything you own, from every store, on one page
-  library.py           store readers, sign-ins, the local server, the command line
-  library.html         the page (styles, markup and script in one file)
-HoardDownloader/       the downloader: keeps local copies of everything you own
-  asset_dl.py          store downloaders, sign-ins, manifests, tags, the command line
-  asset_browser.py     the local server behind "Browse your downloads"
-  browser.html         that page
+hoard/                 the app (python -m hoard); each piece of code exists once
+  __init__.py          version
+  __main__.py          python -m hoard
+  paths.py             where everything lives: Hoard's app-data folder, the downloads folder
+  config.py            settings (config.json in the app-data folder)
+  common.py            progress messages (with a hook the app uses to show them), shared errors
+  safety.py            data files, seals, store links, and the web rules for the local server
+  net.py               is a store reachable?
+  browser.py           store sign-ins and the store browser
+  tags.py              your tags
+  library.py           reading what you own from each store; the library list
+  downloader.py        downloading, the records of what's on disk, the catalog files, verify
+  downloads.py         the Downloads view's index of what's on disk
+  jobs.py              background work, one job at a time: refresh, sign in or out, download
+  server.py            the local server behind both views
+  cli.py               the command line (docs/COMMAND-LINE.md)
+  web/                 library.html, downloads.html and the bundled fonts
+Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
+requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
-fonts/                 the pages' typefaces (WOFF2) and their licenses, bundled for offline use
-scripts/build_release.py   builds the release zips
-.github/workflows/     check.yml runs the build on every push; release.yml publishes tagged versions
-docs/                  this guide
+scripts/build_release.py   builds the release zip
+tests/                 security tests, run on every change
+.github/workflows/     check.yml runs the tests and the build; release.yml publishes tagged versions
+docs/                  this guide and the others
 ```
 
-Each tool folder also has its launchers (`Setup.bat`, `Hoard.bat` / `Hoard Downloader.bat`, `setup.sh`,
-`run.sh`), `requirements.txt`, `config.example.json` and its own README. The two tools share no code
-at runtime, so each works when it's the only one installed. Where they need the same logic (sign-ins,
-web safety, the Booth and Payhip readers), each file carries its own copy. When you change one,
-change the other.
+The two pages share one design system and several blocks of script (tags, settings, downloading), each
+connected to its page through a small adapter object `T`.
 
 ## Sign-ins
 
 Both tools drive a real Chromium browser through Playwright, with one profile per store that belongs
 to Hoard alone. The "sign-ins" section near the top of each Python file handles it (the copies in
-`library.py` and `asset_dl.py` must stay identical; a test checks):
+all in `browser.py`):
 
-- `profile_dir(cfg, store)` is `Hoard/sign-ins/<store>` in the user's app data, shared by both tools.
+- `profile_dir(cfg, store)` is `sign-ins/<store>` in Hoard's app-data folder.
 - `launch_context(p, cfg, headless, store)` moves sign-ins saved by older versions into per-store
   profiles (`_migrate_old_signins`, keeping only each store's own cookies), takes that store's
   `ProfileLock` (an OS file lock released automatically on exit), and starts Chromium through `_launch`.
@@ -57,14 +66,14 @@ to Hoard alone. The "sign-ins" section near the top of each Python file handles 
 | Payhip | `PAYHIP_CARDS_JS` finds product cards by their cover image and links | Payhip shows automated browsers a bot check, so the downloader uses a visible window and waits for the user to complete it |
 
 The readers are JavaScript strings evaluated inside the store page, so they see what the user sees.
-When a store changes its layout, `debug <store>` (Hoard) and `probe jinxxy` (Hoard Downloader) save the
+When a store changes its layout, the `debug <store>` and `probe jinxxy` commands save the
 page, its links and what the reader found, which is usually enough to fix a reader.
 
 **Importing a saved page** (`import_saved_page` in `library.py`): the user saves a store page from their
 own browser. The file is read offline in a browser with every network request blocked and every
 `<script>` removed, and parsed with the same reader.
 
-## Hoard (`library.py`)
+## The library (`library.py`, `jobs.py`, `server.py`)
 
 - `FETCHERS` maps each store to a function that returns a list of items built by `item()`. That's the only
   place a store's data enters the library, and it keeps only http(s) links (`safe_url`).
@@ -85,7 +94,7 @@ own browser. The file is read offline in a browser with every network request bl
 | `POST /api/refresh`, `/api/login`, `/api/logout` | Start a job (`{"stores": [...]}`) |
 | `POST /api/import` | Read a saved store page (`{"store", "filename", "content"}`) |
 
-## Hoard Downloader (`asset_dl.py`)
+## Downloads (`downloader.py`, `downloads.py`)
 
 - Each store has a `sync_<store>` function. They all record progress in a per-store `Manifest`
   (`<root>/<Store>/_manifest.json`): for every product its folder and, for every file, where it's saved,
@@ -97,21 +106,26 @@ own browser. The file is read offline in a browser with every network request bl
   Gumroad or Booth, or the same file name under a new label on Jinxxy or Payhip.
 - `collect_catalog()` builds the catalog and tags from the manifests; `build_catalog()` writes them to
   `catalog.json`, `tags.json` and each product's `asset.json`.
-- `asset_browser.py` serves the downloads browser (`/`, `/api/assets`, `/files/<image>`, and
-  `POST /api/open` to open a folder). It reads the manifests fresh on every rescan.
+- `downloads.py` builds the Downloads view's index from the manifests. The server caches it and rebuilds
+  it after a download, a tag change, a settings change or a rescan. Its routes are `/downloads`,
+  `/api/assets`, `/files/<image>` and `POST /api/open` (open a folder). `POST /api/download` starts a
+  download job; `POST /api/cancel` stops it after the current file.
+- `jobs.Jobs._download` runs the same sync as the command line, but captures its progress messages
+  (`common.capture_log`) for the page, which polls `/api/status`. Stopping raises `common.Cancelled`, a
+  `BaseException` so per-file error handling can't swallow it; the catalog is still rebuilt on the way out.
+- Each library item gets `on_disk`: the Downloads id of the same product (matched by `tag_key`), if any.
 
 ## Tags
 
-Your tags live in `tags.json` in the app-data `Hoard` folder, shared by both tools. Each Python file carries
-the same "tags" section:
+Your tags live in `tags.json` in the app-data `Hoard` folder, shared by both views. `tags.py` holds the code:
 
 - `tag_key(store, name)` identifies a product by store and normalised name. That's the one identifier
-  both tools can compute, since they number Gumroad products differently.
+  the library and the downloads can both compute, since stores number some products differently.
 - `TagStore` holds `tags` (every tag, with an optional word to match), `items` (tags put on products),
   `excluded` (matched tags taken off a product) and `hidden` (dismissed suggestions). `tags_for()` works
   out a product's tags: assigned, plus matched, minus excluded.
 - `TagStore.change()` applies one change from a page (`assign`, `create`, `keep`, `match`, `rename`,
-  `delete`, `hide`, `unhide`). It re-reads the file under a thread lock and an OS file lock, so both tools
+  `delete`, `hide`, `unhide`). It re-reads the file under a thread lock and an OS file lock, so two processes
   can save at once without losing anything.
 - Suggestions are still worked out fresh for each response (`enrich()` in Hoard, `collect_catalog()` in the
   downloader). Hidden words and words that are already your tags are left out.
@@ -174,7 +188,7 @@ Each Python file carries the same "data files" section (a test checks the copies
 ([security-review-2026-09.md](security-review-2026-09.md)) and checks that the code the two tools share
 hasn't drifted apart. It needs no network or browser: `python -m unittest discover -s tests -v`.
 
-Dependencies are listed in each tool's `requirements.in` and locked, with hashes, in `requirements.txt`:
+Dependencies are listed in `requirements.in` and locked, with hashes, in `requirements.txt`:
 `pip-compile --generate-hashes --strip-extras --no-emit-index-url requirements.in`. Setup installs with
 `--require-hashes`, so a changed package fails to install rather than running.
 
@@ -182,9 +196,7 @@ Dependencies are listed in each tool's `requirements.in` and locked, with hashes
 
 Nothing a page needs comes from outside the computer:
 
-- The typefaces are in `fonts/`, served at `/fonts/<file>` by both tools. `font_path()` looks next to the
-  program first (single-tool zips carry their own copy) and then one folder up (the repository, and the
-  bundle, which keeps one shared copy). `build_release.py` places them.
+- The typefaces are in `hoard/web/fonts/`, served at `/fonts/<file>` (`font_path()` in `server.py`).
 - Hoard saves every product image after each refresh (`cache_images`), and after an import, in
   `.cache/thumbs`. `/thumb/` serves the saved copy without going online.
 - Before refreshing, signing in or syncing, `reachable(store)` opens a connection to that store only. An
@@ -202,7 +214,7 @@ bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`
 
 ## Releasing
 
-1. Raise `__version__` in `Hoard/library.py` and `HoardDownloader/asset_dl.py` (they must match) and add a
+1. Raise `__version__` in `hoard/__init__.py` and add a
    `## <version>` section to `CHANGELOG.md`.
 2. Push a `v<version>` tag. `release.yml` runs `scripts/build_release.py`, which checks the versions,
    compiles the Python and builds the three zips from an explicit file list, then publishes a release

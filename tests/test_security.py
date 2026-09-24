@@ -8,7 +8,6 @@ run the same on any computer and in GitHub Actions. Each test names the review f
 from __future__ import annotations
 
 import http.client
-import inspect
 import json
 import os
 import re
@@ -25,29 +24,23 @@ from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "Hoard"))
-sys.path.insert(0, str(REPO / "HoardDownloader"))
-
-import asset_browser  # noqa: E402  Hoard Downloader's browser
-import asset_dl  # noqa: E402  Hoard Downloader
-import library  # noqa: E402  Hoard
-
 _TEST_HOME = Path(tempfile.mkdtemp(prefix="hoard-tests-"))
-for _m in (asset_dl, library, asset_browser):
-    _m._hoard_folder = lambda: _TEST_HOME / "Hoard"
+os.environ["HOARD_DATA_DIR"] = str(_TEST_HOME / "Hoard")   # tests never touch your real Hoard data
+sys.path.insert(0, str(REPO))
+
+from hoard import browser, common, config, downloader, library, safety, server, tags  # noqa: E402
 
 
 def reset_keys():
     """Start with no sealing key and no record of sealed files (as on a fresh install)."""
     import shutil
     shutil.rmtree(_TEST_HOME / "Hoard", ignore_errors=True)
-    for m in (asset_dl, library, asset_browser):
-        m._integrity_key, m._sealed_ids = None, None
+    safety._integrity_key, safety._sealed_ids = None, None
 
 
-WEB_SAFETY = (library, asset_browser)       # both servers carry the web-safety code
-SIGN_INS = (library, asset_dl)              # both tools carry the sign-in code
-PAGES = (REPO / "Hoard" / "library.html", REPO / "HoardDownloader" / "browser.html")
+WEB_SAFETY = (safety,)
+SIGN_INS = (browser,)
+PAGES = (REPO / "hoard" / "web" / "library.html", REPO / "hoard" / "web" / "downloads.html")
 
 
 def fake_addrinfo(*ips):
@@ -59,29 +52,21 @@ def fake_addrinfo(*ips):
     return out
 
 
-class SharedCodeStaysIdentical(unittest.TestCase):
-    """The tools each carry a copy of the security code; the copies must not drift apart."""
+class OneCopy(unittest.TestCase):
+    """Every piece of security code exists exactly once, so a fix can never miss a copy."""
 
-    def test_sign_in_code_matches(self):
-        for name in ("signins_root", "profile_dir", "_launch", "launch_context", "sign_out", "check_saved_signin",
-                     "linux_keyring", "unprotected_cookie_count", "_migrate_old_signins", "ProfileLock"):
-            self.assertEqual(inspect.getsource(getattr(library, name)), inspect.getsource(getattr(asset_dl, name)), name)
-
-    def test_web_safety_code_matches(self):
-        for name in ("safe_url", "_is_public", "_public_addresses", "_connect_public", "fetch_public",
-                     "content_security_policy", "check_access", "network_tls", "TLSServerMixin"):
-            self.assertEqual(inspect.getsource(getattr(library, name)), inspect.getsource(getattr(asset_browser, name)), name)
-
-    def test_data_file_code_matches(self):
-        for name in ("clean_text", "read_json_file", "set_aside", "write_file_safely", "DataFileError", "store_link",
-                     "integrity_key", "_canonical", "seal", "check_seal", "remember_sealed", "_sealed_file_ids"):
-            src = inspect.getsource(getattr(asset_dl, name))
-            self.assertEqual(src, inspect.getsource(getattr(library, name)), name)
-            self.assertEqual(src, inspect.getsource(getattr(asset_browser, name)), name)
-
-    def test_tag_code_matches(self):
-        for name in ("tag_key", "clean_tag", "name_has_word", "TagStore", "tag_overview"):
-            self.assertEqual(inspect.getsource(getattr(library, name)), inspect.getsource(getattr(asset_browser, name)), name)
+    def test_each_is_defined_once(self):
+        import ast as _ast
+        seen = {}
+        for f in (REPO / "hoard").glob("*.py"):
+            for n in _ast.parse(f.read_text("utf-8")).body:
+                if isinstance(n, (_ast.FunctionDef, _ast.ClassDef)):
+                    seen.setdefault(n.name, []).append(f.stem)
+        for name in ("safe_url", "_connect_public", "fetch_public", "content_security_policy", "check_access",
+                     "network_tls", "store_link", "seal", "check_seal", "write_file_safely", "read_json_file",
+                     "clean_text", "safe_name", "rel_to_path", "launch_context", "sign_out", "check_saved_signin",
+                     "TagStore", "clean_tag", "tag_key"):
+            self.assertEqual(len(seen.get(name, [])), 1, f"{name} is defined in {seen.get(name)}")
 
 
 class Links(unittest.TestCase):
@@ -102,10 +87,10 @@ class Links(unittest.TestCase):
             self.assertNotRegex(html, r'rel="noopener"(?! noreferrer)', f"{page.name}: links should use noopener noreferrer")
 
     def test_downloader_only_follows_store_links(self):
-        self.assertTrue(asset_dl.store_url("https://booth.pm/downloadables/1", ["booth.pm"]))
-        self.assertFalse(asset_dl.store_url("https://evil.example/downloadables/1", ["booth.pm"]))
-        self.assertFalse(asset_dl.store_url("https://booth.pm.evil.example/x", ["booth.pm"]))
-        self.assertFalse(asset_dl.store_url("javascript:alert(1)", ["payhip.com"]))
+        self.assertTrue(downloader.store_url("https://booth.pm/downloadables/1", ["booth.pm"]))
+        self.assertFalse(downloader.store_url("https://evil.example/downloadables/1", ["booth.pm"]))
+        self.assertFalse(downloader.store_url("https://booth.pm.evil.example/x", ["booth.pm"]))
+        self.assertFalse(downloader.store_url("javascript:alert(1)", ["payhip.com"]))
 
 
 class PublicOnlyFetching(unittest.TestCase):
@@ -167,7 +152,7 @@ class Pages(unittest.TestCase):
     def test_policy_allows_only_the_pages_own_script(self):
         for page in PAGES:
             body = page.read_bytes()
-            csp = library.content_security_policy(body)
+            csp = safety.content_security_policy(body)
             self.assertIn("script-src 'sha256-", csp)
             self.assertNotIn("unsafe-inline' https", csp)
             self.assertNotRegex(csp.split("script-src")[1].split(";")[0], "unsafe-inline")
@@ -184,7 +169,7 @@ class Pages(unittest.TestCase):
 
     def test_server_headers(self):
         with tempfile.TemporaryDirectory() as tmp:
-            srv = asset_browser.BrowserServer(("127.0.0.1", 0), Path(tmp), lambda: [], lan=False, version="test")
+            srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp}, lan=False)
             t = threading.Thread(target=srv.serve_forever, daemon=True)
             t.start()
             try:
@@ -351,13 +336,13 @@ class GumroadCookie(unittest.TestCase):
     """H-03 / CRED-02: a copied Gumroad session cookie is never read from files or the environment."""
 
     def test_config_and_environment_cookies_are_ignored(self):
-        self.assertNotIn("session_cookie", asset_dl.DEFAULT_CONFIG["gumroad"])
-        cfg = json.loads(json.dumps(asset_dl.DEFAULT_CONFIG))
+        self.assertNotIn("session_cookie", config.DEFAULT_CONFIG["gumroad"])
+        cfg = json.loads(json.dumps(config.DEFAULT_CONFIG))
         cfg["gumroad"]["session_cookie"] = "stolen-looking-value"
         with mock.patch.dict(os.environ, {"HOARD_GUMROAD_SESSION": "another"}), \
-                mock.patch.object(asset_dl, "browser_cookies", return_value=([], "UA")) as from_browser:
-            with self.assertRaises(asset_dl.NotLoggedIn):
-                asset_dl.gumroad_session(cfg)
+                mock.patch.object(downloader, "browser_cookies", return_value=([], "UA")) as from_browser:
+            with self.assertRaises(common.NotLoggedIn):
+                downloader.gumroad_session(cfg)
         from_browser.assert_called_once()
 
 
@@ -366,7 +351,7 @@ class Files(unittest.TestCase):
 
     def test_safe_names(self):
         for bad in ("..", "../..", "a/b\\c", "CON", "nul.txt", "a:b*c?d", " .hidden. "):
-            name = asset_dl.safe_name(bad)
+            name = safety.safe_name(bad)
             self.assertNotIn("/", name)
             self.assertNotIn("\\", name)
             self.assertNotIn("..", name.strip("_"))
@@ -376,7 +361,7 @@ class Files(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
             for attempt in ("../../etc/passwd", "..\\..\\windows\\win.ini", "/etc/passwd", "a/../../b"):
-                joined = asset_browser.safe_join(root, attempt)
+                joined = safety.safe_join(root, attempt)
                 self.assertTrue(joined is None or joined == root or root in joined.parents, attempt)
 
 
@@ -384,12 +369,12 @@ class Tags(unittest.TestCase):
     """Tag names are cleaned, and two programs saving at once lose nothing."""
 
     def test_clean_tag(self):
-        self.assertEqual(library.clean_tag("  #Rusk, Outfits  "), "rusk outfits")
-        self.assertEqual(len(library.clean_tag("x" * 100)), 40)
+        self.assertEqual(tags.clean_tag("  #Rusk, Outfits  "), "rusk outfits")
+        self.assertEqual(len(tags.clean_tag("x" * 100)), 40)
 
     def test_concurrent_saves(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = library.TagStore(Path(tmp) / "tags.json")
+            store = tags.TagStore(Path(tmp) / "tags.json")
             def work(n):
                 for i in range(25):
                     store.change({"action": "assign", "keys": [f"booth:item{n}x{i}"], "add": [f"t{n}"]})
@@ -408,13 +393,13 @@ class Names(unittest.TestCase):
 
     def test_invisible_characters_never_reach_file_names(self):
         for bad in (self.SPOOF, "zero\u200bwidth", "bom\ufeffname", "private\ue000use"):
-            name = asset_dl.safe_name(bad)
+            name = safety.safe_name(bad)
             self.assertFalse(any(__import__("unicodedata").category(c)[0] == "C" for c in name), repr(name))
-        self.assertEqual(asset_dl.safe_name(self.SPOOF), "Cute Hoodiegpj.exe")
-        self.assertEqual(asset_dl.safe_name("【VRChat想定】パーカー"), "【VRChat想定】パーカー")
+        self.assertEqual(safety.safe_name(self.SPOOF), "Cute Hoodiegpj.exe")
+        self.assertEqual(safety.safe_name("【VRChat想定】パーカー"), "【VRChat想定】パーカー")
 
     def test_clean_text(self):
-        for m in (asset_dl, library, asset_browser):
+        for m in (safety,):
             self.assertEqual(m.clean_text("  A\u202eB\u200bC\x07D\n\tE  "), "AB C D E".replace("B C", "BC ") if False else "ABC D E")
             self.assertEqual(len(m.clean_text("x" * 1000, 300)), 300)
             self.assertEqual(m.clean_text(None), "")
@@ -426,17 +411,17 @@ class Paths(unittest.TestCase):
     def test_only_plain_relative_paths(self):
         for bad in ("../x", "a/../../b", "/etc/passwd", "C:/Windows", "a\\b", "a:stream", "a/./b", "a//b", " a", "",
                     None, 5, "a/\u202eb", "x" * 1001):
-            self.assertFalse(asset_dl.valid_rel(bad), repr(bad))
+            self.assertFalse(safety.valid_rel(bad), repr(bad))
         for good in ("Kitsu Studio/Rusk Avatar Base", "Creator/Name (2)/sub/file.zip", "作者/パーカー"):
-            self.assertTrue(asset_dl.valid_rel(good), good)
+            self.assertTrue(safety.valid_rel(good), good)
 
     def test_rel_to_path_refuses_escapes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "downloads"
             (root / "Booth").mkdir(parents=True)
-            with self.assertRaises(asset_dl.UnsafePath):
-                asset_dl.rel_to_path(root, "../outside")
-            self.assertEqual(asset_dl.rel_to_path(root, "Booth/x"), root / "Booth" / "x")
+            with self.assertRaises(safety.UnsafePath):
+                safety.rel_to_path(root, "../outside")
+            self.assertEqual(safety.rel_to_path(root, "Booth/x"), root / "Booth" / "x")
 
     @unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
     def test_rel_to_path_refuses_links_that_lead_out(self):
@@ -445,8 +430,8 @@ class Paths(unittest.TestCase):
             (root / "Booth").mkdir(parents=True)
             outside.mkdir()
             os.symlink(outside, root / "Booth" / "Trap")
-            with self.assertRaises(asset_dl.UnsafePath):
-                asset_dl.rel_to_path(root, "Booth/Trap/file.zip")
+            with self.assertRaises(safety.UnsafePath):
+                safety.rel_to_path(root, "Booth/Trap/file.zip")
 
 
 class DataFiles(unittest.TestCase):
@@ -469,7 +454,7 @@ class DataFiles(unittest.TestCase):
 
     def test_tampered_manifest_is_cleaned(self):
         self._tampered_manifest()
-        man = asset_dl.Manifest(self.root / "Booth")
+        man = downloader.Manifest(self.root / "Booth")
         self.assertEqual(list(man.assets), ["1"])
         rec = man.assets["1"]
         self.assertEqual(rec["name"], "GoodItem")
@@ -478,20 +463,20 @@ class DataFiles(unittest.TestCase):
 
     def test_damaged_manifest_is_kept_aside(self):
         (self.root / "Booth" / "_manifest.json").write_text("{not json")
-        man = asset_dl.Manifest(self.root / "Booth")
+        man = downloader.Manifest(self.root / "Booth")
         self.assertEqual(man.assets, {})
         self.assertTrue(list((self.root / "Booth").glob("_manifest.damaged-*.json")))
 
     def test_catalog_keeps_its_promises(self):
         self._tampered_manifest()
-        cfg = json.loads(json.dumps(asset_dl.DEFAULT_CONFIG))
+        cfg = json.loads(json.dumps(config.DEFAULT_CONFIG))
         with mock.patch.dict(os.environ, {"XDG_DATA_HOME": self.tmp.name, "LOCALAPPDATA": self.tmp.name}):
-            asset_dl.build_catalog(cfg, self.root)
+            downloader.build_catalog(cfg, self.root)
         catalog = json.loads((self.root / "catalog.json").read_text("utf-8"))
         self.assertEqual((catalog["format"], catalog["version"]), ("hoard-catalog", 3))
         self.assertEqual(len(catalog["assets"]), 1)
         for entry in catalog["assets"]:
-            self.assertEqual(asset_dl.validate_catalog_entry(entry), [])
+            self.assertEqual(downloader.validate_catalog_entry(entry), [])
         asset = json.loads((self.root / "Booth" / "Good Creator" / "Good Item" / "asset.json").read_text("utf-8"))
         self.assertEqual(asset["format"], "hoard-asset")
         self.assertFalse((Path(self.tmp.name) / "Startup").exists(), "nothing may be written outside the downloads")
@@ -501,7 +486,7 @@ class DataFiles(unittest.TestCase):
     def test_validator_catches_broken_entries(self):
         bad = {"store": "Booth", "name": "A\u202eB", "creator": "C", "folder": "Booth/../x", "files": ["../y"],
                "url": "javascript:x", "tags": ["<b>"], "suggested_tags": []}
-        self.assertGreaterEqual(len(asset_dl.validate_catalog_entry(bad)), 5)
+        self.assertGreaterEqual(len(downloader.validate_catalog_entry(bad)), 5)
 
     @unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
     def test_writes_replace_planted_links(self):
@@ -509,11 +494,11 @@ class DataFiles(unittest.TestCase):
         victim.write_text("keep me")
         link = self.root / "catalog.json"
         os.symlink(victim, link)
-        asset_dl.write_file_safely(link, "{}", self.root)
+        safety.write_file_safely(link, "{}", self.root)
         self.assertEqual(victim.read_text(), "keep me")
         self.assertFalse(link.is_symlink())
         with self.assertRaises(PermissionError):
-            asset_dl.write_file_safely(Path(self.tmp.name) / "out.json", "{}", self.root)
+            safety.write_file_safely(Path(self.tmp.name) / "out.json", "{}", self.root)
 
     @unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
     def test_partial_downloads_never_follow_links(self):
@@ -521,17 +506,17 @@ class DataFiles(unittest.TestCase):
         victim.write_text("keep me")
         part = self.root / "file.zip.part"
         os.symlink(victim, part)
-        asset_dl.no_link(part)
+        safety.no_link(part)
         self.assertFalse(part.exists())
         self.assertEqual(victim.read_text(), "keep me")
 
     def test_oversized_and_deep_json_are_refused(self):
         big = Path(self.tmp.name) / "big.json"
         big.write_text("[" * 100000 + "]" * 100000)
-        with self.assertRaises(asset_dl.DataFileError):
-            asset_dl.read_json_file(big)
-        with self.assertRaises(asset_dl.DataFileError):
-            asset_dl.read_json_file(big, max_bytes=1000)
+        with self.assertRaises(safety.DataFileError):
+            safety.read_json_file(big)
+        with self.assertRaises(safety.DataFileError):
+            safety.read_json_file(big, max_bytes=1000)
 
     def test_library_list_is_cleaned_and_damage_kept_aside(self):
         path = Path(self.tmp.name) / "library.json"
@@ -553,7 +538,7 @@ class TagHardening(unittest.TestCase):
     """Tags can't carry markup, invisible characters or object-breaking names, and tags.json is checked."""
 
     def test_tag_characters(self):
-        for m in (library, asset_browser):
+        for m in (tags,):
             self.assertEqual(m.clean_tag("<script>alert(1)</script>"), "script alert 1 script")
             self.assertEqual(m.clean_tag("rusk\u202efits"), "rusk fits")
             self.assertEqual(m.clean_tag("パーカー"), "パーカー")
@@ -563,24 +548,24 @@ class TagHardening(unittest.TestCase):
 
     def test_product_keys_must_be_real(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = library.TagStore(Path(tmp) / "tags.json")
+            store = tags.TagStore(Path(tmp) / "tags.json")
             for bad in ("booth:../../x", "evil:item", "booth:", "booth:<b>", "booth:a b"):
                 with self.assertRaises(ValueError):
                     store.change({"action": "assign", "keys": [bad], "add": ["x"]})
-            store.change({"action": "assign", "keys": [library.tag_key("booth", "Rusk Avatar Base")], "add": ["x"]})
+            store.change({"action": "assign", "keys": [tags.tag_key("booth", "Rusk Avatar Base")], "add": ["x"]})
             self.assertEqual(len(store.load()["items"]), 1)
-            self.assertTrue(library.TAG_KEY_RX.match(library.tag_key("booth", "♡♡♡")))
+            self.assertTrue(tags.TAG_KEY_RX.match(tags.tag_key("booth", "♡♡♡")))
 
     def test_limits(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = library.TagStore(Path(tmp) / "tags.json")
+            store = tags.TagStore(Path(tmp) / "tags.json")
             data = store.empty()
-            data["tags"] = {f"tag{i}": {"match": None} for i in range(library.TAG_LIMITS["tags"])}
+            data["tags"] = {f"tag{i}": {"match": None} for i in range(tags.TAG_LIMITS["tags"])}
             store._save(data)
             with self.assertRaises(ValueError):
                 store.change({"action": "create", "name": "one too many"})
             with self.assertRaises(ValueError):
-                store.change({"action": "assign", "keys": ["booth:a"] * (library.TAG_LIMITS["keys_per_change"] + 1), "add": ["x"]})
+                store.change({"action": "assign", "keys": ["booth:a"] * (tags.TAG_LIMITS["keys_per_change"] + 1), "add": ["x"]})
 
     def test_tampered_file_is_cleaned(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -589,10 +574,10 @@ class TagHardening(unittest.TestCase):
                                                  "fine": "not a dict"},
                                         "items": {"booth:item": ["ok", "<b>", 5], "../x": ["ok"], "booth:y": "ok"},
                                         "excluded": [], "hidden": ["good", "<bad>", 7]}))
-            data = library.TagStore(path).load()
+            data = tags.TagStore(path).load()
             for name in data["tags"]:
-                self.assertEqual(library.clean_tag(name), name)
-                self.assertNotIn(name, library.TAG_RESERVED)
+                self.assertEqual(tags.clean_tag(name), name)
+                self.assertNotIn(name, tags.TAG_RESERVED)
             self.assertEqual(sorted(data["tags"]), ["b", "bad", "fine", "ok", "proto"])  # converted, never raw
             self.assertEqual(data["items"], {"booth:item": ["b", "ok"]})
             self.assertEqual(data["hidden"], ["good"])
@@ -602,7 +587,7 @@ class TagHardening(unittest.TestCase):
             path = Path(tmp) / "tags.json"
             path.write_text(json.dumps({"tags": {"fox/dog": {"match": None}, "fox dog": {"match": "fox"}},
                                         "items": {"booth:a": ["fox/dog"], "booth:b": ["fox dog"]}}))
-            data = library.TagStore(path).load()
+            data = tags.TagStore(path).load()
             self.assertEqual(data["tags"], {"fox dog": {"match": "fox"}})
             self.assertEqual(data["items"], {"booth:a": ["fox dog"], "booth:b": ["fox dog"]})
 
@@ -610,7 +595,7 @@ class TagHardening(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "tags.json"
             path.write_text("{this is damaged")
-            store = library.TagStore(path)
+            store = tags.TagStore(path)
             store.change({"action": "create", "name": "new"})
             self.assertEqual(sorted(store.load()["tags"]), ["new"])
             aside = list(Path(tmp).glob("tags.damaged-*.json"))
@@ -620,13 +605,13 @@ class TagHardening(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "file modes are a Linux and macOS feature")
     def test_tags_file_is_private(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store = library.TagStore(Path(tmp) / "Hoard" / "tags.json")
+            store = tags.TagStore(Path(tmp) / "Hoard" / "tags.json")
             store.change({"action": "create", "name": "x"})
             self.assertEqual(stat.S_IMODE(store.path.stat().st_mode), 0o600)
 
     def test_requests_are_small_and_flat(self):
         with tempfile.TemporaryDirectory() as tmp:
-            srv = asset_browser.BrowserServer(("127.0.0.1", 0), Path(tmp), lambda: [], lan=False)
+            srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp}, lan=False)
             threading.Thread(target=srv.serve_forever, daemon=True).start()
             try:
                 def post(body, claimed=None):
@@ -649,7 +634,7 @@ class StoreLinks(unittest.TestCase):
     """An edited record can't send you anywhere but the item's own store."""
 
     def test_rule(self):
-        for m in (asset_dl, library, asset_browser):
+        for m in (safety,):
             ok = [("booth", "https://booth.pm/ja/items/1"), ("Booth", "https://kitsu.booth.pm/items/2"),
                   ("gumroad", "https://app.gumroad.com/d/abc"), ("gumroad", "https://creator.gumroad.com/l/x"),
                   ("jinxxy", "https://jinxxy.com/creator/item"), ("payhip", "https://payhip.com/b/AbC1")]
@@ -668,7 +653,7 @@ class StoreLinks(unittest.TestCase):
             html = page.read_text("utf-8")
             js = re.search(r"const STORE_SITES = (\{.*?\});", html).group(1)
             sites = json.loads(re.sub(r"(\w+):", r'"\1":', js))
-            self.assertEqual({k: tuple(v) for k, v in sites.items()}, asset_dl.STORE_LINK_SITES, page.name)
+            self.assertEqual({k: tuple(v) for k, v in sites.items()}, safety.STORE_LINK_SITES, page.name)
             for field in ("a.url", "a.download_url", "a.creator_url", "f.url"):
                 for use in re.findall(r"href=\"\$\{esc\((\w+)\([^)]*" + re.escape(field) + r"\)\)\}", html):
                     self.assertEqual(use, "storeUrl", f"{page.name}: {field} must be checked with storeUrl")
@@ -686,7 +671,7 @@ class Seals(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_states(self):
-        for m in (asset_dl, library, asset_browser):
+        for m in (safety,):
             reset_keys()
             path = self.dir / f"{m.__name__}.json"
             sealed = m.seal({"assets": {"1": {"url": "https://booth.pm/ja/items/1"}}})
@@ -703,9 +688,9 @@ class Seals(unittest.TestCase):
             self.assertEqual(m.check_seal(other, path), "foreign")
 
     def test_key_is_private_and_shared_by_the_tools(self):
-        key = asset_dl.integrity_key()
-        self.assertEqual(library.integrity_key(), key)
-        self.assertEqual(asset_browser.integrity_key(), key)
+        key = safety.integrity_key()
+        self.assertEqual(safety.integrity_key(), key)
+        self.assertEqual(safety.integrity_key(), key)
         if os.name == "posix":
             self.assertEqual(stat.S_IMODE((_TEST_HOME / "Hoard" / "integrity.key").stat().st_mode), 0o600)
 
@@ -714,7 +699,7 @@ class Seals(unittest.TestCase):
         folder = root / "Booth" / "Kitsu Studio" / "Rusk"
         folder.mkdir(parents=True)
         (folder / "rusk.zip").write_bytes(b"zip")
-        man = asset_dl.Manifest(root / "Booth")
+        man = downloader.Manifest(root / "Booth")
         rec = man.record("111", "Kitsu Studio", "Rusk")
         rec.update(name="Rusk", creator="Kitsu Studio", url="https://booth.pm/ja/items/111")
         rec["files"]["f1"] = {"path": "rusk.zip", "size": 3}
@@ -727,10 +712,10 @@ class Seals(unittest.TestCase):
         data = json.loads(path.read_text("utf-8"))
         data["assets"]["111"]["url"] = "https://booth.pm/ja/items/666"   # same store, different page: only the seal notices
         path.write_text(json.dumps(data))
-        cfg = json.loads(json.dumps(asset_dl.DEFAULT_CONFIG))
-        self.assertEqual(asset_dl.cmd_verify(cfg, root), 1, "verify reports the change")
-        self.assertEqual(asset_dl.cmd_verify(cfg, root), 0, "and settles it: records kept, links dropped, sealed again")
-        man = asset_dl.Manifest(root / "Booth")
+        cfg = json.loads(json.dumps(config.DEFAULT_CONFIG))
+        self.assertEqual(downloader.cmd_verify(cfg, root), 1, "verify reports the change")
+        self.assertEqual(downloader.cmd_verify(cfg, root), 0, "and settles it: records kept, links dropped, sealed again")
+        man = downloader.Manifest(root / "Booth")
         self.assertIsNone(man.assets["111"]["url"], "a changed manifest's links must not be used")
         self.assertIn("rusk.zip", [f["path"] for f in man.assets["111"]["files"].values()], "records are kept")
         self.assertTrue(list((root / "Booth").glob("_manifest.changed-*.json")), "a copy is kept to look at")
@@ -741,27 +726,27 @@ class Seals(unittest.TestCase):
         (root / "Booth" / "_manifest.json").write_text(json.dumps({"assets": {
             "1": {"folder": "A/B", "name": "Good", "creator": "A", "url": "https://booth.pm/ja/items/1", "files": {}},
             "2": {"folder": "A/B", "name": "Phish", "creator": "A", "url": "https://booth-login.example/", "files": {}}}}))
-        man = asset_dl.Manifest(root / "Booth")
+        man = downloader.Manifest(root / "Booth")
         self.assertEqual(man.assets["1"]["url"], "https://booth.pm/ja/items/1")
         self.assertIsNone(man.assets["2"]["url"])
 
     def test_a_tool_changing_asset_json_is_caught_and_repaired(self):
         root = self._download_folder()
-        cfg = json.loads(json.dumps(asset_dl.DEFAULT_CONFIG))
-        asset_dl.build_catalog(cfg, root)
+        cfg = json.loads(json.dumps(config.DEFAULT_CONFIG))
+        downloader.build_catalog(cfg, root)
         asset_path = root / "Booth" / "Kitsu Studio" / "Rusk" / "asset.json"
         for name in ("catalog.json", "tags.json"):
-            self.assertEqual(asset_dl.check_seal(json.loads((root / name).read_text("utf-8"))), "sealed", name)
+            self.assertEqual(safety.check_seal(json.loads((root / name).read_text("utf-8"))), "sealed", name)
         asset = json.loads(asset_path.read_text("utf-8"))
-        self.assertEqual(asset_dl.check_seal(asset), "sealed")
+        self.assertEqual(safety.check_seal(asset), "sealed")
         asset["url"] = "https://booth-login.example/"
         asset_path.write_text(json.dumps(asset))
-        self.assertEqual(asset_dl.check_seal(json.loads(asset_path.read_text("utf-8"))), "changed")
-        self.assertEqual(asset_dl.cmd_verify(cfg, root), 1, "verify reports the change")
+        self.assertEqual(safety.check_seal(json.loads(asset_path.read_text("utf-8"))), "changed")
+        self.assertEqual(downloader.cmd_verify(cfg, root), 1, "verify reports the change")
         repaired = json.loads(asset_path.read_text("utf-8"))
         self.assertEqual(repaired["url"], "https://booth.pm/ja/items/111")
-        self.assertEqual(asset_dl.check_seal(repaired), "sealed")
-        self.assertEqual(asset_dl.cmd_verify(cfg, root), 0)
+        self.assertEqual(safety.check_seal(repaired), "sealed")
+        self.assertEqual(downloader.cmd_verify(cfg, root), 0)
 
     def test_a_tool_changing_hoards_list_is_caught(self):
         path = self.dir / "library.json"
@@ -792,22 +777,30 @@ class SupplyChain(unittest.TestCase):
     """H-04, H-05, H-06: dependencies are locked with hashes, and workflow actions pinned to commits."""
 
     def test_requirements_are_locked(self):
-        for tool in ("Hoard", "HoardDownloader"):
-            text = (REPO / tool / "requirements.txt").read_text("utf-8")
-            packages = re.findall(r"^([A-Za-z0-9_.-]+)==([^\s\\]+)", text, re.M)
-            self.assertTrue(packages, tool)
-            blocks = re.split(r"\n(?=[A-Za-z0-9_.-]+==)", text)
-            for block in blocks:
-                if re.match(r"[A-Za-z0-9_.-]+==", block):
-                    self.assertIn("--hash=sha256:", block, f"{tool}: {block.splitlines()[0]} has no hash")
-        versions = dict(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s\\]+)", (REPO / "HoardDownloader" / "requirements.txt").read_text(), re.M))
-        major, minor, patch = (int(x) for x in versions["requests"].split(".")[:3])
-        self.assertGreaterEqual((major, minor, patch), (2, 32, 4), "requests below 2.32.4 has known vulnerabilities")
+        text = (REPO / "requirements.txt").read_text("utf-8")
+        blocks = re.split(r"\n(?=[A-Za-z0-9_.-]+==)", text)
+        pinned = [b for b in blocks if re.match(r"[A-Za-z0-9_.-]+==", b)]
+        self.assertTrue(pinned)
+        for block in pinned:
+            self.assertIn("--hash=sha256:", block, f"{block.splitlines()[0]} has no hash")
+        versions = dict(re.findall(r"^([A-Za-z0-9_.-]+)==([^\s\\]+)", text, re.M))
+        self.assertGreaterEqual(tuple(int(x) for x in versions["requests"].split(".")[:3]), (2, 32, 4),
+                                "requests below 2.32.4 has known vulnerabilities")
 
     def test_setup_checks_hashes(self):
-        for tool in ("Hoard", "HoardDownloader"):
-            self.assertIn("--require-hashes", (REPO / tool / "Setup.bat").read_text("utf-8"))
-            self.assertIn("--require-hashes", (REPO / tool / "setup.sh").read_text("utf-8"))
+        self.assertIn("--require-hashes", (REPO / "Setup.bat").read_text("utf-8"))
+        self.assertIn("--require-hashes", (REPO / "setup.sh").read_text("utf-8"))
+
+    def test_no_hidden_characters_in_the_project(self):
+        """Invisible formatting characters can make code or text read differently from how it runs ("Trojan Source")."""
+        import unicodedata
+        found = []
+        for path in REPO.rglob("*"):
+            if (path.is_file() and path.suffix in (".py", ".html", ".md", ".yml", ".bat", ".sh", ".json", ".in", ".txt")
+                    and not {"dist", ".git", ".venv", "__pycache__"} & set(path.parts)):
+                for n, line in enumerate(path.read_text("utf-8", errors="replace").splitlines(), 1):
+                    found += [f"{path.relative_to(REPO)}:{n} U+{ord(c):04X}" for c in line if unicodedata.category(c) == "Cf"]
+        self.assertEqual(found, [], "hidden characters found")
 
     def test_actions_are_pinned_to_commits(self):
         for wf in (REPO / ".github" / "workflows").glob("*.yml"):

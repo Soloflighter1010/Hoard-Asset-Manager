@@ -23,8 +23,7 @@ jobs:
           python-version: "3.10"
       - name: Install the locked dependencies
         run: |
-          python -m pip install --disable-pip-version-check --require-hashes -r HoardDownloader/requirements.txt
-          python -m pip install --disable-pip-version-check --require-hashes -r Hoard/requirements.txt
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
       - name: Security tests
         run: python -m unittest discover -s tests -v
       - name: Build the zips

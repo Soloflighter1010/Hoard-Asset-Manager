@@ -1,6 +1,6 @@
 # Data formats
 
-Hoard Downloader writes three files that other programs (a Unity plugin, scripts, spreadsheets) are
+Hoard writes three files in your downloads folder that other programs (a Unity plugin, scripts, spreadsheets) are
 welcome to read. This page says what's in them and what they promise, so readers can rely on it.
 
 ## What every file promises
@@ -43,8 +43,8 @@ encoded as UTF-8. `key_id` is the first 16 hex digits of the key's SHA-256.
 A program running as the same user on the same computer (such as a Unity plugin) can read the key and
 check the seal: if the `mac` doesn't match, something other than Hoard edited the file, and it shouldn't
 be trusted. The key is private to your user account, so programs that can't read it can't produce a valid
-seal. When a file has been edited, `python asset_dl.py verify` reports it and rebuilds the catalog files
-from Hoard Downloader's own records.
+seal. When a file has been edited, `Hoard.bat verify` (or `./run.sh verify`) reports it and rebuilds the catalog files
+from Hoard's own records.
 
 ## `catalog.json` (in the download folder)
 
@@ -89,17 +89,17 @@ The same fields as one `<asset>` above, plus `"format": "hoard-asset"` and `"ver
 }
 ```
 
-## Records Hoard Downloader keeps for itself
+## Records Hoard keeps for itself
 
 `_manifest.json` in each store folder records what's downloaded and where. It's sealed the same way.
-Other programs shouldn't write to it: when the seal shows it was changed, Hoard Downloader keeps its
+Other programs shouldn't write to it: when the seal shows it was changed, Hoard keeps its
 records but stops using their store links, keeps a copy of the changed file as
 `_manifest.changed-<date>.json`, and fetches the links from the store again on the next sync.
 
 ## Your tags (`tags.json` in Hoard's app-data folder)
 
-This one belongs to the tools. Don't write to it; use Hoard's Tags panel. It's private to your user
-account, both tools check every entry when they read it, and a damaged copy is kept as
+This one belongs to Hoard. Don't write to it; use the Tags panel. It's private to your user
+account, Hoard check every entry when they read it, and a damaged copy is kept as
 `tags.damaged-<date>.json` rather than overwritten.
 
 ## Version history

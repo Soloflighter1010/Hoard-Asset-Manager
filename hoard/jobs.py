@@ -1,0 +1,197 @@
+"""Work Hoard does in the background, one job at a time: refreshing, signing in and out, and downloading."""
+from __future__ import annotations
+
+import threading
+
+from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
+from .common import Cancelled, NotLoggedIn, capture_log
+from .library import FETCHERS, IMPORTABLE, Library, STORES, cache_images, unreachable_message
+from .net import is_network_error, reachable
+
+
+# ----------------------------------------------------------------------------- background jobs
+
+class Jobs:
+    """One browser job at a time: refreshing stores, or waiting for you to sign in."""
+
+    def __init__(self, cfg: dict, lib: Library, on_download_done=None):
+        """No job is running at first. on_download_done is called after every download job."""
+        self.cfg, self.lib = cfg, lib
+        self.on_download_done = on_download_done or (lambda: None)
+        self.busy = threading.Lock()
+        self.stop = threading.Event()
+        self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
+                      "log": [], "report": None}
+
+    def _set(self, **kw):
+        """Update the job state the page polls."""
+        self.state.update(kw)
+
+    def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None) -> bool:
+        """Start a job in the background. False when one is already running."""
+        if not self.busy.acquire(blocking=False):
+            return False
+        self.stop.clear()
+        self.state.update(error=None, log=[], report=None)
+        if task == "download":
+            target = lambda s: self._download(s, only)  # noqa: E731
+        elif task == "login":
+            target = self._login_then_refresh
+        elif task == "logout":
+            target = self._logout
+        else:
+            target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
+        threading.Thread(target=self._wrap, args=(target, stores), daemon=True).start()
+        return True
+
+    def _wrap(self, fn, stores):
+        """Run a job, recording any error for the page, and always free the runner afterwards."""
+        try:
+            self._set(running=True)
+            fn(stores)
+        except (ProfileBusy, SigninsUnprotected) as e:
+            self._set(message=str(e), error=str(e))
+        except Exception as e:
+            self._set(message=f"Stopped: {e}", error=f"Stopped: {e}")
+        finally:
+            self._set(running=False, task=None, store=None)
+            self.busy.release()
+
+    def cancel(self) -> bool:
+        """Stop the running download after the file it's on. False when no download is running."""
+        if self.state["running"] and self.state["task"] == "download":
+            self.stop.set()
+            self._set(message="Stopping after the current file")
+            return True
+        return False
+
+    def _download(self, stores: list[str], only: str | None) -> None:
+        """Download everything new or changed from these stores, passing progress to the page as it goes."""
+        from types import SimpleNamespace
+        from .downloader import cmd_sync
+        self._set(task="download", store=stores[0] if len(stores) == 1 else None, message="Starting")
+        lines: list[str] = []
+
+        def progress(msg):
+            lines.extend(line.rstrip() for line in str(msg).splitlines() if line.strip())
+            del lines[:-300]
+            self._set(message=lines[-1] if lines else "", log=lines[-80:])
+            if self.stop.is_set():
+                self.stop.clear()   # the catalog is still rebuilt on the way out
+                raise Cancelled()
+
+        args = SimpleNamespace(store="all" if set(stores) >= set(STORES) else stores, dry_run=False, only=only,
+                               headed=False, payhip_page=None)
+        try:
+            with capture_log(progress):
+                report = cmd_sync(self.cfg, args)
+            summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
+            self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
+                      message=(f"Done: {summary['new_assets']} new, {summary['updated']} updated"
+                               + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
+        except Cancelled:
+            self._set(message="Stopped. Anything half-downloaded resumes next time.")
+        finally:
+            self.on_download_done()
+
+    def _logout(self, stores: list[str]) -> None:
+        """Sign out of one store, or of every store, and mark the affected stores as signed out."""
+        chosen = list(STORES) if stores[0] == "all" else [stores[0]]
+        with _playwright()() as p:
+            for store in chosen:
+                label = STORES[store]["label"]
+                self._set(task="logout", store=store, message=f"Signing out of {label}")
+                done = sign_out(p, self.cfg, store)
+                if store in self.lib.data["stores"]:  # what was done, shown on the store's row in Stores
+                    self.lib.set_error(store, "Signed out. " + done.split(": ", 1)[-1])
+        if stores[0] == "all":
+            root = signins_root(self.cfg)
+            for extra in (root.parent / (root.name + ".old"), LEGACY_PROFILE):
+                if extra.exists():
+                    _remove_tree(extra)
+            self._set(message="Signed out of every store. Each store's row in Stores says what was done.")
+        else:
+            self._set(message="Signed out. " + done.split(": ", 1)[-1])
+
+    def _refresh(self, stores: list[str], skip_imported: bool = False) -> None:
+        """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty."""
+        if skip_imported:
+            stores = [s for s in stores if self.lib.data["stores"].get(s, {}).get("source") != "import"]
+        self._set(task="refresh", message="Checking your connection")
+        online = [s for s in stores if reachable(s)]
+        for store in stores:
+            if store not in online:
+                self.lib.set_error(store, unreachable_message(store))
+        if not online:
+            self._set(message="You're offline. Your saved library still works.")
+            return
+        refreshed = []
+        with _playwright()() as p:
+            for store in online:
+                label = STORES[store]["label"]
+                self._set(task="refresh", store=store, message=f"Reading {label}")
+                try:
+                    ctx = launch(p, self.cfg, True, store)   # each store has its own sign-in
+                except (ProfileBusy, SigninsUnprotected) as e:
+                    self.lib.set_error(store, str(e))
+                    continue
+                try:
+                    try:
+                        items = FETCHERS[store](ctx, self.cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                        before = self.lib.data["stores"].get(store, {}).get("count", 0)
+                        if not items and before:
+                            self.lib.set_error(store, f"Found no items this time (last time: {before}), so the old list was kept. "
+                                                      f"Try again, or run the command: debug {store}")
+                        else:
+                            self.lib.replace_store(store, items)
+                            refreshed.append(store)
+                    except NotLoggedIn:
+                        self.lib.set_error(store, "Not signed in. Choose Sign in, then close the browser window when you're done.")
+                    except Blocked as e:
+                        self.lib.set_error(store, (
+                            f"{label} blocked the automated browser ({e}). Import your library instead: open it in "
+                            f"your usual browser, scroll to the bottom, press Ctrl+S and save it as \"Webpage, Single "
+                            f"File\", then choose Import page here.") if store in IMPORTABLE
+                            else f"{label} blocked the automated browser ({e}). Try again later.")
+                    except Exception as e:
+                        self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
+                                           else f"Couldn't read the library: {e}")
+                finally:
+                    ctx.close()
+        if refreshed and self.cfg.get("offline_images", True):
+            with self.lib.lock:
+                keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
+            cache_images(self.lib, keys, lambda m: self._set(message=m))
+        self._set(message="Library updated")
+
+    def _login_then_refresh(self, stores: list[str]) -> None:
+        """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""
+        store = stores[0]
+        label = STORES[store]["label"]
+        if not reachable(store):
+            self.lib.set_error(store, unreachable_message(store, "opened for signing in"))
+            self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
+            return
+        with _playwright()() as p:
+            ctx = launch(p, self.cfg, False, store)
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.goto(STORES[store]["login"])
+            self._set(task="login", store=store,
+                      message=f"Sign in to {label} in the browser window that opened, then close that window.")
+            while True:  # wait for the window to be closed
+                try:
+                    if not ctx.pages:
+                        break
+                    ctx.pages[0].wait_for_timeout(500)
+                except Exception:
+                    break
+            try:
+                ctx.close()
+            except Exception:
+                pass
+        try:
+            check_saved_signin(self.cfg, store)
+        except SigninsUnprotected as e:
+            self.lib.set_error(store, str(e))
+            raise
+        self._refresh([store])

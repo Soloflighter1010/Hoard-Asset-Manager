@@ -1,4 +1,0 @@
-# What Hoard needs. requirements.txt is generated from this with exact versions and hashes:
-#   pip-compile --generate-hashes --strip-extras --no-emit-index-url requirements.in
-# Don't edit requirements.txt by hand; change this file and regenerate it.
-playwright>=1.45,<2   # each Playwright version also fixes which Chromium build gets installed
