@@ -22,6 +22,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   downloads.py         the Downloads view's index of what's on disk
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the browser
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across
+  marks.py             archive, hide and remove choices, and the hidden library's PIN
   server.py            the local server behind both views
   cli.py               the command line (docs/COMMAND-LINE.md)
   web/                 library.html, downloads.html and the bundled fonts

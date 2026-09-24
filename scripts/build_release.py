@@ -21,7 +21,7 @@ NAME = "Hoard"
 TOP_FILES = ("Hoard.bat", "Setup.bat", "run.sh", "setup.sh", "requirements.txt", "README.md", "CHANGELOG.md",
              "LICENSE", "TERMS.md", "PRIVACY.md", "COPYRIGHT.md", "SECURITY.md", "AI-DISCLOSURE.md")
 # The program: every Python module, both pages and the bundled fonts with their licenses.
-PACKAGE_PATTERNS = ("hoard/*.py", "hoard/web/*.html", "hoard/web/fonts/*.woff2", "hoard/web/fonts/*.txt",
+PACKAGE_PATTERNS = ("hoard/*.py", "hoard/recovery_words.txt", "hoard/web/*.html", "hoard/web/fonts/*.woff2", "hoard/web/fonts/*.txt",
                     "hoard/web/fonts/README.md")
 
 

@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -501,6 +502,35 @@ def settle(page, ms: int = 700) -> None:
 
 
 BOT_CHECK_TITLES = ("just a moment", "attention required", "access denied", "verify you are human", "are you a robot")
+
+
+def still_checking(page) -> bool:
+    """Is the page still a bot check (a challenge, or a check page's title)?"""
+    try:
+        title = page.title().lower()
+        challenge = page.locator("iframe[src*='challenges.cloudflare.com'], #challenge-form, "
+                                 "#cf-wrapper, #cf-challenge-running").count() > 0
+    except Exception:
+        return False
+    return challenge or any(t in title for t in BOT_CHECK_TITLES)
+
+
+def goto_past_check(page, url: str, wait_s: float, progress=lambda m: None):
+    """goto, but when the store shows a bot check in a visible window, wait (up to wait_s) for you to complete it."""
+    try:
+        return goto(page, url)
+    except Blocked:
+        if wait_s <= 0:
+            raise
+    progress("The store is checking the browser. Complete the check in the window that opened")
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        page.wait_for_timeout(1500)
+        if not still_checking(page):
+            if urlparse(page.url).path.rstrip("/") != urlparse(url).path.rstrip("/"):
+                return goto(page, url)   # the check sent you elsewhere afterwards: go back to the page wanted
+            return None
+    raise Blocked("the check wasn't completed in time")
 
 
 def goto(page, url: str):

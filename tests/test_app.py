@@ -225,6 +225,260 @@ class PayhipShops(unittest.TestCase):
         self.assertEqual(both["payhip"], {"shops": ["https://a.store"], "enabled": False})
 
 
+class ArchiveHideRemove(unittest.TestCase):
+    """Your archive, hidden and removed choices, and the hidden library's PIN."""
+
+    def store(self):
+        from hoard import marks
+        return marks.MarkStore(Path(tempfile.mkdtemp()) / "marks.json")
+
+    def test_choices_persist_and_validate(self):
+        st = self.store()
+        st.change("archived", {"booth:rusk", "bad key!"}, True)
+        st.change("removed", {"payhip:pollution"}, True)
+        again = type(st)(st.path).load()
+        self.assertEqual((again["archived"], again["removed"]), ({"booth:rusk"}, {"payhip:pollution"}))
+        st.change("unarchived", {"booth:rusk"}, True)
+        self.assertEqual(st.load()["archived"], set(), "moving back out of the archive undoes archiving")
+        with self.assertRaises(Exception):
+            st.change("hidden", {"booth:rusk"}, True)   # no PIN yet
+
+    def test_pin(self):
+        from hoard import marks
+        st = self.store()
+        st.set_pin("4821")
+        raw = st.path.read_text()
+        self.assertNotIn("4821", raw)
+        self.assertIn("scrypt" if "scrypt" in raw else '"n"', raw)
+        st.check_pin("4821")
+        for _ in range(marks.FREE_TRIES):
+            with self.assertRaises(marks.PinError):
+                st.check_pin("0000")
+        with self.assertRaises(marks.PinError) as waiting:
+            type(st)(st.path).check_pin("4821")   # the wait survives a restart, and applies to the right PIN too
+        self.assertIn("Try again in", str(waiting.exception))
+        with self.assertRaises(marks.PinError):
+            st.set_pin("9999", current="0000")
+
+    def test_forgotten_pin_deletes_never_reveals(self):
+        st = self.store()
+        st.set_pin("4821")
+        st.change("hidden", {"booth:secret"}, True)
+        self.assertEqual(st.forget_hidden(), {"booth:secret"})
+        data = st.load()
+        self.assertEqual((data["hidden"], data["pin"]), (set(), None))
+
+    def test_editing_the_file_drops_the_pin(self):
+        st = self.store()
+        st.set_pin("4821")
+        raw = json.loads(st.path.read_text())
+        raw["hidden"] = ["booth:x"]
+        st.path.write_text(json.dumps(raw))
+        self.assertIsNone(st.load()["pin"], "an edited file can't keep a PIN someone else chose")
+
+    def test_the_server_keeps_hidden_items_private(self):
+        from hoard import marks, tags
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        lib = srv.lib
+        with lib.lock:
+            lib.data["items"] = [library.item("booth", "1", name="Secret Suit"), library.item("booth", "2", name="Plain Hat")]
+            lib.save()
+        secret = tags.tag_key("booth", "Secret Suit")
+        st = marks.MarkStore()
+        st.set_pin("4821")
+        st.change("hidden", {secret}, True)
+        try:
+            def call(method, path, body=None, cookie=None):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                headers = {"Content-Type": "application/json"} if body is not None else {}
+                if cookie:
+                    headers["Cookie"] = cookie
+                c.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return r.status, data, r.getheader("Set-Cookie")
+            _, locked, _ = call("GET", "/api/library")
+            self.assertEqual([i["name"] for i in locked["items"]], ["Plain Hat"])
+            self.assertEqual(call("POST", "/api/marks", {"kind": "hidden", "keys": [secret], "on": False})[0], 403)
+            self.assertEqual(call("POST", "/api/unlock", {"pin": "0000"})[0], 403)
+            status, _, cookie = call("POST", "/api/unlock", {"pin": "4821"})
+            self.assertEqual(status, 200)
+            self.assertIn("HttpOnly", cookie)
+            self.assertIn("SameSite=Strict", cookie)
+            _, unlocked, _ = call("GET", "/api/library", cookie=cookie.split(";")[0])
+            self.assertEqual(sorted(i["name"] for i in unlocked["items"]), ["Plain Hat", "Secret Suit"])
+            self.assertEqual(len(call("GET", "/api/library")[1]["items"]), 1, "other browsers stay locked")
+            call("POST", "/api/lock", {})
+            self.assertEqual(len(call("GET", "/api/library", cookie=cookie.split(";")[0])[1]["items"]), 1, "Lock now locks")
+            self.assertEqual(call("POST", "/api/purge", {"keys": [secret]})[1].get("deleted"), 0, "only removed items can be purged")
+        finally:
+            marks.MarkStore().path.unlink(missing_ok=True)
+            srv.shutdown()
+            srv.server_close()
+
+    def test_removed_products_arent_downloaded(self):
+        from hoard import marks, tags
+        st = marks.MarkStore()
+        st.change("removed", {tags.tag_key("payhip", "Someone Else's Pack")}, True)
+        try:
+            report = downloader.Report()
+            self.assertTrue(downloader.removed_product("payhip", "Someone Else's Pack", report))
+            self.assertFalse(downloader.removed_product("payhip", "My Pack", report))
+            self.assertIn("removed from your library", report.skipped[0])
+        finally:
+            st.path.unlink(missing_ok=True)
+
+    def test_found_payhip_shops_survive_only_if_valid(self):
+        p = Path(tempfile.mkdtemp()) / "library.json"
+        lib = library.Library(p)
+        lib.data["stores"]["payhip"] = {"count": 0, "found_shops": ["https://good.store", "http://10.0.0.1", "https://xn--pypal-4ve.store"]}
+        lib.save()
+        self.assertEqual(library.Library(p).data["stores"]["payhip"]["found_shops"], ["https://good.store"])
+
+
+class RecoveryPhrase(unittest.TestCase):
+    """A forgotten PIN is reset with 6 recovery words, and hidden items stay hidden."""
+
+    def store(self):
+        from hoard import marks
+        return marks.MarkStore(Path(tempfile.mkdtemp()) / "marks.json")
+
+    def test_the_word_list_is_the_bip39_list(self):
+        import hashlib
+        from hoard import marks
+        text = (REPO / "hoard" / "recovery_words.txt").read_bytes()
+        self.assertEqual(hashlib.sha256(text).hexdigest(), "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda")
+        self.assertEqual(len(set(marks.WORDS)), 2048)
+        self.assertEqual(len({w[:4] for w in marks.WORDS}), 2048, "every word is unique in its first four letters")
+
+    def test_phrases(self):
+        from hoard import marks
+        st = self.store()
+        phrase = st.set_pin("4821")
+        words = phrase.split()
+        self.assertEqual(len(words), 6)
+        self.assertTrue(all(w in marks.WORDS for w in words))
+        on_disk = st.path.read_text()
+        self.assertNotIn(phrase, on_disk)
+        self.assertIsNone(st.set_pin("1111", current="4821"), "changing the PIN never shows the phrase again")
+        self.assertNotEqual(self.store().set_pin("4821"), phrase, "each phrase is new")
+
+    def test_reading_what_people_type(self):
+        from hoard import marks
+        words = ["abandon", "zoo", "legal", "winner", "thank", "year"]
+        for typed in ("abandon zoo legal winner thank year", "1. Abandon, 2. ZOO, 3. lega 4 winn 5 thank 6 year\n",
+                      "  abandon\tzoo legal\nwinner thank year  "):
+            self.assertEqual(marks.read_phrase(typed), words, typed)
+        with self.assertRaises(marks.PinError) as typo:
+            marks.read_phrase("abandon zoo legal winner thank yaer")
+        self.assertIn("Word 6 (yaer)", str(typo.exception))
+        with self.assertRaises(marks.PinError) as short:
+            marks.read_phrase("abandon zoo legal")
+        self.assertIn("all 6", str(short.exception))
+
+    def test_recover(self):
+        from hoard import marks
+        st = self.store()
+        phrase = st.set_pin("4821")
+        st.change("hidden", {"booth:secret"}, True)
+        wrong = "abandon ability able about above absent"
+        if wrong.split() == phrase.split():   # (a 1 in 2048^6 chance)
+            wrong = "zoo zoo zoo zoo zoo zoo"
+        with self.assertRaises(marks.PinError):
+            st.recover(wrong, "7777")
+        self.assertEqual(st.load()["failures"], 1, "wrong phrases count toward the lockout")
+        with self.assertRaises(marks.PinError):
+            st.recover("abandon zoo legal winner thank yaer", "7777")
+        self.assertEqual(st.load()["failures"], 1, "a typo is pointed out without counting as a wrong try")
+        st.recover(phrase.upper(), "7777")
+        st.check_pin("7777")
+        self.assertEqual(st.load()["hidden"], {"booth:secret"}, "hidden items stay hidden")
+        self.assertEqual(st.load()["failures"], 0)
+
+    def test_lockout_covers_phrases(self):
+        from hoard import marks
+        st = self.store()
+        phrase = st.set_pin("4821")
+        for _ in range(marks.FREE_TRIES):
+            with self.assertRaises(marks.PinError):
+                st.check_pin("0000")
+        with self.assertRaises(marks.PinError) as waiting:
+            st.recover(phrase, "7777")
+        self.assertIn("Try again in", str(waiting.exception), "the phrase can't be used to get around the wait")
+
+    def test_edited_or_forgotten(self):
+        st = self.store()
+        st.set_pin("4821")
+        raw = json.loads(st.path.read_text())
+        raw["hidden"] = ["booth:x"]
+        st.path.write_text(json.dumps(raw))
+        self.assertIsNone(st.load()["recovery"], "an edited file keeps no phrase")
+        st2 = self.store()
+        st2.set_pin("4821")
+        st2.forget_hidden()
+        self.assertIsNone(st2.load()["recovery"])
+
+    def test_endpoints(self):
+        from hoard import marks
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            def call(path, body, cookie=None):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=30)
+                headers = {"Content-Type": "application/json", **({"Cookie": cookie} if cookie else {})}
+                c.request("POST", path, body=json.dumps(body), headers=headers)
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return r.status, data, (r.getheader("Set-Cookie") or "").split(";")[0]
+            status, first, _ = call("/api/pin", {"pin": "4821"})
+            self.assertEqual(len(first["recovery"].split()), 6)
+            self.assertNotIn("recovery", call("/api/pin", {"pin": "1234", "current": "4821"})[1])
+            self.assertEqual(call("/api/pin/phrase", {})[0], 403, "a new phrase needs unlocking")
+            _, _, cookie = call("/api/unlock", {"pin": "1234"})
+            status, newer, _ = call("/api/pin/phrase", {}, cookie)
+            self.assertEqual((status, len(newer["recovery"].split())), (200, 6))
+            self.assertEqual(call("/api/pin/recover", {"phrase": first["recovery"], "pin": "5555"})[0], 403, "the old phrase stopped working")
+            self.assertEqual(call("/api/pin/recover", {"phrase": newer["recovery"], "pin": "5555"})[0], 200)
+            self.assertFalse(srv.unlocks, "recovering locks every browser")
+        finally:
+            marks.MarkStore().path.unlink(missing_ok=True)
+            srv.shutdown()
+            srv.server_close()
+
+
+class PayhipBotCheck(unittest.TestCase):
+    """A Payhip refresh in a visible window waits while you complete the store's check, instead of giving up."""
+
+    def test_waits_then_carries_on(self):
+        from hoard import browser
+
+        class Page:
+            url, waits = "https://payhip.com/Shop/b-account", 0
+            def wait_for_timeout(self, ms): Page.waits += 1
+        saved = browser.goto, browser.still_checking
+        calls = []
+
+        def goto(page, url):
+            calls.append(url)
+            if len(calls) == 1:
+                raise browser.Blocked("bot check")
+        browser.goto = goto
+        browser.still_checking = lambda page: Page.waits < 3
+        try:
+            said = []
+            browser.goto_past_check(Page(), "https://payhip.com/Shop/b-account", 30, said.append)
+            self.assertIn("Complete the check", said[0])
+            self.assertEqual(Page.waits, 3)
+            browser.still_checking = lambda page: True
+            calls.clear()
+            with self.assertRaises(browser.Blocked):   # never completed: gives up after the wait
+                browser.goto_past_check(Page(), "https://payhip.com/Shop/b-account", 0.01)
+            calls.clear()
+            with self.assertRaises(browser.Blocked):   # invisible browser: nobody to complete it, so no waiting
+                browser.goto_past_check(Page(), "https://payhip.com/Shop/b-account", 0)
+        finally:
+            browser.goto, browser.still_checking = saved
+
+
 class ComingFrom1x(unittest.TestCase):
     """Bringing over a 1.x library list and downloads folder, without overwriting anything."""
 

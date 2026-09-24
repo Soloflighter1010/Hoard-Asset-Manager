@@ -379,6 +379,41 @@ body.selecting .dlpanel { bottom: 96px; }
 .setup textarea { width: 100%; height: auto; min-height: 84px; padding: 8px 10px; resize: vertical; }
 .setup .field input:focus, .setup textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .setup .progress { margin-top: 8px; font-size: 13px; color: var(--dust); overflow-wrap: anywhere; min-height: 1.4em; }
+
+/* views: library, archive, removed, hidden */
+.views { display: flex; flex-direction: column; gap: 2px; margin: 0 0 18px; }
+.views button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--dust); font: 700 14px var(--body); text-align: left; cursor: pointer; }
+.views button:hover { background: var(--stone); color: var(--bone); }
+.views button[aria-checked="true"] { background: var(--ledge); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.views .n { margin-left: auto; font-weight: 500; color: var(--dust); font-size: 12.5px; }
+.viewbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; padding: 12px 14px;
+  border-radius: 12px; background: var(--stone); font-size: 13.5px; }
+.viewbar p { margin: 0; flex: 1; min-width: 240px; }
+.marks { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.store-row .found { flex-basis: 100%; font-size: 12.5px; color: var(--dust); }
+dialog.pin { width: min(420px, calc(100vw - 32px)); padding: 24px 26px; border: 0; border-radius: 16px; color: var(--bone);
+  background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 24px 60px rgb(0 0 0 / .5); }
+dialog.pin::backdrop { background: rgb(10 8 6 / .7); }
+dialog.pin h2 { margin: 0 0 8px; font: 400 22px var(--display); }
+dialog.pin p { font-size: 14px; line-height: 1.5; margin: 6px 0; }
+dialog.pin input { display: block; width: 100%; box-sizing: border-box; height: 40px; margin: 10px 0 0; padding: 0 12px; border: 0;
+  border-radius: 9px; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam);
+  font: 700 18px var(--body); letter-spacing: .18em; }
+dialog.pin input[hidden] { display: none; }
+dialog.pin input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+dialog.pin .pin-note { min-height: 1.3em; margin: 8px 0 0; color: var(--warn); font-size: 13px; }
+dialog.pin .muted { color: var(--dust); font-size: 12.5px; }
+dialog.pin .phrase { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; margin: 14px 0; padding: 14px 16px 14px 36px;
+  border-radius: 12px; background: var(--cave); font: 700 17px var(--body); }
+dialog.pin .phrase li { padding-left: 4px; }
+dialog.pin .phrase li::marker { color: var(--dust); font-weight: 500; }
+dialog.pin textarea { display: block; width: 100%; box-sizing: border-box; min-height: 72px; margin: 10px 0 0; padding: 10px 12px; border: 0;
+  border-radius: 9px; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 600 15px var(--body); resize: vertical; }
+dialog.pin textarea[hidden], dialog.pin [hidden] { display: none; }
+dialog.pin .checks { display: flex; gap: 8px; }
+dialog.pin .checks input { letter-spacing: normal; font-size: 15px; }
+dialog.pin .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
 </style>
 </head>
 <body>
@@ -447,6 +482,7 @@ body.selecting .dlpanel { bottom: 96px; }
 <div id="offline" class="offline" role="status" hidden>You're offline. Your library, search and saved images still work; refreshing and store links need a connection.</div>
 <div class="layout">
   <nav id="filters" class="side" aria-label="Filters">
+    <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
     <h2 class="sidehead">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
     <h2>Suggested</h2>
@@ -462,6 +498,7 @@ body.selecting .dlpanel { bottom: 96px; }
     <div class="headrow"><h2 id="count" class="count" aria-live="polite"></h2>
       <button id="selectBtn" class="ghost sm" aria-pressed="false" title="Select several items to tag them together">Select</button></div>
     <div id="status" class="status"></div>
+    <div id="viewBar" class="viewbar" hidden></div>
     <div id="grid" class="grid" aria-label="Your assets"></div>
     <div id="empty" class="empty" hidden></div>
     <footer class="foot">
@@ -529,6 +566,24 @@ body.selecting .dlpanel { bottom: 96px; }
     </div>
   </div>
 </div>
+<dialog id="pinDialog" class="pin" aria-labelledby="pinTitle">
+  <h2 id="pinTitle">Hidden library</h2>
+  <p id="pinText"></p>
+  <input id="pinCurrent" type="password" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="Current PIN" aria-label="Current PIN" hidden>
+  <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="PIN" aria-label="PIN">
+  <textarea id="recoverWords" spellcheck="false" autocomplete="off" placeholder="Your 6 recovery words, in order" aria-label="Your 6 recovery words" hidden></textarea>
+  <input id="pinAgain" type="password" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="New PIN again" aria-label="New PIN again" hidden>
+  <div id="phraseBox" hidden>
+    <ol class="phrase" id="phraseWords"></ol>
+    <p class="muted">This phrase only unlocks Hoard's hidden library. It isn't a crypto wallet phrase, and Hoard will never ask for a wallet's recovery words.</p>
+    <p>To check you've got them, type word <strong id="checkA"></strong> and word <strong id="checkB"></strong>:</p>
+    <div class="checks"><input id="checkWordA" autocomplete="off" spellcheck="false" aria-label="Check word one">
+      <input id="checkWordB" autocomplete="off" spellcheck="false" aria-label="Check word two"></div>
+  </div>
+  <p class="pin-note" id="pinNote" aria-live="polite"></p>
+  <div class="row"><span><button class="linkish" id="pinForgot">Forgot your PIN?</button><button class="linkish" id="pinLost" hidden>Lost your recovery words too?</button></span>
+    <span><button class="ghost" id="pinCancel">Cancel</button> <button class="primary" id="pinOk">OK</button></span></div>
+</dialog>
 <div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
   <button class="linkish" id="bulkAll">Select all shown</button>
@@ -536,6 +591,10 @@ body.selecting .dlpanel { bottom: 96px; }
   <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
   <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
+  <button class="ghost sm" data-needs data-mark>Archive</button>
+  <button class="ghost sm" data-needs data-mark>Hide</button>
+  <button class="ghost sm" data-needs data-mark>Remove</button>
+  <button class="ghost sm" data-needs id="bulkPurge" hidden>Delete for good</button>
   <button class="ghost sm" id="bulkDone">Done</button>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -548,7 +607,7 @@ const shown = s => (DATA.enabled || {})[s] !== false;   // stores you don't use 
 const usedStores = () => STORE_ORDER.filter(shown);
 const IMPORTABLE = ["booth", "jinxxy", "payhip"];
 let importStore = null;
-const state = { q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null };
+const state = { view: "library", q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null };
 let DATA = { items: [], stores: {}, labels: {}, job: {} }, byKey = new Map(), openKey = null, lastFocus = null, polling = null;
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
@@ -609,6 +668,7 @@ async function load() {
 
 /* ---------- filtering */
 function matches(a, skip) {
+  if (!inView(a)) return false;
   if (state.copies && a.match_key !== state.copies.key) return false;
   if (state.store && a.store !== state.store) return false;
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
@@ -627,12 +687,13 @@ const filtersActive = () => state.q || state.store || state.creator || state.tag
 /* ---------- rendering */
 function render() {
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
-  renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  renderViews(); renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
 function renderStoreSeg() {
   const counts = {};
-  for (const a of DATA.items) counts[a.store] = (counts[a.store] || 0) + 1;
-  $("#storeSeg").innerHTML = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${DATA.items.length}</span></button>` +
+  const here = DATA.items.filter(inView);
+  for (const a of here) counts[a.store] = (counts[a.store] || 0) + 1;
+  $("#storeSeg").innerHTML = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${here.length}</span></button>` +
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
       `<span class="dot ${s}"></span>${label(s)}<span class="n">${counts[s] || 0}</span></button>`).join("");
@@ -650,7 +711,10 @@ function renderStores() {
       `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` +
       (IMPORTABLE.includes(s) ? `<button class="ghost sm" data-import="${s}">Import page</button>` : "") +
       `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button></span>` +
-      (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}</span>` : "") + `</div>`;
+      (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}</span>` : "") +
+      ((info.found_shops || []).length ? `<span class="found">Your library has products from ${info.found_shops.length} more ` +
+        `Payhip ${info.found_shops.length === 1 ? "shop" : "shops"} on their own addresses. <button class="linkish" data-review-shops>Review</button></span>` : "") +
+      `</div>`;
   }).join("");
   $("#refreshAll").disabled = !!job.running;
   $("#signOutAll").disabled = !!job.running;
@@ -789,6 +853,7 @@ function showDetail(a, focus = true) {
     `<p class="copy">${a.on_disk != null
       ? `<a class="ondisk" href="/downloads#open=${a.on_disk}">On disk. Show it in Downloads</a>`
       : `<button class="ghost sm" data-act="download">Download a copy</button>`}</p>` +
+    `<div class="marks">${markButtons(a)}</div>` +
     tagSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
@@ -920,6 +985,8 @@ $("#detail").addEventListener("click", e => {
   const a = byKey.get(openKey);
   if (tagDetailAction(b.dataset.act, b, a)) return;
   if (b.dataset.act === "download") { startDownload([a.store], a.name); return; }
+  if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
+  if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); render(); }
@@ -1405,6 +1472,209 @@ function wireSetup() {
   });
 }
 
+/* ---------- archive, hide and remove; the hidden library and its PIN */
+const VIEWS = { library: "Library", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+const inView = a => state.view === "library" ? !a.mark : state.view === "archive" ? a.mark === "archived" : a.mark === state.view;
+const viewOf = a => !a.mark ? "library" : a.mark === "archived" ? "archive" : a.mark;
+function renderViews() {
+  const p = DATA.privacy || {}, count = {};
+  for (const a of DATA.items) if (shown(a.store)) (count[viewOf(a)] ||= new Set()).add(a.key);   // as the grid counts
+  const n = v => (count[v] || new Set()).size;
+  $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "library" || v === "archive" || state.view === v
+      || (v === "removed" && n(v)) || (v === "hidden" && p.pin_set)).map(v =>
+    `<button role="radio" data-view="${v}" aria-checked="${state.view === v}">${VIEWS[v]}` +
+    (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>` : `<span class="n">${n(v)}</span>`) + `</button>`).join("");
+  const bar = $("#viewBar");
+  bar.hidden = state.view === "library";
+  bar.innerHTML = state.view === "archive" ? `<p>Your archive: older products set aside, out of your main library but still yours. Gumroad's archived purchases start here too.</p>`
+    : state.view === "removed" ? `<p>Removed items stay out of your library, even after a refresh. Restore them, or delete them from Hoard for good (downloaded files stay on disk).</p>`
+    : state.view === "hidden" ? `<p>Hidden items only show here, and only in this browser while it's unlocked. It's a privacy screen for Hoard, not encryption.</p>
+        <button class="ghost sm" data-privacy="lock">Lock now</button><button class="ghost sm" data-privacy="change">Change PIN</button>
+        <button class="ghost sm" data-privacy="phrase">${(DATA.privacy || {}).recovery_set ? "New recovery phrase" : "Create a recovery phrase"}</button>` : "";
+  updateBulkButtons();
+}
+function markButtons(a) {
+  const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
+  if (a.mark === "removed") return b("removed", false, "Restore") + `<button class="ghost sm" data-act="purge">Delete for good</button>`;
+  if (a.mark === "hidden") return b("hidden", false, "Unhide") + b("removed", true, "Remove");
+  return (a.mark === "archived" ? b("unarchived", true, "Unarchive") : b("archived", true, "Archive")) +
+    b("hidden", true, "Hide") + b("removed", true, "Remove");
+}
+function updateBulkButtons() {
+  const set = (el, kind, on, text, show = true) => { el.hidden = !show; el.dataset.kind = kind; el.dataset.on = on; el.textContent = text; };
+  const [one, two, three] = document.querySelectorAll("#bulk [data-mark]");
+  if (!one) return;
+  const v = state.view;
+  if (v === "removed") { set(one, "removed", false, "Restore"); set(two, "", "", "", false); set(three, "", "", "", false); }
+  else if (v === "hidden") { set(one, "hidden", false, "Unhide"); set(two, "removed", true, "Remove"); set(three, "", "", "", false); }
+  else { set(one, v === "archive" ? "unarchived" : "archived", true, v === "archive" ? "Unarchive" : "Archive");
+         set(two, "hidden", true, "Hide"); set(three, "removed", true, "Remove"); }
+  $("#bulkPurge").hidden = v !== "removed";
+}
+const MARK_DONE = {
+  "archived true": n => `Archived ${n}. It's in Archive.`, "unarchived true": n => `Moved ${n} back to your library.`,
+  "removed true": n => `Removed ${n}. Restore from Removed if you change your mind.`, "removed false": n => `Restored ${n}.`,
+  "hidden true": n => `Hidden ${n}. It's in Hidden, behind your PIN.`, "hidden false": n => `${n} no longer hidden.`,
+};
+async function markItems(list, kind, on) {
+  const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!keys.length) { toast("Select some items first."); return; }
+  if (kind === "hidden" && on && !(DATA.privacy || {}).pin_set && !(await pinDialog("set"))) return;
+  const r = await apiPost("/api/marks", { kind, keys, on });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  sel.ids.clear(); T.closeDetail(); await load();
+  toast(MARK_DONE[`${kind} ${on}`](keys.length === 1 ? "1 item" : `${keys.length} items`));
+}
+async function purgeItems(list) {
+  const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!keys.length) return;
+  if (!confirm(`Delete ${keys.length === 1 ? "this item" : keys.length + " items"} from Hoard for good? They stay out of your library even if a store lists them again. Downloaded files stay on disk.`)) return;
+  const r = await apiPost("/api/purge", { keys });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  sel.ids.clear(); T.closeDetail(); await load();
+  toast(`Deleted ${r.data.deleted} ${r.data.deleted === 1 ? "item" : "items"} from Hoard's library.`);
+}
+async function showView(v) {
+  if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
+    if (!(await pinDialog("unlock"))) return;
+    await load();
+  }
+  state.view = v; sel.ids.clear(); T.closeDetail(); render();
+}
+
+/* the PIN dialog: choose a PIN, unlock, or change it */
+const PIN = { mode: null, resolve: null };
+const PIN_TEXT = {
+  set: ["Choose a PIN", "Hidden items stay out of view until you enter this PIN. It's a privacy screen for Hoard, not encryption: anyone who can open your files can still find them."],
+  unlock: ["Unlock hidden items", "Enter your PIN to show hidden items in this browser for a while."],
+  change: ["Change your PIN", "Enter your current PIN, then the new one twice."],
+  recover: ["Reset your PIN", "Enter your 6 recovery words, then choose a new PIN. Your hidden items stay hidden."],
+  phrase: ["Your recovery phrase", "Write these 6 words down, in order, and keep them somewhere safe away from this computer. They're the only way to reset your PIN, and Hoard won't show them again."],
+};
+function pinLayout(mode) {
+  PIN.mode = mode;
+  $("#pinTitle").textContent = PIN_TEXT[mode][0];
+  $("#pinText").textContent = PIN_TEXT[mode][1];
+  $("#pinCurrent").hidden = mode !== "change";
+  $("#pinInput").hidden = mode === "phrase";
+  $("#pinAgain").hidden = mode === "unlock" || mode === "phrase";
+  $("#recoverWords").hidden = mode !== "recover";
+  $("#phraseBox").hidden = mode !== "phrase";
+  $("#pinInput").placeholder = mode === "unlock" ? "PIN" : "New PIN";
+  $("#pinForgot").hidden = mode !== "unlock" && mode !== "change";
+  $("#pinLost").hidden = mode !== "recover";
+  $("#pinCancel").hidden = mode === "phrase";
+  $("#pinOk").textContent = mode === "phrase" ? "I've written them down" : "OK";
+  $("#pinNote").textContent = "";
+}
+function showPhrase(phrase) {
+  const words = phrase.split(" ");
+  PIN.words = words;
+  $("#phraseWords").innerHTML = words.map(w => `<li>${esc(w)}</li>`).join("");
+  const picks = [0, 1, 2, 3, 4, 5].sort(() => Math.random() - 0.5).slice(0, 2).sort((a, b) => a - b);
+  PIN.checks = picks;
+  $("#checkA").textContent = picks[0] + 1; $("#checkB").textContent = picks[1] + 1;
+  $("#checkWordA").value = ""; $("#checkWordB").value = "";
+  pinLayout("phrase");
+  $("#checkWordA").focus();
+}
+async function newPhrase() {
+  const r = await apiPost("/api/pin/phrase");
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  PIN.resolve = null;
+  $("#pinDialog").showModal();
+  showPhrase(r.data.recovery);
+}
+function pinDialog(mode) {
+  return new Promise(resolve => {
+    PIN.resolve = resolve;
+    for (const id of ["#pinCurrent", "#pinInput", "#pinAgain", "#recoverWords"]) $(id).value = "";
+    pinLayout(mode);
+    $("#pinDialog").showModal();
+    (mode === "change" ? $("#pinCurrent") : $("#pinInput")).focus();
+  });
+}
+function pinDone(ok) {
+  if ($("#pinDialog").open) $("#pinDialog").close();
+  const r = PIN.resolve; PIN.resolve = null;
+  if (r) r(ok);
+}
+async function pinSubmit() {
+  const pin = $("#pinInput").value, note = $("#pinNote");
+  if (PIN.mode === "phrase") {   // both check words must match (the first four letters are enough)
+    const same = (typed, word) => { const t = typed.trim().toLowerCase(); return t === word || (t.length >= 4 && word.startsWith(t)); };
+    if (!same($("#checkWordA").value, PIN.words[PIN.checks[0]]) || !same($("#checkWordB").value, PIN.words[PIN.checks[1]])) {
+      note.textContent = "Those don't match the words above. Check them, and try again."; return;
+    }
+    PIN.words = null;
+    toast("Recovery phrase saved. Keep those words safe.");
+    pinDone(true); return;
+  }
+  if (PIN.mode === "recover") {
+    if (pin.length < 4) { note.textContent = "Use at least 4 characters for the new PIN."; return; }
+    if (pin !== $("#pinAgain").value) { note.textContent = "The two PINs don't match."; return; }
+    const r = await apiPost("/api/pin/recover", { phrase: $("#recoverWords").value, pin });
+    if (!r.ok) { note.textContent = r.data.error || "That didn't work."; return; }
+    await apiPost("/api/unlock", { pin });
+    toast("New PIN set. Your hidden items are still hidden, and unlocked in this browser.");
+    pinDone(true); return;
+  }
+  if (PIN.mode !== "unlock") {
+    if (pin.length < 4) { note.textContent = "Use at least 4 characters."; return; }
+    if (pin !== $("#pinAgain").value) { note.textContent = "The two PINs don't match."; return; }
+  }
+  const r = PIN.mode === "unlock" ? await apiPost("/api/unlock", { pin })
+    : await apiPost("/api/pin", { pin, current: $("#pinCurrent").value || null });
+  if (!r.ok) { note.textContent = r.data.error || "That didn't work."; $("#pinInput").select(); return; }
+  if (PIN.mode === "change") toast("PIN changed.");
+  if (r.data.recovery) { showPhrase(r.data.recovery); return; }   // the first PIN: show its recovery phrase once
+  pinDone(true);
+}
+function wirePrivacy() {
+  $("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
+  $("#viewBar").addEventListener("click", async e => {
+    const b = e.target.closest("[data-privacy]");
+    if (!b) return;
+    if (b.dataset.privacy === "lock") { await apiPost("/api/lock"); state.view = "library"; await load(); toast("Hidden items locked."); }
+    else if (b.dataset.privacy === "phrase") {
+      if ((DATA.privacy || {}).recovery_set && !confirm("Make a new recovery phrase? The old words will stop working.")) return;
+      await newPhrase(); await load();
+    }
+    else pinDialog("change");
+  });
+  $("#pinOk").addEventListener("click", pinSubmit);
+  $("#pinCancel").addEventListener("click", () => pinDone(false));
+  $("#pinDialog").addEventListener("cancel", e => { e.preventDefault(); if (PIN.mode !== "phrase") pinDone(false); });
+  $("#pinDialog").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id !== "recoverWords") { e.preventDefault(); pinSubmit(); } });
+  $("#pinForgot").addEventListener("click", () => {
+    if (!(DATA.privacy || {}).recovery_set) { $("#pinLost").click(); return; }
+    for (const id of ["#pinInput", "#pinAgain", "#recoverWords"]) $(id).value = "";
+    pinLayout("recover");
+    $("#recoverWords").focus();
+  });
+  $("#pinLost").addEventListener("click", async () => {
+    if (!confirm("Forgot your PIN? Hoard can't show hidden items without it. Instead, it will delete them from its library and remove the PIN, so you can start again. They won't be shown. Downloaded files stay on disk.")) return;
+    const r = await apiPost("/api/hidden/forget", { confirm: true });
+    pinDone(false);
+    state.view = "library"; await load();
+    toast(r.ok ? `Deleted ${r.data.deleted} hidden ${r.data.deleted === 1 ? "item" : "items"} and removed the PIN.` : (r.data.error || "That didn't work."));
+  });
+  for (const b of document.querySelectorAll("#bulk [data-mark]")) {
+    b.addEventListener("click", () => markItems([...sel.ids].map(T.byId), b.dataset.kind, b.dataset.on === "true"));
+  }
+  $("#bulkPurge").addEventListener("click", () => purgeItems([...sel.ids].map(T.byId)));
+  $("#storeRows").addEventListener("click", async e => {
+    if (!e.target.closest("[data-review-shops]")) return;
+    const found = (DATA.stores.payhip || {}).found_shops || [];
+    if (!found.length) return;
+    const list = found.map(s => s.replace(/^https:\/\//, "")).join("\n");
+    if (!confirm(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then open pages and download files from those addresses. Only add shops you bought from.`)) return;
+    const current = (await (await fetch("/api/settings", { cache: "no-store" })).json()).payhip_shops || [];
+    const r = await apiPost("/api/settings", { payhip_shops: [...current, ...found] });
+    toast(r.ok ? "Added. Refresh Payhip to read them." : (r.data.error || "They weren't added."));
+  });
+}
+
 /* ---------- offline notice: everything here works offline except the store links and refreshing */
 const showConnection = () => { $("#offline").hidden = navigator.onLine; };
 addEventListener("online", showConnection);
@@ -1413,6 +1683,7 @@ showConnection();
 wireTags();
 wireApp();
 wireSetup();
+wirePrivacy();
 readHash();
 load().then(() => {   // someone new (nothing set up, nothing in the library) is walked through setting up
   if (/(^|[#&])setup\b/.test(location.hash) || (!DATA.setup_done && !DATA.items.length && !DATA.error)) openSetup();

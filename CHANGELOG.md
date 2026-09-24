@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.3.0
+
+- **Recovery words for a forgotten PIN.** When you set your hidden library's PIN, Hoard shows 6 recovery
+  words, once, and asks you to type two of them back. If you forget your PIN, choose **Forgot your
+  PIN?** and enter the words to set a new one; your hidden items stay hidden. Capitals, numbering and
+  the first four letters of each word are all fine, and a misspelt word is pointed out. The words
+  are kept only as a slow, salted hash, and wrong ones count toward the same waits as wrong PINs.
+- Already have a PIN? Unlock **Hidden** and choose **Create a recovery phrase**. **New recovery phrase**
+  replaces an old one.
+- The words come from the standard BIP-39 list, but they only unlock Hoard's hidden library. They
+  aren't a crypto wallet phrase, and Hoard never asks for a wallet's recovery words.
+
+## 2.2.0
+
+Tidy your library, and keep some of it private.
+
+- **Remove:** open an item (or choose several with **Select**) and remove it. Removed items stay out of
+  your library even after a refresh, and aren't downloaded. Restore them from **Removed**, or delete
+  them from Hoard for good. That's also how to clean up a library page imported by mistake.
+- **Archive:** put older products that may no longer work into **Archive**, out of your main library.
+  Gumroad's own archived purchases start there too. **Unarchive** moves them back.
+- **Hidden library:** **Hide** things you'd rather not see by default, such as NSFW assets, behind a
+  PIN. Hidden items are left out of everything (library, Downloads, counts, tags, search) until you
+  unlock them in that browser, for 15 minutes past your last use. Wrong guesses wait longer each time.
+  A forgotten PIN can only be cleared by deleting the hidden items, never by showing them. It's a
+  privacy screen, not encryption: the files on your disk are ordinary files.
+- **Payhip, large libraries:** refreshing Payhip now opens a window and waits while you complete
+  Payhip's automated-browser check, instead of giving up. Libraries of up to 3,000 products are read
+  page by page.
+- **Payhip, one shop for everything:** a shop on payhip.com lists your purchases from every shop, so
+  adding one is often enough. Shops on their own domains that turn up are offered in **Stores** to
+  review and add, never trusted automatically.
+- **Payhip downloads:** Hoard uses each file's own download button, names files from the name Payhip
+  shows, includes files on a product's other content pages, and never touches **Reset download
+  credits** (or any other reset, credit, limit or delete control, on any store).
+
 ## 2.1.1
 
 A security release answering the independent audit of 2.1.0. Every finding is fixed; the details are in

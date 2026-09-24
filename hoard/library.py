@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
-from .browser import _playwright, goto, has_password_field, settle
+from .browser import _playwright, goto, goto_past_check, has_password_field, settle
 from .common import NotLoggedIn, now_iso
 from .net import STORE_HOSTS
 from .paths import THUMB_DIR
@@ -486,8 +486,9 @@ PAYHIP_SHOP_JS = r"""
 def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
     """Every product you bought from one Payhip shop, from its library page (<shop>/b-account), all its pages."""
     url, cards = shop + "/b-account", {}
-    for page_no in range(1, 100):
-        goto(page, url)
+    wait = float(cfg["payhip"].get("bot_check_wait", 180)) if cfg["payhip"].get("headed", True) else 0
+    for page_no in range(1, 200):   # 15 products a page: 3,000 products
+        goto_past_check(page, url, wait, progress)
         settle(page)
         if "/b-account" not in urlparse(page.url).path or has_password_field(page):
             raise NotLoggedIn(f"not signed in to {urlparse(shop).hostname}{urlparse(shop).path}")
@@ -537,6 +538,12 @@ def fetch_payhip(ctx, cfg, progress) -> list[dict]:
         raise NotLoggedIn("not signed in to " + ", ".join(signed_out))
     if signed_out:
         progress(f"Not signed in to {', '.join(signed_out)}; sign in to Payhip again to include them")
+    # Payhip's library lists purchases from every shop, including shops on their own domains. Those aren't trusted
+    # until you add them (their links are left out till then), so they're offered for you to review.
+    known = set(payhip_shops(cfg)) | {"https://payhip.com"}
+    found = {s for s in (clean_payhip_shop(c.get("creator_url")) for c in cards.values()) if s and s not in known
+             and not s.startswith("https://payhip.com/")}
+    cfg["_found_payhip_shops"] = sorted(found)
     return [payhip_item(c) for c in cards.values()]
 
 
@@ -701,6 +708,8 @@ class Library:
                     "error": clean_text(info.get("error"), 600) or None,
                     **{k: clean_text(info[k], 40) for k in ("refreshed", "updated") if isinstance(info.get(k), str)},
                     **({"source": info["source"]} if info.get("source") in ("import", "refresh") else {}),
+                    **({"found_shops": [f for f in info["found_shops"][:200] if isinstance(f, str) and clean_payhip_shop(f) == f]}
+                       if store == "payhip" and isinstance(info.get("found_shops"), list) else {}),
                 }
         return out
 
@@ -725,6 +734,22 @@ class Library:
             self.data["stores"][store] = {"updated": now_iso(), "count": len(merged), "error": None, "source": "import"}
             self.save()
             return len(merged)
+
+    def forget_products(self, keys: set) -> int:
+        """Delete these products (by product key) from the list, with their cached pictures. Returns how many."""
+        with self.lock:
+            gone = [i for i in self.data["items"] if tag_key(i["store"], i["name"]) in keys]
+            self.data["items"] = [i for i in self.data["items"] if tag_key(i["store"], i["name"]) not in keys]
+            for store in {i["store"] for i in gone}:
+                info = self.data["stores"].get(store)
+                if isinstance(info, dict):
+                    info["count"] = sum(1 for i in self.data["items"] if i["store"] == store)
+            self.save()
+        for i in gone:
+            if i.get("thumbnail"):
+                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode()).hexdigest() + ".*"):
+                    cached.unlink(missing_ok=True)
+        return len(gone)
 
     def clear_store(self, store: str, note: str) -> int:
         """Forget a store's items and their cached pictures (after signing out, so the next account on this

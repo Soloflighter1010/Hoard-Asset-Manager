@@ -11,6 +11,7 @@ import mimetypes
 import secrets
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +27,7 @@ from .library import IMPORTABLE, STORES, Library, cache_images, enrich, fetch_th
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
                      open_under, safe_join, store_sites, UnsafePath)
+from .marks import MarkStore, PinError, is_archived
 from .setup import migrate_from, setup_status
 from .tags import TagStore, tag_overview
 
@@ -33,7 +35,9 @@ PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "down
 FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
            "/api/download", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
-           "/api/setup/migrate", "/api/signin-link")
+           "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
+           "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase")
+UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 
 
@@ -128,6 +132,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         """Start listening; with lan=True, also create the access key other devices need."""
         super().__init__(addr, Handler)
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        self.unlocks: dict[str, float] = {}   # hidden-library unlock tokens, in memory only: a restart locks it
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
         self.key = secrets.token_urlsafe(18) if lan else None
         self.lib = Library(LIBRARY_FILE)
@@ -182,6 +187,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _unlocked(self) -> bool:
+        """Has this browser unlocked the hidden library (and used it within the last UNLOCK_MINUTES)?"""
+        srv = self.server
+        cookie = self.headers.get("Cookie") or ""
+        token = next((c.split("=", 1)[1] for c in (x.strip() for x in cookie.split(";")) if c.startswith("hoard_unlock=")), "")
+        now = time.time()
+        for t in [t for t, until in srv.unlocks.items() if until < now]:
+            del srv.unlocks[t]
+        if token and token in srv.unlocks:
+            srv.unlocks[token] = now + UNLOCK_MINUTES * 60
+            return True
+        return False
+
     def _json(self, obj, status=200):
         """Send obj as JSON that the browser won't cache."""
         self._send(status, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8",
@@ -209,9 +227,19 @@ class Handler(BaseHTTPRequestHandler):
             tagdata = TagStore().load()
             items = enrich(data["items"], srv.cfg["tags"], tagdata)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index()["assets"]}
+            marks, unlocked = MarkStore().load(), self._unlocked()
+            shown = []
             for i in items:
                 i["on_disk"] = on_disk.get(i["tag_key"])
-            return self._json({"items": items, "tagset": tag_overview(tagdata, items), "stores": data["stores"],
+                i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
+                             else "archived" if is_archived(i, marks) else None)
+                if i["mark"] != "hidden" or unlocked:   # hidden items never leave the server while it's locked
+                    shown.append(i)
+            counted = [i for i in shown if i["mark"] not in ("removed", "hidden")]
+            privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "recovery_set": bool(marks["recovery"]),
+                       "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
+            return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": data["stores"],
+                               "privacy": privacy,
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
@@ -222,8 +250,11 @@ class Handler(BaseHTTPRequestHandler):
                 stores = json.loads(json.dumps(srv.lib.data["stores"]))
             return self._json({"job": srv.jobs.state, "stores": stores})
         if path == "/api/assets":
-            return self._json({**with_tags(srv.index(rescan="rescan" in parse_qs(u.query))), "version": __version__,
-                               "job": srv.jobs.state, "store_sites": store_sites()})
+            index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
+            if not self._unlocked():   # hidden products' downloads stay out of view too
+                hidden = MarkStore().load()["hidden"]
+                index = {**index, "assets": [a for a in index["assets"] if a.get("tag_key") not in hidden]}
+            return self._json({**index, "version": __version__, "job": srv.jobs.state, "store_sites": store_sites()})
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/setup":
@@ -252,6 +283,57 @@ class Handler(BaseHTTPRequestHandler):
             ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"
             return self._send(200, data, ctype, {"Cache-Control": "max-age=3600"})
         self._send(404, b"Not found", "text/plain")
+
+    def _privacy_action(self, path: str, body: dict):
+        """Archive, hide, remove and the hidden library's PIN."""
+        srv, store = self.server, MarkStore()
+        keys = {k for k in (body.get("keys") or [])[:5000] if isinstance(k, str)} if isinstance(body.get("keys"), list) else set()
+        try:
+            if path == "/api/marks":
+                kind, on = str(body.get("kind") or ""), bool(body.get("on", True))
+                marks = store.load()
+                if (keys & marks["hidden"]) and not self._unlocked() and not (kind == "hidden" and on):
+                    return self._json({"error": "Unlock your hidden library first."}, 403)
+                store.change(kind, keys, on)
+            elif path == "/api/purge":   # removed products, deleted from Hoard's list for good
+                keys &= store.load()["removed"]
+                gone = srv.lib.forget_products(keys)
+                return self._json({"ok": True, "deleted": gone})
+            elif path == "/api/pin":   # the first PIN comes with its recovery phrase, shown this once
+                phrase = store.set_pin(str(body.get("pin") or ""), body.get("current"))
+                return self._json({"ok": True, **({"recovery": phrase} if phrase else {})})
+            elif path == "/api/pin/recover":   # forgotten PIN: the recovery words set a new one, nothing is lost
+                store.recover(str(body.get("phrase") or "")[:400], str(body.get("pin") or ""))
+                srv.unlocks.clear()
+                return self._json({"ok": True})
+            elif path == "/api/pin/phrase":   # a new recovery phrase, replacing the old: only while unlocked
+                if not self._unlocked():
+                    return self._json({"error": "Unlock your hidden library first."}, 403)
+                return self._json({"ok": True, "recovery": store.new_phrase()})
+            elif path == "/api/unlock":
+                store.check_pin(str(body.get("pin") or ""))
+                token = secrets.token_urlsafe(32)
+                srv.unlocks[token] = time.time() + UNLOCK_MINUTES * 60
+                secure = "; Secure" if getattr(srv, "tls", False) else ""
+                data = json.dumps({"ok": True}).encode()
+                return self._send(200, data, "application/json; charset=utf-8",
+                                  {"Set-Cookie": f"hoard_unlock={token}; HttpOnly; SameSite=Strict; Path=/{secure}",
+                                   "Cache-Control": "no-store"})
+            elif path == "/api/lock":
+                srv.unlocks.clear()
+            elif path == "/api/hidden/forget":   # forgotten PIN: the hidden products are deleted, never shown
+                if body.get("confirm") is not True:
+                    return self._json({"error": "Confirm first."}, 400)
+                gone = store.forget_hidden()
+                srv.lib.forget_products(gone)
+                srv.unlocks.clear()
+                return self._json({"ok": True, "deleted": len(gone)})
+        except PinError as e:
+            return self._json({"error": str(e)}, 403)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        srv.forget_index()
+        return self._json({"ok": True})
 
     # ---- acting
     def do_POST(self):
@@ -320,6 +402,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "store": store, "label": STORES[store]["label"], "count": len(items), "total": total})
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
+        if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
+                    "/api/pin/recover", "/api/pin/phrase"):
+            return self._privacy_action(path, body)
         if path == "/api/signin-link":
             why = srv.jobs.open_link(str(body.get("url") or "").strip()[:2000])
             return self._json({"error": why}, 400) if why else self._json({"ok": True})
