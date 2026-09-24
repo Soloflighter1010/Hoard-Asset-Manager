@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.0.0
+
+Hoard and Hoard Downloader are now one app, and nothing needs a command prompt or a settings file.
+
+### One app
+- **Library** and **Downloads** are two views of the same app, with one set of sign-ins, tags and settings.
+- Download from the page: **Download** on each store, **Download everything new**, or **Download a copy**
+  on a single item. Progress shows as it goes, and **Stop** pauses safely; it carries on next time.
+- Items you already have say **On disk**, with a link straight to them in Downloads.
+- A **Settings** panel: the downloads folder, which stores to include (and Booth gifts, archived Gumroad
+  purchases), saving images for offline use, and the browser used for store sign-ins.
+- On Windows, store sign-ins use Microsoft Edge, which every PC has and Windows Update keeps patched, so
+  setup no longer downloads a separate 150 MB browser. Hoard's own browser is used only if Edge is missing.
+
+### Where things live
+- Settings, the library list and cached images moved into Hoard's app-data folder, next to your sign-ins
+  and tags. Downloads go to a `Hoard` folder in Documents unless you choose another in Settings.
+- Coming from 1.x: sign-ins and tags carry over by themselves. `Hoard.bat migrate <old folder>` brings
+  over the library list and downloads folder.
+- One release zip, `Hoard-<version>.zip`, replaces the three. Start it with `Hoard.bat` (or `./run.sh`).
+
+### Command line
+- Every command from both tools, as `Hoard.bat <command>` (or `./run.sh <command>`): `sync`, `verify`,
+  `login`, `refresh` and the rest. See docs/COMMAND-LINE.md. `browse` is gone: that's the Downloads view.
+
+### Under the hood
+- The code is one package, `hoard/`, with each piece in exactly one place. The security code used to be
+  copied into two or three files, kept identical by tests; now there's one copy, and a test checks it.
+- Fixed: recognising which store a saved library page came from only worked for pages saved from the exact
+  library address, because a second definition silently replaced the first.
+
 ## 1.6.2
 
 Stops edited links from sending you anywhere but the store.

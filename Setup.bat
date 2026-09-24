@@ -27,12 +27,14 @@ if not exist ".venv\Scripts\python.exe" (
 )
 echo Installing packages ^(each one checked against the hash recorded in requirements.txt^)...
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q --require-hashes -r requirements.txt || goto :fail
-echo Installing the browser used for store sign-ins...
-".venv\Scripts\python.exe" -m playwright install chromium || goto :fail
-if not exist "config.json" copy /y "config.example.json" "config.json" >nul
+rem Hoard uses Microsoft Edge for store sign-ins; its own Chromium is only a fallback if Edge is missing.
+if not exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" if not exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" (
+  echo Microsoft Edge wasn't found, so installing the browser Hoard uses instead...
+  ".venv\Scripts\python.exe" -m playwright install chromium || goto :fail
+)
 
 echo.
-echo Setup finished.
+echo Setup finished. Start Hoard with Hoard.bat.
 if /i not "%~1"=="--quiet" pause
 exit /b 0
 

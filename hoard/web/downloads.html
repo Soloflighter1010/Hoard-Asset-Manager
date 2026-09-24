@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hoard Downloader</title>
+<title>Hoard: Downloads</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cg%20transform%3D%22translate%280%200%29%20scale%281.0%29%22%3E%0A%20%20%3Crect%20x%3D%225%22%20y%3D%2230%22%20width%3D%2227%22%20height%3D%2227%22%20rx%3D%227%22%20fill%3D%22%2356D1DC%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%28-9%2018.5%2043.5%29%22/%3E%0A%20%20%3Crect%20x%3D%2231%22%20y%3D%2231%22%20width%3D%2227%22%20height%3D%2227%22%20rx%3D%227%22%20fill%3D%22%23FF8AD8%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%287%2044.5%2044.5%29%22/%3E%0A%20%20%3Crect%20x%3D%2217.5%22%20y%3D%228%22%20width%3D%2228%22%20height%3D%2228%22%20rx%3D%227%22%20fill%3D%22%23F0B429%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%28-4%2031.5%2022%29%22/%3E%0A%20%20%3Cpath%20d%3D%22M38%2013.5%20l1.6%203.9%203.9%201.6%20-3.9%201.6%20-1.6%203.9%20-1.6%20-3.9%20-3.9%20-1.6%203.9%20-1.6z%22%20fill%3D%22%23FFF8E6%22/%3E%0A%3C/g%3E%3C/svg%3E">
 <style>
 /* Fonts are bundled with Hoard (fonts/, served by the tool), so the pages look the same offline. */
@@ -321,6 +321,34 @@ body.selecting .toast { bottom: 96px; }
 .tagrows .tmeta { grid-column: 1; font-size: 12px; color: var(--dust); }
 .tagrows .tbtns { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .tagpanel details summary { cursor: pointer; font: 700 13px var(--body); color: var(--dust); margin-top: 18px; }
+
+/* the two views, settings, and downloading */
+.apptabs { display: flex; gap: 4px; flex: none; }
+.apptabs a { padding: 7px 12px; border-radius: 9px; font-weight: 700; font-size: 14px; color: var(--dust); text-decoration: none; }
+.apptabs a:hover { color: var(--bone); background: var(--stone); }
+.apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }
+.settings .field { display: flex; gap: 6px; }
+.settings .field input, .settings select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 0;
+  background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.settings select { width: 100%; }
+.settings .field input:focus, .settings select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.settings .check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
+.settings .check.sub { padding-left: 26px; color: var(--dust); font-size: 13px; }
+.settings .check input { width: 16px; height: 16px; accent-color: var(--gold); }
+.settings .actions { margin-top: 20px; display: flex; gap: 8px; }
+.dlpanel { position: fixed; right: 18px; bottom: 18px; z-index: 23; width: min(440px, calc(100vw - 36px)); padding: 14px 16px;
+  background: var(--ledge); border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.dlpanel .dlhead { display: flex; align-items: center; gap: 8px; }
+.dlpanel h2 { flex: 1; margin: 0; font: 400 17px var(--display); }
+.dlpanel .dlmsg { margin: 8px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.dlpanel .problems { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--warn); max-height: 140px; overflow: auto; }
+.dlpanel details summary { cursor: pointer; font-size: 12px; color: var(--dust); margin-top: 10px; }
+.dlpanel pre { max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 8px; border-radius: 8px; background: var(--cave);
+  font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ondisk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--bone); }
+.ondisk::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #4CC38A; }
+body.selecting .dlpanel { bottom: 96px; }
 </style>
 </head>
 <body>
@@ -330,7 +358,8 @@ body.selecting .toast { bottom: 96px; }
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
-</g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg><span class="sub">Downloads</span></a>
+</g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
+  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a></nav>
   <label class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search names, creators, tags, files" aria-label="Search your downloads" autocomplete="off">
@@ -348,6 +377,8 @@ body.selecting .toast { bottom: 96px; }
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
     <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
     <button id="rescan" class="ghost" title="Re-read what's on disk">Rescan</button>
+    <button id="settingsBtn" class="ghost" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+    <button id="downloadNew" class="primary">Download new</button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
 </header>
@@ -400,8 +431,8 @@ body.selecting .toast { bottom: 96px; }
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
-</g></svg><span>Hoard Downloader <span id="version"></span></span></div>
-      <nav class="foot-links" aria-label="About Hoard Downloader">
+</g></svg><span>Hoard <span id="version"></span></span></div>
+      <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues" target="_blank" rel="noopener noreferrer">Report a problem</a>
@@ -416,6 +447,33 @@ body.selecting .toast { bottom: 96px; }
 
 <div id="scrim" class="scrim" hidden></div>
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
+<section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
+  <h2 id="settingsTitle">Settings</h2>
+  <h3>Downloads folder</h3>
+  <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
+    <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
+  <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
+  <h3>Stores</h3>
+  <div id="setStores"></div>
+  <h3>Offline</h3>
+  <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
+  <h3>Browser for store sign-ins</h3>
+  <select id="setBrowser" aria-label="Browser for store sign-ins">
+    <option value="">Automatic (Microsoft Edge on Windows)</option>
+    <option value="msedge">Microsoft Edge</option>
+    <option value="chrome">Google Chrome</option>
+    <option value="chromium">Hoard's own browser</option>
+  </select>
+  <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
+  <div class="actions"><button class="primary" id="setSave">Save</button><button class="ghost" id="setCancel">Cancel</button></div>
+</section>
+<section id="dlPanel" class="dlpanel" hidden aria-labelledby="dlTitle">
+  <div class="dlhead"><h2 id="dlTitle">Downloading</h2>
+    <button class="ghost sm" id="dlStop">Stop</button><button class="ghost sm" id="dlClose" hidden>Close</button></div>
+  <p id="dlMessage" class="dlmsg" aria-live="polite"></p>
+  <ul id="dlProblems" class="problems" hidden></ul>
+  <details><summary>Details</summary><pre id="dlLog"></pre></details>
+</section>
 <div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
   <button class="linkish" id="bulkAll">Select all shown</button>
@@ -478,7 +536,7 @@ async function load(rescan = false) {
       : `The library server answered ${r.status} ${r.statusText}.`);
     DATA = await r.json();
   } catch (e) {
-    DATA = { assets: [], error: e instanceof TypeError ? "Hoard Downloader isn't running. Start it again from its menu (Browse your downloads)." : e.message };
+    DATA = { assets: [], error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
   }
   $("#version").textContent = DATA.version || "";
   for (const a of DATA.assets) {
@@ -533,16 +591,18 @@ function renderGrid(list) {
     const st = DATA.status || { stores: {}, elsewhere: [] };
     const rows = Object.entries(st.stores).map(([s, i]) =>
       `<li>${s}: ${i.found ? `manifest found, ${i.assets} assets with files` : `no <code>${esc(i.manifest)}</code>`}</li>`).join("");
-    const other = st.elsewhere.map(p => `<li>Downloads found in <code>${esc(p)}</code>. Set <code>"root"</code> in config.json to this folder and restart.</li>`).join("");
+    const other = st.elsewhere.map(p => `<li>Downloads found in <code>${esc(p)}</code>. To use them, choose that folder in Settings.</li>`).join("");
     empty.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0 0) scale(1.0)">
   <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
-</g></svg><h2>Nothing downloaded here yet</h2>` +
-      `<p>Looking in <code>${esc(DATA.root)}</code>${st.root_exists === false ? ", which doesn't exist" : ""}.</p>` +
-      `<ul>${rows}${other}</ul>` +
-      `<p>If <code>sync</code> is still running, choose Rescan to pick up what it has finished.</p>`;
+</g></svg><h2>Nothing downloaded yet</h2>` +
+      (Object.values(st.stores).some(i => i.found)
+        ? `<p>Looking in <code>${esc(DATA.root)}</code>.</p><ul>${rows}${other}</ul>`
+        : `<p>Sign in to your stores (in the Library, choose <strong>Stores</strong>), then choose <strong>Download new</strong>. ` +
+          `Files go to <code>${esc(DATA.root)}</code>; you can pick another folder in Settings.</p>` + (other ? `<ul>${other}</ul>` : "")) +
+      (Object.values(st.stores).some(i => i.found) ? `<p>Choose <strong>Download new</strong> to download everything you own.</p>` : "");
   } else if (!list.length) {
     empty.innerHTML = `<h2>Nothing in your downloads matches that</h2><p><button class="linkish" data-clear="all">Clear filters</button></p>`;
   }
@@ -664,6 +724,7 @@ function readHash() {
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
+  if (/^\d+$/.test(p.get("open") || "")) openId = +p.get("open");  // "Show it in Downloads" from the Library
 }
 
 /* ---------- events */
@@ -673,6 +734,7 @@ $("#stores").addEventListener("click", e => { const b = e.target.closest("[data-
 $("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
+$("#downloadNew").addEventListener("click", () => startDownload(Object.keys(STORE_NAMES)));
 $("#rescan").addEventListener("click", async () => { const n = await load(true); toast(`Rescanned ${n} assets`); });
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
@@ -741,7 +803,7 @@ const T = {
   shown: () => DATA.assets.filter(a => matches(a)),
   reload: () => load(),
   closeDetail: () => closeDetail(),
-  closeOtherPanels: () => {},
+  closeOtherPanels: () => closeSettings(),
 };
 /* ---------- tags: your own tags, suggestions you can keep or hide, and tagging many items at once.
    Tags are saved by the tool (POST /api/tags) in a file both Hoard tools share. T (defined above)
@@ -860,7 +922,7 @@ function renderTagPanel() {
   $("#hiddenCount").textContent = ts.hidden.length;
   $("#hiddenRows").innerHTML = ts.hidden.map(w => `<li><span class="tname">${esc(w)}</span>` +
     `<span class="tbtns">${btn("unhide", w, "Suggest again")}</span></li>`).join("") || `<li class="none">Nothing hidden.</li>`;
-  $("#tagFile").textContent = ts.file ? `Saved in ${ts.file}, shared by Hoard and Hoard Downloader.` : "";
+  $("#tagFile").textContent = ts.file ? `Saved in ${ts.file}.` : "";
 }
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
@@ -911,12 +973,116 @@ function wireTags() {
   });
 }
 
+/* ---------- settings and downloading, the same in both views. T (above) connects this to the page. */
+const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip" };
+let SETTINGS = null, dlActive = false, dlTimer = null;
+
+async function apiPost(url, body) {
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: "Hoard isn't running. Open it again." } };
+  }
+}
+
+function closeSettings() {
+  $("#settingsPanel").hidden = true;
+  $("#settingsBtn").setAttribute("aria-expanded", "false");
+}
+async function openSettings(open) {
+  if (!(open ?? $("#settingsPanel").hidden)) return closeSettings();
+  T.closeOtherPanels();
+  openTagPanel(false);
+  try {
+    SETTINGS = await (await fetch("/api/settings", { cache: "no-store" })).json();
+  } catch (e) {
+    toast("Hoard isn't running. Open it again."); return;
+  }
+  $("#settingsPanel").hidden = false;
+  $("#settingsBtn").setAttribute("aria-expanded", "true");
+  $("#setRoot").value = SETTINGS.root;
+  $("#setOffline").checked = SETTINGS.offline_images;
+  $("#setBrowser").value = SETTINGS.browser_channel;
+  const box = (store, opt, on, label, sub) =>
+    `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
+  $("#setStores").innerHTML = Object.entries(SETTINGS.stores).map(([s, o]) => box(s, "enabled", o.enabled, STORE_NAMES[s]) +
+    (s === "booth" ? box(s, "include_gifts", o.include_gifts, "Include gifts", true) : "") +
+    (s === "gumroad" ? box(s, "include_archived", o.include_archived, "Include archived purchases", true) : "")).join("");
+}
+async function saveSettings() {
+  const root = $("#setRoot").value.trim();
+  const body = { root: root === SETTINGS.default_root ? "" : root, offline_images: $("#setOffline").checked,
+                 browser_channel: $("#setBrowser").value, stores: {} };
+  for (const c of document.querySelectorAll("#setStores [data-set-store]")) {
+    (body.stores[c.dataset.setStore] ||= {})[c.dataset.opt] = c.checked;
+  }
+  const r = await apiPost("/api/settings", body);
+  if (!r.ok) { toast(r.data.error || "Your settings weren't saved."); return; }
+  closeSettings();
+  toast("Settings saved.");
+  T.reload();
+}
+
+async function startDownload(stores, only) {
+  if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
+  const r = await apiPost("/api/download", { stores, only });
+  if (!r.ok) { toast(r.data.error || "Downloading didn't start."); return; }
+  dlActive = true;
+  showDownload({ running: true, message: "Starting", log: [] });
+  pollDownload();
+}
+async function pollDownload() {
+  clearTimeout(dlTimer);
+  let job;
+  try {
+    job = (await (await fetch("/api/status", { cache: "no-store" })).json()).job || {};
+  } catch (e) {
+    if (dlActive) dlTimer = setTimeout(pollDownload, 2000);
+    return;
+  }
+  const running = job.running && job.task === "download";
+  if (running || dlActive) showDownload({ ...job, running });
+  if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
+  else if (dlActive) { dlActive = false; T.reload(); }
+}
+function showDownload(job) {
+  $("#dlPanel").hidden = false;
+  const stopped = /^Stopped/.test(job.message || "");
+  $("#dlTitle").textContent = job.running ? "Downloading" : stopped ? "Stopped" : "Finished";
+  $("#dlMessage").textContent = job.message || "";
+  $("#dlLog").textContent = (job.log || []).join("\n");
+  $("#dlStop").hidden = !job.running;
+  $("#dlClose").hidden = !!job.running;
+  const problems = (!job.running && job.report && job.report.problems) || [];
+  $("#dlProblems").hidden = !problems.length;
+  $("#dlProblems").innerHTML = problems.map(p => `<li>${esc(p)}</li>`).join("");
+}
+
+function wireApp() {
+  $("#settingsBtn").addEventListener("click", () => openSettings());
+  $("#setSave").addEventListener("click", saveSettings);
+  $("#setCancel").addEventListener("click", closeSettings);
+  $("#setRootDefault").addEventListener("click", () => { if (SETTINGS) $("#setRoot").value = SETTINGS.default_root; });
+  $("#dlStop").addEventListener("click", async () => {
+    const r = await apiPost("/api/cancel");
+    if (r.ok) $("#dlMessage").textContent = "Stopping after the current file";
+  });
+  $("#dlClose").addEventListener("click", () => { $("#dlPanel").hidden = true; });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#settingsPanel").hidden) closeSettings(); });
+  document.addEventListener("pointerdown", e => {
+    if (!$("#settingsPanel").hidden && !e.target.closest("#settingsPanel, #settingsBtn, #toast")) closeSettings();
+  });
+  pollDownload();  // a download started from the other view, or before this page opened
+}
+
 /* ---------- offline notice: everything here works offline except the store links and refreshing */
 const showConnection = () => { $("#offline").hidden = navigator.onLine; };
 addEventListener("online", showConnection);
 addEventListener("offline", showConnection);
 showConnection();
 wireTags();
+wireApp();
 readHash();
 load();
 </script>

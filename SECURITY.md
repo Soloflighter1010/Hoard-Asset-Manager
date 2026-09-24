@@ -50,7 +50,7 @@ It can't fully protect against:
   that no copy of it is left anywhere, and tells you what it did.
 - A copied session cookie in a settings file or environment variable is never read.
 
-**The tools' pages**
+**Hoard's pages**
 - Served only to your own computer by default. To use them from other devices you need HTTPS (your
   own certificate) or to say the connection is already encrypted, such as over Tailscale; other devices
   also need an access key. Signing in, refreshing, signing out, changing tags and opening folders only
@@ -88,12 +88,12 @@ It can't fully protect against:
 - Every link you can open (**Open on Booth**, **Open download page**, a creator's page) must be an https
   address on that item's own store, checked when data is read, when it's written, and again in the page.
   An edited record can't send you to a lookalike sign-in page.
-- Each data file the tools write (manifests, `catalog.json`, `tags.json`, `asset.json`, Hoard's library
+- Each data file Hoard writes (manifests, `catalog.json`, `tags.json`, `asset.json`, Hoard's library
   list) is sealed with a keyed signature (HMAC-SHA256) using a random key private to your user account.
-  If something else edits a file, the tools notice when they next read it: they keep the data but not its
+  If something else edits a file, Hoard notices when it next reads it: it keeps the data but not its
   links, tell you, keep a copy of the changed file, and fetch the links from the store again on the next
   sync or refresh. Removing the seal doesn't hide an edit.
-- `python asset_dl.py verify` checks every data file in the download folder and rebuilds the catalog files.
+- `Hoard.bat verify` (or `./run.sh verify`) checks every data file in the download folder and rebuilds the catalog files.
 - The seal can't stop malware already running as you, which could read the key too (see above).
 - Setup limits who can change the program folder to your account (plus Windows itself and
   administrators), so no other account can swap in code that would run with your sign-ins. For the
