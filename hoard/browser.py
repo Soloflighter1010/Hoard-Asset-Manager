@@ -102,12 +102,39 @@ def app_data_dir() -> Path:
     return data_dir()
 
 
+def _network_location(p: Path) -> bool:
+    """A network share or mapped network drive (Windows), where OS protection of sign-ins can't be relied on."""
+    if sys.platform != "win32":
+        return str(p).startswith("//")
+    if str(p).startswith("\\\\"):
+        return True
+    try:
+        import ctypes
+        return ctypes.windll.kernel32.GetDriveTypeW(str(p.anchor)) == 4   # DRIVE_REMOTE
+    except Exception:
+        return False
+
+
 def signins_root(cfg: dict) -> Path:
-    """The folder holding one profile per store. config.json's profile_dir can move it."""
+    """The folder holding one profile per store: Hoard's private sign-in folder in your app data.
+
+    config.json's profile_dir can move it only in advanced mode (advanced_signin_location: true), because the
+    protection of saved sign-ins depends on where they are, and never onto a network share.
+    """
     value = (cfg.get("profile_dir") or "").strip()
     if value and Path(value).name != ".browser-profile":  # that name was the pre-1.2 default: ignore it
+        if not cfg.get("advanced_signin_location"):
+            if not cfg.get("_warned_profile_dir"):
+                cfg["_warned_profile_dir"] = True
+                print("Note: profile_dir in config.json is ignored unless advanced_signin_location is true; sign-ins "
+                      "stay in Hoard's private folder.", flush=True)
+            return app_data_dir() / "sign-ins"
         p = Path(os.path.expandvars(value)).expanduser()
-        return p if p.is_absolute() else HERE / p
+        p = p if p.is_absolute() else HERE / p
+        if _network_location(p):
+            raise SigninsUnprotected(f"Sign-ins can't be kept on a network location ({p}). Remove profile_dir from "
+                                     "config.json, or choose a folder on this computer.")
+        return p
     return app_data_dir() / "sign-ins"
 
 
@@ -208,6 +235,8 @@ def linux_keyring() -> str | None:
 
 def signin_protection(cfg: dict) -> str:
     """How saved sign-ins are protected on this computer, in words."""
+    if cfg.get("advanced_signin_location") and (cfg.get("profile_dir") or "").strip():
+        return "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions"
     if sys.platform == "win32":
         return "encrypted by your Windows account"
     if sys.platform == "darwin":

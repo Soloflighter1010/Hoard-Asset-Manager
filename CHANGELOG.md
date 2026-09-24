@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.1.1
+
+A security release answering the independent audit of 2.1.0. Every finding is fixed; the details are in
+docs/security-audit-2.1.0-response.md.
+
+- **Downloads take one checked path.** Downloads of your files went through a different, less careful
+  route than product pictures, which would have followed a redirect to your own computer or network.
+  Now every store request and download goes through one path. Redirects are followed one hop at a
+  time, and each hop must be https to a public internet address. Store cookies only go to the store's
+  own sites; the servers hosting its files get none.
+- **Store traffic is https only.**
+- **Files can't be redirected on disk.** Downloads are created exclusively without following links, and
+  only moved into place if they're still the file that was written. Pictures are served the same way.
+- **Imported pages run nothing:** scripts are off, and event handlers are stripped too.
+- **Shops from imported pages need your say-so.** Hoard shows the exact address and asks before
+  adding it. Internationalised look-alike names are refused.
+- **No more overwriting** when two products' or files' names clean up alike.
+- **Troubleshooting files are scrubbed by default:** no email addresses, license keys, tokens, signed
+  links or screenshots, and a summary instead of your purchases. `--raw` saves everything, marked
+  sensitive.
+- Also: time limits and a connection cap for Hoard's server; manifests are read with size and type
+  checks everywhere; a custom sign-in folder needs an explicit advanced setting and can't be on a
+  network share; the import picker accepts the same file again after you decline.
+
 ## 2.1.0
 
 A setup assistant, so nobody needs a command line or has to guess what to do first.

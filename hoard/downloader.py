@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import time
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,10 +20,11 @@ import requests
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
 from .common import NotLoggedIn, log, now_iso
 from .library import PAYHIP_SHOP_JS
-from .config import apply_store_sites, clean_payhip_shop, payhip_shops, root_dir
+from .config import clean_payhip_shop, payhip_shops, root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR
-from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, no_link, read_json_file, rel_to_path, remember_sealed, safe_name, seal, set_aside, store_link, valid_rel, write_file_safely
+from . import egress
+from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagStore, clean_tag, tag_key
 
 try:
@@ -158,47 +160,42 @@ class Manifest:
         """Existing record for a product, or a new one with a folder no other product uses."""
         if key in self.assets:
             return self.assets[key]
-        used = {a.get("folder") for a in self.assets.values()}
+        used = {same_name_key(a.get("folder") or "") for a in self.assets.values()}
         base = f"{safe_name(creator)}/{safe_name(name)}"
-        folder, n = base, 2
-        while folder in used:
-            folder, n = f"{base} ({n})", n + 1
+        folder = base
+        if same_name_key(folder) in used:   # another product's name cleans up to the same folder name
+            folder = f"{base} [{short_id(key)}]"
+            n = 2
+            while same_name_key(folder) in used:
+                folder, n = f"{base} [{short_id(key)}-{n}]", n + 1
         rec = {"key": key, "name": name, "creator": creator, "folder": folder,
                "files": {}, "first_seen": now_iso()}
         self.assets[key] = rec
         return rec
 
 
-def http_download(sess: requests.Session, url: str, dest: Path, desc: str = "") -> int:
-    """Stream url to dest via a .part file, resuming a previous partial download if possible."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    part = no_link(dest.with_name(dest.name + ".part"))
-    have = part.stat().st_size if part.exists() else 0
-    headers = {"Range": f"bytes={have}-"} if have else {}
-    with sess.get(url, stream=True, headers=headers, timeout=(20, 300)) as r:
-        if have and r.status_code == 416:  # .part was already complete
-            os.replace(part, dest)
-            return dest.stat().st_size
-        if have and r.status_code == 206:
-            mode = "ab"
-        else:
-            r.raise_for_status()
-            mode, have = "wb", 0
-        ctype = r.headers.get("Content-Type", "")
-        if ctype.startswith("text/html") and not dest.suffix.lower().startswith(".htm"):
-            raise RuntimeError("store returned a web page instead of the file (file may be unavailable)")
-        total = int(r.headers.get("Content-Length", 0) or 0) + have
-        bar = tqdm(total=total or None, initial=have, unit="B", unit_scale=True, unit_divisor=1024,
-                   desc=desc[:40], leave=False) if tqdm else None
-        with open(part, mode) as fh:
-            for chunk in r.iter_content(1 << 20):
-                fh.write(chunk)
-                if bar:
-                    bar.update(len(chunk))
-        if bar:
-            bar.close()
-    os.replace(part, dest)
-    return dest.stat().st_size
+def same_name_key(name: str) -> str:
+    """How a file system that ignores case and Unicode form (Windows, macOS) sees a name."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def short_id(key: str) -> str:
+    """A short, stable tag for a store id, used to tell apart names that would otherwise collide."""
+    return hashlib.sha256(str(key).encode()).hexdigest()[:8]
+
+
+def distinct_name(name: str, fid: str, rec: dict, offered: set) -> str:
+    """name, unless a different file that's still offered (its id in offered) already has that name in this
+    product's folder. Then the two are different files whose names clean up alike, so this one gets a stable tag
+    instead of overwriting the other. (A name held by a file that's no longer offered is the creator's update
+    of it, and is replaced as before.)"""
+    holder = next((k for k, v in rec["files"].items() if same_name_key(v.get("path") or "") == same_name_key(name)), None)
+    if holder is None or holder == fid or holder not in offered:
+        return name
+    folder, slash, last = name.rpartition("/")
+    stem, dot, ext = last.rpartition(".")
+    tagged = f"{stem} [{short_id(fid)}].{ext}" if dot and stem else f"{last} [{short_id(fid)}]"
+    return folder + slash + tagged
 
 
 def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
@@ -248,7 +245,7 @@ def gumroad_session(cfg: dict) -> requests.Session:
         log("Note: a Gumroad session cookie in config.json or HOARD_GUMROAD_SESSION is no longer used, because "
             "anyone who sees it can use your account. Delete it (and sign out of Gumroad on its website to end that "
             "session), then sign in with: login gumroad")
-    s = requests.Session()
+    s = egress.session()
     cookies, ua = browser_cookies(cfg, "gumroad")
     if not any(c["name"].startswith("_gumroad_app_session") for c in cookies):
         raise NotLoggedIn("Not signed in to Gumroad")
@@ -268,7 +265,7 @@ class Gumroad:
     def page(self, url: str, params: dict | None = None) -> dict:
         """Load a Gumroad page and return its embedded page data (component and props)."""
         time.sleep(self.delay)
-        r = self.sess.get(url, params=params, timeout=60)
+        r = egress.get(self.sess, url, STORE_SITES["gumroad"], params=params, timeout=60)
         if "/login" in urlparse(r.url).path:
             raise NotLoggedIn("Gumroad session expired")
         r.raise_for_status()
@@ -296,9 +293,8 @@ class Gumroad:
     def file_url(self, page_url: str, token: str, file_id: str, fallback: str | None) -> str | None:
         """Ask for a signed download URL; fall back to the redirecting link on the download page."""
         try:
-            r = self.sess.get(urljoin(page_url, f"/r/{token}/product_files.json"),
-                              params={"product_file_ids[]": file_id},
-                              headers={"Accept": "application/json"}, timeout=60)
+            r = egress.get(self.sess, urljoin(page_url, f"/r/{token}/product_files.json"), STORE_SITES["gumroad"],
+                           params={"product_file_ids[]": file_id}, headers={"Accept": "application/json"}, timeout=60)
             if r.ok:
                 files = r.json().get("files") or []
                 if files and files[0].get("url"):
@@ -349,7 +345,7 @@ def save_thumbnail(url: str | None, folder: Path, referer: str | None = None) ->
 def store_url(url: str, sites: list[str]) -> bool:
     """True when url is an https (or http) address on one of the store's own sites."""
     u = urlparse(url or "")
-    return u.scheme in ("https", "http") and bool(u.hostname) and _on_sites(u.hostname, sites)
+    return u.scheme == "https" and bool(u.hostname) and not u.username and _on_sites(u.hostname, sites)
 
 
 def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
@@ -412,9 +408,10 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
         log(f"\n[Gumroad] {creator} / {name}{f' ({variants})' if variants else ''}")
 
         got_any = False
+        offered = {f.get("id") for _sub, f in gumroad_files(content.get("content_items"))}
         for sub, f in gumroad_files(content.get("content_items")):
             fid, size = f.get("id"), f.get("file_size")
-            relpath = sub + gumroad_filename(f)
+            relpath = distinct_name(sub + gumroad_filename(f), fid, rec, offered)
             target = rel_to_path(folder, relpath)
             old = rec["files"].get(fid)
             if target.exists() and (not size or target.stat().st_size == size):
@@ -430,7 +427,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
                 continue
             try:
                 url = gr.file_url(page_url, token, fid, f.get("download_url"))
-                got = http_download(gr.sess, url, target, desc=relpath)
+                got = egress.download(gr.sess, url, target, STORE_SITES["gumroad"], desc=relpath)
             except Exception as e:
                 report.failed.append(f"Gumroad: {label} - {e}")
                 continue
@@ -694,16 +691,13 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if not dl:
             report.failed.append(f"{store}: {name} / {k} - clicking download didn't start a download")
             continue
-        fname = safe_name(dl.suggested_filename or k, 150)
+        fname = distinct_name(safe_name(dl.suggested_filename or k, 150), k, rec, {key for _label, key in wanted})
         target = folder / fname
         # the same filename under a different label means the creator updated that file
         prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
         is_update = prev is not None or target.exists()
-        part = no_link(target.with_name(target.name + ".part"))
         try:
-            folder.mkdir(parents=True, exist_ok=True)
-            dl.save_as(str(part))
-            os.replace(part, target)
+            save_browser_download(dl, folder, fname)
         except Exception as e:
             report.failed.append(f"{store}: {name} / {fname} - {e}")
             continue
@@ -903,9 +897,8 @@ def booth_library(page, cfg: dict) -> list[dict]:
 
 def session_from_context(ctx, domain: str) -> requests.Session:
     """A requests session carrying the browser's cookies for one site, and the same User-Agent."""
-    s = requests.Session()
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
-    s.headers["User-Agent"] = page.evaluate("navigator.userAgent").replace("HeadlessChrome", "Chrome")
+    s = egress.session(page.evaluate("navigator.userAgent").replace("HeadlessChrome", "Chrome"))
     for c in ctx.cookies():
         if c["domain"].lstrip(".").endswith(domain):
             s.cookies.set(c["name"], c["value"], domain=c["domain"], path=c.get("path", "/"))
@@ -914,7 +907,7 @@ def session_from_context(ctx, domain: str) -> requests.Session:
 
 def booth_file_location(sess: requests.Session, url: str) -> str:
     """Booth answers a file link with a redirect to a short-lived download address."""
-    r = sess.get(url, allow_redirects=False, timeout=60, headers={"Referer": BOOTH_LIBRARY})
+    r = egress.get(sess, url, STORE_SITES["booth"], follow=False, timeout=60, headers={"Referer": BOOTH_LIBRARY})
     if r.status_code in (301, 302, 303, 307, 308):
         loc = urljoin(url, r.headers.get("Location", ""))
         if "sign_in" in loc or urlparse(loc).path.startswith("/users"):
@@ -939,7 +932,8 @@ BOOTH_CLICK_JS = """url => { const a = document.createElement('a'); a.href = url
   document.body.appendChild(a); a.click(); a.remove(); }"""
 
 
-def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, timeout_s: float) -> tuple[str, int]:
+def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, timeout_s: float,
+                           name_for=lambda n: n) -> tuple[str, int]:
     """Download one Booth file through the signed-in browser, just as clicking its download button would.
 
     Returns (file name, size). Raises NotLoggedIn when Booth answers with its sign-in page instead.
@@ -962,29 +956,24 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
     if not started:
         raise RuntimeError("Booth didn't start the download")
     dl = started[0]
-    fname = booth_filename(label, dl.suggested_filename or dl.url, f"file-{fid}")
-    target = folder / fname
-    folder.mkdir(parents=True, exist_ok=True)
-    part = no_link(target.with_name(target.name + ".part"))
-    dl.save_as(str(part))
-    if dl.failure():
-        raise RuntimeError(f"the download failed ({dl.failure()})")
-    os.replace(part, target)
+    fname = name_for(booth_filename(label, dl.suggested_filename or dl.url, f"file-{fid}"))
+    target = save_browser_download(dl, folder, fname)
     return fname, target.stat().st_size
 
 
-def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeout_s: float) -> tuple[str, int]:
+def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeout_s: float,
+                name_for=lambda n: n) -> tuple[str, int]:
     """Download one Booth file. The direct route is fastest and resumes where it stopped; if Booth turns it away
     (sites often screen out anything that isn't a real browser), the rest of the run goes through the browser."""
     if route["direct"]:
         try:
             loc = booth_file_location(sess, f["url"])
-            fname = booth_filename(f["name"], loc, f"file-{fid}")
-            return fname, http_download(sess, loc, folder / fname, desc=fname)
-        except (NotLoggedIn, RuntimeError, requests.RequestException) as e:
+            fname = name_for(booth_filename(f["name"], loc, f"file-{fid}"))
+            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname)
+        except (NotLoggedIn, RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
             route["direct"] = False
             log(f"    Booth turned the direct download away ({e}), so Hoard downloads through the browser instead.")
-    return booth_browser_download(page, f["url"], folder, f["name"], fid, timeout_s)
+    return booth_browser_download(page, f["url"], folder, f["name"], fid, timeout_s, name_for)
 
 
 def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
@@ -1037,7 +1026,9 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                             continue
                         on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
                         try:
-                            fname, got = booth_fetch(page, sess, f, folder, fid, route, timeout_s)
+                            offered = {(re.search(r"/downloadables/(\d+)", x["url"]) or [None, x["url"]])[1] for x in b["files"]}
+                            fname, got = booth_fetch(page, sess, f, folder, fid, route, timeout_s,
+                                                     name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered))
                             prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
                             is_update = had_files or prev is not None or fname in on_disk
                         except NotLoggedIn:
@@ -1266,9 +1257,8 @@ def payhip_products_from_file(p, path: Path) -> list[dict]:
     page_html = page_html[:head.end()] + base_tag + page_html[head.end():] if head else base_tag + page_html
     browser = p.chromium.launch()
     try:
-        page = browser.new_page()
-        page.route("**/*", lambda route: route.abort())  # read the file only
-        page.set_content(page_html, wait_until="domcontentloaded")
+        page = offline_page(browser)   # scripts off, no network
+        page.set_content(inert_html(page_html), wait_until="domcontentloaded")
         cards = page.evaluate(PAYHIP_SHOP_JS if shop_page else PAYHIP_CARDS_JS)["cards"]
     finally:
         browser.close()
@@ -1326,10 +1316,12 @@ def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
     saved_page = getattr(args, "payhip_page", None)
     with _playwright()() as p:
         products = payhip_products_from_file(p, Path(saved_page)) if saved_page else None
-        if products:   # you chose this page, so its shop counts as Payhip for this run
-            added = [s for s in (clean_payhip_shop(c.get("creator_url")) for c in products) if s]
-            cfg["payhip"]["shops"] = list(dict.fromkeys((cfg["payhip"].get("shops") or []) + added))
-            apply_store_sites(cfg)
+        if products:   # its shop must already be one of yours: an address inside a file isn't trusted on its own
+            found = {s for s in (clean_payhip_shop(c.get("creator_url")) for c in products) if s}
+            unknown = sorted(found - set(payhip_shops(cfg)) - {"https://payhip.com"})
+            if unknown:
+                raise RuntimeError(f"{Path(saved_page).name} is from {', '.join(u.split('://', 1)[1] for u in unknown)}, "
+                                   "which isn't in your Payhip shops. Add it in Settings first if it's yours")
         ctx = launch_context(p, cfg, not headed, "payhip")
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -1434,8 +1426,10 @@ def cmd_probe(cfg: dict, args) -> None:
         jinxxy_require_login(page)
         links = jinxxy_item_links(page, cfg["jinxxy"]["item_link_pattern"])
         dump("inventory")
-        (PROBE_DIR / "inventory.html").write_text(page.content(), "utf-8")
-        page.screenshot(path=str(PROBE_DIR / "inventory.png"), full_page=True)
+        raw = bool(getattr(args, "raw", False))
+        (PROBE_DIR / "inventory.html").write_text(page.content() if raw else scrub(page.content()), "utf-8")
+        if raw:
+            page.screenshot(path=str(PROBE_DIR / "inventory.png"), full_page=True)
         hrefs = sorted({urlparse(h).path for h in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")})
         (PROBE_DIR / "inventory_links.txt").write_text("\n".join(hrefs), "utf-8")
         log(f"Item links matching item_link_pattern: {len(links)}")
@@ -1444,14 +1438,18 @@ def cmd_probe(cfg: dict, args) -> None:
             page.goto(links[0], wait_until="domcontentloaded")
             settle(page, 2000)
             dump("item")
-            (PROBE_DIR / "item.html").write_text(page.content(), "utf-8")
-            page.screenshot(path=str(PROBE_DIR / "item.png"), full_page=True)
+            (PROBE_DIR / "item.html").write_text(page.content() if raw else scrub(page.content()), "utf-8")
+            if raw:
+                page.screenshot(path=str(PROBE_DIR / "item.png"), full_page=True)
             log(f"First item: {page.evaluate(JX_INFO_JS)}")
             for b in page.evaluate(DOWNLOAD_BUTTONS_JS, {"allowAll": True, "hosts": JX_HOSTS}):
                 log(f"  download button: {b['label'][:120]}")
         ctx.close()
     out.close()
-    log(f"\nWrote {PROBE_DIR}. Skim it for personal info before sharing it with anyone.")
+    log(f"\nWrote {PROBE_DIR}. " + ("These files are exactly what Jinxxy showed you, including your purchases and "
+                                     "account details: only share them with someone you trust." if getattr(args, "raw", False)
+                                     else "Email addresses, form values, tokens and signed links were removed, and there are "
+                                          "no screenshots. If someone helping you needs more, run again with --raw."))
 
 
 # ----------------------------------------------------------------------------- tags & catalog

@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
     "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "chromium", "msedge" or "chrome"
     "profile_dir": "",             # "" = Hoard's private sign-in folder (one profile per store)
+    "advanced_signin_location": False,   # only then is profile_dir used; never a network location
     "allow_unprotected_signins": False,  # Linux without a keyring only: keep sign-ins protected by folder permissions
     "offline_images": True,        # save every product image after a refresh, so the library works offline
     "gumroad": {"enabled": True, "include_archived": True, "save_thumbnails": True},
@@ -53,6 +54,10 @@ def clean_payhip_shop(value) -> str | None:
         return None
     if not re.fullmatch(r"[a-z0-9.-]+", host) or host.startswith(("-", ".")) or host in ("localhost",):
         return None
+    if any(label.startswith("xn--") for label in host.split(".")):
+        return None               # internationalised names can be made to look like other names
+    if any(not label or len(label) > 63 or label.startswith("-") or label.endswith("-") for label in host.split(".")):
+        return None
     try:
         ipaddress.ip_address(host)
         return None               # a raw IP address isn't a shop
@@ -66,6 +71,15 @@ def clean_payhip_shop(value) -> str | None:
             return None           # on payhip.com, a shop is payhip.com/<ShopName>
         return f"https://payhip.com/{parts[0]}"
     return f"https://{host}"
+
+
+class NewShop(Exception):
+    """A saved page came from a Payhip shop that isn't in your list; adding it needs your say-so."""
+
+    def __init__(self, shop: str):
+        self.shop = shop
+        super().__init__(f"This page is from the Payhip shop {shop.split('://', 1)[1]}, which isn't in your list. "
+                         "Confirm to add it, or add it in Settings first.")
 
 
 def payhip_shops(cfg: dict) -> list[str]:

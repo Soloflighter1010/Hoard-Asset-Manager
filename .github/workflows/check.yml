@@ -1,7 +1,8 @@
 name: Check
 
-# On every push and pull request: install the locked dependencies (checking every hash), run the
-# security tests, and build the zips. Actions are pinned to exact commits; the version is in the comment.
+# On every push and pull request, on Linux and on Windows: install the locked dependencies (checking every
+# hash), run the tests (Windows runs its own file-safety code paths), and build the zip. Actions are pinned
+# to exact commits; the version is in the comment.
 
 on:
   push:
@@ -13,7 +14,11 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,7 +30,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
       - name: A browser for the store-reader tests
-        run: python -m playwright install --with-deps chromium
+        run: python -m playwright install ${{ matrix.os == 'ubuntu-latest' && '--with-deps' || '' }} chromium
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Build the zips

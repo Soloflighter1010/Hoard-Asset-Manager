@@ -88,6 +88,9 @@ In plain words, here's what protects you. [SECURITY.md](SECURITY.md) has the tec
   hide it inside their own pages.
 - **Nothing from a store can run on your computer.** Names, links and pictures from stores are shown as
   plain text and ordinary images, never as code.
+- **Downloads only go where they should.** Every download and store request is checked at each step:
+  secure connections only, never to your computer or home network, and your store sign-in is only ever
+  sent to that store, never to the servers that host its files.
 - **Hoard stays out of your home network.** It only fetches product pictures from the public internet,
   never from your router, NAS or other devices.
 

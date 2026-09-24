@@ -848,12 +848,26 @@ async function importFile(file, store) {
   toast(`Reading ${file.name}`);
   try {
     const content = await file.text();
-    const j = await post("/api/import", { store: store || "auto", filename: file.name, content });
+    const body = { store: store || "auto", filename: file.name, content };
+    let r = await apiPost("/api/import", body);
+    if (r.status === 409 && r.data.confirm_shop) {
+      // a Payhip shop Hoard doesn't know yet: add it only if you say so, showing exactly which address
+      const host = r.data.confirm_shop.replace(/^https:\/\//, "");
+      if (!confirm(`This page is from the Payhip shop:\n\n${host}\n\nAdd it to your Payhip shops? Hoard will then open pages and download files from that address. Only add it if it's the shop you bought from.`)) {
+        toast("Not imported. You can add the shop in Settings if it's yours."); return;
+      }
+      r = await apiPost("/api/import", { ...body, trust_shop: r.data.confirm_shop });
+    }
+    if (!r.ok) throw new Error(r.data.error || "Couldn't import that page.");
+    const j = r.data;
     await load();
     toast(`Imported ${j.count} ${j.label} items. ${j.label} now has ${j.total}.`);
   } catch (e) { toast(e.message); }
 }
-$("#importFile").addEventListener("change", e => importFile(e.target.files[0], importStore));
+$("#importFile").addEventListener("change", e => {
+  importFile(e.target.files[0], importStore);
+  e.target.value = "";   // so choosing the same file again (say, after declining) works
+});
 let dragDepth = 0;
 document.addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dragDepth++; $("#drop").hidden = false; } });
 document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#drop").hidden = true; } });

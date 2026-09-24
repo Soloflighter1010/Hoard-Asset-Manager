@@ -18,6 +18,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.parse
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -825,6 +826,236 @@ def _test_server():
     srv = hs.ThreadingHTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv
+
+
+# ----------------------------------------------------------------------------- the 2.1.0 audit (H-01 to H-12)
+
+import http.server  # noqa: E402
+
+from hoard import downloads, egress  # noqa: E402
+
+
+class _Hops(http.server.BaseHTTPRequestHandler):
+    """A test server: /go?to=<address> redirects there; /file sends a file; every request is recorded."""
+    seen: list = []
+
+    def do_GET(self):
+        type(self).seen.append((self.server.server_port, self.path, self.headers.get("Cookie")))
+        if self.path.startswith("/go?to="):
+            self.send_response(302)
+            self.send_header("Location", urllib.parse.unquote(self.path[len("/go?to="):]))
+            self.end_headers()
+        else:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", "4")
+            self.end_headers()
+            self.wfile.write(b"DATA")
+
+    def log_message(self, *a):
+        pass
+
+
+def _hop_server():
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Hops)
+    srv.daemon_threads = True
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+class Egress(unittest.TestCase):
+    """Every store download and request goes through one checked path (H-01, H-02, H-03)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.store, cls.other = _hop_server(), _hop_server()
+        cls.store_origin = f"http://127.0.0.1:{cls.store.server_port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        for srv in (cls.store, cls.other):
+            srv.shutdown()
+            srv.server_close()
+
+    def setUp(self):
+        egress._TEST_ORIGINS.clear()
+        egress._TEST_ORIGINS.add(self.store_origin)   # only the stand-in store itself; everything else is real
+        _Hops.seen.clear()
+        self.addCleanup(egress._TEST_ORIGINS.clear)
+        self.dest = Path(tempfile.mkdtemp()) / "file.bin"
+
+    def redirect(self, *targets):
+        url = targets[-1]
+        for hop in reversed(targets[:-1]):
+            url = f"{hop}/go?to={urllib.parse.quote(url, safe='')}"
+        return url
+
+    def test_no_test_origins_in_normal_use(self):
+        self.assertEqual(egress._TEST_ORIGINS - {self.store_origin}, set())
+        egress._TEST_ORIGINS.clear()
+        import importlib
+        self.assertEqual(importlib.reload(egress)._TEST_ORIGINS, set())
+
+    def test_redirects_to_this_computer_or_network_are_refused(self):
+        other = self.other.server_port
+        for target in (f"http://127.0.0.1:{other}/secret", f"https://127.0.0.1:{other}/secret", "https://localhost/secret",
+                       "https://169.254.169.254/latest/meta-data/", "https://10.0.0.1/", "https://[::1]/", "https://192.168.1.1/",
+                       "file:///etc/passwd", "ftp://example.com/x"):
+            for chain in ((self.store_origin, target), (self.store_origin, self.store_origin, self.store_origin, target)):
+                with self.subTest(target=target, hops=len(chain)):
+                    _Hops.seen.clear()
+                    with self.assertRaises(Exception):
+                        egress.download(egress.session(), self.redirect(*chain), self.dest, ["127.0.0.1"])
+                    self.assertFalse(self.dest.exists(), "nothing is written")
+                    self.assertFalse([s for s in _Hops.seen if s[0] == other], "the refused address is never contacted")
+
+    def test_store_cookies_never_leave_the_store(self):
+        other_origin = f"http://localhost:{self.other.server_port}"
+        egress._TEST_ORIGINS.add(other_origin)      # a stand-in "CDN" the store redirects to
+        sess = egress.session()
+        sess.cookies.set("store_session", "secret", domain="127.0.0.1", path="/")
+        size = egress.download(sess, self.redirect(self.store_origin, f"{other_origin}/file"), self.dest, ["127.0.0.1"])
+        self.assertEqual(size, 4)
+        cookies = {port: cookie for port, _path, cookie in _Hops.seen}
+        self.assertIn("store_session=secret", cookies[self.store.server_port] or "")
+        self.assertIsNone(cookies[self.other.server_port], "the file host gets no cookies at all")
+
+    def test_api_redirects_stay_on_the_store(self):
+        other_origin = f"http://localhost:{self.other.server_port}"
+        egress._TEST_ORIGINS.add(other_origin)
+        with self.assertRaises(egress.UnsafeRequest):
+            egress.get(egress.session(), self.redirect(self.store_origin, f"{other_origin}/api"), ["127.0.0.1"])
+
+    def test_plain_http_and_credentials_are_refused(self):
+        egress._TEST_ORIGINS.clear()
+        for url in ("http://booth.pm/downloadables/1", "https://user:pw@booth.pm/x"):
+            with self.assertRaises(egress.UnsafeRequest):
+                egress.check_hop(url)
+            with self.assertRaises(Exception):
+                egress.session().get(url.replace("https://user:pw@", "http://"), timeout=5)
+        self.assertFalse(downloader.store_url("http://booth.pm/downloadables/1", ["booth.pm"]), "store links are https only")
+        self.assertTrue(downloader.store_url("https://booth.pm/downloadables/1", ["booth.pm"]))
+
+    def test_no_other_way_out(self):
+        """No module makes its own requests: only egress (store traffic) and safety.fetch_public (public images)."""
+        for f in (REPO / "hoard").glob("*.py"):
+            if f.name in ("egress.py", "safety.py"):
+                continue
+            text = f.read_text("utf-8")
+            self.assertNotRegex(text, r"requests\.(get|post|Session)\(|\bsess\.get\(|urlopen\(", f.name)
+
+
+@unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
+class FileRaces(unittest.TestCase):
+    """Files are written and served without being redirected by a link or a swap (H-04, H-05)."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.outside = Path(tempfile.mkdtemp()) / "victim.txt"
+        self.outside.write_text("keep me")
+
+    def test_a_planted_link_is_never_written_through(self):
+        part = self.dir / "file.zip.part"
+        part.symlink_to(self.outside)
+        with self.assertRaises(safety.UnsafePath):
+            safety.open_part(part, resume=True)          # resuming never follows a link
+        fh, identity = safety.open_part(part, resume=False)   # starting fresh removes the link, never follows it
+        with fh:
+            fh.write(b"new")
+        self.assertEqual(self.outside.read_text(), "keep me")
+        safety.move_into_place(part, self.dir / "file.zip", identity)
+        self.assertEqual((self.dir / "file.zip").read_bytes(), b"new")
+
+    def test_a_swapped_part_file_is_not_used(self):
+        part = self.dir / "file.zip.part"
+        fh, identity = safety.open_part(part, resume=False)
+        with fh:
+            fh.write(b"real")
+        part.unlink()
+        part.symlink_to(self.outside)                    # swapped for a link after writing
+        with self.assertRaises(safety.UnsafePath):
+            safety.move_into_place(part, self.dir / "file.zip", identity)
+        self.assertFalse((self.dir / "file.zip").exists())
+        self.assertEqual(self.outside.read_text(), "keep me")
+
+    def test_served_files_never_follow_links(self):
+        (self.dir / "Booth" / "Creator" / "Item").mkdir(parents=True)
+        (self.dir / "Booth" / "Creator" / "Item" / "_thumbnail.png").write_bytes(b"PNG")
+        with safety.open_under(self.dir, "Booth/Creator/Item/_thumbnail.png") as fh:
+            self.assertEqual(fh.read(), b"PNG")
+        (self.dir / "Booth" / "Creator" / "Leak").symlink_to(self.outside.parent)
+        (self.dir / "Booth" / "Creator" / "Item" / "_link.png").symlink_to(self.outside)
+        for rel in ("Booth/Creator/Leak/victim.txt", "Booth/Creator/Item/_link.png", "../x", "Booth/../../x"):
+            with self.subTest(rel=rel), self.assertRaises(safety.UnsafePath):
+                safety.open_under(self.dir, rel).close()
+
+
+class NameCollisions(unittest.TestCase):
+    """Names that clean up alike never share a folder or overwrite each other (H-08)."""
+
+    def test_folders(self):
+        man = downloader.Manifest(Path(tempfile.mkdtemp()) / "Booth")
+        a = man.record("1", "Creator", "My:Asset")
+        b = man.record("2", "Creator", "My?Asset")
+        c = man.record("3", "creator", "MY_ASSET")      # the same folder on Windows and macOS
+        self.assertEqual(len({x["folder"].casefold() for x in (a, b, c)}), 3)
+        self.assertEqual(man.record("2", "Creator", "My?Asset")["folder"], b["folder"], "stable across runs")
+
+    def test_files(self):
+        rec = {"files": {"101": {"path": "Model_v1.zip"}}}
+        self.assertEqual(downloader.distinct_name("model_v1.zip", "101", rec, {"101", "102"}), "model_v1.zip")
+        tagged = downloader.distinct_name("Model:v1.zip".replace(":", "_"), "102", rec, {"101", "102"})
+        self.assertNotEqual(tagged.casefold(), "model_v1.zip", "both files are still offered: keep both")
+        self.assertTrue(tagged.endswith(".zip"))
+        self.assertEqual(downloader.distinct_name("Model_v1.zip", "103", rec, {"103"}), "Model_v1.zip",
+                         "the old file is no longer offered: this is the creator's update, which replaces it")
+
+
+class Diagnostics(unittest.TestCase):
+    """What the troubleshooting commands save is scrubbed by default (H-09)."""
+
+    def test_scrub(self):
+        page = ('<meta name="csrf-token" content="abcDEF123"><input value="QWERT-12345-ASDFG-67890">'
+                '<p>me@example.com</p><a href="https://cdn.example/f.zip?X-Amz-Signature=deadbeef&Expires=99">f</a>'
+                '<div data-transaction-key="0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"></div>')
+        clean = safety.scrub(page)
+        for secret in ("abcDEF123", "QWERT-12345", "me@example.com", "deadbeef", "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"):
+            self.assertNotIn(secret, clean)
+        self.assertIn("X-Amz-Signature=", clean, "the page's structure stays")
+        from hoard import cli
+        self.assertEqual(cli.reader_summary([{"name": "Secret Purchase", "files": [1, 2]}, {"name": ""}]),
+                         {"items": 2, "fields_filled": {"name": 1, "files": 1}, "files": 2})
+
+
+class SmallerFindings(unittest.TestCase):
+    """H-07 (shop names), H-10 (manifests), H-11 (server limits), H-12 (sign-in location)."""
+
+    def test_deceptive_shop_names_are_refused(self):
+        for bad in ("xn--pypal-4ve.store", "shop.xn--p1ai", "-shop.store", "shop-.store", "a..b.store"):
+            self.assertIsNone(config.clean_payhip_shop(bad), bad)
+
+    def test_odd_manifests_dont_break_the_index(self):
+        root = Path(tempfile.mkdtemp())
+        for store, text in (("Booth", '{"assets": []}'), ("Gumroad", "[1, 2]"), ("Jinxxy", '{"assets": {"a": "x"}}'),
+                            ("Payhip", "[" * 100000)):
+            (root / store).mkdir()
+            (root / store / "_manifest.json").write_text(text)
+        status = downloads.library_status(root)
+        self.assertTrue(all(s["assets"] in (0, -1) for s in status["stores"].values()))
+
+    def test_server_limits(self):
+        self.assertTrue(0 < server.Handler.timeout <= 60)
+        self.assertTrue(0 < server.MAX_CONNECTIONS <= 256)
+
+    def test_sign_in_location(self):
+        cfg = {**config.load_config(), "profile_dir": str(Path(tempfile.mkdtemp()) / "elsewhere")}
+        self.assertEqual(browser.signins_root(cfg), browser.app_data_dir() / "sign-ins", "ignored without advanced mode")
+        cfg["advanced_signin_location"] = True
+        self.assertEqual(browser.signins_root(cfg), Path(cfg["profile_dir"]))
+        self.assertIn("folder you chose", browser.signin_protection(cfg))
+        cfg["profile_dir"] = "//fileserver/share/signins"
+        with self.assertRaises(browser.SigninsUnprotected):
+            browser.signins_root(cfg)
 
 
 if __name__ == "__main__":

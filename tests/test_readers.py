@@ -152,19 +152,42 @@ class BoothAndPayhip(unittest.TestCase):
                           ("Product cD2", "Test Shop", "https://testshop.store/b-account/digital/cD2")])
         self.assertEqual(cards[0]["creator_url"], "https://testshop.store")
 
-    def test_importing_a_shop_page_adds_the_shop(self):
+    def test_importing_a_shop_page_needs_your_say_so(self):
+        """A shop named inside an imported file is only trusted once you confirm its exact address (audit H-07)."""
         mhtml = ("From: <Saved by Blink>\r\nSnapshot-Content-Location: https://testshop.store/b-account\r\nSubject: Dashboard\r\n"
                  "MIME-Version: 1.0\r\nContent-Type: multipart/related; type=\"text/html\"; boundary=\"B\"\r\n\r\n--B\r\n"
                  "Content-Type: text/html\r\nContent-Location: https://testshop.store/b-account\r\n\r\n" + PAYHIP_SHOP + "\r\n--B--\r\n")
         cfg = config.load_config()
         cfg["payhip"]["shops"] = []
         config.apply_store_sites(cfg)
-        store, items = library.import_saved_page(cfg, "auto", "Dashboard.mhtml", mhtml)
-        self.assertEqual(store, "payhip")
-        self.assertEqual(cfg["payhip"]["shops"], ["https://testshop.store"])
-        self.assertEqual([i["url"] for i in items], ["https://testshop.store/b-account/digital/aB1",
-                                                     "https://testshop.store/b-account/digital/cD2"])
+        with self.assertRaises(config.NewShop) as asked:
+            library.import_saved_page(cfg, "auto", "Dashboard.mhtml", mhtml)
+        self.assertEqual(asked.exception.shop, "https://testshop.store")
+        self.assertEqual(cfg["payhip"]["shops"], [], "nothing is trusted before you confirm")
+        with self.assertRaises(config.NewShop):
+            library.import_saved_page(cfg, "auto", "Dashboard.mhtml", mhtml, trust_shop="https://other.store")
+        store, items = library.import_saved_page(cfg, "auto", "Dashboard.mhtml", mhtml, trust_shop="https://testshop.store")
+        self.assertEqual((store, cfg["payhip"]["shops"]), ("payhip", ["https://testshop.store"]))
+        self.assertEqual(len(items), 2)
+        config.apply_store_sites(config.load_config())
 
+    def test_imported_pages_run_nothing(self):
+        """Event handlers in an imported page never run (audit H-06): scripts are off and handlers are stripped."""
+        hostile = ('<html><head><title>untouched</title></head><body><img src="x" onerror="document.title=\'ran\'">'
+                   '<svg><animate onbegin="document.title=\'ran\'" attributeName="x" dur="1s"/></svg>'
+                   '<a href="javascript:document.title=\'ran\'">x</a><iframe srcdoc="<script>parent.document.title=1</script>"></iframe></body></html>')
+        from hoard import safety
+        self.assertNotIn("onerror", safety.inert_html(hostile))
+        self.assertNotIn("javascript:", safety.inert_html(hostile))
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        browser = pw.chromium.launch()
+        self.addCleanup(browser.close)
+        for html_text in (hostile, safety.inert_html(hostile)):   # scripts off even for the unstripped page
+            page = safety.offline_page(browser)
+            page.set_content(html_text, wait_until="domcontentloaded")
+            page.wait_for_timeout(600)
+            self.assertEqual(page.title(), "untouched")
 
 if __name__ == "__main__":
     unittest.main()

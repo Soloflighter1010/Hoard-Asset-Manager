@@ -14,12 +14,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .config import apply_store_sites, clean_payhip_shop, payhip_shops
+from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from .browser import _playwright, goto, has_password_field, settle
 from .common import NotLoggedIn, now_iso
 from .net import STORE_HOSTS
 from .paths import THUMB_DIR
-from .safety import STORE_LINK_SITES, DataFileError, check_seal, clean_text, fetch_public, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
+from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
 from .tags import TagStore, tag_key
 
 
@@ -579,7 +579,7 @@ def store_for_url(url: str | None) -> str | None:
     return next((s for s, sites in STORE_LINK_SITES.items() if any(host == h or host.endswith("." + h) for h in sites)), None)
 
 
-def import_saved_page(cfg: dict, store: str | None, filename: str, text: str) -> tuple[str, list[dict]]:
+def import_saved_page(cfg: dict, store: str | None, filename: str, text: str, trust_shop: str | None = None) -> tuple[str, list[dict]]:
     """Read a store page saved from your own browser and return (store, items).
 
     The file is read offline: scripts are stripped and every network request is blocked. Images saved
@@ -589,13 +589,16 @@ def import_saved_page(cfg: dict, store: str | None, filename: str, text: str) ->
     detected = store_for_url(source_url)
     shop_page = "/b-account" in urlparse(source_url or "").path
     if shop_page and not detected and store in (None, "", "auto", "payhip"):
-        # A Payhip shop's own library page, on the shop's own domain. You saved it from your own browser, so that
-        # shop joins your list (Payhip keeps purchases in each shop, not in one library).
+        # A Payhip shop's own library page, on the shop's own domain. A shop Hoard doesn't know yet is only added
+        # when you confirm its exact address (trust_shop): an address inside a file isn't enough on its own.
         shop = clean_payhip_shop(source_url)
         if not shop:
             raise ValueError("that page's address isn't one Hoard can use as a Payhip shop")
-        cfg["payhip"]["shops"] = list(dict.fromkeys((cfg["payhip"].get("shops") or []) + [shop]))
-        apply_store_sites(cfg)
+        if shop not in payhip_shops(cfg):
+            if trust_shop != shop:
+                raise NewShop(shop)
+            cfg["payhip"]["shops"] = list(dict.fromkeys((cfg["payhip"].get("shops") or []) + [shop]))
+            apply_store_sites(cfg)
         detected = "payhip"
     if not store or store == "auto":
         store = detected
@@ -616,9 +619,8 @@ def import_saved_page(cfg: dict, store: str | None, filename: str, text: str) ->
     with _playwright()() as p:
         browser = p.chromium.launch()
         try:
-            page = browser.new_page()
-            page.route("**/*", lambda route: route.abort())  # read the file only; contact nobody
-            page.set_content(page_html, wait_until="domcontentloaded")
+            page = offline_page(browser)   # scripts off, no network: read the file, run nothing, contact nobody
+            page.set_content(inert_html(page_html), wait_until="domcontentloaded")
             if store == "booth":
                 gift = "/gifts" in urlparse(base).path
                 library_url = base.split("?")[0]
