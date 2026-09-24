@@ -188,6 +188,43 @@ class JinxxyBanners(unittest.TestCase):
         self.assertEqual(sorted(p.parent.name for p in store.rglob("_thumbnail.png")), ["Three"])
 
 
+class PayhipShops(unittest.TestCase):
+    """Payhip keeps purchases per shop; the shops you list are the only extra sites Hoard trusts for Payhip."""
+
+    def tearDown(self):
+        config.apply_store_sites(config.load_config())
+
+    def test_addresses(self):
+        good = {"myshop.store": "https://myshop.store", "https://myshop.store/b-account": "https://myshop.store",
+                "payhip.com/MyShop": "https://payhip.com/MyShop", "https://payhip.com/MyShop/b-account": "https://payhip.com/MyShop"}
+        for given, kept in good.items():
+            self.assertEqual(config.clean_payhip_shop(given), kept, given)
+        for bad in ("http://localhost", "https://127.0.0.1", "https://[::1]/", "https://user@shop.example", "payhip.com",
+                    "https://payhip.com/a/b", "shop", "javascript:alert(1)", "https://shop.example:8443", ""):
+            self.assertIsNone(config.clean_payhip_shop(bad), bad)
+
+    def test_only_listed_shops_count_as_payhip(self):
+        from hoard import safety
+        cfg = config.load_config()
+        cfg["payhip"]["shops"] = ["myshop.store"]
+        config.apply_store_sites(cfg)
+        self.assertTrue(safety.store_link("payhip", "https://myshop.store/b-account/digital/x"))
+        self.assertIsNone(safety.store_link("payhip", "https://myshop.store.evil.example/"))
+        self.assertIsNone(safety.store_link("booth", "https://myshop.store/"), "a Payhip shop never counts for another store")
+        cfg["payhip"]["shops"] = []
+        config.apply_store_sites(cfg)
+        self.assertIsNone(safety.store_link("payhip", "https://myshop.store/b-account/digital/x"), "removed means removed")
+
+    def test_settings(self):
+        cfg = config.load_config()
+        change = server.apply_settings(cfg, {"payhip_shops": ["myshop.store", "https://myshop.store/b-account", "payhip.com/Two"]})
+        self.assertEqual(change["payhip"]["shops"], ["https://myshop.store", "https://payhip.com/Two"])
+        with self.assertRaises(ValueError):
+            server.apply_settings(cfg, {"payhip_shops": ["http://192.168.1.5"]})
+        both = server.apply_settings(cfg, {"payhip_shops": ["a.store"], "stores": {"payhip": {"enabled": False}}})
+        self.assertEqual(both["payhip"], {"shops": ["https://a.store"], "enabled": False})
+
+
 class ComingFrom1x(unittest.TestCase):
     """`migrate` brings over a 1.x library list and downloads folder, without overwriting anything."""
 

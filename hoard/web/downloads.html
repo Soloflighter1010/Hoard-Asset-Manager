@@ -332,6 +332,9 @@ body.selecting .toast { bottom: 96px; }
 .settings .field input, .settings select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
 .settings select { width: 100%; }
+.settings textarea { width: 100%; min-height: 70px; padding: 8px 10px; border-radius: 8px; border: 0; resize: vertical;
+  background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.settings textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .settings .field input:focus, .settings select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .settings .check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
 .settings .check.sub { padding-left: 26px; color: var(--dust); font-size: 13px; }
@@ -455,6 +458,11 @@ body.selecting .dlpanel { bottom: 96px; }
   <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
   <h3>Stores</h3>
   <div id="setStores"></div>
+  <h3>Payhip shops</h3>
+  <textarea id="setShops" rows="3" spellcheck="false" autocomplete="off" aria-label="Payhip shops"
+    placeholder="myshop.store&#10;payhip.com/AnotherShop"></textarea>
+  <p class="hint">Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's
+    address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you.</p>
   <h3>Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
   <h3>Browser for store sign-ins</h3>
@@ -535,6 +543,7 @@ async function load(rescan = false) {
       ? `The library server refused this address. Open http://127.0.0.1:${location.port || 8765}/ on the PC running it, or start it with --host 0.0.0.0.`
       : `The library server answered ${r.status} ${r.statusText}.`);
     DATA = await r.json();
+    for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
   } catch (e) {
     DATA = { assets: [], error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
   }
@@ -1004,16 +1013,19 @@ async function openSettings(open) {
   $("#setRoot").value = SETTINGS.root;
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setBrowser").value = SETTINGS.browser_channel;
+  $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
     `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
   $("#setStores").innerHTML = Object.entries(SETTINGS.stores).map(([s, o]) => box(s, "enabled", o.enabled, STORE_NAMES[s]) +
-    (s === "booth" ? box(s, "include_gifts", o.include_gifts, "Include gifts", true) : "") +
+    (s === "booth" ? box(s, "include_gifts", o.include_gifts, "Include gifts", true) +
+                     box(s, "include_free", o.include_free, "Include free downloads", true) : "") +
     (s === "gumroad" ? box(s, "include_archived", o.include_archived, "Include archived purchases", true) : "")).join("");
 }
 async function saveSettings() {
   const root = $("#setRoot").value.trim();
   const body = { root: root === SETTINGS.default_root ? "" : root, offline_images: $("#setOffline").checked,
-                 browser_channel: $("#setBrowser").value, stores: {} };
+                 browser_channel: $("#setBrowser").value, stores: {},
+                 payhip_shops: $("#setShops").value.split("\n").map(x => x.trim()).filter(Boolean) };
   for (const c of document.querySelectorAll("#setStores [data-set-store]")) {
     (body.stores[c.dataset.setStore] ||= {})[c.dataset.opt] = c.checked;
   }

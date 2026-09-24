@@ -18,7 +18,8 @@ import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
 from .common import NotLoggedIn, log, now_iso
-from .config import root_dir
+from .library import PAYHIP_SHOP_JS
+from .config import apply_store_sites, clean_payhip_shop, payhip_shops, root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR
 from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, no_link, read_json_file, rel_to_path, remember_sealed, safe_name, seal, set_aside, store_link, valid_rel, write_file_safely
@@ -832,13 +833,32 @@ BOOTH_JS = r"""
     if (!creator) creator = text(c.querySelector('.text-text-gray600'));
     const img = c.querySelector('a[href*="/items/"] img') || c.querySelector('img');
     const thumb = img ? (img.getAttribute('data-original') || img.getAttribute('data-src') || img.currentSrc || img.src || '') : '';
-    const files = [...c.querySelectorAll('a[href*="/downloadables/"]')].map(d => {
-      let r = d;
-      while (r.parentElement && r.parentElement !== c
-             && r.parentElement.querySelectorAll('a[href*="/downloadables/"]').length === 1
-             && !r.parentElement.querySelector('a[href*="/items/"], img')) r = r.parentElement;
-      return { name: text(r).replace(/ダウンロード|Download/gi, '').trim() || 'File', url: d.href };
-    });
+    // Files. Booth now draws each file's buttons from placeholders that carry the address in data-href
+    // (2026); older pages used plain links. "Download" is the file itself; "Open in Browser" (?browse=1) and the
+    // Booth Library Manager links (/deeplink) are other ways to the same file, so they're skipped.
+    const FILE_SEL = '[data-href*="/downloadables/"], a[href*="/downloadables/"]';
+    const addr = el => el.getAttribute('data-href') || el.getAttribute('href') || '';
+    const fileId = el => {
+      const h = addr(el), m = h.match(/\/downloadables\/(\d+)(?:[?#]|$)/);
+      return m && !/[?&]browse=/.test(h) && (el.getAttribute('data-test') || 'downloadable') === 'downloadable' ? m[1] : null;
+    };
+    const seen = new Set(), files = [];
+    for (const d of c.querySelectorAll(FILE_SEL)) {
+      const fid = fileId(d);
+      if (!fid || seen.has(fid)) continue;
+      seen.add(fid);
+      let r = d;   // the file's row: widen from its button while the row is still about this one file
+      while (r.parentElement && r.parentElement !== c) {
+        const p = r.parentElement;
+        const ids = new Set([...p.querySelectorAll(FILE_SEL)].map(x => (addr(x).match(/\/downloadables\/(\d+)/) || [])[1]).filter(Boolean));
+        if (ids.size > 1 || p.querySelector('a[href*="/items/"], img')) break;
+        r = p;
+      }
+      const row = r.cloneNode(true);
+      row.querySelectorAll('.js-download-button, button, [data-href], a[href*="/downloadables/"]').forEach(x => x.remove());
+      const name = (row.textContent || '').replace(/\s+/g, ' ').replace(/ダウンロード|Download|Open in Browser|Other Downloads/gi, '').trim();
+      files.push({ name: name || 'File', url: new URL(addr(d), location.href).href });
+    }
     const order = c.querySelector('a[href*="/orders/"]');
     out.set(id, { id, name, creator, creator_url: creatorUrl, thumbnail: thumb, url: a.href,
                   order_url: order ? order.href : '', files });
@@ -859,7 +879,8 @@ def booth_library(page, cfg: dict) -> list[dict]:
     """Every purchase (and, if enabled, gift) in your Booth library, one dict per item."""
     items: dict[str, dict] = {}
     delay = float(cfg.get("request_delay", 1.0))
-    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else [])
+    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
+        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
     for path, gift in sources:
         for page_no in range(1, 500):
             resp = page.goto(f"{BOOTH_LIBRARY}{path}?page={page_no}", wait_until="domcontentloaded")
@@ -1176,20 +1197,38 @@ def payhip_library_url(page, cfg: dict, wait_s: int, headed: bool) -> str:
                        "(Account menu, Use Payhip as), or put your library's address in payhip.library_url in config.json.")
 
 
+def payhip_sites(cfg: dict) -> list[str]:
+    """Payhip's own sites for this run: payhip.com and the shops in your settings."""
+    return ["payhip.com"] + [urlparse(s).hostname for s in payhip_shops(cfg) if urlparse(s).hostname != "payhip.com"]
+
+
 def payhip_products(page, cfg: dict, wait_s: int, headed: bool) -> list[dict]:
-    """Every product in your Payhip library, following its pages."""
-    url = payhip_library_url(page, cfg, wait_s, headed)
+    """Every product you bought on Payhip. Payhip keeps purchases in each shop, so this reads every shop in your
+    settings (<shop>/b-account, all its pages); a shop you aren't signed in to is skipped with a note."""
+    shops = payhip_shops(cfg)
+    if not shops:
+        raise RuntimeError("Payhip keeps your purchases in each shop you bought from. Add those shops in Settings "
+                           "(the shop's address is in your purchase email)")
     cards: dict[str, dict] = {}
-    for _ in range(100):
-        open_past_bot_check(page, url, wait_s, headed)
-        payhip_require_login(page)
-        result = page.evaluate(PAYHIP_CARDS_JS)
-        for c in result["cards"]:
-            cards.setdefault(c["id"], c)
-        if not result["next"] or result["next"] == url:
-            break
-        url = result["next"]
-        time.sleep(float(cfg.get("request_delay", 1.0)))
+    signed_out = []
+    for shop in shops:
+        url = shop + "/b-account"
+        for _ in range(100):
+            open_past_bot_check(page, url, wait_s, headed)
+            if "/b-account" not in urlparse(page.url).path or page.locator("input[type=password]").count():
+                signed_out.append(shop.split("://", 1)[1])
+                break
+            result = page.evaluate(PAYHIP_SHOP_JS)
+            for c in result["cards"]:
+                cards.setdefault(c["id"], c)
+            if not result["next"] or result["next"] == url:
+                break
+            url = result["next"]
+            time.sleep(float(cfg.get("request_delay", 1.0)))
+    if signed_out and not cards:
+        raise NotLoggedIn("not signed in to " + ", ".join(signed_out))
+    for shop in signed_out:
+        log(f"Payhip: not signed in to {shop}, so it was skipped. Sign in to Payhip again to include it.")
     return list(cards.values())
 
 
@@ -1218,7 +1257,8 @@ def payhip_products_from_file(p, path: Path) -> list[dict]:
     """Read the product list from a Payhip library page you saved from your own browser."""
     page_html, source, _ = read_saved_page(path.name, path.read_text("utf-8", errors="replace"))
     host = urlparse(source or "").hostname or ""
-    if source and not (host == "payhip.com" or host.endswith(".payhip.com")):
+    shop_page = "/b-account" in urlparse(source or "").path   # a Payhip shop's own library, on its own domain
+    if source and not shop_page and not (host == "payhip.com" or host.endswith(".payhip.com")):
         raise RuntimeError(f"{path.name} is a page from {host}, not Payhip")
     page_html = re.sub(r"<script\b[^>]*>.*?</script>", "", page_html, flags=re.S | re.I)
     head = re.search(r"<head[^>]*>", page_html, re.I)
@@ -1229,7 +1269,7 @@ def payhip_products_from_file(p, path: Path) -> list[dict]:
         page = browser.new_page()
         page.route("**/*", lambda route: route.abort())  # read the file only
         page.set_content(page_html, wait_until="domcontentloaded")
-        cards = page.evaluate(PAYHIP_CARDS_JS)["cards"]
+        cards = page.evaluate(PAYHIP_SHOP_JS if shop_page else PAYHIP_CARDS_JS)["cards"]
     finally:
         browser.close()
     if not cards:
@@ -1286,6 +1326,10 @@ def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
     saved_page = getattr(args, "payhip_page", None)
     with _playwright()() as p:
         products = payhip_products_from_file(p, Path(saved_page)) if saved_page else None
+        if products:   # you chose this page, so its shop counts as Payhip for this run
+            added = [s for s in (clean_payhip_shop(c.get("creator_url")) for c in products) if s]
+            cfg["payhip"]["shops"] = list(dict.fromkeys((cfg["payhip"].get("shops") or []) + added))
+            apply_store_sites(cfg)
         ctx = launch_context(p, cfg, not headed, "payhip")
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -1316,13 +1360,15 @@ def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
                 if blocked:
                     pending.append((c, folder))
                     continue
-                if not store_url(c["download_url"], ["payhip.com"]):
-                    report.skipped.append(f"Payhip: {name} - its download link isn't on payhip.com, so it wasn't opened")
+                if not store_url(c["download_url"], payhip_sites(cfg)):
+                    report.skipped.append(f"Payhip: {name} - its download link isn't on Payhip or one of your Payhip "
+                                          "shops, so it wasn't opened")
                     continue
                 try:
                     open_past_bot_check(page, c["download_url"], wait_s, headed)
                     payhip_require_login(page)
-                    got_any = download_by_clicking(ctx, page, page.url, rec, folder, "Payhip", PAYHIP_HOSTS,
+                    hosts = PAYHIP_HOSTS + [re.escape(h) for h in payhip_sites(cfg)[1:]]
+                    got_any = download_by_clicking(ctx, page, page.url, rec, folder, "Payhip", hosts,
                                                    int(pcfg.get("download_start_timeout", 90)), name, creator,
                                                    man, args, report)
                 except Blocked as e:

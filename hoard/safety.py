@@ -106,8 +106,22 @@ def write_file_safely(path: Path, data, root: Path | None = None) -> None:
 STORE_LINK_SITES = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com",), "payhip": ("payhip.com",)}
 
 
+# Sites you've added for a store (Payhip shops on their own domains), on top of the store's own website.
+_EXTRA_SITES: dict[str, tuple] = {}
+
+
+def set_extra_sites(store: str, hosts) -> None:
+    """Also count these hosts as the store's own website (the Payhip shops listed in your settings)."""
+    _EXTRA_SITES[store] = tuple(sorted({h.lower() for h in hosts}))
+
+
+def store_sites() -> dict:
+    """Every store's own sites, including any you've added, for the pages' link check."""
+    return {s: list(sites) + list(_EXTRA_SITES.get(s, ())) for s, sites in STORE_LINK_SITES.items()}
+
+
 def store_link(store, url) -> str | None:
-    """url if it's an https address on the given store's own website, otherwise None."""
+    """url if it's an https address on the given store's own website (or a site you added for it), otherwise None."""
     if not isinstance(url, str) or not isinstance(store, str):
         return None
     url = url.strip()
@@ -119,7 +133,8 @@ def store_link(store, url) -> str | None:
     host = (u.hostname or "").rstrip(".")
     if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii():
         return None
-    return url if any(host == s or host.endswith("." + s) for s in STORE_LINK_SITES.get(store.lower(), ())) else None
+    sites = STORE_LINK_SITES.get(store.lower(), ()) + _EXTRA_SITES.get(store.lower(), ())
+    return url if any(host == s or host.endswith("." + s) for s in sites) else None
 
 
 # Seals. The tools seal each data file they write (manifests, the catalog files, Hoard's library list)
