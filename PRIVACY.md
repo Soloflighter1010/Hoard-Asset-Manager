@@ -25,6 +25,12 @@ Hoard, and I never receive any of your information.
 
 None of this leaves your computer unless you share it yourself.
 
+## Hoard for Unity
+
+The Unity package reads Hoard's `catalog.json`, its seal key and your downloaded files, all on your own
+computer, and contacts nobody. It keeps a list of what you imported through it in the Unity project
+(`ProjectSettings/Hoard/imports.json`) and a cache of package contents in the project's `Library` folder.
+
 ## Who Hoard talks to
 
 - **The stores you sign in to:** Booth (and pixiv, which Booth uses for sign-in), Gumroad, Jinxxy and

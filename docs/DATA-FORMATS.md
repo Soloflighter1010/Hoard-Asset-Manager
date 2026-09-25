@@ -40,8 +40,8 @@ on Linux), over the file's JSON with the `integrity` field removed, serialised w
 point, no spaces (`,` and `:` separators), non-ASCII characters written as UTF-8 rather than escaped, and
 encoded as UTF-8. `key_id` is the first 16 hex digits of the key's SHA-256.
 
-A program running as the same user on the same computer (such as a Unity plugin) can read the key and
-check the seal: if the `mac` doesn't match, something other than Hoard edited the file, and it shouldn't
+A program running as the same user on the same computer can read the key and check the seal. Hoard for
+Unity (`unity/soloflighter.hoard`) does: its C# `Seal` class is tested against files sealed by this code. if the `mac` doesn't match, something other than Hoard edited the file, and it shouldn't
 be trusted. The key is private to your user account, so programs that can't read it can't produce a valid
 seal. When a file has been edited, `Hoard.bat verify` (or `./run.sh verify`) reports it and rebuilds the catalog files
 from Hoard's own records.
@@ -51,7 +51,7 @@ from Hoard's own records.
 ```json
 {
   "format": "hoard-catalog",
-  "version": 2,
+  "version": 3,
   "generated_at": "2026-09-23T10:00:00+00:00",
   "assets": [ <asset>, ... ]
 }

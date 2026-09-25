@@ -29,9 +29,14 @@ jobs:
       - name: Install the locked dependencies
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
+      - name: C# for the Unity package's tests
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mono-mcs mono-runtime
       - name: A browser for the store-reader tests
         run: python -m playwright install ${{ matrix.os == 'ubuntu-latest' && '--with-deps' || '' }} chromium
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Build the zips
         run: python scripts/build_release.py
+      - name: Build the Unity package (fails if a file has no .meta)
+        run: python3 scripts/build_vpm.py
