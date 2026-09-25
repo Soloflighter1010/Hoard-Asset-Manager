@@ -20,6 +20,8 @@ app-data folder that belongs to your user account.
 | `cache/thumbs/` | Product pictures, saved so the library works offline |
 | `logs/hoard.log` | What Hoard would print, when it runs without a console: what it read, what it downloaded, and any errors (no passwords, cookies or page contents). Past 2 MB, the older part moves to `hoard.old.log` |
 | `window/` | The window's own storage |
+| `update.json` | When Hoard last checked for updates, and the newest version it found |
+| `updates/` | A new version's installer, downloaded and checked, while Hoard updates. Deleted once the update is installed |
 | `debug/` | Troubleshooting files, only when you run `debug` or `probe` |
 
 None of this leaves your computer unless you share it yourself.

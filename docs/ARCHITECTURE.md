@@ -26,6 +26,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   server.py            the local server behind both views
   cli.py               the command line (docs/COMMAND-LINE.md)
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
+  updater.py           checking GitHub for a newer release; downloading, checking and running its installer
   web/                 library.html, downloads.html and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
@@ -263,6 +264,18 @@ bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`
    explicit file list. It makes the release as a draft, adds the Windows app, then publishes it with that
    version's changelog section. Published releases are immutable, and so is their tag: a failed run leaves a
    draft that running it again fills in. The wiki's Releasing page has the details.
+
+### Updating
+
+`updater.py` asks `api.github.com/repos/<repo>/releases` (through egress) and picks the highest published
+`vX.Y.Z` release: drafts, pre-releases and `unity-v` tags are ignored. It asks when **Check now** is chosen
+(`POST /api/update/check`), and at start once a day only when `check_for_updates` is on; the last answer is kept in
+`update.json`. `POST /api/update/install` works only in the installed Windows app (an `unins*.exe` beside
+`Hoard.exe`) and never during a job: it downloads `Hoard-Setup-<version>.exe` into `updates/`, requires its SHA-256
+to match the release's `SHA256SUMS-windows.txt` and the asset's `digest` (when GitHub lists one) and its size to
+match, then quits. `app.run_app` runs the installer only after the server has stopped and the instance lock is
+released, re-checking the hash first, with `/SILENT /SP- /NORESTART /RELAUNCH=1`; `hoard.iss` opens Hoard again
+when it sees `/RELAUNCH=1`. The next start deletes installers for its own version or older.
 
 ## Conventions
 

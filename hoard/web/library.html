@@ -522,7 +522,8 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
-</g></svg><span>Hoard <span id="version"></span></span></div>
+</g></svg><span>Hoard <span id="version"></span></span>
+        <button class="linkish" id="updateNote" hidden></button></div>
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
@@ -562,6 +563,14 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
     <option value="chromium">Hoard's own browser</option>
   </select>
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
+  <h3>Updates</h3>
+  <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
+  <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
+    version. GitHub sees your IP address, as with any website; nothing else is sent.</p>
+  <p class="hint" id="updStatus" aria-live="polite"></p>
+  <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
+    <button class="primary sm" id="updInstall" hidden></button>
+    <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
   <div class="actions"><button class="primary" id="setSave">Save</button><button class="ghost" id="setCancel">Cancel</button></div>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
@@ -722,6 +731,7 @@ async function load() {
     if (!r.ok) throw new Error(r.status === 401 ? NEEDS_KEY : r.status === 403 ? "Open this page at http://127.0.0.1 on the computer running it." : `Server answered ${r.status}.`);
     DATA = await r.json(); DATA.error = null;
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
+    if ($("#updateNote")) showUpdate();
     for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
   } catch (e) {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
@@ -1431,6 +1441,8 @@ async function openSettings(open) {
   $("#settingsBtn").setAttribute("aria-expanded", "true");
   $("#setRoot").value = SETTINGS.root;
   $("#setOffline").checked = SETTINGS.offline_images;
+  $("#setUpdates").checked = SETTINGS.check_for_updates;
+  showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
@@ -1444,6 +1456,7 @@ async function openSettings(open) {
 async function saveSettings() {
   const root = $("#setRoot").value.trim();
   const body = { root: root === SETTINGS.default_root ? "" : root, offline_images: $("#setOffline").checked,
+                 check_for_updates: $("#setUpdates").checked,
                  browser_channel: $("#setBrowser").value, stores: {},
                  payhip_shops: $("#setShops").value.split("\n").map(x => x.trim()).filter(Boolean) };
   for (const c of document.querySelectorAll("#setStores [data-set-store]")) {
@@ -1454,6 +1467,54 @@ async function saveSettings() {
   closeSettings();
   toast("Settings saved.");
   T.reload();
+}
+
+/* ---------- updates: checked with GitHub when you ask (or daily, if you turned that on); installed by Hoard itself
+   only in the app Hoard-Setup installed on Windows */
+let UPDATE = null, updTimer = null;
+function describeUpdate(u) {
+  if (u.error) return u.error;
+  if (u.busy) return u.message || "Getting the update";
+  if (u.available) return `Hoard ${u.latest.version} is available (you have ${u.current}).` +
+    (u.can_install ? "" : " Download it from the releases page, and install it over this one.");
+  if (u.checked) return `Hoard ${u.current} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
+  return `You have Hoard ${u.current}.`;
+}
+async function showUpdate(u) {
+  if (!u) {
+    try {
+      const r = await api("/api/update", { cache: "no-store" });
+      if (!r.ok) return;   // not this page's key (yet), or Hoard has stopped to update
+      u = await r.json();
+    } catch (e) { return; }
+  }
+  UPDATE = u;
+  $("#updStatus").textContent = describeUpdate(u);
+  $("#updInstall").hidden = !u.can_install || u.busy;
+  $("#updInstall").textContent = u.available ? `Update to ${u.latest.version}` : "";
+  $("#updCheck").disabled = !!u.busy;
+  $("#updLink").hidden = !u.available;
+  $("#updLink").href = u.available ? u.latest.url : u.releases_page;
+  $("#updateNote").hidden = !u.available;
+  $("#updateNote").textContent = u.available ? `Update to ${u.latest.version}` : "";
+  clearTimeout(updTimer);
+  if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
+}
+async function checkUpdate() {
+  if (!navigator.onLine) { toast("You're offline. Checking for updates needs a connection."); return; }
+  $("#updCheck").disabled = true;
+  $("#updStatus").textContent = "Checking";
+  const r = await apiPost("/api/update/check");
+  if (!r.ok) { $("#updCheck").disabled = false; $("#updStatus").textContent = r.data.error || "Couldn't check for updates."; return; }
+  showUpdate(r.data);
+}
+async function installUpdate() {
+  if (!UPDATE || !UPDATE.available) return;
+  if (!confirm(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
+               "Your library, settings, sign-ins and downloads stay as they are.")) return;
+  const r = await apiPost("/api/update/install");
+  if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
+  showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
 }
 
 async function startDownload(stores, only) {
@@ -1506,6 +1567,9 @@ function wireApp() {
   $("#settingsBtn").addEventListener("click", () => openSettings());
   $("#setSave").addEventListener("click", saveSettings);
   $("#setCancel").addEventListener("click", closeSettings);
+  $("#updCheck").addEventListener("click", checkUpdate);
+  $("#updInstall").addEventListener("click", installUpdate);
+  $("#updateNote").addEventListener("click", () => openSettings(true));
   $("#setupAgain").addEventListener("click", () => {
     if (typeof openSetup === "function") openSetup(); else location.href = "/#setup";
   });

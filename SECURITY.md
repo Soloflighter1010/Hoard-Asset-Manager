@@ -10,8 +10,8 @@ week. Fixes are released as a new version, and the changelog credits you unless 
 
 ## Supported versions
 
-Only the latest release receives security fixes. The tools don't update themselves, so check the
-releases page now and then.
+Only the latest release receives security fixes. **Settings**, **Updates** checks for a newer version (and, in
+the installed Windows app, installs it); turn on **Check for updates automatically** to be told when there is one.
 
 ## What Hoard protects against, and what it can't
 

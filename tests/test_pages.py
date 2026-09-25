@@ -116,6 +116,23 @@ class AccessKey(unittest.TestCase):
             self.assertTrue(refused, url)
             page.close()
 
+    def test_an_update_is_offered(self):
+        """A newer version from the last check shows in the footer and in Settings; this copy (not the installed
+        app) links to the release instead of offering to install it."""
+        self.srv.updates.state["latest"] = {"version": "99.0.0", "url": "https://github.com/Soloflighter1010/"
+                                            "Hoard-Asset-Manager/releases/tag/v99.0.0", "notes": "", "published": "",
+                                            "has_installer": True}
+        self.addCleanup(self.srv.updates.state.update, latest=None)
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_role("button", name="Update to 99.0.0").wait_for()
+        page.click("#updateNote")
+        page.get_by_text("Hoard 99.0.0 is available").wait_for()
+        self.assertTrue(page.locator("#updInstall").is_hidden(), "only the installed app installs it")
+        self.assertTrue(page.locator("#updLink").is_visible())
+        self.assertFalse(page.locator("#setUpdates").is_checked(), "automatic checks are off unless turned on")
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_a_used_link_doesnt_work_again(self):
         link = self.srv.entry_url()
         first, _ = self.open(link)

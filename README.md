@@ -31,7 +31,10 @@ Guides for everything, from installing to fixing a problem, are in the
    setup assistant walks you through the rest: which stores you use, signing in to each one, your Payhip
    shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**.
 
-**Updating:** run the newer setup; there's no need to uninstall first. Your settings, library, sign-ins and
+**Updating:** in **Settings**, **Updates**, choose **Check now**, then **Update to** the new version: Hoard
+downloads it, checks it against the release's checksums, closes, installs it and opens again. (Turn on **Check
+for updates automatically** to be told when there's one; it's off unless you do.) Or run the newer setup
+yourself; there's no need to uninstall first. Your settings, library, sign-ins and
 tags live in Hoard's app-data folder (`%LOCALAPPDATA%\Hoard`), and your downloads in your downloads folder, so
 installing, updating and uninstalling never touch them.
 
@@ -169,7 +172,7 @@ In plain words, here's what protects you. [SECURITY.md](SECURITY.md) has the tec
 - Keep Hoard in a folder of your own, such as one inside your user folder.
 - Never share Hoard's app-data folder (listed below); it holds your sign-ins.
 - Before sharing troubleshooting files, read them: they can show what you've bought.
-- Update when a new version comes out (the **Updates** link at the bottom of every page).
+- Update when a new version comes out (**Settings**, **Updates**).
 
 ## Your sign-ins
 

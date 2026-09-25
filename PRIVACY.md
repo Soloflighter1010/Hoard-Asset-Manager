@@ -41,11 +41,16 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   policy. For itch.io that's its API (`api.itch.io`), with the API key you gave Hoard, and the file hosts its
   downloads come from. Pages you import instead are read on your computer, and nothing is sent anywhere for them.
 - **The image hosts those stores use,** to fetch product images.
-- **GitHub,** only when you open a link in Hoard's footer or in the documentation.
+- **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
+  when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
+  day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A
+  check asks GitHub's API (`api.github.com`) for the list of Hoard's releases; GitHub sees your IP address and
+  that it's Hoard (and which version) asking, as with any website, and nothing else is sent. Updating
+  downloads the new installer from GitHub.
 
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
-has no telemetry, no crash reporting and no automatic update checks, and it works offline except for
-refreshing, signing in and downloading.
+has no telemetry and no crash reporting, and it works offline except for refreshing, signing in, downloading
+and checking for updates.
 
 ## Using Hoard on your network
 

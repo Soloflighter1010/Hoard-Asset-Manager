@@ -1,5 +1,5 @@
 ; Hoard's Windows installer (Inno Setup 6). Built by .github/workflows/release.yml:
-;   iscc /DAppVersion=2.6.0 packaging\hoard.iss   (after PyInstaller has made dist\Hoard)
+;   iscc /DAppVersion=2.7.0 packaging\hoard.iss   (after PyInstaller has made dist\Hoard)
 ;
 ; Installs for the current user only (no administrator prompt) into %LOCALAPPDATA%\Programs\Hoard, with a Start
 ; menu entry, an optional desktop icon and an uninstaller. Hoard's own data (settings, library, sign-ins, tags) is
@@ -7,7 +7,7 @@
 ; touch either.
 
 #ifndef AppVersion
-  #error Pass the version: iscc /DAppVersion=2.6.0 packaging\hoard.iss
+  #error Pass the version: iscc /DAppVersion=2.7.0 packaging\hoard.iss
 #endif
 
 [Setup]
@@ -59,6 +59,8 @@ Name: "{autodesktop}\Hoard"; Filename: "{app}\Hoard.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\Hoard.exe"; Description: "{cm:LaunchProgram,Hoard}"; Flags: nowait postinstall skipifsilent
+; Hoard updating itself runs this setup with /SILENT /RELAUNCH=1 (hoard/updater.py): open the new Hoard afterwards.
+Filename: "{app}\Hoard.exe"; Flags: nowait; Check: RelaunchAfterUpdate
 
 [Code]
 { Hoard's window uses Microsoft Edge WebView2, part of Windows 11 and kept up to date on Windows 10. Without it,
@@ -70,6 +72,11 @@ begin
   Result :=
     (RegQueryStringValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and (Version <> '') and (Version <> '0.0.0.0')) or
     (RegQueryStringValue(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version) and (Version <> '') and (Version <> '0.0.0.0'));
+end;
+
+function RelaunchAfterUpdate(): Boolean;
+begin
+  Result := WizardSilent() and (ExpandConstant('{param:RELAUNCH|0}') = '1');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

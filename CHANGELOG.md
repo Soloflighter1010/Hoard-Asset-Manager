@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.7.0
+
+- **Hoard updates itself.** **Settings** has a new **Updates** section. **Check now** asks GitHub whether there's
+  a newer version. In the Windows app installed with `Hoard-Setup`, **Update to** then downloads the new
+  installer, checks it, closes Hoard, installs it and opens Hoard again. Your settings, library, sign-ins and
+  downloads stay as they are. Hoard only runs an installer whose SHA-256 matches both the release's
+  `SHA256SUMS-windows.txt` and the checksum GitHub lists for the file, and it won't update in the middle of a
+  refresh or download. The portable zip and Hoard run with Python say there's a newer version and link to it.
+- **Check for updates automatically,** off unless you turn it on: Hoard asks GitHub once a day, when it starts,
+  and shows **Update to** at the bottom of the page when there's a new version. A check sends GitHub nothing but
+  the request itself (GitHub sees your IP address, as with any website). The privacy notes say so.
+
 ## 2.6.0
 
 - **itch.io signs in with an API key.** Its website shows automated browsers a Cloudflare check that never lets
