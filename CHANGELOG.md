@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.8.1
+
+- **Hoard for Unity loads large libraries quickly,** and recognises your own catalog: see its 0.2.0 changelog.
+- **The catalog is sealed again when Hoard starts,** if it isn't sealed with this computer's key. The Unity window
+  reads `catalog.json`, and one sealed by a Hoard with a different key (Hoard on another computer, an earlier
+  install, or Hoard run on Microsoft Store Python) showed there as "made on another computer" until the next
+  download. Hoard rebuilds it in the background, and not while a job is running (that job rebuilds it anyway).
+- **Fixed: a blank page from files with Windows line endings.** Browsers check a page's script against Hoard's
+  security policy after turning CRLF line endings into LF, and Hoard didn't, so a page file saved with CRLF (a
+  checkout whose git settings override `.gitattributes`) had its script refused.
+- **Microsoft Store Python:** when Hoard runs on it, the log and `verify` say so. Windows keeps a Store app's
+  AppData separately, so that Hoard's settings, sign-ins and sealing key aren't the installed app's.
+
 ## 2.8.0
 
 - **Sync automatically.** In **Settings**, choose every 6 or 12 hours, once a day or once a week (it's off unless

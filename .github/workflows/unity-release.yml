@@ -4,8 +4,8 @@ name: Build Release
 # does: the .zip for VCC, a .unitypackage for projects without VCC, and package.json. When it's done, Build Repo
 # Listing updates the VCC listing on GitHub Pages.
 #
-# Runs when a Unity package tag (unity-v0.1.1, ...) is pushed (publish-hoard does this when the version in
-# Packages/soloflighter.hoard/package.json is new), or by hand from Actions, which tags that version itself.
+# Runs by hand from Actions (it tags unity-v<version> from Packages/soloflighter.hoard/package.json itself), or when
+# that tag is pushed.
 # Needs the repository variable PACKAGE_NAME = soloflighter.hoard (Settings > Secrets and variables > Actions >
 # Variables).
 #

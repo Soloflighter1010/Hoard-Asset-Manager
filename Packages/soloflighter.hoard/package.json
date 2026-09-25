@@ -1,7 +1,7 @@
 {
   "name": "soloflighter.hoard",
   "displayName": "Hoard",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "unity": "2022.3",
   "description": "Browse the VRChat assets you've downloaded with the Hoard app, see which are already in this project, and import them without downloading again. Editor only: nothing is added to your uploads.",
   "author": {

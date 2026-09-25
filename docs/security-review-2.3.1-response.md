@@ -132,7 +132,7 @@ but nothing should fall over at that size.
 |---|---|---|
 | P-01 | `/api/assets` and `/api/library` send the whole library | **Confirmed; roadmap.** Paging and filtering on the server is an architecture change for both pages. |
 | P-02 | The Downloads page draws every card | **Confirmed; roadmap**, with P-01: only what's on screen should be drawn. |
-| P-03 | The Unity window draws every row and keeps every thumbnail | **Confirmed; roadmap**, with P-01. |
+| P-03 | The Unity window draws every row and keeps every thumbnail | **Fixed** in Hoard for Unity 0.2.0: loaded in the background, only visible rows drawn, pictures read in the background and at most 256 kept. Tests: `CoreTests.cs` (visible rows; a 3,000-product library). |
 | P-04 | Tag matching tries every tag on every name | **Confirmed; roadmap** (a word-to-tags index). |
 | P-05 | Finding a picture walked the whole library | **Fixed.** A lookup table, made again whenever the list changes. 1,000 pictures in a 100,000-item library: 10.3 s before, 45 ms now. Test: `LibraryLookups`. |
 | P-06 | `/api/library` copied the library through JSON | **Fixed.** A snapshot (`Library.snapshot`): 730 ms before, 3 ms now at 100,000 items. Test: `LibraryLookups`. |
