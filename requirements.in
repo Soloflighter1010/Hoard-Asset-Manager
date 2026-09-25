@@ -1,0 +1,7 @@
+# What Hoard needs. requirements.txt is generated from this with exact versions and hashes:
+#   pip-compile --generate-hashes --strip-extras --no-emit-index-url requirements.in
+# Don't edit requirements.txt by hand; change this file and regenerate it.
+requests>=2.32.4,<3   # 2.32.4 fixes CVE-2024-35195 and CVE-2024-47081
+playwright>=1.45,<2   # each Playwright version also fixes which Chromium build gets installed
+tqdm>=4.66,<5
+colorama              # tqdm needs it on Windows; listed so the Windows install is hash-checked too

@@ -1,0 +1,14 @@
+# Personal data: never commit these
+config.json
+.browser-profile/
+library.json
+downloads/
+.cache/
+debug/
+probe-output/
+
+# Environments and builds
+.venv/
+__pycache__/
+*.pyc
+dist/
