@@ -1,0 +1,75 @@
+name: Build Repo Listing
+
+# Builds the VCC listing (index.json) and its landing page (Website/) from every release's package .zip with
+# VRChat's package-list-action, as the template-package does, and deploys them to GitHub Pages. Runs after Build
+# Release, whenever a release changes, or by hand. Needs Settings > Pages > Source: GitHub Actions.
+# The listing's name, id and address are in source.json.
+#
+# Differences from the template:
+# - Every action, and package-list-action itself, is pinned to an exact commit instead of a branch or tag.
+# - package-list-action is given a "current listing" address that doesn't exist, so it rebuilds from every
+#   release each time. (Its current code skips releases already in the live listing without carrying them over,
+#   which would leave only newly released versions in each rebuilt listing.)
+# - The listing is also copied to vpm/index.json, the address used before this setup, so it keeps working.
+
+env:
+  listPublishDirectory: Website
+  pathToCi: ci
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Build Release]
+    types: [completed]
+  release:
+    types: [published, created, edited, unpublished, deleted, released]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-listing:
+    name: build-listing
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: VRChat's listing builder, at a pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: vrchat-community/package-list-action
+          ref: cb31c3b5d17d1070d7741c61de2ca1b219224039
+          path: ${{ env.pathToCi }}
+          clean: false
+          persist-credentials: false
+
+      - name: Build the listing from every release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_NAME: ${{ vars.PACKAGE_NAME }}
+        run: >-
+          ${{ env.pathToCi }}/build.cmd BuildRepoListing --root ${{ env.pathToCi }}
+          --list-publish-directory "$GITHUB_WORKSPACE/${{ env.listPublishDirectory }}"
+          --current-package-name "$PACKAGE_NAME"
+          --current-listing-url "https://${{ github.repository_owner }}.github.io/no-current-listing.json"
+
+      - name: Keep the earlier listing address (vpm/index.json) working
+        run: mkdir -p ${{ env.listPublishDirectory }}/vpm && cp ${{ env.listPublishDirectory }}/index.json ${{ env.listPublishDirectory }}/vpm/index.json
+
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: ${{ env.listPublishDirectory }}
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

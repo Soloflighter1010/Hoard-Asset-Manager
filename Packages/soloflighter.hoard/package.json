@@ -1,0 +1,25 @@
+{
+  "name": "soloflighter.hoard",
+  "displayName": "Hoard",
+  "version": "0.1.1",
+  "unity": "2022.3",
+  "description": "Browse the VRChat assets you've downloaded with the Hoard app, see which are already in this project, and import them without downloading again. Editor only: nothing is added to your uploads.",
+  "author": {
+    "name": "SoloFlighter",
+    "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager"
+  },
+  "license": "MIT",
+  "licensesUrl": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE",
+  "changelogUrl": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/Packages/soloflighter.hoard/CHANGELOG.md",
+  "documentationUrl": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/Packages/soloflighter.hoard/README.md",
+  "keywords": [
+    "vrchat",
+    "assets",
+    "library",
+    "booth",
+    "gumroad",
+    "jinxxy",
+    "payhip"
+  ],
+  "vpmDependencies": {}
+}

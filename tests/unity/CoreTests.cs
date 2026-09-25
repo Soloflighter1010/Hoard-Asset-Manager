@@ -1,0 +1,105 @@
+// Checks for the Unity package's plain-C# core, run by tests/test_unity.py against material Hoard's own Python
+// code made (sealed catalogs, canonical JSON, a Unity package). Prints PASS or FAIL lines.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using SoloFlighter.Hoard;
+
+public static class CoreTests
+{
+    static int failures;
+
+    static void Check(string name, bool ok, string detail = "")
+    {
+        Console.WriteLine((ok ? "PASS " : "FAIL ") + name + (ok ? "" : ": " + detail));
+        if (!ok) failures++;
+    }
+
+    public static int Main(string[] args)
+    {
+        string dir = args[0];
+        byte[] key = Seal.ReadKey(Path.Combine(dir, "integrity.key"));
+        Check("key read", key != null && key.Length == 32);
+        Check("key id matches Hoard's", Seal.KeyId(key) == File.ReadAllText(Path.Combine(dir, "key_id.txt")).Trim());
+
+        // canonical JSON: byte for byte what Python's json.dumps(sort_keys, (",", ":"), ensure_ascii=False) makes
+        var cases = Json.Parse(File.ReadAllText(Path.Combine(dir, "canonical_cases.json"), Encoding.UTF8));
+        var expected = File.ReadAllLines(Path.Combine(dir, "canonical_sha256.txt"));
+        for (int n = 0; n < cases.Items.Count; n++)
+        {
+            string got;
+            using (var sha = SHA256.Create()) got = BitConverter.ToString(sha.ComputeHash(Json.Canonical(cases.Items[n]))).Replace("-", "").ToLowerInvariant();
+            Check("canonical case " + n, got == expected[n], Encoding.UTF8.GetString(Json.Canonical(cases.Items[n])));
+        }
+
+        // seals
+        var states = new Dictionary<string, SealState> {
+            { "sealed", SealState.Sealed }, { "edited", SealState.Changed }, { "unsealed", SealState.Unsealed } };
+        foreach (var kv in states)
+        {
+            var doc = Json.Parse(File.ReadAllText(Path.Combine(dir, "seal_" + kv.Key + ".json"), Encoding.UTF8));
+            Check("seal " + kv.Key, Seal.Check(doc, key) == kv.Value, Seal.Check(doc, key).ToString());
+        }
+        var sealedDoc = Json.Parse(File.ReadAllText(Path.Combine(dir, "seal_sealed.json"), Encoding.UTF8));
+        var otherKey = new byte[32];
+        Check("seal from another computer", Seal.Check(sealedDoc, otherKey) == SealState.Foreign);
+        Check("seal without the key", Seal.Check(sealedDoc, null) == SealState.NoKey);
+
+        // the catalog: every documented promise re-checked, links dropped when the seal doesn't match
+        var cat = HoardCatalog.Load(Path.Combine(dir, "root"), key);
+        Check("catalog loads", cat.Problem == null, cat.Problem ?? "");
+        Check("catalog is sealed", cat.SealStatus == SealState.Sealed, cat.SealStatus.ToString());
+        var names = new List<string>();
+        foreach (var a in cat.Assets) names.Add(a.Name);
+        Check("only the good entries", string.Join("|", names) == File.ReadAllText(Path.Combine(dir, "good_names.txt")).Trim(), string.Join("|", names));
+        Check("broken entries counted", cat.LeftOut == int.Parse(File.ReadAllText(Path.Combine(dir, "left_out.txt")).Trim()), cat.LeftOut.ToString());
+        var good = cat.Assets.Find(a => a.Name == "Rusk Avatar Base");
+        Check("store link kept", good != null && good.Url == "https://booth.pm/ja/items/1", good == null ? "missing" : good.Url ?? "null");
+        var badLink = cat.Assets.Find(a => a.Name == "Odd Link");
+        Check("off-store link dropped", badLink != null && badLink.Url == null);
+        Check("file found inside the folder", good != null && cat.FilePath(good, "Rusk.unitypackage") != null);
+        Check("thumbnail found", good != null && cat.Thumbnail(good) != null);
+        var linked = cat.Assets.Find(a => a.Name == "Linked Away");
+        Check("never through a planted link", linked != null && cat.FilePath(linked, "secret.txt") == null && cat.FolderPath(linked) == null);
+        Check("missing file is null", good != null && cat.FilePath(good, "nope.zip") == null);
+
+        var edited = HoardCatalog.Load(Path.Combine(dir, "root_edited"), key);
+        Check("edited catalog: seal says so", edited.SealStatus == SealState.Changed, edited.SealStatus.ToString());
+        Check("edited catalog: no links trusted", edited.Assets.TrueForAll(a => a.Url == null));
+
+        // path, link and text rules
+        foreach (string p in new[] { "../x", "/abs", "a//b", "a/./b", "C:/x", "a\\b", "a:b", "a/b?", "a\u202eb" })
+            Check("path refused: " + p, !HoardCatalog.PlainPath(p));
+        Check("plain path ok", HoardCatalog.PlainPath("Booth/Kitsu Studio/Rusk ラスク"));
+        foreach (string u in new[] { "http://booth.pm/x", "https://booth.pm.evil.example/x", "https://user@booth.pm/x", "https://booth.pm:8443/x", "javascript:alert(1)" })
+            Check("link refused: " + u, !HoardCatalog.StoreLink("Booth", u));
+        Check("shop subdomain ok", HoardCatalog.StoreLink("Booth", "https://kitsu.booth.pm/items/1"));
+
+        // a Unity package: every GUID and path, nothing extracted
+        var assets = UnityPackageReader.ReadAssets(Path.Combine(dir, "test.unitypackage"));
+        var want = File.ReadAllLines(Path.Combine(dir, "package_expected.txt"));
+        var gotLines = new List<string>();
+        foreach (var kv in assets) gotLines.Add(kv.Key + " " + kv.Value);
+        gotLines.Sort(StringComparer.Ordinal);
+        Check("package GUIDs and paths", string.Join("\n", gotLines) == string.Join("\n", want), string.Join(" / ", gotLines));
+        try { UnityPackageReader.ReadAssets(Path.Combine(dir, "not_a_package.unitypackage")); Check("not a package refused", false, "no error"); }
+        catch (Exception e) { Check("not a package refused", e is InvalidDataException || e is IOException, e.GetType().Name); }
+
+        // the release's own .unitypackage (built by scripts/build_vpm.py), read back by this reader
+        string release = Path.Combine(dir, "release.unitypackage");
+        if (File.Exists(release))
+        {
+            var got = new List<string>();
+            foreach (var kv in UnityPackageReader.ReadAssets(release)) got.Add(kv.Key + " " + kv.Value);
+            got.Sort(StringComparer.Ordinal);
+            var expect = new List<string>(File.ReadAllLines(Path.Combine(dir, "release_expected.txt"), Encoding.UTF8));
+            Check("the release .unitypackage reads back", string.Join("\n", got) == string.Join("\n", expect),
+                  got.Count + " entries, expected " + expect.Count);
+        }
+
+        Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
+        return failures == 0 ? 0 : 1;
+    }
+}

@@ -1,0 +1,94 @@
+name: Build Release
+
+# Builds and publishes a release of the Unity package (Packages/<PACKAGE_NAME>), as VRChat's template-package
+# does: the .zip for VCC, a .unitypackage for projects without VCC, and package.json. When it's done, Build Repo
+# Listing updates the VCC listing on GitHub Pages.
+#
+# Runs when a Unity package tag (unity-v0.1.1, ...) is pushed (publish-hoard does this when the version in
+# Packages/soloflighter.hoard/package.json is new), or by hand from Actions, which tags that version itself.
+# Needs the repository variable PACKAGE_NAME = soloflighter.hoard (Settings > Secrets and variables > Actions >
+# Variables).
+#
+# Unlike the template, every action is pinned to an exact commit (its version in the comment), and the release is
+# made with the GitHub CLI and this repository's own tested scripts instead of third-party actions.
+
+on:
+  push:
+    tags: ["unity-v*"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: unity-release
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          PACKAGE_NAME: ${{ vars.PACKAGE_NAME }}
+        run: |
+          if [ -n "$PACKAGE_NAME" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Set the repository variable PACKAGE_NAME (soloflighter.hoard) to publish the Unity package."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: config
+    if: needs.config.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # the tag and the release
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
+    env:
+      PACKAGE_NAME: ${{ vars.PACKAGE_NAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The version, from package.json
+        run: |
+          version=$(jq -r .version "Packages/$PACKAGE_NAME/package.json")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "TAG=unity-v$version" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "unity-v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json's version $version."
+            exit 1
+          fi
+
+      - name: Test the package's core (C#, against Hoard's own sealed files)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mono-mcs mono-runtime
+          python3 -m unittest tests.test_unity -v
+
+      - name: Build the .zip and .unitypackage
+        run: python3 scripts/build_vpm.py --tag "$TAG"
+
+      - name: Sign build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/vpm/*.zip
+            dist/vpm/*.unitypackage
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files="dist/vpm/$PACKAGE_NAME-$VERSION.zip dist/vpm/$PACKAGE_NAME-$VERSION.unitypackage dist/vpm/package.json"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" $files --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Hoard for Unity $VERSION" --notes-file dist/vpm/RELEASE_NOTES.md
+          fi
