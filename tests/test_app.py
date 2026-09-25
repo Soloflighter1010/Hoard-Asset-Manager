@@ -1313,9 +1313,12 @@ class AutomaticSync(unittest.TestCase):
         """A sync you start resets the clock too, and the job says whether it started by itself."""
         from unittest import mock
         runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
-        with mock.patch.object(runner, "_refresh"), mock.patch.object(runner, "_download"):
+        checked = threading.Event()   # the job waits here, so it can be looked at while it runs
+        with mock.patch.object(runner, "_refresh", lambda *a, **k: checked.wait(10)), \
+                mock.patch.object(runner, "_download"):
             self.assertTrue(runner.start("sync", ["booth"], scheduled=True))
             self.assertTrue(runner.state["scheduled"])
+            checked.set()
             for _ in range(100):
                 if not runner.state["running"] and runner.busy.acquire(blocking=False):
                     runner.busy.release()
