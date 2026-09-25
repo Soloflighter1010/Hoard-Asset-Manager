@@ -39,3 +39,11 @@
 	- Show a little banner or icon on New assets.
 - Application
 	- Implement an app updater
+- Large libraries (from the 2.3.1 review, see docs/security-review-2.3.1-response.md)
+	- Page the library and downloads on the server, and only draw what's on screen, in both views and in the Unity window (P-01, P-02, P-03)
+	- Match tags through a word index instead of trying every tag on every name (P-04)
+	- Rebuild the downloads index without holding up other requests (P-07), and only rewrite an asset.json that changed (P-09)
+- Data and integrity (from the 2.3.1 review)
+	- Know products by their store ID instead of their name, moving existing tags and hidden, removed and archived marks over (B-02)
+	- Record each downloaded file's SHA-256 in the sealed manifest, and have the Unity window check it before importing (S-02)
+	- Only remove a product picture when it's a known default banner, not whenever two products share one (P-10)
