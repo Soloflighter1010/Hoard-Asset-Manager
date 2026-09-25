@@ -84,6 +84,18 @@ It can't fully protect against:
   Windows, by checking where the opened file really is), and what's served is exactly what was opened.
 - Two products or files whose names clean up alike never share a folder or overwrite each other.
 
+**The Windows app**
+- Built by GitHub Actions from this repository for each release, from hash-locked dependencies
+  (`requirements-app.txt`), checked with `hoard-cli self-test`, with signed build provenance: verify a download
+  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. It isn't code-signed yet, so
+  Windows SmartScreen warns the first time.
+- The installer asks for no administrator rights and installs for the current user only. An update replaces
+  the program files completely, so nothing from an older version lingers.
+- One copy runs at a time (an operating-system lock that ends with the process). A second copy can only ask the
+  running one to show its window, proving it's Hoard with a random token kept in Hoard's private app-data folder.
+- The window shows only Hoard's own pages from its local server; links elsewhere open in your web browser, and
+  the window accepts no downloads.
+
 **The hidden library**
 - It's a privacy screen for Hoard, not encryption. Hidden items are left out of everything Hoard's pages
   receive (library, Downloads, counts, tags) until you unlock it, but the files and records on your disk

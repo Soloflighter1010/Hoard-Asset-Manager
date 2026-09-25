@@ -27,6 +27,7 @@ from .library import IMPORTABLE, STORES, Library, cache_images, enrich, fetch_th
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
                      open_under, safe_join, store_sites, UnsafePath)
+from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import migrate_from, setup_status
 from .tags import TagStore, tag_overview
@@ -36,7 +37,7 @@ FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenM
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
-           "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase")
+           "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit")
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 
@@ -133,6 +134,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         super().__init__(addr, Handler)
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self.unlocks: dict[str, float] = {}   # hidden-library unlock tokens, in memory only: a restart locks it
+        # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
+        # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
+        self.show_window = None
+        self.quit_app = None
+        self.show_token = None
+        self.last_seen = time.time()
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
         self.key = secrets.token_urlsafe(18) if lan else None
         self.lib = Library(LIBRARY_FILE)
@@ -212,6 +219,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- reading
     def do_GET(self):
+        self.server.last_seen = time.time()
         """Serve the pages, their data and images."""
         if not self._host_ok():
             return self._send(403, b"Forbidden", "text/plain")
@@ -244,7 +252,7 @@ class Handler(BaseHTTPRequestHandler):
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done"))})
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None})
         if path == "/api/status":
             with srv.lib.lock:
                 stores = json.loads(json.dumps(srv.lib.data["stores"]))
@@ -254,7 +262,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self._unlocked():   # hidden products' downloads stay out of view too
                 hidden = MarkStore().load()["hidden"]
                 index = {**index, "assets": [a for a in index["assets"] if a.get("tag_key") not in hidden]}
-            return self._json({**index, "version": __version__, "job": srv.jobs.state, "store_sites": store_sites()})
+            return self._json({**index, "version": __version__, "job": srv.jobs.state, "store_sites": store_sites(),
+                               "can_quit": srv.quit_app is not None})
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/setup":
@@ -337,6 +346,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- acting
     def do_POST(self):
+        self.server.last_seen = time.time()
         """Run an action. Only requests from this computer, sent as JSON, are accepted."""
         path, srv = urlparse(self.path).path, self.server
         if path not in ACTIONS:
@@ -405,6 +415,16 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
                     "/api/pin/recover", "/api/pin/phrase"):
             return self._privacy_action(path, body)
+        if path == "/api/show":   # a second copy of Hoard, asking this one to come to the front
+            if not token_matches(body.get("token"), srv.show_token) or not srv.show_window:
+                return self._json({"error": "No."}, 403)
+            srv.show_window()
+            return self._json({"ok": True})
+        if path == "/api/quit":
+            if not srv.quit_app:
+                return self._json({"error": "Hoard is running as a server; stop it where it was started."}, 409)
+            threading.Timer(0.3, srv.quit_app).start()   # after this answer is on its way
+            return self._json({"ok": True})
         if path == "/api/signin-link":
             why = srv.jobs.open_link(str(body.get("url") or "").strip()[:2000])
             return self._json({"error": why}, 400) if why else self._json({"ok": True})

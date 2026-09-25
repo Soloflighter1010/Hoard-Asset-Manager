@@ -17,6 +17,7 @@ from .library import BOOTH_JS, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 
 from .safety import scrub
+from .app import run_app, self_test
 from .server import serve
 from .setup import install_browser, migrate_from
 
@@ -137,7 +138,8 @@ def main(argv=None) -> None:
     ap.add_argument("--tls-key", help="with --host: the certificate's private key file (PEM)")
     ap.add_argument("--plain-http", action="store_true",
                     help="with --host: serve plain HTTP, only when the network is already encrypted (a VPN such as Tailscale)")
-    ap.add_argument("--no-open", action="store_true", help="start Hoard without opening its page")
+    ap.add_argument("--no-open", action="store_true", help="run Hoard as a server only, without opening it")
+    ap.add_argument("--browser", action="store_true", help="open Hoard in your web browser instead of its own window")
     sub = ap.add_subparsers(dest="cmd", metavar="command")
     s = sub.add_parser("login", help="sign in to a store in a browser window")
     s.add_argument("store", choices=list(STORES))
@@ -160,6 +162,7 @@ def main(argv=None) -> None:
     s = sub.add_parser("debug", help="save a store's library page, for troubleshooting (scrubbed of personal details)")
     s.add_argument("store", choices=list(STORES))
     s.add_argument("--raw", action="store_true", help="save the page as it is, with a screenshot (contains your details)")
+    sub.add_parser("self-test", help="check this copy of Hoard has everything it needs (used by the build)")
     sub.add_parser("install-browser", help="download Hoard's own browser (only needed without Microsoft Edge)")
     s = sub.add_parser("migrate", help="bring over the library list and downloads folder from Hoard 1.x")
     s.add_argument("folder", type=Path, help="the folder you ran Hoard 1.x from")
@@ -169,9 +172,14 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     try:
-        if args.cmd is None:
+        if args.cmd is None and (args.no_open or args.host not in ("127.0.0.1", "localhost", "::1") or args.port):
+            # a server: for other devices, a fixed port, or no page (stop it with Ctrl+C where it runs)
             serve(cfg, args.host, args.port, not args.no_open, args.tls_cert, args.tls_key, args.plain_http,
                   config_path=args.config)
+        elif args.cmd is None:
+            sys.exit(run_app(cfg, args.config, browser=args.browser))   # the app, in its own window
+        elif args.cmd == "self-test":
+            sys.exit(self_test())
         elif args.cmd == "login":
             cmd_login(cfg, args.store)
         elif args.cmd == "logout":

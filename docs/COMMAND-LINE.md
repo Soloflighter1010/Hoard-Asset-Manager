@@ -1,8 +1,9 @@
 # Hoard from the command line
 
 Everything Hoard does from its window also works as a command, for scripts, scheduled tasks and
-computers without a desktop (a NAS, say). On Windows, run commands with `Hoard.bat`; on Linux and macOS,
-with `./run.sh`. Without a command, Hoard opens.
+computers without a desktop (a NAS, say). With the installed app, run commands with `hoard-cli.exe` in
+Hoard's folder (`%LOCALAPPDATA%\Programs\Hoard`); from source, with `Hoard.bat` or `./run.sh`. Without a
+command, Hoard opens in its window (`--browser`: in your web browser instead).
 
 | Command | What it does |
 |---|---|
@@ -13,6 +14,7 @@ with `./run.sh`. Without a command, Hoard opens.
 | `sync` | Download everything new or changed (options below) |
 | `tags` | Rebuild `catalog.json` and `tags.json` from what's downloaded |
 | `verify` | Check whether any data file was changed outside Hoard, then rebuild the catalog files. Exits with 1 if anything was changed |
+| `self-test` | Check this copy of Hoard has everything it needs (its pages, fonts, Playwright's driver) |
 | `migrate <folder>` | Bring over the library list and downloads folder from Hoard 1.x |
 | `install-browser` | Download Hoard's own browser (only needed without Microsoft Edge; the setup assistant does this too) |
 | `debug <store> [--raw]` | Save a store's library page and a summary of what Hoard read from it, for troubleshooting. Personal details are removed; `--raw` keeps everything, with a screenshot |

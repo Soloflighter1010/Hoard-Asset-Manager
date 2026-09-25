@@ -19,29 +19,29 @@ files? Hoard answers those without opening four tabs.
 
 ## Install (Windows)
 
-1. Install [Python 3.10 or newer](https://www.python.org/downloads/) and tick **Add python.exe to PATH**.
-2. Download `Hoard-<version>.zip` from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest).
-3. Extract it into a folder of your own, such as one inside your user folder (not Program Files).
-4. Double-click `Hoard.bat`. The first time, it sets Hoard up: a private Python environment in that
-   folder, with every package checked against a recorded fingerprint. Hoard then opens in your browser.
-5. A short setup assistant walks you through the rest: which stores you use, signing in to each one,
-   your Payhip shops, and where downloads go. If Hoard needs its own browser, the assistant installs it
-   with one button. Run it again any time from **Settings**, then **Set up Hoard again**.
+1. Download **`Hoard-Setup-<version>.exe`** from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
+   and run it. It installs for you only, with no administrator prompt, and adds Hoard to the Start menu.
+2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (a certificate costs
+   money every year). Choose **More info**, then **Run anyway**. To check the download really came from
+   this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
+3. Open **Hoard** from the Start menu. It opens in its own window; closing the window quits Hoard. A short
+   setup assistant walks you through the rest: which stores you use, signing in to each one, your Payhip
+   shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**.
 
-Keep the small Hoard window open while you use it; closing it quits Hoard. (A proper installer and a
-Hoard window of its own are coming next.)
+**Updating:** run the newer setup; there's no need to uninstall first. Your settings, library, sign-ins and
+tags live in Hoard's app-data folder (`%LOCALAPPDATA%\Hoard`), and your downloads in your downloads folder, so
+installing, updating and uninstalling never touch them.
 
-On Linux or macOS, run `./run.sh` in the Hoard folder.
+Prefer no installer? `Hoard-<version>-windows.zip` is the same app: extract it anywhere and run `Hoard.exe`.
+Hoard's window uses Microsoft Edge WebView2, part of Windows 11 and kept up to date on Windows 10; without it,
+Hoard opens in your web browser instead (quit it from **Settings**).
 
-**Updating:** extract the new zip over the old folder. Your settings, library list, sign-ins and tags
-live in Hoard's app-data folder, and your downloads in your downloads folder, so nothing is lost.
+**From source, or on Linux and macOS:** install [Python 3.10 or newer](https://www.python.org/downloads/),
+download `Hoard-<version>.zip`, extract it, and run `Hoard.bat` (Windows) or `./run.sh`. It sets up a private
+Python environment (every package checked against a recorded fingerprint), then opens Hoard.
 
-**Coming from Hoard 1.x?** Your sign-ins and tags carry over by themselves. To bring over your library
-list and downloads folder too, run this once, naming the folder you ran 1.x from:
-
-```
-Hoard.bat migrate "D:\Tools\Hoard-Bundle"
-```
+**Coming from Hoard 1.x?** Your sign-ins and tags carry over by themselves. The setup assistant brings over
+your library list and downloads folder: choose the folder you ran 1.x from.
 
 ## Using Hoard
 

@@ -19,6 +19,8 @@ Hoard, and I never receive any of your information.
 | Product images, saved after each refresh (turn off in Settings) | So the library loads quickly and works offline | `cache/thumbs` in Hoard's app-data folder |
 | Downloaded files and their records (`_manifest.json`, `catalog.json`, `tags.json`, `asset.json`) | So nothing is downloaded twice, and for search and tags | The download folder you choose |
 | Your tags | So you can sort and find things your way, in Hoard | `tags.json` in the same private `Hoard` folder as your sign-ins |
+| What Hoard would print: which stores it read, what it downloaded, and any errors (no passwords, cookies or page contents) | So there's something to look at if Hoard misbehaves | `logs\\hoard.log` in Hoard's app-data folder (it keeps two runs' worth) |
+| The window's own storage (its layout choices) | So the window remembers how you left it | `window` in Hoard's app-data folder |
 | What you've archived, hidden or removed, and your hidden library's PIN (only as a salted, slow hash, never the PIN itself) | So those choices last, even after refreshing | `marks.json` in the same private `Hoard` folder |
 | Your settings | So Hoard remembers your choices | `config.json` in Hoard's app-data folder |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug` in Hoard's app-data folder |
