@@ -499,6 +499,33 @@ body.selecting .dlpanel { bottom: 96px; }
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+/* ---------- the access key. Hoard's server only answers requests that carry this run's key (see server.py).
+   Hoard opens this page with a one-time link (#enter=...) that's traded for it; the address `hoard serve`
+   prints carries the key itself (#key=...). It's kept for this address only: each start brings a new one. */
+const ACCESS = { key: "" };
+const entered = (async () => {
+  const h = new URLSearchParams(location.hash.slice(1)), once = h.get("enter"), given = h.get("key");
+  if (once !== null || given !== null) {   // out of the address before anything else reads or shows it
+    h.delete("enter"); h.delete("key");
+    history.replaceState(null, "", h.toString() ? "#" + h : location.pathname);
+  }
+  try { ACCESS.key = given || localStorage.getItem("hoard-key") || ""; } catch (e) { ACCESS.key = given || ""; }
+  if (once) {
+    try {
+      const r = await fetch("/api/enter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: once }) });
+      if (r.ok) ACCESS.key = (await r.json()).key || "";
+    } catch (e) { /* Hoard isn't running: the first request says so */ }
+  }
+  try { if (ACCESS.key) localStorage.setItem("hoard-key", ACCESS.key); } catch (e) { /* no storage: this page still works */ }
+})();
+// Every request to Hoard's server goes through api(), with the key. Images, which the browser loads by itself,
+// carry it in their address instead (keyed()).
+async function api(url, opts = {}) {
+  await entered;
+  return fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Hoard-Key": ACCESS.key } });
+}
+const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
+const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
 const grid = $("#grid"), detail = $("#detail");
 const state = { q: "", store: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
@@ -517,7 +544,7 @@ const storeUrl = (store, u) => {
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const norm = s => String(s || "").normalize("NFKC").toLowerCase();
 const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-const fileUrl = p => "/files/" + p.split("/").map(encodeURIComponent).join("/");
+const fileUrl = p => keyed("/files/" + p.split("/").map(encodeURIComponent).join("/"));
 const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
 function fmtSize(n) {
@@ -541,8 +568,8 @@ function toast(msg) {
 /* ---------- data */
 async function load(rescan = false) {
   try {
-    const r = await fetch("/api/assets" + (rescan ? "?rescan=1" : ""));
-    if (!r.ok) throw new Error(r.status === 403
+    const r = await api("/api/assets" + (rescan ? "?rescan=1" : ""));
+    if (!r.ok) throw new Error(r.status === 401 ? NEEDS_KEY : r.status === 403
       ? `The library server refused this address. Open http://127.0.0.1:${location.port || 8765}/ on the PC running it, or start it with --host 0.0.0.0.`
       : `The library server answered ${r.status} ${r.statusText}.`);
     DATA = await r.json();
@@ -703,7 +730,7 @@ function closeDetail() {
 }
 async function reveal(path) {
   try {
-    const r = await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+    const r = await api("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
     const j = await r.json();
     toast(r.ok ? `Opened in ${j.opened_in}` : j.error);
   } catch (e) { toast("Couldn't reach the library server."); }
@@ -826,7 +853,7 @@ const keysOf = list => [...new Set(list.flatMap(a => [a.tag_key, ...(a.copy_keys
 
 async function changeTags(body, done) {
   try {
-    const r = await fetch("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await api("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { toast(j.error || "That tag change wasn't saved."); return false; }
   } catch (e) { toast("That tag change wasn't saved, because the tool isn't running."); return false; }
@@ -992,7 +1019,7 @@ let SETTINGS = null, dlActive = false, dlTimer = null;
 
 async function apiPost(url, body) {
   try {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
     return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
   } catch (e) {
     return { ok: false, status: 0, data: { error: "Hoard isn't running. Open it again." } };
@@ -1008,7 +1035,7 @@ async function openSettings(open) {
   T.closeOtherPanels();
   openTagPanel(false);
   try {
-    SETTINGS = await (await fetch("/api/settings", { cache: "no-store" })).json();
+    SETTINGS = await (await api("/api/settings", { cache: "no-store" })).json();
   } catch (e) {
     toast("Hoard isn't running. Open it again."); return;
   }
@@ -1052,7 +1079,7 @@ async function pollDownload() {
   clearTimeout(dlTimer);
   let job;
   try {
-    job = (await (await fetch("/api/status", { cache: "no-store" })).json()).job || {};
+    job = (await (await api("/api/status", { cache: "no-store" })).json()).job || {};
   } catch (e) {
     if (dlActive) dlTimer = setTimeout(pollDownload, 2000);
     return;
@@ -1105,7 +1132,7 @@ function wireApp() {
   });
   pollDownload();  // a download started from the other view, or before this page opened
   // Every open page checks in once a minute: when Hoard runs in the browser, it stops once none has for a while.
-  setInterval(() => { fetch("/api/status", { cache: "no-store" }).catch(() => {}); }, 60000);
+  setInterval(() => { api("/api/status", { cache: "no-store" }).catch(() => {}); }, 60000);
   $("#quitHoard").addEventListener("click", async () => {
     const r = await apiPost("/api/quit");
     if (!r.ok) { toast(r.data.error || "Hoard didn't quit."); return; }

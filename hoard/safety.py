@@ -19,7 +19,6 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
-from http.cookies import SimpleCookie
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -216,12 +215,14 @@ def _sealed_file_ids() -> set:
 
 
 def remember_sealed(path: Path) -> None:
-    """Note that this install has sealed the file at path."""
+    """Note that this install has sealed the file at path. Nothing is ever forgotten: a forgotten file whose seal
+    was then removed would pass as one written by an older version. Only files that can't be rebuilt are noted
+    (each store's _manifest.json and the library list), a handful per downloads folder, so the list stays small."""
     ids = _sealed_file_ids()
     pid = _path_id(path)
     if pid not in ids:
         ids.add(pid)
-        write_file_safely(_hoard_folder() / "sealed-files.json", json.dumps({"files": sorted(ids)[-20000:]}))
+        write_file_safely(_hoard_folder() / "sealed-files.json", json.dumps({"files": sorted(ids)}))
 
 
 def check_seal(obj, path: Path | None = None) -> str:
@@ -249,7 +250,9 @@ def check_seal(obj, path: Path | None = None) -> str:
 #   - server-side fetches only go to public internet addresses, never your home network or this PC,
 #   - every page is sent with a Content-Security-Policy that only runs the page's own script, and
 #     with headers that stop other sites from framing it or reading its responses,
-#   - on your network (--host 0.0.0.0) other devices need the access key printed at start-up.
+#   - every request for data, images or an action needs the access key made at start-up, from this
+#     computer too: other programs, and other people's accounts on a shared computer, can reach
+#     127.0.0.1 as well, so being on this computer doesn't make a request Hoard's own.
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -438,40 +441,20 @@ def content_security_policy(page: bytes) -> str:
     return _csp_cache[key]
 
 
-def check_access(handler, lan: bool, key: str | None) -> bool:
-    """On the network (--host 0.0.0.0), let a device in only with the access key. True when allowed.
+ACCESS_HEADER = "X-Hoard-Key"
 
-    The key arrives once in the address (?key=...); after that it's kept in a cookie. Sends the reply
-    itself (a redirect that sets the cookie, or a refusal) when it returns False.
+
+def check_access(handler, key: str | None, in_address: bool = False) -> bool:
+    """Does this request carry this run's access key? True when it does.
+
+    The pages send it in a header (ACCESS_HEADER), never in a cookie: a browser sends a cookie for 127.0.0.1
+    to every program listening on 127.0.0.1, whatever its port. Images, which the browser loads by itself,
+    carry it in their address (?k=...) when in_address is True.
     """
-    if not lan or not key:
-        return True
-    host = (handler.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
-    if handler.client_address[0] in LOOPBACK and host in LOOPBACK:
-        return True  # this computer itself
-    cookies = SimpleCookie(handler.headers.get("Cookie") or "")
-    if "hoard_key" in cookies and hmac.compare_digest(cookies["hoard_key"].value, key):
-        return True
-    given = (parse_qs(urlparse(handler.path).query).get("key") or [""])[0]
-    if given and hmac.compare_digest(given, key):
-        handler.send_response(303)
-        handler.send_header("Location", urlparse(handler.path).path or "/")
-        secure = "; Secure" if getattr(handler.server, "tls", False) else ""
-        handler.send_header("Set-Cookie", f"hoard_key={key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000{secure}")
-        handler.send_header("Content-Length", "0")
-        handler.end_headers()
-        return False
-    body = (b"<!doctype html><meta charset=utf-8><title>Access key needed</title>"
-            b"<p style='font:16px system-ui;margin:40px'>Open the address shown in the Hoard window on the computer "
-            b"running it. It includes the access key.</p>")
-    handler.send_response(401)
-    handler.send_header("Content-Type", "text/html; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    for k, v in SECURITY_HEADERS.items():
-        handler.send_header(k, v)
-    handler.end_headers()
-    handler.wfile.write(body)
-    return False
+    given = handler.headers.get(ACCESS_HEADER) or ""
+    if not given and in_address:
+        given = (parse_qs(urlparse(handler.path).query).get("k") or [""])[0]
+    return bool(key and given) and hmac.compare_digest(given.encode("utf-8", "surrogateescape"), key.encode("utf-8"))
 
 
 WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}

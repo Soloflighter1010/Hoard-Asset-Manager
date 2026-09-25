@@ -113,6 +113,9 @@ class Report:
                     log(f"  - {line}")
 
 
+SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
+
+
 class Manifest:
     """Per-store record of what's been downloaded and where."""
 
@@ -134,6 +137,7 @@ class Manifest:
             log(f"{store_dir.name}: ignored {dropped} entries in _manifest.json that pointed outside {store_dir} "
                 "or weren't valid. Check who else can change that folder.")
         self.assets: dict = self.data.setdefault("assets", {})
+        self._saved, self._saved_at = self._contents(), 0.0   # what's on disk, and when this last wrote it
 
     def _check(self, raw) -> bool:
         """Check the manifest's seal, say what it means, and return whether its links can be trusted."""
@@ -155,6 +159,23 @@ class Manifest:
         """Seal the manifest and write it through a temporary file, so a crash can't leave it half-written."""
         write_file_safely(self.path, json.dumps(seal(self.data), indent=2, ensure_ascii=False))
         remember_sealed(self.path)
+        self._saved, self._saved_at = self._contents(), time.monotonic()
+
+    def save_changes(self) -> None:
+        """Save, if anything changed since the manifest was read or last saved. Every sync ends with this, however it
+        ends (a stop, an error), so every file that finished downloading is recorded; and a store that was never
+        used isn't given a manifest it never had."""
+        if self._contents() != self._saved:
+            self.save()
+
+    def checkpoint(self) -> None:
+        """While downloading: save changes, at most once every SAVE_EVERY seconds. A whole manifest rewritten after every
+        file and every product adds up in a large library; the sync's closing save_changes() writes whatever's newer."""
+        if time.monotonic() - self._saved_at >= SAVE_EVERY:
+            self.save_changes()
+
+    def _contents(self) -> str:
+        return json.dumps(self.data, sort_keys=True, ensure_ascii=False)
 
     def record(self, key: str, creator: str, name: str) -> dict:
         """Existing record for a product, or a new one with a folder no other product uses."""
@@ -372,6 +393,7 @@ def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
     finally:
         gr.sess.cookies.clear()  # the copied sign-in only lives for this sync
         gr.sess.close()
+        man.save_changes()   # every finished file recorded, however the sync ended
 
 
 def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Manifest", args, report: Report) -> None:
@@ -450,13 +472,13 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
             (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
             rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
             got_any = True
-            man.save()
+            man.checkpoint()
 
         if got_any and is_new_asset:
             report.new_assets.append(f"Gumroad: {creator} / {name}")
         if cfg["gumroad"].get("save_thumbnails", True) and not args.dry_run:
             save_thumbnail(prod.get("thumbnail_url"), folder)
-        man.save()
+        man.checkpoint()
 
 
 # ----------------------------------------------------------------------------- Jinxxy
@@ -745,7 +767,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"{store}: {creator} / {name} / {fname}")
         got_any = True
-        man.save()
+        man.checkpoint()
     return got_any
 
 
@@ -798,6 +820,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                 except Exception as e:
                     report.failed.append(f"Jinxxy: {url} - {e}")
         finally:
+            man.save_changes()   # every finished file recorded, however the sync ended
             ctx.close()
 
 
@@ -827,7 +850,7 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report) -> None:
         report.new_assets.append(f"Jinxxy: {creator} / {name}")
     if jcfg.get("save_thumbnails", True) and not args.dry_run:
         save_thumbnail(info.get("thumbnail"), folder, "https://jinxxy.com/")
-    man.save()
+    man.checkpoint()
 
 
 # ----------------------------------------------------------------------------- Booth
@@ -1081,18 +1104,19 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         log(f"    {'updated' if is_update else 'saved'}: {fname}")
                         (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
                         got_any = True
-                        man.save()
+                        man.checkpoint()
                         time.sleep(delay)
 
                     if got_any and is_new_asset:
                         report.new_assets.append(f"Booth: {creator} / {name}")
                     if bcfg.get("save_thumbnails", True) and not args.dry_run:
                         save_thumbnail(b["thumbnail"], folder, "https://booth.pm/")
-                    man.save()
+                    man.checkpoint()
             finally:
                 sess.cookies.clear()  # the copied sign-in only lives for this sync
                 sess.close()
         finally:
+            man.save_changes()   # every finished file recorded, however the sync ended
             ctx.close()
 
 
@@ -1322,12 +1346,20 @@ def adopt_files_on_disk(rec: dict, folder: Path) -> int:
     return added
 
 
-def write_payhip_todo(store_dir: Path, pending: list) -> Path:
-    """Write Payhip/_download-yourself.html, listing products Payhip wouldn't let the tool open."""
+def write_payhip_todo(store_dir: Path, pending: list, sites: list[str]) -> Path:
+    """Write Payhip/_download-yourself.html, listing products Payhip wouldn't let the tool open. A download page only
+    becomes a link when it's an https address on Payhip or one of your shops (sites): escaping stops a link from
+    breaking the page, but not from being, say, a javascript: address. sync_payhip checks each one before listing it,
+    too."""
     esc = lambda v: html.escape(str(v or ""))  # noqa: E731
+
+    def link(url) -> str:
+        if store_url(url, sites):
+            return f"<a href=\"{esc(url)}\">Open download page</a>"
+        return "<span>Its download link isn't on Payhip or one of your shops, so it's left out.</span>"
     rows = "".join(
         f"<li><b>{esc(c['name'])}</b> <span>by {esc(c['creator'] or 'Unknown creator')}</span>"
-        f"<a href=\"{esc(c['download_url'])}\">Open download page</a>"
+        f"{link(c.get('download_url'))}"
         f"<label>Save its files into<input readonly value=\"{esc(folder)}\" onclick=\"this.select()\"></label></li>"
         for c, folder in pending)
     page = f"""<!doctype html><html lang="en"><meta charset="utf-8"><title>Payhip downloads for you to grab</title>
@@ -1339,9 +1371,8 @@ input{{display:block;width:100%;margin-top:4px;padding:6px 8px;border:0;border-r
 <p>Payhip didn't let Hoard in, so these are yours to download. Open each download page, save its files
 into the folder shown, then run a sync again. It records whatever you saved.</p>
 <ol>{rows}</ol></html>"""
-    store_dir.mkdir(parents=True, exist_ok=True)
     path = store_dir / "_download-yourself.html"
-    path.write_text(page, "utf-8")
+    write_file_safely(path, page, store_dir.parent)   # like every other file Hoard writes: whole, and never through a link
     return path
 
 
@@ -1388,14 +1419,14 @@ def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
                 rec.update(name=name, creator=creator, url=c["url"], last_synced=now_iso())
                 folder = rel_to_path(store_dir, rec["folder"])
                 if adopt_files_on_disk(rec, folder):
-                    man.save()
+                    man.checkpoint()
                 log(f"\n[Payhip] {creator} / {name}")
-                if blocked:
-                    pending.append((c, folder))
-                    continue
-                if not store_url(c["download_url"], payhip_sites(cfg)):
+                if not store_url(c["download_url"], payhip_sites(cfg)):   # before anything, listing it for you included
                     report.skipped.append(f"Payhip: {name} - its download link isn't on Payhip or one of your Payhip "
                                           "shops, so it wasn't opened")
+                    continue
+                if blocked:
+                    pending.append((c, folder))
                     continue
                 try:
                     open_past_bot_check(page, c["download_url"], wait_s, headed)
@@ -1417,14 +1448,14 @@ def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
                     report.new_assets.append(f"Payhip: {creator} / {name}")
                 if pcfg.get("save_thumbnails", True) and not args.dry_run:
                     save_thumbnail(c.get("thumbnail"), folder, "https://payhip.com/")
-                man.save()
-            man.save()
+                man.checkpoint()
             if pending and not args.dry_run:
-                todo = write_payhip_todo(store_dir, pending)
+                todo = write_payhip_todo(store_dir, pending, payhip_sites(cfg))
                 what = "1 product is" if len(pending) == 1 else f"{len(pending)} products are"
                 report.failed.append(f"Payhip: {blocked}. {what} listed in {todo} for you to "
                                      "download yourself; the next sync records files you save there.")
         finally:
+            man.save_changes()   # every finished file recorded, however the sync ended
             ctx.close()
 
 
@@ -1606,7 +1637,12 @@ def build_catalog(cfg: dict, root: Path) -> None:
     """Write catalog.json, tags.json and each product's asset.json."""
     catalog, ordered = collect_catalog(cfg, root)
     if not catalog:
-        log(f"No downloaded assets found under {root} - nothing to tag.")
+        stale = [name for name in ("catalog.json", "tags.json") if os.path.lexists(root / name)]
+        if stale:   # an earlier catalog mustn't go on listing products that are no longer here
+            write_catalog_files(root, [], {})
+            log(f"No downloaded assets found under {root}, so {' and '.join(stale)} now list none.")
+        else:       # an empty or new folder isn't given files it never had
+            log(f"No downloaded assets found under {root} - nothing to tag.")
         return
     # clean_manifest should make every entry pass; any that doesn't is left out rather than written
     checked = [(entry, validate_catalog_entry(entry)) for entry in catalog]
@@ -1623,6 +1659,14 @@ def build_catalog(cfg: dict, root: Path) -> None:
         if adir.is_dir():
             write_file_safely(adir / "asset.json", json.dumps(seal({**CATALOG_FORMAT["asset"], **entry}), indent=2,
                                                               ensure_ascii=False), root)
+    write_catalog_files(root, catalog, ordered)
+    top = ", ".join(f"{t} ({len(v)})" for t, v in list(ordered.items())[:25])
+    log(f"\nTagged {len(catalog)} assets with {len(ordered)} suggested tags. Top: {top or '-'}")
+    log("Hide suggestions you don't want in the Tags panel.")
+
+
+def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
+    """catalog.json (every product) and tags.json (every tag, and the suggested ones, with their products)."""
     write_file_safely(root / "catalog.json", json.dumps(seal({**CATALOG_FORMAT["catalog"], "generated_at": now_iso(),
                                                               "assets": catalog}), indent=2, ensure_ascii=False), root)
     yours: dict[str, list] = {}
@@ -1634,9 +1678,6 @@ def build_catalog(cfg: dict, root: Path) -> None:
         "tags": {t: {"count": len(v), "assets": v} for t, v in sorted(yours.items(), key=lambda kv: (-len(kv[1]), kv[0]))},
         "suggested": {t: {"count": len(v), "assets": v} for t, v in ordered.items()},
     }), indent=2, ensure_ascii=False), root)
-    top = ", ".join(f"{t} ({len(v)})" for t, v in list(ordered.items())[:25])
-    log(f"\nTagged {len(catalog)} assets with {len(ordered)} suggested tags. Top: {top or '-'}")
-    log("Hide suggestions you don't want in the Tags panel.")
 
 
 def cmd_verify(cfg: dict, root: Path) -> int:

@@ -663,6 +663,7 @@ class Library:
         self.path = path
         self.lock = threading.Lock()
         self.data = {"items": [], "stores": {}}
+        self._pictured, self._pictured_from = {}, None   # key -> item with a picture, for data["items"] (see _with_picture)
         if path.exists():
             try:
                 raw = read_json_file(path, 256 * 1024 * 1024)
@@ -772,13 +773,31 @@ class Library:
             s["error"] = message
             self.save()
 
+    def snapshot(self) -> tuple[list[dict], dict]:
+        """The items and each store's notes as they are now, to read without holding the lock. Every change replaces
+        the list of items rather than editing the items in it, so a copy of the list is a consistent picture; the
+        store notes are edited in place, so each is copied."""
+        with self.lock:
+            return list(self.data["items"]), {s: dict(info) for s, info in self.data["stores"].items()}
+
     def thumbnail_for(self, key: str) -> tuple[str, str] | None:
         """(image address, referrer) for an item's thumbnail, or None."""
         with self.lock:
-            for i in self.data["items"]:
-                if i["key"] == key and i.get("thumbnail"):
-                    return i["thumbnail"], STORES[i["store"]]["referer"]
-        return None
+            i = self._with_picture(key)
+            return (i["thumbnail"], STORES[i["store"]]["referer"]) if i else None
+
+    def _with_picture(self, key: str) -> dict | None:
+        """The item with this key, if it has a picture, found in a lookup table instead of by going through the whole
+        list for every picture shown. Every change replaces data["items"], so the table is made again when that list
+        isn't the one it was made from. Call with the lock held."""
+        items = self.data["items"]
+        if self._pictured_from is not items:
+            self._pictured = {}
+            for i in items:
+                if i.get("thumbnail"):
+                    self._pictured.setdefault(i["key"], i)   # the first, as a walk through the list would find
+            self._pictured_from = items
+        return self._pictured.get(key)
 
 
 STOPWORDS = set("""

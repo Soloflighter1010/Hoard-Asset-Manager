@@ -7,6 +7,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -19,6 +20,7 @@ os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-
 sys.path.insert(0, str(REPO))
 
 from hoard import cli, common, config, downloader, jobs, library, paths, server  # noqa: E402
+from hoard.safety import ACCESS_HEADER  # noqa: E402
 
 
 class Settings(unittest.TestCase):
@@ -62,6 +64,118 @@ class Settings(unittest.TestCase):
         finally:
             srv.shutdown()
             srv.server_close()
+
+
+class EmptyLibrary(unittest.TestCase):
+    """B-01 (2.3.1 review): once nothing is downloaded any more, catalog.json and tags.json say so, instead of going
+    on listing what's gone (the Unity window shows what catalog.json lists)."""
+
+    def test_the_catalog_empties_with_the_downloads(self):
+        from hoard import safety
+        root = Path(tempfile.mkdtemp())
+        folder = root / "Booth" / "Kitsu Studio" / "Rusk"
+        folder.mkdir(parents=True)
+        (folder / "rusk.zip").write_bytes(b"zip")
+        man = downloader.Manifest(root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec.update(name="Rusk", creator="Kitsu Studio", url="https://booth.pm/ja/items/111")
+        rec["files"]["f1"] = {"path": "rusk.zip", "size": 3}
+        man.save()
+        cfg = config.load_config()
+        downloader.build_catalog(cfg, root)
+        self.assertEqual(len(json.loads((root / "catalog.json").read_text("utf-8"))["assets"]), 1)
+        shutil.rmtree(root / "Booth")   # every download deleted by hand
+        downloader.build_catalog(cfg, root)
+        catalog = json.loads((root / "catalog.json").read_text("utf-8"))
+        tag_index = json.loads((root / "tags.json").read_text("utf-8"))
+        self.assertEqual((catalog["assets"], tag_index["total_assets"], tag_index["tags"]), ([], 0, {}))
+        self.assertEqual(safety.check_seal(catalog, root / "catalog.json"), "sealed")
+
+    def test_a_new_folder_is_left_as_it_is(self):
+        root = Path(tempfile.mkdtemp())
+        downloader.build_catalog(config.load_config(), root)
+        self.assertEqual(list(root.iterdir()), [])
+
+
+class ManifestSaves(unittest.TestCase):
+    """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
+    after every file and every product; each sync still ends by saving everything, however it ends."""
+
+    def test_checkpoints_are_spaced_out(self):
+        man = downloader.Manifest(Path(tempfile.mkdtemp()) / "Booth")
+        on_disk = lambda: set(json.loads(man.path.read_text("utf-8"))["assets"])  # noqa: E731
+        man.record("1", "Kitsu", "One")
+        man.checkpoint()
+        self.assertEqual(on_disk(), {"1"}, "the first change is saved straight away")
+        man.record("2", "Kitsu", "Two")
+        man.checkpoint()
+        self.assertEqual(on_disk(), {"1"}, "not again within SAVE_EVERY seconds")
+        man._saved_at -= downloader.SAVE_EVERY   # as if that long had passed
+        man.checkpoint()
+        self.assertEqual(on_disk(), {"1", "2"})
+
+    def test_an_unused_store_gets_no_manifest(self):
+        """A manifest is how a sync tells a store you use from one you don't (see cmd_sync)."""
+        man = downloader.Manifest(Path(tempfile.mkdtemp()) / "Jinxxy")
+        man.checkpoint()
+        man.save_changes()
+        self.assertFalse(man.path.exists())
+
+    def test_a_stopped_sync_records_what_finished(self):
+        """Stop is noticed when the next line is logged, which came before the save: the file that had just finished
+        went unrecorded, and was downloaded again the next time."""
+        import contextlib
+        import types
+        from unittest import mock
+        root = Path(tempfile.mkdtemp())
+
+        class Context:
+            pages = [types.SimpleNamespace(url="https://payhip.com/d/a1")]
+
+            def close(self):
+                pass
+
+        def finished_then_stopped(ctx, page, url, rec, *rest):
+            rec["files"]["f1"] = {"path": "first.zip", "size": 3}
+            raise common.Cancelled()   # Stop, noticed as that download is logged
+        product = {"id": "a1", "name": "First", "creator": "Kitsu", "url": "https://payhip.com/b/a1",
+                   "download_url": "https://payhip.com/d/a1"}
+        with mock.patch.multiple(downloader, _playwright=lambda: (lambda: contextlib.nullcontext(None)),
+                                 launch_context=lambda *a, **k: Context(), payhip_products=lambda *a, **k: [product],
+                                 open_past_bot_check=lambda *a: None, payhip_require_login=lambda page: None,
+                                 download_by_clicking=finished_then_stopped):
+            with self.assertRaises(common.Cancelled):
+                downloader.sync_payhip(config.load_config(), root, types.SimpleNamespace(
+                    headed=False, only=None, dry_run=False, payhip_page=None), downloader.Report())
+        saved = json.loads((root / "Payhip" / "_manifest.json").read_text("utf-8"))
+        self.assertEqual(saved["assets"]["a1"]["files"]["f1"]["path"], "first.zip")
+
+
+class LibraryLookups(unittest.TestCase):
+    """P-05/P-06 (2.3.1 review): a picture is found without going through the whole library, and a page's copy of
+    the library is a snapshot, not a JSON round trip of all of it."""
+
+    def test_pictures_are_found_and_follow_changes(self):
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        with lib.lock:
+            lib.data["items"] = [library.item("booth", str(n), name=f"Item {n}", thumbnail=f"https://img.example/{n}.png")
+                                 for n in range(3)] + [library.item("booth", "plain", name="No Picture")]
+        self.assertEqual(lib.thumbnail_for("booth:2"), ("https://img.example/2.png", library.STORES["booth"]["referer"]))
+        self.assertIsNone(lib.thumbnail_for("booth:plain"))
+        self.assertIsNone(lib.thumbnail_for("booth:nothing"))
+        lib.merge_store("booth", [library.item("booth", "2", name="Item 2", thumbnail="https://img.example/new.png")])
+        self.assertEqual(lib.thumbnail_for("booth:2")[0], "https://img.example/new.png", "a change is seen straight away")
+        lib.forget_products({library.tag_key("booth", "Item 2")})
+        self.assertIsNone(lib.thumbnail_for("booth:2"))
+
+    def test_a_snapshot_stays_as_it_was(self):
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("booth", [library.item("booth", "1", name="One")])
+        items, stores = lib.snapshot()
+        lib.replace_store("booth", [])
+        lib.set_error("booth", "changed since")
+        self.assertEqual([i["key"] for i in items], ["booth:1"])
+        self.assertIsNone(stores["booth"]["error"])
 
 
 class Downloading(unittest.TestCase):
@@ -291,7 +405,7 @@ class ArchiveHideRemove(unittest.TestCase):
         try:
             def call(method, path, body=None, cookie=None):
                 c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
-                headers = {"Content-Type": "application/json"} if body is not None else {}
+                headers = {**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: srv.key}
                 if cookie:
                     headers["Cookie"] = cookie
                 c.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
@@ -425,7 +539,7 @@ class RecoveryPhrase(unittest.TestCase):
         try:
             def call(path, body, cookie=None):
                 c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=30)
-                headers = {"Content-Type": "application/json", **({"Cookie": cookie} if cookie else {})}
+                headers = {"Content-Type": "application/json", ACCESS_HEADER: srv.key, **({"Cookie": cookie} if cookie else {})}
                 c.request("POST", path, body=json.dumps(body), headers=headers)
                 r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
                 return r.status, data, (r.getheader("Set-Cookie") or "").split(";")[0]
@@ -616,7 +730,7 @@ class SetupAssistant(unittest.TestCase):
             def call(method, path, body=None):
                 c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
                 c.request(method, path, body=json.dumps(body) if body is not None else None,
-                          headers={"Content-Type": "application/json"} if body is not None else {})
+                          headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: srv.key})
                 r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
                 return r.status, data
             status, st = call("GET", "/api/setup")

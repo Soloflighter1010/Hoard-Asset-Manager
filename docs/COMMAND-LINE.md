@@ -50,6 +50,10 @@ downloading, signing out, changing tags or settings and opening folders still on
 running Hoard. `--port` picks the port (by default Hoard uses any free one), and `--no-open` starts Hoard
 without opening its page.
 
+Started this way, Hoard also prints the address to open it at on this computer. That address includes
+the access key too: even on this computer, Hoard only answers pages that have it, so other programs and
+other people's accounts on the same computer can't use it. Keep it to yourself.
+
 ## Settings file
 
 Hoard's window has a Settings panel for everyday choices. A few rarer ones only live in `config.json` in

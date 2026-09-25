@@ -18,6 +18,7 @@ os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-
 sys.path.insert(0, str(REPO))
 
 from hoard import app, config  # noqa: E402
+from hoard.safety import ACCESS_HEADER  # noqa: E402
 
 
 class FakeWindow:
@@ -50,14 +51,21 @@ def fake_webview(fail=False):
     return mod
 
 
-def post(url, path, body):
-    host, port = url.split("//")[1].strip("/").split(":")
+def post(url, path, body, key=None):
+    host, port = url.split("#")[0].split("//")[1].strip("/").split(":")
     c = http.client.HTTPConnection(host, int(port), timeout=10)
-    c.request("POST", path, body=json.dumps(body), headers={"Content-Type": "application/json"})
+    c.request("POST", path, body=json.dumps(body),
+              headers={"Content-Type": "application/json", **({ACCESS_HEADER: key} if key else {})})
     r = c.getresponse()
-    r.read()
+    data = r.read()
     c.close()
-    return r.status
+    return (r.status, json.loads(data or b"{}")) if path == "/api/enter" else r.status
+
+
+def enter(link):
+    """What Hoard's page does with the one-time link it was opened with: trade it for the access key."""
+    status, data = post(link, "/api/enter", {"token": link.split("#enter=", 1)[1]})
+    return data.get("key") if status == 200 else None
 
 
 class DesktopApp(unittest.TestCase):
@@ -91,15 +99,20 @@ class DesktopApp(unittest.TestCase):
         sys.modules["webview"] = wv = fake_webview()
         t, result, info = self.start()
         window = wv.windows[0]
-        self.assertEqual((window.title, window.url), ("Hoard", info["url"]))
+        self.assertEqual(window.title, "Hoard")
+        self.assertTrue(window.url.startswith(info["url"] + "#enter="), "a one-time link, never the key itself")
+        key = enter(window.url)
+        self.assertTrue(key)
+        self.assertIsNone(enter(window.url), "the link works once")
         self.assertTrue(wv.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"], "store pages open in the browser, not in Hoard")
         self.assertEqual(wv.start_kw["private_mode"], False)
         # a second copy: it asks this one to come to the front, and ends
         self.assertEqual(app.run_app(config.load_config(), None), 0)
         self.assertEqual(window.shown, 1)
         self.assertEqual(post(info["url"], "/api/show", {"token": "guess"}), 403, "only another Hoard can ask")
-        # Quit Hoard
-        self.assertEqual(post(info["url"], "/api/quit", {}), 200)
+        # Quit Hoard: only the page, which has the key, can
+        self.assertEqual(post(info["url"], "/api/quit", {}), 401)
+        self.assertEqual(post(info["url"], "/api/quit", {}, key), 200)
         t.join(15)
         self.assertEqual(result.get("code"), 0)
         self.assertFalse(app.running_file().exists(), "tidied up")
@@ -116,7 +129,8 @@ class DesktopApp(unittest.TestCase):
             t.join(40)
         finally:
             app.IDLE_MINUTES = saved
-        self.assertEqual(self.opened, [info["url"]])
+        self.assertEqual(len(self.opened), 1)
+        self.assertTrue(self.opened[0].startswith(info["url"] + "#enter="), "a one-time link, never the key itself")
         self.assertTrue(any("browser" in m for m in self.messages))
         self.assertEqual(result.get("code"), 0, "stopped by itself once no page was open")
 
