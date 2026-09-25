@@ -9,6 +9,7 @@ Payhip becomes a library Hoard reads, saved pages can be imported in bulk, and i
   download the files from Payhip yourself. **Sync**, **Download** and **Download everything new** leave Payhip
   out. Files Hoard downloaded from Payhip before stay where they are, in Downloads and in the catalog.
   `sync --payhip-page` is gone, with the page Hoard used to write listing Payhip products to download yourself.
+  Refreshing Payhip with no shops listed no longer opens a window just to say so: it suggests importing.
 - **Import saved pages in bulk.** A store's library often spans several pages, and Payhip keeps one per shop,
   so one saved page couldn't hold everything. **Import pages** (in **Stores**) now takes any number of saved
   pages at once, **Import a folder** takes a whole folder of them, and files or folders can be dropped on the
@@ -17,8 +18,9 @@ Payhip becomes a library Hoard reads, saved pages can be imported in bulk, and i
   the command line, `import` takes several files and folders, and `--trust-shop` can be given more than once.
 - **itch.io,** a new store. Sign in, and Hoard reads your itch.io library (what you bought, and what you
   claimed from bundles or "name your own price" pages) and downloads each project's files from its download
-  page. Game builds (files the creator marked for Windows, macOS, Linux or Android) are skipped unless you turn
-  off **Skip game builds** in **Settings**, so a library with games in it doesn't fill your drive. A download
+  page. If you set Hoard up before this version, turn itch.io on in **Settings** first: Hoard keeps the stores
+  you chose. Game builds (files the creator marked for Windows, macOS, Linux or Android) are skipped unless you
+  turn off **Skip game builds** in **Settings**, so a library with games in it doesn't fill your drive. A download
   page's address holds a key that opens it for anyone, so it's kept like a sign-in: only in Hoard's private
   library list, and taken out of troubleshooting files. If Hoard reads your itch.io library wrong, `debug itch`
   saves what it read (scrubbed of your details) for a report.

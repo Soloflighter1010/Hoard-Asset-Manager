@@ -374,6 +374,11 @@ def jinxxy_item(c: dict) -> dict:
 # not in one library. Hoard reads Payhip and never downloads from it. PAYHIP_SHOP_JS reads a shop's library page,
 # PAYHIP_CARDS_JS a page saved from Payhip's own site. If either gets things wrong, run: debug payhip
 
+PAYHIP_NO_SHOPS = ("Payhip keeps your purchases in each shop you bought from, not in one library. Import each "
+                   "shop's saved library pages (Import pages, in Stores), or add your shops in Settings to refresh "
+                   "them (a shop's address is in your purchase email).")
+
+
 PAYHIP_CARDS_JS = r"""
 () => {
   const reserved = /^\/(auth|account|settings|marketplace|help|blog|pricing|features|login|signup|register|cart|checkout|search|explore|dashboard|users)(\/|$)/i;
@@ -495,8 +500,7 @@ def fetch_payhip(ctx, cfg, progress) -> list[dict]:
     your settings; a shop you aren't signed in to is noted and the others still count."""
     shops = payhip_shops(cfg)
     if not shops:
-        raise RuntimeError("Payhip keeps your purchases in each shop you bought from, not in one library. Add those "
-                           "shops in Settings (the shop's address is in your purchase email).")
+        raise RuntimeError(PAYHIP_NO_SHOPS)
     page = ctx.new_page()
     cards: dict[str, dict] = {}
     signed_out = []

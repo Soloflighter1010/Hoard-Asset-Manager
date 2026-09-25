@@ -79,9 +79,10 @@ Payhip has no single library: your purchases live in each shop you bought from, 
 
 - **Import the pages** (the easy way). In your usual browser, open each shop's library page (the shop's
   address followed by `/b-account`, such as `myshop.store/b-account`), sign in there if it asks, and save it
-  with **Ctrl+S** as **Webpage, Single File**, and each of its pages if it has several. Then choose **Import pages** on Payhip's row, or **Import a
-  folder** with all of them in it. See [Importing saved pages](#importing-saved-pages). A shop that isn't in
-  your list yet is added when you confirm it: Hoard asks once for all of them, showing each address.
+  with **Ctrl+S** as **Webpage, Single File**, and each of its pages if it has several. Then choose **Import
+  pages** on Payhip's row, or **Import a folder** with all of them in it. See
+  [Importing saved pages](#importing-saved-pages). A shop that isn't in your list yet is added when you confirm
+  it: Hoard asks once for all of them, showing each address.
 - **Sign in and refresh.** Add your shops in **Settings** under **Payhip shops**, one per line: a shop's
   address is either its own domain (`myshop.store`) or `payhip.com/ShopName`. **Sign in** then opens a tab for
   each shop. Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
@@ -92,6 +93,8 @@ that turn up in your library are offered in **Stores**: choose **Review** to add
 
 ## itch.io
 
+- New in 2.5.0. If you set Hoard up before then, turn itch.io on in [Settings](Settings) first: Hoard keeps the
+  stores you chose, so it starts switched off.
 - Hoard reads your itch.io library: what you bought, and what you claimed from bundles or "name your own
   price" projects. A bundle's projects only count once you've claimed them on itch.io.
 - Each project's files come from its download page, by clicking each file's Download button in Hoard's

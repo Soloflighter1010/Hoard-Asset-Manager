@@ -68,7 +68,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   email) and refresh: Payhip checks for automated browsers, so that opens a window where you can complete
   the check.
 - **itch.io:** everything in your itch.io library (things you bought, and ones you claimed from bundles or
-  "name your own price" pages), downloaded from each project's download page. Game builds (files the
+  "name your own price" pages), downloaded from each project's download page. Set Hoard up before 2.5.0? Turn
+  itch.io on in **Settings** first. Game builds (files the
   creator marked for Windows, macOS, Linux or Android) are skipped unless you turn off **Skip game builds**
   in **Settings**, so a library with games in it doesn't fill your drive.
 - **Signing in without your saved passwords:** Hoard's window is its own browser, so it doesn't have

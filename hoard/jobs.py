@@ -7,7 +7,8 @@ from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _
 from .safety import store_link
 from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
-from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
+from .config import payhip_shops
+from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
 
 
@@ -188,6 +189,9 @@ class Jobs:
         with _playwright()() as p:
             for store in online:
                 label = STORES[store]["label"]
+                if store == "payhip" and not payhip_shops(self.cfg):   # no shop to read: no window opened for nothing
+                    self.lib.set_error(store, PAYHIP_NO_SHOPS)
+                    continue
                 self._set(task="refresh", store=store, message=f"Reading {label}")
                 try:
                     # each store has its own sign-in; Payhip checks for automated browsers, so it gets a visible

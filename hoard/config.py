@@ -31,6 +31,12 @@ DEFAULT_CONFIG = {
 }
 
 
+# Stores added since Hoard was first released. An install that was set up before one came keeps the stores it
+# chose: the new store starts switched off there (Settings turns it on), rather than showing up unasked, with a
+# "not signed in" warning after the next sync. New installs choose in the setup assistant, where it's ticked.
+NEW_STORES = ("itch",)
+
+
 def clean_payhip_shop(value) -> str | None:
     """A Payhip shop's address as Hoard keeps it, or None if it isn't one.
 
@@ -112,6 +118,9 @@ def load_config(path: Path | None = None) -> dict:
             saved = read_json_file(path, 1024 * 1024)
             if isinstance(saved, dict):
                 deep_merge(cfg, saved)
+                for store in NEW_STORES:
+                    if saved.get("setup_done") and store not in saved:
+                        cfg[store]["enabled"] = False   # set up before this store came: off until you turn it on
         except DataFileError as e:
             print(f"Settings: {e}. Using the defaults.", flush=True)
     apply_store_sites(cfg)

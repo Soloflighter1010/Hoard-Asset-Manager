@@ -52,6 +52,17 @@ class Settings(unittest.TestCase):
                          {"itch": {"skip_game_builds": False}})
         self.assertEqual(server.apply_settings(cfg, {"stores": {"booth": {"skip_game_builds": False}}}), {"booth": {}})
 
+    def test_a_new_store_waits_to_be_turned_on(self):
+        """itch.io came in 2.5.0: an install set up before then keeps the stores it chose; a new one starts with all."""
+        folder = Path(tempfile.mkdtemp())
+        (folder / "config.json").write_text(json.dumps({"setup_done": True, "booth": {"enabled": True}}), "utf-8")
+        self.assertFalse(config.load_config(folder / "config.json")["itch"]["enabled"])
+        (folder / "config.json").write_text(json.dumps({"setup_done": True, "itch": {"enabled": True}}), "utf-8")
+        self.assertTrue(config.load_config(folder / "config.json")["itch"]["enabled"], "once you've chosen, your choice")
+        (folder / "config.json").write_text(json.dumps({"setup_done": False}), "utf-8")
+        self.assertTrue(config.load_config(folder / "config.json")["itch"]["enabled"], "setting up, it's offered like the rest")
+        self.assertTrue(config.load_config(folder / "missing.json")["itch"]["enabled"])
+
     def test_default_downloads_folder(self):
         self.assertEqual(config.root_dir({"root": ""}), paths.default_downloads())
         self.assertTrue(str(paths.default_downloads()).endswith("Hoard"))
@@ -847,6 +858,26 @@ class PayhipIsListedOnly(unittest.TestCase):
                 downloader.cmd_sync(cfg, types.SimpleNamespace(store=asked, dry_run=False, only=None, headed=False))
         self.assertEqual(synced, ["booth", "gumroad", "jinxxy", "itch", "booth"])
         self.assertFalse(hasattr(downloader, "sync_payhip"))
+
+    def test_refreshing_without_shops_opens_no_window(self):
+        """With no shop listed there's nothing to read, so no window opens just to say so; importing is suggested."""
+        from unittest import mock
+        cfg = config.load_config()
+        cfg["payhip"] = {**cfg["payhip"], "shops": []}
+        job = jobs.Jobs(cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+
+        class NoBrowser:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, *a):
+                return False
+
+        def launch(*a, **k):
+            raise AssertionError("a browser window was opened")
+        with mock.patch.multiple(jobs, reachable=lambda store, timeout=5.0: True, _playwright=lambda: NoBrowser, launch=launch):
+            job._refresh(["payhip"])
+        self.assertIn("Import each shop's saved library pages", job.lib.data["stores"]["payhip"]["error"])
 
     def test_nothing_that_downloads_takes_payhip(self):
         import contextlib
