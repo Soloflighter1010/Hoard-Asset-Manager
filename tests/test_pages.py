@@ -216,3 +216,89 @@ class ImportingFromTheLibrary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class HighlightsAndAccessibility(unittest.TestCase):
+    """The open item stays marked, things you own twice have striped spines, and the Accessibility settings
+    apply to the page: text size, reduced motion, and animated pictures paused as stills."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
+                                   lan=False)
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = [
+                library.item("booth", "111", name="Rusk", creator="Kitsu Studio", thumbnail=THUMB),
+                library.item("gumroad", "abc", name="Rusk", creator="Kitsu Studio"),
+                library.item("booth", "222", name="Mochi", creator="Kitsu Studio")]
+        library.THUMB_DIR.mkdir(parents=True, exist_ok=True)
+        cls.cached = library.THUMB_DIR / (hashlib.sha1(THUMB.encode()).hexdigest() + ".png")
+        cls.cached.write_bytes(png())
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.cached.unlink(missing_ok=True)
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.srv.cfg["display"] = {"text_size": 100, "pause_animations": False, "reduce_motion": False}
+
+    def open(self):
+        page = self.browser.new_page()
+        page.goto(self.srv.entry_url())
+        page.get_by_text("Mochi").first.wait_for()
+        return page
+
+    def test_the_open_item_is_marked(self):
+        page = self.open()
+        mochi = page.locator(".slot", has_text="Mochi")
+        mochi.click()
+        page.locator("#detail.open").wait_for()
+        self.assertEqual(mochi.get_attribute("aria-current"), "true")
+        self.assertEqual(page.locator('.slot[aria-current="true"]').count(), 1)
+        page.locator(".slot", has_text="Rusk").first.click()
+        self.assertIsNone(mochi.get_attribute("aria-current"), "only the one that's open")
+        page.keyboard.press("Escape")
+        page.wait_for_function("() => !document.querySelector('.slot[aria-current]')")
+        page.close()
+
+    def test_owned_twice_is_striped(self):
+        page = self.open()
+        rusk = page.locator(".slot", has_text="Rusk")
+        self.assertEqual(rusk.count(), 2)
+        for i in range(2):
+            self.assertIn("dup", rusk.nth(i).locator(".notch").get_attribute("class"))
+            self.assertIn("also on", rusk.nth(i).get_attribute("aria-label"))
+        self.assertNotIn("dup", page.locator(".slot", has_text="Mochi").locator(".notch").get_attribute("class"))
+        page.close()
+
+    def test_display_settings(self):
+        self.srv.cfg["display"] = {"text_size": 130, "pause_animations": True, "reduce_motion": True}
+        page = self.open()
+        self.assertEqual(page.evaluate("document.documentElement.style.zoom"), "1.3")
+        self.assertTrue(page.evaluate("document.body.classList.contains('less-motion')"))
+        page.wait_for_function("() => !!document.querySelector('.slot canvas.still')")
+        self.assertEqual(page.locator(".slot img").count(), 0, "every picture is a still")
+        # turned off from Settings: the pictures move again, straight away
+        from playwright.sync_api import expect
+        page.click("#settingsBtn")
+        # uncheck() reads the box straight away, so wait for Settings to have filled it in first
+        expect(page.locator("#setPause")).to_be_checked()
+        page.locator("#setPause").uncheck()
+        page.locator("#setMotion").uncheck()
+        page.select_option("#setTextSize", "100")
+        page.click("#setSave")
+        page.wait_for_function("() => !document.querySelector('canvas.still')")
+        self.assertEqual(page.evaluate("document.documentElement.style.zoom"), "")
+        self.assertFalse(page.evaluate("document.body.classList.contains('less-motion')"))
+        self.assertEqual(self.srv.cfg["display"], {"text_size": 100, "pause_animations": False, "reduce_motion": False})
+        page.close()

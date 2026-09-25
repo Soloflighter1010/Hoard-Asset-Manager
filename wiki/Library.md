@@ -13,7 +13,13 @@ Your search, filters and sort are kept in the page's address, so going back retu
 
 ## An item's details
 
-Click an item to open its details:
+Click an item to open its details. The item stays outlined in gold in the grid while its details are open, so
+you can see where it is.
+
+Something you own on more than one store has a striped spine along the bottom of its tile, in both stores'
+colours (the tile's label says so too, for screen readers).
+
+In the details:
 
 - **Open store page** and **Open download page** open the product on its store, in your web browser. These
   buttons only ever go to that item's own store.

@@ -1257,3 +1257,87 @@ class CommandLine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutomaticSync(unittest.TestCase):
+    """Settings, Sync automatically: when a sync starts by itself, and what it leaves alone."""
+
+    def setUp(self):
+        from unittest import mock
+        self.cfg = {**config.load_config(), "setup_done": True, "auto_sync_hours": 24}
+        self.started = []
+        self.fake = mock.Mock(state={"running": False})
+        self.fake.start = lambda task, stores, **kw: self.started.append((task, stores, kw)) or True
+        self.schedule = jobs.Schedule(self.cfg, self.fake)
+        self.schedule.not_before = 0
+        jobs._sync_file().unlink(missing_ok=True)
+        patch = mock.patch.object(jobs, "reachable", lambda store: True)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_due_after_the_interval_from_the_last_sync(self):
+        now = time.time()
+        self.assertTrue(self.schedule.tick(now))
+        (task, stores, kw), = self.started
+        self.assertEqual((task, kw), ("sync", {"skip_imported": False, "scheduled": True}))
+        self.assertNotIn("payhip", stores, "Payhip needs you there for its bot check")
+        self.assertIn("booth", stores)
+        jobs._record_sync()   # what the sync itself does as it starts
+        self.assertFalse(self.schedule.due(now + 23 * 3600))
+        self.assertTrue(self.schedule.due(time.time() + 24 * 3600 + 1))
+
+    def test_when_it_waits(self):
+        now = time.time()
+        for change, why in (({"auto_sync_hours": 0}, "off"), ({"auto_sync_hours": 5}, "not a choice"),
+                            ({"setup_done": False}, "before setup is done")):
+            with self.subTest(why):
+                cfg = {**self.cfg, **change}
+                self.assertFalse(jobs.Schedule(cfg, self.fake).due(now + 3600), why)
+        self.fake.state["running"] = True
+        self.assertFalse(self.schedule.due(now), "another job is running")
+        self.fake.state["running"] = False
+        self.assertFalse(jobs.Schedule(self.cfg, self.fake).due(now), "not straight after Hoard starts")
+        only_payhip = {**self.cfg, **{s: {**self.cfg[s], "enabled": s == "payhip"} for s in library.STORES}}
+        self.assertFalse(jobs.Schedule(only_payhip, self.fake).due(now), "nothing it can sync unattended")
+
+    def test_offline_it_tries_again_later(self):
+        from unittest import mock
+        now = time.time()
+        with mock.patch.object(jobs, "reachable", lambda store: False):
+            self.assertFalse(self.schedule.tick(now))
+        self.assertEqual(self.started, [])
+        self.assertEqual(self.schedule.not_before, now + jobs.OFFLINE_RETRY)
+        self.assertEqual(jobs.last_sync(), 0, "a sync that never started isn't counted")
+
+    def test_any_sync_counts(self):
+        """A sync you start resets the clock too, and the job says whether it started by itself."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        checked = threading.Event()   # the job waits here, so it can be looked at while it runs
+        with mock.patch.object(runner, "_refresh", lambda *a, **k: checked.wait(10)), \
+                mock.patch.object(runner, "_download"):
+            self.assertTrue(runner.start("sync", ["booth"], scheduled=True))
+            self.assertTrue(runner.state["scheduled"])
+            checked.set()
+            for _ in range(100):
+                if not runner.state["running"] and runner.busy.acquire(blocking=False):
+                    runner.busy.release()
+                    break
+                time.sleep(0.02)
+        self.assertAlmostEqual(jobs.last_sync(), time.time(), delta=5)
+        self.assertFalse(runner.state["scheduled"])
+
+    def test_settings(self):
+        cfg = config.load_config()
+        self.assertEqual(config.DEFAULT_CONFIG["auto_sync_hours"], 0, "off unless you turn it on")
+        self.assertEqual(server.apply_settings(cfg, {"auto_sync_hours": 12}), {"auto_sync_hours": 12})
+        for bad in (5, "24", True, None):
+            with self.assertRaises(ValueError):
+                server.apply_settings(cfg, {"auto_sync_hours": bad})
+        change = server.apply_settings(cfg, {"display": {"text_size": 130, "pause_animations": 1, "reduce_motion": 0}})
+        self.assertEqual(change, {"display": {"text_size": 130, "pause_animations": True, "reduce_motion": False}})
+        for bad in (99, "130", True):
+            with self.assertRaises(ValueError):
+                server.apply_settings(cfg, {"display": {"text_size": bad}})
+        shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
+        self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")

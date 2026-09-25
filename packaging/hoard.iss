@@ -1,5 +1,5 @@
 ; Hoard's Windows installer (Inno Setup 6). Built by .github/workflows/release.yml:
-;   iscc /DAppVersion=2.7.0 packaging\hoard.iss   (after PyInstaller has made dist\Hoard)
+;   iscc /DAppVersion=2.8.0 packaging\hoard.iss   (after PyInstaller has made dist\Hoard)
 ;
 ; Installs for the current user only (no administrator prompt) into %LOCALAPPDATA%\Programs\Hoard, with a Start
 ; menu entry, an optional desktop icon and an uninstaller. Hoard's own data (settings, library, sign-ins, tags) is
@@ -7,7 +7,7 @@
 ; touch either.
 
 #ifndef AppVersion
-  #error Pass the version: iscc /DAppVersion=2.7.0 packaging\hoard.iss
+  #error Pass the version: iscc /DAppVersion=2.8.0 packaging\hoard.iss
 #endif
 
 [Setup]

@@ -14,6 +14,16 @@ Everyday choices are in the **Settings** panel (top right). A few rarer ones onl
   `payhip.com/ShopName`. Importing a shop's saved page adds it for you. Hoard lists what you bought there, and
   you download it from Payhip yourself. See [Stores](Stores#payhip).
 - **Offline:** **Save product images, so the library works offline**.
+- **Sync automatically:** **Off** (only when you choose **Sync**), or every 6 hours, every 12 hours, once a day or
+  once a week, while Hoard is open. Payhip is left out. See [Downloads](Downloads#downloading).
+- **Accessibility:**
+  - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
+  - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
+    frame. Turn it off and they move again.
+  - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
+    computer's own settings ask for less motion.
+
+  These apply to both views straight away.
 - **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
   it asks GitHub whether there's a newer version. **Check now** asks straight away, and **Update to** installs
   it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating).
@@ -38,6 +48,8 @@ and keep it valid JSON.
 |---|---|---|
 | `allow_unprotected_signins` | `false` | Linux without a keyring only: keep sign-ins protected by folder permissions alone |
 | `profile_dir` with `advanced_signin_location` | `""`, `false` | Keep sign-ins somewhere other than Hoard's private folder. Used only when `advanced_signin_location` is `true`, never on a network share; how well they're protected then depends on that drive |
+| `auto_sync_hours` | `0` | Hours between automatic syncs while Hoard is open: `0` (off), `6`, `12`, `24` or `168` (**Sync automatically** in Settings) |
+| `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `payhip.bot_check_wait` | `180` | Seconds to wait for you to complete Payhip's bot check |
