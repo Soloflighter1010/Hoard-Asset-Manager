@@ -21,11 +21,18 @@ namespace SoloFlighter.Hoard
     {
         public const int NewestVersion = 3;
         const long MaxBytes = 64L * 1024 * 1024;
-        static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip" };
+        static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch" };
         static readonly Dictionary<string, string> StoreSites = new Dictionary<string, string>
         {
             { "Booth", "booth.pm" }, { "Gumroad", "gumroad.com" }, { "Jinxxy", "jinxxy.com" }, { "Payhip", "payhip.com" },
+            { "Itch", "itch.io" },
         };
+
+        /// <summary>A store as people write it, from the name of its folder ("Itch" is itch.io).</summary>
+        public static string StoreLabel(string store)
+        {
+            return store == "Itch" ? "itch.io" : store;
+        }
         static readonly Regex BadPathChars = new Regex("[<>:\"\\\\|?*]");
 
         public string Root;

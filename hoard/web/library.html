@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hoard</title>
-<meta name="description" content="Everything you own on Booth, Gumroad, Jinxxy and Payhip, in one place.">
+<meta name="description" content="Everything you own on Booth, Gumroad, Jinxxy, Payhip and itch.io, in one place.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cg%20transform%3D%22translate%280%200%29%20scale%281.0%29%22%3E%0A%20%20%3Crect%20x%3D%225%22%20y%3D%2230%22%20width%3D%2227%22%20height%3D%2227%22%20rx%3D%227%22%20fill%3D%22%2356D1DC%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%28-9%2018.5%2043.5%29%22/%3E%0A%20%20%3Crect%20x%3D%2231%22%20y%3D%2231%22%20width%3D%2227%22%20height%3D%2227%22%20rx%3D%227%22%20fill%3D%22%23FF8AD8%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%287%2044.5%2044.5%29%22/%3E%0A%20%20%3Crect%20x%3D%2217.5%22%20y%3D%228%22%20width%3D%2228%22%20height%3D%2228%22%20rx%3D%227%22%20fill%3D%22%23F0B429%22%20stroke%3D%22%23211C18%22%20stroke-width%3D%223%22%20transform%3D%22rotate%28-4%2031.5%2022%29%22/%3E%0A%20%20%3Cpath%20d%3D%22M38%2013.5%20l1.6%203.9%203.9%201.6%20-3.9%201.6%20-1.6%203.9%20-1.6%20-3.9%20-3.9%20-1.6%203.9%20-1.6z%22%20fill%3D%22%23FFF8E6%22/%3E%0A%3C/g%3E%3C/svg%3E">
 <style>
 /* Fonts are bundled with Hoard (fonts/, served by the tool), so the pages look the same offline. */
@@ -15,7 +15,7 @@
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
   --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --warn: #FF9F6B;
-  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF;
+  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A;
   --ph-l: 30%; --ph-s: 28%;
   --slot-size: 172px; --bar-h: 72px;
   --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic UI", "Segoe UI Black", system-ui, sans-serif;
@@ -26,7 +26,7 @@
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
     --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --warn: #B4531B;
-    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6;
+    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
   }
@@ -100,6 +100,7 @@ a { color: var(--gold); text-underline-offset: 3px; }
 }
 .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; background: var(--c); transform: rotate(45deg); }
 .booth { --c: var(--booth); } .gumroad { --c: var(--gumroad); } .jinxxy { --c: var(--jinxxy); } .payhip { --c: var(--payhip); }
+.itch { --c: var(--itch); }
 
 /* stores panel */
 .stores {
@@ -126,6 +127,9 @@ a { color: var(--gold); text-underline-offset: 3px; }
 .primary:hover { filter: brightness(1.06); }
 .stores .primary { width: 100%; justify-content: center; margin-top: 14px; }
 .stores .hint { font-size: 13px; color: var(--dust); margin: 14px 0 0; line-height: 1.5; }
+.stores h3 { font: 700 14px var(--body); margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--seam); }
+.stores h3 + .hint { margin-top: 6px; }
+.importbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .drop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgb(20 16 12 / .7);
   font: 400 26px var(--display); color: #F4EDE3; pointer-events: none; }
 
@@ -342,6 +346,8 @@ body.selecting .toast { bottom: 96px; }
 .dlpanel details summary { cursor: pointer; font-size: 12px; color: var(--dust); margin-top: 10px; }
 .dlpanel pre { max-height: 220px; overflow: auto; margin: 6px 0 0; padding: 8px; border-radius: 8px; background: var(--cave);
   font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.imppanel { right: auto; left: 18px; }
+.copy .muted { font-size: 13px; color: var(--dust); }
 .ondisk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--bone); }
 .ondisk::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #4CC38A; }
 body.selecting .dlpanel { bottom: 96px; }
@@ -475,11 +481,16 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
     <span id="signinsMissing" hidden>Store sign-ins aren't saved on this computer, because it has no keyring to protect
     them. Install and unlock one (GNOME Keyring, KeePassXC or KWallet), then sign in again.</span>
     <button class="linkish" id="signOutAll">Sign out of every store</button></p>
-  <p class="hint">If a store blocks the automatic refresh, open your library there in your usual browser, scroll to
-    the bottom, press Ctrl+S and save it as "Webpage, Single File". Then choose Import page, or drop the file on this window.</p>
-  <input id="importFile" type="file" accept=".mhtml,.mht,.html,.htm" hidden>
+  <h3>Import saved pages</h3>
+  <p class="hint">Instead of signing in, or when a store blocks the refresh: open your library in your usual browser,
+    scroll to the bottom, press Ctrl+S and save it as "Webpage, Single File". Save each page of it (for Payhip, each
+    shop's library page), then import them all together, or drop them, or their folder, on this window.</p>
+  <div class="importbtns"><button class="ghost sm" id="importPages">Import pages</button>
+    <button class="ghost sm" id="importFolder">Import a folder</button></div>
+  <input id="importFile" type="file" accept=".mhtml,.mht,.html,.htm" multiple hidden>
+  <input id="importDir" type="file" webkitdirectory multiple hidden>
 </section>
-<div id="drop" class="drop" hidden>Drop a saved store page to add it to your hoard</div>
+<div id="drop" class="drop" hidden>Drop saved store pages, or a folder of them, to add them to your hoard</div>
 
 <div id="offline" class="offline" role="status" hidden>You're offline. Your library, search and saved images still work; refreshing and store links need a connection.</div>
 <div class="layout">
@@ -518,7 +529,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/TERMS.md" target="_blank" rel="noopener noreferrer">Terms</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/AI-DISCLOSURE.md" target="_blank" rel="noopener noreferrer">Made with AI</a>
       </nav>
-      <p class="foot-note">Free and open source under the MIT license. Not affiliated with Booth, Gumroad, Jinxxy or Payhip.</p>
+      <p class="foot-note">Free and open source under the MIT license. Not affiliated with Booth, Gumroad, Jinxxy, Payhip or itch.io.</p>
     </footer>
   </main>
 </div>
@@ -537,7 +548,8 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <textarea id="setShops" rows="3" spellcheck="false" autocomplete="off" aria-label="Payhip shops"
     placeholder="myshop.store&#10;payhip.com/AnotherShop"></textarea>
   <p class="hint">Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's
-    address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you.</p>
+    address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you. Hoard lists
+    what you bought on Payhip; you download it from Payhip yourself.</p>
   <h3>Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
   <h3>Browser for store sign-ins</h3>
@@ -558,6 +570,13 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <p id="dlMessage" class="dlmsg" aria-live="polite"></p>
   <ul id="dlProblems" class="problems" hidden></ul>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
+</section>
+<section id="impPanel" class="dlpanel imppanel" hidden aria-labelledby="impTitle">
+  <div class="dlhead"><h2 id="impTitle">Importing pages</h2>
+    <button class="ghost sm" id="impStop">Stop</button><button class="ghost sm" id="impClose" hidden>Close</button></div>
+  <p id="impMessage" class="dlmsg" aria-live="polite"></p>
+  <ul id="impProblems" class="problems" hidden></ul>
+  <details><summary>Details</summary><pre id="impLog"></pre></details>
 </section>
 <div id="setup" class="setup" hidden role="dialog" aria-modal="true" aria-labelledby="setupTitle">
   <div class="setup-card">
@@ -632,18 +651,21 @@ async function api(url, opts = {}) {
 }
 const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
 const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
-const STORE_ORDER = ["booth", "gumroad", "jinxxy", "payhip"];
+const STORE_ORDER = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
 const shown = s => (DATA.enabled || {})[s] !== false;   // stores you don't use (Settings, or setup) are hidden
 const usedStores = () => STORE_ORDER.filter(shown);
-const IMPORTABLE = ["booth", "jinxxy", "payhip"];
-let importStore = null;
+// The stores you can import saved pages for, and the ones Hoard downloads from (Payhip is only read). The server
+// says which; these are the same, for before it has.
+const importable = s => (DATA.importable || ["booth", "jinxxy", "payhip", "itch"]).includes(s);
+const downloadable = s => (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).includes(s);
+let importStore = null, importing = null;
 const state = { view: "library", q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null };
 let DATA = { items: [], stores: {}, labels: {}, job: {} }, byKey = new Map(), openKey = null, lastFocus = null, polling = null;
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
 const safeUrl = u => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch (e) { return ""; } };
 // Links to a store only open when they lead to that store's own website (the same rule the tool applies).
-const STORE_SITES = { booth: ["booth.pm"], gumroad: ["gumroad.com"], jinxxy: ["jinxxy.com"], payhip: ["payhip.com"] };
+const STORE_SITES = { booth: ["booth.pm"], gumroad: ["gumroad.com"], jinxxy: ["jinxxy.com"], payhip: ["payhip.com"], itch: ["itch.io"] };
 const storeUrl = (store, u) => {
   const s = safeUrl(u); if (!s) return "";
   const x = new URL(s), host = x.hostname.replace(/\.$/, "");
@@ -734,13 +756,14 @@ function renderStores() {
   $("#storeRows").innerHTML = usedStores().map(s => {
     const info = DATA.stores[s] || {};
     const busy = job.running;
-    const meta = info.updated ? `${info.count} items, ${info.source === "import" ? "imported" : "refreshed"} ${ago(info.updated)}` : "Not refreshed yet";
+    const meta = (info.updated ? `${plural(info.count, "item", "items")}, ${info.source === "import" ? "imported" : "refreshed"} ${ago(info.updated)}` : "Not refreshed yet")
+      + (downloadable(s) ? "" : ". Listed, not downloaded");
     return `<div class="store-row"><span class="nm"><span class="dot ${s}"></span>${label(s)}</span>` +
       `<span class="meta">${esc(meta)}</span>` +
       `<span class="btns"><button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>Sign in</button>` +
       `<button class="ghost sm" data-refresh="${s}" ${busy ? "disabled" : ""}>Refresh</button>` +
-      `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` +
-      (IMPORTABLE.includes(s) ? `<button class="ghost sm" data-import="${s}">Import page</button>` : "") +
+      (downloadable(s) ? `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` : "") +
+      (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
       `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button></span>` +
       (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}</span>` : "") +
       ((info.found_shops || []).length ? `<span class="found">Your library has products from ${info.found_shops.length} more ` +
@@ -748,6 +771,8 @@ function renderStores() {
       `</div>`;
   }).join("");
   $("#refreshAll").disabled = !!job.running;
+  $("#downloadAll").hidden = !usedStores().some(downloadable);
+  $("#importPages").disabled = $("#importFolder").disabled = !!importing;
   $("#signOutAll").disabled = !!job.running;
   $("#signinsPath").textContent = DATA.signins ? ` (${DATA.signins})` : "";
   // switch between the two messages; never replace them, since every refresh updates the parts inside
@@ -884,7 +909,8 @@ function showDetail(a, focus = true) {
       pageLink + `</div>` +
     `<p class="copy">${a.on_disk != null
       ? `<a class="ondisk" href="/downloads#open=${a.on_disk}">On disk. Show it in Downloads</a>`
-      : `<button class="ghost sm" data-act="download">Download a copy</button>`}</p>` +
+      : downloadable(a.store) ? `<button class="ghost sm" data-act="download">Download a copy</button>`
+      : `<span class="muted">Hoard doesn't download from ${store}. Open its download page to get the files.</span>`}</p>` +
     `<div class="marks">${markButtons(a)}</div>` +
     tagSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
@@ -926,7 +952,7 @@ $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
-$("#downloadAll").addEventListener("click", () => startDownload(usedStores()));
+$("#downloadAll").addEventListener("click", () => startDownload(usedStores().filter(downloadable)));
 $("#signOutAll").addEventListener("click", () => {
   if (confirm("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.")) runJob("/api/logout", ["all"]);
 });
@@ -940,31 +966,144 @@ $("#storeRows").addEventListener("click", e => {
   else if (r) runJob("/api/refresh", [r.dataset.refresh]);
   else if (i) { importStore = i.dataset.import; $("#importFile").value = ""; $("#importFile").click(); }
 });
-async function importFile(file, store) {
-  if (!file) return;
-  toast(`Reading ${file.name}`);
+/* ---------- importing saved pages: any number at once, from the file picker, a folder, or dropped on the window.
+   They go to Hoard a batch at a time, and each page gets its own result, so one bad page doesn't stop the rest. */
+const PAGE_FILE = /\.(mhtml|mht|html|htm)$/i;
+const IMPORT_BATCH = { pages: 10, bytes: 24 * 1024 * 1024 };   // per request, well inside what Hoard accepts
+const MOST_PAGES = 2000;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const listed = list => new Intl.ListFormat("en", { type: "conjunction" }).format(list);
+const shopName = s => String(s).replace(/^https:\/\//, "");
+
+async function importPages(files, store) {
+  const all = files.filter(f => PAGE_FILE.test(f.name)), pages = all.slice(0, MOST_PAGES);
+  if (!pages.length) {
+    toast(files.length ? 'Those aren\'t saved pages. Save your library page as "Webpage, Single File" (.mhtml), and import that.'
+                       : "There are no saved pages there.");
+    return;
+  }
+  if (importing) { toast("Hoard is already importing pages. Wait for it to finish."); return; }
+  importing = { stop: false };
+  const done = { pages: 0, items: {}, totals: {}, problems: [], log: [], shops: new Map(), added: [] };
+  if (all.length > pages.length) done.problems.push(`Only the first ${MOST_PAGES} pages were imported. Import the rest separately.`);
+  renderStores();
+  showImport(done, `Reading ${plural(pages.length, "page", "pages")}`);
   try {
-    const content = await file.text();
-    const body = { store: store || "auto", filename: file.name, content };
-    let r = await apiPost("/api/import", body);
-    if (r.status === 409 && r.data.confirm_shop) {
-      // a Payhip shop Hoard doesn't know yet: add it only if you say so, showing exactly which address
-      const host = r.data.confirm_shop.replace(/^https:\/\//, "");
-      if (!confirm(`This page is from the Payhip shop:\n\n${host}\n\nAdd it to your Payhip shops? Hoard will then open pages and download files from that address. Only add it if it's the shop you bought from.`)) {
-        toast("Not imported. You can add the shop in Settings if it's yours."); return;
+    await sendPages(pages, store, [], done);
+    if (done.shops.size && !importing.stop) {
+      // Pages from Payhip shops that aren't in your list: a shop is only added when you say so, all of them at once
+      const shops = [...done.shops.keys()], again = [...done.shops.values()].flat(), n = shops.length;
+      done.shops = new Map();
+      if (confirm(`${plural(again.length, "page is", "pages are")} from ${n === 1 ? "a Payhip shop that isn't" : `${n} Payhip shops that aren't`} in your list:\n\n` +
+          shops.map(s => "   " + shopName(s)).join("\n") + `\n\nAdd ${n === 1 ? "it" : "them"} to your Payhip shops, and import ${again.length === 1 ? "that page" : "those pages"}? ` +
+          "Only add shops you bought from.")) {
+        await sendPages(again, store, shops, done);
+      } else {
+        done.problems.push(`${listed(again.map(f => f.name))}: from ${listed(shops.map(shopName))}, which you didn't add to your Payhip shops, so not imported.`);
       }
-      r = await apiPost("/api/import", { ...body, trust_shop: r.data.confirm_shop });
     }
-    if (!r.ok) throw new Error(r.data.error || "Couldn't import that page.");
-    const j = r.data;
+  } finally {
+    const stopped = importing.stop;
+    importing = null;
     await load();
-    toast(`Imported ${j.count} ${j.label} items. ${j.label} now has ${j.total}.`);
-  } catch (e) { toast(e.message); }
+    finishImport(done, files.length - all.length, stopped);
+  }
 }
-$("#importFile").addEventListener("change", e => {
-  importFile(e.target.files[0], importStore);
-  e.target.value = "";   // so choosing the same file again (say, after declining) works
+async function sendPages(files, store, trust, done) {
+  let i = 0;
+  while (i < files.length && !importing.stop) {
+    const batch = [];
+    let bytes = 0;
+    while (i < files.length && batch.length < IMPORT_BATCH.pages && (!batch.length || bytes + files[i].size <= IMPORT_BATCH.bytes)) {
+      bytes += files[i].size;
+      batch.push(files[i++]);
+    }
+    showImport(done, `Reading ${batch.length === 1 ? batch[0].name : plural(batch.length, "page", "pages")} (${i} of ${files.length})`);
+    let sent;
+    try {
+      sent = await Promise.all(batch.map(async f => ({ filename: f.name, content: await f.text() })));
+    } catch (e) {
+      batch.forEach(f => done.problems.push(`${f.name}: couldn't be opened.`));
+      continue;
+    }
+    const r = await apiPost("/api/import", { store: store || "auto", files: sent, trust_shops: trust });
+    if (!r.ok) {
+      batch.forEach(f => done.problems.push(`${f.name}: ${r.data.error || "couldn't be imported."}`));
+      if (r.status === 0 || r.status === 401 || r.status >= 500) break;   // Hoard stopped, doesn't know this page, or can't read pages now
+      continue;
+    }
+    (r.data.results || []).forEach((res, k) => {
+      if (res.count != null) {
+        done.pages += 1;
+        done.items[res.label] = (done.items[res.label] || 0) + res.count;
+        done.log.push(`${res.filename}: ${plural(res.count, `${res.label} item`, `${res.label} items`)}`);
+      } else if (res.confirm_shop) {
+        if (!done.shops.has(res.confirm_shop)) done.shops.set(res.confirm_shop, []);
+        done.shops.get(res.confirm_shop).push(batch[k]);
+      } else {
+        done.problems.push(`${res.filename}: ${res.error}`);
+      }
+    });
+    for (const s of Object.values(r.data.totals || {})) done.totals[s.label] = s.total;
+    done.added.push(...(r.data.added_shops || []));
+  }
+}
+function showImport(done, message, finished = false, title = "Importing pages") {
+  $("#impPanel").hidden = false;
+  $("#impTitle").textContent = title;
+  $("#impMessage").textContent = message;
+  $("#impStop").hidden = finished;
+  $("#impClose").hidden = !finished;
+  $("#impProblems").hidden = !done.problems.length;
+  $("#impProblems").innerHTML = done.problems.map(p => `<li>${esc(p)}</li>`).join("");
+  $("#impLog").textContent = done.log.join("\n");
+}
+function finishImport(done, notPages, stopped) {
+  if (notPages) done.problems.push(`${plural(notPages, "file isn't a saved page", "files aren't saved pages")} (.mhtml or .html), so ${notPages === 1 ? "it was" : "they were"} left alone.`);
+  const got = Object.entries(done.items), totals = Object.entries(done.totals);
+  let said = got.length
+    ? `Imported ${listed(got.map(([l, n]) => plural(n, `${l} item`, `${l} items`)))} from ${plural(done.pages, "page", "pages")}.`
+    : "Nothing was imported.";
+  if (totals.length) said += ` Your library now has ${listed(totals.map(([l, n]) => `${n} from ${l}`))}.`;
+  if (done.added.length) said += ` Added ${listed(done.added.map(shopName))} to your Payhip shops.`;
+  showImport(done, (stopped ? "Stopped. " : "") + said, true,
+             stopped ? "Import stopped" : done.problems.length ? (got.length ? "Imported, with problems" : "Nothing imported") : "Imported");
+}
+$("#impStop").addEventListener("click", () => {
+  if (importing) { importing.stop = true; $("#impMessage").textContent = "Stopping after the pages being read now"; }
 });
+$("#impClose").addEventListener("click", () => { $("#impPanel").hidden = true; });
+$("#importPages").addEventListener("click", () => { importStore = null; $("#importFile").click(); });
+$("#importFolder").addEventListener("click", () => $("#importDir").click());
+$("#importFile").addEventListener("change", e => {
+  const files = [...e.target.files];
+  e.target.value = "";   // so the same pages can be chosen again (say, after declining a shop)
+  importPages(files, importStore);
+});
+$("#importDir").addEventListener("change", e => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  importPages(files, null);
+});
+async function filesIn(entries, most = 5000) {
+  // Files and folders dropped on the window, with everything inside the folders
+  const out = [];
+  const walk = async entry => {
+    if (out.length >= most) return;
+    if (entry.isFile) { out.push(await new Promise((ok, fail) => entry.file(ok, fail))); return; }
+    if (!entry.isDirectory) return;
+    const reader = entry.createReader();
+    for (;;) {
+      const some = await new Promise((ok, fail) => reader.readEntries(ok, fail));
+      if (!some.length) return;
+      for (const e of some) await walk(e);
+    }
+  };
+  for (const e of entries) {
+    try { await walk(e); } catch (x) { /* one that can't be read is left out */ }
+  }
+  return out;
+}
 let dragDepth = 0;
 document.addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dragDepth++; $("#drop").hidden = false; } });
 document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#drop").hidden = true; } });
@@ -972,7 +1111,11 @@ document.addEventListener("dragover", e => { if (e.dataTransfer.types.includes("
 document.addEventListener("drop", e => {
   if (!e.dataTransfer.files.length) return;
   e.preventDefault(); dragDepth = 0; $("#drop").hidden = true;
-  importFile(e.dataTransfer.files[0], null);
+  // What was dropped can only be read while the drop is happening, so take it now; folders are read after
+  const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const files = [...e.dataTransfer.files];
+  if (entries.some(x => x.isDirectory)) filesIn(entries).then(found => importPages(found, null));
+  else importPages(files, null);
 });
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
@@ -1219,7 +1362,7 @@ function wireTags() {
 }
 
 /* ---------- settings and downloading, the same in both views. T (above) connects this to the page. */
-const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip" };
+const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io" };
 let SETTINGS = null, dlActive = false, dlTimer = null;
 
 async function apiPost(url, body) {
@@ -1255,7 +1398,8 @@ async function openSettings(open) {
   $("#setStores").innerHTML = Object.entries(SETTINGS.stores).map(([s, o]) => box(s, "enabled", o.enabled, STORE_NAMES[s]) +
     (s === "booth" ? box(s, "include_gifts", o.include_gifts, "Include gifts", true) +
                      box(s, "include_free", o.include_free, "Include free downloads", true) : "") +
-    (s === "gumroad" ? box(s, "include_archived", o.include_archived, "Include archived purchases", true) : "")).join("");
+    (s === "gumroad" ? box(s, "include_archived", o.include_archived, "Include archived purchases", true) : "") +
+    (s === "itch" ? box(s, "skip_game_builds", o.skip_game_builds, "Skip game builds (files marked for Windows, macOS, Linux or Android)", true) : "")).join("");
 }
 async function saveSettings() {
   const root = $("#setRoot").value.trim();
@@ -1388,12 +1532,15 @@ const SETUP_VIEWS = {
   stores: st => `<h2 id="setupTitle">Which stores have you bought from?</h2>
     <p>Hoard only shows and reads the stores you pick. You can change this later in Settings.</p>
     <div class="storepick">${STORE_ORDER.map(s => `<label><input type="checkbox" data-pick="${s}"${st.stores[s].enabled ? " checked" : ""}>
-      <span class="dot ${s}"></span>${esc(st.stores[s].label)}</label>`).join("")}</div>`,
+      <span class="dot ${s}"></span>${esc(st.stores[s].label)}</label>`).join("")}</div>
+    <p class="muted">Hoard lists what you own on each of them, and keeps copies from all but Payhip: for Payhip, it lists
+      what you bought and where to download it, and you download it from Payhip yourself.</p>`,
   payhip: st => `<h2 id="setupTitle">Your Payhip shops</h2>
     <p>Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address, one per line.
       It's in your purchase email: a shop's own address such as <code>myshop.store</code>, or <code>payhip.com/ShopName</code>.</p>
     <textarea id="setupShops" spellcheck="false" aria-label="Payhip shops" placeholder="myshop.store">${esc(st.payhip_shops.map(s => s.replace(/^https:\/\//, "")).join("\n"))}</textarea>
-    <p class="muted">Importing a shop's saved page from the Stores panel adds that shop for you too.</p>`,
+    <p class="muted">Rather not sign in to Payhip? Save each shop's library page from your usual browser, and import them all
+      from the Stores panel. Importing a shop's page adds that shop for you too.</p>`,
   signin: st => `<h2 id="setupTitle">Sign in to your stores</h2>
     <p>Each store opens in Hoard's own window. Sign in there as usual, then close the window, and Hoard reads what you own.</p>
     ${STORE_ORDER.filter(s => st.stores[s].enabled).map(s => `<div class="signrow"><span class="who"><span class="dot ${s}"></span>${esc(st.stores[s].label)}</span>
@@ -1718,7 +1865,7 @@ function wirePrivacy() {
     const found = (DATA.stores.payhip || {}).found_shops || [];
     if (!found.length) return;
     const list = found.map(s => s.replace(/^https:\/\//, "")).join("\n");
-    if (!confirm(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then open pages and download files from those addresses. Only add shops you bought from.`)) return;
+    if (!confirm(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then read your purchases there. Only add shops you bought from.`)) return;
     const current = (await (await api("/api/settings", { cache: "no-store" })).json()).payhip_shops || [];
     const r = await apiPost("/api/settings", { payhip_shops: [...current, ...found] });
     toast(r.ok ? "Added. Refresh Payhip to read them." : (r.data.error || "They weren't added."));

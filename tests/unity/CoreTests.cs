@@ -57,6 +57,9 @@ public static class CoreTests
         Check("broken entries counted", cat.LeftOut == int.Parse(File.ReadAllText(Path.Combine(dir, "left_out.txt")).Trim()), cat.LeftOut.ToString());
         var good = cat.Assets.Find(a => a.Name == "Rusk Avatar Base");
         Check("store link kept", good != null && good.Url == "https://booth.pm/ja/items/1", good == null ? "missing" : good.Url ?? "null");
+        var itch = cat.Assets.Find(a => a.Name == "Paw Suit");
+        Check("an itch.io asset, with its link", itch != null && itch.Store == "Itch" && itch.Url == "https://kitsu.itch.io/paw-suit"
+              && cat.FilePath(itch, "PawSuit.unitypackage") != null, itch == null ? "missing" : itch.Url ?? "null");
         var badLink = cat.Assets.Find(a => a.Name == "Odd Link");
         Check("off-store link dropped", badLink != null && badLink.Url == null);
         Check("file found inside the folder", good != null && cat.FilePath(good, "Rusk.unitypackage") != null);
@@ -76,6 +79,10 @@ public static class CoreTests
         foreach (string u in new[] { "http://booth.pm/x", "https://booth.pm.evil.example/x", "https://user@booth.pm/x", "https://booth.pm:8443/x", "javascript:alert(1)" })
             Check("link refused: " + u, !HoardCatalog.StoreLink("Booth", u));
         Check("shop subdomain ok", HoardCatalog.StoreLink("Booth", "https://kitsu.booth.pm/items/1"));
+        Check("itch.io creator page ok", HoardCatalog.StoreLink("Itch", "https://kitsu.itch.io/paw-suit"));
+        foreach (string u in new[] { "https://itch.io.evil.example/x", "https://evil-itch.io/x", "https://kitsu.booth.pm/items/1" })
+            Check("itch.io link refused: " + u, !HoardCatalog.StoreLink("Itch", u));
+        Check("itch.io named as people write it", HoardCatalog.StoreLabel("Itch") == "itch.io" && HoardCatalog.StoreLabel("Booth") == "Booth");
 
         // a Unity package: every GUID and path, nothing extracted
         var assets = UnityPackageReader.ReadAssets(Path.Combine(dir, "test.unitypackage"));

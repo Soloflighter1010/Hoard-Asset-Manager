@@ -7,7 +7,7 @@ from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _
 from .safety import store_link
 from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
-from .library import FETCHERS, IMPORTABLE, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
+from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
 
 
@@ -114,9 +114,16 @@ class Jobs:
         return False
 
     def _download(self, stores: list[str], only: str | None) -> None:
-        """Download everything new or changed from these stores, passing progress to the page as it goes."""
+        """Download everything new or changed from these stores, passing progress to the page as it goes. (Payhip is
+        only read, so it's left out.)"""
         from types import SimpleNamespace
         from .downloader import cmd_sync
+        stores = [s for s in stores if s in DOWNLOADABLE]
+        if not stores:
+            self._set(task="download", message="Nothing to download: Hoard lists what you own on Payhip, and you "
+                                                "download it from Payhip yourself.")
+            self.on_download_done()
+            return
         self._set(task="download", store=stores[0] if len(stores) == 1 else None, message="Starting")
         lines: list[str] = []
 
@@ -128,8 +135,8 @@ class Jobs:
                 self.stop.clear()   # the catalog is still rebuilt on the way out
                 raise Cancelled()
 
-        args = SimpleNamespace(store="all" if set(stores) >= set(STORES) else stores, dry_run=False, only=only,
-                               headed=False, payhip_page=None)
+        args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=False, only=only,
+                               headed=False)
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
@@ -209,7 +216,8 @@ class Jobs:
                         self.lib.set_error(store, (
                             f"{label} blocked the automated browser ({e}). Import your library instead: open it in "
                             f"your usual browser, scroll to the bottom, press Ctrl+S and save it as \"Webpage, Single "
-                            f"File\", then choose Import page here.") if store in IMPORTABLE
+                            f"File\" (each page of it, and for Payhip each shop's), then choose Import pages here.")
+                            if store in IMPORTABLE
                             else f"{label} blocked the automated browser ({e}). Try again later.")
                     except Exception as e:
                         self.lib.set_error(store, unreachable_message(store) if is_network_error(e)

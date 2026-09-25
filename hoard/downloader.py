@@ -1,7 +1,6 @@
 """Keeping local copies: downloading from each store, the records of what's on disk, and the catalog files."""
 from __future__ import annotations
 
-import email
 import hashlib
 import html
 import json
@@ -17,14 +16,14 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 
-from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
+from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, goto, launch_context
 from .common import NotLoggedIn, log, now_iso
-from .library import PAYHIP_SHOP_JS
-from .config import clean_payhip_shop, payhip_shops, root_dir
+from .library import DOWNLOADABLE, STORES, read_itch_library
+from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR
 from . import egress
-from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
+from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagStore, clean_tag, tag_key
 
 try:
@@ -222,7 +221,7 @@ def distinct_name(name: str, fid: str, rec: dict, offered: set) -> str:
 def removed_product(store: str, name: str, report: "Report") -> bool:
     """True (and noted in the report) for a product you removed from your library: it isn't downloaded."""
     if tag_key(store, name) in _removed_keys():
-        report.skipped.append(f"{store.capitalize()}: {name} - removed from your library, so not downloaded")
+        report.skipped.append(f"{STORES[store]['label']}: {name} - removed from your library, so not downloaded")
         return True
     return False
 
@@ -359,8 +358,8 @@ def gumroad_filename(f: dict) -> str:
 def save_thumbnail(url: str | None, folder: Path, referer: str | None = None) -> None:
     """Save a product's store image as _thumbnail.<ext> in its folder, once. Failures are only logged.
 
-    Image addresses come from store pages (and from Payhip pages you save yourself), so they're fetched
-    through a connection that only reaches public internet addresses, and only raster images are kept.
+    Image addresses come from store pages, so they're fetched through a connection that only reaches public
+    internet addresses, and only raster images are kept.
     """
     if not url or any(folder.glob("_thumbnail.*")):
         return
@@ -504,12 +503,8 @@ DOWNLOAD_BUTTONS_JS = r"""
   // Never these, whatever they say about downloading: resetting download credits or limits, and the like
   const never = /reset|credit|limit|remove|delete|archive|report|refund|review|how to|instruction/i;
   document.querySelectorAll('[data-adl-idx]').forEach(e => e.removeAttribute('data-adl-idx'));
-  // Payhip marks each file's own button; when a page has them, only those are used, even on content pages
-  // that aren't showing (they're clicked through the page's own code).
-  const avoid = e => never.test(text(e)) || e.matches('.js-reset-download-credits-button, [class*="reset-download"]');
-  const fileButtons = [...document.querySelectorAll('.js-file-download-button')].filter(e => !avoid(e));
-  const cands = fileButtons.length ? fileButtons : [...document.querySelectorAll('button, a, [role="button"]')]
-    .filter(e => visible(e) && onSite(e) && dl.test(text(e)) && !avoid(e) && (allowAll || !all.test(text(e))));
+  const cands = [...document.querySelectorAll('button, a, [role="button"]')]
+    .filter(e => visible(e) && onSite(e) && dl.test(text(e)) && !never.test(text(e)) && (allowAll || !all.test(text(e))));
   const leaf = cands.filter(e => !cands.some(o => o !== e && e.contains(o)));
   const set = new Set(leaf);
   return leaf.map((e, i) => {
@@ -521,8 +516,7 @@ DOWNLOAD_BUTTONS_JS = r"""
       if (n > 1 || (p.innerText || '').length > 500) break;
       row = p;
     }
-    const named = row.querySelector('input.js-file-row-input-name, input[class*="file-row"]');   // Payhip: the file's name
-    const label = (named && named.value) || row.innerText || text(e);
+    const label = row.innerText || text(e);
     return { idx: i, label: label.replace(/\s+/g, ' ').trim().slice(0, 300) };
   });
 }
@@ -644,7 +638,7 @@ def jinxxy_item_links(page, pattern: str) -> list[str]:
     return list(found)
 
 
-def jinxxy_click_download(ctx, page, idx: int, timeout_s: int):
+def click_download(ctx, page, idx: int, timeout_s: int):
     """Click a tagged button and return the Download it triggers (in this tab or a popup)."""
     captured = []
     hooked = list(ctx.pages)
@@ -665,7 +659,7 @@ def jinxxy_click_download(ctx, page, idx: int, timeout_s: int):
         button = page.locator(f'[data-adl-idx="{idx}"]').first
         if button.is_visible():
             button.click(timeout=30000)   # a real click, waiting for overlays and animations to clear
-        else:   # on a content page that isn't showing (Payhip): click it through the page's own code
+        else:   # a button that isn't showing: click it through the page's own code
             button.evaluate("e => e.click()")
         started = time.time()
         deadline, said = started + timeout_s, started
@@ -742,7 +736,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if not match:
             report.failed.append(f"{store}: {name} / {k} - button disappeared")
             continue
-        dl = jinxxy_click_download(ctx, page, match["idx"], timeout_s)
+        dl = click_download(ctx, page, match["idx"], timeout_s)
         if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
             page.goto(url, wait_until="domcontentloaded")
             settle(page)
@@ -1120,343 +1114,162 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
             ctx.close()
 
 
-# ----------------------------------------------------------------------------- Payhip
+# ----------------------------------------------------------------------------- itch.io
 #
-# Payhip keeps a buyer library while your account is in Customer mode, and puts a bot check in
-# front of automated browsers. So Payhip runs in a visible browser window: if a check appears,
-# complete it there and the downloads carry on. If Payhip still won't let the tool in, it
-# writes Payhip/_download-yourself.html with each product's download page and the folder its
-# files belong in; files you save into those folders are picked up by the next sync.
+# Your itch.io library lists everything you own, each with a download page (<creator>.itch.io/<project>/download/
+# <key>) that lists the project's files. Each file is downloaded by clicking its Download button in the signed-in
+# browser, as you would. Game builds (files the creator marked as a program for Windows, macOS, Linux or Android)
+# are skipped while itch.skip_game_builds is on: creators mark their games' builds, and hardly ever asset files, so a
+# library with games in it doesn't fill your drive with them.
 
-PAYHIP_LOGIN = "https://payhip.com/auth/login"
-
-
-PAYHIP_HOSTS = ["payhip\\.com", "amazonaws\\.com", "cloudfront\\.net"]
-
-
-BOT_CHECK_TITLES = ("just a moment", "attention required", "access denied", "verify you are human", "are you a robot")
-
-
-PAYHIP_FIND_LIBRARY_JS = r"""
+ITCH_UPLOADS_JS = r"""
 () => {
-  const a = [...document.querySelectorAll('a[href]')].find(x => {
-    let u; try { u = new URL(x.href); } catch (e) { return false; }
-    return /(^|\.)payhip\.com$/.test(u.hostname) && /\b(library|my purchases|purchases)\b/i.test(x.innerText || '');
-  });
-  return a ? a.href : null;
-}
-"""
-
-
-PAYHIP_CARDS_JS = r"""
-() => {
-  const reserved = /^\/(auth|account|settings|marketplace|help|blog|pricing|features|login|signup|register|cart|checkout|search|explore|dashboard|users)(\/|$)/i;
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const isItemLink = a => {
-    let u; try { u = new URL(a.href); } catch (e) { return false; }
-    if (!/(^|\.)payhip\.com$/.test(u.hostname) || u.pathname === '/' || reserved.test(u.pathname)) return false;
-    return /^\/(b|d|download|downloads|order|orders|purchase|purchases|library|p)\//i.test(u.pathname)
-      || /download|access|view content/i.test(a.innerText || '');
-  };
-  const cards = new Map();
-  for (const img of document.querySelectorAll('img')) {
-    const w = img.naturalWidth || parseInt(img.getAttribute('width') || '0', 10) || img.width;
-    if (w && w < 40) continue;
-    let c = img;
-    while (c.parentElement && c.parentElement !== document.body && c.parentElement.querySelectorAll('img').length === 1) c = c.parentElement;
-    const links = [...c.querySelectorAll('a[href]')].filter(isItemLink);
-    if (!links.length) continue;
-    const product = links.find(a => /^\/b\//i.test(new URL(a.href).pathname));
-    const dl = links.find(a => /download|access/i.test(a.innerText || ''))
-      || links.find(a => a !== product && !/^\/b\//i.test(new URL(a.href).pathname)) || links[0];
-    const id = (product ? new URL(product.href).pathname : new URL(dl.href).pathname).replace(/\/$/, '');
-    if (cards.has(id)) continue;
-    const heading = c.querySelector('h1,h2,h3,h4,h5,strong');
-    const name = text(heading) || links.map(text).sort((x, y) => y.length - x.length)[0] || img.alt || '';
-    const by = (c.innerText || '').match(/\bby\s+([^\n]+)/i);
-    let creator = by ? by[1].trim() : '';
-    let creatorUrl = '';
-    if (!creator) {
-      for (const s of c.querySelectorAll('a[href]')) {
-        let u; try { u = new URL(s.href); } catch (e) { continue; }
-        const segs = u.pathname.split('/').filter(Boolean);
-        if (/(^|\.)payhip\.com$/.test(u.hostname) && segs.length === 1 && !reserved.test(u.pathname) && text(s) && text(s) !== name) {
-          creator = text(s); creatorUrl = u.href; break;
-        }
+  // A project's download page: a row per file, whose Download button carries the file's number (data-upload_id),
+  // with its name in .name (the whole name in its title) and its size in .file_size. A file the creator marked as
+  // a program for an operating system shows that system's icon.
+  const text = e => ((e && (e.innerText || e.textContent)) || '').replace(/\s+/g, ' ').trim();
+  const SYSTEMS = [['Windows', /windows|win8|win10/i], ['macOS', /apple|mac\s?os|osx|\bmac\b/i], ['Linux', /linux|tux/i],
+                   ['Android', /android/i]];
+  document.querySelectorAll('[data-adl-idx]').forEach(e => e.removeAttribute('data-adl-idx'));
+  const out = [], seen = new Set();
+  for (const el of document.querySelectorAll('[data-upload_id]')) {
+    const id = (el.getAttribute('data-upload_id') || '').trim();
+    if (!/^\d{1,20}$/.test(id) || seen.has(id)) continue;
+    const button = el.matches('a, button, [role="button"]') ? el : el.querySelector('a, button, [role="button"]');
+    if (!button) continue;
+    seen.add(id);
+    let row = button.closest('.upload');
+    if (!row) {   // widen from the button while the row is still about this one file
+      row = button;
+      while (row.parentElement && row.parentElement !== document.body && !row.parentElement.matches('main, .upload_list_widget')) {
+        const ids = new Set([...row.parentElement.querySelectorAll('[data-upload_id]')].map(x => x.getAttribute('data-upload_id')));
+        if (ids.size > 1) break;
+        row = row.parentElement;
       }
     }
-    cards.set(id, { id, name, creator, creator_url: creatorUrl, thumbnail: img.currentSrc || img.src || '',
-                    url: product ? product.href : dl.href, download_url: dl.href });
+    const named = row.querySelector('.upload_name .name, strong.name, .name');
+    const name = named ? ((named.getAttribute('title') || '').trim() || text(named)) : '';
+    const icons = [...row.querySelectorAll('.download_platforms *, [class*="icon-"]')]
+      .map(i => (i.getAttribute('title') || '') + ' ' + (i.getAttribute('class') || '')).join(' ');
+    const href = button.getAttribute('href') || '';
+    let elsewhere = false;   // a file the creator links to on another website, rather than one itch.io keeps
+    if (href && !href.startsWith('#') && !/^javascript:/i.test(href)) {
+      try { elsewhere = !/(^|\.)itch\.(io|zone)$/i.test(new URL(href, location.href).hostname); } catch (e) { elsewhere = true; }
+    }
+    button.setAttribute('data-adl-idx', String(out.length));
+    out.push({ idx: out.length, upload_id: id, name, size: text(row.querySelector('.file_size')),
+               systems: SYSTEMS.filter(([, rx]) => rx.test(icons)).map(([n]) => n), elsewhere,
+               label: text(row).slice(0, 300) });
   }
-  const next = document.querySelector('a[rel="next"]')
-    || [...document.querySelectorAll('a[href]')].find(a => /^(next|›|»)$/i.test(text(a)));
-  return { cards: [...cards.values()], next: next ? next.href : null };
+  return out;
 }
 """
 
 
-class Blocked(Exception):
-    """The store showed a bot check that didn't clear."""
-
-
-def is_bot_check(page) -> bool:
-    """True when the page is a bot check (Cloudflare's "Just a moment" and similar)."""
-    try:
-        title = page.title().lower()
-        return any(t in title for t in BOT_CHECK_TITLES) or page.locator(
-            "iframe[src*='challenges.cloudflare.com'], #challenge-form, #cf-wrapper, #cf-challenge-running").count() > 0
-    except Exception:
-        return False
-
-
-def open_past_bot_check(page, url: str, wait_s: int, headed: bool) -> None:
-    """Open a page; if a bot check shows up, wait for you to complete it in the window."""
-    page.goto(url, wait_until="domcontentloaded")
-    settle(page)
-    if not is_bot_check(page):
-        return
-    if not headed:
-        raise Blocked("Payhip showed a bot check")
-    log(f"    Payhip is showing a check in the browser window. Complete it there; waiting up to {wait_s} seconds...")
-    deadline = time.time() + wait_s
-    while time.time() < deadline:
-        page.wait_for_timeout(2000)
-        if not is_bot_check(page):
-            settle(page)
-            return
-    raise Blocked(f"the bot check didn't clear within {wait_s} seconds")
-
-
-def payhip_require_login(page) -> None:
-    """Raise NotLoggedIn when Payhip is showing its sign-in form."""
-    if "/auth/login" in urlparse(page.url).path or page.locator("input[type=password]").count():
-        raise NotLoggedIn("Not signed in to Payhip")
-
-
-def payhip_library_url(page, cfg: dict, wait_s: int, headed: bool) -> str:
-    """The address of your Payhip library: from config.json, a link on your account page, or a known path."""
-    if cfg["payhip"].get("library_url"):
-        return cfg["payhip"]["library_url"]
-    open_past_bot_check(page, PAYHIP_LOGIN, wait_s, headed)
-    payhip_require_login(page)
-    found = page.evaluate(PAYHIP_FIND_LIBRARY_JS)
-    if found:
-        return found
-    for guess in ("https://payhip.com/library", "https://payhip.com/account/library",
-                  "https://payhip.com/customer/library", "https://payhip.com/purchases"):
-        resp = page.goto(guess, wait_until="domcontentloaded")
-        if resp and resp.ok and "/auth/login" not in urlparse(page.url).path and not is_bot_check(page):
-            return page.url
-    raise RuntimeError("couldn't find your Payhip library. If your account is in Creator mode, switch it to Customer "
-                       "(Account menu, Use Payhip as), or put your library's address in payhip.library_url in config.json.")
-
-
-def payhip_sites(cfg: dict) -> list[str]:
-    """Payhip's own sites for this run: payhip.com and the shops in your settings."""
-    return ["payhip.com"] + [urlparse(s).hostname for s in payhip_shops(cfg) if urlparse(s).hostname != "payhip.com"]
-
-
-def payhip_products(page, cfg: dict, wait_s: int, headed: bool) -> list[dict]:
-    """Every product you bought on Payhip. Payhip keeps purchases in each shop, so this reads every shop in your
-    settings (<shop>/b-account, all its pages); a shop you aren't signed in to is skipped with a note."""
-    shops = payhip_shops(cfg)
-    if not shops:
-        raise RuntimeError("Payhip keeps your purchases in each shop you bought from. Add those shops in Settings "
-                           "(the shop's address is in your purchase email)")
-    cards: dict[str, dict] = {}
-    signed_out = []
-    for shop in shops:
-        url = shop + "/b-account"
-        for _ in range(100):
-            open_past_bot_check(page, url, wait_s, headed)
-            if "/b-account" not in urlparse(page.url).path or page.locator("input[type=password]").count():
-                signed_out.append(shop.split("://", 1)[1])
-                break
-            result = page.evaluate(PAYHIP_SHOP_JS)
-            for c in result["cards"]:
-                cards.setdefault(c["id"], c)
-            if not result["next"] or result["next"] == url:
-                break
-            url = result["next"]
-            time.sleep(float(cfg.get("request_delay", 1.0)))
-    if signed_out and not cards:
-        raise NotLoggedIn("not signed in to " + ", ".join(signed_out))
-    for shop in signed_out:
-        log(f"Payhip: not signed in to {shop}, so it was skipped. Sign in to Payhip again to include it.")
-    return list(cards.values())
-
-
-def read_saved_page(filename: str, text: str) -> tuple[str, str | None, dict]:
-    """HTML, the page's original address, and any images saved with it (single-file .mhtml keeps them)."""
-    images: dict[str, tuple[bytes, str]] = {}
-    if filename.lower().endswith((".mhtml", ".mht")) or re.search(r"^Content-Type:\s*multipart/related", text[:4000], re.I | re.M):
-        msg = email.message_from_string(text)
-        page_html, location = None, msg.get("Snapshot-Content-Location")
-        for part in msg.walk():
-            ctype = part.get_content_type()
-            if ctype == "text/html" and page_html is None:
-                raw = part.get_payload(decode=True) or b""
-                page_html = raw.decode(part.get_content_charset() or "utf-8", "replace")
-                location = location or part.get("Content-Location")
-            elif ctype.startswith("image/") and part.get("Content-Location"):
-                images[part.get("Content-Location")] = (part.get_payload(decode=True) or b"", ctype)
-        if page_html is None:
-            raise ValueError("there's no web page inside that file")
-        return page_html, location, images
-    m = re.search(r"saved from url=\(\d+\)(\S+?)\s*-->", text[:4000])
-    return text, (m.group(1) if m else None), images
-
-
-def payhip_products_from_file(p, path: Path) -> list[dict]:
-    """Read the product list from a Payhip library page you saved from your own browser."""
-    page_html, source, _ = read_saved_page(path.name, path.read_text("utf-8", errors="replace"))
-    host = urlparse(source or "").hostname or ""
-    shop_page = "/b-account" in urlparse(source or "").path   # a Payhip shop's own library, on its own domain
-    if source and not shop_page and not (host == "payhip.com" or host.endswith(".payhip.com")):
-        raise RuntimeError(f"{path.name} is a page from {host}, not Payhip")
-    page_html = re.sub(r"<script\b[^>]*>.*?</script>", "", page_html, flags=re.S | re.I)
-    head = re.search(r"<head[^>]*>", page_html, re.I)
-    base_tag = f'<base href="{html.escape(source or "https://payhip.com/", quote=True)}">'
-    page_html = page_html[:head.end()] + base_tag + page_html[head.end():] if head else base_tag + page_html
-    browser = p.chromium.launch()
-    try:
-        page = offline_page(browser)   # scripts off, no network
-        page.set_content(inert_html(page_html), wait_until="domcontentloaded")
-        cards = page.evaluate(PAYHIP_SHOP_JS if shop_page else PAYHIP_CARDS_JS)["cards"]
-    finally:
-        browser.close()
-    if not cards:
-        raise RuntimeError(f"no Payhip products found in {path.name}. Save the library page itself, after it has loaded.")
-    return cards
-
-
-def adopt_files_on_disk(rec: dict, folder: Path) -> int:
-    """Record files you put in a product's folder yourself, so they count as downloaded."""
-    if not folder.is_dir():
-        return 0
-    known = {v["path"] for v in rec["files"].values()}
-    added = 0
-    for f in sorted(folder.rglob("*")):
-        if not f.is_file() or f.name.startswith("_thumbnail") or f.name == "asset.json" or f.suffix == ".part":
-            continue
-        rel = f.relative_to(folder).as_posix()
-        if rel not in known:
-            rec["files"][f"by-hand:{rel}"] = {"path": rel, "size": f.stat().st_size, "added_by_hand": True}
-            added += 1
-    return added
-
-
-def write_payhip_todo(store_dir: Path, pending: list, sites: list[str]) -> Path:
-    """Write Payhip/_download-yourself.html, listing products Payhip wouldn't let the tool open. A download page only
-    becomes a link when it's an https address on Payhip or one of your shops (sites): escaping stops a link from
-    breaking the page, but not from being, say, a javascript: address. sync_payhip checks each one before listing it,
-    too."""
-    esc = lambda v: html.escape(str(v or ""))  # noqa: E731
-
-    def link(url) -> str:
-        if store_url(url, sites):
-            return f"<a href=\"{esc(url)}\">Open download page</a>"
-        return "<span>Its download link isn't on Payhip or one of your shops, so it's left out.</span>"
-    rows = "".join(
-        f"<li><b>{esc(c['name'])}</b> <span>by {esc(c['creator'] or 'Unknown creator')}</span>"
-        f"{link(c.get('download_url'))}"
-        f"<label>Save its files into<input readonly value=\"{esc(folder)}\" onclick=\"this.select()\"></label></li>"
-        for c, folder in pending)
-    page = f"""<!doctype html><html lang="en"><meta charset="utf-8"><title>Payhip downloads for you to grab</title>
-<style>body{{font:16px/1.5 system-ui,sans-serif;background:#211C18;color:#F4EDE3;max-width:760px;margin:40px auto;padding:0 20px}}
-h1{{font-size:26px}}p{{color:#B3A695}}li{{margin:0 0 18px;padding:14px 16px;background:#2B2520;border-radius:12px}}
-span{{color:#B3A695}}a{{display:block;color:#F0B429;margin:6px 0}}label{{display:block;font-size:13px;color:#B3A695}}
-input{{display:block;width:100%;margin-top:4px;padding:6px 8px;border:0;border-radius:6px;background:#372F28;color:#F4EDE3}}</style>
-<h1>Payhip downloads for you to grab</h1>
-<p>Payhip didn't let Hoard in, so these are yours to download. Open each download page, save its files
-into the folder shown, then run a sync again. It records whatever you saved.</p>
-<ol>{rows}</ol></html>"""
-    path = store_dir / "_download-yourself.html"
-    write_file_safely(path, page, store_dir.parent)   # like every other file Hoard writes: whole, and never through a link
-    return path
-
-
-def sync_payhip(cfg: dict, root: Path, args, report: Report) -> None:
-    """Download everything new in your Payhip library, in a visible window so you can pass Payhip's bot check."""
-    pcfg = cfg["payhip"]
-    store_dir = root / "Payhip"
+def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
+    """Download everything new or changed in your itch.io library."""
+    store_dir = root / STORE_DIRS["itch"]
     man = Manifest(store_dir)
-    headed = bool(pcfg.get("headed", True) or args.headed)
-    wait_s = int(pcfg.get("bot_check_wait", 180))
-    saved_page = getattr(args, "payhip_page", None)
+    delay = float(cfg.get("request_delay", 1.0))
     with _playwright()() as p:
-        products = payhip_products_from_file(p, Path(saved_page)) if saved_page else None
-        if products:   # its shop must already be one of yours: an address inside a file isn't trusted on its own
-            found = {s for s in (clean_payhip_shop(c.get("creator_url")) for c in products) if s}
-            unknown = sorted(found - set(payhip_shops(cfg)) - {"https://payhip.com"})
-            if unknown:
-                raise RuntimeError(f"{Path(saved_page).name} is from {', '.join(u.split('://', 1)[1] for u in unknown)}, "
-                                   "which isn't in your Payhip shops. Add it in Settings first if it's yours")
-        ctx = launch_context(p, cfg, not headed, "payhip")
+        ctx = launch_context(p, cfg, not args.headed, "itch")
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            if headed:
-                log("Payhip: working in a visible browser window, because Payhip checks for automated browsers.")
-            if products is None:
-                try:
-                    products = payhip_products(page, cfg, wait_s, headed)
-                except Blocked as e:
-                    raise Blocked(f"{e}. Save your Payhip library page from your own browser (Ctrl+S, "
-                                  f"\"Webpage, Single File\") and run: sync --store payhip --payhip-page \"<saved file>\"")
-            log(f"Payhip: {len(products)} products in your library")
-
-            pending, blocked = [], None
-            for c in products:
+            cards = read_itch_library(page, cfg, lambda _message: None)
+            log(f"itch.io: {len(cards)} {'item' if len(cards) == 1 else 'items'} in your library")
+            for c in cards:
                 name = (c["name"] or c["id"]).strip()
                 creator = (c["creator"] or "Unknown Creator").strip()
                 if args.only and args.only.lower() not in f"{name} {creator}".lower():
                     continue
-                key = c["id"].strip("/").replace("/", "-")
-                if removed_product("payhip", name, report):
+                if removed_product("itch", name, report):
                     continue
-                rec = man.record(key, creator, name)
-                is_new_asset = not rec["files"]
-                rec.update(name=name, creator=creator, url=c["url"], last_synced=now_iso())
-                folder = rel_to_path(store_dir, rec["folder"])
-                if adopt_files_on_disk(rec, folder):
-                    man.checkpoint()
-                log(f"\n[Payhip] {creator} / {name}")
-                if not store_url(c["download_url"], payhip_sites(cfg)):   # before anything, listing it for you included
-                    report.skipped.append(f"Payhip: {name} - its download link isn't on Payhip or one of your Payhip "
-                                          "shops, so it wasn't opened")
+                if not store_url(c.get("download_url"), STORE_SITES["itch"]):
+                    report.skipped.append(f"itch.io: {name} - your library has no download page for it")
                     continue
-                if blocked:
-                    pending.append((c, folder))
-                    continue
+                time.sleep(delay)
                 try:
-                    open_past_bot_check(page, c["download_url"], wait_s, headed)
-                    payhip_require_login(page)
-                    hosts = PAYHIP_HOSTS + [re.escape(h) for h in payhip_sites(cfg)[1:]]
-                    got_any = download_by_clicking(ctx, page, page.url, rec, folder, "Payhip", hosts,
-                                                   int(pcfg.get("download_start_timeout", 90)), name, creator,
-                                                   man, args, report)
-                except Blocked as e:
-                    blocked = str(e)
-                    pending.append((c, folder))
-                    continue
+                    _itch_project(ctx, page, c, name, creator, man, store_dir, cfg["itch"], args, report)
                 except NotLoggedIn:
                     raise
                 except Exception as e:
-                    report.failed.append(f"Payhip: {creator} / {name} - {e}")
-                    continue
-                if got_any and is_new_asset:
-                    report.new_assets.append(f"Payhip: {creator} / {name}")
-                if pcfg.get("save_thumbnails", True) and not args.dry_run:
-                    save_thumbnail(c.get("thumbnail"), folder, "https://payhip.com/")
-                man.checkpoint()
-            if pending and not args.dry_run:
-                todo = write_payhip_todo(store_dir, pending, payhip_sites(cfg))
-                what = "1 product is" if len(pending) == 1 else f"{len(pending)} products are"
-                report.failed.append(f"Payhip: {blocked}. {what} listed in {todo} for you to "
-                                     "download yourself; the next sync records files you save there.")
+                    report.failed.append(f"itch.io: {creator} / {name} - {e}")
         finally:
             man.save_changes()   # every finished file recorded, however the sync ended
             ctx.close()
+
+
+def _itch_project(ctx, page, c: dict, name: str, creator: str, man: "Manifest", store_dir: Path, icfg: dict, args,
+                  report: Report) -> None:
+    """Open one project's download page and download each of its files that isn't here yet, or has changed."""
+    goto(page, c["download_url"])
+    settle(page)
+    here = page.url.split("#")[0]
+    if "/download/" not in urlparse(here).path:
+        raise RuntimeError("its download page sent Hoard elsewhere (the purchase may have been refunded)")
+    uploads = page.evaluate(ITCH_UPLOADS_JS)
+    if not uploads:
+        report.skipped.append(f"itch.io: {name} - no files on its download page")
+        return
+    rec = man.record(c["id"], creator, name)
+    is_new_asset = not rec["files"]
+    rec.update(name=name, creator=creator, url=store_link("itch", c.get("url")), last_synced=now_iso())
+    folder = rel_to_path(store_dir, rec["folder"])
+    log(f"\n[itch.io] {creator} / {name}")
+    offered = {u["upload_id"] for u in uploads}
+    timeout_s = int(icfg.get("download_start_timeout", 90))
+    got_any = False
+    for u in uploads:
+        fid, label = u["upload_id"], u["name"] or f"file {u['upload_id']}"
+        shown = f"{u['name']}|{u['size']}"   # what itch.io says about the file: when it changes, the creator updated it
+        old = rec["files"].get(fid)
+        if old and old.get("shown", shown) == shown and rel_to_path(folder, old["path"]).exists():
+            continue
+        if u["elsewhere"]:
+            report.skipped.append(f"itch.io: {name} / {label} - kept on another website, so not downloaded")
+            continue
+        if u["systems"] and icfg.get("skip_game_builds", True):
+            report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(u['systems'])}, so not "
+                                  "downloaded (Settings, itch.io: Skip game builds)")
+            continue
+        if args.dry_run:
+            log(f"    would {'update' if old else 'download'}: {label}")
+            continue
+        match = next((x for x in page.evaluate(ITCH_UPLOADS_JS) if x["upload_id"] == fid), None)   # tagged afresh
+        if not match:
+            report.failed.append(f"itch.io: {name} / {label} - its Download button disappeared")
+            continue
+        dl = click_download(ctx, page, match["idx"], timeout_s)
+        if page.url.split("#")[0] != here:   # the click went somewhere: back to the download page
+            goto(page, here)
+            settle(page)
+        if not dl:
+            report.failed.append(f"itch.io: {name} / {label} - clicking Download didn't start a download")
+            continue
+        fname = distinct_name(safe_name(dl.suggested_filename or label, 150), fid, rec, offered)
+        target = folder / fname
+        prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
+        is_update = old is not None or prev is not None or target.exists()
+        try:
+            save_browser_download(dl, folder, fname)
+        except Exception as e:
+            report.failed.append(f"itch.io: {name} / {fname} - {e}")
+            continue
+        finally:
+            close_if_popup(dl.page, page)
+        if prev:
+            rec["files"].pop(prev, None)
+        rec["files"][fid] = {"path": fname, "size": target.stat().st_size, "label": label, "shown": shown,
+                             "downloaded_at": now_iso()}
+        log(f"    {'updated' if is_update else 'saved'}: {fname}")
+        (report.updated if is_update else report.new_files).append(f"itch.io: {creator} / {name} / {fname}")
+        got_any = True
+        man.checkpoint()
+    if got_any and is_new_asset:
+        report.new_assets.append(f"itch.io: {creator} / {name}")
+    if rec["files"] and icfg.get("save_thumbnails", True) and not args.dry_run:
+        save_thumbnail(c.get("thumbnail"), folder, "https://itch.io/")
+    man.checkpoint()
 
 
 REDACT_KEYS = re.compile(r'("[^"]*(?:email|token|password|secret|session|cookie|authorization|jwt|license)[^"]*"\s*:\s*)"[^"]*"', re.I)
@@ -1720,13 +1533,13 @@ def cmd_verify(cfg: dict, root: Path) -> int:
 
 # ----------------------------------------------------------------------------- CLI
 
-STORE_DIRS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip"}
+STORE_DIRS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip", "itch": "Itch"}
 
 
 def unreachable_message(store: str) -> str:
     """What to tell you when a store's website can't be reached."""
     host = STORE_HOSTS[store].replace("accounts.", "").replace("app.", "")
-    return (f"{STORE_DIRS[store]}: couldn't reach {host}, so nothing was synced from it. You may be offline, or the "
+    return (f"{STORES[store]['label']}: couldn't reach {host}, so nothing was synced from it. You may be offline, or the "
             "store may be down. Your downloads are unchanged; try again when you're connected.")
 
 
@@ -1736,11 +1549,12 @@ def cmd_sync(cfg: dict, args) -> None:
     root.mkdir(parents=True, exist_ok=True)
     log(f"Downloading into {root}")
     report = Report()
-    stores = list(STORE_DIRS) if args.store == "all" else ([args.store] if isinstance(args.store, str) else list(args.store))
-    syncers = {"booth": sync_booth, "gumroad": sync_gumroad, "jinxxy": sync_jinxxy, "payhip": sync_payhip}
+    asked = list(DOWNLOADABLE) if args.store == "all" else ([args.store] if isinstance(args.store, str) else list(args.store))
+    stores = [s for s in asked if s in DOWNLOADABLE]   # Payhip is read, never downloaded from
+    syncers = {"booth": sync_booth, "gumroad": sync_gumroad, "jinxxy": sync_jinxxy, "itch": sync_itch}
     try:
         for store in stores:
-            label = STORE_DIRS[store]
+            label, folder = STORES[store]["label"], STORE_DIRS[store]
             if not cfg[store].get("enabled", True):
                 continue
             if not reachable(store):
@@ -1754,7 +1568,7 @@ def cmd_sync(cfg: dict, args) -> None:
             except ProfileBusy as e:
                 report.failed.append(str(e))
             except NotLoggedIn as e:
-                if (root / label / "_manifest.json").exists():
+                if (root / folder / "_manifest.json").exists():
                     report.failed.append(f"{label}: {e} - sign in to {label} again (Stores, then Sign in)")
                 else:
                     report.skipped.append(f"{label}: not signed in, so skipped. Sign in from Stores to include it.")

@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
@@ -189,32 +190,8 @@ class BoothAndPayhip(unittest.TestCase):
             page.wait_for_timeout(600)
             self.assertEqual(page.title(), "untouched")
 
-# A Payhip product page (September 2026): each file's own button, its name in a box beside it, a "Reset download
-# credits" link that must never be clicked, and a second content page that isn't showing.
-PAYHIP_PRODUCT = """<html><head><meta charset="utf-8"></head><body><main>
-<div class="page" style="display:block"><div class="file-row"><input class="js-file-row-input-name" value="Avatar_v1.2">
-  <a href="#!" class="btn js-reset-download-credits-button">Reset download credits</a>
-  <button class="file-download-button js-file-download-button" data-file-id="aaa">Download</button></div></div>
-<div class="page" style="display:none"><div class="file-row"><input class="js-file-row-input-name" value="Textures">
-  <a href="#!" class="btn js-reset-download-credits-button">Reset download credits</a>
-  <button class="file-download-button js-file-download-button" data-file-id="bbb">Download</button></div></div>
-<a href="#!">How to download</a></main></body></html>"""
-
-
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class PayhipProductPage(unittest.TestCase):
-
-    def test_only_the_file_buttons(self):
-        pw = sync_playwright().start()
-        self.addCleanup(pw.stop)
-        browser = pw.chromium.launch()
-        self.addCleanup(browser.close)
-        pg = browser.new_page()
-        pg.set_content(PAYHIP_PRODUCT)
-        found = pg.evaluate(downloader.DOWNLOAD_BUTTONS_JS, {"allowAll": False, "hosts": ["payhip\\.com"]})
-        self.assertEqual([f["label"] for f in found], ["Avatar_v1.2", "Textures"], "both files, the hidden page's too")
-        classes = [pg.locator(f'[data-adl-idx="{f["idx"]}"]').first.get_attribute("class") for f in found]
-        self.assertTrue(all("js-file-download-button" in c for c in classes), "never the reset-credits links")
+class DownloadButtons(unittest.TestCase):
 
     def test_class_names_dont_hide_a_download_button(self):
         """Utility class names can contain any word ("review", "limit"): only what a button says counts."""
@@ -230,6 +207,210 @@ class PayhipProductPage(unittest.TestCase):
         found = pg.evaluate(downloader.DOWNLOAD_BUTTONS_JS, {"allowAll": False, "hosts": ["jinxxy\\.com"]})
         self.assertEqual(len(found), 1, "the download button, and not the reset one")
         self.assertEqual(pg.locator(f'[data-adl-idx="{found[0]["idx"]}"]').first.inner_text(), "Download")
+
+
+# itch.io's library (itch.io/my-purchases), laid out the way itch.io lays out its game grids: a cell per project with
+# the project's id, a picture that loads as you scroll (data-lazy_src; older grids use a background picture), the
+# title, the creator, and a Download button leading to the project's download page. Around it: your own profile in
+# the header, and projects you don't own in the footer and in a recommendation.
+def itch_cell(game_id, creator, slug, title, key=None, picture="lazy"):
+    thumb = (f'<img class="lazy_loaded" data-lazy_src="https://img.itch.zone/{slug}.png" '
+             'src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="315" height="250">' if picture == "lazy"
+             else f'<div class="game_thumb" data-background_image="https://img.itch.zone/{slug}.jpg"></div>')
+    download = f'<a class="button download_btn" href="https://{creator}.itch.io/{slug}/download/{key}">Download</a>' if key else ""
+    return (f'<div class="game_cell has_cover lazy_images" data-game_id="{game_id}">'
+            f'<a class="thumb_link game_link" href="https://{creator}.itch.io/{slug}">{thumb}</a>'
+            f'<div class="game_cell_data"><div class="game_title"><a class="title game_link" href="https://{creator}.itch.io/{slug}">'
+            f'{title}</a></div><div class="game_author"><a href="https://{creator}.itch.io">{creator.replace("-", " ").title()}</a>'
+            f'</div>{download}</div></div>')
+
+
+def itch_library(cells, extra=""):
+    return ('<html><head><meta charset="utf-8"><title>My purchases - itch.io</title></head><body>'
+            '<div class="header_widget"><header><a href="https://itch.io/">itch.io</a><a href="https://itch.io/my-purchases">Library</a>'
+            '<a href="https://buyer.itch.io"><img src="https://img.itch.zone/me.png" width="24" height="24">buyer</a></header></div>'
+            '<div class="main wrapper"><div class="inner_column"><h2>My purchases</h2>'
+            f'<div class="game_grid_widget base_widget user_game_grid">{"".join(cells)}</div>{extra}</div></div>'
+            '<footer><a href="https://itch.io/docs">Docs</a><a href="https://featured.itch.io/staff-pick">Staff pick</a></footer>'
+            '</body></html>')
+
+
+# A project's download page: a row per file, one marked as a Windows build, one kept on another website, and the itch
+# app's own links, which aren't files.
+ITCH_DOWNLOAD = '''<html><head><meta charset="utf-8"><title>Download Paw Suit by Kitsu</title></head><body>
+<header><a href="https://itch.io/app">Download the itch app</a></header>
+<div class="main wrapper"><h2>Download Paw Suit</h2>
+<div class="upload_list_widget base_widget">
+  <div class="upload"><div class="info_column"><div class="upload_name"><strong class="name" title="PawSuit_v1.2.unitypackage">PawSuit_v1.2.unitypackage</strong>
+    <span class="file_size"><span>48 MB</span></span></div><div class="upload_date">Jan 5, 2026</div></div>
+    <a href="#" class="button download_btn" data-upload_id="5550001">Download</a></div>
+  <div class="upload"><div class="info_column"><div class="upload_name"><strong class="name" title="PawSuit-Demo-Windows.zip">PawSuit-Demo-Windows.zip</strong>
+    <span class="file_size"><span>210 MB</span></span><span class="download_platforms"><span title="Download for Windows" class="icon icon-windows8"></span></span></div></div>
+    <a href="#" class="button download_btn" data-upload_id="5550002">Download</a></div>
+  <div class="upload"><div class="info_column"><div class="upload_name"><strong class="name" title="Textures (Google Drive)">Textures (Google Drive)</strong></div></div>
+    <a href="https://drive.google.com/file/d/abc/view" class="button download_btn" data-upload_id="5550003">Download</a></div>
+</div>
+<p>Also through <a class="button" href="https://itch.io/app">the itch app: Download</a></p>
+</div></body></html>'''
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class Itch(unittest.TestCase):
+
+    def page_at(self, url, html):
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        browser = pw.chromium.launch()
+        self.addCleanup(browser.close)
+        pg = browser.new_page()
+        pg.route("**/*", lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
+                 if r.request.url.split("?")[0].rstrip("/") == url.rstrip("/") else r.abort())
+        pg.goto(url)
+        return pg
+
+    def read(self, html):
+        return self.page_at(library.ITCH_LIBRARY, html).evaluate(library.ITCH_JS)
+
+    def test_the_library(self):
+        got = self.read(itch_library([
+            itch_cell(1001, "kitsu", "paw-suit", "Paw Suit", key="AbCdEf1234567890"),
+            itch_cell(1002, "nova-works", "cozy-hoodie", "Cozy Hoodie", key="Zz9Yy8Xx7", picture="background"),
+            itch_cell(1003, "kitsu", "protogen-visor", "Protogen Visor", key="Qq1Ww2Ee3"),
+        ], extra=itch_cell(9999, "someone", "recommended-game", "You might like this")))
+        cards = {c["id"]: c for c in got["cards"]}
+        self.assertEqual(sorted(cards), ["kitsu/paw-suit", "kitsu/protogen-visor", "nova-works/cozy-hoodie"],
+                         "only projects with a download page: never the recommendation, the footer or your own profile")
+        paw = cards["kitsu/paw-suit"]
+        self.assertEqual((paw["name"], paw["creator"], paw["creator_url"], paw["url"], paw["download_url"]),
+                         ("Paw Suit", "Kitsu", "https://kitsu.itch.io", "https://kitsu.itch.io/paw-suit",
+                          "https://kitsu.itch.io/paw-suit/download/AbCdEf1234567890"))
+        self.assertEqual(paw["thumbnail"], "https://img.itch.zone/paw-suit.png", "the picture waiting to load, not its placeholder")
+        hoodie = cards["nova-works/cozy-hoodie"]
+        self.assertEqual((hoodie["creator"], hoodie["thumbnail"]), ("Nova Works", "https://img.itch.zone/cozy-hoodie.jpg"))
+        self.assertIsNone(got["next"])
+        items = [library.itch_item(c) for c in got["cards"]]
+        self.assertTrue(all(i["key"].startswith("itch:") and i["download_url"] and i["url"] for i in items), items)
+
+    def test_a_single_purchase(self):
+        """With one project, its card is the whole page: the name, creator and picture are still the project's."""
+        (c,) = self.read(itch_library([itch_cell(1001, "kitsu", "paw-suit", "Paw Suit", key="AbCdEf1234567890")]))["cards"]
+        self.assertEqual((c["name"], c["creator"], c["thumbnail"]), ("Paw Suit", "Kitsu", "https://img.itch.zone/paw-suit.png"))
+
+    def test_a_layout_without_download_buttons(self):
+        """Should the library stop showing Download buttons, the cards itch.io marks with an id still list what you own."""
+        got = self.read(itch_library([itch_cell(1001, "kitsu", "paw-suit", "Paw Suit"), itch_cell(1002, "nova", "hoodie", "Hoodie")]))
+        self.assertEqual(sorted((c["id"], c["download_url"]) for c in got["cards"]), [("kitsu/paw-suit", ""), ("nova/hoodie", "")])
+
+    def test_the_next_page(self):
+        got = self.read(itch_library([itch_cell(1001, "kitsu", "paw-suit", "Paw Suit", key="AbCdEf1234567890")],
+                                     extra='<div class="pager"><a class="next_page" href="/my-purchases?page=2">Next page</a></div>'))
+        self.assertEqual(got["next"], "https://itch.io/my-purchases?page=2")
+
+    def test_a_download_page(self):
+        pg = self.page_at("https://kitsu.itch.io/paw-suit/download/AbCdEf1234567890", ITCH_DOWNLOAD)
+        files = pg.evaluate(downloader.ITCH_UPLOADS_JS)
+        self.assertEqual([(f["upload_id"], f["name"], f["size"], f["systems"], f["elsewhere"]) for f in files],
+                         [("5550001", "PawSuit_v1.2.unitypackage", "48 MB", [], False),
+                          ("5550002", "PawSuit-Demo-Windows.zip", "210 MB", ["Windows"], False),
+                          ("5550003", "Textures (Google Drive)", "", [], True)],
+                         "every file, and never the itch app's own links")
+        for f in files:   # each file's own button is the one tagged for clicking
+            self.assertEqual(pg.locator(f'[data-adl-idx="{f["idx"]}"]').first.get_attribute("data-upload_id"), f["upload_id"])
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class ItchSync(unittest.TestCase):
+    """A whole itch.io sync in a real browser, against a stand-in itch.io: the library read, the download page
+    opened, and a file's Download button clicked and what it downloads saved, the way itch.io's pages hand it over
+    (the button leads the browser to the file's address, which answers with the file as an attachment)."""
+
+    def test_sync(self):
+        import types
+        root = Path(tempfile.mkdtemp())
+        cfg = {**config.load_config(), "request_delay": 0, "browser_channel": "chromium", "allow_unprotected_signins": True,
+               "advanced_signin_location": True, "profile_dir": str(Path(tempfile.mkdtemp()) / "sign-ins")}
+        cfg["itch"] = {**cfg["itch"], "save_thumbnails": False}
+        shelf = itch_library([itch_cell(1001, "kitsu", "paw-suit", "Paw Suit", key="AbCdEf1234567890")])
+        clicks = ("<script>document.addEventListener('click', e => { const b = e.target.closest('[data-upload_id]'); "
+                  "if (!b) return; e.preventDefault(); location.href = 'https://files.example/' + b.dataset.upload_id; });</script>")
+        page = ITCH_DOWNLOAD.replace("</body>", clicks + "</body>")
+
+        def serve(route):
+            url = route.request.url
+            if url.startswith(library.ITCH_LIBRARY):
+                route.fulfill(status=200, content_type="text/html; charset=utf-8", body=shelf)
+            elif url.startswith("https://kitsu.itch.io/paw-suit/download/"):
+                route.fulfill(status=200, content_type="text/html; charset=utf-8", body=page)
+            elif url.startswith("https://files.example/5550001"):
+                route.fulfill(status=200, body=b"PAW" * 1000, headers={
+                    "Content-Type": "application/octet-stream", "Content-Disposition": 'attachment; filename="PawSuit_v1.2.unitypackage"'})
+            else:
+                route.abort()
+        real_launch = downloader.launch_context
+
+        def launch(p, cfg, headless, store):
+            ctx = real_launch(p, cfg, True, store)
+            ctx.route("**/*", serve)
+            return ctx
+        report = downloader.Report()
+        with mock.patch.object(downloader, "launch_context", launch):
+            downloader.sync_itch(cfg, root, types.SimpleNamespace(headed=False, only=None, dry_run=False), report)
+        self.assertEqual(report.failed, [])
+        self.assertEqual((root / "Itch" / "Kitsu" / "Paw Suit" / "PawSuit_v1.2.unitypackage").read_bytes(), b"PAW" * 1000)
+        self.assertEqual(report.new_assets, ["itch.io: Kitsu / Paw Suit"])
+        self.assertIn("a game build for Windows", " ".join(report.skipped))
+
+
+def mhtml(page_html: str, url: str) -> str:
+    """A page saved as "Webpage, Single File", as Chrome and Edge save one."""
+    return ("From: <Saved by Blink>\r\nSnapshot-Content-Location: " + url + "\r\nSubject: Saved\r\n"
+            "MIME-Version: 1.0\r\nContent-Type: multipart/related; type=\"text/html\"; boundary=\"B\"\r\n\r\n--B\r\n"
+            "Content-Type: text/html\r\nContent-Location: " + url + "\r\n\r\n" + page_html + "\r\n--B--\r\n")
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class ImportingSeveralPages(unittest.TestCase):
+    """Bulk import: pages from several stores, and several pages of one shop, read together in one offline browser,
+    each with its own result. A page that can't be read doesn't stop the rest."""
+
+    def tearDown(self):
+        config.apply_store_sites(config.load_config())
+
+    def test_a_mixed_batch(self):
+        cfg = config.load_config()
+        cfg["payhip"]["shops"] = ["https://testshop.store"]
+        config.apply_store_sites(cfg)
+        pages = [("Dashboard - Test Shop.mhtml", mhtml(PAYHIP_SHOP, "https://testshop.store/b-account")),
+                 ("Dashboard - Test Shop (2).mhtml", mhtml(PAYHIP_SHOP.replace("aB1", "eF3").replace("cD2", "gH4"),
+                                                           "https://testshop.store/b-account?page=2")),
+                 ("My purchases - itch.io.html", "<!-- saved from url=(0028)https://itch.io/my-purchases -->\n"
+                  + itch_library([itch_cell(1001, "kitsu", "paw-suit", "Paw Suit", key="AbCdEf1234567890")])),
+                 ("Other Shop.mhtml", mhtml(PAYHIP_SHOP.replace("testshop.store", "othershop.store"),
+                                            "https://othershop.store/b-account")),
+                 ("notes.html", "<html><body><p>Just notes</p></body></html>"),
+                 ("broken.mhtml", 'Content-Type: multipart/related; boundary="B"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\n'
+                                  "no page in here\r\n--B--\r\n")]
+        launched, real = [], library._playwright
+
+        def counted():
+            start = real()
+            return lambda: (launched.append(True), start())[1]
+        with mock.patch.object(library, "_playwright", counted):
+            results = library.import_saved_pages(cfg, pages)
+        self.assertEqual(len(launched), 1, "one browser reads every page")
+        self.assertEqual([r["filename"] for r in results], [name for name, _text in pages], "a result for every page, in order")
+        found = {r["filename"]: r for r in results}
+        self.assertEqual([len(found[n]["items"]) for n in ("Dashboard - Test Shop.mhtml", "Dashboard - Test Shop (2).mhtml")], [2, 2])
+        self.assertEqual([i["key"] for i in found["My purchases - itch.io.html"]["items"]], ["itch:kitsu/paw-suit"])
+        self.assertEqual(found["Other Shop.mhtml"], {"filename": "Other Shop.mhtml", "confirm_shop": "https://othershop.store"})
+        self.assertIn("couldn't tell which store", found["notes.html"]["error"])
+        self.assertIn("no web page inside", found["broken.mhtml"]["error"])
+        self.assertEqual(cfg["payhip"]["shops"], ["https://testshop.store"], "nothing added before you confirm")
+        (again,) = library.import_saved_pages(cfg, [pages[3]], trust_shops=["othershop.store"])
+        self.assertEqual((again["store"], len(again["items"])), ("payhip", 2))
+        self.assertEqual(cfg["payhip"]["shops"], ["https://testshop.store", "https://othershop.store"])
+        self.assertTrue(all(i["url"].startswith("https://othershop.store/b-account/digital/") for i in again["items"]),
+                        "its links count once the shop is yours")
 
 
 if __name__ == "__main__":

@@ -49,6 +49,7 @@ STORE_SITES = {
     "gumroad": ["gumroad.com"],
     "jinxxy": ["jinxxy.com"],
     "payhip": ["payhip.com"],
+    "itch": ["itch.io"],                       # creators' pages are <creator>.itch.io
 }
 
 
@@ -57,7 +58,13 @@ STORE_ORIGINS = {
     "gumroad": ["https://gumroad.com", "https://app.gumroad.com"],
     "jinxxy": ["https://jinxxy.com", "https://www.jinxxy.com"],
     "payhip": ["https://payhip.com"],
+    "itch": ["https://itch.io"],
 }
+
+
+def store_label(store: str) -> str:
+    """A store's name as people write it."""
+    return {"itch": "itch.io"}.get(store, store.title())
 
 
 # Pages that show whether you're signed in (a sign-in form means you're not), and where to sign out.
@@ -66,6 +73,7 @@ STORE_ACCOUNT_PAGES = {
     "gumroad": "https://app.gumroad.com/library",
     "jinxxy": "https://jinxxy.com/my/inventory",
     "payhip": "https://payhip.com/account",
+    "itch": "https://itch.io/my-purchases",
 }
 
 
@@ -176,7 +184,7 @@ class ProfileLock:
         except OSError:
             self.fh.close()
             self.fh = None
-            raise ProfileBusy(f"The other Hoard tool is using your {self.path.stem.title()} sign-in right now. "
+            raise ProfileBusy(f"The other Hoard tool is using your {store_label(self.path.stem)} sign-in right now. "
                               "Try again when it has finished.")
 
     def release(self) -> None:
@@ -405,7 +413,7 @@ def check_saved_signin(cfg: dict, store: str) -> None:
         return
     _remove_tree(target)
     raise SigninsUnprotected(
-        f"Your {store.title()} sign-in was saved without your keyring's protection (the keyring may be locked), so "
+        f"Your {store_label(store)} sign-in was saved without your keyring's protection (the keyring may be locked), so "
         "Hoard deleted it. Unlock your keyring and sign in again.")
 
 
@@ -455,7 +463,7 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
             if extra.exists():
                 _remove_tree(extra)
         return "\n".join(done)
-    label = store.title()
+    label = store_label(store)
     target = profile_dir(cfg, store)
     if not target.exists():
         return f"{label}: no saved sign-in."

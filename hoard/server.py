@@ -21,17 +21,17 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__
 from .browser import signin_protection, signins_root
-from .config import DEFAULT_CONFIG, NewShop, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
+from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog
 from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
 from .jobs import Jobs
-from .library import IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_page
+from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
                      open_under, safe_join, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
-from .setup import migrate_from, setup_status
+from .setup import browser_problem, migrate_from, setup_status
 from .tags import TagStore, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
@@ -47,6 +47,7 @@ KEYLESS_ACTIONS = ("/api/enter", "/api/show")
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
+MAX_IMPORT_FILES = 50   # saved pages in one request; the page sends more as several requests
 
 
 def font_path(name: str) -> Path | None:
@@ -63,7 +64,8 @@ def public_settings(cfg: dict) -> dict:
         "stores": {s: {"enabled": bool(cfg[s].get("enabled", True)),
                        **({"include_gifts": bool(cfg[s].get("include_gifts", True)),
                            "include_free": bool(cfg[s].get("include_free", True))} if s == "booth" else {}),
-                       **({"include_archived": bool(cfg[s].get("include_archived", True))} if s == "gumroad" else {})}
+                       **({"include_archived": bool(cfg[s].get("include_archived", True))} if s == "gumroad" else {}),
+                       **({"skip_game_builds": bool(cfg[s].get("skip_game_builds", True))} if s == "itch" else {})}
                    for s in STORES},
     }
 
@@ -109,7 +111,7 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if store not in STORES or not isinstance(opts, dict):
             raise ValueError("Unknown store.")
         allowed = {"enabled"} | ({"include_gifts", "include_free"} if store == "booth" else set()) | \
-                  ({"include_archived"} if store == "gumroad" else set())
+                  ({"include_archived"} if store == "gumroad" else set()) | ({"skip_game_builds"} if store == "itch" else set())
         change.setdefault(store, {}).update({k: bool(v) for k, v in opts.items() if k in allowed})
     return change
 
@@ -287,6 +289,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": stores,
                                "privacy": privacy,
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
+                               "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
@@ -375,6 +378,45 @@ class Handler(BaseHTTPRequestHandler):
         srv.forget_index()
         return self._json({"ok": True})
 
+    def _import(self, body: dict):
+        """Import library pages saved from your own browser: any number, sent a batch at a time. Each page gets its
+        own result, so one bad page doesn't stop the rest. A page from a Payhip shop you haven't added comes back
+        asking you to confirm that shop; sent again with the shop in trust_shops, it's added."""
+        srv = self.server
+        files = body.get("files")
+        if not isinstance(files, list) or not 1 <= len(files) <= MAX_IMPORT_FILES or \
+                not all(isinstance(f, dict) and isinstance(f.get("content"), str) for f in files):
+            return self._json({"error": f"Send between 1 and {MAX_IMPORT_FILES} saved pages at a time."}, 400)
+        store = body.get("store") if isinstance(body.get("store"), str) else None
+        trust = [s for s in body.get("trust_shops") or [] if isinstance(s, str)][:200] \
+            if isinstance(body.get("trust_shops"), list) else []
+        shops_before = payhip_shops(srv.cfg)
+        try:
+            results = import_saved_pages(srv.cfg, [(str(f.get("filename") or "page")[:300], f["content"]) for f in files],
+                                         store, trust)
+        except Exception as e:   # the reading browser itself didn't start: no page could be read
+            return self._json({"error": browser_problem(e) or f"Couldn't read the pages: {e}"}, 500)
+        found: dict[str, list] = {}
+        for r in results:
+            if r.get("items"):
+                found.setdefault(r["store"], []).extend(r["items"])
+        totals = {s: srv.lib.merge_store(s, items) for s, items in found.items()}
+        added = [s for s in payhip_shops(srv.cfg) if s not in shops_before]
+        if added:   # importing a shop's page, once you've confirmed the shop, adds it to your list
+            save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+        if found and srv.cfg.get("offline_images", True):
+            keys = [i["key"] for items in found.values() for i in items]
+            threading.Thread(target=cache_images, args=(srv.lib, keys, lambda m: None), daemon=True).start()
+        said = []
+        for r in results:
+            if "items" in r:
+                said.append({"filename": r["filename"], "store": r["store"], "label": STORES[r["store"]]["label"],
+                             "count": len(r["items"])})
+            else:
+                said.append({"filename": r["filename"], **{k: r[k] for k in ("confirm_shop", "error") if k in r}})
+        return self._json({"ok": True, "results": said, "added_shops": added,
+                           "totals": {s: {"label": STORES[s]["label"], "total": n} for s, n in totals.items()}})
+
     # ---- acting
     def do_POST(self):
         """Run an action. Only requests from this computer, sent as JSON with the access key, are accepted."""
@@ -393,7 +435,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Bad request."}, 400)
         if length > (80 * 1024 * 1024 if path == "/api/import" else 1024 * 1024):  # only imports are large
             return self._json({"error": "That's too large." if path != "/api/import"
-                               else "That file is too large to be a library page."}, 413)
+                               else "That's too large to be library pages. Import fewer at a time."}, 413)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except (ValueError, RecursionError):
@@ -433,20 +475,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError as e:
                 return self._json({"error": str(e)}, 500)
         if path == "/api/import":
-            try:
-                store, items = import_saved_page(srv.cfg, body.get("store"), str(body.get("filename") or ""),
-                                                 str(body.get("content") or ""), trust_shop=body.get("trust_shop"))
-            except NewShop as e:   # the page names a shop you haven't added: ask first, showing its exact address
-                return self._json({"error": str(e), "confirm_shop": e.shop}, 409)
-            except (ValueError, RuntimeError) as e:
-                return self._json({"error": f"Couldn't import: {e}"}, 422)
-            total = srv.lib.merge_store(store, items)
-            if store == "payhip":   # importing a shop's page adds that shop to your list
-                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
-            if srv.cfg.get("offline_images", True):
-                threading.Thread(target=cache_images, args=(srv.lib, [i["key"] for i in items], lambda m: None),
-                                 daemon=True).start()
-            return self._json({"ok": True, "store": store, "label": STORES[store]["label"], "count": len(items), "total": total})
+            return self._import(body)
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
@@ -484,6 +513,9 @@ class Handler(BaseHTTPRequestHandler):
         stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]
         if path == "/api/sync":   # only the stores you use
             stores = [s for s in stores if srv.cfg[s].get("enabled", True)]
+        if path == "/api/download" and stores and not any(s in DOWNLOADABLE for s in stores):
+            return self._json({"error": "Hoard lists what you own on Payhip, and doesn't download from it. Open the "
+                                        "product's download page from its details, and download it there."}, 400)
         if not stores:
             return self._json({"error": "Unknown store." if path != "/api/sync" else "No stores are switched on in Settings."}, 400)
         task = {"/api/login": "login", "/api/logout": "logout", "/api/download": "download",

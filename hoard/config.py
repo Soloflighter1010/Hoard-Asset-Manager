@@ -25,8 +25,8 @@ DEFAULT_CONFIG = {
     "booth": {"enabled": True, "include_gifts": True, "include_free": True, "save_thumbnails": True},
     "jinxxy": {"enabled": True, "item_link_pattern": "^/my/(inventory|purchases|library)/[^/]+/?$",
                "save_thumbnails": True, "download_start_timeout": 90},
-    "payhip": {"enabled": True, "shops": [], "library_url": "", "headed": True, "bot_check_wait": 180,
-               "download_start_timeout": 90, "save_thumbnails": True},
+    "payhip": {"enabled": True, "shops": [], "headed": True, "bot_check_wait": 180},   # read only: never downloaded
+    "itch": {"enabled": True, "skip_game_builds": True, "save_thumbnails": True, "download_start_timeout": 90},
     "tags": {"min_count": 3, "max_share": 0.4, "min_length": 2, "extra_stopwords": [], "blocklist": []},
 }
 
