@@ -25,10 +25,16 @@ DEFAULT_CONFIG = {
     "booth": {"enabled": True, "include_gifts": True, "include_free": True, "save_thumbnails": True},
     "jinxxy": {"enabled": True, "item_link_pattern": "^/my/(inventory|purchases|library)/[^/]+/?$",
                "save_thumbnails": True, "download_start_timeout": 90},
-    "payhip": {"enabled": True, "shops": [], "library_url": "", "headed": True, "bot_check_wait": 180,
-               "download_start_timeout": 90, "save_thumbnails": True},
+    "payhip": {"enabled": True, "shops": [], "headed": True, "bot_check_wait": 180},   # read only: never downloaded
+    "itch": {"enabled": True, "skip_game_builds": True, "save_thumbnails": True, "download_start_timeout": 90},
     "tags": {"min_count": 3, "max_share": 0.4, "min_length": 2, "extra_stopwords": [], "blocklist": []},
 }
+
+
+# Stores added since Hoard was first released. An install that was set up before one came keeps the stores it
+# chose: the new store starts switched off there (Settings turns it on), rather than showing up unasked, with a
+# "not signed in" warning after the next sync. New installs choose in the setup assistant, where it's ticked.
+NEW_STORES = ("itch",)
 
 
 def clean_payhip_shop(value) -> str | None:
@@ -112,6 +118,9 @@ def load_config(path: Path | None = None) -> dict:
             saved = read_json_file(path, 1024 * 1024)
             if isinstance(saved, dict):
                 deep_merge(cfg, saved)
+                for store in NEW_STORES:
+                    if saved.get("setup_done") and store not in saved:
+                        cfg[store]["enabled"] = False   # set up before this store came: off until you turn it on
         except DataFileError as e:
             print(f"Settings: {e}. Using the defaults.", flush=True)
     apply_store_sites(cfg)

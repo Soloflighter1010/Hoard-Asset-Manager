@@ -5,6 +5,7 @@ these run on every change.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import struct
 import sys
@@ -123,6 +124,77 @@ class AccessKey(unittest.TestCase):
         again, _ = self.open(link)
         again.get_by_text(NEEDS_KEY).wait_for()
         again.close()
+
+
+def shop_page(*codes):
+    """A Payhip shop's own library page (testshop.store/b-account)."""
+    return ('<html><head><meta charset="utf-8"><title>Dashboard - Test Shop</title></head><body><header>'
+            '<a class="logo-link" href="https://testshop.store/b-account">Test Shop</a></header><div class="grid-list">'
+            + "".join(f'<div class="grid-item"><img src="https://images.payhip.com/{c}.gif" width="200" height="200">'
+                      f'<h4 class="product-name"><a href="https://testshop.store/b-account/digital/{c}">Product {c}</a></h4></div>'
+                      for c in codes) + '</div></body></html>')
+
+
+def mhtml(page_html: str, url: str) -> bytes:
+    """A page saved as "Webpage, Single File"."""
+    return ("From: <Saved by Blink>\r\nSnapshot-Content-Location: " + url + "\r\nMIME-Version: 1.0\r\n"
+            'Content-Type: multipart/related; type="text/html"; boundary="B"\r\n\r\n--B\r\nContent-Type: text/html\r\n'
+            "Content-Location: " + url + "\r\n\r\n" + page_html + "\r\n--B--\r\n").encode()
+
+
+ITCH_SAVED = ('<!-- saved from url=(0028)https://itch.io/my-purchases -->\n<html><body><div class="game_grid_widget">'
+              '<div class="game_cell" data-game_id="1001"><a class="title game_link" href="https://kitsu.itch.io/paw-suit">Paw Suit</a>'
+              '<div class="game_author"><a href="https://kitsu.itch.io">Kitsu</a></div>'
+              '<a class="button" href="https://kitsu.itch.io/paw-suit/download/AbCdEf1234567890">Download</a></div></div></body></html>')
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class ImportingFromTheLibrary(unittest.TestCase):
+    """Import pages, in the Stores panel: several saved pages at once, a new Payhip shop's pages confirmed with one
+    question, and what came of every page shown at the end."""
+
+    def test_several_pages_at_once(self):
+        tmp = Path(tempfile.mkdtemp())
+        cfg = {**config.load_config(), "root": str(tmp / "downloads"), "setup_done": True, "offline_images": False}
+        cfg["payhip"] = {**cfg["payhip"], "shops": []}
+        srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False, config_path=tmp / "config.json")
+        srv.lib = library.Library(tmp / "library.json")
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(lambda: config.apply_store_sites(config.load_config()))
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        browser = pw.chromium.launch()
+        self.addCleanup(browser.close)
+        page = browser.new_page()
+        asked = []
+        page.on("dialog", lambda d: (asked.append(d.message), d.accept()))
+        page.goto(srv.entry_url())
+        page.locator("#storesBtn").click()
+        page.locator("#importPages").wait_for()
+        page.set_input_files("#importFile", [
+            {"name": "Dashboard - Test Shop.mhtml", "mimeType": "multipart/related",
+             "buffer": mhtml(shop_page("aB1", "cD2"), "https://testshop.store/b-account")},
+            {"name": "Dashboard - Test Shop (2).mhtml", "mimeType": "multipart/related",
+             "buffer": mhtml(shop_page("eF3"), "https://testshop.store/b-account?page=2")},
+            {"name": "My purchases - itch.io.html", "mimeType": "text/html", "buffer": ITCH_SAVED.encode()},
+            {"name": "notes.html", "mimeType": "text/html", "buffer": b"<html><body>notes</body></html>"},
+            {"name": "readme.txt", "mimeType": "text/plain", "buffer": b"not a page"},
+        ])
+        page.locator("#impClose").wait_for(state="visible", timeout=90000)
+        said, problems = page.locator("#impMessage").inner_text(), page.locator("#impProblems").inner_text()
+        self.assertEqual(len(asked), 1, "one question for the new shop, for both its pages")
+        self.assertIn("2 pages are from a Payhip shop", asked[0])
+        self.assertIn("testshop.store", asked[0])
+        for part in ("3 Payhip items", "1 itch.io item", "from 3 pages", "Added testshop.store to your Payhip shops"):
+            self.assertIn(part, said)
+        self.assertIn("notes.html: couldn't tell which store", problems)
+        self.assertIn("1 file isn't a saved page", problems)
+        self.assertEqual(json.loads((tmp / "config.json").read_text("utf-8"))["payhip"]["shops"], ["https://testshop.store"])
+        page.get_by_text("Product eF3").first.wait_for()   # in the library straight away
+        self.assertEqual(sorted(i["key"] for i in srv.lib.data["items"]),
+                         ["itch:kitsu/paw-suit", "payhip:testshop.store:aB1", "payhip:testshop.store:cD2", "payhip:testshop.store:eF3"])
 
 
 if __name__ == "__main__":

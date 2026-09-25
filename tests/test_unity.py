@@ -69,9 +69,12 @@ def build_material(d: Path) -> None:
     outside.mkdir()
     (outside / "secret.txt").write_text("secret")
     (root / "Booth" / "Kitsu Studio" / "Linked Away").symlink_to(outside, target_is_directory=True)
+    (root / "Itch" / "Kitsu Studio" / "Paw Suit").mkdir(parents=True)
+    (root / "Itch" / "Kitsu Studio" / "Paw Suit" / "PawSuit.unitypackage").write_bytes(b"x")
     good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"]),
             asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
-            asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"])]
+            asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"]),
+            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch")]
     bad = [asset("Escaping", "../outside", None, []), asset("Absolute", "/etc", None, []),
            asset("Hidden \u202e name", "Booth/x", None, []), {**asset("Wrong Store", "Booth/y", None, []), "store": "Steam"},
            asset("", "Booth/z", None, []), "not an object"]

@@ -79,15 +79,18 @@ all in `browser.py`):
 | Gumroad | The library page's embedded Inertia data (`data-page` JSON), 15 purchases a page, archived ones read separately | The most dependable reader; the data shapes follow Gumroad's open-source code |
 | Booth | `BOOTH_JS` reads each card on `accounts.booth.pm/library`, `/library/gifts` and `/library/free_downloads`, page by page | Files come from the download-button placeholders' `data-href` (`test=downloadable`). They redirect to a short-lived address; if Booth refuses the direct request, `booth_fetch` downloads through the browser |
 | Jinxxy | `JX_CARDS_JS` reads the inventory cards, scrolling and clicking "load more" until nothing new appears | No buyer API. Card text skips buttons, menus and screen-reader labels |
-| Payhip | Purchases live in each shop (`<shop>/b-account`, often on the shop's own domain). `PAYHIP_SHOP_JS` reads each shop listed in settings (`payhip.shops`), which `config.apply_store_sites` also adds to Payhip's trusted sites | Payhip shows automated browsers a bot check, so the downloader uses a visible window and waits for the user to complete it |
+| Payhip | Purchases live in each shop (`<shop>/b-account`, often on the shop's own domain). `PAYHIP_SHOP_JS` reads each shop listed in settings (`payhip.shops`), which `config.apply_store_sites` also adds to Payhip's trusted sites | Read only: Hoard lists Payhip purchases and never downloads them (`DOWNLOADABLE` leaves it out). Payhip shows automated browsers a bot check, so a refresh uses a visible window and waits for the user to complete it; most people import each shop's saved pages instead |
+| itch.io | `ITCH_JS` reads `itch.io/my-purchases` by its addresses rather than its layout: a project is `<creator>.itch.io/<project>`, and one you own has a download page, `<creator>.itch.io/<project>/download/<key>`. It scrolls while more load, and follows the library's pages if it has any | The key in a download page's address opens it for anyone, so it stays in `library.json` (the manifest and catalog keep the project page) and `scrub()` removes it. `ITCH_UPLOADS_JS` reads a download page's files (`data-upload_id`), noting builds marked for an operating system and files kept on other websites |
 
 The readers are JavaScript strings evaluated inside the store page, so they see what the user sees.
 When a store changes its layout, the `debug <store>` and `probe jinxxy` commands save the
 page, its links and what the reader found, which is usually enough to fix a reader.
 
-**Importing a saved page** (`import_saved_page` in `library.py`): the user saves a store page from their
-own browser. The file is read offline in a browser with every network request blocked and every
-`<script>` removed, and parsed with the same reader.
+**Importing saved pages** (`import_saved_pages` in `library.py`): the user saves store pages from their
+own browser, any number at once (a library often spans several pages, and Payhip has one per shop). Each is
+read offline, all in one browser, with every network request blocked and every `<script>` removed, and
+parsed with the same reader. Every page gets its own result: its items, an error, or the Payhip shop it's
+from when that shop isn't in the user's list (it's only added when the user confirms it: `trust_shops`).
 
 ## The library (`library.py`, `jobs.py`, `server.py`)
 
@@ -108,7 +111,7 @@ own browser. The file is read offline in a browser with every network request bl
 | `GET /api/status` | Job state and store status, for polling |
 | `GET /thumb/<item key>` | That item's image, fetched once from a public address and cached |
 | `POST /api/refresh`, `/api/login`, `/api/logout` | Start a job (`{"stores": [...]}`) |
-| `POST /api/import` | Read a saved store page (`{"store", "filename", "content"}`) |
+| `POST /api/import` | Read saved store pages, up to `MAX_IMPORT_FILES` a request (`{"store", "files": [{"filename", "content"}], "trust_shops"}`); a result for each |
 | `POST /api/enter` | Trade the one-time link a page was opened with (`{"token"}`) for the access key |
 
 ## Downloads (`downloader.py`, `downloads.py`)
@@ -124,10 +127,14 @@ own browser. The file is read offline in a browser with every network request bl
   adds to one the part that follows it (206, `Content-Range` starting where it ends), counts it as finished
   only when the store says the file ends there (416, `Content-Range: bytes */<that size>`), starts again
   otherwise, and puts a file in place only once it's as long as the store said. It asks for the file's own
-  bytes (`Accept-Encoding: identity`), so sizes and ranges are exact. Jinxxy and Payhip click each file's
-  download button in the browser (`download_by_clicking`), because their files are only handed out that way.
+  bytes (`Accept-Encoding: identity`), so sizes and ranges are exact. Jinxxy and itch.io click each file's
+  download button in the browser (`click_download`), because their files are only handed out that way.
+  Payhip isn't downloaded from at all: `cmd_sync` only syncs `DOWNLOADABLE` stores, and the server refuses a
+  download of Payhip alone. Its folder and manifest, from earlier versions, stay in the catalog.
 - A file counts as **updated** when a store offers a new version of it: a different size or file link on
-  Gumroad or Booth, or the same file name under a new label on Jinxxy or Payhip.
+  Gumroad or Booth, the same file name under a new label on Jinxxy, or a different name or size shown for
+  the same file (`data-upload_id`) on itch.io. itch.io files marked for an operating system (game builds)
+  are skipped while `itch.skip_game_builds` is on.
 - `collect_catalog()` builds the catalog and tags from the manifests; `build_catalog()` writes them to
   `catalog.json`, `tags.json` and each product's `asset.json`. With nothing downloaded, an existing
   `catalog.json` and `tags.json` are rewritten empty, so they never go on listing what's gone; a folder

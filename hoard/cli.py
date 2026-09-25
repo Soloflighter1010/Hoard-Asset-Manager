@@ -10,10 +10,11 @@ from urllib.parse import urlparse
 from . import __version__
 from .browser import ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
 from .common import log
-from .config import NewShop, clean_payhip_shop, load_config, payhip_shops, root_dir, save_config
-from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify
+from .config import clean_payhip_shop, load_config, payhip_shops, root_dir, save_config
+from .downloader import ITCH_UPLOADS_JS, build_catalog, cmd_probe, cmd_sync, cmd_verify
 from .jobs import Jobs
-from .library import BOOTH_JS, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY, Library, PAYHIP_SHOP_JS, STORES, import_saved_page, open_sign_in_pages
+from .library import (BOOTH_JS, DOWNLOADABLE, GR_LIBRARY, IMPORTABLE, ITCH_JS, ITCH_LIBRARY, JX_CARDS_JS, JX_INVENTORY,
+                      Library, PAYHIP_SHOP_JS, STORES, import_saved_pages, open_sign_in_pages, saved_pages_in)
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 
 from .safety import scrub
@@ -87,7 +88,7 @@ def cmd_debug(cfg, store, raw: bool = False):
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         shops = payhip_shops(cfg)
         url = {"booth": "https://accounts.booth.pm/library", "gumroad": GR_LIBRARY, "jinxxy": JX_INVENTORY,
-               "payhip": (shops[0] + "/b-account") if shops else "https://payhip.com/"}[store]
+               "payhip": (shops[0] + "/b-account") if shops else "https://payhip.com/", "itch": ITCH_LIBRARY}[store]
         page.goto(url, wait_until="domcontentloaded")
         settle(page, 2000)
         page.mouse.wheel(0, 4000)
@@ -96,7 +97,7 @@ def cmd_debug(cfg, store, raw: bool = False):
         (DEBUG_DIR / f"{store}.html").write_text(content if raw else scrub(content), "utf-8")
         links = sorted({urlparse(h).path for h in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")})
         (DEBUG_DIR / f"{store}_links.txt").write_text("\n".join(links), "utf-8")
-        js = {"booth": BOOTH_JS, "payhip": PAYHIP_SHOP_JS}.get(store)
+        js = {"booth": BOOTH_JS, "payhip": PAYHIP_SHOP_JS, "itch": ITCH_JS}.get(store)
         if js:
             parsed = page.evaluate(js)
         elif store == "jinxxy":
@@ -110,6 +111,19 @@ def cmd_debug(cfg, store, raw: bool = False):
             (DEBUG_DIR / f"{store}_parsed.json").write_text(json.dumps(parsed, indent=2, ensure_ascii=False), "utf-8")
             (DEBUG_DIR / "SENSITIVE-README.txt").write_text(SENSITIVE_NOTE, "utf-8")
         print(f"Page: {urlparse(page.url).scheme}://{urlparse(page.url).netloc}{urlparse(page.url).path}")
+        if store == "itch":   # the downloader reads each project's download page too: save the first one's
+            first = next((c for c in parsed.get("cards", []) if c.get("download_url")), None)
+            if first:
+                page.goto(first["download_url"], wait_until="domcontentloaded")
+                settle(page, 1500)
+                content = page.content()
+                (DEBUG_DIR / "itch_download.html").write_text(content if raw else scrub(content), "utf-8")
+                uploads = page.evaluate(ITCH_UPLOADS_JS)
+                (DEBUG_DIR / "itch_download_summary.json").write_text(json.dumps(reader_summary(uploads), indent=2), "utf-8")
+                if raw:
+                    page.screenshot(path=str(DEBUG_DIR / "itch_download.png"), full_page=True)
+                    (DEBUG_DIR / "itch_download_parsed.json").write_text(json.dumps(uploads, indent=2, ensure_ascii=False), "utf-8")
+                print(f"The first download page lists {len(uploads)} files.")
         ctx.close()
     print(f"The reader found {summary['items']} items. Saved in {DEBUG_DIR}.")
     if raw:
@@ -118,6 +132,59 @@ def cmd_debug(cfg, store, raw: bool = False):
     else:
         print("Email addresses, form values, tokens and signed links were removed, and there's no screenshot. "
               "If someone helping you needs the page exactly as it is, run again with --raw.")
+
+def cmd_import(cfg: dict, args, batch: int = 20) -> int:
+    """Import library pages saved from your own browser: files, and folders of them. Returns 1 when any page
+    wasn't imported, so a script can tell."""
+    trust = []
+    for given in args.trust_shop or []:
+        shop = clean_payhip_shop(given)
+        if not shop:
+            sys.exit(f"{given} isn't a Payhip shop's address. Use the shop's own address, such as myshop.store or "
+                     "payhip.com/MyShop.")
+        trust.append(shop)
+    files = saved_pages_in(args.paths)
+    if not files:
+        sys.exit("There are no saved pages (.mhtml, .mht, .html or .htm) there.")
+    shops_before, lib = payhip_shops(cfg), Library(LIBRARY_FILE)
+    items_by_store: dict[str, int] = {}
+    totals: dict[str, int] = {}
+    problems, new_shops = [], {}
+    for start in range(0, len(files), batch):   # a batch at a time, so a large folder isn't all in memory at once
+        pages = []
+        for f in files[start:start + batch]:
+            try:
+                pages.append((f.name, f.read_text("utf-8", errors="replace")))
+            except OSError as e:
+                problems.append(f"{f.name}: couldn't be opened ({e.strerror or e})")
+        results = import_saved_pages(cfg, pages, args.store, trust, progress=lambda n, _total, name, done=start:
+                                     print(f"Reading {name} ({done + n} of {len(files)})"))
+        found: dict[str, list] = {}
+        for r in results:
+            if "items" in r:
+                found.setdefault(r["store"], []).extend(r["items"])
+                items_by_store[r["store"]] = items_by_store.get(r["store"], 0) + len(r["items"])
+            elif "confirm_shop" in r:
+                new_shops.setdefault(r["confirm_shop"], []).append(r["filename"])
+            else:
+                problems.append(f"{r['filename']}: {r['error']}")
+        for store, items in found.items():
+            totals[store] = lib.merge_store(store, items)
+    if payhip_shops(cfg) != shops_before:
+        save_config(cfg, args.config)
+    if items_by_store:
+        print("Imported " + ", ".join(f"{n} {STORES[s]['label']} {'item' if n == 1 else 'items'}" for s, n in items_by_store.items()) + ". "
+              + "Your library now has " + ", ".join(f"{n} from {STORES[s]['label']}" for s, n in totals.items()) + ".")
+    for shop, names in new_shops.items():
+        address = shop.split("://", 1)[1]
+        problems.append(f"{', '.join(names)}: from the Payhip shop {address}, which isn't in your list. If it's the "
+                        f"shop you bought from, import again with: --trust-shop {address}")
+    if problems:
+        print(f"{len(problems)} {'page wasn' if len(problems) == 1 else 'pages weren'}'t imported:")
+        for line in problems:
+            print(f"  - {line}")
+    return 1 if problems else 0
+
 
 def cmd_logout(cfg: dict, args) -> None:
     """Sign out of one store, or of every store, in Hoard."""
@@ -147,16 +214,16 @@ def main(argv=None) -> None:
     s.add_argument("store", choices=[*STORES, "all"])
     s = sub.add_parser("refresh", help="read what you own from the stores")
     s.add_argument("--store", choices=list(STORES), action="append", help="repeat for several; default: all")
-    s = sub.add_parser("import", help="add a library page you saved from your own browser (.mhtml or .html)")
-    s.add_argument("file", type=Path)
+    s = sub.add_parser("import", help="add library pages you saved from your own browser (.mhtml or .html), or folders of them")
+    s.add_argument("paths", type=Path, nargs="+", metavar="file-or-folder")
     s.add_argument("--store", choices=list(IMPORTABLE), help="only needed if the store can't be worked out")
-    s.add_argument("--trust-shop", metavar="ADDRESS", help="add the Payhip shop the page is from (its exact address)")
+    s.add_argument("--trust-shop", metavar="ADDRESS", action="append",
+                   help="add the Payhip shop a page is from (its exact address); repeat for several")
     s = sub.add_parser("sync", help="download everything new or changed")
-    s.add_argument("--store", choices=[*STORES, "all"], default="all")
+    s.add_argument("--store", choices=[*DOWNLOADABLE, "all"], default="all")
     s.add_argument("--dry-run", action="store_true", help="list what would download, download nothing")
     s.add_argument("--only", help="only products whose name or creator contains this text")
-    s.add_argument("--headed", action="store_true", help="show the browser while downloading from Booth or Jinxxy")
-    s.add_argument("--payhip-page", metavar="FILE", help="read Payhip products from a library page you saved")
+    s.add_argument("--headed", action="store_true", help="show the browser while downloading from Booth, Jinxxy or itch.io")
     sub.add_parser("tags", help="rebuild catalog.json and tags.json from what's downloaded")
     sub.add_parser("verify", help="check whether any data file was changed outside Hoard, and rebuild the catalog")
     s = sub.add_parser("debug", help="save a store's library page, for troubleshooting (scrubbed of personal details)")
@@ -187,15 +254,7 @@ def main(argv=None) -> None:
         elif args.cmd == "refresh":
             cmd_refresh(cfg, args.store or list(STORES))
         elif args.cmd == "import":
-            try:
-                store, items = import_saved_page(cfg, args.store, args.file.name, args.file.read_text("utf-8", errors="replace"),
-                                                 trust_shop=clean_payhip_shop(args.trust_shop) if args.trust_shop else None)
-            except NewShop as e:
-                sys.exit(f"{e}\nTo add it, run the import again with: --trust-shop {e.shop.split('://', 1)[1]}")
-            if store == "payhip" and args.trust_shop:
-                save_config(cfg, args.config)
-            total = Library(LIBRARY_FILE).merge_store(store, items)
-            print(f"Imported {len(items)} {STORES[store]['label']} items ({total} in the library for that store).")
+            sys.exit(cmd_import(cfg, args))
         elif args.cmd == "sync":
             cmd_sync(cfg, args)
         elif args.cmd == "tags":

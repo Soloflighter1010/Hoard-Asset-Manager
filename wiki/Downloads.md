@@ -1,4 +1,5 @@
-Hoard keeps local copies of what you own, and keeps them up to date when creators update their files.
+Hoard keeps local copies of what you own on Booth, Gumroad, Jinxxy and itch.io, and keeps them up to date when
+creators update their files. Payhip is listed, not downloaded: see [Payhip](#payhip).
 
 ## Downloading
 
@@ -30,7 +31,7 @@ Hoard/
         _thumbnail.png
         asset.json
     _manifest.json
-  Gumroad/  Jinxxy/  Payhip/
+  Gumroad/  Jinxxy/  Itch/  Payhip/
   catalog.json
   tags.json
 ```
@@ -47,8 +48,9 @@ explained in [Where Hoard keeps things](Where-Hoard-Keeps-Things).
 ## Updates from creators
 
 A file counts as **updated** when the store offers a new version of it: a different size or file link on
-Gumroad or Booth, or the same file name under a new label on Jinxxy or Payhip. Updated files are downloaded
-again, replacing the old ones, and listed as updated in the summary.
+Gumroad or Booth, the same file name under a new label on Jinxxy, or a new name or size shown for the same file
+on itch.io. Updated files are downloaded again and listed as updated in the summary. (When the new version has
+a different name, the old file stays in the folder too; Hoard never deletes your files.)
 
 ## Resuming
 
@@ -68,6 +70,13 @@ again from the start.
 
 ## Payhip
 
-Payhip sometimes won't let an automated browser download. Products Hoard couldn't get are listed in
-`Payhip/_download-yourself.html`, with each download page and the folder its files go in. Save them there
-yourself, and the next sync records them. See [Stores](Stores#payhip).
+Hoard doesn't download from Payhip: its check for automated browsers made that unreliable. Your Payhip purchases
+are in the Library, each with **Open download page**, where you download the files from Payhip. **Sync** and
+the download buttons leave Payhip out. What earlier versions of Hoard downloaded from Payhip stays in the
+`Payhip` folder, and in this view. See [Stores](Stores#payhip).
+
+## itch.io
+
+itch.io's files go in the `Itch` folder. Game builds (files marked for Windows, macOS, Linux or Android) are
+skipped unless you turn off **Skip game builds** in [Settings](Settings), and files kept on other websites are
+skipped too; both are listed in the summary. See [Stores](Stores#itchio).

@@ -53,7 +53,7 @@ def _thumbnail(folder: Path, files: list[str]) -> str | None:
     return images[0] if images else None
 
 
-STORES = ("Booth", "Gumroad", "Jinxxy", "Payhip")
+STORES = ("Booth", "Gumroad", "Jinxxy", "Payhip", "Itch")
 
 
 def library_status(root: Path) -> dict:

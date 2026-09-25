@@ -103,7 +103,8 @@ def write_file_safely(path: Path, data, root: Path | None = None) -> None:
 # Every link to a store must lead to that store's own website (or a subdomain of it, such as a Booth
 # shop's <shop>.booth.pm), over HTTPS. Hoard never downloads from a stored link; they're only for you to
 # open, so this is what stops an edited record turning "Open on Booth" into a lookalike sign-in page.
-STORE_LINK_SITES = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com",), "payhip": ("payhip.com",)}
+STORE_LINK_SITES = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com",), "payhip": ("payhip.com",),
+                    "itch": ("itch.io",)}
 
 
 # Sites you've added for a store (Payhip shops on their own domains), on top of the store's own website.
@@ -653,6 +654,7 @@ _SCRUB = [
     (re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "[email]"),
     (re.compile(r'(?i)(<input\b[^>]*?\bvalue=)(["\'])[^"\']*\2'), r"\1\2[value]\2"),     # form values: keys, codes
     (re.compile(r'(?i)(<meta\b[^>]*?name=["\']csrf[^"\']*["\'][^>]*?content=)(["\'])[^"\']*\2'), r"\1\2[token]\2"),
+    (re.compile(r"((?:\\?/)download(?:\\?/))[A-Za-z0-9_-]{6,}"), r"\1[key]"),              # download keys (itch.io)
     (re.compile(r'(?i)([?&][\w.%-]+=)[^&"\'\s<>#]+'), r"\1[value]"),                    # every URL query value
     (re.compile(r'(?i)(data-[\w-]*(?:key|token|id|encrypted)[\w-]*=)(["\'])[^"\']*\2'), r"\1\2[value]\2"),
     (re.compile(r"\b[A-Za-z0-9_-]{32,}\b"), "[token]"),                                 # long opaque tokens
@@ -661,8 +663,8 @@ _SCRUB = [
 
 def scrub(text: str) -> str:
     """A page with the personal and secret parts replaced: email addresses, form values (license keys, codes),
-    security tokens, every URL query value (signed download addresses) and long opaque tokens. The page's
-    structure, which is what troubleshooting needs, is kept."""
+    security tokens, download keys, every URL query value (signed download addresses) and long opaque tokens. The
+    page's structure, which is what troubleshooting needs, is kept."""
     for pattern, replacement in _SCRUB:
         text = pattern.sub(replacement, text)
     return text

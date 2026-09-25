@@ -18,7 +18,7 @@ Click an item to open its details:
 - **Open store page** and **Open download page** open the product on its store, in your web browser. These
   buttons only ever go to that item's own store.
 - **On disk. Show it in Downloads** appears when you already have a copy. Otherwise, **Download a copy** fetches
-  it now.
+  it now (Payhip products say to download from Payhip instead: Hoard lists them and doesn't download them).
 - **You also own this on ...**: Hoard spots the same product bought on more than one store. **Show all copies**
   lists them together.
 - **Tags:** add your own tags, or click a suggestion. See [Tags](Tags).

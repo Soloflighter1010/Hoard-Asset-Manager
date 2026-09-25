@@ -323,75 +323,6 @@ class LocalAccess(unittest.TestCase):
             other.server_close()
 
 
-class PayhipToDo(unittest.TestCase):
-    """S-04/B-04 (2.3.1 review): when Payhip blocks the automated browser, the page listing products for you to
-    download yourself links only to Payhip and your shops, whatever a record says, and is written like every other
-    file Hoard writes: whole, and never through a link planted where it goes."""
-
-    PRODUCTS = [
-        {"id": "a1", "name": "First", "creator": "Kitsu", "url": "https://payhip.com/b/a1", "download_url": "https://payhip.com/d/a1"},
-        {"id": "x1", "name": "Trap", "creator": "Kitsu", "url": "https://payhip.com/b/x1",
-         "download_url": "javascript:alert(document.cookie)"},
-        {"id": "x2", "name": "Lookalike", "creator": "Kitsu", "url": "https://payhip.com/b/x2",
-         "download_url": "https://payhip.com.evil.example/d/x2"},
-        {"id": "b2", "name": "Second", "creator": "Kitsu", "url": "https://payhip.com/b/b2", "download_url": "https://payhip.com/d/b2"},
-    ]
-
-    def sync(self, root: Path) -> tuple[list, "downloader.Report"]:
-        """sync_payhip with the browser stood in for: Payhip blocks the first product it's asked to open."""
-        import contextlib
-        import types
-        opened = []
-
-        class Context:
-            pages = [object()]
-
-            def close(self):
-                pass
-
-        def bot_check(page, url, wait_s, headed):
-            opened.append(url)
-            raise downloader.Blocked("Payhip showed a bot check")
-        report = downloader.Report()
-        with mock.patch.multiple(downloader, _playwright=lambda: (lambda: contextlib.nullcontext(None)),
-                                 launch_context=lambda *a, **k: Context(), open_past_bot_check=bot_check,
-                                 payhip_products=lambda *a, **k: [dict(p) for p in self.PRODUCTS]):
-            downloader.sync_payhip(config.load_config(), root, types.SimpleNamespace(
-                headed=False, only=None, dry_run=False, payhip_page=None), report)
-        return opened, report
-
-    def test_links_are_checked_even_after_payhip_blocks(self):
-        root = Path(tempfile.mkdtemp())
-        opened, report = self.sync(root)
-        self.assertEqual(opened, ["https://payhip.com/d/a1"], "the first is tried; after that Payhip is blocking")
-        page = (root / "Payhip" / "_download-yourself.html").read_text("utf-8")
-        self.assertIn('href="https://payhip.com/d/a1"', page)
-        self.assertIn('href="https://payhip.com/d/b2"', page, "listed after the block, and checked")
-        self.assertNotIn("javascript:", page)
-        self.assertNotIn("evil.example", page)
-        self.assertEqual(sorted(s.split(" - ")[0] for s in report.skipped), ["Payhip: Lookalike", "Payhip: Trap"])
-
-    def test_the_page_itself_only_links_to_payhip(self):
-        """Checked again where the page is written, in case anything else ever lists a product."""
-        root = Path(tempfile.mkdtemp())
-        pending = [(p, root / "Payhip" / p["name"]) for p in self.PRODUCTS]
-        page = downloader.write_payhip_todo(root / "Payhip", pending, ["payhip.com"]).read_text("utf-8")
-        self.assertEqual(page.count("<a href="), 2)
-        self.assertNotIn("javascript:", page)
-        self.assertEqual(page.count("left out"), 2)
-
-    @unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
-    def test_a_planted_link_is_replaced_not_followed(self):
-        root = Path(tempfile.mkdtemp())
-        outside = Path(tempfile.mkdtemp()) / "yours.txt"
-        outside.write_text("keep me")
-        (root / "Payhip").mkdir()
-        (root / "Payhip" / "_download-yourself.html").symlink_to(outside)
-        downloader.write_payhip_todo(root / "Payhip", [(self.PRODUCTS[0], root / "Payhip" / "First")], ["payhip.com"])
-        self.assertEqual(outside.read_text(), "keep me")
-        self.assertFalse((root / "Payhip" / "_download-yourself.html").is_symlink())
-
-
 class Thumbnails(unittest.TestCase):
     """H-07: only raster images are kept; SVG is never fetched into the cache or served."""
 
@@ -427,7 +358,7 @@ class SignIns(unittest.TestCase):
     def test_each_store_has_its_own_folder(self):
         for m in SIGN_INS:
             dirs = {m.profile_dir(self.cfg, s) for s in m.STORE_SITES}
-            self.assertEqual(len(dirs), 4)
+            self.assertEqual(len(dirs), len(m.STORE_SITES))
             self.assertEqual(m.signins_root({"profile_dir": ".browser-profile"}), m.app_data_dir() / "sign-ins")
 
     @unittest.skipUnless(os.name == "posix", "folder modes are a Linux and macOS feature")
@@ -797,12 +728,16 @@ class StoreLinks(unittest.TestCase):
         for m in (safety,):
             ok = [("booth", "https://booth.pm/ja/items/1"), ("Booth", "https://kitsu.booth.pm/items/2"),
                   ("gumroad", "https://app.gumroad.com/d/abc"), ("gumroad", "https://creator.gumroad.com/l/x"),
-                  ("jinxxy", "https://jinxxy.com/creator/item"), ("payhip", "https://payhip.com/b/AbC1")]
+                  ("jinxxy", "https://jinxxy.com/creator/item"), ("payhip", "https://payhip.com/b/AbC1"),
+                  ("itch", "https://kitsu.itch.io/paw-suit"), ("Itch", "https://kitsu.itch.io/paw-suit/download/AbC123xyz"),
+                  ("itch", "https://itch.io/my-purchases")]
             bad = [("booth", "https://booth.pm.evil.example/"), ("booth", "https://evil.example/booth.pm"),
                    ("booth", "https://booth.pm@evil.example/"), ("booth", "http://booth.pm/items/1"),
                    ("booth", "https://b\u043e\u043eth.pm/"), ("booth", "https://xn--bth-ted.pm/"),
                    ("booth", "https://app.gumroad.com/d/x"), ("payhip", "https://payhip.com:8443/b/x"),
-                   ("booth", "javascript:alert(1)"), ("nowhere", "https://booth.pm/"), ("booth", None)]
+                   ("booth", "javascript:alert(1)"), ("nowhere", "https://booth.pm/"), ("booth", None),
+                   ("itch", "https://itch.io.evil.example/"), ("itch", "https://evil-itch.io/"), ("itch", "https://img.itch.zone/x.png"),
+                   ("itch", "https://kitsu.itch.io@evil.example/"), ("booth", "https://kitsu.itch.io/paw-suit")]
             for store, url in ok:
                 self.assertEqual(m.store_link(store, url), url, (m.__name__, url))
             for store, url in bad:
@@ -1390,6 +1325,13 @@ class Diagnostics(unittest.TestCase):
         for secret in ("abcDEF123", "QWERT-12345", "me@example.com", "deadbeef", "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"):
             self.assertNotIn(secret, clean)
         self.assertIn("X-Amz-Signature=", clean, "the page's structure stays")
+        # an itch.io download key opens that download page for anyone: short ones too, and as page data writes them
+        keyed = ('<a href="https://kitsu.itch.io/paw-suit/download/Ab12Cd34">Download</a>'
+                 '<script>{"url":"https:\\/\\/kitsu.itch.io\\/paw-suit\\/download\\/Zy98Xw76"}</script>')
+        clean = safety.scrub(keyed)
+        self.assertNotIn("Ab12Cd34", clean)
+        self.assertNotIn("Zy98Xw76", clean)
+        self.assertIn("kitsu.itch.io/paw-suit/download/", clean)
         from hoard import cli
         self.assertEqual(cli.reader_summary([{"name": "Secret Purchase", "files": [1, 2]}, {"name": ""}]),
                          {"items": 2, "fields_filled": {"name": 1, "files": 1}, "files": 2})

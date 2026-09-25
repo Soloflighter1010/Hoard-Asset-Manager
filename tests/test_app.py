@@ -45,6 +45,24 @@ class Settings(unittest.TestCase):
         self.assertEqual(server.apply_settings(cfg, {"stores": {"payhip": {"include_gifts": True, "enabled": True}}}),
                          {"payhip": {"enabled": True}})
 
+    def test_itch_game_builds(self):
+        cfg = config.load_config()
+        self.assertTrue(server.public_settings(cfg)["stores"]["itch"]["skip_game_builds"], "skipped unless you want them")
+        self.assertEqual(server.apply_settings(cfg, {"stores": {"itch": {"skip_game_builds": False}}}),
+                         {"itch": {"skip_game_builds": False}})
+        self.assertEqual(server.apply_settings(cfg, {"stores": {"booth": {"skip_game_builds": False}}}), {"booth": {}})
+
+    def test_a_new_store_waits_to_be_turned_on(self):
+        """itch.io came in 2.5.0: an install set up before then keeps the stores it chose; a new one starts with all."""
+        folder = Path(tempfile.mkdtemp())
+        (folder / "config.json").write_text(json.dumps({"setup_done": True, "booth": {"enabled": True}}), "utf-8")
+        self.assertFalse(config.load_config(folder / "config.json")["itch"]["enabled"])
+        (folder / "config.json").write_text(json.dumps({"setup_done": True, "itch": {"enabled": True}}), "utf-8")
+        self.assertTrue(config.load_config(folder / "config.json")["itch"]["enabled"], "once you've chosen, your choice")
+        (folder / "config.json").write_text(json.dumps({"setup_done": False}), "utf-8")
+        self.assertTrue(config.load_config(folder / "config.json")["itch"]["enabled"], "setting up, it's offered like the rest")
+        self.assertTrue(config.load_config(folder / "missing.json")["itch"]["enabled"])
+
     def test_default_downloads_folder(self):
         self.assertEqual(config.root_dir({"root": ""}), paths.default_downloads())
         self.assertTrue(str(paths.default_downloads()).endswith("Hoard"))
@@ -120,35 +138,6 @@ class ManifestSaves(unittest.TestCase):
         man.checkpoint()
         man.save_changes()
         self.assertFalse(man.path.exists())
-
-    def test_a_stopped_sync_records_what_finished(self):
-        """Stop is noticed when the next line is logged, which came before the save: the file that had just finished
-        went unrecorded, and was downloaded again the next time."""
-        import contextlib
-        import types
-        from unittest import mock
-        root = Path(tempfile.mkdtemp())
-
-        class Context:
-            pages = [types.SimpleNamespace(url="https://payhip.com/d/a1")]
-
-            def close(self):
-                pass
-
-        def finished_then_stopped(ctx, page, url, rec, *rest):
-            rec["files"]["f1"] = {"path": "first.zip", "size": 3}
-            raise common.Cancelled()   # Stop, noticed as that download is logged
-        product = {"id": "a1", "name": "First", "creator": "Kitsu", "url": "https://payhip.com/b/a1",
-                   "download_url": "https://payhip.com/d/a1"}
-        with mock.patch.multiple(downloader, _playwright=lambda: (lambda: contextlib.nullcontext(None)),
-                                 launch_context=lambda *a, **k: Context(), payhip_products=lambda *a, **k: [product],
-                                 open_past_bot_check=lambda *a: None, payhip_require_login=lambda page: None,
-                                 download_by_clicking=finished_then_stopped):
-            with self.assertRaises(common.Cancelled):
-                downloader.sync_payhip(config.load_config(), root, types.SimpleNamespace(
-                    headed=False, only=None, dry_run=False, payhip_page=None), downloader.Report())
-        saved = json.loads((root / "Payhip" / "_manifest.json").read_text("utf-8"))
-        self.assertEqual(saved["assets"]["a1"]["files"]["f1"]["path"], "first.zip")
 
 
 class LibraryLookups(unittest.TestCase):
@@ -743,6 +732,334 @@ class SetupAssistant(unittest.TestCase):
         finally:
             srv.shutdown()
             srv.server_close()
+
+
+class ItchDownloads(unittest.TestCase):
+    """itch.io: each file on a project's download page is downloaded once, and again when itch.io shows it changed;
+    game builds and files kept on other websites are left alone. The browser is stood in for here; test_readers reads
+    the pages themselves."""
+
+    CARD = {"id": "kitsu/paw-suit", "name": "Paw Suit", "creator": "Kitsu Studio", "creator_url": "https://kitsu.itch.io",
+            "thumbnail": "", "url": "https://kitsu.itch.io/paw-suit",
+            "download_url": "https://kitsu.itch.io/paw-suit/download/AbCdEf123456"}
+
+    @staticmethod
+    def uploads(avatar=("PawSuit_v1.2.unitypackage", "48 MB")):
+        return [{"idx": 0, "upload_id": "5550001", "name": avatar[0], "size": avatar[1], "systems": [], "elsewhere": False},
+                {"idx": 1, "upload_id": "5550002", "name": "PawSuit-Demo-Windows.zip", "size": "210 MB",
+                 "systems": ["Windows"], "elsewhere": False},
+                {"idx": 2, "upload_id": "5550003", "name": "Textures (Google Drive)", "size": "", "systems": [],
+                 "elsewhere": True}]
+
+    @staticmethod
+    def cfg(**itch):
+        cfg = {**config.load_config(), "request_delay": 0}
+        cfg["itch"] = {**cfg["itch"], **itch}
+        return cfg
+
+    def sync(self, root, uploads, cfg, lands_on=None):
+        """sync_itch with the browser stood in for. Returns the files clicked, and the report."""
+        import contextlib
+        import types
+        from unittest import mock
+        clicked, card = [], self.CARD
+
+        class Page:
+            url = lands_on or card["download_url"]
+
+            def evaluate(self, js, *args):
+                return [dict(u) for u in uploads]
+        page = Page()
+
+        class Context:
+            pages = [page]
+
+            def close(self):
+                pass
+
+        class Download:
+            def __init__(self, name):
+                self.suggested_filename, self.page = name, page
+
+            def save_as(self, path):
+                Path(path).write_bytes(b"0123456789")
+
+            def failure(self):
+                return None
+
+        def click(ctx, pg, idx, timeout_s):
+            clicked.append(uploads[idx]["upload_id"])
+            return Download(uploads[idx]["name"])
+        report = downloader.Report()
+        with mock.patch.multiple(downloader, _playwright=lambda: (lambda: contextlib.nullcontext(None)),
+                                 launch_context=lambda *a, **k: Context(), read_itch_library=lambda *a, **k: [dict(card)],
+                                 goto=lambda page, url: None, settle=lambda page, ms=800: None, click_download=click,
+                                 save_thumbnail=lambda *a, **k: None):
+            downloader.sync_itch(cfg, root, types.SimpleNamespace(headed=False, only=None, dry_run=False), report)
+        return clicked, report
+
+    def test_once_and_again_when_itch_shows_a_change(self):
+        root = Path(tempfile.mkdtemp())
+        clicked, report = self.sync(root, self.uploads(), self.cfg())
+        self.assertEqual(clicked, ["5550001"], "the asset file; not the game build, nor the file kept on another website")
+        self.assertTrue((root / "Itch" / "Kitsu Studio" / "Paw Suit" / "PawSuit_v1.2.unitypackage").is_file())
+        self.assertEqual(report.new_assets, ["itch.io: Kitsu Studio / Paw Suit"])
+        skipped = " ".join(report.skipped)
+        self.assertIn("a game build for Windows", skipped)
+        self.assertIn("kept on another website", skipped)
+        self.assertEqual(self.sync(root, self.uploads(), self.cfg())[0], [], "nothing again while itch.io shows the same file")
+        clicked, report = self.sync(root, self.uploads(("PawSuit_v1.3.unitypackage", "49 MB")), self.cfg())
+        self.assertEqual(clicked, ["5550001"], "a new version: downloaded again")
+        self.assertEqual(len(report.updated), 1)
+        saved = json.loads((root / "Itch" / "_manifest.json").read_text("utf-8"))
+        self.assertEqual(saved["assets"]["kitsu/paw-suit"]["files"]["5550001"]["path"], "PawSuit_v1.3.unitypackage")
+        catalog, _tags = downloader.collect_catalog(config.load_config(), root)
+        self.assertEqual([(e["store"], e["url"], e["files"]) for e in catalog],
+                         [("Itch", "https://kitsu.itch.io/paw-suit", ["PawSuit_v1.3.unitypackage"])])
+        self.assertEqual(downloader.validate_catalog_entry(catalog[0]), [])
+
+    def test_game_builds_when_you_want_them(self):
+        clicked, _report = self.sync(Path(tempfile.mkdtemp()), self.uploads(), self.cfg(skip_game_builds=False))
+        self.assertEqual(clicked, ["5550001", "5550002"])
+
+    def test_a_download_page_that_sends_you_elsewhere(self):
+        """A refunded purchase's key no longer opens its download page: nothing is clicked on the page it lands on."""
+        clicked, report = self.sync(Path(tempfile.mkdtemp()), self.uploads(), self.cfg(), lands_on="https://kitsu.itch.io/paw-suit")
+        self.assertEqual(clicked, [])
+        self.assertIn("sent Hoard elsewhere", report.failed[0])
+
+    def test_a_stopped_sync_records_what_finished(self):
+        """Stop is noticed when the next line is logged, which came before the save: the file that had just finished
+        went unrecorded, and was downloaded again the next time."""
+        from unittest import mock
+        root = Path(tempfile.mkdtemp())
+
+        def log(message):
+            if message.strip().startswith("saved:"):
+                raise common.Cancelled()   # Stop, noticed as that download is logged
+        with mock.patch.object(downloader, "log", log), self.assertRaises(common.Cancelled):
+            self.sync(root, self.uploads(), self.cfg())
+        saved = json.loads((root / "Itch" / "_manifest.json").read_text("utf-8"))
+        self.assertEqual(saved["assets"]["kitsu/paw-suit"]["files"]["5550001"]["path"], "PawSuit_v1.2.unitypackage")
+
+
+class PayhipIsListedOnly(unittest.TestCase):
+    """Hoard reads Payhip and never downloads from it: a sync leaves it out, however it's asked."""
+
+    def test_syncing_leaves_payhip_out(self):
+        import types
+        from unittest import mock
+        synced = []
+        pretend = {f"sync_{s}": (lambda s: lambda cfg, root, args, report: synced.append(s))(s) for s in library.DOWNLOADABLE}
+        cfg = {**config.load_config(), "root": tempfile.mkdtemp()}
+        with mock.patch.multiple(downloader, reachable=lambda store, timeout=5.0: True, build_catalog=lambda cfg, root: None,
+                                 **pretend):
+            for asked in ("all", ["payhip", "booth"], ["payhip"]):
+                downloader.cmd_sync(cfg, types.SimpleNamespace(store=asked, dry_run=False, only=None, headed=False))
+        self.assertEqual(synced, ["booth", "gumroad", "jinxxy", "itch", "booth"])
+        self.assertFalse(hasattr(downloader, "sync_payhip"))
+
+    def test_refreshing_without_shops_opens_no_window(self):
+        """With no shop listed there's nothing to read, so no window opens just to say so; importing is suggested."""
+        from unittest import mock
+        cfg = config.load_config()
+        cfg["payhip"] = {**cfg["payhip"], "shops": []}
+        job = jobs.Jobs(cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+
+        class NoBrowser:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, *a):
+                return False
+
+        def launch(*a, **k):
+            raise AssertionError("a browser window was opened")
+        with mock.patch.multiple(jobs, reachable=lambda store, timeout=5.0: True, _playwright=lambda: NoBrowser, launch=launch):
+            job._refresh(["payhip"])
+        self.assertIn("Import each shop's saved library pages", job.lib.data["stores"]["payhip"]["error"])
+
+    def test_nothing_that_downloads_takes_payhip(self):
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            cli.main(["sync", "--store", "payhip"])
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        done = []
+        job.on_download_done = lambda: done.append(True)
+        job._download(["payhip"], None)
+        self.assertIn("download it from Payhip yourself", job.state["message"])
+        self.assertEqual(done, [True], "the downloads view is still told the job ended")
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=10)
+            c.request("POST", "/api/download", body=json.dumps({"stores": ["payhip"]}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse()
+            said = json.loads(r.read())
+            c.close()
+            self.assertEqual(r.status, 400)
+            self.assertIn("doesn't download from it", said["error"])
+            self.assertFalse(srv.jobs.state["running"])
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
+class ImportingPages(unittest.TestCase):
+    """The import endpoint: saved pages a batch at a time, each with its own result. A Payhip shop a page names is
+    only added once you've confirmed it; test_readers reads real pages, and test_pages goes through the Library."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        cfg = {**config.load_config(), "offline_images": False}
+        cfg["payhip"] = {**cfg["payhip"], "shops": []}
+        self.srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False, config_path=self.tmp / "config.json")
+        self.srv.lib = library.Library(self.tmp / "library.json")
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+        config.apply_store_sites(config.load_config())
+
+    def post(self, body):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request("POST", "/api/import", body=json.dumps(body),
+                  headers={"Content-Type": "application/json", ACCESS_HEADER: self.srv.key})
+        r = c.getresponse()
+        data = json.loads(r.read() or b"{}")
+        c.close()
+        return r.status, data
+
+    @staticmethod
+    def pretend(cfg, pages, store, trust):
+        """import_saved_pages without a browser: shop pages need their shop trusted, itch pages are read, the rest fail."""
+        results = []
+        for name, text in pages:
+            if name.startswith("shop"):
+                if "https://testshop.store" not in trust:
+                    results.append({"filename": name, "confirm_shop": "https://testshop.store"})
+                    continue
+                cfg["payhip"]["shops"] = ["https://testshop.store"]
+                results.append({"filename": name, "store": "payhip", "items": [library.item("payhip", "testshop.store-" + text, name=text)]})
+            elif name.startswith("itch"):
+                results.append({"filename": name, "store": "itch", "items": [library.item("itch", "kitsu/" + text, name=text)]})
+            else:
+                results.append({"filename": name, "error": "couldn't tell which store this page is from"})
+        return results
+
+    def test_each_page_gets_its_own_result(self):
+        from unittest import mock
+        with mock.patch.object(server, "import_saved_pages", self.pretend):
+            status, got = self.post({"files": [{"filename": "shop 1.mhtml", "content": "One"},
+                                               {"filename": "itch library.html", "content": "paw-suit"},
+                                               {"filename": "notes.html", "content": "hello"}]})
+            self.assertEqual(status, 200)
+            self.assertEqual([r.get("count", r.get("confirm_shop", r.get("error"))) for r in got["results"]],
+                             ["https://testshop.store", 1, "couldn't tell which store this page is from"])
+            self.assertEqual(got["totals"], {"itch": {"label": "itch.io", "total": 1}})
+            self.assertEqual(got["added_shops"], [])
+            self.assertFalse((self.tmp / "config.json").exists(), "nothing confirmed, so no shop added")
+            status, got = self.post({"files": [{"filename": "shop 1.mhtml", "content": "One"}],
+                                     "trust_shops": ["https://testshop.store"]})
+        self.assertEqual((got["results"][0]["count"], got["added_shops"]), (1, ["https://testshop.store"]))
+        self.assertEqual(json.loads((self.tmp / "config.json").read_text("utf-8"))["payhip"]["shops"], ["https://testshop.store"])
+        self.assertEqual(sorted(i["key"] for i in self.srv.lib.data["items"]), ["itch:kitsu/paw-suit", "payhip:testshop.store-One"])
+        self.assertEqual(self.srv.lib.data["stores"]["itch"]["source"], "import")
+
+    def test_what_isnt_a_batch_of_pages(self):
+        for body in ({}, {"files": []}, {"files": "page"}, {"files": [{"filename": "a.mhtml"}]}, {"files": [{"content": 5}]},
+                     {"files": [{"filename": "p.mhtml", "content": ""}] * (server.MAX_IMPORT_FILES + 1)}):
+            self.assertEqual(self.post(body)[0], 400, body)
+
+
+class ImportCommand(unittest.TestCase):
+    """hoard-cli import: files and folders of saved pages, a batch at a time, with a line for each page that wasn't
+    imported."""
+
+    def test_files_and_folders(self):
+        import contextlib
+        import io
+        import types
+        from unittest import mock
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "pages" / "more").mkdir(parents=True)
+        for rel in ("pages/a.mhtml", "pages/more/b.html", "pages/notes.txt", "c.mht"):
+            (tmp / rel).write_text("page " + rel, "utf-8")
+        batches = []
+
+        def pretend(cfg, pages, store, trust, progress):
+            batches.append([name for name, _text in pages])
+            for n, (name, _text) in enumerate(pages, 1):
+                progress(n, len(pages), name)
+            return [{"filename": name, "confirm_shop": "https://testshop.store"} if name == "c.mht"
+                    else {"filename": name, "store": "booth", "items": [library.item("booth", name, name=name)]}
+                    for name, _text in pages]
+        out = io.StringIO()
+        with mock.patch.object(cli, "import_saved_pages", pretend), mock.patch.object(cli, "LIBRARY_FILE", tmp / "library.json"), \
+                contextlib.redirect_stdout(out):
+            code = cli.cmd_import(config.load_config(), types.SimpleNamespace(
+                paths=[tmp / "pages", tmp / "c.mht"], store=None, trust_shop=None, config=tmp / "config.json"), batch=2)
+        self.assertEqual(batches, [["a.mhtml", "b.html"], ["c.mht"]], "folders searched, other files left alone")
+        said = out.getvalue()
+        self.assertIn("Reading b.html (2 of 3)", said)
+        self.assertIn("Imported 2 Booth items", said)
+        self.assertIn("--trust-shop testshop.store", said)
+        self.assertEqual(code, 1, "a page wasn't imported, and a script can tell")
+        self.assertEqual(len(library.Library(tmp / "library.json").data["items"]), 2)
+
+    def test_a_shop_must_be_a_shop(self):
+        import types
+        with self.assertRaises(SystemExit) as stopped:
+            cli.cmd_import(config.load_config(), types.SimpleNamespace(paths=[], store=None, trust_shop=["http://192.168.1.5"],
+                                                                        config=None))
+        self.assertIn("isn't a Payhip shop", str(stopped.exception))
+
+
+class StoreTables(unittest.TestCase):
+    """Every list of stores, in the app, its pages and Hoard for Unity, names the same stores, so a store can't be
+    half added, or half taken away."""
+
+    def test_the_same_stores_everywhere(self):
+        import re
+        from hoard import browser, downloads, net, safety, tags
+        stores = set(library.STORES)
+        for name, table in (("browser.STORE_SITES", browser.STORE_SITES), ("browser.STORE_ORIGINS", browser.STORE_ORIGINS),
+                            ("browser.STORE_ACCOUNT_PAGES", browser.STORE_ACCOUNT_PAGES), ("net.STORE_HOSTS", net.STORE_HOSTS),
+                            ("safety.STORE_LINK_SITES", safety.STORE_LINK_SITES), ("library.FETCHERS", library.FETCHERS),
+                            ("downloader.STORE_DIRS", downloader.STORE_DIRS)):
+            self.assertEqual(set(table), stores, name)
+        for s in stores:
+            self.assertIn(s, config.DEFAULT_CONFIG)
+            self.assertTrue(tags.TAG_KEY_RX.match(f"{s}:thing"), s)
+            self.assertEqual(downloader.STORE_DIRS[s].lower(), s, "a store's folder is its name: records find their store by it")
+        self.assertEqual(set(downloads.STORES), set(downloader.STORE_DIRS.values()))
+        self.assertTrue(set(library.DOWNLOADABLE) <= stores and set(library.IMPORTABLE) <= stores)
+        self.assertNotIn("payhip", library.DOWNLOADABLE)
+        web = REPO / "hoard" / "web"
+        for page in ("library.html", "downloads.html"):
+            html = (web / page).read_text("utf-8")
+            for const in ("STORE_SITES", "STORE_NAMES"):
+                keys = set(re.findall(r"(\w+):", re.search(rf"const {const} = \{{(.*?)\}};", html).group(1)))
+                self.assertEqual(keys, stores, f"{page}: {const}")
+            for s in stores:
+                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", html)), 2, f"{page}: {s}'s colour, in both themes")
+                self.assertIn(f".{s} {{ --c: var(--{s}); }}", html, page)
+        order = re.search(r"const STORE_ORDER = \[(.*?)\];", (web / "library.html").read_text("utf-8")).group(1)
+        self.assertEqual(re.findall(r'"(\w+)"', order), list(library.STORES))
+        self.assertEqual(set(re.findall(r'data-store="(\w+)"', (web / "downloads.html").read_text("utf-8"))),
+                         set(downloader.STORE_DIRS.values()))
+        unity = REPO / "Packages" / "soloflighter.hoard" / "Editor"
+        catalog = (unity / "Core" / "Catalog.cs").read_text("utf-8")
+        self.assertEqual(set(re.findall(r'"(\w+)"', re.search(r"Stores = \{(.*?)\};", catalog).group(1))),
+                         set(downloader.STORE_DIRS.values()))
+        self.assertEqual(dict(re.findall(r'\{ "(\w+)", "([\w.]+)" \}', catalog)),
+                         {downloader.STORE_DIRS[s]: safety.STORE_LINK_SITES[s][0] for s in stores})
+        window = (unity / "HoardWindow.cs").read_text("utf-8")
+        self.assertEqual(re.findall(r'"(\w+)"', re.search(r"StoreNames = \{(.*?)\};", window).group(1)),
+                         [downloader.STORE_DIRS[s] for s in library.STORES])
 
 
 class CommandLine(unittest.TestCase):

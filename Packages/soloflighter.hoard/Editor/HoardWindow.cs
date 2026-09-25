@@ -11,7 +11,8 @@ namespace SoloFlighter.Hoard.Editor
     public sealed class HoardWindow : EditorWindow
     {
         const string RootPref = "SoloFlighter.Hoard.DownloadsFolder";
-        static readonly string[] StoreNames = { "All stores", "Booth", "Gumroad", "Jinxxy", "Payhip" };
+        static readonly string[] StoreNames = { "All stores", "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch" };
+        static readonly string[] StoreLabels = Array.ConvertAll(StoreNames, s => HoardCatalog.StoreLabel(s));
 
         HoardCatalog catalog;
         PackageIndex packages;
@@ -179,7 +180,7 @@ namespace SoloFlighter.Hoard.Editor
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
             search = GUILayout.TextField(search, EditorStyles.toolbarSearchField, GUILayout.MinWidth(160));
-            store = EditorGUILayout.Popup(store, StoreNames, EditorStyles.toolbarPopup, GUILayout.Width(100));
+            store = EditorGUILayout.Popup(store, StoreLabels, EditorStyles.toolbarPopup, GUILayout.Width(100));
             packagesOnly = GUILayout.Toggle(packagesOnly, "Unity packages only", EditorStyles.toolbarButton);
             inProjectOnly = GUILayout.Toggle(inProjectOnly, "In this project", EditorStyles.toolbarButton);
             if (EditorGUI.EndChangeCheck()) Filter();
@@ -228,7 +229,7 @@ namespace SoloFlighter.Hoard.Editor
                 if (t != null) GUI.DrawTexture(pic, t, ScaleMode.ScaleAndCrop);
                 else EditorGUI.DrawRect(pic, new Color(0.3f, 0.3f, 0.3f, 0.5f));
                 GUI.Label(new Rect(row.x + 56, row.y + 6, row.width - 150, 18), a.Name, EditorStyles.boldLabel);
-                GUI.Label(new Rect(row.x + 56, row.y + 26, row.width - 150, 18), a.Creator + "  ·  " + a.Store, EditorStyles.miniLabel);
+                GUI.Label(new Rect(row.x + 56, row.y + 26, row.width - 150, 18), a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.miniLabel);
                 var s = ProjectStatus(a);
                 if (s >= InProject.Partly)
                     GUI.Label(new Rect(row.xMax - 92, row.y + 16, 88, 18), s == InProject.Yes ? "In this project" : "Partly in project", EditorStyles.miniBoldLabel);
@@ -260,7 +261,7 @@ namespace SoloFlighter.Hoard.Editor
             var t = Thumb(a);
             if (t != null) GUI.DrawTexture(GUILayoutUtility.GetRect(160, 160, GUILayout.Width(160), GUILayout.Height(160)), t, ScaleMode.ScaleToFit);
             GUILayout.Label(a.Name, EditorStyles.largeLabel);
-            GUILayout.Label("by " + a.Creator + "  ·  " + a.Store + (a.Variants != null ? "  ·  " + a.Variants : ""), EditorStyles.label);
+            GUILayout.Label("by " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store) + (a.Variants != null ? "  ·  " + a.Variants : ""), EditorStyles.label);
             if (a.Tags.Count > 0) GUILayout.Label("Tags: " + string.Join(", ", a.Tags), EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.Space();
 

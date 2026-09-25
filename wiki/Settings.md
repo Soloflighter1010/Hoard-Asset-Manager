@@ -8,8 +8,11 @@ Everyday choices are in the **Settings** panel (top right). A few rarer ones onl
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.
   - Gumroad: **Include archived purchases**.
+  - itch.io: **Skip game builds** (on unless you turn it off): files the creator marked as a program for
+    Windows, macOS, Linux or Android aren't downloaded. See [Stores](Stores#itchio).
 - **Payhip shops:** the shops you've bought from on Payhip, one per line, such as `myshop.store` or
-  `payhip.com/ShopName`. Importing a shop's saved page adds it for you. See [Stores](Stores#payhip).
+  `payhip.com/ShopName`. Importing a shop's saved page adds it for you. Hoard lists what you bought there, and
+  you download it from Payhip yourself. See [Stores](Stores#payhip).
 - **Offline:** **Save product images, so the library works offline**.
 - **Browser for store sign-ins:** **Automatic** (Microsoft Edge on Windows, Hoard's own browser elsewhere),
   **Microsoft Edge**, **Google Chrome** or **Hoard's own browser**. After changing it, you may need to sign in to

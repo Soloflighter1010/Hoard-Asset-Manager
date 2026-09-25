@@ -28,7 +28,14 @@ STORES = {
     "gumroad": {"label": "Gumroad", "login": "https://app.gumroad.com/login", "referer": "https://gumroad.com/"},
     "jinxxy": {"label": "Jinxxy", "login": "https://jinxxy.com/my/inventory", "referer": "https://jinxxy.com/"},
     "payhip": {"label": "Payhip", "login": "https://payhip.com/auth/login", "referer": "https://payhip.com/"},
+    "itch": {"label": "itch.io", "login": "https://itch.io/login?return_to=https%3A%2F%2Fitch.io%2Fmy-purchases",
+             "referer": "https://itch.io/"},
 }
+
+
+# The stores Hoard downloads from. Payhip is only read: its bot check made downloading unreliable, so Hoard lists
+# what you own there, with each product's download page, and you download from Payhip yourself.
+DOWNLOADABLE = ("booth", "gumroad", "jinxxy", "itch")
 
 
 def item(store: str, id_, **fields) -> dict:
@@ -363,19 +370,13 @@ def jinxxy_item(c: dict) -> dict:
 
 # ----------------------------------------------------------------------------- Payhip
 #
-# Payhip keeps a buyer library when your account is in Customer mode. Its layout isn't
-# documented, so this finds product cards by their cover images and links. If it gets
-# things wrong, set payhip.library_url and run `python library.py debug payhip`.
+# Payhip keeps your purchases in each shop you bought from, on that shop's own library page (<shop>/b-account),
+# not in one library. Hoard reads Payhip and never downloads from it. PAYHIP_SHOP_JS reads a shop's library page,
+# PAYHIP_CARDS_JS a page saved from Payhip's own site. If either gets things wrong, run: debug payhip
 
-PAYHIP_FIND_LIBRARY_JS = r"""
-() => {
-  const a = [...document.querySelectorAll('a[href]')].find(x => {
-    let u; try { u = new URL(x.href); } catch (e) { return false; }
-    return /(^|\.)payhip\.com$/.test(u.hostname) && /\b(library|my purchases|purchases)\b/i.test(x.innerText || '');
-  });
-  return a ? a.href : null;
-}
-"""
+PAYHIP_NO_SHOPS = ("Payhip keeps your purchases in each shop you bought from, not in one library. Import each "
+                   "shop's saved library pages (Import pages, in Stores), or add your shops in Settings to refresh "
+                   "them (a shop's address is in your purchase email).")
 
 
 PAYHIP_CARDS_JS = r"""
@@ -423,27 +424,6 @@ PAYHIP_CARDS_JS = r"""
   return { cards: [...cards.values()], next: next ? next.href : null };
 }
 """
-
-
-def payhip_library_url(page, cfg) -> str:
-    """The address of your Payhip library: from config.json, a link on your account page, or a known path."""
-    if cfg["payhip"].get("library_url"):
-        return cfg["payhip"]["library_url"]
-    goto(page, "https://payhip.com/auth/login")
-    settle(page)
-    if "/auth/login" in urlparse(page.url).path or has_password_field(page):
-        raise NotLoggedIn()
-    found = page.evaluate(PAYHIP_FIND_LIBRARY_JS)
-    if found:
-        return found
-    for guess in ("https://payhip.com/library", "https://payhip.com/account/library",
-                  "https://payhip.com/customer/library", "https://payhip.com/purchases"):
-        resp = page.goto(guess, wait_until="domcontentloaded")
-        if resp and resp.ok and "/auth/login" not in urlparse(page.url).path:
-            return page.url
-    raise RuntimeError("couldn't find your Payhip library. If your account is in Creator mode, switch it to "
-                       "Customer (Account menu, Use Payhip as). Or open your library in a browser and put its "
-                       "address in payhip.library_url in config.json.")
 
 
 PAYHIP_SHOP_JS = r"""
@@ -520,8 +500,7 @@ def fetch_payhip(ctx, cfg, progress) -> list[dict]:
     your settings; a shop you aren't signed in to is noted and the others still count."""
     shops = payhip_shops(cfg)
     if not shops:
-        raise RuntimeError("Payhip keeps your purchases in each shop you bought from, not in one library. Add those "
-                           "shops in Settings (the shop's address is in your purchase email).")
+        raise RuntimeError(PAYHIP_NO_SHOPS)
     page = ctx.new_page()
     cards: dict[str, dict] = {}
     signed_out = []
@@ -553,10 +532,184 @@ def payhip_item(c: dict) -> dict:
                 creator_url=c["creator_url"], thumbnail=c["thumbnail"], url=c["url"], download_url=c["download_url"])
 
 
-FETCHERS = {"booth": fetch_booth, "gumroad": fetch_gumroad, "jinxxy": fetch_jinxxy, "payhip": fetch_payhip}
+# ----------------------------------------------------------------------------- itch.io
+#
+# itch.io keeps everything you've bought or claimed (from bundles, or "name your own price" projects) in your
+# library at itch.io/my-purchases: a card per project, each with a Download button that leads to the project's
+# download page, <creator>.itch.io/<project>/download/<key>. The key in that address opens the page for anyone who
+# has it, so it's kept like a sign-in: only in Hoard's private library list, and taken out of anything saved for
+# troubleshooting. The reader goes by those addresses rather than the page's layout. If it gets things wrong,
+# run: debug itch
+
+ITCH_LIBRARY = "https://itch.io/my-purchases"
 
 
-IMPORTABLE = ("booth", "jinxxy", "payhip")
+ITCH_JS = r"""
+() => {
+  const text = e => ((e && (e.innerText || e.textContent)) || '').replace(/\s+/g, ' ').trim();
+  const LANDMARKS = 'nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]';
+  const NOT_CREATORS = new Set(['www', 'static', 'img', 'api', 'itch', 'assets', 'cdn']);
+  // A creator's site (<creator>.itch.io), one of their projects (<creator>.itch.io/<project>), or a project's
+  // download page (<creator>.itch.io/<project>/download/<key>)
+  const parse = href => {
+    let u; try { u = new URL(href, location.href); } catch (e) { return null; }
+    const m = u.hostname.toLowerCase().replace(/\.$/, '').match(/^([a-z0-9][a-z0-9-]*)\.itch\.io$/);
+    if (u.protocol !== 'https:' || !m || NOT_CREATORS.has(m[1])) return null;
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (!segs.length) return { kind: 'creator', creator: m[1], url: u.origin };
+    const id = m[1] + '/' + segs[0].toLowerCase(), url = u.origin + '/' + segs[0];
+    if (segs.length === 1) return { kind: 'project', id, url };
+    if (segs.length === 3 && segs[1] === 'download' && /^[A-Za-z0-9_-]{6,}$/.test(segs[2]))
+      return { kind: 'download', id, url: url + '/download/' + segs[2] };
+    return null;
+  };
+  const links = [];
+  for (const a of document.querySelectorAll('a[href]')) {
+    if (a.closest(LANDMARKS)) continue;
+    const p = parse(a.getAttribute('href'));
+    if (p && p.kind !== 'creator') { a.setAttribute('data-hoard-project', p.id); links.push({ a, ...p }); }
+  }
+  // Yours: every project with a download page here. On a page with no download pages at all (a layout Hoard
+  // doesn't know), the project cards itch.io marks with an id, so the library still lists them.
+  const withDownload = new Set(links.filter(l => l.kind === 'download').map(l => l.id));
+  const owned = withDownload.size ? withDownload
+    : new Set(links.filter(l => l.a.closest('[data-game_id]')).map(l => l.id));
+  const cardOf = (a, id) => {   // the project's card: widen from its link while it's still about this one project
+    let c = a;
+    while (c.parentElement && c.parentElement !== document.body) {
+      const p = c.parentElement;
+      if (p.matches('main, [role="main"]')) break;
+      if ([...p.querySelectorAll('[data-hoard-project]')].some(x => x.getAttribute('data-hoard-project') !== id)) break;
+      c = p;
+    }
+    return c;
+  };
+  const picture = c => {   // itch.io loads pictures as you scroll: the address waits in data-lazy_src until then
+    const img = c.querySelector('a[data-hoard-project] img') || c.querySelector('img');
+    const src = img ? (img.getAttribute('data-lazy_src') || img.getAttribute('data-src') || img.currentSrc || img.getAttribute('src') || '') : '';
+    if (src && !src.startsWith('data:')) return src;
+    const bg = c.querySelector('[data-background_image]');
+    if (bg) return bg.getAttribute('data-background_image');
+    const styled = [c, ...c.querySelectorAll('[style*="background-image"]')]
+      .map(e => (e.getAttribute('style') || '').match(/url\(["']?([^"')]+)/)).find(Boolean);
+    return styled ? styled[1] : '';
+  };
+  const cards = new Map();
+  for (const l of links) {
+    if (!owned.has(l.id)) continue;
+    const old = cards.get(l.id);
+    if (old) { if (l.kind === 'download' && !old.download_url) old.download_url = l.url; continue; }
+    const c = cardOf(l.a, l.id);
+    const mine = links.filter(x => x.id === l.id && c.contains(x.a));
+    const img = c.querySelector('img');
+    const name = mine.filter(x => x.kind === 'project').map(x => text(x.a)).find(Boolean)
+      || text(c.querySelector('.game_title, .title')) || (img && img.alt) || l.id.split('/')[1];
+    const who = l.id.split('/')[0];
+    let creator = '', creatorUrl = 'https://' + who + '.itch.io';
+    for (const a of c.querySelectorAll('a[href]')) {
+      const p = parse(a.getAttribute('href'));
+      if (p && p.kind === 'creator' && p.creator === who && text(a)) { creator = text(a); creatorUrl = p.url; break; }
+    }
+    creator = creator || text(c.querySelector('.game_author')).replace(/^by\s+/i, '') || who;
+    const page = mine.find(x => x.kind === 'project'), dl = mine.find(x => x.kind === 'download');
+    cards.set(l.id, { id: l.id, name, creator, creator_url: creatorUrl, thumbnail: picture(c),
+                      url: page ? page.url : l.url.split('/download/')[0], download_url: dl ? dl.url : '' });
+  }
+  const next = [...document.querySelectorAll('a[rel="next"], a.next_page, .pager a, .pagination a')]
+    .find(a => /next|›|»/i.test(text(a) + ' ' + (a.getAttribute('rel') || '') + ' ' + (a.className || '')));
+  let nextUrl = null;
+  if (next) {
+    try { const u = new URL(next.getAttribute('href'), location.href); if (u.protocol === 'https:' && u.hostname === 'itch.io') nextUrl = u.href; } catch (e) {}
+  }
+  return { cards: [...cards.values()], next: nextUrl };
+}
+"""
+
+
+def itch_signed_out(page) -> bool:
+    """True when itch.io is showing its sign-in page instead of your library."""
+    u = urlparse(page.url)
+    if u.hostname == "itch.io" and u.path.rstrip("/") in ("/login", "/register"):
+        return True
+    return has_password_field(page)
+
+
+def read_itch_library(page, cfg: dict, progress) -> list[dict]:
+    """Every project in your itch.io library, as cards (see ITCH_JS): scrolls while more appear, and follows the
+    library's pages if it has any."""
+    delay = float(cfg.get("request_delay", 1.0))
+    goto(page, ITCH_LIBRARY)
+    settle(page, 1000)
+    if itch_signed_out(page):
+        raise NotLoggedIn("Not signed in to itch.io")
+    found: dict[str, dict] = {}
+    visited = {ITCH_LIBRARY}
+    for _ in range(200):   # numbered pages, if the library has them
+        quiet, nxt = 0, None
+        for _ in range(500):   # a library that loads more as you scroll
+            before = len(found)
+            result = page.evaluate(ITCH_JS)
+            for c in result["cards"]:
+                old = found.get(c["id"])
+                found[c["id"]] = {k: old.get(k) or c.get(k) for k in c} if old else c
+            nxt = result["next"] or nxt
+            progress(f"Library, {len(found)} items")
+            more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
+            if more.count() and more.first.is_visible() and more.first.is_enabled():
+                more.first.click()
+                settle(page, 500)
+                continue
+            page.mouse.wheel(0, 20000)
+            page.wait_for_timeout(900)
+            quiet = quiet + 1 if len(found) == before else 0
+            if quiet >= 3:
+                break
+        if not nxt or nxt in visited:
+            break
+        visited.add(nxt)
+        time.sleep(delay)
+        goto(page, nxt)
+        settle(page)
+    return list(found.values())
+
+
+def fetch_itch(ctx, cfg, progress) -> list[dict]:
+    """Every project in your itch.io library."""
+    page = ctx.new_page()
+    try:
+        cards = read_itch_library(page, cfg, progress)
+    finally:
+        page.close()
+    if not cards:
+        raise RuntimeError("found nothing in your itch.io library. If you do own things there, run the command: "
+                           "debug itch")
+    return [itch_item(c) for c in cards]
+
+
+def itch_item(c: dict) -> dict:
+    """Turn a card read from your itch.io library into a library item."""
+    return item("itch", c["id"], name=c["name"], creator=c["creator"], creator_url=c.get("creator_url"),
+                thumbnail=c.get("thumbnail"), url=c.get("url"), download_url=c.get("download_url"))
+
+
+FETCHERS = {"booth": fetch_booth, "gumroad": fetch_gumroad, "jinxxy": fetch_jinxxy, "payhip": fetch_payhip,
+            "itch": fetch_itch}
+
+
+# ----------------------------------------------------------------------------- saved pages
+#
+# When a store won't let Hoard's browser read your library (or, for Payhip, when you'd rather not sign in), you can
+# save the library pages from your own browser and import them. A library often spans several pages (Payhip keeps
+# one per shop), so any number are imported at once, read together in one browser with scripts off and no network.
+
+IMPORTABLE = ("booth", "jinxxy", "payhip", "itch")
+
+
+IMPORT_BASES = {"booth": "https://accounts.booth.pm/library", "jinxxy": JX_INVENTORY, "payhip": "https://payhip.com/",
+                "itch": ITCH_LIBRARY}
+
+
+SAVED_PAGE_TYPES = (".mhtml", ".mht", ".html", ".htm")
 
 
 def read_saved_page(filename: str, text: str) -> tuple[str, str | None, dict]:
@@ -569,7 +722,10 @@ def read_saved_page(filename: str, text: str) -> tuple[str, str | None, dict]:
             ctype = part.get_content_type()
             if ctype == "text/html" and page_html is None:
                 raw = part.get_payload(decode=True) or b""
-                page_html = raw.decode(part.get_content_charset() or "utf-8", "replace")
+                try:
+                    page_html = raw.decode(part.get_content_charset() or "utf-8", "replace")
+                except LookupError:   # a character set Python doesn't know
+                    page_html = raw.decode("utf-8", "replace")
                 location = location or part.get("Content-Location")
             elif ctype.startswith("image/") and part.get("Content-Location"):
                 images[part.get("Content-Location")] = (part.get_payload(decode=True) or b"", ctype)
@@ -586,23 +742,23 @@ def store_for_url(url: str | None) -> str | None:
     return next((s for s, sites in STORE_LINK_SITES.items() if any(host == h or host.endswith("." + h) for h in sites)), None)
 
 
-def import_saved_page(cfg: dict, store: str | None, filename: str, text: str, trust_shop: str | None = None) -> tuple[str, list[dict]]:
-    """Read a store page saved from your own browser and return (store, items).
-
-    The file is read offline: scripts are stripped and every network request is blocked. Images saved
-    inside a single-file (.mhtml) page are cached so the library can show them.
-    """
+def _prepare_import(cfg: dict, store: str | None, filename: str, text: str, trust_shops: set) -> dict:
+    """Which store a saved page is from, and the page ready to read: scripts stripped, anything that could run
+    removed, and its own address as the base for its links. Raises NewShop for a page from a Payhip shop that isn't
+    in your list (unless trust_shops names it), and ValueError for a page that can't be imported."""
+    if store not in (None, "", "auto") and store not in STORES:
+        raise ValueError("unknown store")
     page_html, source_url, images = read_saved_page(filename, text)
     detected = store_for_url(source_url)
     shop_page = "/b-account" in urlparse(source_url or "").path
     if shop_page and not detected and store in (None, "", "auto", "payhip"):
         # A Payhip shop's own library page, on the shop's own domain. A shop Hoard doesn't know yet is only added
-        # when you confirm its exact address (trust_shop): an address inside a file isn't enough on its own.
+        # when you confirm its exact address (trust_shops): an address inside a file isn't enough on its own.
         shop = clean_payhip_shop(source_url)
         if not shop:
             raise ValueError("that page's address isn't one Hoard can use as a Payhip shop")
         if shop not in payhip_shops(cfg):
-            if trust_shop != shop:
+            if shop not in trust_shops:
                 raise NewShop(shop)
             cfg["payhip"]["shops"] = list(dict.fromkeys((cfg["payhip"].get("shops") or []) + [shop]))
             apply_store_sites(cfg)
@@ -610,48 +766,124 @@ def import_saved_page(cfg: dict, store: str | None, filename: str, text: str, tr
     if not store or store == "auto":
         store = detected
         if not store:
-            raise ValueError("couldn't tell which store this page is from. Use Import page on that store's row in Stores.")
+            raise ValueError("couldn't tell which store this page is from. Use Import pages on that store's row in "
+                             "Stores.")
     elif detected and detected != store:
         raise ValueError(f"that page is from {STORES[detected]['label']}, not {STORES[store]['label']}")
     if store not in IMPORTABLE:
         raise ValueError(f"{STORES[store]['label']} doesn't need importing; its refresh reads everything")
-    label = STORES[store]["label"]
-    base = source_url or {"booth": "https://accounts.booth.pm/library", "jinxxy": JX_INVENTORY,
-                          "payhip": "https://payhip.com/"}[store]
+    base = source_url or IMPORT_BASES[store]
     page_html = re.sub(r"<script\b[^>]*>.*?</script>", "", page_html, flags=re.S | re.I)  # don't run the saved page
     head = re.search(r"<head[^>]*>", page_html, re.I)
     base_tag = f'<base href="{html.escape(base, quote=True)}">'
     page_html = page_html[:head.end()] + base_tag + page_html[head.end():] if head else base_tag + page_html
+    return {"store": store, "html": inert_html(page_html), "base": base, "shop_page": shop_page, "images": images}
 
-    with _playwright()() as p:
-        browser = p.chromium.launch()
-        try:
-            page = offline_page(browser)   # scripts off, no network: read the file, run nothing, contact nobody
-            page.set_content(inert_html(page_html), wait_until="domcontentloaded")
-            if store == "booth":
-                gift = "/gifts" in urlparse(base).path
-                library_url = base.split("?")[0]
-                items = [booth_item(b, gift, library_url) for b in page.evaluate(BOOTH_JS)]
-            elif store == "jinxxy":
-                seen = {}
-                for c in page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"]):
-                    seen.setdefault(c["key"], c)
-                items = [jinxxy_item(c) for c in seen.values()]
-            else:
-                items = [payhip_item(c) for c in page.evaluate(PAYHIP_SHOP_JS if shop_page else PAYHIP_CARDS_JS)["cards"]]
-        finally:
-            browser.close()
+
+def _read_import(browser, cfg: dict, prep: dict) -> list[dict]:
+    """The items on one prepared page (see _prepare_import), read offline, with the images saved inside it kept."""
+    store = prep["store"]
+    page = offline_page(browser)   # scripts off, no network: read the file, run nothing, contact nobody
+    try:
+        page.set_content(prep["html"], wait_until="domcontentloaded")
+        if store == "booth":
+            gift = "/gifts" in urlparse(prep["base"]).path
+            items = [booth_item(b, gift, prep["base"].split("?")[0]) for b in page.evaluate(BOOTH_JS)]
+        elif store == "jinxxy":
+            seen = {}
+            for c in page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"]):
+                seen.setdefault(c["key"], c)
+            items = [jinxxy_item(c) for c in seen.values()]
+        elif store == "itch":
+            items = [itch_item(c) for c in page.evaluate(ITCH_JS)["cards"]]
+        else:
+            items = [payhip_item(c) for c in page.evaluate(PAYHIP_SHOP_JS if prep["shop_page"] else PAYHIP_CARDS_JS)["cards"]]
+    finally:
+        page.context.close()
     if not items:
-        raise ValueError(f"no {label} items in that page. Save your library page itself, after everything "
-                         "on it has loaded (scroll to the bottom first).")
+        raise ValueError(f"no {STORES[store]['label']} items in that page. Save your library page itself, after "
+                         "everything on it has loaded (scroll to the bottom first).")
     for i in items:  # keep the images that came inside the file (plain raster images only)
-        if i.get("thumbnail") in images:
-            data, ctype = images[i["thumbnail"]]
+        if i.get("thumbnail") in prep["images"]:
+            data, ctype = prep["images"][i["thumbnail"]]
             if ctype not in IMAGE_TYPES:
                 continue
             THUMB_DIR.mkdir(parents=True, exist_ok=True)
             write_file_safely(THUMB_DIR / f"{hashlib.sha1(i['thumbnail'].encode()).hexdigest()}.{IMAGE_TYPES[ctype]}", data)
-    return store, items
+    return items
+
+
+def import_saved_pages(cfg: dict, pages, store: str | None = None, trust_shops=(), progress=lambda done, total, name: None) -> list[dict]:
+    """Read store pages saved from your own browser, (filename, text) each, and return one result per page, in order:
+
+    - {"filename", "store", "items"} for a page that was read,
+    - {"filename", "confirm_shop"} for a page from a Payhip shop that isn't in your list, unless trust_shops names
+      it: an address inside a file isn't trusted on its own, so the caller asks you first,
+    - {"filename", "error"} for a page that couldn't be imported. One bad page never stops the others.
+
+    Shops in trust_shops that a page comes from are added to cfg["payhip"]["shops"]; the caller saves the settings.
+    Every page is read in one browser, with scripts off and every network request blocked (see offline_page).
+    """
+    trusted = {s for s in (clean_payhip_shop(x) for x in trust_shops or ()) if s}
+    results: list[dict] = []
+    ready: list[tuple[dict, dict]] = []
+    for filename, text in pages:
+        result = {"filename": filename}
+        results.append(result)
+        try:
+            ready.append((result, _prepare_import(cfg, store, filename, text, trusted)))
+        except NewShop as e:
+            result["confirm_shop"] = e.shop
+        except Exception as e:   # a damaged or unexpected file: say so, and carry on with the rest
+            result["error"] = str(e) or type(e).__name__
+    if ready:
+        with _playwright()() as p:
+            browser = p.chromium.launch()
+            try:
+                for n, (result, prep) in enumerate(ready, 1):
+                    progress(n, len(ready), result["filename"])
+                    try:
+                        result.update(store=prep["store"], items=_read_import(browser, cfg, prep))
+                    except Exception as e:
+                        result.pop("store", None)
+                        result["error"] = str(e).splitlines()[0] if str(e) else type(e).__name__
+            finally:
+                browser.close()
+    return results
+
+
+def import_saved_page(cfg: dict, store: str | None, filename: str, text: str, trust_shop: str | None = None) -> tuple[str, list[dict]]:
+    """Read one store page saved from your own browser and return (store, items). Raises NewShop when the page is
+    from a Payhip shop you haven't added (and trust_shop isn't its exact address), and ValueError when it can't be
+    imported. See import_saved_pages."""
+    (result,) = import_saved_pages(cfg, [(filename, text)], store, [trust_shop] if trust_shop else [])
+    if "confirm_shop" in result:
+        raise NewShop(result["confirm_shop"])
+    if "error" in result:
+        raise ValueError(result["error"])
+    return result["store"], result["items"]
+
+
+def saved_pages_in(paths, limit: int = 2000) -> list[Path]:
+    """The saved pages among these files and folders (folders are searched, with everything in them), in order and
+    without repeats; at most limit."""
+    found: dict[Path, None] = {}
+    for path in paths:
+        path = Path(path)
+        if path.is_dir():
+            inside = []
+            for f in path.rglob("*"):
+                if f.suffix.lower() in SAVED_PAGE_TYPES and f.is_file():
+                    inside.append(f)
+                    if len(found) + len(inside) >= limit:
+                        break
+            for f in sorted(inside):
+                found.setdefault(f, None)
+        else:
+            found.setdefault(path, None)
+        if len(found) >= limit:
+            break
+    return list(found)[:limit]
 
 
 # ----------------------------------------------------------------------------- library data

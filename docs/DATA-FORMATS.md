@@ -15,7 +15,8 @@ against them (`validate_catalog_entry`) before writing, and leaves out any entry
   and have no `..`, `.` or empty parts, no drive letters, no `:` and none of `<>"\|?*`. `folder` is
   relative to the download folder; `files` are relative to `folder`.
 - **Links lead to the store.** `url` is `null` or an `https://` address on the asset's own store: `booth.pm`,
-  `gumroad.com`, `jinxxy.com` or `payhip.com`, or a subdomain of it (such as a Booth shop's `<shop>.booth.pm`),
+  `gumroad.com`, `jinxxy.com`, `payhip.com` or `itch.io`, or a subdomain of it (such as a Booth shop's
+  `<shop>.booth.pm`, or an itch.io creator's `<creator>.itch.io`),
   with no user name, password or port. These links are for people to open; Hoard never downloads from them.
 - **They're sealed.** Each file carries an `integrity` field (below), so an edit made by any other program
   is detectable.
@@ -61,7 +62,7 @@ An `<asset>`:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `store` | string | `Booth`, `Gumroad`, `Jinxxy` or `Payhip` |
+| `store` | string | `Booth`, `Gumroad`, `Jinxxy`, `Payhip` or `Itch` (itch.io). Skip an entry with a store you don't know: later versions may add stores |
 | `name` | string | Product name |
 | `creator` | string | Creator or shop name |
 | `folder` | string | The product's folder, e.g. `Booth/Kitsu Studio/Rusk Avatar Base` |
@@ -114,6 +115,8 @@ account, Hoard check every entry when they read it, and a damaged copy is kept a
 
 ## Version history
 
+- **3**, still, in 2.5.0: a new store, `Itch` (itch.io). Nothing else changed, so the version didn't; readers
+  that skip stores they don't know carry on as before.
 - **3** (1.6.2): the `integrity` seal; `url` must be an https address on the asset's own store.
 - **2** (1.6.1): `format` and `version` fields; the promises above are checked before writing.
 - **1** (1.5.0): `tags` (yours) and `suggested` in `tags.json`; `tags` and `suggested_tags` per asset.

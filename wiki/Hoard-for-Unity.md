@@ -19,6 +19,8 @@ assets came from.
 
 - The Hoard app, 2.3.1 or newer, with some downloads. Hoard doesn't need to be running.
 - Unity 2022.3, the version VRChat uses.
+- For assets from itch.io, which Hoard downloads from 2.5.0: the package's 0.1.3 or newer. Earlier ones leave
+  them out, since they only show stores they know.
 
 ## Installing
 

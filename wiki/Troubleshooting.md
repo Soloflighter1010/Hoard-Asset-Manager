@@ -65,8 +65,8 @@ still won't start: `.venv/bin/python -m playwright install-deps chromium` in Hoa
 Stores change their websites, and a reader can stop working until Hoard is updated.
 
 1. Check you're on the [latest version](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest).
-2. Meanwhile, you can usually import a page you saved yourself: see
-   [Stores](Stores#importing-a-saved-page).
+2. Meanwhile, you can usually import pages you saved yourself: see
+   [Stores](Stores#importing-saved-pages).
 3. Run `hoard-cli debug <store>` (or `hoard-cli probe jinxxy`). It saves the library page and a summary of what
    Hoard read into the `debug` folder in Hoard's app-data folder, with personal details removed.
 4. [Open an issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) and attach it, **after reading
@@ -75,13 +75,37 @@ Stores change their websites, and a reader can stop working until Hoard is updat
 ### Payhip keeps showing a bot check
 
 Complete it in the window Payhip opens in, and Hoard carries on (it waits up to 3 minutes). If Payhip still won't
-let Hoard in, import your library page yourself, and use the download-it-yourself page. See
+let Hoard in, save each shop's library page from your usual browser and import them all instead. See
 [Stores](Stores#payhip).
 
-### Payhip shows nothing
+### Payhip shows nothing, or only some of what I bought
 
-Payhip keeps purchases in each shop, so Hoard only sees the shops you've added. Add yours in **Settings** under
-**Payhip shops**.
+Payhip keeps purchases in each shop, each on pages of 15, so Hoard only sees the shops you've added, or the
+pages you've imported. Import every page of every shop's library (**Import a folder** takes them all at once),
+or add your shops in **Settings** under **Payhip shops** and refresh.
+
+### "Hoard doesn't download from Payhip"
+
+That's right: Hoard lists what you bought on Payhip, and you download it from Payhip. Open the product in your
+library and choose **Open download page**. See [Stores](Stores#payhip).
+
+### Some pages weren't imported
+
+When importing ends, Hoard lists each page it couldn't use, and why:
+
+- **"couldn't tell which store this page is from":** the page wasn't saved from a store's library, or was saved
+  as text only. Save the library page itself as **Webpage, Single File**, or import it from that store's row
+  in **Stores** (**Import pages**), which tells Hoard the store.
+- **"no ... items in that page":** the page was saved before it finished loading. Scroll to the bottom first,
+  then save it again.
+- **A Payhip shop you didn't add:** Hoard only adds a shop when you confirm it. Import the page again and choose
+  **OK** when Hoard asks, or add the shop in **Settings**.
+
+### itch.io skips some of my files
+
+Files the creator marked as a program for Windows, macOS, Linux or Android are game builds, skipped unless you
+turn off **Skip game builds** under itch.io in **Settings**. Files kept on another website (the summary says
+so) are downloaded from there, by you. A project from a bundle only counts once you've claimed it on itch.io.
 
 ### "Booth turned the direct download away"
 

@@ -24,6 +24,11 @@ windowed app are for Windows. Hoard for Unity works wherever Unity 2022.3 does.
 No. Hoard records what it downloaded and where, and only downloads what's new, plus files the creator has
 updated. See [Downloads](Downloads).
 
+## Which stores does Hoard work with?
+
+Booth, Gumroad, Jinxxy, Payhip and itch.io. Hoard lists what you own on all of them, and downloads from all but
+Payhip, where you download the files yourself from each product's download page. See [Stores](Stores).
+
 ## Where do my files go?
 
 A `Hoard` folder in your Documents, in `<Store>/<Creator>/<Product>` folders, unless you choose another folder in
