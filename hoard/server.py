@@ -24,7 +24,7 @@ from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog
 from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
-from .jobs import Jobs
+from .jobs import SYNC_CHOICES, Jobs, Schedule
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, WEB, default_downloads
@@ -48,12 +48,20 @@ KEYLESS_ACTIONS = ("/api/enter", "/api/show")
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
+TEXT_SIZES = (100, 115, 130, 150)   # percent
 MAX_IMPORT_FILES = 50   # saved pages in one request; the page sends more as several requests
 
 
 def font_path(name: str) -> Path | None:
     """One of the bundled font files, or None."""
     return WEB / "fonts" / name if name in FONT_FILES and (WEB / "fonts" / name).is_file() else None
+
+
+def display_settings(cfg: dict) -> dict:
+    """Text size and motion, as the pages apply them."""
+    d = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
+    return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
+            "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion"))}
 
 
 def public_settings(cfg: dict) -> dict:
@@ -63,6 +71,8 @@ def public_settings(cfg: dict) -> dict:
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
+        "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
+        "display": display_settings(cfg),
         "stores": {s: {"enabled": bool(cfg[s].get("enabled", True)),
                        **({"include_gifts": bool(cfg[s].get("include_gifts", True)),
                            "include_free": bool(cfg[s].get("include_free", True))} if s == "booth" else {}),
@@ -92,6 +102,19 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["offline_images"] = bool(body["offline_images"])
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
+    if "auto_sync_hours" in body:
+        if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
+            raise ValueError("Choose how often to sync from the list.")
+        change["auto_sync_hours"] = body["auto_sync_hours"]
+    if "display" in body:
+        given = body["display"] if isinstance(body["display"], dict) else {}
+        display = {}
+        if "text_size" in given:
+            if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
+                raise ValueError("Choose a text size from the list.")
+            display["text_size"] = given["text_size"]
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion") if k in given})
+        change["display"] = display
     if "request_delay" in body:
         try:
             delay = float(body["request_delay"])
@@ -162,6 +185,13 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index)
         self._index, self._index_lock = None, threading.Lock()
         self.updates = updater.Updates(cfg)
+        self.schedule = Schedule(cfg, self.jobs)
+
+    def start_schedule(self) -> threading.Event:
+        """Automatic syncs, while this server runs (the desktop app starts it). Set the returned event to stop."""
+        stop = threading.Event()
+        threading.Thread(target=self.schedule.run_forever, args=(stop,), daemon=True, name="schedule").start()
+        return stop
 
     def can_update(self) -> bool:
         """Can Hoard install an update itself? Only the installed Windows app, which can quit to let it run."""
@@ -303,7 +333,8 @@ class Handler(BaseHTTPRequestHandler):
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None})
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None,
+                               "display": display_settings(srv.cfg)})
         if path == "/api/status":
             return self._json({"job": srv.jobs.state, "stores": srv.lib.snapshot()[1]})
         if path == "/api/assets":
@@ -312,7 +343,7 @@ class Handler(BaseHTTPRequestHandler):
                 hidden = MarkStore().load()["hidden"]
                 index = {**index, "assets": [a for a in index["assets"] if a.get("tag_key") not in hidden]}
             return self._json({**index, "version": __version__, "job": srv.jobs.state, "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None})
+                               "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)})
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/update":

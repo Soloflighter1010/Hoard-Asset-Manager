@@ -4,6 +4,11 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 ## Downloading
 
 - **Sync** (top right) reads what you own from each store you use, then downloads anything new, as one job.
+- **Sync automatically** (in **Settings**, off unless you choose how often: every 6 or 12 hours, once a day or
+  once a week) does the same by itself while Hoard is open, counting from your last sync, whoever started it.
+  It leaves Payhip out (Payhip needs you there for its bot check), waits for any other job to finish, and
+  when you're offline it tries again 15 minutes later instead of marking your stores as unreachable. Its
+  progress shows like any sync, and **Stop** stops it. Hoard doesn't sync while it's closed.
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
   your Library list first. A store's **Download** button does one store.
 - **Download a copy** in an item's details (in the Library) downloads just that product.

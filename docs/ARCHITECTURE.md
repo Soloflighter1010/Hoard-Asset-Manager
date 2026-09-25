@@ -20,7 +20,8 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   library.py           reading what you own from each store; the library list
   downloader.py        downloading, the records of what's on disk, the catalog files, verify
   downloads.py         the Downloads view's index of what's on disk
-  jobs.py              background work, one job at a time: refresh, sign in or out, download, install the browser
+  jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
+                       browser; Schedule, the automatic syncs
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across
   marks.py             archive, hide and remove choices, and the hidden library's PIN
   server.py            the local server behind both views
@@ -264,6 +265,15 @@ bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`
    explicit file list. It makes the release as a draft, adds the Windows app, then publishes it with that
    version's changelog section. Published releases are immutable, and so is their tag: a failed run leaves a
    draft that running it again fills in. The wiki's Releasing page has the details.
+
+### Automatic syncs
+
+`jobs.Schedule` runs in the desktop app (`AppServer.start_schedule`, from `app.run_app`) and ticks once a minute.
+A sync is due when `auto_sync_hours` is one of `SYNC_CHOICES` (not 0), setup is done, no job is running, Hoard
+started over `FIRST_WAIT` ago, and `sync.json` (written as every sync starts, yours or automatic) is that old.
+It syncs the enabled stores except `UNATTENDED` (Payhip, which opens a visible window). When no store is
+reachable it waits `OFFLINE_RETRY` rather than recording errors on every store row. The job carries
+`scheduled: true`; open pages pick it up at their once-a-minute check-in.
 
 ### Updating
 

@@ -1,7 +1,9 @@
 """Work Hoard does in the background, one job at a time: refreshing, signing in and out, and downloading."""
 from __future__ import annotations
 
+import json
 import threading
+import time
 
 from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
 from .safety import store_link
@@ -10,9 +12,76 @@ from .common import Cancelled, NotLoggedIn, capture_log
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
+from .paths import data_dir
+from .safety import DataFileError, read_json_file, write_file_safely
 
 
 NO_BROWSER = ("itch",)   # read through an API with a key, rather than with a sign-in in a browser
+SYNC_CHOICES = (0, 6, 12, 24, 168)   # hours between automatic syncs; 0 = off
+UNATTENDED = ("payhip",)   # never synced automatically: Payhip needs a visible window, for its bot check
+OFFLINE_RETRY = 15 * 60    # an automatic sync that found no connection tries again this much later
+FIRST_WAIT = 2 * 60        # after Hoard starts, before an automatic sync that's due
+
+
+def _sync_file():
+    return data_dir() / "sync.json"
+
+
+def last_sync() -> float:
+    """When the last sync started (yours or an automatic one), or 0."""
+    try:
+        data = read_json_file(_sync_file()) if _sync_file().is_file() else {}
+    except (DataFileError, OSError):
+        return 0.0
+    last = data.get("last") if isinstance(data, dict) else None
+    return float(last) if isinstance(last, (int, float)) and last > 0 else 0.0
+
+
+def _record_sync() -> None:
+    try:
+        write_file_safely(_sync_file(), json.dumps({"last": time.time()}))
+    except OSError:
+        pass
+
+
+class Schedule:
+    """Automatic syncs, while Hoard is open: every auto_sync_hours after the last sync, whoever started it. Only
+    stores that can be read without you (Payhip is left out), only once setup is done, never while another job
+    runs, and not while offline (it tries again later, without marking your stores as unreachable)."""
+
+    def __init__(self, cfg: dict, jobs: "Jobs"):
+        self.cfg, self.jobs = cfg, jobs
+        self.not_before = time.time() + FIRST_WAIT
+
+    def stores(self) -> list[str]:
+        return [s for s in STORES if self.cfg[s].get("enabled", True) and s not in UNATTENDED]
+
+    def due(self, now: float | None = None) -> bool:
+        now = time.time() if now is None else now
+        hours = self.cfg.get("auto_sync_hours") or 0
+        return bool(hours in SYNC_CHOICES and hours and self.cfg.get("setup_done") and now >= self.not_before
+                    and not self.jobs.state["running"] and now - last_sync() >= hours * 3600 and self.stores())
+
+    def tick(self, now: float | None = None) -> bool:
+        """Start a sync if one is due. True when it started."""
+        now = time.time() if now is None else now
+        if not self.due(now):
+            return False
+        stores = self.stores()
+        if not any(reachable(s) for s in stores):
+            self.not_before = now + OFFLINE_RETRY
+            return False
+        started = self.jobs.start("sync", stores, skip_imported=False, scheduled=True)
+        if started:
+            print(f"Syncing by itself ({', '.join(STORES[s]['label'] for s in stores)})", flush=True)
+        return started
+
+    def run_forever(self, stop: threading.Event) -> None:
+        while not stop.wait(60):
+            try:
+                self.tick()
+            except Exception as e:   # never let the schedule die: say so, and try again next minute
+                print(f"Automatic sync: {type(e).__name__}: {e}", flush=True)
 
 
 # ----------------------------------------------------------------------------- background jobs
@@ -28,18 +97,19 @@ class Jobs:
         self.stop = threading.Event()
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
-                      "log": [], "report": None, "sync": False}
+                      "log": [], "report": None, "sync": False, "scheduled": False}
 
     def _set(self, **kw):
         """Update the job state the page polls."""
         self.state.update(kw)
 
-    def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None) -> bool:
-        """Start a job in the background. False when one is already running."""
+    def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
+              scheduled: bool = False) -> bool:
+        """Start a job in the background. False when one is already running. scheduled: an automatic sync."""
         if not self.busy.acquire(blocking=False):
             return False
         self.stop.clear()
-        self.state.update(error=None, log=[], report=None)
+        self.state.update(error=None, log=[], report=None, scheduled=scheduled)
         if task == "download":
             target = lambda s: self._download(s, only)  # noqa: E731
         elif task == "sync":
@@ -66,7 +136,7 @@ class Jobs:
             why = browser_problem(e) or f"Stopped: {e}"
             self._set(message=why, error=why)
         finally:
-            self._set(running=False, task=None, store=None)
+            self._set(running=False, task=None, store=None, scheduled=False)
             self.busy.release()
 
     def open_link(self, url: str) -> str | None:
@@ -102,6 +172,7 @@ class Jobs:
     def _sync(self, stores: list[str]) -> None:
         """Sync: read what you own from each store, then download anything new, as one job."""
         self.state["sync"] = True
+        _record_sync()
         try:
             self._refresh(stores, skip_imported=True)
             if self.stop.is_set():

@@ -249,6 +249,16 @@ a.ghost { height: 42px; }
   main { padding: 18px 16px 48px; }
   .stores { top: 12px; right: 16px; }
 }
+/* the item whose details are open */
+.slot[aria-current="true"] .art { outline: 3px solid var(--gold); outline-offset: 3px; }
+.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold); }
+/* something you own on more than one store: its spine stripes their colours */
+.notch.dup { height: 7px; background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px); }
+/* Pause animated pictures: a still of the first frame */
+canvas.still { width: 100%; height: 100%; display: block; }
+/* Reduce motion (Settings), as well as the system's own setting below */
+body.less-motion *, body.less-motion *::before, body.less-motion *::after { animation: none !important; transition: none !important; }
+body.less-motion .slot:hover .art { transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .detail, .detail.open, .toast, .art { transition: none; }
   .slot:hover .art { transform: none; }
@@ -555,6 +565,25 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
     what you bought on Payhip; you download it from Payhip yourself.</p>
   <h3>Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
+  <h3>Sync automatically</h3>
+  <select id="setAutoSync" aria-label="Sync automatically">
+    <option value="0">Off: only when I choose Sync</option>
+    <option value="6">Every 6 hours</option>
+    <option value="12">Every 12 hours</option>
+    <option value="24">Once a day</option>
+    <option value="168">Once a week</option>
+  </select>
+  <p class="hint">While Hoard is open, it syncs by itself this often: it reads your stores and downloads anything
+    new or updated, counting from your last sync. Payhip is left out, since it needs you there for its bot check.</p>
+  <h3>Accessibility</h3>
+  <label class="check">Text size
+    <select id="setTextSize" aria-label="Text size">
+      <option value="100">Normal</option><option value="115">Larger</option>
+      <option value="130">Large</option><option value="150">Largest</option>
+    </select></label>
+  <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
+  <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
+  <p class="hint">Motion is also reduced when your computer's settings ask for less of it.</p>
   <h3>Browser for store sign-ins</h3>
   <select id="setBrowser" aria-label="Browser for store sign-ins">
     <option value="">Automatic (Microsoft Edge on Windows)</option>
@@ -712,6 +741,46 @@ function ago(iso) {
   const [n, u] = s < 3600 ? [s / 60, "minute"] : s < 86400 ? [s / 3600, "hour"] : [s / 86400, "day"];
   const r = Math.round(n); return `${r} ${u}${r === 1 ? "" : "s"} ago`;
 }
+/* ---------- highlights and accessibility */
+const STRIPE_STORES = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
+// A tile's store spine; for something you own on more than one store, striped with the other store's colour.
+function notch(store, others) {
+  const other = (others || []).find(o => STRIPE_STORES.includes(o) && o !== store);
+  return other ? `<i class="notch ${store} dup" style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"></i>`;
+}
+// The item whose details are open stays marked in the grid.
+function markCurrent(selector) {
+  for (const s of document.querySelectorAll('.slot[aria-current="true"]')) s.removeAttribute("aria-current");
+  const slot = selector && document.querySelector(selector);
+  if (slot) slot.setAttribute("aria-current", "true");
+}
+// Text size, Reduce motion and Pause animated pictures, from Settings.
+let PAUSE = false;
+function applyDisplay(d) {
+  if (!d) return;
+  document.documentElement.style.zoom = d.text_size && d.text_size !== 100 ? String(d.text_size / 100) : "";
+  document.body.classList.toggle("less-motion", !!d.reduce_motion);
+  if (!!d.pause_animations === PAUSE) return;
+  PAUSE = !!d.pause_animations;
+  if (PAUSE) document.querySelectorAll(".art img, .d-art img").forEach(freeze);
+  else for (const c of document.querySelectorAll("canvas.still")) c.replaceWith(c.moving);
+}
+// Swap a picture for a still of the frame it's showing (the first, when it's just loaded), drawn the way the
+// picture is: filling a tile, or whole in the details.
+function freeze(img) {
+  if (!PAUSE || !img.complete || !img.naturalWidth || !img.closest(".art, .d-art")) return;
+  const w = img.clientWidth, h = img.clientHeight;
+  if (!w || !h) return;
+  const dpr = window.devicePixelRatio || 1, c = document.createElement("canvas");
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const scale = (img.closest(".art") ? Math.max : Math.min)(c.width / img.naturalWidth, c.height / img.naturalHeight);
+  const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+  c.getContext("2d").drawImage(img, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+  c.className = "still"; c.moving = img; c.setAttribute("aria-hidden", "true");
+  img.replaceWith(c);
+}
+document.addEventListener("load", e => { if (e.target.tagName === "IMG") freeze(e.target); }, true);
+
 let toastTimer;
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -732,6 +801,7 @@ async function load() {
     DATA = await r.json(); DATA.error = null;
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
     if ($("#updateNote")) showUpdate();
+    applyDisplay(DATA.display);
     for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
   } catch (e) {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
@@ -809,8 +879,9 @@ function renderStores() {
 }
 function renderGrid(list) {
   $("#grid").innerHTML = list.map(a =>
-    `<button class="slot" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}">` +
-      `<span class="art">${thumb(a)}<i class="notch ${a.store}"></i><i class="tick" aria-hidden="true"></i>` +
+    `<button class="slot" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
+      `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
+      `<span class="art">${thumb(a)}${notch(a.store, a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span>` +
       `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`).join("");
   const empty = $("#empty");
@@ -917,6 +988,7 @@ function openStores(open) {
 /* ---------- detail */
 function showDetail(a, focus = true) {
   openKey = a.key;
+  markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
   const by = storeUrl(a.store, a.creator_url) ? `<a href="${esc(storeUrl(a.store, a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
   const extra = [a.variants && esc(a.variants), a.gift && "gift", a.archived && "archived on Gumroad"].filter(Boolean).join(", ");
   const store = label(a.store);
@@ -948,7 +1020,7 @@ function closeDetail() {
   if (!openKey) return;
   $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   const back = document.querySelector(`.slot[data-key="${CSS.escape(openKey)}"]`) || lastFocus;
-  openKey = null; if (back) back.focus();
+  openKey = null; markCurrent(null); if (back) back.focus();
 }
 
 /* ---------- URL state */
@@ -1444,6 +1516,10 @@ async function openSettings(open) {
   $("#setUpdates").checked = SETTINGS.check_for_updates;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
+  $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
+  $("#setTextSize").value = String(SETTINGS.display.text_size);
+  $("#setPause").checked = SETTINGS.display.pause_animations;
+  $("#setMotion").checked = SETTINGS.display.reduce_motion;
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
     `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
@@ -1458,12 +1534,16 @@ async function saveSettings() {
   const body = { root: root === SETTINGS.default_root ? "" : root, offline_images: $("#setOffline").checked,
                  check_for_updates: $("#setUpdates").checked,
                  browser_channel: $("#setBrowser").value, stores: {},
+                 auto_sync_hours: Number($("#setAutoSync").value),
+                 display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
+                            reduce_motion: $("#setMotion").checked },
                  payhip_shops: $("#setShops").value.split("\n").map(x => x.trim()).filter(Boolean) };
   for (const c of document.querySelectorAll("#setStores [data-set-store]")) {
     (body.stores[c.dataset.setStore] ||= {})[c.dataset.opt] = c.checked;
   }
   const r = await apiPost("/api/settings", body);
   if (!r.ok) { toast(r.data.error || "Your settings weren't saved."); return; }
+  applyDisplay(r.data.settings.display);
   closeSettings();
   toast("Settings saved.");
   T.reload();
@@ -1585,7 +1665,13 @@ function wireApp() {
   });
   pollDownload();  // a download started from the other view, or before this page opened
   // Every open page checks in once a minute: when Hoard runs in the browser, it stops once none has for a while.
-  setInterval(() => { api("/api/status", { cache: "no-store" }).catch(() => {}); }, 60000);
+  // It also brings up a sync Hoard started by itself (Settings, Sync automatically).
+  setInterval(async () => {
+    try {
+      const job = (await (await api("/api/status", { cache: "no-store" })).json()).job || {};
+      if (job.running && job.sync && !dlActive) pollDownload();
+    } catch (e) { /* not running: the next check-in says so */ }
+  }, 60000);
   $("#quitHoard").addEventListener("click", async () => {
     const r = await apiPost("/api/quit");
     if (!r.ok) { toast(r.data.error || "Hoard didn't quit."); return; }

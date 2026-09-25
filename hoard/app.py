@@ -176,6 +176,7 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         from . import updater
         updater.tidy()
         srv.updates.check_in_background()
+        srv.start_schedule()
         from .safety import write_file_safely
         write_file_safely(running_file(), json.dumps({"url": url, "token": token, "pid": os.getpid()}))
         if os.name == "posix":

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.8.0
+
+- **Sync automatically.** In **Settings**, choose every 6 or 12 hours, once a day or once a week (it's off unless
+  you do). While Hoard is open, it syncs by itself that often, counting from your last sync, whoever started
+  it: it reads your stores and downloads anything new or updated. Payhip is left out, since it needs you there
+  for its bot check. It waits for any other job, and when you're offline it tries again 15 minutes later
+  instead of marking every store as unreachable. An open page shows its progress, and **Stop** stops it.
+- **The open item stays marked.** While an item's details are open, its tile is outlined in gold, in both
+  views, and screen readers hear it as the current item.
+- **Owned twice, striped.** Something you own on more than one store has a spine striped in both stores'
+  colours, and its label says where else you own it.
+- **Accessibility settings,** in **Settings**, for both views:
+  - **Text size:** Normal, Larger, Large or Largest.
+  - **Pause animated pictures:** animated product pictures show as a still of their first frame.
+  - **Reduce motion:** no sliding panels, lifting tiles or animated progress, as when your computer asks for
+    less motion (which Hoard already followed).
+
 ## 2.7.0
 
 - **Hoard updates itself.** **Settings** has a new **Updates** section. **Check now** asks GitHub whether there's
