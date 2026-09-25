@@ -1,0 +1,54 @@
+name: Wiki
+
+# Publishes wiki/ to this repository's GitHub wiki whenever it changes on main, or by hand. The pages are written
+# and reviewed here like the code, so the wiki describes what's on main. Each publish replaces every page, so edit
+# them in wiki/, not on GitHub.
+#
+# Once, before the first run: open the repository's Wiki tab and save any first page. GitHub only creates the
+# wiki's storage when its first page is saved.
+#
+# The wiki is a git repository of its own, published with git and this job's own token: no third-party actions.
+# It only runs for main, never for a pull request, so no unreviewed change ever holds the token.
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["wiki/**", ".github/workflows/wiki.yml"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: wiki
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push to the wiki, which belongs to the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Publish wiki/ to the wiki
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # the token goes in a header for each command, never into a saved address or config
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          if ! git -c http.extraheader="$auth" clone --quiet "https://github.com/$GITHUB_REPOSITORY.wiki.git" site; then
+            echo "::error::Couldn't open the wiki. If it has no pages yet, open the Wiki tab, save any first page, then run this again."
+            exit 1
+          fi
+          find site -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +   # a page removed from wiki/ goes too
+          cp -R wiki/. site/
+          cd site
+          git add --all
+          if git diff --cached --quiet; then
+            echo "The wiki already matches wiki/."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Publish the wiki from ${GITHUB_SHA:0:7}"
+          git -c http.extraheader="$auth" push --quiet origin HEAD

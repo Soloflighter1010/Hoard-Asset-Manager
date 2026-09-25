@@ -42,8 +42,10 @@ Packages/, ProjectSettings/, Assets/, source.json, Website/   VRChat's template-
                        package; build-listing.yml builds the VCC listing and its page (Website/) with VRChat's
                        package-list-action, pinned, from every release
 tests/                 security tests, run on every change
-.github/workflows/     check.yml runs the tests and the build; release.yml publishes tagged versions
+.github/workflows/     check.yml runs the tests and the build; release.yml publishes tagged versions; wiki.yml
+                       publishes wiki/ to the repository's GitHub wiki
 docs/                  this guide and the others
+wiki/                  the wiki's pages, written and reviewed here (tests/test_wiki.py checks their links and facts)
 ```
 
 The two pages share one design system and several blocks of script (tags, settings, downloading), each
@@ -247,10 +249,12 @@ bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`
 
 1. Raise `__version__` in `hoard/__init__.py` and add a
    `## <version>` section to `CHANGELOG.md`.
-2. Push a `v<version>` tag. `release.yml` runs `scripts/build_release.py`, which checks the versions,
-   compiles the Python and builds the three zips from an explicit file list, then publishes a release
-   with that version's changelog section. To rebuild the release for an existing tag, use
-   **Actions → Release → Run workflow**.
+2. Run **Actions → Release → Run workflow** with the tag (`v<version>`), or push the tag. `release.yml`
+   makes a tag that doesn't exist yet (after checking it matches `__version__`) and runs
+   `scripts/build_release.py`, which checks the versions, compiles the Python and builds the zips from an
+   explicit file list. It makes the release as a draft, adds the Windows app, then publishes it with that
+   version's changelog section. Published releases are immutable, and so is their tag: a failed run leaves a
+   draft that running it again fills in. The wiki's Releasing page has the details.
 
 ## Conventions
 
