@@ -21,7 +21,7 @@ from .common import NotLoggedIn, log, now_iso
 from .library import DOWNLOADABLE, STORES
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
-from .paths import PROBE_DIR
+from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, vault
 from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagStore, clean_tag, tag_key
@@ -1446,12 +1446,32 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     }), indent=2, ensure_ascii=False), root)
 
 
+def reseal_catalog(cfg: dict, root: Path) -> str | None:
+    """If catalog.json isn't sealed with this install's key (Hoard on another computer, an earlier install, a Hoard
+    whose files Windows keeps separately, or an edit), rebuild it from the store records, which seals it again.
+    Returns what its seal was, if it was rebuilt; None if it was already fine or there's no catalog."""
+    path = root / "catalog.json"
+    if not path.is_file():
+        return None
+    try:
+        status = check_seal(read_json_file(path))
+    except (DataFileError, OSError, ValueError):
+        status = "unreadable"
+    if status == "sealed":
+        return None
+    build_catalog(cfg, root)
+    log(f"catalog.json was {status}: rebuilt from the store records and sealed with this computer's key.")
+    return status
+
+
 def cmd_verify(cfg: dict, root: Path) -> int:
     """Check the seal on every data file in the download folder, then rebuild the catalog files. 1 if any were changed."""
     labels = {"sealed": "fine", "unsealed": "not sealed yet (saved by an older version; sealed on the next sync)",
               "foreign": "sealed by Hoard on another computer",
               "changed": "CHANGED by something other than Hoard"}
     changed = 0
+    if store_python():
+        log(STORE_PYTHON_NOTE)
     files = [root / d / "_manifest.json" for d in STORE_DIRS.values()] + [root / "catalog.json", root / "tags.json"]
     files += sorted(root.glob("*/*/*/asset.json"))
     counts: Counter = Counter()

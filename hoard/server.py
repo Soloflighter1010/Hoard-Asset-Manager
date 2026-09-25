@@ -22,12 +22,12 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import __version__, itch, updater, vault
 from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import collect_catalog
+from .downloader import collect_catalog, reseal_catalog
 from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
 from .jobs import SYNC_CHOICES, Jobs, Schedule
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
-from .paths import LIBRARY_FILE, WEB, default_downloads
+from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
                      open_under, safe_join, store_sites, UnsafePath)
 from .app import token_matches
@@ -617,6 +617,19 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True}, 202)
 
 
+def reseal_in_background(srv, cfg: dict) -> None:
+    """At startup: if the downloads folder's catalog.json isn't sealed with this install's key, rebuild and seal it
+    (the Unity window reads it). Skipped when a job is already running: that job rebuilds the catalog anyway."""
+    if not srv.jobs.busy.acquire(blocking=False):
+        return
+    try:
+        reseal_catalog(cfg, root_dir(cfg))
+    except Exception as e:   # never stops Hoard from starting
+        print(f"Couldn't check catalog.json's seal: {e}")
+    finally:
+        srv.jobs.busy.release()
+
+
 def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool = True, tls_cert: str | None = None,
           tls_key: str | None = None, plain_http: bool = False, config_path: Path | None = None,
           on_ready=None) -> None:
@@ -635,6 +648,9 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
         if not tls:
             print("This is plain HTTP: only use it where the connection is already encrypted, such as over Tailscale.")
     print(f"Hoard {__version__}: {url}   (library: {len(srv.lib.data['items'])} items; downloads: {root_dir(cfg)})")
+    if store_python():
+        print(STORE_PYTHON_NOTE)
+    threading.Thread(target=reseal_in_background, args=(srv, cfg), name="hoard-reseal", daemon=True).start()
     if on_ready:   # the desktop app: it opens its window with a one-time link, and never logs the key
         on_ready(url, srv)
     else:

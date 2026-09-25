@@ -1255,6 +1255,96 @@ class CommandLine(unittest.TestCase):
             self.assertIn("usage", out.getvalue().lower(), cmd)
 
 
+class CatalogSeal(unittest.TestCase):
+    """The Unity window reads catalog.json: when it isn't sealed with this install's key, Hoard seals it again."""
+
+    def setUp(self):
+        from hoard import safety
+        self.safety = safety
+        self.root = Path(tempfile.mkdtemp())
+        self.cfg = {**config.load_config(), "root": str(self.root)}
+
+    def catalog(self, key: bytes | None = None, text: str | None = None) -> Path:
+        path = self.root / "catalog.json"
+        if text is not None:
+            path.write_text(text, "utf-8")
+            return path
+        saved = self.safety._integrity_key
+        if key is not None:
+            self.safety._integrity_key = key
+        try:
+            path.write_text(json.dumps(self.safety.seal({"format": "hoard-catalog", "version": 3, "assets": []})), "utf-8")
+        finally:
+            self.safety._integrity_key = saved
+        return path
+
+    def status(self) -> str:
+        return self.safety.check_seal(json.loads((self.root / "catalog.json").read_text("utf-8")))
+
+    def test_sealed_elsewhere_is_sealed_again(self):
+        self.catalog(bytes(range(32)))   # another key: another computer, or Hoard on Store Python
+        self.assertEqual(self.status(), "foreign")
+        self.assertEqual(downloader.reseal_catalog(self.cfg, self.root), "foreign")
+        self.assertEqual(self.status(), "sealed")
+
+    def test_already_sealed_is_left_alone(self):
+        path = self.catalog()
+        before = path.stat().st_mtime_ns
+        self.assertIsNone(downloader.reseal_catalog(self.cfg, self.root))
+        self.assertEqual(path.stat().st_mtime_ns, before)
+
+    def test_unreadable_or_missing(self):
+        self.catalog(text="{not json")
+        self.assertEqual(downloader.reseal_catalog(self.cfg, self.root), "unreadable")
+        self.assertEqual(self.status(), "sealed")
+        (self.root / "catalog.json").unlink()
+        self.assertIsNone(downloader.reseal_catalog(self.cfg, self.root))
+
+    def test_at_startup(self):
+        self.catalog(bytes(range(32)))
+        ready = threading.Event()
+        state = {}
+        threading.Thread(target=server.serve, daemon=True, kwargs=dict(
+            cfg=self.cfg, port=0, open_browser=False,
+            on_ready=lambda url, srv: (state.update(srv=srv), ready.set()))).start()
+        self.assertTrue(ready.wait(20))
+        try:
+            for _ in range(100):
+                if self.status() == "sealed":
+                    break
+                time.sleep(0.1)
+            self.assertEqual(self.status(), "sealed", "opening Hoard seals the catalog again")
+        finally:
+            state["srv"].shutdown()
+            state["srv"].server_close()
+
+    def test_not_while_a_job_runs(self):
+        self.catalog(bytes(range(32)))
+        srv = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False)
+        try:
+            srv.jobs.busy.acquire()
+            server.reseal_in_background(srv, self.cfg)
+            self.assertEqual(self.status(), "foreign", "a running job rebuilds the catalog itself")
+            srv.jobs.busy.release()
+            server.reseal_in_background(srv, self.cfg)
+            self.assertEqual(self.status(), "sealed")
+        finally:
+            srv.server_close()
+
+    def test_store_python_is_recognised(self):
+        from unittest import mock
+        store = r"C:\Users\sam\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe"
+        org = r"C:\Users\sam\AppData\Local\Programs\Python\Python312\python.exe"
+        with mock.patch.object(paths.sys, "platform", "win32"):
+            with mock.patch.object(paths.sys, "executable", store):
+                self.assertTrue(paths.store_python())
+            with mock.patch.object(paths.sys, "executable", org), mock.patch.object(paths.sys, "prefix", org), \
+                 mock.patch.object(paths.sys, "base_prefix", org):
+                self.assertFalse(paths.store_python())
+        with mock.patch.object(paths.sys, "platform", "linux"), mock.patch.object(paths.sys, "executable", store):
+            self.assertFalse(paths.store_python())
+
+
 if __name__ == "__main__":
     unittest.main()
 

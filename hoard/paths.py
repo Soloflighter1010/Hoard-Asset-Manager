@@ -27,6 +27,22 @@ def data_dir() -> Path:
     return base / "Hoard"
 
 
+def store_python() -> bool:
+    """Is this Hoard running on Microsoft Store Python? Windows keeps a Store app's AppData separately (its writes
+    go to a private copy under AppData\\Local\\Packages), so that Hoard has its own settings and sealing key,
+    apart from the installed Hoard app and the Unity window."""
+    if sys.platform != "win32":
+        return False
+    where = f"{sys.executable} {sys.prefix} {getattr(sys, 'base_prefix', '')}"
+    return "PythonSoftwareFoundation.Python" in where or "\\WindowsApps\\" in where
+
+
+STORE_PYTHON_NOTE = ("This Hoard is running on Microsoft Store Python. Windows keeps its files apart from the installed "
+                     "Hoard app's (a private copy of AppData), so its settings, sign-ins and sealing key are separate, "
+                     "and the Unity window may call its catalog 'sealed elsewhere'. Use the installed Hoard app, or "
+                     "Python from python.org, to share one set.")
+
+
 DATA = data_dir()
 HERE = DATA                                    # relative paths in settings are taken from here
 CONFIG_FILE = DATA / "config.json"
