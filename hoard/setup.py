@@ -6,32 +6,17 @@ does is also available on its own, so it can be run again from Settings at any t
 """
 from __future__ import annotations
 
-import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from .browser import _cookie_hosts, _on_sites, _playwright, default_channel, profile_dir, STORE_SITES
+from .browser import _cookie_hosts, _on_sites, _playwright, channel_installed, chosen_channel, profile_dir, STORE_SITES
 from .config import payhip_shops, root_dir, save_config
 from .library import STORES, Library
 from .paths import LIBRARY_FILE, default_downloads
 from .safety import DataFileError, read_json_file
 
 BROWSER_NAMES = {"msedge": "Microsoft Edge", "chrome": "Google Chrome", "chromium": "Hoard's own browser"}
-
-
-def channel_installed(channel: str) -> bool:
-    """Is Microsoft Edge or Google Chrome installed where Playwright looks for it?"""
-    if sys.platform == "win32":
-        folders = {"msedge": ("Microsoft", "Edge", "Application", "msedge.exe"),
-                   "chrome": ("Google", "Chrome", "Application", "chrome.exe")}[channel]
-        bases = (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA"))
-        return any(b and Path(b, *folders).is_file() for b in bases)
-    if sys.platform == "darwin":
-        app = {"msedge": "Microsoft Edge", "chrome": "Google Chrome"}[channel]
-        return Path(f"/Applications/{app}.app/Contents/MacOS/{app}").is_file()
-    return bool(shutil.which({"msedge": "microsoft-edge", "chrome": "google-chrome"}[channel]))
 
 
 def own_browser_installed() -> bool:
@@ -45,15 +30,17 @@ def own_browser_installed() -> bool:
 
 def browser_status(cfg: dict) -> dict:
     """Which browser Hoard will use to sign in to stores, and whether it's ready."""
-    channel = cfg.get("browser_channel") or default_channel()
-    if channel in ("msedge", "chrome"):
-        ready = channel_installed(channel)
-        return {"channel": channel, "name": BROWSER_NAMES[channel], "ready": ready, "can_install": not ready,
-                "note": "" if ready else f"{BROWSER_NAMES[channel]} isn't installed. Install Hoard's own browser instead."}
+    channel = chosen_channel(cfg)
+    if channel in ("msedge", "chrome") and channel_installed(channel):
+        return {"channel": channel, "name": BROWSER_NAMES[channel], "ready": True, "can_install": False, "note": ""}
+    # Hoard's own browser: chosen, or standing in for a chosen browser that isn't installed (use_channel)
     ready = own_browser_installed()
     note = ""
+    if channel != "chromium":
+        note = (f"{BROWSER_NAMES[channel]} isn't installed on this computer, so Hoard uses its own browser"
+                + ("." if ready else " once it's installed."))
     if not ready and sys.platform.startswith("linux"):
-        note = "On Linux the browser may also need system libraries: python -m playwright install-deps chromium"
+        note += (" " if note else "") + "On Linux the browser may also need system libraries: python -m playwright install-deps chromium"
     return {"channel": "chromium", "name": BROWSER_NAMES["chromium"], "ready": ready, "can_install": not ready, "note": note}
 
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.5.1
+
+- **Hoard's own browser:** when **Settings** names Microsoft Edge or Google Chrome and it isn't installed, Hoard
+  now uses its own browser instead. Setup offered to install it for that case, but afterwards still said the
+  chosen browser "isn't installed", and signing in failed. Installing it is now also written to `hoard.log`.
+
 ## 2.5.0
 
 Payhip becomes a library Hoard reads, saved pages can be imported in bulk, and itch.io joins.

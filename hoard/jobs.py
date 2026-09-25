@@ -86,10 +86,12 @@ class Jobs:
             lines.append(line)
             del lines[:-40]
             self._set(message=line, log=lines[-20:])
+            print(f"Installing the browser: {line}", flush=True)   # in hoard.log too, for when it goes wrong
         try:
             install_browser(progress)
         except RuntimeError as e:   # already a plain explanation
             why = str(e)[:1].upper() + str(e)[1:]
+            print(why, flush=True)
             self._set(message=why, error=why)
             return
         self._set(message="Hoard's browser is installed.")

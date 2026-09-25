@@ -297,14 +297,35 @@ def _on_sites(host: str, sites: list[str]) -> bool:
     return any(host == s or host.endswith("." + s) for s in sites)
 
 
+def channel_installed(channel: str) -> bool:
+    """Is Microsoft Edge or Google Chrome installed where Playwright looks for it?"""
+    if sys.platform == "win32":
+        folders = {"msedge": ("Microsoft", "Edge", "Application", "msedge.exe"),
+                   "chrome": ("Google", "Chrome", "Application", "chrome.exe")}[channel]
+        bases = (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA"))
+        return any(b and Path(b, *folders).is_file() for b in bases)
+    if sys.platform == "darwin":
+        app = {"msedge": "Microsoft Edge", "chrome": "Google Chrome"}[channel]
+        return Path(f"/Applications/{app}.app/Contents/MacOS/{app}").is_file()
+    return bool(shutil.which({"msedge": "microsoft-edge", "chrome": "google-chrome"}[channel]))
+
+
 def default_channel() -> str:
     """The browser Hoard uses unless you choose one: Microsoft Edge on Windows, where every PC has it and Windows
     Update keeps it patched; otherwise the Chromium that comes with Playwright."""
-    if sys.platform == "win32":
-        for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
-            if base and (Path(base) / "Microsoft" / "Edge" / "Application" / "msedge.exe").is_file():
-                return "msedge"
-    return "chromium"
+    return "msedge" if sys.platform == "win32" and channel_installed("msedge") else "chromium"
+
+
+def chosen_channel(cfg: dict) -> str:
+    """The browser you chose in Settings (or the automatic one)."""
+    return cfg.get("browser_channel") or default_channel()
+
+
+def use_channel(cfg: dict) -> str:
+    """The browser Hoard actually starts: the one you chose, or, when that one isn't installed on this computer,
+    Hoard's own. (Setup offers to install Hoard's own for exactly that case, so it has to be the one used.)"""
+    channel = chosen_channel(cfg)
+    return channel if channel == "chromium" or channel_installed(channel) else "chromium"
 
 
 def _launch(p, cfg: dict, profile: Path, headless: bool):
@@ -323,7 +344,7 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
                 "unlock one (GNOME Keyring, KeePassXC with Secret Service turned on, or KWallet), then try again. "
                 "On a computer without a desktop you can instead set \"allow_unprotected_signins\": true in "
                 "config.json; sign-ins are then protected only by your user account's folder permissions.")
-    channel = cfg.get("browser_channel") or default_channel()
+    channel = use_channel(cfg)
     if channel != "chromium":
         kwargs["channel"] = channel
     return p.chromium.launch_persistent_context(**kwargs)
