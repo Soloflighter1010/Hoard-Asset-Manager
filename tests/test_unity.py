@@ -120,7 +120,7 @@ class UnityCore(unittest.TestCase):
         import re
         expected = []
         for meta in PACKAGE.rglob("*.meta"):
-            guid = re.search(r"^guid: ([0-9a-f]{32})$", meta.read_text("utf-8"), re.M).group(1)
+            guid = re.search(r"^guid: ([0-9a-f]{32})\r?$", meta.read_text("utf-8"), re.M).group(1)
             rel = meta.relative_to(PACKAGE).as_posix()[:-5]
             expected.append(f"{guid} Packages/soloflighter.hoard/{rel}")
         (d / "release_expected.txt").write_text("\n".join(sorted(expected)), "utf-8")
