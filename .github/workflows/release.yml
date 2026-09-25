@@ -2,7 +2,12 @@ name: Release
 
 # Builds the release zip and publishes it as a GitHub release.
 # Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
-# already exists (say an earlier build failed), open Actions > Release > Run workflow and enter the tag.
+# already exists (say an earlier build failed), open Actions > Release > Run workflow and enter the tag
+# with its "v" (v1.2.0, not 1.2.0).
+#
+# Releases here are immutable: once published, nothing can be added to them. So the release is made as a
+# draft, every job attaches its files to the draft, and the last job publishes it. A failed build leaves
+# only a draft, which a re-run (or Run workflow) fills in and publishes.
 #
 # Every action is pinned to an exact commit (the version tag is in the comment), so a changed or
 # compromised tag upstream can't alter what runs here. Update them deliberately.
@@ -48,7 +53,7 @@ jobs:
         with:
           subject-path: dist/*.zip
 
-      - name: Publish the release
+      - name: Make the release (a draft until every file is attached)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -57,7 +62,7 @@ jobs:
             gh release edit "$TAG" --notes-file dist/RELEASE_NOTES.md --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" \
-              --title "Hoard $TAG" --notes-file dist/RELEASE_NOTES.md --verify-tag
+              --title "Hoard $TAG" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
           fi
 
   # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer and a portable zip,
@@ -118,3 +123,17 @@ jobs:
         run: |
           $files = @(Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip, dist\SHA256SUMS-windows.txt | ForEach-Object FullName)
           gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
+
+  # Last: publishing makes the release immutable, so it waits until every file is attached.
+  publish:
+    needs: [release, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # publish the draft
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
