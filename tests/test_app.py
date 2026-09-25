@@ -690,6 +690,27 @@ class SetupAssistant(unittest.TestCase):
         self.assertIsNone(job.open_link("https://accounts.booth.pm/users/confirmation?token=x"))
         self.assertEqual(job.pending_link, "https://accounts.booth.pm/users/confirmation?token=x")
 
+    def test_a_chosen_browser_thats_missing(self):
+        """Settings named Edge or Chrome, which isn't installed: setup offers Hoard's own browser, and once it's
+        installed that's the one used and shown as ready (it kept saying the chosen one "isn't installed")."""
+        from unittest import mock
+        from hoard import browser, setup
+        cfg = {**config.load_config(), "browser_channel": "chrome"}
+        with mock.patch.object(browser, "channel_installed", lambda channel: False), \
+                mock.patch.object(setup, "channel_installed", lambda channel: False):
+            self.assertEqual(browser.use_channel(cfg), "chromium")
+            with mock.patch.object(setup, "own_browser_installed", lambda: False):
+                st = setup.browser_status(cfg)
+                self.assertEqual((st["ready"], st["can_install"]), (False, True))
+                self.assertIn("Google Chrome isn't installed", st["note"])
+            with mock.patch.object(setup, "own_browser_installed", lambda: True):
+                st = setup.browser_status(cfg)
+                self.assertEqual((st["ready"], st["name"]), (True, "Hoard's own browser"))
+        with mock.patch.object(browser, "channel_installed", lambda channel: True), \
+                mock.patch.object(setup, "channel_installed", lambda channel: True):
+            self.assertEqual(browser.use_channel(cfg), "chrome", "installed: the one you chose")
+            self.assertEqual(setup.browser_status(cfg)["name"], "Google Chrome")
+
     def test_missing_browser_is_explained(self):
         from hoard import setup
         self.assertIn("Set up Hoard", setup.browser_problem(RuntimeError(

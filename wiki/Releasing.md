@@ -6,7 +6,7 @@ For maintainers. Every release is built by GitHub Actions from this repository.
    section becomes the release's notes, and the build refuses a version without one.
 2. Merge to `main`, and wait for **Check** to pass.
 3. In **Actions**, open **Release**, choose **Run workflow** on `main`, and enter the tag, with its `v`
-   (`v2.5.0`). If the tag doesn't exist yet, the workflow makes it on `main`'s latest commit, after checking it
+   (`v2.5.1`). If the tag doesn't exist yet, the workflow makes it on `main`'s latest commit, after checking it
    matches `__version__`. Pushing the tag yourself does the same.
 
 The **Release** workflow then:
