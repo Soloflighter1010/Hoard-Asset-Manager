@@ -2,8 +2,10 @@ name: Release
 
 # Builds the release zip and publishes it as a GitHub release.
 # Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
-# already exists (say an earlier build failed), open Actions > Release > Run workflow and enter the tag
-# with its "v" (v1.2.0, not 1.2.0).
+# already exists (say an earlier build failed), or to release the branch you pick without making the tag
+# yourself, open Actions > Release > Run workflow and enter the tag with its "v" (v1.2.0, not 1.2.0). A tag
+# that doesn't exist yet is made on that branch's latest commit; the build refuses it unless it matches
+# the version in hoard/__init__.py.
 #
 # Releases here are immutable: once published, nothing can be added to them. So the release is made as a
 # draft, every job attaches its files to the draft, and the last job publishes it. A failed build leaves
@@ -30,12 +32,30 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # create the release and upload the zips
+      contents: write        # the tag (Run workflow), the release and its zips
       id-token: write        # sign the build provenance
       attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      - name: Make the tag, if Run workflow was given a new one
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$TAG" in v[0-9]*) ;; *) echo "::error::Enter the tag with its v, for example v1.2.0 (got $TAG)."; exit 1 ;; esac
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "$TAG already exists; building it."
+          else
+            version=$(gh api "repos/$GITHUB_REPOSITORY/contents/hoard/__init__.py?ref=$GITHUB_SHA" --jq .content \
+              | base64 -d | sed -n 's/^__version__ = "\(.*\)"/\1/p')
+            if [ "v$version" != "$TAG" ]; then
+              echo "::error::$GITHUB_REF_NAME is version $version, so it can't be released as $TAG."; exit 1
+            fi
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+            echo "Made $TAG on $GITHUB_REF_NAME ($GITHUB_SHA)."
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
