@@ -104,6 +104,22 @@ def build_material(d: Path) -> None:
     (d / "test.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
     (d / "package_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
     (d / "not_a_package.unitypackage").write_bytes(gzip.compress(b"hello, this is not a tar file" * 3))
+    # hostile packages (S-03, 2.3.1 review): headers claiming far more than follows them
+    (d / "huge_name.unitypackage").write_bytes(gzip.compress(tar_header("././@LongLink", 8 ** 11 - 1, b"L") + b"x" * 100))
+    (d / "too_big.unitypackage").write_bytes(gzip.compress(tar_header("0123456789abcdef0123456789abcdef/asset",
+                                                                       8 ** 12 - 1, b"0") + b"x" * 100))
+
+
+def tar_header(name: str, size: int, kind: bytes) -> bytes:
+    """A GNU tar header claiming whatever size it's given, whatever follows it, the way a hostile package could."""
+    h = bytearray(512)
+    h[0:len(name)] = name.encode()
+    h[100:108], h[108:116], h[116:124], h[136:148] = b"0000644\0", b"0000000\0", b"0000000\0", b"00000000000\0"
+    h[124:136] = (f"{size:011o}\0" if size < 8 ** 11 else f"{size:012o}").encode()
+    h[156:157], h[257:265] = kind, b"ustar  \0"
+    h[148:156] = b" " * 8
+    h[148:156] = f"{sum(h):06o}\0 ".encode()
+    return bytes(h)
 
 
 @unittest.skipUnless(HAVE_CSHARP, "needs a C# compiler and runtime (mono-mcs, mono-runtime)")
