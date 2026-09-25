@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.5.2
+
+- **Hoard's own browser, in the Windows app:** installing it now works. The app looked for the browser inside its
+  own program folder, while installing put it in your user account's usual folder
+  (`%LOCALAPPDATA%\ms-playwright`), so setup went on saying it "isn't installed". Both now use that folder: a
+  browser you'd already downloaded is found straight away, and updating Hoard never removes it.
+
 ## 2.5.1
 
 - **Hoard's own browser:** when **Settings** names Microsoft Edge or Google Chrome and it isn't installed, Hoard

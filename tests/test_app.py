@@ -711,6 +711,20 @@ class SetupAssistant(unittest.TestCase):
             self.assertEqual(browser.use_channel(cfg), "chrome", "installed: the one you chose")
             self.assertEqual(setup.browser_status(cfg)["name"], "Google Chrome")
 
+    def test_one_browser_folder(self):
+        """Installing and launching use the same folder, one outside Hoard's program folder: packaged as an app,
+        Playwright looked in the program folder when launching, so an installed browser was never found."""
+        from unittest import mock
+        from hoard import browser
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+            browser.use_browsers_folder()
+            self.assertEqual(os.environ["PLAYWRIGHT_BROWSERS_PATH"], str(browser.browsers_folder()))
+            self.assertEqual(browser.browsers_folder().name, "ms-playwright")
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/somewhere/you/chose"
+            browser.use_browsers_folder()
+            self.assertEqual(os.environ["PLAYWRIGHT_BROWSERS_PATH"], "/somewhere/you/chose", "yours is kept")
+
     def test_missing_browser_is_explained(self):
         from hoard import setup
         self.assertIn("Set up Hoard", setup.browser_problem(RuntimeError(

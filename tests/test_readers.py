@@ -361,6 +361,24 @@ class ItchSync(unittest.TestCase):
         self.assertIn("a game build for Windows", " ".join(report.skipped))
 
 
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class PackagedApp(unittest.TestCase):
+
+    def test_the_browser_is_found_where_it_was_installed(self):
+        """Packaged as an app (sys.frozen), Playwright would look for browsers inside the program folder; Hoard's
+        folder, which is where installing puts them, has to win."""
+        from hoard import browser
+        installed = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or str(browser.browsers_folder())
+        expected = Path(installed)
+        with mock.patch.object(sys, "frozen", True, create=True), mock.patch.dict(os.environ, {}), \
+                mock.patch.object(browser, "browsers_folder", lambda: expected):
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)   # as in the app: nobody has set it
+            with browser._playwright()() as p:
+                path = Path(p.chromium.executable_path)
+                p.chromium.launch().close()
+        self.assertTrue(str(path).startswith(str(expected)), path)
+
+
 def mhtml(page_html: str, url: str) -> str:
     """A page saved as "Webpage, Single File", as Chrome and Edge save one."""
     return ("From: <Saved by Blink>\r\nSnapshot-Content-Location: " + url + "\r\nSubject: Saved\r\n"
