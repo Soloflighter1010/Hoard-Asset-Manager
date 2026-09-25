@@ -20,8 +20,27 @@ class Blocked(Exception):
 
 # ----------------------------------------------------------------------------- browser
 
+def browsers_folder() -> Path:
+    """Where Hoard's own browser is kept: Playwright's usual folder for your user account (on Windows,
+    %LOCALAPPDATA%\\ms-playwright), outside Hoard's program folder, so an update never removes it."""
+    home = Path.home()
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or home / "AppData" / "Local") / "ms-playwright"
+    if sys.platform == "darwin":
+        return home / "Library" / "Caches" / "ms-playwright"
+    return Path(os.environ.get("XDG_CACHE_HOME") or home / ".cache") / "ms-playwright"
+
+
+def use_browsers_folder() -> None:
+    """Point Playwright at browsers_folder(), for installing and launching alike. Packaged as an app, Playwright
+    otherwise looks inside the program folder when launching, while installing still goes to its usual folder: the
+    browser installed but was never found. A folder you've set yourself (PLAYWRIGHT_BROWSERS_PATH) is kept."""
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browsers_folder()))
+
+
 def _playwright():
     """Import Playwright's sync API, or exit with a clear message when setup hasn't been run."""
+    use_browsers_folder()
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:

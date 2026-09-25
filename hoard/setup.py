@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .browser import _cookie_hosts, _on_sites, _playwright, channel_installed, chosen_channel, profile_dir, STORE_SITES
+from .browser import _cookie_hosts, _on_sites, _playwright, channel_installed, chosen_channel, profile_dir, use_browsers_folder, STORE_SITES
 from .config import payhip_shops, root_dir, save_config
 from .library import STORES, Library
 from .paths import LIBRARY_FILE, default_downloads
@@ -48,6 +48,7 @@ def install_browser(progress) -> None:
     """Download Hoard's own browser (Playwright's Chromium), reporting progress. The same as
     `python -m playwright install chromium`, without anyone needing a command line."""
     from playwright._impl._driver import compute_driver_executable, get_driver_env
+    use_browsers_folder()   # the same folder the browser is launched from
     node, cli = compute_driver_executable()
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     proc = subprocess.Popen([str(node), str(cli), "install", "chromium"], env=get_driver_env(), stdout=subprocess.PIPE,
