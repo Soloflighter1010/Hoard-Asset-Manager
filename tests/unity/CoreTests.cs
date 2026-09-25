@@ -45,7 +45,7 @@ public static class CoreTests
         var sealedDoc = Json.Parse(File.ReadAllText(Path.Combine(dir, "seal_sealed.json"), Encoding.UTF8));
         var otherKey = new byte[32];
         Check("seal from another computer", Seal.Check(sealedDoc, otherKey) == SealState.Foreign);
-        Check("seal without the key", Seal.Check(sealedDoc, null) == SealState.NoKey);
+        Check("seal without the key", Seal.Check(sealedDoc, (byte[])null) == SealState.NoKey);
 
         // the catalog: every documented promise re-checked, links dropped when the seal doesn't match
         var cat = HoardCatalog.Load(Path.Combine(dir, "root"), key);
@@ -114,6 +114,51 @@ public static class CoreTests
             Check("the release .unitypackage reads back", string.Join("\n", got) == string.Join("\n", expect),
                   got.Count + " entries, expected " + expect.Count);
         }
+
+        // several keys: the seal is checked with whichever of this account's keys it names
+        byte[] keyB = Seal.ReadKey(Path.Combine(dir, "other.key"));
+        var byB = Json.Parse(File.ReadAllText(Path.Combine(dir, "seal_other_key.json"), Encoding.UTF8));
+        Check("sealed by a second key: found among the keys", Seal.Check(byB, new List<byte[]> { key, keyB }) == SealState.Sealed);
+        Check("sealed by a key this account doesn't have", Seal.Check(byB, new List<byte[]> { key }) == SealState.Foreign);
+        Check("no keys at all", Seal.Check(byB, new List<byte[]>()) == SealState.NoKey);
+        var tampered = Json.Parse(File.ReadAllText(Path.Combine(dir, "seal_other_key_edited.json"), Encoding.UTF8));
+        Check("an edit is still caught with the right key among others", Seal.Check(tampered, new List<byte[]> { key, keyB }) == SealState.Changed);
+        var both = Seal.ReadKeys(new[] { Path.Combine(dir, "integrity.key"), Path.Combine(dir, "other.key"), Path.Combine(dir, "integrity.key"), Path.Combine(dir, "missing.key") });
+        Check("keys read once each, missing ones skipped", both.Count == 2);
+
+        // where this account's keys can be: Hoard's folder, and Microsoft Store Python's private copy (Windows)
+        string local = Path.Combine(dir, "localappdata");
+        var onWindows = HoardLocation.KeyFiles(Path.Combine(local, "Hoard"), local, true);
+        Check("Store Python's copy found on Windows", onWindows.Count == 2 && onWindows[1].Contains("PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0"), string.Join(";", onWindows));
+        Check("only Hoard's folder elsewhere", HoardLocation.KeyFiles(Path.Combine(local, "Hoard"), local, false).Count == 1);
+
+        // what the window needs is worked out while loading, not while drawing
+        Check("files resolved when loading", good != null && good.PackagePaths.Count == 1 && good.PackagePaths[0].EndsWith("Rusk.unitypackage"));
+        Check("picture resolved when loading", good != null && good.ThumbPath != null && good.ThumbPath.EndsWith("_thumbnail.png"));
+        Check("search text ready", good != null && good.SearchText.Contains("kitsu studio") && good.HasPackages);
+        Check("a planted link resolves to nothing", linked != null && linked.PackagePaths.Count == 0 && linked.ThumbPath == null);
+
+        // only the rows on screen are drawn
+        int first, last;
+        ListView.VisibleRange(0, 520, 52, 3000, out first, out last);
+        Check("top of a long list", first == 0 && last == 10, first + ".." + last);
+        ListView.VisibleRange(52 * 1000, 520, 52, 3000, out first, out last);
+        Check("middle of a long list", first == 999 && last == 1010, first + ".." + last);
+        ListView.VisibleRange(52 * 2995, 520, 52, 3000, out first, out last);
+        Check("end of a long list", last == 2999, first + ".." + last);
+        ListView.VisibleRange(0, 520, 52, 0, out first, out last);
+        Check("an empty list draws nothing", last < first);
+
+        // a big library: loaded quickly, with each shared folder checked once
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var big = HoardCatalog.Load(Path.Combine(dir, "root_big"), key);
+        watch.Stop();
+        int wanted = int.Parse(File.ReadAllText(Path.Combine(dir, "big_count.txt")).Trim());
+        Check("big library: every product loaded", big.Problem == null && big.Assets.Count == wanted, big.Problem ?? big.Assets.Count.ToString());
+        Check("big library: every file and picture resolved", big.Assets.TrueForAll(a => a.PackagePaths.Count == 1 && a.ThumbPath != null));
+        Check("big library: shared folders checked once", big.DiskChecks <= wanted * 3 + 200, big.DiskChecks + " disk checks for " + wanted + " products");
+        Console.WriteLine("INFO big library: " + wanted + " products in " + watch.ElapsedMilliseconds + " ms, " + big.DiskChecks + " disk checks");
+        Check("big library: loaded in under 10 seconds", watch.ElapsedMilliseconds < 10000, watch.ElapsedMilliseconds + " ms");
 
         Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
         return failures == 0 ? 0 : 1;

@@ -81,6 +81,38 @@ def build_material(d: Path) -> None:
     catalog = {"format": "hoard-catalog", "version": 3, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
     (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
     (d / "good_names.txt").write_text("|".join(a["name"] for a in good))
+
+    # a second key: a catalog sealed with it, and one edited after sealing
+    other = bytes(range(32))
+    (d / "other.key").write_text(other.hex(), "ascii")
+    saved = safety._integrity_key
+    safety._integrity_key = other
+    try:
+        by_other = safety.seal({"format": "hoard-catalog", "version": 3, "assets": [{"name": "Sealed elsewhere"}]})
+    finally:
+        safety._integrity_key = saved
+    (d / "seal_other_key.json").write_text(json.dumps(by_other, ensure_ascii=False, indent=1), "utf-8")
+    by_other["assets"][0]["name"] = "Edited afterwards"
+    (d / "seal_other_key_edited.json").write_text(json.dumps(by_other, ensure_ascii=False, indent=1), "utf-8")
+    # Microsoft Store Python's private copy of Hoard's folder, as Windows keeps it
+    store_py = d / "localappdata" / "Packages" / "PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0" / "LocalCache" / "Local" / "Hoard"
+    store_py.mkdir(parents=True)
+    (store_py / "integrity.key").write_text(other.hex(), "ascii")
+    (d / "localappdata" / "Hoard").mkdir()
+    (d / "localappdata" / "Hoard" / "integrity.key").write_text(key.hex(), "ascii")
+
+    # a big library on disk: 3,000 products across 60 creators, each with a package and a picture
+    big_root, big = d / "root_big", []
+    for n in range(3000):
+        creator, name = f"Creator {n % 60:02d}", f"Product {n:04d}"
+        folder = big_root / "Booth" / creator / name
+        folder.mkdir(parents=True)
+        (folder / "pack.unitypackage").write_bytes(b"x")
+        (folder / "_thumbnail.png").write_bytes(b"\x89PNG")
+        big.append(asset(name, f"Booth/{creator}/{name}", None, ["pack.unitypackage"]))
+    (big_root / "catalog.json").write_text(json.dumps(safety.seal({"format": "hoard-catalog", "version": 3,
+                                            "generated_at": "2026-09-25T00:00:00+00:00", "assets": big})), "utf-8")
+    (d / "big_count.txt").write_text(str(len(big)))
     (d / "left_out.txt").write_text(str(len(bad)))
     edited_root = d / "root_edited"
     edited_root.mkdir()

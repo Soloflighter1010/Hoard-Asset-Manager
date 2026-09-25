@@ -1,6 +1,7 @@
 // Checking the seal Hoard puts on its data files (HMAC-SHA256 with the key in Hoard's app-data folder), as
 // described in Hoard's docs/DATA-FORMATS.md. Plain C#, no Unity references.
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -33,6 +34,19 @@ namespace SoloFlighter.Hoard
             catch (Exception) { return null; }
         }
 
+        /// <summary>Every readable key among these files, each once.</summary>
+        public static List<byte[]> ReadKeys(IEnumerable<string> keyFiles)
+        {
+            var keys = new List<byte[]>();
+            var seen = new HashSet<string>();
+            foreach (string f in keyFiles)
+            {
+                var k = ReadKey(f);
+                if (k != null && seen.Add(KeyId(k))) keys.Add(k);
+            }
+            return keys;
+        }
+
         public static string KeyId(byte[] key)
         {
             using (var sha = SHA256.Create()) return Hex(sha.ComputeHash(key)).Substring(0, 16);
@@ -40,11 +54,21 @@ namespace SoloFlighter.Hoard
 
         public static SealState Check(JsonValue doc, byte[] key)
         {
+            return Check(doc, key == null ? new List<byte[]>() : new List<byte[]> { key });
+        }
+
+        /// <summary>Check the seal with whichever of these keys it names. All of them are this user account's own
+        /// Hoard keys (see HoardLocation.KeyFiles), so any of them is as good as another: a catalog sealed by a Hoard
+        /// whose files Windows keeps separately (Microsoft Store Python) is still recognised.</summary>
+        public static SealState Check(JsonValue doc, IList<byte[]> keys)
+        {
             var seal = doc.Get("integrity");
             if (seal == null || seal.Kind != JsonKind.Object) return SealState.Unsealed;
-            if (key == null) return SealState.NoKey;
+            if (keys == null || keys.Count == 0) return SealState.NoKey;
             if (seal.Str("alg") != "HMAC-SHA256") return SealState.Changed;
-            if (seal.Str("key_id") != KeyId(key)) return SealState.Foreign;
+            byte[] key = null;
+            foreach (var k in keys) if (k != null && seal.Str("key_id") == KeyId(k)) { key = k; break; }
+            if (key == null) return SealState.Foreign;
             var body = new JsonValue { Kind = JsonKind.Object, Members = doc.Members.FindAll(m => m.Key != "integrity") };
             string expected;
             using (var hmac = new HMACSHA256(key)) expected = Hex(hmac.ComputeHash(Json.Canonical(body)));

@@ -77,14 +77,19 @@ namespace SoloFlighter.Hoard.Editor
 
         static string SafeStamp(string path) { try { return Stamp(path); } catch (Exception) { return path; } }
 
-        /// <summary>Call from the editor's update loop: true when there's something new to show.</summary>
-        public bool TakeChanges()
+        /// <summary>Call from the editor's update loop: true when there's something new to show. The packages read
+        /// since the last call are added to fresh (when given), so only their products need looking at again.</summary>
+        public bool TakeChanges(List<string> freshPaths = null)
         {
             if (cacheDirty && Waiting == 0) SaveCache();
             if (!changed) return false;
             changed = false;
             string path;
-            while (fresh.TryDequeue(out path)) status.Remove(path);   // only what's new is looked at again
+            while (fresh.TryDequeue(out path))
+            {
+                status.Remove(path);   // only what's new is looked at again
+                if (freshPaths != null) freshPaths.Add(path);
+            }
             return true;
         }
 

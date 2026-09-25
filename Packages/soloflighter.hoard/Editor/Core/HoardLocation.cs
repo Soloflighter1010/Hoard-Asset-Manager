@@ -1,5 +1,6 @@
 // Where Hoard keeps things, found the same way the Hoard app does. Plain C#, no Unity references.
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -26,6 +27,33 @@ namespace SoloFlighter.Hoard
         }
 
         public static string KeyFile() { return Path.Combine(DataDir(), "integrity.key"); }
+
+        /// <summary>Every place this user account's Hoard keeps its sealing key: Hoard's own folder and, on Windows,
+        /// the private copy of it that Windows keeps for Hoard run with Microsoft Store Python (Store apps' writes to
+        /// AppData are redirected to their own folder, so that Hoard has a key of its own).</summary>
+        public static List<string> KeyFiles()
+        {
+            return KeyFiles(DataDir(), Environment.GetEnvironmentVariable("LOCALAPPDATA"),
+                            RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        }
+
+        public static List<string> KeyFiles(string dataDir, string localAppData, bool windows)
+        {
+            var files = new List<string> { Path.Combine(dataDir, "integrity.key") };
+            if (!windows || string.IsNullOrEmpty(localAppData)) return files;
+            try
+            {
+                string packages = Path.Combine(localAppData, "Packages");
+                if (Directory.Exists(packages))
+                    foreach (string dir in Directory.GetDirectories(packages, "PythonSoftwareFoundation.Python.*"))
+                    {
+                        string key = Path.Combine(dir, "LocalCache", "Local", "Hoard", "integrity.key");
+                        if (File.Exists(key)) files.Add(key);
+                    }
+            }
+            catch (Exception) { /* can't look: the main key will do */ }
+            return files;
+        }
 
         /// <summary>The downloads folder: the one chosen in Hoard's Settings, or Hoard's default (Documents/Hoard).</summary>
         public static string DownloadsFolder()
