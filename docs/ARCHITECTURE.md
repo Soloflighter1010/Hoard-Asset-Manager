@@ -107,19 +107,29 @@ own browser. The file is read offline in a browser with every network request bl
 | `GET /thumb/<item key>` | That item's image, fetched once from a public address and cached |
 | `POST /api/refresh`, `/api/login`, `/api/logout` | Start a job (`{"stores": [...]}`) |
 | `POST /api/import` | Read a saved store page (`{"store", "filename", "content"}`) |
+| `POST /api/enter` | Trade the one-time link a page was opened with (`{"token"}`) for the access key |
 
 ## Downloads (`downloader.py`, `downloads.py`)
 
 - Each store has a `sync_<store>` function. They all record progress in a per-store `Manifest`
   (`<root>/<Store>/_manifest.json`): for every product its folder and, for every file, where it's saved,
   its size and when it was downloaded. A product keeps its folder even if it's renamed on the store.
-- Gumroad and Booth download over HTTP with `http_download`, which resumes from a `.part` file. Jinxxy and
-  Payhip click each file's download button in the browser (`download_by_clicking`), because their files
-  are only handed out that way.
+  While downloading, `checkpoint()` saves it at most every `SAVE_EVERY` seconds (rewriting a large
+  manifest after every file and product adds up), and every sync ends with `save_changes()` in a `finally`,
+  so a stop or an error never loses a finished file's record. A manifest is only written when something
+  changed: `cmd_sync` treats a store with no manifest as one you don't use.
+- Gumroad and Booth download over HTTP with `egress.download`, which resumes from a `.part` file. It only
+  adds to one the part that follows it (206, `Content-Range` starting where it ends), counts it as finished
+  only when the store says the file ends there (416, `Content-Range: bytes */<that size>`), starts again
+  otherwise, and puts a file in place only once it's as long as the store said. It asks for the file's own
+  bytes (`Accept-Encoding: identity`), so sizes and ranges are exact. Jinxxy and Payhip click each file's
+  download button in the browser (`download_by_clicking`), because their files are only handed out that way.
 - A file counts as **updated** when a store offers a new version of it: a different size or file link on
   Gumroad or Booth, or the same file name under a new label on Jinxxy or Payhip.
 - `collect_catalog()` builds the catalog and tags from the manifests; `build_catalog()` writes them to
-  `catalog.json`, `tags.json` and each product's `asset.json`.
+  `catalog.json`, `tags.json` and each product's `asset.json`. With nothing downloaded, an existing
+  `catalog.json` and `tags.json` are rewritten empty, so they never go on listing what's gone; a folder
+  that never had them doesn't get them.
 - `downloads.py` builds the Downloads view's index from the manifests. The server caches it and rebuilds
   it after a download, a tag change, a settings change or a rescan. Its routes are `/downloads`,
   `/api/assets`, `/files/<image>` and `POST /api/open` (open a folder). `POST /api/download` starts a
@@ -152,8 +162,15 @@ Your tags live in `tags.json` in the app-data `Hoard` folder, shared by both vie
 Both servers share the rules in their "web safety" section:
 
 - They bind to `127.0.0.1` and check the `Host` header, which stops DNS-rebinding attacks. With
-  `--host 0.0.0.0` other devices need the access key (`check_access`), and every action endpoint still
-  only accepts requests from the computer itself.
+  `--host 0.0.0.0` every action endpoint still only accepts requests from the computer itself.
+- Every request for data, images or an action needs the server's access key (`check_access`), new on
+  every start, from the computer itself too. The pages send it in the `X-Hoard-Key` header through
+  `api()`; images, which the browser loads by itself, carry it as `?k=` (`keyed()`). It's never a cookie,
+  because browsers send cookies for 127.0.0.1 to every port. Hoard opens its page with a one-time link
+  (`entry_url()`, `#enter=...`) that the page trades for the key at `/api/enter`, so the key never appears
+  on a browser's command line; `hoard serve` prints an address with the key itself (`#key=...`), which
+  is also what other devices open. The pages and fonts hold nothing private and need no key.
+  `/api/show` (a second copy of Hoard) proves itself with the token in the running copy's private file.
 - Action endpoints only accept `Content-Type: application/json`, which other websites can't send
   without a CORS preflight that the servers never approve.
 - Every page carries a Content-Security-Policy that allows only its own inline script, by hash

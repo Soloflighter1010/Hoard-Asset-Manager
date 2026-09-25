@@ -95,14 +95,18 @@ class InstanceLock:
             self.fh = None
 
 
-def local_request(url: str, body: dict | None = None, timeout: float = 20):
+def local_request(url: str, body: dict | None = None, timeout: float = 20, key: str | None = None):
     """A request to Hoard's own server on this computer, and nowhere else (anything that isn't
-    http://127.0.0.1:<port>/ is refused). Store traffic goes through egress.py; this is only Hoard talking to itself."""
+    http://127.0.0.1:<port>/ is refused), with that server's access key when given. Store traffic goes through
+    egress.py; this is only Hoard talking to itself."""
+    from .safety import ACCESS_HEADER
     if not re_local.match(url):
         raise ValueError("only Hoard's own server on this computer")
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"} if data else {},
-                                 method="POST" if data is not None else "GET")
+    headers = {"Content-Type": "application/json"} if data else {}
+    if key:
+        headers[ACCESS_HEADER] = key
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data is not None else "GET")
     return urllib.request.urlopen(req, timeout=timeout)
 
 
@@ -176,14 +180,14 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         opened = False
         if not browser and window_available():
             try:
-                open_window(url, srv)
+                open_window(srv)
                 opened = True
             except Exception as e:   # typically: no WebView2 on this PC
                 print(f"The window couldn't open ({type(e).__name__}: {e}); using the browser instead.")
                 message("Hoard's window couldn't open on this PC, so Hoard opens in your web browser instead.\n\n"
                         "To quit Hoard, choose Settings, then Quit Hoard.")
         if not opened:
-            run_in_browser(url, srv)
+            run_in_browser(srv)
         return 0
     finally:
         quit_cleanly(state.get("srv"))
@@ -194,15 +198,15 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         lock.release()
 
 
-def open_window(url: str, srv) -> None:
-    """Hoard's own window. Blocks until it's closed."""
+def open_window(srv) -> None:
+    """Hoard's own window, opened with a one-time link to its page. Blocks until it's closed."""
     import webview
     try:
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True   # store pages open in your browser, not in Hoard
         webview.settings["ALLOW_DOWNLOADS"] = False
     except Exception:
         pass
-    window = webview.create_window("Hoard", url, width=1440, height=920, min_size=(900, 600),
+    window = webview.create_window("Hoard", srv.entry_url(), width=1440, height=920, min_size=(900, 600),
                                    background_color="#221c17", text_select=True)
 
     def show():
@@ -218,13 +222,14 @@ def open_window(url: str, srv) -> None:
     webview.start(private_mode=False, storage_path=str(storage))
 
 
-def run_in_browser(url: str, srv) -> None:
+def run_in_browser(srv) -> None:
     """No window: open Hoard in the web browser, and run until Quit Hoard, or until no Hoard page has been open
-    for IDLE_MINUTES (every open page checks in once a minute)."""
+    for IDLE_MINUTES (every open page checks in once a minute). Each time it's opened, it's with a new one-time
+    link: a browser's command line can be read by other accounts on some systems, so it never carries the key."""
     stop = threading.Event()
     srv.quit_app = stop.set
-    srv.show_window = lambda: webbrowser.open(url)
-    webbrowser.open(url)
+    srv.show_window = lambda: webbrowser.open(srv.entry_url())
+    webbrowser.open(srv.entry_url())
     while not stop.wait(15):
         idle = time.time() - getattr(srv, "last_seen", time.time())
         if idle > IDLE_MINUTES * 60 and not srv.jobs.state.get("running"):
@@ -281,7 +286,7 @@ def self_test() -> int:
         base = f"http://127.0.0.1:{srv.server_port}"
         for path in ("/", "/downloads", "/fonts/DelaGothicOne-Regular.woff2", "/api/status", "/api/setup"):
             try:
-                with local_request(base + path) as r:
+                with local_request(base + path, key=srv.key) as r:
                     check("serves " + path, r.status == 200 and len(r.read()) > 0)
             except OSError as e:
                 check("serves " + path, False, repr(e))

@@ -14,6 +14,7 @@ Images from stores' public CDNs have their own small fetcher with the same addre
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -132,9 +133,39 @@ def get(store_sess: requests.Session, url: str, sites, *, stay_on_sites: bool = 
     raise UnsafeRequest("too many redirects")
 
 
+def _content_range(r: requests.Response) -> tuple[int, int, int | None] | None:
+    """A 206 answer's Content-Range, as (first byte, last byte, the whole file's size or None), or None when it has
+    none that makes sense."""
+    m = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+|\*)", (r.headers.get("Content-Range") or "").strip())
+    if not m:
+        return None
+    first, last, whole = int(m[1]), int(m[2]), None if m[3] == "*" else int(m[3])
+    return None if last < first or (whole is not None and last >= whole) else (first, last, whole)
+
+
+def _whole_size(r: requests.Response) -> int | None:
+    """The file's size from a 416 answer's Content-Range ("bytes */1234"), or None."""
+    m = re.fullmatch(r"bytes \*/(\d+)", (r.headers.get("Content-Range") or "").strip())
+    return int(m[1]) if m else None
+
+
+def _length(r: requests.Response) -> int | None:
+    try:
+        n = int(r.headers.get("Content-Length") or "")
+    except ValueError:
+        return None
+    return n if n >= 0 else None
+
+
 def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: str = "") -> int:
     """Download url to dest through a .part file (resuming one left from last time), following redirects one checked
-    hop at a time. Returns the file's size. Refuses anything that isn't https to a public address."""
+    hop at a time. Returns the file's size. Refuses anything that isn't https to a public address.
+
+    A .part file is only added to when the store answers with exactly the part that follows it (206, Content-Range
+    starting where the .part file ends), and only counts as finished when the store says the file ends there (416,
+    Content-Range naming that size). Anything else starts the file again rather than joining two different ones. A
+    file is only put in place once it's as long as the store said it would be; otherwise the .part file is kept, and
+    the next sync resumes it. The file's own bytes are asked for (no compression), so every size is exact."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     anon = session(store_sess.headers.get("User-Agent", ""))
@@ -144,33 +175,53 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
         have = 0
     for _ in range(MAX_HOPS):
         r = _send(store_sess, anon, url, sites, stream=True, timeout=(20, 300),
-                  headers={"Range": f"bytes={have}-"} if have else {})
+                  headers={"Accept-Encoding": "identity", **({"Range": f"bytes={have}-"} if have else {})})
         with r:
             if r.is_redirect:
                 url = urljoin(url, r.headers.get("Location", ""))
                 continue
-            if have and r.status_code == 416:  # the .part file was already complete
-                fh, identity = open_part(part, resume=True)
-                fh.close()
-                move_into_place(part, dest, identity)
-                return dest.stat().st_size
-            resume = bool(have) and r.status_code == 206
-            if not resume:
+            if have and r.status_code == 416:   # nothing past the end of the .part file
+                if _whole_size(r) == have:      # and the store says the file ends there: the .part file is all of it
+                    fh, identity = open_part(part, resume=True)
+                    fh.close()
+                    move_into_place(part, dest, identity)
+                    return dest.stat().st_size
+                have = 0    # the file on the store isn't the one the .part file was part of: start again
+                continue
+            encoded = r.headers.get("Content-Encoding", "identity").lower() != "identity"
+            span = _content_range(r) if r.status_code == 206 else None
+            if r.status_code == 206 and (span is None or span[0] != have or encoded):
+                if not have:
+                    raise RuntimeError("the store sent only part of the file, in a way that can't be checked")
+                have = 0    # not the part that follows the .part file: never added to it; the whole file is asked for
+                continue
+            resume = r.status_code == 206 and have > 0
+            if r.status_code != 206:
                 r.raise_for_status()
-                have = 0
+                have = 0    # the whole file, from the start
             if r.headers.get("Content-Type", "").startswith("text/html") and not dest.suffix.lower().startswith(".htm"):
                 raise RuntimeError("store returned a web page instead of the file (file may be unavailable)")
-            total = int(r.headers.get("Content-Length", 0) or 0) + have
-            bar = tqdm(total=total or None, initial=have, unit="B", unit_scale=True, unit_divisor=1024,
+            length = _length(r)
+            if encoded:
+                expected = None     # compressed on the way despite asking not to: its length isn't the file's
+            elif span and span[2] is not None:
+                expected = span[2]
+            else:
+                expected = have + length if length is not None else None
+            bar = tqdm(total=expected, initial=have, unit="B", unit_scale=True, unit_divisor=1024,
                        desc=desc[:40], leave=False) if tqdm else None
+            written = have
             fh, identity = open_part(part, resume=resume)
             with fh:
                 for chunk in r.iter_content(1 << 20):
                     fh.write(chunk)
+                    written += len(chunk)
                     if bar:
                         bar.update(len(chunk))
             if bar:
                 bar.close()
+            if expected is not None and written != expected:
+                raise RuntimeError(f"the download stopped at {written} of {expected} bytes; the next sync resumes it")
             move_into_place(part, dest, identity)
             return dest.stat().st_size
     raise UnsafeRequest("too many redirects")

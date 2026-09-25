@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.4.2
+
+Fixes from an outside review of 2.3.1. What was found and what changed, finding by finding, is in
+`docs/security-review-2.3.1-response.md`.
+
+- **Only Hoard's own window can use Hoard:** every request for your library, your downloads, their pictures or
+  an action now needs a key that's new each time Hoard starts, even from your own computer. Other programs,
+  and other people's accounts on a shared computer, could reach Hoard's address and, for example, point its
+  downloads folder somewhere else. Hoard opens its window with a one-time link that the page trades for the
+  key. Started as a server from the command line (`--no-open`, `--port` or `--host`), Hoard prints an
+  address that includes it.
+- **Payhip:** when Payhip blocks the automated browser, the page listing products for you to download yourself
+  only links to Payhip and your own shops, whatever a product's record says (a record could have held a
+  `javascript:` link), and it's written the same careful way as every other file.
+- **Resumed downloads:** a half-finished file is only continued with the part that follows it, and only counts
+  as finished when the store says the file ends there. Otherwise it's downloaded again from the start rather
+  than stitched together from two different versions, and a file is only put in place once it's as long as
+  the store said.
+- **An emptied downloads folder:** `catalog.json` and `tags.json` no longer go on listing products that aren't
+  there any more (the Unity window showed them).
+- **Stop:** the file that had just finished downloading when you pressed Stop is recorded, instead of being
+  downloaded again next time.
+- **Faster with large libraries:** product pictures are found without going through the whole library
+  (1,000 pictures in a 100,000-item library: 10 seconds before, 0.05 now); opening the Library no longer copies
+  the whole list through JSON (0.7 seconds to 3 milliseconds at 100,000 items); and during a sync each store's
+  record is saved at most every 10 seconds, instead of after every product and file (a 5,000-product sync
+  with nothing new rewrote a 1.4 MB file 5,000 times).
+- The list of files Hoard has sealed never drops an entry (past 20,000 it could, in principle).
+- **Hoard for Unity 0.1.2:** a `.unitypackage` whose headers claim impossible sizes is refused before anything
+  is set aside for it. It's a separate release: see its own changelog.
+
 ## 2.4.1
 
 The 2.4.0 Windows app, released again: 2.4.0's release couldn't take the installer, and its version number can't

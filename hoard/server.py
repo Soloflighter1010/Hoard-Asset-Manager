@@ -1,8 +1,10 @@
 """The local server behind Hoard's window: the Library and Downloads pages and everything they ask for.
 
-It only answers this computer unless started with --host (then other devices need HTTPS and the access
-key), refuses requests that name another host, and takes actions only from this computer, sent as JSON.
-Every page is sent with a strict Content-Security-Policy; everything else is sandboxed.
+It only answers this computer unless started with --host (then other devices need HTTPS), refuses requests
+that name another host, and takes actions only from this computer, sent as JSON. Every request for data,
+images or an action needs this run's access key, from this computer too (check_access): Hoard opens its
+page with a one-time link that the page trades for the key. Every page is sent with a strict
+Content-Security-Policy; everything else is sandboxed.
 """
 from __future__ import annotations
 
@@ -37,8 +39,13 @@ FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenM
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
-           "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit")
+           "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
+           "/api/enter")
+# Actions that prove themselves another way than the access key: the one-time link a page is opened with,
+# and a second copy of Hoard with the token in the running copy's private file.
+KEYLESS_ACTIONS = ("/api/enter", "/api/show")
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
+ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 
 
@@ -130,7 +137,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             self._slots.release()
 
     def __init__(self, addr, cfg: dict, lan: bool, config_path: Path | None = None):
-        """Start listening; with lan=True, also create the access key other devices need."""
+        """Start listening, with a new access key: every request for data, images or an action needs it."""
         super().__init__(addr, Handler)
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self.unlocks: dict[str, float] = {}   # hidden-library unlock tokens, in memory only: a restart locks it
@@ -141,7 +148,10 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.show_token = None
         self.last_seen = time.time()
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
-        self.key = secrets.token_urlsafe(18) if lan else None
+        self.key = secrets.token_urlsafe(32)   # new on every start, in memory only
+        self.url = f"http://127.0.0.1:{self.server_port}/"   # serve() makes it https when there's a certificate
+        self._entries: dict[str, float] = {}   # one-time links: token -> until when it can be used
+        self._entries_lock = threading.Lock()
         self.lib = Library(LIBRARY_FILE)
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index)
         self._index, self._index_lock = None, threading.Lock()
@@ -151,6 +161,25 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         if isinstance(sys.exc_info()[1], (ConnectionError, TimeoutError)):
             return
         super().handle_error(request, client_address)
+
+    def entry_url(self) -> str:
+        """A one-time link to Hoard's page, for opening its window or a browser. The page trades the token in it for
+        the access key, so the key itself never appears where other programs can see it (a browser's command
+        line, which other accounts can read on some systems). Usable once, within ENTRY_SECONDS."""
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._entries_lock:
+            self._entries = {t: until for t, until in self._entries.items() if until > now}
+            self._entries[token] = now + ENTRY_SECONDS
+        return f"{self.url}#enter={token}"
+
+    def use_entry(self, token) -> bool:
+        """Is token a one-time link that hasn't been used or run out? Using it ends it."""
+        if not isinstance(token, str) or not token:
+            return False
+        with self._entries_lock:
+            until = self._entries.pop(token, None)
+        return until is not None and until > time.time()
 
     def forget_index(self) -> None:
         """The downloads changed: rebuild the index next time it's asked for."""
@@ -217,23 +246,32 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
         return self.server.lan or host in LOOPBACK
 
+    def _refused(self):
+        """The request didn't carry this run's access key (see check_access)."""
+        return self._json({"error": "Hoard didn't recognise this page. Open Hoard again, or the address it printed."}, 401)
+
     # ---- reading
     def do_GET(self):
-        self.server.last_seen = time.time()
         """Serve the pages, their data and images."""
         if not self._host_ok():
             return self._send(403, b"Forbidden", "text/plain")
-        if not check_access(self, self.server.lan, self.server.key):
-            return
         u = urlparse(self.path)
         path, srv = u.path, self.server
-        if path in PAGES:
+        if path in PAGES:   # the pages hold nothing private: everything they show is fetched with the access key
+            srv.last_seen = time.time()
             return self._send(200, (WEB / PAGES[path]).read_bytes(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+        if path.startswith("/fonts/"):
+            font = font_path(unquote(path[len("/fonts/"):]))
+            if not font:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
+        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/"))):
+            return self._refused()
+        srv.last_seen = time.time()
         if path == "/api/library":
-            with srv.lib.lock:
-                data = json.loads(json.dumps(srv.lib.data))
+            items, stores = srv.lib.snapshot()   # enrich() makes new items, so the library's own are never changed
             tagdata = TagStore().load()
-            items = enrich(data["items"], srv.cfg["tags"], tagdata)
+            items = enrich(items, srv.cfg["tags"], tagdata)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index()["assets"]}
             marks, unlocked = MarkStore().load(), self._unlocked()
             shown = []
@@ -246,7 +284,7 @@ class Handler(BaseHTTPRequestHandler):
             counted = [i for i in shown if i["mark"] not in ("removed", "hidden")]
             privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "recovery_set": bool(marks["recovery"]),
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
-            return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": data["stores"],
+            return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": stores,
                                "privacy": privacy,
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
@@ -254,9 +292,7 @@ class Handler(BaseHTTPRequestHandler):
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None})
         if path == "/api/status":
-            with srv.lib.lock:
-                stores = json.loads(json.dumps(srv.lib.data["stores"]))
-            return self._json({"job": srv.jobs.state, "stores": stores})
+            return self._json({"job": srv.jobs.state, "stores": srv.lib.snapshot()[1]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
             if not self._unlocked():   # hidden products' downloads stay out of view too
@@ -268,11 +304,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(public_settings(srv.cfg))
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": srv.jobs.state})
-        if path.startswith("/fonts/"):
-            font = font_path(unquote(path[len("/fonts/"):]))
-            if not font:
-                return self._send(404, b"Not found", "text/plain")
-            return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), srv.lib)
             if not got:
@@ -346,14 +377,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- acting
     def do_POST(self):
-        self.server.last_seen = time.time()
-        """Run an action. Only requests from this computer, sent as JSON, are accepted."""
+        """Run an action. Only requests from this computer, sent as JSON with the access key, are accepted."""
         path, srv = urlparse(self.path).path, self.server
         if path not in ACTIONS:
             return self._send(404, b"Not found", "text/plain")
         if (not self._host_ok() or self.client_address[0] not in LOOPBACK
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
             return self._json({"error": "That only works on the computer running Hoard."}, 403)
+        if path not in KEYLESS_ACTIONS and not check_access(self, srv.key):
+            return self._refused()
+        srv.last_seen = time.time()
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
@@ -368,6 +401,10 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, dict):
             return self._json({"error": "Bad request."}, 400)
 
+        if path == "/api/enter":   # a page Hoard opened with a one-time link, trading it for the access key
+            if not srv.use_entry(body.get("token")):
+                return self._json({"error": "That link to Hoard was already used or is too old. Open Hoard again."}, 403)
+            return self._json({"ok": True, "key": srv.key})
         if path == "/api/tags":
             try:
                 TagStore().change(body)
@@ -469,17 +506,19 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
         sys.exit(f"Couldn't start on port {port} ({e}). Try another one with --port.")
     srv.tls_context, srv.tls = tls, bool(tls)
     scheme = "https" if tls else "http"
-    url = f"{scheme}://127.0.0.1:{srv.server_port}/"
-    if srv.key:
-        print(f"Other devices on your network: {scheme}://<this computer's address>:{srv.server_port}/?key={srv.key}")
-        print("That key is needed to use Hoard from another device. Share it only with devices you trust.")
+    srv.url = url = f"{scheme}://127.0.0.1:{srv.server_port}/"
+    if srv.lan:
+        print(f"Other devices on your network: {scheme}://<this computer's address>:{srv.server_port}/#key={srv.key}")
+        print("That address includes the access key, new each time Hoard starts. Share it only with devices you trust.")
         if not tls:
             print("This is plain HTTP: only use it where the connection is already encrypted, such as over Tailscale.")
     print(f"Hoard {__version__}: {url}   (library: {len(srv.lib.data['items'])} items; downloads: {root_dir(cfg)})")
-    if on_ready:
+    if on_ready:   # the desktop app: it opens its window with a one-time link, and never logs the key
         on_ready(url, srv)
-    elif open_browser:
-        threading.Timer(0.6, webbrowser.open, (url,)).start()
+    else:
+        print(f"Open Hoard at {url}#key={srv.key}   (this address includes the access key: keep it to yourself)")
+        if open_browser:
+            threading.Timer(0.6, webbrowser.open, (srv.entry_url(),)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

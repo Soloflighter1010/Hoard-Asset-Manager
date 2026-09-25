@@ -17,6 +17,7 @@ import stat
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.parse
 import urllib.error
@@ -160,6 +161,14 @@ class Pages(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", csp)
             self.assertIn("font-src 'self'", csp)
 
+    def test_every_request_carries_the_key(self):
+        """S-01: the pages reach Hoard's server only through api() (the key in a header) and keyed() (images)."""
+        for page in PAGES:
+            script = re.search(r"<script>(.*?)</script>", page.read_text("utf-8"), re.S).group(1)
+            self.assertEqual(len(re.findall(r"\bfetch\(", script)), 2, f"{page.name}: api() and the one-time link only")
+            self.assertIn(f'"{safety.ACCESS_HEADER}": ACCESS.key', script, page.name)
+            self.assertNotRegex(script, r"""src=["'`]/(thumb|files)/""", f"{page.name}: an image without the key")
+
     def test_pages_have_no_inline_handlers_or_outside_resources(self):
         for page in PAGES:
             html = page.read_text("utf-8")
@@ -175,6 +184,7 @@ class Pages(unittest.TestCase):
             t.start()
             try:
                 port = srv.server_port
+                key = {safety.ACCESS_HEADER: srv.key}
                 def get(path, headers=None, method="GET", body=None):
                     c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
                     c.request(method, path, body=body, headers=headers or {})
@@ -184,9 +194,9 @@ class Pages(unittest.TestCase):
                 page = get("/")
                 self.assertIn("script-src 'sha256-", page.getheader("Content-Security-Policy"))
                 self.assertEqual(page.getheader("X-Frame-Options"), "DENY")
-                self.assertEqual(get("/api/assets").getheader("Content-Security-Policy"), "default-src 'none'; sandbox")
+                self.assertEqual(get("/api/assets", key).getheader("Content-Security-Policy"), "default-src 'none'; sandbox")
                 self.assertEqual(get("/", {"Host": "evil.example"}).status, 403)              # DNS rebinding of the page
-                self.assertEqual(get("/files/..%2F..%2Fetc%2Fpasswd").status, 404)            # path traversal
+                self.assertEqual(get("/files/..%2F..%2Fetc%2Fpasswd", key).status, 404)       # path traversal
                 self.assertEqual(get("/api/open", {"Content-Type": "application/x-www-form-urlencoded"},
                                      "POST", "path=x").status, 403)                            # cross-site form post
             finally:
@@ -204,34 +214,182 @@ class NetworkMode(unittest.TestCase):
                 m.network_tls("0.0.0.0", None, None, False)
             self.assertIsNone(m.network_tls("0.0.0.0", None, None, True))
 
-    def _access(self, m, *, key, path="/", cookie=None, client="192.0.2.7", tls=False):
-        sent = {"status": None, "headers": {}}
+    def _access(self, m, *, key, path="/api/library", header=None, cookie=None, in_address=False):
         handler = mock.Mock()
-        handler.headers = {"Host": "hoard.lan:8766", **({"Cookie": cookie} if cookie else {})}
-        handler.client_address = (client, 50000)
+        handler.headers = {"Host": "hoard.lan:8766", **({m.ACCESS_HEADER: header} if header is not None else {}),
+                           **({"Cookie": cookie} if cookie else {})}
+        handler.client_address = ("192.0.2.7", 50000)
         handler.path = path
-        handler.server = mock.Mock(tls=tls)
-        handler.send_response.side_effect = lambda code: sent.update(status=code)
-        handler.send_header.side_effect = lambda k, v: sent["headers"].update({k: v})
-        allowed = m.check_access(handler, True, key)
-        return allowed, sent
+        return m.check_access(handler, key, in_address=in_address)
 
     def test_other_devices_need_the_key(self):
         for m in WEB_SAFETY:
-            allowed, sent = self._access(m, key="s3cret")
-            self.assertFalse(allowed)
-            self.assertEqual(sent["status"], 401)
-            allowed, sent = self._access(m, key="s3cret", path="/?key=wrong")
-            self.assertEqual(sent["status"], 401)
-            allowed, _ = self._access(m, key="s3cret", cookie="hoard_key=s3cret")
-            self.assertTrue(allowed)
+            self.assertFalse(self._access(m, key="s3cret"))
+            self.assertFalse(self._access(m, key="s3cret", header="wrong"))
+            self.assertFalse(self._access(m, key="s3cret", header="s3cre"))
+            self.assertFalse(self._access(m, key="s3cret", header="s3crét"))   # not ASCII: refused, no error
+            self.assertTrue(self._access(m, key="s3cret", header="s3cret"))
+            self.assertFalse(self._access(m, key=None, header=""), "no key made: nothing gets in")
 
-    def test_cookie_is_secure_over_https(self):
+    def test_the_key_never_comes_from_a_cookie(self):
+        """A browser sends a cookie for 127.0.0.1 to every program listening there, whatever its port."""
         for m in WEB_SAFETY:
-            _, sent = self._access(m, key="s3cret", path="/?key=s3cret", tls=True)
-            self.assertEqual(sent["status"], 303)
-            self.assertIn("; Secure", sent["headers"]["Set-Cookie"])
-            self.assertIn("HttpOnly", sent["headers"]["Set-Cookie"])
+            self.assertFalse(self._access(m, key="s3cret", cookie="hoard_key=s3cret"))
+
+    def test_only_images_carry_the_key_in_their_address(self):
+        for m in WEB_SAFETY:
+            self.assertFalse(self._access(m, key="s3cret", path="/api/library?k=s3cret"))
+            self.assertTrue(self._access(m, key="s3cret", path="/files/a.png?k=s3cret", in_address=True))
+            self.assertFalse(self._access(m, key="s3cret", path="/files/a.png?k=wrong", in_address=True))
+
+
+class LocalAccess(unittest.TestCase):
+    """S-01 (2.3.1 review): being on this computer isn't enough. Other programs, and other people's accounts on a
+    shared computer, can reach 127.0.0.1 too, so every request for data, images or an action needs this run's
+    access key. Without it, nothing can read your library or, say, point Hoard's downloads folder elsewhere."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        Path(self.tmp.name, "a.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": self.tmp.name}, lan=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+        self.tmp.cleanup()
+
+    def call(self, method, path, body=None, key=None, headers=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=10)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}),
+                           **({safety.ACCESS_HEADER: key} if key else {}), **(headers or {})})
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+
+    def test_data_needs_the_key(self):
+        for path in ("/api/library", "/api/assets", "/api/settings", "/api/status", "/api/setup"):
+            self.assertEqual(self.call("GET", path)[0], 401, path)
+            self.assertEqual(self.call("GET", path, key="wrong")[0], 401, path)
+            self.assertEqual(self.call("GET", path, key=self.srv.key)[0], 200, path)
+
+    def test_actions_need_the_key(self):
+        root = self.srv.cfg["root"]
+        self.assertEqual(self.call("POST", "/api/settings", {"root": str(Path(self.tmp.name, "elsewhere"))})[0], 401)
+        self.assertEqual(self.srv.cfg["root"], root, "the downloads folder stays where it was")
+        for path in ("/api/sync", "/api/logout", "/api/tags", "/api/open", "/api/quit", "/api/unlock"):
+            self.assertEqual(self.call("POST", path, {})[0], 401, path)
+        self.assertEqual(self.call("POST", "/api/cancel", {}, key=self.srv.key)[0], 200)
+
+    def test_not_from_a_cookie_or_the_address(self):
+        """A browser sends a cookie for 127.0.0.1 to every port there, and addresses end up in histories."""
+        self.assertEqual(self.call("GET", "/api/settings", headers={"Cookie": f"hoard_key={self.srv.key}"})[0], 401)
+        self.assertEqual(self.call("GET", f"/api/settings?k={self.srv.key}")[0], 401)
+        self.assertEqual(self.call("GET", f"/api/settings?key={self.srv.key}")[0], 401)
+
+    def test_images_carry_the_key_in_their_address(self):
+        self.assertEqual(self.call("GET", "/files/a.png")[0], 401)
+        self.assertEqual(self.call("GET", "/files/a.png?k=wrong")[0], 401)
+        self.assertEqual(self.call("GET", f"/files/a.png?k={self.srv.key}")[0], 200)
+        self.assertEqual(self.call("GET", "/thumb/booth%3A1")[0], 401)
+        self.assertEqual(self.call("GET", f"/thumb/booth%3A1?k={self.srv.key}")[0], 404)
+
+    def test_pages_and_fonts_hold_nothing_private(self):
+        for path in ("/", "/downloads", "/fonts/DelaGothicOne-Regular.woff2"):
+            self.assertEqual(self.call("GET", path)[0], 200, path)
+
+    def test_one_time_links(self):
+        link = self.srv.entry_url()
+        self.assertTrue(link.startswith(self.srv.url + "#enter="), link)
+        self.assertNotIn(self.srv.key, link, "the key itself never appears in a link Hoard opens")
+        token = link.split("#enter=", 1)[1]
+        status, data = self.call("POST", "/api/enter", {"token": token})
+        self.assertEqual((status, json.loads(data)["key"]), (200, self.srv.key))
+        self.assertEqual(self.call("POST", "/api/enter", {"token": token})[0], 403, "each link works once")
+        for bad in ({"token": "guess"}, {"token": ""}, {"token": 7}, {}):
+            self.assertEqual(self.call("POST", "/api/enter", bad)[0], 403, bad)
+        old = self.srv.entry_url().split("#enter=", 1)[1]
+        self.srv._entries[old] = time.time() - 1   # as if it had waited longer than ENTRY_SECONDS
+        self.assertEqual(self.call("POST", "/api/enter", {"token": old})[0], 403, "an unused link runs out")
+
+    def test_a_new_key_each_start(self):
+        other = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        try:
+            self.assertNotEqual(other.key, self.srv.key)
+            self.assertGreaterEqual(len(self.srv.key), 43)   # 32 random bytes
+        finally:
+            other.server_close()
+
+
+class PayhipToDo(unittest.TestCase):
+    """S-04/B-04 (2.3.1 review): when Payhip blocks the automated browser, the page listing products for you to
+    download yourself links only to Payhip and your shops, whatever a record says, and is written like every other
+    file Hoard writes: whole, and never through a link planted where it goes."""
+
+    PRODUCTS = [
+        {"id": "a1", "name": "First", "creator": "Kitsu", "url": "https://payhip.com/b/a1", "download_url": "https://payhip.com/d/a1"},
+        {"id": "x1", "name": "Trap", "creator": "Kitsu", "url": "https://payhip.com/b/x1",
+         "download_url": "javascript:alert(document.cookie)"},
+        {"id": "x2", "name": "Lookalike", "creator": "Kitsu", "url": "https://payhip.com/b/x2",
+         "download_url": "https://payhip.com.evil.example/d/x2"},
+        {"id": "b2", "name": "Second", "creator": "Kitsu", "url": "https://payhip.com/b/b2", "download_url": "https://payhip.com/d/b2"},
+    ]
+
+    def sync(self, root: Path) -> tuple[list, "downloader.Report"]:
+        """sync_payhip with the browser stood in for: Payhip blocks the first product it's asked to open."""
+        import contextlib
+        import types
+        opened = []
+
+        class Context:
+            pages = [object()]
+
+            def close(self):
+                pass
+
+        def bot_check(page, url, wait_s, headed):
+            opened.append(url)
+            raise downloader.Blocked("Payhip showed a bot check")
+        report = downloader.Report()
+        with mock.patch.multiple(downloader, _playwright=lambda: (lambda: contextlib.nullcontext(None)),
+                                 launch_context=lambda *a, **k: Context(), open_past_bot_check=bot_check,
+                                 payhip_products=lambda *a, **k: [dict(p) for p in self.PRODUCTS]):
+            downloader.sync_payhip(config.load_config(), root, types.SimpleNamespace(
+                headed=False, only=None, dry_run=False, payhip_page=None), report)
+        return opened, report
+
+    def test_links_are_checked_even_after_payhip_blocks(self):
+        root = Path(tempfile.mkdtemp())
+        opened, report = self.sync(root)
+        self.assertEqual(opened, ["https://payhip.com/d/a1"], "the first is tried; after that Payhip is blocking")
+        page = (root / "Payhip" / "_download-yourself.html").read_text("utf-8")
+        self.assertIn('href="https://payhip.com/d/a1"', page)
+        self.assertIn('href="https://payhip.com/d/b2"', page, "listed after the block, and checked")
+        self.assertNotIn("javascript:", page)
+        self.assertNotIn("evil.example", page)
+        self.assertEqual(sorted(s.split(" - ")[0] for s in report.skipped), ["Payhip: Lookalike", "Payhip: Trap"])
+
+    def test_the_page_itself_only_links_to_payhip(self):
+        """Checked again where the page is written, in case anything else ever lists a product."""
+        root = Path(tempfile.mkdtemp())
+        pending = [(p, root / "Payhip" / p["name"]) for p in self.PRODUCTS]
+        page = downloader.write_payhip_todo(root / "Payhip", pending, ["payhip.com"]).read_text("utf-8")
+        self.assertEqual(page.count("<a href="), 2)
+        self.assertNotIn("javascript:", page)
+        self.assertEqual(page.count("left out"), 2)
+
+    @unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
+    def test_a_planted_link_is_replaced_not_followed(self):
+        root = Path(tempfile.mkdtemp())
+        outside = Path(tempfile.mkdtemp()) / "yours.txt"
+        outside.write_text("keep me")
+        (root / "Payhip").mkdir()
+        (root / "Payhip" / "_download-yourself.html").symlink_to(outside)
+        downloader.write_payhip_todo(root / "Payhip", [(self.PRODUCTS[0], root / "Payhip" / "First")], ["payhip.com"])
+        self.assertEqual(outside.read_text(), "keep me")
+        self.assertFalse((root / "Payhip" / "_download-yourself.html").is_symlink())
 
 
 class Thumbnails(unittest.TestCase):
@@ -619,6 +777,7 @@ class TagHardening(unittest.TestCase):
                     c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=10)
                     c.putrequest("POST", "/api/tags")
                     c.putheader("Content-Type", "application/json")
+                    c.putheader(safety.ACCESS_HEADER, srv.key)
                     c.putheader("Content-Length", str(claimed or len(body)))
                     c.endheaders(body)
                     r = c.getresponse(); r.read(); c.close()
@@ -687,6 +846,19 @@ class Seals(unittest.TestCase):
             other = json.loads(json.dumps(sealed))
             other["integrity"]["key_id"] = "0" * 16
             self.assertEqual(m.check_seal(other, path), "foreign")
+
+    def test_nothing_sealed_is_forgotten(self):
+        """S-05 (2.3.1 review): the list of sealed files kept only its 20,000 alphabetically last entries, so any
+        other could be dropped, and a seal later removed from that file would pass as an older version's file."""
+        reset_keys()
+        self.addCleanup(reset_keys)
+        first = self.dir / "first.json"
+        safety.remember_sealed(first)
+        safety._sealed_file_ids().update(f"z{n:031x}" for n in range(20000))   # 20,000 more, all sorting after it
+        safety.remember_sealed(self.dir / "latest.json")
+        safety._sealed_ids = None   # read back from the file, as the next start would
+        stripped = {"assets": {}}
+        self.assertEqual(safety.check_seal(stripped, first), "changed", "still known as sealed: its seal was removed")
 
     def test_key_is_private_and_shared_by_the_tools(self):
         key = safety.integrity_key()
@@ -951,6 +1123,127 @@ class Egress(unittest.TestCase):
         for url in ("https://example.com/", "http://127.0.0.1.evil.example/", "http://localhost:80/", "file:///etc/passwd"):
             with self.assertRaises(ValueError):
                 app.local_request(url)
+
+
+FILE = bytes(range(256)) * 4   # 1024 bytes: any misplaced part shows
+
+
+class _Ranges(http.server.BaseHTTPRequestHandler):
+    """A test server for resumed downloads: /file sends `file`, answering a Range the way `mode` says."""
+    file, mode, asked = FILE, "honest", []
+
+    def do_GET(self):
+        body, rng, mode = type(self).file, self.headers.get("Range"), type(self).mode
+        type(self).asked.append(rng)
+        if not rng:
+            return self.reply(200, body)
+        start = int(rng[len("bytes="):-1])
+        whole = len(body)
+        if start >= whole:
+            return self.reply(416, b"", {} if mode == "416 without a size" else {"Content-Range": f"bytes */{whole}"})
+        if mode == "the wrong part":
+            start //= 2
+        end = min(start + 100, whole) if mode == "a short part" else whole
+        headers = {} if mode == "no Content-Range" else {"Content-Range": f"bytes {start}-{end - 1}/{whole}"}
+        return self.reply(206, body[start:end], headers)
+
+    def reply(self, status, body, headers=None):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+class Resuming(unittest.TestCase):
+    """B-03 (2.3.1 review): a .part file left from last time is only added to with the part that follows it, and only
+    counts as finished when the store says the file ends there. Otherwise the file starts again, rather than being
+    joined from two different ones; and a file shorter than the store said is never put in place."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Ranges)
+        cls.srv.daemon_threads = True
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.origin = f"http://127.0.0.1:{cls.srv.server_port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def setUp(self):
+        egress._TEST_ORIGINS.clear()
+        egress._TEST_ORIGINS.add(self.origin)
+        self.addCleanup(egress._TEST_ORIGINS.clear)
+        _Ranges.file, _Ranges.mode, _Ranges.asked = FILE, "honest", []
+        self.dest = Path(tempfile.mkdtemp()) / "file.bin"
+        self.part = self.dest.with_name("file.bin.part")
+
+    def download(self):
+        return egress.download(egress.session(), f"{self.origin}/file", self.dest, ["127.0.0.1"])
+
+    def test_the_rest_is_added(self):
+        self.part.write_bytes(FILE[:300])
+        self.assertEqual(self.download(), len(FILE))
+        self.assertEqual(self.dest.read_bytes(), FILE)
+        self.assertEqual(_Ranges.asked, ["bytes=300-"])
+
+    def test_the_wrong_part_is_never_added(self):
+        for mode in ("the wrong part", "no Content-Range"):
+            with self.subTest(mode):
+                _Ranges.mode, _Ranges.asked = mode, []
+                self.part.write_bytes(FILE[:600])
+                self.dest.unlink(missing_ok=True)
+                self.download()
+                self.assertEqual(self.dest.read_bytes(), FILE)
+                self.assertEqual(_Ranges.asked, ["bytes=600-", None], "started again, from the beginning")
+
+    def test_a_finished_part_is_used(self):
+        self.part.write_bytes(FILE)
+        self.assertEqual(self.download(), len(FILE))
+        self.assertEqual(self.dest.read_bytes(), FILE)
+        self.assertEqual(_Ranges.asked, ["bytes=1024-"], "nothing downloaded again")
+
+    def test_an_old_part_of_a_changed_file_isnt_used(self):
+        """The creator uploaded a smaller version: the store has nothing past the .part file, but it isn't this file."""
+        _Ranges.file = b"new version" * 10
+        self.part.write_bytes(FILE)
+        self.download()
+        self.assertEqual(self.dest.read_bytes(), b"new version" * 10)
+        self.assertEqual(_Ranges.asked, ["bytes=1024-", None])
+
+    def test_a_finished_part_needs_the_store_to_say_so(self):
+        _Ranges.mode = "416 without a size"
+        self.part.write_bytes(FILE)
+        self.download()
+        self.assertEqual(self.dest.read_bytes(), FILE)
+        self.assertEqual(_Ranges.asked, ["bytes=1024-", None])
+
+    def test_a_short_answer_waits_for_next_time(self):
+        _Ranges.mode = "a short part"
+        self.part.write_bytes(FILE[:300])
+        with self.assertRaises(RuntimeError):
+            self.download()
+        self.assertFalse(self.dest.exists(), "never put in place while it's short")
+        self.assertEqual(self.part.read_bytes(), FILE[:400], "what arrived is kept")
+        _Ranges.mode = "honest"
+        self.download()
+        self.assertEqual(self.dest.read_bytes(), FILE)
+        self.assertEqual(_Ranges.asked[-1], "bytes=400-")
+
+    def test_downloads_ask_for_the_files_own_bytes(self):
+        """Compression would make sizes and byte ranges mean something else."""
+        seen = []
+        real = egress._send
+        with mock.patch.object(egress, "_send", lambda *a, **k: seen.append(k["headers"]) or real(*a, **k)):
+            self.download()
+        self.assertEqual(seen[0].get("Accept-Encoding"), "identity")
 
 
 class EgressOverHTTPS(unittest.TestCase):

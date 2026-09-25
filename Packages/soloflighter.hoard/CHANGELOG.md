@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+Safer reading of `.unitypackage` files, which anyone could have made: a package whose headers claim a file name
+longer than any real path is refused before anything is set aside for it (one claiming an 8 GB name could make
+the editor try to allocate it), and a package that would unpack to more than 64 GB is refused instead of being
+read to the end. Either counts as "not a package", as a damaged one always has.
+
 ## 0.1.1
 
 Published the way VRChat's template-package does: each release now also has a `.unitypackage`, for projects

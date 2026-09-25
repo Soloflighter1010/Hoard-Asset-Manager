@@ -51,10 +51,16 @@ It can't fully protect against:
 - A copied session cookie in a settings file or environment variable is never read.
 
 **Hoard's pages**
-- Served only to your own computer by default. To use them from other devices you need HTTPS (your
-  own certificate) or to say the connection is already encrypted, such as over Tailscale; other devices
-  also need an access key. Signing in, refreshing, signing out, changing tags and opening folders only
-  work on the computer running the tool.
+- Served only to your own computer by default, and even there every request for your library, your
+  downloads, their pictures or an action needs an access key that's new each time Hoard starts. Being on
+  the same computer isn't enough: other programs, and other people's accounts on a shared computer, can
+  reach Hoard's address too. Hoard opens its page with a one-time link that the page trades for the key,
+  so the key never appears where other programs can see it. It's sent in a request header, never in a
+  cookie (a browser sends cookies for your computer's address to every program listening there).
+- To use them from other devices you need HTTPS (your own certificate) or to say the connection is
+  already encrypted, such as over Tailscale, and the address Hoard prints, which includes the key.
+  Signing in, refreshing, signing out, changing tags and opening folders only work on the computer
+  running the tool.
 - Sent with a strict Content-Security-Policy, so only the page's own script can run, and with headers
   that stop other websites from embedding the page or reading its responses. Everything else Hoard
   serves (data, images, fonts) is sandboxed, so it can never run as a page.

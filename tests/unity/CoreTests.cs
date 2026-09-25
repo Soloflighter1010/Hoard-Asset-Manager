@@ -86,6 +86,15 @@ public static class CoreTests
         Check("package GUIDs and paths", string.Join("\n", gotLines) == string.Join("\n", want), string.Join(" / ", gotLines));
         try { UnityPackageReader.ReadAssets(Path.Combine(dir, "not_a_package.unitypackage")); Check("not a package refused", false, "no error"); }
         catch (Exception e) { Check("not a package refused", e is InvalidDataException || e is IOException, e.GetType().Name); }
+        // hostile packages: what a header claims is checked before it's acted on (an 8 GiB name would be allocated)
+        try { UnityPackageReader.ReadAssets(Path.Combine(dir, "huge_name.unitypackage")); Check("a huge long name refused", false, "no error"); }
+        catch (Exception e) { Check("a huge long name refused before anything is allocated", e is InvalidDataException, e.GetType().Name); }
+        try { UnityPackageReader.ReadAssets(Path.Combine(dir, "too_big.unitypackage")); Check("a package larger than any real one refused", false, "no error"); }
+        catch (Exception e)
+        {
+            Check("a package larger than any real one refused", e is InvalidDataException && e.Message.Contains("larger"),
+                  e.GetType().Name + ": " + e.Message);
+        }
 
         // the release's own .unitypackage (built by scripts/build_vpm.py), read back by this reader
         string release = Path.Combine(dir, "release.unitypackage");

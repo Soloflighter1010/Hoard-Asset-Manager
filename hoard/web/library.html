@@ -605,6 +605,33 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+/* ---------- the access key. Hoard's server only answers requests that carry this run's key (see server.py).
+   Hoard opens this page with a one-time link (#enter=...) that's traded for it; the address `hoard serve`
+   prints carries the key itself (#key=...). It's kept for this address only: each start brings a new one. */
+const ACCESS = { key: "" };
+const entered = (async () => {
+  const h = new URLSearchParams(location.hash.slice(1)), once = h.get("enter"), given = h.get("key");
+  if (once !== null || given !== null) {   // out of the address before anything else reads or shows it
+    h.delete("enter"); h.delete("key");
+    history.replaceState(null, "", h.toString() ? "#" + h : location.pathname);
+  }
+  try { ACCESS.key = given || localStorage.getItem("hoard-key") || ""; } catch (e) { ACCESS.key = given || ""; }
+  if (once) {
+    try {
+      const r = await fetch("/api/enter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: once }) });
+      if (r.ok) ACCESS.key = (await r.json()).key || "";
+    } catch (e) { /* Hoard isn't running: the first request says so */ }
+  }
+  try { if (ACCESS.key) localStorage.setItem("hoard-key", ACCESS.key); } catch (e) { /* no storage: this page still works */ }
+})();
+// Every request to Hoard's server goes through api(), with the key. Images, which the browser loads by itself,
+// carry it in their address instead (keyed()).
+async function api(url, opts = {}) {
+  await entered;
+  return fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Hoard-Key": ACCESS.key } });
+}
+const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
+const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
 const STORE_ORDER = ["booth", "gumroad", "jinxxy", "payhip"];
 const shown = s => (DATA.enabled || {})[s] !== false;   // stores you don't use (Settings, or setup) are hidden
 const usedStores = () => STORE_ORDER.filter(shown);
@@ -631,7 +658,7 @@ const label = s => DATA.labels[s] || s;
 const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
 const placeholder = a => `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b></span>`;
-const thumb = a => a.thumbnail ? `<img src="/thumb/${encodeURIComponent(a.key)}" alt="" loading="lazy" decoding="async">` : placeholder(a);
+const thumb = a => a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="" loading="lazy" decoding="async">` : placeholder(a);
 function ago(iso) {
   if (!iso) return "never";
   const s = (Date.now() - Date.parse(iso)) / 1000;
@@ -645,7 +672,7 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
 }
 async function post(url, body) {
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `The library server answered ${r.status}.`);
   return j;
@@ -654,8 +681,8 @@ async function post(url, body) {
 /* ---------- data */
 async function load() {
   try {
-    const r = await fetch("/api/library");
-    if (!r.ok) throw new Error(r.status === 403 ? "Open this page at http://127.0.0.1 on the computer running it." : `Server answered ${r.status}.`);
+    const r = await api("/api/library");
+    if (!r.ok) throw new Error(r.status === 401 ? NEEDS_KEY : r.status === 403 ? "Open this page at http://127.0.0.1 on the computer running it." : `Server answered ${r.status}.`);
     DATA = await r.json(); DATA.error = null;
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
     for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
@@ -803,7 +830,7 @@ function startPolling() {
   let lastCounts = JSON.stringify(DATA.stores);
   polling = setInterval(async () => {
     try {
-      const r = await fetch("/api/status"); const s = await r.json();
+      const r = await api("/api/status"); const s = await r.json();
       DATA.job = s.job; showJob(s.job);
       const counts = JSON.stringify(s.stores);
       if (counts !== lastCounts) { lastCounts = counts; await load(); }
@@ -846,7 +873,7 @@ function showDetail(a, focus = true) {
   const pageLink = storeUrl(a.store, a.url) && a.url !== a.download_url ? `<a class="ghost" href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer">Open store page</a>` : "";
   $("#detail").innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
-    `<div class="d-art">${a.thumbnail ? `<img src="/thumb/${encodeURIComponent(a.key)}" alt="">` : placeholder(a)}</div>` +
+    `<div class="d-art">${a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="">` : placeholder(a)}</div>` +
     `<h2 class="d-name">${esc(a.name)}</h2>` +
     `<p class="d-by">by ${by}${extra ? `, ${extra}` : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store}"></span>${store}</p>` +
@@ -1031,7 +1058,7 @@ const keysOf = list => [...new Set(list.flatMap(a => [a.tag_key, ...(a.copy_keys
 
 async function changeTags(body, done) {
   try {
-    const r = await fetch("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await api("/api/tags", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { toast(j.error || "That tag change wasn't saved."); return false; }
   } catch (e) { toast("That tag change wasn't saved, because the tool isn't running."); return false; }
@@ -1197,7 +1224,7 @@ let SETTINGS = null, dlActive = false, dlTimer = null;
 
 async function apiPost(url, body) {
   try {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
     return { ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) };
   } catch (e) {
     return { ok: false, status: 0, data: { error: "Hoard isn't running. Open it again." } };
@@ -1213,7 +1240,7 @@ async function openSettings(open) {
   T.closeOtherPanels();
   openTagPanel(false);
   try {
-    SETTINGS = await (await fetch("/api/settings", { cache: "no-store" })).json();
+    SETTINGS = await (await api("/api/settings", { cache: "no-store" })).json();
   } catch (e) {
     toast("Hoard isn't running. Open it again."); return;
   }
@@ -1257,7 +1284,7 @@ async function pollDownload() {
   clearTimeout(dlTimer);
   let job;
   try {
-    job = (await (await fetch("/api/status", { cache: "no-store" })).json()).job || {};
+    job = (await (await api("/api/status", { cache: "no-store" })).json()).job || {};
   } catch (e) {
     if (dlActive) dlTimer = setTimeout(pollDownload, 2000);
     return;
@@ -1310,7 +1337,7 @@ function wireApp() {
   });
   pollDownload();  // a download started from the other view, or before this page opened
   // Every open page checks in once a minute: when Hoard runs in the browser, it stops once none has for a while.
-  setInterval(() => { fetch("/api/status", { cache: "no-store" }).catch(() => {}); }, 60000);
+  setInterval(() => { api("/api/status", { cache: "no-store" }).catch(() => {}); }, 60000);
   $("#quitHoard").addEventListener("click", async () => {
     const r = await apiPost("/api/quit");
     if (!r.ok) { toast(r.data.error || "Hoard didn't quit."); return; }
@@ -1323,7 +1350,7 @@ const SETUP = { step: 0, st: null, timer: null, busy: false };
 const setupSteps = () => ["welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
 async function setupStatus() {
-  SETUP.st = await (await fetch("/api/setup", { cache: "no-store" })).json();
+  SETUP.st = await (await api("/api/setup", { cache: "no-store" })).json();
   return SETUP.st;
 }
 async function openSetup() {
@@ -1692,7 +1719,7 @@ function wirePrivacy() {
     if (!found.length) return;
     const list = found.map(s => s.replace(/^https:\/\//, "")).join("\n");
     if (!confirm(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then open pages and download files from those addresses. Only add shops you bought from.`)) return;
-    const current = (await (await fetch("/api/settings", { cache: "no-store" })).json()).payhip_shops || [];
+    const current = (await (await api("/api/settings", { cache: "no-store" })).json()).payhip_shops || [];
     const r = await apiPost("/api/settings", { payhip_shops: [...current, ...found] });
     toast(r.ok ? "Added. Refresh Payhip to read them." : (r.data.error || "They weren't added."));
   });
