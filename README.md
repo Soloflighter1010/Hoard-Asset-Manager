@@ -17,6 +17,9 @@ files? Hoard answers those without opening four tabs.
   to date when creators update their files.
 - One app, one set of sign-ins, one set of tags, and it works offline.
 
+Guides for everything, from installing to fixing a problem, are in the
+**[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**.
+
 ## Install (Windows)
 
 1. Download **`Hoard-Setup-<version>.exe`** from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
@@ -239,6 +242,9 @@ for you. Hoard itself doesn't use AI, and your data never goes to one.
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how Hoard is built: the store readers, sign-ins,
 the local servers and their safety rules, and how releases are made.
+The wiki's [Development](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Development) and
+[Releasing](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Releasing) pages cover tests and releases step
+by step. The wiki itself is written in `wiki/` and published by the **Wiki** workflow.
 
 To make a release, raise `__version__` in `hoard/__init__.py`, add a section to `CHANGELOG.md`, then push a
 tag such as `v2.0.1`. GitHub Actions builds the zip and publishes the release with that version's
