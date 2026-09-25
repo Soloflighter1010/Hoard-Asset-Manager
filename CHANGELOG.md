@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.4.1
+
+The 2.4.0 Windows app, released again: 2.4.0's release couldn't take the installer, and its version number can't
+be reused. Nothing else changed: what's new is under 2.4.0 in CHANGELOG.md.
+
 ## 2.4.0
 
 Hoard is a Windows app now: no command prompt, no Python to install.
