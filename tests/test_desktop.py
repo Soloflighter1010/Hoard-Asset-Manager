@@ -132,6 +132,9 @@ class DesktopApp(unittest.TestCase):
         self.assertEqual(path.parent, app.data_dir() / "logs")
 
     def test_self_test(self):
+        # The stand-in, as the tests run from requirements.txt, which has no pywebview. The built app's own
+        # self-test (hoard-cli.exe self-test, in both workflows) checks the real one.
+        sys.modules["webview"] = fake_webview()
         self.assertEqual(app.self_test(), 0)
 
 
