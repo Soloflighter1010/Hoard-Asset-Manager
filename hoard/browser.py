@@ -505,6 +505,15 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
         return "\n".join(done)
     label = store_label(store)
     target = profile_dir(cfg, store)
+    if store == "itch":   # signs in with an API key, not a browser (a browser sign-in from 2.5.0 is removed too)
+        from .vault import forget_key
+        had = forget_key(cfg, "itch")
+        if target.exists():
+            _remove_tree(target)
+        if not had:
+            return f"{label}: no saved API key."
+        return (f"{label}: deleted the saved API key. It still works until you delete it on itch.io too "
+                "(Settings, API keys), so do that if you're done with it.")
     if not target.exists():
         return f"{label}: no saved sign-in."
     if online is None:

@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "jinxxy": {"enabled": True, "item_link_pattern": "^/my/(inventory|purchases|library)/[^/]+/?$",
                "save_thumbnails": True, "download_start_timeout": 90},
     "payhip": {"enabled": True, "shops": [], "headed": True, "bot_check_wait": 180},   # read only: never downloaded
-    "itch": {"enabled": True, "skip_game_builds": True, "save_thumbnails": True, "download_start_timeout": 90},
+    "itch": {"enabled": True, "skip_game_builds": True, "save_thumbnails": True},   # through its API, with your key
     "tags": {"min_count": 3, "max_share": 0.4, "min_length": 2, "extra_stopwords": [], "blocklist": []},
 }
 

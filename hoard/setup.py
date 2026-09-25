@@ -82,6 +82,9 @@ def browser_problem(error: BaseException) -> str | None:
 def signed_in(cfg: dict, store: str) -> bool:
     """Does Hoard hold a sign-in for this store? (Cookies for the store's site in its profile; whether the store
     still accepts them is only known when Hoard next reads the store.)"""
+    if store == "itch":   # an API key, not a browser sign-in
+        from .vault import load_key
+        return load_key(cfg, "itch") is not None
     profile = profile_dir(cfg, store)
     return profile.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(profile))
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
+from . import itch, vault
 from .browser import _playwright, goto, goto_past_check, has_password_field, settle
 from .common import NotLoggedIn, now_iso
 from .net import STORE_HOSTS
@@ -28,8 +29,7 @@ STORES = {
     "gumroad": {"label": "Gumroad", "login": "https://app.gumroad.com/login", "referer": "https://gumroad.com/"},
     "jinxxy": {"label": "Jinxxy", "login": "https://jinxxy.com/my/inventory", "referer": "https://jinxxy.com/"},
     "payhip": {"label": "Payhip", "login": "https://payhip.com/auth/login", "referer": "https://payhip.com/"},
-    "itch": {"label": "itch.io", "login": "https://itch.io/login?return_to=https%3A%2F%2Fitch.io%2Fmy-purchases",
-             "referer": "https://itch.io/"},
+    "itch": {"label": "itch.io", "login": "https://itch.io/user/settings/api-keys", "referer": "https://itch.io/"},
 }
 
 
@@ -534,12 +534,10 @@ def payhip_item(c: dict) -> dict:
 
 # ----------------------------------------------------------------------------- itch.io
 #
-# itch.io keeps everything you've bought or claimed (from bundles, or "name your own price" projects) in your
-# library at itch.io/my-purchases: a card per project, each with a Download button that leads to the project's
-# download page, <creator>.itch.io/<project>/download/<key>. The key in that address opens the page for anyone who
-# has it, so it's kept like a sign-in: only in Hoard's private library list, and taken out of anything saved for
-# troubleshooting. The reader goes by those addresses rather than the page's layout. If it gets things wrong,
-# run: debug itch
+# itch.io is read through its API (itch.py), with an API key you create on itch.io: its website shows automated
+# browsers a Cloudflare check they never get past. ITCH_JS reads a library page you saved yourself (itch.io/
+# my-purchases), for importing: a card per project, each with a Download button leading to the project's download
+# page (<creator>.itch.io/<project>/download/<key>). Items are known by itch.io's own project number either way.
 
 ITCH_LIBRARY = "https://itch.io/my-purchases"
 
@@ -612,7 +610,8 @@ ITCH_JS = r"""
     }
     creator = creator || text(c.querySelector('.game_author')).replace(/^by\s+/i, '') || who;
     const page = mine.find(x => x.kind === 'project'), dl = mine.find(x => x.kind === 'download');
-    cards.set(l.id, { id: l.id, name, creator, creator_url: creatorUrl, thumbnail: picture(c),
+    const cell = l.a.closest('[data-game_id]'), number = cell && cell.getAttribute('data-game_id');
+    cards.set(l.id, { id: /^\d{1,20}$/.test(number || '') ? number : l.id, name, creator, creator_url: creatorUrl, thumbnail: picture(c),
                       url: page ? page.url : l.url.split('/download/')[0], download_url: dl ? dl.url : '' });
   }
   const next = [...document.querySelectorAll('a[rel="next"], a.next_page, .pager a, .pagination a')]
@@ -626,64 +625,23 @@ ITCH_JS = r"""
 """
 
 
-def itch_signed_out(page) -> bool:
-    """True when itch.io is showing its sign-in page instead of your library."""
-    u = urlparse(page.url)
-    if u.hostname == "itch.io" and u.path.rstrip("/") in ("/login", "/register"):
-        return True
-    return has_password_field(page)
-
-
-def read_itch_library(page, cfg: dict, progress) -> list[dict]:
-    """Every project in your itch.io library, as cards (see ITCH_JS): scrolls while more appear, and follows the
-    library's pages if it has any."""
-    delay = float(cfg.get("request_delay", 1.0))
-    goto(page, ITCH_LIBRARY)
-    settle(page, 1000)
-    if itch_signed_out(page):
-        raise NotLoggedIn("Not signed in to itch.io")
-    found: dict[str, dict] = {}
-    visited = {ITCH_LIBRARY}
-    for _ in range(200):   # numbered pages, if the library has them
-        quiet, nxt = 0, None
-        for _ in range(500):   # a library that loads more as you scroll
-            before = len(found)
-            result = page.evaluate(ITCH_JS)
-            for c in result["cards"]:
-                old = found.get(c["id"])
-                found[c["id"]] = {k: old.get(k) or c.get(k) for k in c} if old else c
-            nxt = result["next"] or nxt
-            progress(f"Library, {len(found)} items")
-            more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
-            if more.count() and more.first.is_visible() and more.first.is_enabled():
-                more.first.click()
-                settle(page, 500)
-                continue
-            page.mouse.wheel(0, 20000)
-            page.wait_for_timeout(900)
-            quiet = quiet + 1 if len(found) == before else 0
-            if quiet >= 3:
-                break
-        if not nxt or nxt in visited:
-            break
-        visited.add(nxt)
-        time.sleep(delay)
-        goto(page, nxt)
-        settle(page)
-    return list(found.values())
-
-
 def fetch_itch(ctx, cfg, progress) -> list[dict]:
-    """Every project in your itch.io library."""
-    page = ctx.new_page()
+    """Everything you own on itch.io, through its API (no browser: ctx is unused)."""
+    key = vault.load_key(cfg, "itch")
+    if not key:
+        raise NotLoggedIn("No itch.io API key yet")
+    sess = itch.session(key)
     try:
-        cards = read_itch_library(page, cfg, progress)
+        keys = itch.owned_keys(sess, float(cfg.get("request_delay", 1.0)), progress)
     finally:
-        page.close()
-    if not cards:
-        raise RuntimeError("found nothing in your itch.io library. If you do own things there, run the command: "
-                           "debug itch")
-    return [itch_item(c) for c in cards]
+        sess.close()
+    items = []
+    for k in keys:
+        g = itch.game_of(k)
+        if g["id"]:
+            items.append(item("itch", g["id"], name=g["title"], creator=g["creator"], creator_url=g["creator_url"],
+                              thumbnail=g["cover"], url=g["url"]))
+    return items
 
 
 def itch_item(c: dict) -> dict:

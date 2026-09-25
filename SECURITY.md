@@ -86,10 +86,15 @@ It can't fully protect against:
 - Download files are created exclusively and opened without following links. The finished file is
   moved into place only if it is still the very file that was written; anything swapped in meanwhile is
   refused. Downloads the store window makes are saved into a new private folder first.
-- Jinxxy and itch.io files are downloaded by clicking each file's own button in that store's signed-in
-  window, as you would. An itch.io download page's address holds a key that opens it for anyone, so it's
-  kept only in Hoard's private library list (never in the catalog or a product's `asset.json`), and taken out
-  of troubleshooting files. Payhip is only read: Hoard never downloads from it.
+- Jinxxy files are downloaded by clicking each file's own button in its signed-in window, as you would. Payhip
+  is only read: Hoard never downloads from it.
+- itch.io is reached through its API with an API key you create on itch.io, never your password. The key is
+  kept with the operating system's protection (`hoard/vault.py`): encrypted for your Windows account (DPAPI), in
+  your macOS Keychain, or in your Linux keyring through `secret-tool`; without a keyring it isn't kept, unless
+  you've allowed unprotected sign-ins. It never goes in `config.json`, on a command line or into a log, is
+  never shown again, and is deleted when you sign out of itch.io in Hoard. It's sent in one header, only ever to
+  `api.itch.io`: a file's download address redirects to a file host, which is reached with a session carrying
+  nothing of yours. Each downloaded file is checked against itch.io's MD5 checksum when it gives one.
 - Pictures from your downloads folder are opened one folder at a time without following links (on
   Windows, by checking where the opened file really is), and what's served is exactly what was opened.
 - Two products or files whose names clean up alike never share a folder or overwrite each other.

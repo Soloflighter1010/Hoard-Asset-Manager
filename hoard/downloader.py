@@ -16,13 +16,13 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 
-from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, goto, launch_context
+from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
 from .common import NotLoggedIn, log, now_iso
-from .library import DOWNLOADABLE, STORES, read_itch_library
+from .library import DOWNLOADABLE, STORES
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR
-from . import egress
+from . import egress, itch, vault
 from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagStore, clean_tag, tag_key
 
@@ -1116,151 +1116,104 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
 
 # ----------------------------------------------------------------------------- itch.io
 #
-# Your itch.io library lists everything you own, each with a download page (<creator>.itch.io/<project>/download/
-# <key>) that lists the project's files. Each file is downloaded by clicking its Download button in the signed-in
-# browser, as you would. Game builds (files the creator marked as a program for Windows, macOS, Linux or Android)
-# are skipped while itch.skip_game_builds is on: creators mark their games' builds, and hardly ever asset files, so a
-# library with games in it doesn't fill your drive with them.
+# Through itch.io's API (itch.py), with your API key: what you own, each project's files, and each file from its
+# download address, which redirects to the file host. Downloads resume, and a file whose checksum itch.io gives is
+# checked against it. Game builds (files the creator marked for Windows, macOS, Linux or Android) are skipped while
+# itch.skip_game_builds is on: creators mark their games' builds, and hardly ever asset files, so a library with
+# games in it doesn't fill your drive with them.
 
-ITCH_UPLOADS_JS = r"""
-() => {
-  // A project's download page: a row per file, whose Download button carries the file's number (data-upload_id),
-  // with its name in .name (the whole name in its title) and its size in .file_size. A file the creator marked as
-  // a program for an operating system shows that system's icon.
-  const text = e => ((e && (e.innerText || e.textContent)) || '').replace(/\s+/g, ' ').trim();
-  const SYSTEMS = [['Windows', /windows|win8|win10/i], ['macOS', /apple|mac\s?os|osx|\bmac\b/i], ['Linux', /linux|tux/i],
-                   ['Android', /android/i]];
-  document.querySelectorAll('[data-adl-idx]').forEach(e => e.removeAttribute('data-adl-idx'));
-  const out = [], seen = new Set();
-  for (const el of document.querySelectorAll('[data-upload_id]')) {
-    const id = (el.getAttribute('data-upload_id') || '').trim();
-    if (!/^\d{1,20}$/.test(id) || seen.has(id)) continue;
-    const button = el.matches('a, button, [role="button"]') ? el : el.querySelector('a, button, [role="button"]');
-    if (!button) continue;
-    seen.add(id);
-    let row = button.closest('.upload');
-    if (!row) {   // widen from the button while the row is still about this one file
-      row = button;
-      while (row.parentElement && row.parentElement !== document.body && !row.parentElement.matches('main, .upload_list_widget')) {
-        const ids = new Set([...row.parentElement.querySelectorAll('[data-upload_id]')].map(x => x.getAttribute('data-upload_id')));
-        if (ids.size > 1) break;
-        row = row.parentElement;
-      }
-    }
-    const named = row.querySelector('.upload_name .name, strong.name, .name');
-    const name = named ? ((named.getAttribute('title') || '').trim() || text(named)) : '';
-    const icons = [...row.querySelectorAll('.download_platforms *, [class*="icon-"]')]
-      .map(i => (i.getAttribute('title') || '') + ' ' + (i.getAttribute('class') || '')).join(' ');
-    const href = button.getAttribute('href') || '';
-    let elsewhere = false;   // a file the creator links to on another website, rather than one itch.io keeps
-    if (href && !href.startsWith('#') && !/^javascript:/i.test(href)) {
-      try { elsewhere = !/(^|\.)itch\.(io|zone)$/i.test(new URL(href, location.href).hostname); } catch (e) { elsewhere = true; }
-    }
-    button.setAttribute('data-adl-idx', String(out.length));
-    out.push({ idx: out.length, upload_id: id, name, size: text(row.querySelector('.file_size')),
-               systems: SYSTEMS.filter(([, rx]) => rx.test(icons)).map(([n]) => n), elsewhere,
-               label: text(row).slice(0, 300) });
-  }
-  return out;
-}
-"""
+def md5_of(path: Path) -> str:
+    """A file's MD5, read a piece at a time (files can be many gigabytes). itch.io gives it to check downloads by."""
+    digest = hashlib.md5(usedforsecurity=False)
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your itch.io library."""
+    key = vault.load_key(cfg, "itch")
+    if not key:
+        raise NotLoggedIn("no itch.io API key yet")
     store_dir = root / STORE_DIRS["itch"]
     man = Manifest(store_dir)
     delay = float(cfg.get("request_delay", 1.0))
-    with _playwright()() as p:
-        ctx = launch_context(p, cfg, not args.headed, "itch")
-        try:
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            cards = read_itch_library(page, cfg, lambda _message: None)
-            log(f"itch.io: {len(cards)} {'item' if len(cards) == 1 else 'items'} in your library")
-            for c in cards:
-                name = (c["name"] or c["id"]).strip()
-                creator = (c["creator"] or "Unknown Creator").strip()
-                if args.only and args.only.lower() not in f"{name} {creator}".lower():
-                    continue
-                if removed_product("itch", name, report):
-                    continue
-                if not store_url(c.get("download_url"), STORE_SITES["itch"]):
-                    report.skipped.append(f"itch.io: {name} - your library has no download page for it")
-                    continue
-                time.sleep(delay)
-                try:
-                    _itch_project(ctx, page, c, name, creator, man, store_dir, cfg["itch"], args, report)
-                except NotLoggedIn:
-                    raise
-                except Exception as e:
-                    report.failed.append(f"itch.io: {creator} / {name} - {e}")
-        finally:
-            man.save_changes()   # every finished file recorded, however the sync ended
-            ctx.close()
+    sess = itch.session(key)
+    try:
+        keys = itch.owned_keys(sess, delay)
+        log(f"itch.io: {len(keys)} {'item' if len(keys) == 1 else 'items'} in your library")
+        for k in keys:
+            g = itch.game_of(k)
+            name = clean_text(g["title"], 300) or f"itch.io project {g['id']}"
+            creator = clean_text(g["creator"], 200) or "Unknown Creator"
+            if not g["id"] or (args.only and args.only.lower() not in f"{name} {creator}".lower()):
+                continue
+            if removed_product("itch", name, report):
+                continue
+            time.sleep(delay)
+            try:
+                _itch_project(sess, k, g, name, creator, man, store_dir, cfg["itch"], args, report)
+            except NotLoggedIn:
+                raise
+            except Exception as e:
+                report.failed.append(f"itch.io: {creator} / {name} - {e}")
+    finally:
+        sess.headers.pop("Authorization", None)   # the key only lives for this sync
+        sess.close()
+        man.save_changes()   # every finished file recorded, however the sync ended
 
 
-def _itch_project(ctx, page, c: dict, name: str, creator: str, man: "Manifest", store_dir: Path, icfg: dict, args,
+def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifest", store_dir: Path, icfg: dict, args,
                   report: Report) -> None:
-    """Open one project's download page and download each of its files that isn't here yet, or has changed."""
-    goto(page, c["download_url"])
-    settle(page)
-    here = page.url.split("#")[0]
-    if "/download/" not in urlparse(here).path:
-        raise RuntimeError("its download page sent Hoard elsewhere (the purchase may have been refunded)")
-    uploads = page.evaluate(ITCH_UPLOADS_JS)
-    if not uploads:
-        report.skipped.append(f"itch.io: {name} - no files on its download page")
+    """Download each of one project's files that isn't here yet, or has changed."""
+    files = itch.uploads(sess, g["id"], k["id"])
+    if not files:
+        report.skipped.append(f"itch.io: {name} - no files to download")
         return
-    rec = man.record(c["id"], creator, name)
+    rec = man.record(str(g["id"]), creator, name)
     is_new_asset = not rec["files"]
-    rec.update(name=name, creator=creator, url=store_link("itch", c.get("url")), last_synced=now_iso())
+    rec.update(name=name, creator=creator, url=store_link("itch", g["url"]), last_synced=now_iso())
     folder = rel_to_path(store_dir, rec["folder"])
     log(f"\n[itch.io] {creator} / {name}")
-    offered = {u["upload_id"] for u in uploads}
-    timeout_s = int(icfg.get("download_start_timeout", 90))
+    offered = {str(u["id"]) for u in files}
     got_any = False
-    for u in uploads:
-        fid, label = u["upload_id"], u["name"] or f"file {u['upload_id']}"
-        shown = f"{u['name']}|{u['size']}"   # what itch.io says about the file: when it changes, the creator updated it
+    for u in files:
+        fid = str(u["id"])
+        label = clean_text(u.get("display_name") or u.get("filename"), 200) or f"file {fid}"
+        # what itch.io says about the file: when it changes, the creator updated it
+        shown = str(u.get("md5_hash") or f"{u.get('filename')}|{u.get('size')}|{u.get('updated_at')}")
         old = rec["files"].get(fid)
         if old and old.get("shown", shown) == shown and rel_to_path(folder, old["path"]).exists():
             continue
-        if u["elsewhere"]:
+        if u.get("storage") == "external":
             report.skipped.append(f"itch.io: {name} / {label} - kept on another website, so not downloaded")
             continue
-        if u["systems"] and icfg.get("skip_game_builds", True):
-            report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(u['systems'])}, so not "
+        if itch.systems(u) and icfg.get("skip_game_builds", True):
+            report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(itch.systems(u))}, so not "
                                   "downloaded (Settings, itch.io: Skip game builds)")
             continue
         if args.dry_run:
             log(f"    would {'update' if old else 'download'}: {label}")
             continue
-        match = next((x for x in page.evaluate(ITCH_UPLOADS_JS) if x["upload_id"] == fid), None)   # tagged afresh
-        if not match:
-            report.failed.append(f"itch.io: {name} / {label} - its Download button disappeared")
-            continue
-        dl = click_download(ctx, page, match["idx"], timeout_s)
-        if page.url.split("#")[0] != here:   # the click went somewhere: back to the download page
-            goto(page, here)
-            settle(page)
-        if not dl:
-            report.failed.append(f"itch.io: {name} / {label} - clicking Download didn't start a download")
-            continue
-        fname = distinct_name(safe_name(dl.suggested_filename or label, 150), fid, rec, offered)
+        fname = distinct_name(safe_name(u.get("filename") or label, 150), fid, rec, offered)
         target = folder / fname
-        prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
+        prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
         is_update = old is not None or prev is not None or target.exists()
         try:
-            save_browser_download(dl, folder, fname)
+            size = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname)
+            expected = str(u.get("md5_hash") or "").lower()
+            if expected and md5_of(target) != expected:
+                target.unlink(missing_ok=True)
+                raise RuntimeError("the file didn't match itch.io's checksum, so it was deleted; the next sync tries again")
+        except NotLoggedIn:
+            raise
         except Exception as e:
-            report.failed.append(f"itch.io: {name} / {fname} - {e}")
+            report.failed.append(f"itch.io: {creator} / {name} / {fname} - {e}")
             continue
-        finally:
-            close_if_popup(dl.page, page)
         if prev:
             rec["files"].pop(prev, None)
-        rec["files"][fid] = {"path": fname, "size": target.stat().st_size, "label": label, "shown": shown,
-                             "downloaded_at": now_iso()}
+        rec["files"][fid] = {"path": fname, "size": size, "label": label, "shown": shown, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"itch.io: {creator} / {name} / {fname}")
         got_any = True
@@ -1268,7 +1221,7 @@ def _itch_project(ctx, page, c: dict, name: str, creator: str, man: "Manifest", 
     if got_any and is_new_asset:
         report.new_assets.append(f"itch.io: {creator} / {name}")
     if rec["files"] and icfg.get("save_thumbnails", True) and not args.dry_run:
-        save_thumbnail(c.get("thumbnail"), folder, "https://itch.io/")
+        save_thumbnail(g["cover"], folder, "https://itch.io/")
     man.checkpoint()
 
 

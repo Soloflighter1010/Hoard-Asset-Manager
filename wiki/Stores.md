@@ -95,16 +95,25 @@ that turn up in your library are offered in **Stores**: choose **Review** to add
 
 - New in 2.5.0. If you set Hoard up before then, turn itch.io on in [Settings](Settings) first: Hoard keeps the
   stores you chose, so it starts switched off.
+- **itch.io signs in with an API key,** not your password: its website doesn't let automated browsers sign in
+  (it shows a check that never lets them through), so Hoard uses the API itch.io's own app uses.
+  1. On itch.io's row in **Stores**, choose **Add API key**.
+  2. Open the **API keys** link it shows (your itch.io settings, in your usual browser), choose **Generate new
+     API key**, and copy it.
+  3. Paste it into Hoard and choose **Save key**. Hoard checks it with itch.io, then reads your library.
+
+  The key is kept protected by your operating system (your Windows account, your Mac's Keychain or your Linux
+  keyring), only ever sent to itch.io's API, and never shown again. **Sign out** deletes it from Hoard; it
+  keeps working until you also delete it on itch.io, so do that if you're done with it. From the command line:
+  `hoard-cli login itch`.
 - Hoard reads your itch.io library: what you bought, and what you claimed from bundles or "name your own
   price" projects. A bundle's projects only count once you've claimed them on itch.io.
-- Each project's files come from its download page, by clicking each file's Download button in Hoard's
-  browser, as you would. A file is downloaded again when itch.io shows a new version of it (a new name or size).
+- Each project's files are downloaded through the API, resuming if interrupted, and checked against itch.io's
+  checksum. A file is downloaded again when itch.io shows a new version of it.
 - **Game builds are skipped:** files the creator marked as a program for Windows, macOS, Linux or Android. That
   keeps the games in your library from filling your drive, and VRChat assets are hardly ever marked that way.
   To download them too, turn off **Skip game builds** under itch.io in [Settings](Settings). Files a creator
   keeps on another website (a Google Drive link, say) are skipped as well, and listed in the summary.
-- A download page's address holds a key that opens it for anyone, so Hoard keeps it like a sign-in: only in
-  its private library list, and never in the catalog or troubleshooting files.
 
 ## Importing saved pages
 

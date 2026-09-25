@@ -11,7 +11,8 @@ app-data folder that belongs to your user account.
 |---|---|
 | `sign-ins/` | Your store sign-ins, one folder per store, encrypted by your operating system. Never share this folder |
 | `config.json` | Your settings. See [Settings](Settings) |
-| `library.json` | Your library list: names, creators, links and picture addresses for what you own. Its itch.io download page addresses open those pages for anyone, which is one more reason to keep this folder to yourself |
+| `library.json` | Your library list: names, creators, links and picture addresses for what you own |
+| `keys/` | On Windows: your itch.io API key, encrypted by your Windows account. (On a Mac it's in your Keychain, on Linux in your keyring.) See [Stores](Stores#itchio) |
 | `tags.json` | Your tags |
 | `marks.json` | What you've archived, hidden or removed, and your hidden library's PIN and recovery words, each only as a salted, slow hash |
 | `integrity.key` | The key Hoard seals its records with (see [Seals](#seals)). Private to your account |
