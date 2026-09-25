@@ -82,7 +82,7 @@ def check(write_metas: bool) -> dict:
             else:
                 problems.append(f"{p.relative_to(PACKAGE)} has no .meta file (run with --write-metas)")
                 continue
-        guid = re.search(r"^guid: ([0-9a-f]{32})$", meta.read_text("utf-8"), re.M)
+        guid = re.search(r"^guid: ([0-9a-f]{32})\r?$", meta.read_text("utf-8"), re.M)   # CRLF-safe
         if not guid:
             problems.append(f"{meta.relative_to(PACKAGE)} has no GUID")
         elif guid.group(1) in guids:
@@ -123,7 +123,7 @@ def build_unitypackage(version: str, date: tuple) -> Path:
             tar.addfile(info, io.BytesIO(data))
         for p in contents():
             meta = p.with_name(p.name + ".meta").read_bytes()
-            guid = re.search(rb"^guid: ([0-9a-f]{32})$", meta, re.M).group(1).decode()
+            guid = re.search(rb"^guid: ([0-9a-f]{32})\r?$", meta, re.M).group(1).decode()
             if p.is_file():
                 add(f"{guid}/asset", p.read_bytes())
             add(f"{guid}/asset.meta", meta)

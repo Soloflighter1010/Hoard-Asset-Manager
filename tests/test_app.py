@@ -346,7 +346,7 @@ class RecoveryPhrase(unittest.TestCase):
     def test_the_word_list_is_the_bip39_list(self):
         import hashlib
         from hoard import marks
-        text = (REPO / "hoard" / "recovery_words.txt").read_bytes()
+        text = (REPO / "hoard" / "recovery_words.txt").read_bytes().replace(b"\r\n", b"\n")   # as on any checkout
         self.assertEqual(hashlib.sha256(text).hexdigest(), "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda")
         self.assertEqual(len(set(marks.WORDS)), 2048)
         self.assertEqual(len({w[:4] for w in marks.WORDS}), 2048, "every word is unique in its first four letters")

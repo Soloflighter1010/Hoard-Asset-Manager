@@ -39,4 +39,4 @@ jobs:
       - name: Build the zips
         run: python scripts/build_release.py
       - name: Build the Unity package (fails if a file has no .meta)
-        run: python3 scripts/build_vpm.py
+        run: python scripts/build_vpm.py
