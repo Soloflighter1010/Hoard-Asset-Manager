@@ -1368,5 +1368,18 @@ class SmallerFindings(unittest.TestCase):
             browser.signins_root(cfg)
 
 
+class ScriptHashLineEndings(unittest.TestCase):
+    """A page's script runs whatever line endings the file has: browsers hash it after turning CRLF into LF."""
+
+    def test_crlf_page(self):
+        import base64
+        import hashlib
+        script = "\nconst a = 1;\nconsole.log(a);\n"
+        want = "'sha256-" + base64.b64encode(hashlib.sha256(script.encode()).digest()).decode() + "'"
+        for ending in ("\n", "\r\n", "\r"):
+            page = ("<html><body><script>" + script.replace("\n", ending) + "</script></body></html>").encode()
+            self.assertIn(want, safety.content_security_policy(page), repr(ending))
+
+
 if __name__ == "__main__":
     unittest.main()

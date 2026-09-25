@@ -432,7 +432,10 @@ def content_security_policy(page: bytes) -> str:
     key = hashlib.sha256(page).hexdigest()
     if key not in _csp_cache:
         scripts = re.findall(rb"<script>(.*?)</script>", page, re.S)
-        hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(s).digest()).decode() + "'" for s in scripts)
+        # Browsers hash a script as HTML parsing leaves it, with every CRLF or CR turned into LF, so the same is
+        # done here: a page saved with Windows line endings would otherwise have its script refused.
+        hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(s.replace(b"\r\n", b"\n").replace(b"\r", b"\n")).digest()).decode()
+                          + "'" for s in scripts)
         script_src = hashes or "'none'"
         _csp_cache[key] = ("default-src 'none'; "
                            f"script-src {script_src}; "
