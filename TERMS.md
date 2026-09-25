@@ -33,8 +33,8 @@ with your store accounts, and the limits of what the project promises.
 
 ## 5. No affiliation
 
-The app aren't affiliated with, endorsed by or supported by Booth or pixiv, Gumroad, Jinxxy, Payhip or
-VRChat. Their names appear only to say which stores the app works with.
+The app aren't affiliated with, endorsed by or supported by Booth or pixiv, Gumroad, Jinxxy, Payhip,
+itch.io or VRChat. Their names appear only to say which stores the app works with.
 
 ## 6. No warranty
 

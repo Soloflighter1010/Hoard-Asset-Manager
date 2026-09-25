@@ -11,7 +11,7 @@ app-data folder that belongs to your user account.
 |---|---|
 | `sign-ins/` | Your store sign-ins, one folder per store, encrypted by your operating system. Never share this folder |
 | `config.json` | Your settings. See [Settings](Settings) |
-| `library.json` | Your library list: names, creators, links and picture addresses for what you own |
+| `library.json` | Your library list: names, creators, links and picture addresses for what you own. Its itch.io download page addresses open those pages for anyone, which is one more reason to keep this folder to yourself |
 | `tags.json` | Your tags |
 | `marks.json` | What you've archived, hidden or removed, and your hidden library's PIN and recovery words, each only as a salted, slow hash |
 | `integrity.key` | The key Hoard seals its records with (see [Seals](#seals)). Private to your account |
@@ -36,7 +36,7 @@ A `Hoard` folder in your Documents, unless you chose another in [Settings](Setti
 | `<product>/_thumbnail.*` | The product's picture |
 | `<Store>/_manifest.json` | Hoard's own record of what it downloaded from that store and where. Don't edit it |
 | `*.part` | A download that stopped partway. The next download picks up where it ended |
-| `Payhip/_download-yourself.html` | Payhip products for you to download yourself, when Payhip blocked Hoard. See [Stores](Stores#payhip) |
+| `Payhip/_download-yourself.html` | Left by versions before 2.5.0, which listed Payhip products for you to download yourself. Hoard doesn't download from Payhip any more (see [Stores](Stores#payhip)), so it no longer writes or reads this page: delete it if you like |
 
 `catalog.json`, `tags.json` and `asset.json` are written for other programs to read, and promise clean text,
 plain relative paths and links only to the product's own store. Their exact format is in

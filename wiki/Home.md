@@ -7,9 +7,9 @@
 
 <p align="center"><b>Every avatar asset you've bought, in one pile.</b></p>
 
-Hoard brings your Booth, Gumroad, Jinxxy and Payhip purchases into one library you can search, filter and
-tag. It keeps local copies of your files, up to date when creators update them, and puts them within reach
-in Unity.
+Hoard brings your Booth, Gumroad, Jinxxy, Payhip and itch.io purchases into one library you can search,
+filter and tag. It keeps local copies of your files, up to date when creators update them, and puts them within
+reach in Unity.
 
 New here? Start with [Installing Hoard](Installing-Hoard), then [Getting started](Getting-Started).
 
@@ -34,10 +34,11 @@ New here? Start with [Installing Hoard](Installing-Hoard), then [Getting started
 
 ## What Hoard does
 
-- **Library:** everything you own on Booth, Gumroad, Jinxxy and Payhip, in one page you can search, filter
-  and tag. It spots products you own on more than one store.
-- **Downloads:** local copies of everything, in tidy `<Store>/<Creator>/<Product>` folders, kept up to date
-  when creators update their files.
+- **Library:** everything you own on Booth, Gumroad, Jinxxy, Payhip and itch.io, in one page you can search,
+  filter and tag, read with your own sign-in or from pages you save yourself. It spots products you own on
+  more than one store.
+- **Downloads:** local copies from every store but Payhip (which Hoard only lists), in tidy
+  `<Store>/<Creator>/<Product>` folders, kept up to date when creators update their files.
 - **Hoard for Unity:** a Creator Companion package that shows your downloads inside the Unity editor, tells
   you which are already in your project, and imports them without downloading again.
 - **Private by design:** Hoard runs on your own computer, never sees your store passwords, sends nothing to
@@ -45,5 +46,5 @@ New here? Start with [Installing Hoard](Installing-Hoard), then [Getting started
   downloading.
 
 Hoard is free and open source ([MIT](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE)).
-It's unofficial: not affiliated with or endorsed by Booth (pixiv), Gumroad, Jinxxy, Payhip or VRChat. It only
+It's unofficial: not affiliated with or endorsed by Booth (pixiv), Gumroad, Jinxxy, Payhip, itch.io or VRChat. It only
 reads purchases in your own accounts, with your own sign-in.

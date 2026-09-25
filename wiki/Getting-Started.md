@@ -10,10 +10,13 @@ you can run it again any time from **Settings**, then **Set up Hoard again**. **
    Edge). If that isn't installed yet, **Install Hoard's browser** downloads it (about 150 MB, once).
 3. **Used Hoard before?** If you used Hoard 1.x, **Bring it over** copies your library list and downloads
    folder. New to Hoard? Skip it.
-4. **Which stores have you bought from?** Hoard only shows and reads the stores you pick. You can change this
-   later in [Settings](Settings).
+4. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Hoard only shows and
+   reads the stores you pick. You can change this later in [Settings](Settings). Hoard keeps copies of your
+   files from all of them but Payhip, which it lists: you download from Payhip yourself.
 5. **Your Payhip shops** (only if you picked Payhip). Payhip keeps your purchases in each shop you bought
-   from, not in one library, so add each shop's address, one per line. See [Stores](Stores#payhip).
+   from, not in one library, so add each shop's address, one per line. Rather not sign in to Payhip? Leave
+   this empty, save each shop's library page from your usual browser, and import them all from **Stores**
+   afterwards. See [Stores](Stores#payhip).
 6. **Sign in to your stores.** Each store opens in Hoard's own window. Sign in there as usual, then close the
    window, and Hoard reads what you own.
 7. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive

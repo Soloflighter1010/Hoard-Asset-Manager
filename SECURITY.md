@@ -86,6 +86,10 @@ It can't fully protect against:
 - Download files are created exclusively and opened without following links. The finished file is
   moved into place only if it is still the very file that was written; anything swapped in meanwhile is
   refused. Downloads the store window makes are saved into a new private folder first.
+- Jinxxy and itch.io files are downloaded by clicking each file's own button in that store's signed-in
+  window, as you would. An itch.io download page's address holds a key that opens it for anyone, so it's
+  kept only in Hoard's private library list (never in the catalog or a product's `asset.json`), and taken out
+  of troubleshooting files. Payhip is only read: Hoard never downloads from it.
 - Pictures from your downloads folder are opened one folder at a time without following links (on
   Windows, by checking where the opened file really is), and what's served is exactly what was opened.
 - Two products or files whose names clean up alike never share a folder or overwrite each other.
@@ -122,8 +126,8 @@ It can't fully protect against:
   for a wallet's recovery words.
 
 **Troubleshooting files**
-- `debug` and `probe` save pages with email addresses, form values (license keys, codes), tokens and
-  signed links removed, a summary of what was found instead of your purchases, and no screenshots.
+- `debug` and `probe` save pages with email addresses, form values (license keys, codes), tokens, download
+  keys and signed links removed, a summary of what was found instead of your purchases, and no screenshots.
   `--raw` saves everything as it is, marked as sensitive.
 
 **Files and data**

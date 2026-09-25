@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+Knows itch.io, which Hoard 2.5.0 downloads from: its assets show in the window (as "itch.io"), can be picked in
+the store filter, and link to their pages on itch.io. Earlier versions left them out of the list, since the
+catalog promises never to show a store they don't know.
+
 ## 0.1.2
 
 Safer reading of `.unitypackage` files, which anyone could have made: a package whose headers claim a file name

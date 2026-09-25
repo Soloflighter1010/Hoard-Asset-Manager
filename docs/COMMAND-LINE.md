@@ -7,11 +7,11 @@ command, Hoard opens in its window (`--browser`: in your web browser instead).
 
 | Command | What it does |
 |---|---|
-| `login <store>` | Sign in to a store (`booth`, `gumroad`, `jinxxy` or `payhip`) in a browser window |
+| `login <store>` | Sign in to a store (`booth`, `gumroad`, `jinxxy`, `payhip` or `itch`) in a browser window |
 | `logout <store>` | Sign out of a store in Hoard, or of every store with `all` |
 | `refresh [--store <store>]` | Read what you own from the stores (repeat `--store` for several; default: all) |
-| `import <file> [--store <store>] [--trust-shop <address>]` | Add a library page you saved from your own browser (`.mhtml` or `.html`). A Payhip shop that isn't in your list is only added with `--trust-shop` and its exact address |
-| `sync` | Download everything new or changed (options below) |
+| `import <file or folder>... [--store <store>] [--trust-shop <address>]` | Add library pages you saved from your own browser (`.mhtml` or `.html`): any number of files, and folders of them. A Payhip shop that isn't in your list is only added with `--trust-shop` and its exact address (repeat it for several). Exits with 1 if any page wasn't imported |
+| `sync` | Download everything new or changed, from every store but Payhip, which Hoard only reads (options below) |
 | `tags` | Rebuild `catalog.json` and `tags.json` from what's downloaded |
 | `verify` | Check whether any data file was changed outside Hoard, then rebuild the catalog files. Exits with 1 if anything was changed |
 | `self-test` | Check this copy of Hoard has everything it needs (its pages, fonts, Playwright's driver) |
@@ -22,12 +22,10 @@ command, Hoard opens in its window (`--browser`: in your web browser instead).
 
 `sync` options:
 
-- `--store <store>`: only one store (default: all)
+- `--store <store>`: only one store: `booth`, `gumroad`, `jinxxy` or `itch` (default: all of them)
 - `--dry-run`: list what would download, and download nothing
 - `--only <text>`: only products whose name or creator contains the text
-- `--headed`: show the browser while downloading from Booth or Jinxxy
-- `--payhip-page <file>`: read your Payhip products from a library page you saved, when Payhip blocks the
-  automated browser
+- `--headed`: show the browser while downloading from Booth, Jinxxy or itch.io
 
 Options for every command:
 
@@ -68,6 +66,7 @@ macOS, `~/.local/share/Hoard` on Linux):
 | `payhip.shops` | `[]` | The Payhip shops you've bought from (also in Settings). Payhip keeps purchases per shop |
 | `booth.include_free` | `true` | Also read Booth's free downloads (also in Settings) |
 | `payhip.bot_check_wait` | `180` | Seconds to wait for you to complete Payhip's bot check |
+| `itch.skip_game_builds` | `true` | Skip itch.io files the creator marked as a program for Windows, macOS, Linux or Android (also in Settings) |
 | `jinxxy.item_link_pattern` | | Which links on Jinxxy's inventory page are your items |
 | `tags.min_count`, `tags.max_share` | `3`, `0.4` | When a word becomes a suggested tag |
 | `tags.blocklist` | `[]` | Words never to suggest (the Tags panel's **Hide** does the same) |

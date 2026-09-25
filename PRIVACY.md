@@ -35,9 +35,10 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
 
 ## Who Hoard talks to
 
-- **The stores you sign in to:** Booth (and pixiv, which Booth uses for sign-in), Gumroad, Jinxxy and
-  Payhip. Hoard reads your purchases and downloads your files there, as your own browser would, and
-  each store handles those visits under its own privacy policy.
+- **The stores you sign in to:** Booth (and pixiv, which Booth uses for sign-in), Gumroad, Jinxxy, Payhip
+  and itch.io. Hoard reads your purchases there and downloads your files (from every store but Payhip, which
+  it only reads), as your own browser would, and each store handles those visits under its own privacy
+  policy. Pages you import instead are read on your computer, and nothing is sent anywhere for them.
 - **The image hosts those stores use,** to fetch product images.
 - **GitHub,** only when you open a link in Hoard's footer or in the documentation.
 

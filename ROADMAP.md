@@ -15,6 +15,9 @@
 	- Hoard sees all items, but Hoard:Downloader can't download anything. Booth's library is different than the others.
 - Payhip: **Reworked** (2.0.2): shops listed in Settings; downloads need confirming on a real shop
 	- Needs to support store specific pages. There is no overall Payhip library.
+	- **Done** (2.5.0): Payhip is a library reader only (no downloads), with bulk import of saved pages, since one saved page can't hold every shop's purchases.
+- itch.io: **Added** (2.5.0): library, downloads (game builds skipped unless wanted) and imports.
+	- Check the readers against real itch.io libraries and download pages, and adjust with `debug itch` output.
 - Gumroad
 	- Nothing so far, needs more testing with other users.
 - Full Library
@@ -30,7 +33,6 @@
 - Full Library
   - Add the ability to add, remove and archive assets. Manually added assets should be kept in their own category.
 	- Create a category for Creators and their own listings
-	- Add support for Itch.io if possible
 	- Implement a configurable sync to check for updates of owned assets.
 	- Highlight selected asset on click
 	- Add accessibility controls like pausing gifs and other animated thumbnails, font size and others.

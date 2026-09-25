@@ -35,4 +35,4 @@ in the window's toolbar.
   never through a link or junction, and store links only to the product's own store.
 - **Editor only.** Nothing from this package is included in avatar or world uploads.
 
-MIT licensed. Not affiliated with VRChat, Booth, Gumroad, Jinxxy or Payhip.
+MIT licensed. Not affiliated with VRChat, Booth, Gumroad, Jinxxy, Payhip or itch.io.

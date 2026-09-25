@@ -6,15 +6,15 @@
 </p>
 
 <p align="center"><b>Every avatar asset you've bought, in one pile.</b><br>
-Booth, Gumroad, Jinxxy and Payhip purchases in a single library you can search, filter and keep.</p>
+Booth, Gumroad, Jinxxy, Payhip and itch.io purchases in a single library you can search, filter and keep.</p>
 
 You bought that hoodie. Was it on Booth or Gumroad? Did the creator update it? Do you still have the
 files? Hoard answers those without opening four tabs.
 
-- **Library:** everything you own on Booth, Gumroad, Jinxxy and Payhip, in one page you can search,
+- **Library:** everything you own on Booth, Gumroad, Jinxxy, Payhip and itch.io, in one page you can search,
   filter and tag. It spots products you own on more than one store.
-- **Downloads:** keep local copies of everything, in tidy `<Store>/<Creator>/<Product>` folders, kept up
-  to date when creators update their files.
+- **Downloads:** keep local copies, in tidy `<Store>/<Creator>/<Product>` folders, kept up to date when
+  creators update their files. (Payhip is listed, not downloaded: see below.)
 - One app, one set of sign-ins, one set of tags, and it works offline.
 
 Guides for everything, from installing to fixing a problem, are in the
@@ -53,15 +53,24 @@ your library list and downloads folder: choose the folder you ran 1.x from.
 - **Stores** (top right): sign in to each store once, in a browser window that opens for it. **Refresh**
   reads what you've bought. **Download** keeps local copies of everything new from that store, and
   **Download everything new** does all of them.
+- **Import pages** (in **Stores**) reads library pages you saved from your usual browser instead
+  (Ctrl+S, "Webpage, Single File"): choose any number at once, a whole folder of them, or drop them on the
+  window. Handy when a store blocks the refresh, or you'd rather not sign in there.
 - **Library** shows everything you own. Open an item to see its details, tag it, open its store page, or
   **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads.
 - **Downloads** shows what's on your computer, with its files, sizes and folders. **Download new** fetches
   anything new or updated, with progress as it goes; **Stop** pauses safely, and it carries on next time.
-- **Payhip** keeps your purchases under the shops you bought from. Add a shop in **Settings** under
-  **Payhip shops** (its address is in your purchase email). A shop on payhip.com
-  (`payhip.com/ShopName`) lists your purchases from every shop, so one is often enough. Shops on their
-  own domains (`myshop.store`) that turn up are offered in **Stores** to review and add. Payhip checks
-  for automated browsers, so refreshing it opens a window where you can complete the check.
+- **Payhip** is listed, not downloaded: Hoard shows everything you bought there, with each product's
+  download page, and you download the files from Payhip yourself. Payhip keeps your purchases under the
+  shops you bought from, one library page per shop, so the easy way in is to save each shop's library
+  page (every page of it) and import them all together; a shop you haven't added is added once you
+  confirm it. Or add your shops in **Settings** under **Payhip shops** (the address is in your purchase
+  email) and refresh: Payhip checks for automated browsers, so that opens a window where you can complete
+  the check.
+- **itch.io:** everything in your itch.io library (things you bought, and ones you claimed from bundles or
+  "name your own price" pages), downloaded from each project's download page. Game builds (files the
+  creator marked for Windows, macOS, Linux or Android) are skipped unless you turn off **Skip game builds**
+  in **Settings**, so a library with games in it doesn't fill your drive.
 - **Signing in without your saved passwords:** Hoard's window is its own browser, so it doesn't have
   the passwords your usual browser saved. The assistant shows where to find and copy them in Chrome,
   Edge, Firefox, Safari or a password manager. If a store emails you a sign-in or confirmation link,
@@ -216,11 +225,11 @@ and leaves your saved library and downloads as they were.
 
 ## Things to know
 
-- Hoard is unofficial, not affiliated with or endorsed by Booth (pixiv), Gumroad, Jinxxy or
-  Payhip. It only reads purchases in your own accounts, with your own sign-in.
+- Hoard is unofficial, not affiliated with or endorsed by Booth (pixiv), Gumroad, Jinxxy, Payhip or
+  itch.io. It only reads purchases in your own accounts, with your own sign-in.
 - Stores change their websites. When one does, its reader can stop working until it's updated.
   Payhip already checks for automated browsers: Hoard works around it with your help (a visible
-  window you can complete the check in, or a page you save from your own browser).
+  window you can complete the check in, or pages you save from your own browser).
 - Downloading doesn't change what you're allowed to do with an asset. Follow each creator's license
   and each store's terms.
 
