@@ -30,6 +30,10 @@ Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
 scripts/build_release.py   builds the release zip
+scripts/build_vpm.py   builds the Unity package for VCC, and its listing
+unity/soloflighter.hoard/  Hoard for Unity (a VPM package, editor-only). Editor/Core is plain C# with no
+                       Unity references (catalog, seal, .unitypackage GUIDs), tested by tests/test_unity.py
+                       with Mono against files Hoard's own Python code writes; Editor/ is the window
 tests/                 security tests, run on every change
 .github/workflows/     check.yml runs the tests and the build; release.yml publishes tagged versions
 docs/                  this guide and the others

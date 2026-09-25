@@ -74,6 +74,19 @@ Hoard.bat migrate "D:\Tools\Hoard-Bundle"
   stores to include, and the browser used for store sign-ins (Microsoft Edge, unless you choose otherwise).
 - **Tags** works the same in both views; see [Tags](#tags) below.
 
+## Hoard in Unity
+
+**Hoard for Unity** brings what Hoard has downloaded into the Unity editor. Open **Window › Hoard** to
+search your downloads with thumbnails, see which products are already in the open project (read from
+the asset GUIDs inside each `.unitypackage`), and **Import** one through Unity's own import dialog, with no
+downloading again. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
+nothing reaches your uploads.
+
+Add it in the VRChat Creator Companion: **Settings › Packages › Add Repository**, and paste
+`https://soloflighter1010.github.io/Hoard-Asset-Manager/vpm/index.json` (or use the **Add to VCC** button on
+that page). Then add **Hoard** to a project. More in
+[unity/soloflighter.hoard/README.md](unity/soloflighter.hoard/README.md).
+
 Everything also works from the command line, for scripts and computers without a desktop:
 [docs/COMMAND-LINE.md](docs/COMMAND-LINE.md).
 

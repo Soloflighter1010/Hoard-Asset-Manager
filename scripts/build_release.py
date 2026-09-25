@@ -36,11 +36,11 @@ def version() -> str:
     return m.group(1)
 
 
-def build_date() -> tuple:
-    """The date every file in the zip gets: SOURCE_DATE_EPOCH if set (the reproducible-builds convention), else the
-    release commit's time, else now. The same commit always builds the same zip, and each release's files are
-    newer than the last one's. (A fixed date would make Python keep running old compiled copies of any file whose
-    size didn't change, after an update over an old install.)"""
+def build_date(files=None) -> tuple:
+    """The date every file in a zip gets: SOURCE_DATE_EPOCH if set (the reproducible-builds convention), else the
+    release commit's time, else the newest of the files being packed. The same commit (or the same files) always
+    builds the same zip, and each release's files are newer than the last one's. (A fixed date would make Python
+    keep running old compiled copies of any file whose size didn't change, after an update over an old install.)"""
     stamp = os.environ.get("SOURCE_DATE_EPOCH")
     if not stamp:
         try:
@@ -48,16 +48,22 @@ def build_date() -> tuple:
                                    timeout=10).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             stamp = ""
-    seconds = int(stamp) if stamp.isdigit() else int(time.time())
+    if stamp.isdigit():
+        seconds = int(stamp)
+    else:
+        mtimes = [Path(f).stat().st_mtime for f in (files or []) if Path(f).is_file()]
+        seconds = int(max(mtimes)) if mtimes else int(time.time())
     return time.gmtime(max(seconds, 315532800))[:6]   # zip dates start in 1980
 
 
-BUILD_DATE = build_date()
+
+
+_DATE = [None]   # set by main() from the files being packed
 
 
 def add(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
     """Add a file to a zip with the build's date and the right permissions, so the same commit gives an identical zip."""
-    info = zipfile.ZipInfo(arcname, date_time=BUILD_DATE)
+    info = zipfile.ZipInfo(arcname, date_time=_DATE[0])
     info.compress_type = zipfile.ZIP_STORED if src.suffix == ".woff2" else zipfile.ZIP_DEFLATED
     info.external_attr = (0o755 if src.suffix == ".sh" else 0o644) << 16
     zf.writestr(info, src.read_bytes())
@@ -90,6 +96,7 @@ def main() -> None:
         if f.suffix == ".bat" and b"\r\n" not in f.read_bytes():
             sys.exit(f"{f.name} needs Windows (CRLF) line endings")
     notes = release_notes(ver)
+    _DATE[0] = build_date(files)
     DIST.mkdir(exist_ok=True)
     out = DIST / f"{NAME}-{ver}.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:

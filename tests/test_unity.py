@@ -1,0 +1,178 @@
+"""The Unity package's plain-C# core, checked against material made by Hoard's own Python code: catalogs sealed by
+the real seal(), canonical JSON from Python's json.dumps, and a .unitypackage built the way Unity builds them.
+
+Needs a C# compiler and runtime (Mono's mcs and mono); skipped without them. GitHub Actions installs them.
+"""
+from __future__ import annotations
+
+import gzip
+import hashlib
+import io
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
+sys.path.insert(0, str(REPO))
+
+from hoard import safety  # noqa: E402
+
+CORE = REPO / "unity" / "soloflighter.hoard" / "Editor" / "Core"
+HAVE_CSHARP = bool(shutil.which("mcs") and shutil.which("mono"))
+
+
+def asset(name, folder, url, files, **extra):
+    return {"store": "Booth", "name": name, "creator": "Kitsu Studio", "folder": folder, "url": url, "variants": None,
+            "added": "2026-09-25T00:00:00+00:00", "files": files, "tags": ["rusk"], "suggested_tags": [], **extra}
+
+
+def build_material(d: Path) -> None:
+    """Everything CoreTests.cs checks against, made by Hoard's own code."""
+    key = safety.integrity_key()
+    (d / "integrity.key").write_text(key.hex(), "ascii")
+    (d / "key_id.txt").write_text(safety._key_id(key))
+
+    cases = [
+        {"b": 1, "a": [True, False, None], "c": {"z": "last", "y": "first"}},
+        {"日本": "ラスク", "emoji \U0001F98A": "fox", "\uffff": "bmp end", "\U00010000": "past bmp", "é": "e"},
+        {"escapes": "quote \" backslash \\ slash / nl \n cr \r tab \t bs \b ff \f nul \u0000 esc \u001b del \u007f"},
+        {"nested": {"deep": [{"k": [1, 2, {"x": -3}]}]}, "big": 12345678901234, "neg": -7},
+        json.loads('{"dup": 1, "dup": 2, "other": "x"}'),
+        {"line sep": "\u2028 and \u2029", "rtl": "a\u202eb", "zero width": "a\u200bb"},
+    ]
+    (d / "canonical_cases.json").write_text(json.dumps(cases, ensure_ascii=False, indent=1), "utf-8")
+    (d / "canonical_sha256.txt").write_text("\n".join(hashlib.sha256(safety._canonical(c)).hexdigest() for c in cases))
+
+    doc = {"format": "hoard-catalog", "version": 3, "assets": [{"name": "Kitsu ラスク \U0001F98A", "n": 3}]}
+    (d / "seal_sealed.json").write_text(json.dumps(safety.seal(doc), ensure_ascii=False, indent=1), "utf-8")
+    edited = safety.seal(doc)
+    edited["assets"][0]["n"] = 4
+    (d / "seal_edited.json").write_text(json.dumps(edited, ensure_ascii=False, indent=1), "utf-8")
+    (d / "seal_unsealed.json").write_text(json.dumps(doc, ensure_ascii=False), "utf-8")
+
+    # a downloads folder: good entries, entries breaking each promise, and a planted link
+    root = d / "root"
+    rusk = root / "Booth" / "Kitsu Studio" / "Rusk Avatar Base"
+    rusk.mkdir(parents=True)
+    (rusk / "Rusk.unitypackage").write_bytes(b"x")
+    (rusk / "_thumbnail.png").write_bytes(b"\x89PNG")
+    (root / "Booth" / "Kitsu Studio" / "Odd Link").mkdir()
+    outside = d / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("secret")
+    (root / "Booth" / "Kitsu Studio" / "Linked Away").symlink_to(outside, target_is_directory=True)
+    good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"]),
+            asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
+            asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"])]
+    bad = [asset("Escaping", "../outside", None, []), asset("Absolute", "/etc", None, []),
+           asset("Hidden \u202e name", "Booth/x", None, []), {**asset("Wrong Store", "Booth/y", None, []), "store": "Steam"},
+           asset("", "Booth/z", None, []), "not an object"]
+    catalog = {"format": "hoard-catalog", "version": 3, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
+    (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
+    (d / "good_names.txt").write_text("|".join(a["name"] for a in good))
+    (d / "left_out.txt").write_text(str(len(bad)))
+    edited_root = d / "root_edited"
+    edited_root.mkdir()
+    sealed = safety.seal(catalog)
+    sealed["assets"][0]["name"] = "Rusk Avatar Base (edited)"
+    (edited_root / "catalog.json").write_text(json.dumps(sealed, ensure_ascii=False, indent=1), "utf-8")
+
+    # a Unity package, as Unity builds them: a folder per asset with asset, asset.meta and pathname
+    expected = {"0123456789abcdef0123456789abcdef": "Assets/Kitsu/Rusk/Rusk.prefab",
+                "fedcba9876543210fedcba9876543210": "Assets/Kitsu/Rusk/Textures/ラスク_body.png",
+                "00000000000000000000000000000001": "Assets/" + "Very Long Folder Name/" * 8 + "deep.mat"}
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w", format=tarfile.GNU_FORMAT) as tar:
+        for guid, path in expected.items():
+            for name, data in (("asset", b"\0" * 1500), ("asset.meta", b"fileFormatVersion: 2\n"),
+                               ("pathname", (path + "\n00\n").encode())):
+                # Unity writes "./<guid>/..." or "<guid>/...": both forms are here
+                info = tarfile.TarInfo(f"./{guid}/{name}" if guid.startswith("0123") else f"{guid}/{name}")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+        long_info = tarfile.TarInfo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/" + "n" * 120)   # a long name, stored as a GNU 'L' entry
+        long_info.size = 3
+        tar.addfile(long_info, io.BytesIO(b"abc"))
+    (d / "test.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
+    (d / "package_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
+    (d / "not_a_package.unitypackage").write_bytes(gzip.compress(b"hello, this is not a tar file" * 3))
+
+
+@unittest.skipUnless(HAVE_CSHARP, "needs a C# compiler and runtime (mono-mcs, mono-runtime)")
+class UnityCore(unittest.TestCase):
+
+    def test_core_against_hoards_own_material(self):
+        d = Path(tempfile.mkdtemp(prefix="hoard-unity-"))
+        build_material(d)
+        exe = d / "CoreTests.exe"
+        build = subprocess.run(["mcs", "-langversion:7.2", "-out:" + str(exe), "-r:System.dll", "-r:System.Core.dll",
+                                *map(str, sorted(CORE.glob("*.cs"))), str(REPO / "tests" / "unity" / "CoreTests.cs")],
+                               capture_output=True, text=True, timeout=180)
+        self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
+        run = subprocess.run(["mono", str(exe), str(d)], capture_output=True, text=True, timeout=120)
+        failed = [line for line in run.stdout.splitlines() if line.startswith("FAIL")]
+        self.assertEqual(failed, [], run.stdout[-3000:])
+        self.assertIn("ALL PASSED", run.stdout, run.stdout + run.stderr)
+
+    def test_core_has_no_unity_references(self):
+        """The core must compile without Unity, so it can be tested here; Unity-only code lives in Editor/."""
+        for f in CORE.glob("*.cs"):
+            text = f.read_text("utf-8")
+            self.assertNotIn("using UnityEngine", text, f.name)
+            self.assertNotIn("using UnityEditor", text, f.name)
+
+
+class UnityPackage(unittest.TestCase):
+    """The package VCC installs: complete, with fixed GUIDs, editor-only, and built the same way every time."""
+    PKG = REPO / "unity" / "soloflighter.hoard"
+
+    def test_manifest(self):
+        m = json.loads((self.PKG / "package.json").read_text("utf-8"))
+        self.assertEqual((m["name"], m["author"]["name"], m["unity"]), ("soloflighter.hoard", "SoloFlighter", "2022.3"))
+        self.assertRegex(m["version"], r"^\d+\.\d+\.\d+$")
+        self.assertIn(f"## {m['version']}", (self.PKG / "CHANGELOG.md").read_text("utf-8"), "each version has changelog notes")
+
+    def test_editor_only(self):
+        for asmdef in self.PKG.rglob("*.asmdef"):
+            d = json.loads(asmdef.read_text("utf-8"))
+            self.assertEqual(d["includePlatforms"], ["Editor"], f"{asmdef.name}: nothing may reach an upload")
+        core = json.loads((CORE / "SoloFlighter.Hoard.Core.asmdef").read_text("utf-8"))
+        self.assertTrue(core["noEngineReferences"], "the core stays testable outside Unity")
+
+    def test_metas(self):
+        sys.path.insert(0, str(REPO / "scripts"))
+        import build_vpm
+        seen = set()
+        for p in self.PKG.rglob("*"):
+            if p.suffix == ".meta":
+                continue
+            meta = p.with_name(p.name + ".meta").read_text("utf-8")
+            guid = build_vpm.meta_guid(p)
+            self.assertIn(f"guid: {guid}", meta, f"{p.name}: GUIDs come from the path, so they never change")
+            self.assertNotIn(guid, seen)
+            seen.add(guid)
+
+    def test_build(self):
+        import zipfile
+        out = subprocess.run([sys.executable, str(REPO / "scripts" / "build_vpm.py")], capture_output=True, text=True, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        version = json.loads((self.PKG / "package.json").read_text("utf-8"))["version"]
+        z = zipfile.ZipFile(REPO / "dist" / "vpm" / f"soloflighter.hoard-{version}.zip")
+        names = z.namelist()
+        self.assertIn("package.json", names, "package.json at the zip's root, as VCC expects")
+        self.assertTrue(all(n + ".meta" in names for n in names if not n.endswith(".meta")))
+        listing = json.loads((REPO / "dist" / "vpm" / "index.json").read_text("utf-8"))
+        entry = listing["packages"]["soloflighter.hoard"]["versions"][version]
+        self.assertTrue(entry["url"].startswith("https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/unity-v"))
+        self.assertEqual(len(entry["zipSHA256"]), 64)
+
+
+if __name__ == "__main__":
+    unittest.main()

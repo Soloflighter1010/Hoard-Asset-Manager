@@ -1,6 +1,6 @@
 name: Release
 
-# Builds the three zips and publishes them as a GitHub release.
+# Builds the release zip and publishes it as a GitHub release.
 # Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
 # already exists (say an earlier build failed), open Actions > Release > Run workflow and enter the tag.
 #

@@ -1,0 +1,87 @@
+name: Unity package
+
+# Builds Hoard for Unity (the soloflighter.hoard VPM package) and publishes it: a GitHub release with the zip,
+# and the VCC listing (vpm/index.json, with an "Add to VCC" page) on the gh-pages branch for GitHub Pages.
+# Runs when a Unity package tag (unity-v0.1.0, ...) is pushed. Once, in Settings > Pages, set the source to
+# "Deploy from a branch", branch gh-pages, folder / (root).
+#
+# Every action is pinned to an exact commit (the version tag is in the comment), as in release.yml.
+
+on:
+  push:
+    tags: ["unity-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Unity package tag to publish, for example unity-v0.1.0"
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: vpm-listing        # one listing update at a time, so no version is lost
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # the release, and the listing on the gh-pages branch
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+
+      - name: Test the package's core (C#, against Hoard's own sealed files)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mono-mcs mono-runtime
+          python3 -m unittest tests.test_unity -v
+
+      - name: The current listing, so earlier versions are kept
+        run: |
+          if git fetch -q --depth=1 origin gh-pages 2>/dev/null && git show FETCH_HEAD:vpm/index.json > current-listing.json 2>/dev/null; then
+            echo "Found the current listing."
+          else
+            echo "{}" > current-listing.json
+            echo "No listing yet: starting one."
+          fi
+
+      - name: Build the package and listing
+        run: python3 scripts/build_vpm.py --tag "$TAG" --listing current-listing.json
+
+      - name: Sign build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/vpm/*.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/vpm/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" dist/vpm/*.zip --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Hoard for Unity ${TAG#unity-v}" --notes-file dist/vpm/RELEASE_NOTES.md
+          fi
+
+      - name: Publish the listing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git init -q site && cd site
+          if git fetch -q --depth=1 "$remote" gh-pages 2>/dev/null; then git checkout -q -B gh-pages FETCH_HEAD; else git checkout -q --orphan gh-pages; fi
+          mkdir -p vpm
+          cp ../dist/vpm/index.json ../dist/vpm/index.html vpm/
+          touch .nojekyll
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "VCC listing: $TAG"
+          git push -q "$remote" HEAD:gh-pages
