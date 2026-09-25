@@ -1,0 +1,41 @@
+# Hoard Asset Manager Roadmap
+
+- Full integration with Booth, Gumroad, Jinxxy and Payhip: **Done**
+- Branding: **Done**
+- Add footers to both versions that link back to the Github repo: **Done** (1.3.0)
+- Secure User Info and harden against attacks: **Done** (1.2.0 sign-ins, 1.3.0 pages and network)
+- Comment and document codebase: **Done** (1.3.0)
+- Add Privacy Policy, Copyright and Terms of Service Documents in the Repo: **Done** (1.3.0)
+- Add Ai Disclaimer: **Done** (1.3.0)
+- Allow Offline Compatibility: **Done** (1.4.0)
+- Create a Tag Manager: **Done** (1.5.0)
+- Jinxxy: **Fixed** (2.0.1)
+	- New Users see their owned items as `Navigation` and Thumbnails don't import right. They show the defualt Jinxxy homepage image.
+- Booth: **Fixed** (2.0.2, checked against a real library page; free downloads added)
+	- Hoard sees all items, but Hoard:Downloader can't download anything. Booth's library is different than the others.
+- Payhip: **Reworked** (2.0.2): shops listed in Settings; downloads need confirming on a real shop
+	- Needs to support store specific pages. There is no overall Payhip library.
+- Gumroad
+	- Nothing so far, needs more testing with other users.
+- Full Library
+	- **Done** (2.0.1): Catalogs don't clear after logging out from Hoard. Hoard:Downloader should keep it's catalog. We need to prevent multiple account pollution and most Creators don't allow asset sharing in their Terms of Service.
+  - **Done** (2.1.0): Add library toggles. If a user doesn't use Payhip, don't show it.
+	- **Done** (2.1.0): Make a through Onboarding Process and import from older version of Hoard.
+---
+- Implement a Unity Plugin and VPM Package
+- Link VPM Package with Repo on Pages
+- Set up both versions to be standalone apps that don't need a command prompt or bat files
+- Create an installer
+- Mac and Linux Compatibility
+- Full Library
+  - Add the ability to add, remove and archive assets. Manually added assets should be kept in their own category.
+	- Create a category for Creators and their own listings
+	- Add support for Itch.io if possible
+	- Implement a configurable sync to check for updates of owned assets.
+	- Highlight selected asset on click
+	- Add accessibility controls like pausing gifs and other animated thumbnails, font size and others.
+	- Add support for multiple drives.
+	- Show duplicate assets with a zebra striped highlight instead of their solid colors.
+	- Show a little banner or icon on New assets.
+- Application
+	- Implement an app updater
