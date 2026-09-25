@@ -173,6 +173,9 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
             message("Hoard's local server didn't start." + (f" Details are in {log_path}." if log_path else ""))
             return 1
         url, srv = state["url"], state["srv"]
+        from . import updater
+        updater.tidy()
+        srv.updates.check_in_background()
         from .safety import write_file_safely
         write_file_safely(running_file(), json.dumps({"url": url, "token": token, "pid": os.getpid()}))
         if os.name == "posix":
@@ -196,6 +199,9 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         except OSError:
             pass
         lock.release()
+        if state.get("srv") is not None:   # an update Hoard quit for: its installer runs now that Hoard has stopped
+            from . import updater
+            updater.finish(state["srv"].updates)
 
 
 def open_window(srv) -> None:

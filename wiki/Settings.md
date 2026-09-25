@@ -14,6 +14,9 @@ Everyday choices are in the **Settings** panel (top right). A few rarer ones onl
   `payhip.com/ShopName`. Importing a shop's saved page adds it for you. Hoard lists what you bought there, and
   you download it from Payhip yourself. See [Stores](Stores#payhip).
 - **Offline:** **Save product images, so the library works offline**.
+- **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
+  it asks GitHub whether there's a newer version. **Check now** asks straight away, and **Update to** installs
+  it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating).
 - **Browser for store sign-ins:** **Automatic** (Microsoft Edge on Windows, Hoard's own browser elsewhere),
   **Microsoft Edge**, **Google Chrome** or **Hoard's own browser**. After changing it, you may need to sign in to
   your stores again.
@@ -35,6 +38,7 @@ and keep it valid JSON.
 |---|---|---|
 | `allow_unprotected_signins` | `false` | Linux without a keyring only: keep sign-ins protected by folder permissions alone |
 | `profile_dir` with `advanced_signin_location` | `""`, `false` | Keep sign-ins somewhere other than Hoard's private folder. Used only when `advanced_signin_location` is `true`, never on a network share; how well they're protected then depends on that drive |
+| `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `payhip.bot_check_wait` | `180` | Seconds to wait for you to complete Payhip's bot check |
 | `jinxxy.item_link_pattern` | | Which links on Jinxxy's inventory page are your items |

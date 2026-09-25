@@ -47,8 +47,11 @@ is in [PRIVACY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/
 
 ## Your privacy
 
-- **Nothing is sent to the developer.** No accounts, no tracking, no analytics, no ads, and no automatic update
-  checks. Hoard only talks to the stores you use and the servers that host their pictures.
+- **Nothing is sent to the developer.** No accounts, no tracking, no analytics, no ads. Hoard only talks to the
+  stores you use, the servers that host their pictures, and GitHub when it checks for updates (when you ask,
+  or daily if you turn that on).
+- **Updates are checked before they run.** Hoard only runs an installer whose SHA-256 matches both the
+  release's `SHA256SUMS-windows.txt` and the checksum GitHub lists for the file.
 - **It works offline** for everything except refreshing, signing in and downloading.
 - **Hoard doesn't use AI,** and your data never goes to one. (It was largely written with an AI assistant: see
   [AI-DISCLOSURE.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/AI-DISCLOSURE.md).)

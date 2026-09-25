@@ -22,12 +22,23 @@ Without it, Hoard says so and opens in your web browser instead; quit it from **
 
 ### Updating
 
-Run the newer setup. There's no need to uninstall first, and an update replaces the program files completely,
-so nothing from the old version lingers.
+In **Settings**, under **Updates**, choose **Check now**. When there's a newer version, **Update to** it: Hoard
+downloads its installer from the release on GitHub, checks it, closes (a download in progress resumes next time),
+installs it and opens again. It only runs an installer whose SHA-256 matches both the release's
+`SHA256SUMS-windows.txt` and the checksum GitHub lists for the file; one that doesn't is deleted. Hoard won't
+update in the middle of a refresh or download: wait for it, or **Stop** it.
+
+**Check for updates automatically** (off unless you turn it on) makes Hoard ask GitHub once a day, when it
+starts; a newer version then shows as **Update to** at the bottom of the page. A check sends GitHub nothing but
+the request itself: see [Security and privacy](Security-and-Privacy).
+
+Hoard installs updates itself only when it was installed with `Hoard-Setup`. The portable zip, and Hoard run
+with Python, say there's a newer version and link to it. You can always run the newer setup yourself too.
+There's no need to uninstall first, and an update replaces the program files completely, so nothing from the
+old version lingers.
 
 Your settings, library, sign-ins and tags live in Hoard's app-data folder (`%LOCALAPPDATA%\Hoard`) and your
-files in your downloads folder, so installing, updating and uninstalling never touch them. Hoard doesn't check
-for updates by itself: the **Updates** link at the bottom of every page opens the releases page.
+files in your downloads folder, so installing, updating and uninstalling never touch them.
 
 ### Uninstalling
 

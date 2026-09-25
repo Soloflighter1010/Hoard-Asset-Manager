@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, itch, vault
+from . import __version__, itch, updater, vault
 from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog
@@ -41,7 +41,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
-           "/api/enter", "/api/itch-key")
+           "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -62,6 +62,7 @@ def public_settings(cfg: dict) -> dict:
         "root": str(root_dir(cfg)), "default_root": str(default_downloads()),
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
+        "check_for_updates": bool(cfg.get("check_for_updates")),
         "stores": {s: {"enabled": bool(cfg[s].get("enabled", True)),
                        **({"include_gifts": bool(cfg[s].get("include_gifts", True)),
                            "include_free": bool(cfg[s].get("include_free", True))} if s == "booth" else {}),
@@ -89,6 +90,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["browser_channel"] = body["browser_channel"]
     if "offline_images" in body:
         change["offline_images"] = bool(body["offline_images"])
+    if "check_for_updates" in body:
+        change["check_for_updates"] = bool(body["check_for_updates"])
     if "request_delay" in body:
         try:
             delay = float(body["request_delay"])
@@ -158,6 +161,11 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.lib = Library(LIBRARY_FILE)
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index)
         self._index, self._index_lock = None, threading.Lock()
+        self.updates = updater.Updates(cfg)
+
+    def can_update(self) -> bool:
+        """Can Hoard install an update itself? Only the installed Windows app, which can quit to let it run."""
+        return self.quit_app is not None and updater.installed_copy()
 
     def handle_error(self, request, client_address):
         """A page that closes mid-reply (a closed window, a cancelled image) isn't a problem; anything else is shown."""
@@ -307,6 +315,8 @@ class Handler(BaseHTTPRequestHandler):
                                "can_quit": srv.quit_app is not None})
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
+        if path == "/api/update":
+            return self._json(srv.updates.view(srv.can_update()))
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": srv.jobs.state})
         if path.startswith("/thumb/"):
@@ -510,6 +520,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._itch_key(body)
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
+        if path == "/api/update/check":
+            try:
+                srv.updates.check()
+            except Exception as e:
+                why = "you're offline, or GitHub can't be reached" if is_network_error(e) else str(e)[:200]
+                return self._json({"error": f"Couldn't check for updates: {why}."}, 502)
+            return self._json({"ok": True, **srv.updates.view(srv.can_update())})
+        if path == "/api/update/install":
+            if not srv.can_update():
+                return self._json({"error": "This copy of Hoard can't update itself. Download the new version from "
+                                            "the releases page."}, 409)
+            if srv.jobs.state["running"]:
+                return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
+            why = srv.updates.start_install(srv.quit_app)
+            return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
                     "/api/pin/recover", "/api/pin/phrase"):
             return self._privacy_action(path, body)
