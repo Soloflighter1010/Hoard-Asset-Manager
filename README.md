@@ -67,11 +67,14 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   confirm it. Or add your shops in **Settings** under **Payhip shops** (the address is in your purchase
   email) and refresh: Payhip checks for automated browsers, so that opens a window where you can complete
   the check.
-- **itch.io:** everything in your itch.io library (things you bought, and ones you claimed from bundles or
-  "name your own price" pages), downloaded from each project's download page. Set Hoard up before 2.5.0? Turn
-  itch.io on in **Settings** first. Game builds (files the
-  creator marked for Windows, macOS, Linux or Android) are skipped unless you turn off **Skip game builds**
-  in **Settings**, so a library with games in it doesn't fill your drive.
+- **itch.io** signs in with an API key instead of a password, as itch.io's own app does (its website doesn't
+  let automated browsers sign in). In **Stores**, choose **Add API key** on itch.io's row: Hoard shows you where
+  to make one, checks it with itch.io, and keeps it protected by your operating system. Hoard then reads
+  everything in your itch.io library (what you bought, and what you claimed from bundles or "name your own
+  price" pages) and downloads it, checking each file against itch.io's checksum. Set Hoard up before 2.5.0?
+  Turn itch.io on in **Settings** first. Game builds (files the creator marked for Windows, macOS, Linux or
+  Android) are skipped unless you turn off **Skip game builds** in **Settings**, so a library with games in it
+  doesn't fill your drive.
 - **Signing in without your saved passwords:** Hoard's window is its own browser, so it doesn't have
   the passwords your usual browser saved. The assistant shows where to find and copy them in Chrome,
   Edge, Firefox, Safari or a password manager. If a store emails you a sign-in or confirmation link,

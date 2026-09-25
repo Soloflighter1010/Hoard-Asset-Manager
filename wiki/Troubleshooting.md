@@ -101,6 +101,11 @@ When importing ends, Hoard lists each page it couldn't use, and why:
 - **A Payhip shop you didn't add:** Hoard only adds a shop when you confirm it. Import the page again and choose
   **OK** when Hoard asks, or add the shop in **Settings**.
 
+### itch.io: "didn't accept the API key"
+
+The key was mistyped or cut short when it was copied, or it was deleted on itch.io. Make a new one on itch.io
+(Settings, API keys), then choose **Change API key** on itch.io's row in **Stores**. See [Stores](Stores#itchio).
+
 ### itch.io skips some of my files
 
 Files the creator marked as a program for Windows, macOS, Linux or Android are game builds, skipped unless you

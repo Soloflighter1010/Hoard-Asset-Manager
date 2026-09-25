@@ -769,113 +769,258 @@ class SetupAssistant(unittest.TestCase):
             srv.server_close()
 
 
-class ItchDownloads(unittest.TestCase):
-    """itch.io: each file on a project's download page is downloaded once, and again when itch.io shows it changed;
-    game builds and files kept on other websites are left alone. The browser is stood in for here; test_readers reads
-    the pages themselves."""
+class _ItchStandIn:
+    """A stand-in api.itch.io and file host, on this computer. It records the Authorization header of every request."""
 
-    CARD = {"id": "kitsu/paw-suit", "name": "Paw Suit", "creator": "Kitsu Studio", "creator_url": "https://kitsu.itch.io",
-            "thumbnail": "", "url": "https://kitsu.itch.io/paw-suit",
-            "download_url": "https://kitsu.itch.io/paw-suit/download/AbCdEf123456"}
+    KEY = "GoodKey1234567890abcdef"
+    DATA = {5550001: b"PAW" * 1000}
+    seen: list = []
+    uploads: list = []
 
-    @staticmethod
-    def uploads(avatar=("PawSuit_v1.2.unitypackage", "48 MB")):
-        return [{"idx": 0, "upload_id": "5550001", "name": avatar[0], "size": avatar[1], "systems": [], "elsewhere": False},
-                {"idx": 1, "upload_id": "5550002", "name": "PawSuit-Demo-Windows.zip", "size": "210 MB",
-                 "systems": ["Windows"], "elsewhere": False},
-                {"idx": 2, "upload_id": "5550003", "name": "Textures (Google Drive)", "size": "", "systems": [],
-                 "elsewhere": True}]
+    @classmethod
+    def start(cls):
+        import hashlib
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import parse_qs, urlparse
+        stand_in = cls
 
-    @staticmethod
-    def cfg(**itch):
-        cfg = {**config.load_config(), "request_delay": 0}
-        cfg["itch"] = {**cfg["itch"], **itch}
-        return cfg
-
-    def sync(self, root, uploads, cfg, lands_on=None):
-        """sync_itch with the browser stood in for. Returns the files clicked, and the report."""
-        import contextlib
-        import types
-        from unittest import mock
-        clicked, card = [], self.CARD
-
-        class Page:
-            url = lands_on or card["download_url"]
-
-            def evaluate(self, js, *args):
-                return [dict(u) for u in uploads]
-        page = Page()
-
-        class Context:
-            pages = [page]
-
-            def close(self):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):
                 pass
 
-        class Download:
-            def __init__(self, name):
-                self.suggested_filename, self.page = name, page
+            def send(self, status, body=b"", ctype="application/json", headers=None):
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                for k, v in (headers or {}).items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
 
-            def save_as(self, path):
-                Path(path).write_bytes(b"0123456789")
+            def do_GET(self):
+                u = urlparse(self.path)
+                stand_in.seen.append((self.server.server_port, u.path, self.headers.get("Authorization")))
+                if self.server is stand_in.files:
+                    data = stand_in.DATA.get(int(u.path.rsplit("/", 1)[-1]), b"")
+                    return self.send(200, data, "application/octet-stream")
+                if self.headers.get("Authorization") != f"Bearer {stand_in.KEY}":
+                    return self.send(403, json.dumps({"errors": ["invalid key"]}).encode())
+                q = parse_qs(u.query)
+                if u.path == "/profile":
+                    body = {"user": {"username": "buyer", "display_name": "Buyer"}}
+                elif u.path == "/profile/owned-keys":
+                    body = {"page": 1, "per_page": 50, "owned_keys": [] if q.get("page") != ["1"] else [
+                        {"id": 77, "game_id": 1001, "game": {"id": 1001, "title": "Paw Suit", "url": "https://kitsu.itch.io/paw-suit",
+                                                            "cover_url": "https://img.itch.zone/paw.png",
+                                                            "user": {"display_name": "Kitsu Studio", "url": "https://kitsu.itch.io"}}}]}
+                elif u.path == "/games/1001/uploads" and q.get("download_key_id") == ["77"]:
+                    body = {"uploads": [dict(x, md5_hash=hashlib.md5(stand_in.DATA.get(x["id"], b"")).hexdigest()
+                                             if x["id"] in stand_in.DATA else None) for x in stand_in.uploads]}
+                elif u.path.startswith("/uploads/") and u.path.endswith("/download") and q.get("uuid"):
+                    upload = u.path.split("/")[2]
+                    return self.send(302, headers={"Location": f"http://localhost:{stand_in.files.server_port}/f/{upload}"})
+                else:
+                    return self.send(404, b"{}")
+                self.send(200, json.dumps(body).encode())
 
-            def failure(self):
-                return None
+        cls.api, cls.files = ThreadingHTTPServer(("127.0.0.1", 0), Handler), ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        for srv in (cls.api, cls.files):
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
 
-        def click(ctx, pg, idx, timeout_s):
-            clicked.append(uploads[idx]["upload_id"])
-            return Download(uploads[idx]["name"])
+    @classmethod
+    def stop(cls):
+        for srv in (cls.api, cls.files):
+            srv.shutdown()
+            srv.server_close()
+
+    @classmethod
+    def use(cls, test):
+        """Point Hoard's itch.io code at the stand-ins for one test, with the key kept."""
+        from unittest import mock
+        from hoard import egress, itch, vault
+        cls.seen.clear()
+        cls.uploads = [{"id": 5550001, "filename": "PawSuit_v1.2.unitypackage", "size": 3000, "storage": "hosted", "traits": []},
+                       {"id": 5550002, "filename": "PawSuit-Demo-Windows.zip", "size": 9, "storage": "hosted", "traits": ["p_windows"]},
+                       {"id": 5550003, "filename": "Textures", "storage": "external"}]
+        api = f"http://127.0.0.1:{cls.api.server_port}"
+        egress._TEST_ORIGINS.update({api, f"http://localhost:{cls.files.server_port}"})
+        test.addCleanup(egress._TEST_ORIGINS.clear)
+        patcher = mock.patch.object(itch, "API", api)
+        patcher.start()
+        test.addCleanup(patcher.stop)
+        cfg = {**config.load_config(), "request_delay": 0, "allow_unprotected_signins": True}
+        vault.save_key(cfg, "itch", cls.KEY)
+        test.addCleanup(lambda: vault.forget_key(cfg, "itch"))
+        return cfg
+
+
+class ItchKeys(unittest.TestCase):
+    """The itch.io API key: kept with the operating system's protection, never in config.json, and deleted on sign-out."""
+
+    def test_kept_and_forgotten(self):
+        from hoard import vault
+        cfg = {**config.load_config(), "allow_unprotected_signins": True}
+        self.assertIsNone(vault.clean_key("not a key!"))
+        self.assertEqual(vault.clean_key('  "GoodKey1234567890abcdef"\n'), "GoodKey1234567890abcdef")
+        vault.save_key(cfg, "itch", "GoodKey1234567890abcdef")
+        self.assertEqual(vault.load_key(cfg, "itch"), "GoodKey1234567890abcdef")
+        self.assertNotIn("GoodKey", json.dumps(cfg))
+        if os.name == "posix":
+            self.assertEqual(os.stat(paths.data_dir() / "keys" / "itch.key").st_mode & 0o777, 0o600)
+        else:   # encrypted by the Windows account: the file isn't the key
+            self.assertNotIn(b"GoodKey", (paths.data_dir() / "keys" / "itch.dpapi").read_bytes())
+        self.assertTrue(vault.forget_key(cfg, "itch"))
+        self.assertIsNone(vault.load_key(cfg, "itch"))
+        self.assertFalse(vault.forget_key(cfg, "itch"))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "the Linux keyring rule")
+    def test_no_keyring_no_key(self):
+        from unittest import mock
+        from hoard import browser, vault
+        with mock.patch.object(vault, "linux_keyring", lambda: None):
+            with self.assertRaises(browser.SigninsUnprotected):
+                vault.save_key(config.load_config(), "itch", "GoodKey1234567890abcdef")
+            self.assertIsNone(vault.load_key(config.load_config(), "itch"))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "the Linux keyring")
+    def test_the_keyring_gets_it_on_stdin(self):
+        """Through secret-tool, with the key on stdin: never on a command line, which other accounts can read."""
+        from unittest import mock
+        from hoard import vault
+        calls = []
+
+        def run(cmd, stdin=""):
+            calls.append((cmd, stdin))
+            return types.SimpleNamespace(returncode=0, stdout="GoodKey1234567890abcdef\n", stderr="")
+        import types
+        with mock.patch.object(vault, "linux_keyring", lambda: "gnome-libsecret"), \
+                mock.patch.object(vault.shutil, "which", lambda name: "/usr/bin/" + name), mock.patch.object(vault, "_run", run):
+            vault.save_key(config.load_config(), "itch", "GoodKey1234567890abcdef")
+            self.assertEqual(vault.load_key(config.load_config(), "itch"), "GoodKey1234567890abcdef")
+        self.assertEqual(calls[0][0][:2], ["secret-tool", "store"])
+        self.assertEqual(calls[0][1], "GoodKey1234567890abcdef")
+        self.assertFalse(any("GoodKey" in " ".join(cmd) for cmd, _stdin in calls))
+
+
+class ItchAPI(unittest.TestCase):
+    """itch.io through its API, against a stand-in: the library, the files, and where the key goes."""
+
+    @classmethod
+    def setUpClass(cls):
+        _ItchStandIn.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        _ItchStandIn.stop()
+
+    def sync(self, cfg, root):
+        import types
         report = downloader.Report()
-        with mock.patch.multiple(downloader, _playwright=lambda: (lambda: contextlib.nullcontext(None)),
-                                 launch_context=lambda *a, **k: Context(), read_itch_library=lambda *a, **k: [dict(card)],
-                                 goto=lambda page, url: None, settle=lambda page, ms=800: None, click_download=click,
-                                 save_thumbnail=lambda *a, **k: None):
-            downloader.sync_itch(cfg, root, types.SimpleNamespace(headed=False, only=None, dry_run=False), report)
-        return clicked, report
+        downloader.sync_itch(cfg, root, types.SimpleNamespace(headed=False, only=None, dry_run=False), report)
+        return report
 
-    def test_once_and_again_when_itch_shows_a_change(self):
+    def test_the_library(self):
+        cfg = _ItchStandIn.use(self)
+        (i,) = library.fetch_itch(None, cfg, lambda m: None)
+        self.assertEqual((i["key"], i["name"], i["creator"], i["url"], i["download_url"]),
+                         ("itch:1001", "Paw Suit", "Kitsu Studio", "https://kitsu.itch.io/paw-suit", None))
+
+    def test_downloads_and_where_the_key_goes(self):
+        from unittest import mock
+        cfg = _ItchStandIn.use(self)
         root = Path(tempfile.mkdtemp())
-        clicked, report = self.sync(root, self.uploads(), self.cfg())
-        self.assertEqual(clicked, ["5550001"], "the asset file; not the game build, nor the file kept on another website")
-        self.assertTrue((root / "Itch" / "Kitsu Studio" / "Paw Suit" / "PawSuit_v1.2.unitypackage").is_file())
-        self.assertEqual(report.new_assets, ["itch.io: Kitsu Studio / Paw Suit"])
-        skipped = " ".join(report.skipped)
-        self.assertIn("a game build for Windows", skipped)
-        self.assertIn("kept on another website", skipped)
-        self.assertEqual(self.sync(root, self.uploads(), self.cfg())[0], [], "nothing again while itch.io shows the same file")
-        clicked, report = self.sync(root, self.uploads(("PawSuit_v1.3.unitypackage", "49 MB")), self.cfg())
-        self.assertEqual(clicked, ["5550001"], "a new version: downloaded again")
-        self.assertEqual(len(report.updated), 1)
-        saved = json.loads((root / "Itch" / "_manifest.json").read_text("utf-8"))
-        self.assertEqual(saved["assets"]["kitsu/paw-suit"]["files"]["5550001"]["path"], "PawSuit_v1.3.unitypackage")
+        with mock.patch.object(downloader, "save_thumbnail", lambda *a, **k: None):
+            report = self.sync(cfg, root)
+            self.assertEqual(report.failed, [])
+            folder = root / "Itch" / "Kitsu Studio" / "Paw Suit"
+            self.assertEqual((folder / "PawSuit_v1.2.unitypackage").read_bytes(), b"PAW" * 1000)
+            self.assertFalse((folder / "PawSuit-Demo-Windows.zip").exists(), "a game build, skipped")
+            skipped = " ".join(report.skipped)
+            self.assertIn("a game build for Windows", skipped)
+            self.assertIn("kept on another website", skipped)
+            api, files = _ItchStandIn.api.server_port, _ItchStandIn.files.server_port
+            self.assertTrue(all(auth == f"Bearer {_ItchStandIn.KEY}" for port, _p, auth in _ItchStandIn.seen if port == api))
+            self.assertEqual([auth for port, _p, auth in _ItchStandIn.seen if port == files], [None], "the file host never gets the key")
+            _ItchStandIn.seen.clear()
+            self.assertEqual(self.sync(cfg, root).new_files, [], "nothing again while itch.io shows the same file")
+            _ItchStandIn.DATA[5550001] = b"PAW2" * 1000   # the creator updates it
+            _ItchStandIn.uploads[0]["filename"] = "PawSuit_v1.3.unitypackage"
+            try:
+                report = self.sync(cfg, root)
+            finally:
+                _ItchStandIn.DATA[5550001] = b"PAW" * 1000
+            self.assertEqual(len(report.updated), 1)
+            self.assertEqual((folder / "PawSuit_v1.3.unitypackage").read_bytes(), b"PAW2" * 1000)
+            cfg["itch"] = {**cfg["itch"], "skip_game_builds": False}
+            _ItchStandIn.DATA[5550002] = b"DEMO"
+            try:
+                self.sync(cfg, root)
+            finally:
+                del _ItchStandIn.DATA[5550002]
+            self.assertTrue((folder / "PawSuit-Demo-Windows.zip").is_file(), "game builds when you want them")
+        manifest = (root / "Itch" / "_manifest.json").read_text("utf-8")
+        self.assertNotIn(_ItchStandIn.KEY, manifest)
         catalog, _tags = downloader.collect_catalog(config.load_config(), root)
-        self.assertEqual([(e["store"], e["url"], e["files"]) for e in catalog],
-                         [("Itch", "https://kitsu.itch.io/paw-suit", ["PawSuit_v1.3.unitypackage"])])
         self.assertEqual(downloader.validate_catalog_entry(catalog[0]), [])
 
-    def test_game_builds_when_you_want_them(self):
-        clicked, _report = self.sync(Path(tempfile.mkdtemp()), self.uploads(), self.cfg(skip_game_builds=False))
-        self.assertEqual(clicked, ["5550001", "5550002"])
-
-    def test_a_download_page_that_sends_you_elsewhere(self):
-        """A refunded purchase's key no longer opens its download page: nothing is clicked on the page it lands on."""
-        clicked, report = self.sync(Path(tempfile.mkdtemp()), self.uploads(), self.cfg(), lands_on="https://kitsu.itch.io/paw-suit")
-        self.assertEqual(clicked, [])
-        self.assertIn("sent Hoard elsewhere", report.failed[0])
-
-    def test_a_stopped_sync_records_what_finished(self):
-        """Stop is noticed when the next line is logged, which came before the save: the file that had just finished
-        went unrecorded, and was downloaded again the next time."""
+    def test_a_file_that_doesnt_match_its_checksum(self):
         from unittest import mock
+        cfg = _ItchStandIn.use(self)
         root = Path(tempfile.mkdtemp())
+        with mock.patch.object(downloader, "save_thumbnail", lambda *a, **k: None), \
+                mock.patch.object(downloader, "md5_of", lambda path: "0" * 32):
+            report = self.sync(cfg, root)
+        self.assertIn("didn't match itch.io's checksum", report.failed[0])
+        self.assertFalse((root / "Itch" / "Kitsu Studio" / "Paw Suit" / "PawSuit_v1.2.unitypackage").exists())
 
-        def log(message):
-            if message.strip().startswith("saved:"):
-                raise common.Cancelled()   # Stop, noticed as that download is logged
-        with mock.patch.object(downloader, "log", log), self.assertRaises(common.Cancelled):
-            self.sync(root, self.uploads(), self.cfg())
-        saved = json.loads((root / "Itch" / "_manifest.json").read_text("utf-8"))
-        self.assertEqual(saved["assets"]["kitsu/paw-suit"]["files"]["5550001"]["path"], "PawSuit_v1.2.unitypackage")
+    def test_a_refused_key(self):
+        from hoard import itch, vault
+        cfg = _ItchStandIn.use(self)
+        vault.save_key(cfg, "itch", "WrongKey1234567890abcdef")
+        with self.assertRaises(itch.KeyRefused):
+            library.fetch_itch(None, cfg, lambda m: None)
+        vault.forget_key(cfg, "itch")
+        with self.assertRaises(common.NotLoggedIn):
+            self.sync(cfg, Path(tempfile.mkdtemp()))
+
+    def test_signing_in_and_out(self):
+        """The page's key goes to POST /api/itch-key: checked with itch.io, kept, and the library read, no browser."""
+        from unittest import mock
+        from hoard import vault
+        cfg = _ItchStandIn.use(self)
+        vault.forget_key(cfg, "itch")
+        srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
+        srv.lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        srv.jobs.lib = srv.lib
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+
+        def post(path, body):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", path, body=json.dumps(body), headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse()
+            data = json.loads(r.read() or b"{}")
+            c.close()
+            return r.status, data
+        self.assertEqual(post("/api/itch-key", {"key": "short"})[0], 400)
+        self.assertEqual(post("/api/itch-key", {"key": "WrongKey1234567890abcdef"})[0], 400)
+        self.assertIsNone(vault.load_key(cfg, "itch"), "a refused key isn't kept")
+        self.assertEqual(post("/api/login", {"stores": ["itch"]})[0], 400, "no browser sign-in for itch.io")
+        with mock.patch.object(jobs, "reachable", lambda store, timeout=5.0: True), \
+                mock.patch.object(jobs, "launch", lambda *a, **k: self.fail("a browser was opened")):
+            status, said = post("/api/itch-key", {"key": _ItchStandIn.KEY})
+            self.assertEqual((status, said["user"]), (200, "Buyer"))
+            for _ in range(200):
+                if not srv.jobs.state["running"] and srv.lib.data["items"]:
+                    break
+                time.sleep(0.05)
+        self.assertEqual(vault.load_key(cfg, "itch"), _ItchStandIn.KEY)
+        self.assertEqual([i["key"] for i in srv.lib.data["items"]], ["itch:1001"])
+        from hoard import browser
+        said = browser.sign_out(None, cfg, "itch")
+        self.assertIn("deleted the saved API key", said)
+        self.assertIsNone(vault.load_key(cfg, "itch"))
 
 
 class PayhipIsListedOnly(unittest.TestCase):

@@ -194,7 +194,7 @@ class ImportingFromTheLibrary(unittest.TestCase):
         self.assertEqual(json.loads((tmp / "config.json").read_text("utf-8"))["payhip"]["shops"], ["https://testshop.store"])
         page.get_by_text("Product eF3").first.wait_for()   # in the library straight away
         self.assertEqual(sorted(i["key"] for i in srv.lib.data["items"]),
-                         ["itch:kitsu/paw-suit", "payhip:testshop.store:aB1", "payhip:testshop.store:cD2", "payhip:testshop.store:eF3"])
+                         ["itch:1001", "payhip:testshop.store:aB1", "payhip:testshop.store:cD2", "payhip:testshop.store:eF3"])
 
 
 if __name__ == "__main__":

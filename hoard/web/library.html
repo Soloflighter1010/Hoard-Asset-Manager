@@ -420,6 +420,8 @@ dialog.pin textarea { display: block; width: 100%; box-sizing: border-box; min-h
 dialog.pin textarea[hidden], dialog.pin [hidden] { display: none; }
 dialog.pin .checks { display: flex; gap: 8px; }
 dialog.pin .checks input { letter-spacing: normal; font-size: 15px; }
+dialog.pin #itchKey { font: 500 14px var(--body); letter-spacing: 0; }
+dialog.pin .keysteps { margin: 10px 0; padding-left: 20px; font-size: 14px; line-height: 1.55; }
 dialog.pin .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
 </style>
 </head>
@@ -606,6 +608,19 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <div class="row"><span><button class="linkish" id="pinForgot">Forgot your PIN?</button><button class="linkish" id="pinLost" hidden>Lost your recovery words too?</button></span>
     <span><button class="ghost" id="pinCancel">Cancel</button> <button class="primary" id="pinOk">OK</button></span></div>
 </dialog>
+<dialog id="itchDialog" class="pin" aria-labelledby="itchTitle">
+  <h2 id="itchTitle">itch.io API key</h2>
+  <p>itch.io doesn't let automated browsers sign in, so Hoard uses an API key instead, as itch.io's own app does.</p>
+  <ol class="keysteps">
+    <li>Open <a href="https://itch.io/user/settings/api-keys" target="_blank" rel="noopener noreferrer">API keys</a> in your itch.io settings, in your usual browser.</li>
+    <li>Choose <strong>Generate new API key</strong>, then copy the key.</li>
+    <li>Paste it here.</li></ol>
+  <input id="itchKey" type="password" autocomplete="off" spellcheck="false" placeholder="API key" aria-label="itch.io API key">
+  <p class="pin-note" id="itchNote" aria-live="polite"></p>
+  <p class="muted">Hoard keeps it protected by your operating system, only ever sends it to itch.io's API, and never shows it
+    again. Signing out of itch.io in Hoard deletes it.</p>
+  <div class="row"><span></span><span><button class="ghost" id="itchCancel">Cancel</button> <button class="primary" id="itchSave">Save key</button></span></div>
+</dialog>
 <div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
   <button class="linkish" id="bulkAll">Select all shown</button>
@@ -760,7 +775,7 @@ function renderStores() {
       + (downloadable(s) ? "" : ". Listed, not downloaded");
     return `<div class="store-row"><span class="nm"><span class="dot ${s}"></span>${label(s)}</span>` +
       `<span class="meta">${esc(meta)}</span>` +
-      `<span class="btns"><button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>Sign in</button>` +
+      `<span class="btns"><button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>${s === "itch" ? (DATA.itch_key ? "Change API key" : "Add API key") : "Sign in"}</button>` +
       `<button class="ghost sm" data-refresh="${s}" ${busy ? "disabled" : ""}>Refresh</button>` +
       (downloadable(s) ? `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` : "") +
       (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
@@ -962,10 +977,35 @@ $("#storeRows").addEventListener("click", e => {
   const d = e.target.closest("[data-download]");
   if (d) startDownload([d.dataset.download]);
   else if (o) runJob("/api/logout", [o.dataset.logout]);
+  else if (l && l.dataset.login === "itch") openItchKey();
   else if (l) runJob("/api/login", [l.dataset.login]);
   else if (r) runJob("/api/refresh", [r.dataset.refresh]);
   else if (i) { importStore = i.dataset.import; $("#importFile").value = ""; $("#importFile").click(); }
 });
+/* ---------- itch.io's API key: checked with itch.io and kept by Hoard (POST /api/itch-key), never shown again */
+let itchDone = null;
+function openItchKey(done) {
+  itchDone = done || null;
+  $("#itchKey").value = ""; $("#itchNote").textContent = ""; $("#itchSave").disabled = false;
+  $("#itchDialog").showModal(); $("#itchKey").focus();
+}
+async function saveItchKey() {
+  const key = $("#itchKey").value.trim();
+  if (!key) { $("#itchNote").textContent = "Paste the key from itch.io first."; return; }
+  $("#itchSave").disabled = true; $("#itchNote").textContent = "Checking the key with itch.io";
+  const r = await apiPost("/api/itch-key", { key });
+  $("#itchKey").value = "";
+  if (!r.ok) { $("#itchSave").disabled = false; $("#itchNote").textContent = r.data.error || "That key wasn't saved."; return; }
+  $("#itchDialog").close();
+  toast(`Signed in to itch.io${r.data.user ? " as " + r.data.user : ""}. Reading your library.`);
+  DATA.job = { running: true, message: "Reading itch.io" }; showJob(DATA.job); renderStores(); startPolling();
+  if (itchDone) itchDone();
+}
+$("#itchSave").addEventListener("click", saveItchKey);
+$("#itchKey").addEventListener("keydown", e => { if (e.key === "Enter") saveItchKey(); });
+$("#itchCancel").addEventListener("click", () => { $("#itchKey").value = ""; $("#itchDialog").close(); });
+$("#itchDialog").addEventListener("close", () => { $("#itchKey").value = ""; });
+
 /* ---------- importing saved pages: any number at once, from the file picker, a folder, or dropped on the window.
    They go to Hoard a batch at a time, and each page gets its own result, so one bad page doesn't stop the rest. */
 const PAGE_FILE = /\.(mhtml|mht|html|htm)$/i;
@@ -1545,7 +1585,7 @@ const SETUP_VIEWS = {
     <p>Each store opens in Hoard's own window. Sign in there as usual, then close the window, and Hoard reads what you own.</p>
     ${STORE_ORDER.filter(s => st.stores[s].enabled).map(s => `<div class="signrow"><span class="who"><span class="dot ${s}"></span>${esc(st.stores[s].label)}</span>
       <span class="state${st.stores[s].signed_in ? " ok" : ""}">${st.stores[s].signed_in ? "Signed in" : "Not signed in yet"}</span>
-      <button class="ghost sm" data-signin="${s}">${st.stores[s].signed_in ? "Sign in again" : "Sign in"}</button></div>`).join("")
+      <button class="ghost sm" data-signin="${s}">${s === "itch" ? (st.stores[s].signed_in ? "Change API key" : "Add API key") : st.stores[s].signed_in ? "Sign in again" : "Sign in"}</button></div>`).join("")
       || `<p class="muted">You haven't picked any stores. Go back a step to choose some.</p>`}
     <div class="progress" id="signinProgress" aria-live="polite"></div>
     <div id="linkBox" hidden><p class="muted">Did the store email you a link to sign in, or to confirm it's you? Paste it here instead of clicking it, and Hoard opens it in its window.</p>
@@ -1590,6 +1630,7 @@ const SETUP_WIRES = {
   signin: () => {
     for (const b of document.querySelectorAll("#setupBody [data-signin]")) {
       b.addEventListener("click", async () => {
+        if (b.dataset.signin === "itch") { openItchKey(async () => { await setupStatus(); renderSetup(); }); return; }
         const r = await apiPost("/api/login", { stores: [b.dataset.signin] });
         if (!r.ok) { toast(r.data.error || "Signing in didn't start."); return; }
         document.querySelectorAll("#setupBody [data-signin]").forEach(x => { x.disabled = true; });

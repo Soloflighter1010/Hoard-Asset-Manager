@@ -20,7 +20,7 @@ The examples below say `hoard-cli`; use whichever of these fits. Without a comma
 
 | Command | What it does |
 |---|---|
-| `login <store>` | Sign in to a store (`booth`, `gumroad`, `jinxxy`, `payhip` or `itch`) in a browser window |
+| `login <store>` | Sign in to a store (`booth`, `gumroad`, `jinxxy`, `payhip`) in a browser window, or add an itch.io API key (`itch`) |
 | `logout <store>` | Sign out of a store in Hoard, or of every store with `all` |
 | `refresh [--store <store>]` | Read what you own from the stores (repeat `--store` for several; default: all) |
 | `import <file or folder>... [--store <store>] [--trust-shop <address>]` | Add library pages you saved from your own browser (`.mhtml` or `.html`): any number of files, and folders of them. A Payhip shop that isn't in your list is only added with `--trust-shop` and its exact address (repeat it for several). Exits with 1 if any page wasn't imported |
@@ -38,7 +38,7 @@ The examples below say `hoard-cli`; use whichever of these fits. Without a comma
 - `--store <store>`: only one store, `booth`, `gumroad`, `jinxxy` or `itch` (default: all of them)
 - `--dry-run`: list what would download, and download nothing
 - `--only <text>`: only products whose name or creator contains the text
-- `--headed`: show the browser while downloading from Booth, Jinxxy or itch.io
+- `--headed`: show the browser while downloading from Booth or Jinxxy
 
 Every command also takes `--config <file>`, to use a different settings file (default: `config.json` in Hoard's
 app-data folder).

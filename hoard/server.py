@@ -19,12 +19,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__
-from .browser import signin_protection, signins_root
+from . import __version__, itch, vault
+from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog
 from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
 from .jobs import Jobs
+from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, WEB, default_downloads
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
@@ -40,7 +41,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
-           "/api/enter")
+           "/api/enter", "/api/itch-key")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -290,6 +291,7 @@ class Handler(BaseHTTPRequestHandler):
                                "privacy": privacy,
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
                                "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
+                               "itch_key": vault.load_key(srv.cfg, "itch") is not None,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
@@ -417,6 +419,34 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({"ok": True, "results": said, "added_shops": added,
                            "totals": {s: {"label": STORES[s]["label"], "total": n} for s, n in totals.items()}})
 
+    def _itch_key(self, body: dict):
+        """Check an itch.io API key with itch.io, keep it (vault), and read your itch.io library with it."""
+        srv = self.server
+        key = vault.clean_key(body.get("key"))
+        if not key:
+            return self._json({"error": "That doesn't look like an itch.io API key. Copy the whole key from itch.io "
+                                        "(Settings, API keys)."}, 400)
+        if srv.jobs.state["running"]:
+            return self._json({"error": "Hoard is busy. Wait for the current job to finish."}, 409)
+        sess = itch.session(key)
+        try:
+            who = itch.profile(sess)
+        except itch.KeyRefused:
+            return self._json({"error": "itch.io didn't accept that key. Check you copied all of it, and that it hasn't "
+                                        "been deleted on itch.io."}, 400)
+        except Exception as e:
+            return self._json({"error": "Couldn't reach itch.io. Check your connection and try again." if is_network_error(e)
+                               else f"itch.io didn't answer as expected: {e}"}, 502)
+        finally:
+            sess.close()
+        try:
+            vault.save_key(srv.cfg, "itch", key)
+        except (SigninsUnprotected, OSError) as e:
+            return self._json({"error": str(e)}, 500)
+        srv.jobs.start("refresh", ["itch"])
+        name = str(who.get("display_name") or who.get("username") or "")[:100]
+        return self._json({"ok": True, "user": name, "kept": vault.key_protection(srv.cfg)})
+
     # ---- acting
     def do_POST(self):
         """Run an action. Only requests from this computer, sent as JSON with the access key, are accepted."""
@@ -476,6 +506,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e)}, 500)
         if path == "/api/import":
             return self._import(body)
+        if path == "/api/itch-key":
+            return self._itch_key(body)
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
@@ -513,6 +545,8 @@ class Handler(BaseHTTPRequestHandler):
         stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]
         if path == "/api/sync":   # only the stores you use
             stores = [s for s in stores if srv.cfg[s].get("enabled", True)]
+        if path == "/api/login" and stores == ["itch"]:
+            return self._json({"error": "itch.io signs in with an API key: choose Sign in on its row in Stores."}, 400)
         if path == "/api/download" and stores and not any(s in DOWNLOADABLE for s in stores):
             return self._json({"error": "Hoard lists what you own on Payhip, and doesn't download from it. Open the "
                                         "product's download page from its details, and download it there."}, 400)

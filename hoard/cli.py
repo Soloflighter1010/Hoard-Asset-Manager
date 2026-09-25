@@ -11,9 +11,10 @@ from . import __version__
 from .browser import ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
 from .common import log
 from .config import clean_payhip_shop, load_config, payhip_shops, root_dir, save_config
-from .downloader import ITCH_UPLOADS_JS, build_catalog, cmd_probe, cmd_sync, cmd_verify
+from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify
 from .jobs import Jobs
-from .library import (BOOTH_JS, DOWNLOADABLE, GR_LIBRARY, IMPORTABLE, ITCH_JS, ITCH_LIBRARY, JX_CARDS_JS, JX_INVENTORY,
+from . import itch, vault
+from .library import (BOOTH_JS, DOWNLOADABLE, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY,
                       Library, PAYHIP_SHOP_JS, STORES, import_saved_pages, open_sign_in_pages, saved_pages_in)
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 
@@ -26,7 +27,9 @@ from .setup import install_browser, migrate_from
 # ----------------------------------------------------------------------------- CLI
 
 def cmd_login(cfg, store):
-    """Open Hoard's browser at a store's sign-in page and wait while you sign in."""
+    """Open Hoard's browser at a store's sign-in page and wait while you sign in. For itch.io: ask for an API key."""
+    if store == "itch":
+        return cmd_itch_key(cfg)
     with _playwright()() as p:
         ctx = launch(p, cfg, False, store)
         open_sign_in_pages(ctx, cfg, store)
@@ -75,6 +78,45 @@ def reader_summary(parsed) -> dict:
     return {"items": len(items), "fields_filled": fields, **({"files": files} if files else {})}
 
 
+def cmd_itch_key(cfg) -> None:
+    """Ask for an itch.io API key (typed without showing), check it with itch.io, and keep it."""
+    import getpass
+    print(f"Make an API key on itch.io ({itch.KEYS_PAGE}), then paste it here. It isn't shown as you type.")
+    key = vault.clean_key(getpass.getpass("itch.io API key: "))
+    if not key:
+        sys.exit("That doesn't look like an itch.io API key. Copy the whole key from itch.io.")
+    sess = itch.session(key)
+    try:
+        who = itch.profile(sess)
+    except itch.KeyRefused:
+        sys.exit("itch.io didn't accept that key. Check you copied all of it, and that it hasn't been deleted.")
+    finally:
+        sess.close()
+    vault.save_key(cfg, "itch", key)
+    print(f"Signed in to itch.io as {who.get('display_name') or who.get('username') or 'you'}. The key is kept "
+          f"{vault.key_protection(cfg)}. Run: refresh --store itch")
+
+
+def cmd_debug_itch(cfg) -> None:
+    """For troubleshooting itch.io: what its API returned, counted rather than listed (no purchases, no key)."""
+    key = vault.load_key(cfg, "itch")
+    if not key:
+        sys.exit("There's no itch.io API key yet. Run: login itch")
+    sess = itch.session(key)
+    try:
+        keys = itch.owned_keys(sess)
+        first = next((k for k in keys if itch.game_of(k)["id"]), None)
+        files = itch.uploads(sess, itch.game_of(first)["id"], first["id"]) if first else []
+    finally:
+        sess.close()
+    summary = {"library": reader_summary([itch.game_of(k) for k in keys]),
+               "first_project_files": reader_summary(files),
+               "file_fields": sorted({f for u in files for f in u}), "systems": [itch.systems(u) for u in files]}
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    (DEBUG_DIR / "itch_summary.json").write_text(json.dumps(summary, indent=2), "utf-8")
+    print(f"itch.io's API lists {len(keys)} items, and {len(files)} files for the first. Saved in {DEBUG_DIR}.")
+
+
 def cmd_debug(cfg, store, raw: bool = False):
     """Save what a store's library page looks like and what the reader found, for troubleshooting.
 
@@ -88,7 +130,7 @@ def cmd_debug(cfg, store, raw: bool = False):
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         shops = payhip_shops(cfg)
         url = {"booth": "https://accounts.booth.pm/library", "gumroad": GR_LIBRARY, "jinxxy": JX_INVENTORY,
-               "payhip": (shops[0] + "/b-account") if shops else "https://payhip.com/", "itch": ITCH_LIBRARY}[store]
+               "payhip": (shops[0] + "/b-account") if shops else "https://payhip.com/"}[store]
         page.goto(url, wait_until="domcontentloaded")
         settle(page, 2000)
         page.mouse.wheel(0, 4000)
@@ -97,7 +139,7 @@ def cmd_debug(cfg, store, raw: bool = False):
         (DEBUG_DIR / f"{store}.html").write_text(content if raw else scrub(content), "utf-8")
         links = sorted({urlparse(h).path for h in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")})
         (DEBUG_DIR / f"{store}_links.txt").write_text("\n".join(links), "utf-8")
-        js = {"booth": BOOTH_JS, "payhip": PAYHIP_SHOP_JS, "itch": ITCH_JS}.get(store)
+        js = {"booth": BOOTH_JS, "payhip": PAYHIP_SHOP_JS}.get(store)
         if js:
             parsed = page.evaluate(js)
         elif store == "jinxxy":
@@ -111,19 +153,6 @@ def cmd_debug(cfg, store, raw: bool = False):
             (DEBUG_DIR / f"{store}_parsed.json").write_text(json.dumps(parsed, indent=2, ensure_ascii=False), "utf-8")
             (DEBUG_DIR / "SENSITIVE-README.txt").write_text(SENSITIVE_NOTE, "utf-8")
         print(f"Page: {urlparse(page.url).scheme}://{urlparse(page.url).netloc}{urlparse(page.url).path}")
-        if store == "itch":   # the downloader reads each project's download page too: save the first one's
-            first = next((c for c in parsed.get("cards", []) if c.get("download_url")), None)
-            if first:
-                page.goto(first["download_url"], wait_until="domcontentloaded")
-                settle(page, 1500)
-                content = page.content()
-                (DEBUG_DIR / "itch_download.html").write_text(content if raw else scrub(content), "utf-8")
-                uploads = page.evaluate(ITCH_UPLOADS_JS)
-                (DEBUG_DIR / "itch_download_summary.json").write_text(json.dumps(reader_summary(uploads), indent=2), "utf-8")
-                if raw:
-                    page.screenshot(path=str(DEBUG_DIR / "itch_download.png"), full_page=True)
-                    (DEBUG_DIR / "itch_download_parsed.json").write_text(json.dumps(uploads, indent=2, ensure_ascii=False), "utf-8")
-                print(f"The first download page lists {len(uploads)} files.")
         ctx.close()
     print(f"The reader found {summary['items']} items. Saved in {DEBUG_DIR}.")
     if raw:
@@ -208,7 +237,7 @@ def main(argv=None) -> None:
     ap.add_argument("--no-open", action="store_true", help="run Hoard as a server only, without opening it")
     ap.add_argument("--browser", action="store_true", help="open Hoard in your web browser instead of its own window")
     sub = ap.add_subparsers(dest="cmd", metavar="command")
-    s = sub.add_parser("login", help="sign in to a store in a browser window")
+    s = sub.add_parser("login", help="sign in to a store in a browser window (itch.io: with an API key)")
     s.add_argument("store", choices=list(STORES))
     s = sub.add_parser("logout", help="sign out of a store in Hoard, or of every store")
     s.add_argument("store", choices=[*STORES, "all"])
@@ -223,7 +252,7 @@ def main(argv=None) -> None:
     s.add_argument("--store", choices=[*DOWNLOADABLE, "all"], default="all")
     s.add_argument("--dry-run", action="store_true", help="list what would download, download nothing")
     s.add_argument("--only", help="only products whose name or creator contains this text")
-    s.add_argument("--headed", action="store_true", help="show the browser while downloading from Booth, Jinxxy or itch.io")
+    s.add_argument("--headed", action="store_true", help="show the browser while downloading from Booth or Jinxxy")
     sub.add_parser("tags", help="rebuild catalog.json and tags.json from what's downloaded")
     sub.add_parser("verify", help="check whether any data file was changed outside Hoard, and rebuild the catalog")
     s = sub.add_parser("debug", help="save a store's library page, for troubleshooting (scrubbed of personal details)")
@@ -262,7 +291,7 @@ def main(argv=None) -> None:
         elif args.cmd == "verify":
             sys.exit(cmd_verify(cfg, root_dir(cfg)))
         elif args.cmd == "debug":
-            cmd_debug(cfg, args.store, args.raw)
+            cmd_debug_itch(cfg) if args.store == "itch" else cmd_debug(cfg, args.store, args.raw)
         elif args.cmd == "install-browser":
             install_browser(print)
             print("Hoard's browser is installed.")

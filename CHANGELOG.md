@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.6.0
+
+- **itch.io signs in with an API key.** Its website shows automated browsers a Cloudflare check that never lets
+  them through, so signing in to itch.io in Hoard's window couldn't work. Now **Add API key** on itch.io's row
+  in **Stores** shows where to make a key on itch.io, checks it with itch.io, and keeps it protected by your
+  operating system (your Windows account, your Mac's Keychain or your Linux keyring), never in `config.json`.
+  Hoard reads your itch.io library and downloads your files through itch.io's API, as itch.io's own app does:
+  no browser, downloads that resume, and each file checked against itch.io's checksum. The key is only ever
+  sent to itch.io's API. **Sign out** deletes it. From the command line: `login itch`.
+- itch.io items are known by itch.io's own project number, so a page you import and the API agree.
+
 ## 2.5.2
 
 - **Hoard's own browser, in the Windows app:** installing it now works. The app looked for the browser inside its

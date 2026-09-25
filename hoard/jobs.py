@@ -12,6 +12,9 @@ from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Librar
 from .net import is_network_error, reachable
 
 
+NO_BROWSER = ("itch",)   # read through an API with a key, rather than with a sign-in in a browser
+
+
 # ----------------------------------------------------------------------------- background jobs
 
 class Jobs:
@@ -197,8 +200,9 @@ class Jobs:
                 self._set(task="refresh", store=store, message=f"Reading {label}")
                 try:
                     # each store has its own sign-in; Payhip checks for automated browsers, so it gets a visible
-                    # window you can complete its check in
-                    ctx = launch(p, self.cfg, not (store == "payhip" and self.cfg["payhip"].get("headed", True)), store)
+                    # window you can complete its check in. itch.io is read through its API: no browser at all.
+                    ctx = None if store in NO_BROWSER else \
+                        launch(p, self.cfg, not (store == "payhip" and self.cfg["payhip"].get("headed", True)), store)
                 except (ProfileBusy, SigninsUnprotected) as e:
                     self.lib.set_error(store, str(e))
                     continue
@@ -216,8 +220,10 @@ class Jobs:
                                     self.lib.data["stores"]["payhip"]["found_shops"] = self.cfg.pop("_found_payhip_shops", [])[:200]
                                     self.lib.save()
                             refreshed.append(store)
-                    except NotLoggedIn:
-                        self.lib.set_error(store, "Not signed in. Choose Sign in, then close the browser window when you're done.")
+                    except NotLoggedIn as e:
+                        self.lib.set_error(store, (
+                            f"{str(e).rstrip('.')}. Choose Sign in to add an API key from itch.io." if store == "itch"
+                            else "Not signed in. Choose Sign in, then close the browser window when you're done."))
                     except Blocked as e:
                         self.lib.set_error(store, (
                             f"{label} blocked the automated browser ({e}). Import your library instead: open it in "
@@ -229,7 +235,8 @@ class Jobs:
                         self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
                                            else f"Couldn't read the library: {e}")
                 finally:
-                    ctx.close()
+                    if ctx:
+                        ctx.close()
         if refreshed and self.cfg.get("offline_images", True):
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
@@ -240,6 +247,8 @@ class Jobs:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""
         store = stores[0]
         label = STORES[store]["label"]
+        if store in NO_BROWSER:   # signs in with an API key, from the page (POST /api/itch-key), not a window
+            raise RuntimeError("itch.io signs in with an API key: choose Sign in on its row in Stores")
         if not reachable(store):
             self.lib.set_error(store, unreachable_message(store, "opened for signing in"))
             self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
