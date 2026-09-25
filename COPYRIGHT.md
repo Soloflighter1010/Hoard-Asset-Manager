@@ -32,6 +32,14 @@ sources:
 | requests | Apache License 2.0 |
 | tqdm | MPL 2.0 and MIT |
 
+## The Windows app
+
+The installed app includes [pywebview](https://github.com/r0x0r/pywebview) (BSD 3-Clause) for its window,
+with [pythonnet](https://github.com/pythonnet/pythonnet) and clr-loader (MIT), and is built with
+[PyInstaller](https://pyinstaller.org) (GPL 2.0 with an exception that allows distributing the programs it
+builds under their own licenses). The installer is made with [Inno Setup](https://jrsoftware.org/isinfo.php)
+(the Inno Setup License, free for any use). The window is drawn by Microsoft Edge WebView2, part of Windows.
+
 ## The recovery word list
 
 `hoard/recovery_words.txt` is the BIP-39 English word list, as published in Trezor's python-mnemonic

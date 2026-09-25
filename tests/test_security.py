@@ -942,7 +942,15 @@ class Egress(unittest.TestCase):
             if f.name in ("egress.py", "safety.py"):
                 continue
             text = f.read_text("utf-8")
+            if f.name == "app.py":   # Hoard talking to itself: one call, behind a check that it's this computer only
+                self.assertEqual(text.count("urlopen("), 1)
+                self.assertIn("if not re_local.match(url):", text)
+                text = text.replace("urllib.request.urlopen(req, timeout=timeout)", "")
             self.assertNotRegex(text, r"requests\.(get|post|Session)\(|\bsess\.get\(|urlopen\(", f.name)
+        from hoard import app
+        for url in ("https://example.com/", "http://127.0.0.1.evil.example/", "http://localhost:80/", "file:///etc/passwd"):
+            with self.assertRaises(ValueError):
+                app.local_request(url)
 
 
 class EgressOverHTTPS(unittest.TestCase):

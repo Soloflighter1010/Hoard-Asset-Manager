@@ -25,11 +25,14 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   marks.py             archive, hide and remove choices, and the hidden library's PIN
   server.py            the local server behind both views
   cli.py               the command line (docs/COMMAND-LINE.md)
+  app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   web/                 library.html, downloads.html and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
 scripts/build_release.py   builds the release zip
+packaging/             the Windows app: hoard.spec (PyInstaller: Hoard.exe and hoard-cli.exe), hoard.iss
+                       (Inno Setup installer), the icon; built by release.yml, checked by check.yml
 scripts/build_vpm.py   builds Hoard for Unity's release files: the .zip, a .unitypackage and package.json
 Packages/soloflighter.hoard/  Hoard for Unity (a VPM package, editor-only). Editor/Core is plain C# with no
                        Unity references (catalog, seal, .unitypackage GUIDs), tested by tests/test_unity.py

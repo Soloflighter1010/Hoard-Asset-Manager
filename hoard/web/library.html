@@ -550,6 +550,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
   <div class="actions"><button class="primary" id="setSave">Save</button><button class="ghost" id="setCancel">Cancel</button></div>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
+  <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
 <section id="dlPanel" class="dlpanel" hidden aria-labelledby="dlTitle">
   <div class="dlhead"><h2 id="dlTitle">Downloading</h2>
@@ -656,6 +657,7 @@ async function load() {
     const r = await fetch("/api/library");
     if (!r.ok) throw new Error(r.status === 403 ? "Open this page at http://127.0.0.1 on the computer running it." : `Server answered ${r.status}.`);
     DATA = await r.json(); DATA.error = null;
+    if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
     for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
   } catch (e) {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
@@ -1307,6 +1309,13 @@ function wireApp() {
     if (!$("#settingsPanel").hidden && !e.target.closest("#settingsPanel, #settingsBtn, #toast")) closeSettings();
   });
   pollDownload();  // a download started from the other view, or before this page opened
+  // Every open page checks in once a minute: when Hoard runs in the browser, it stops once none has for a while.
+  setInterval(() => { fetch("/api/status", { cache: "no-store" }).catch(() => {}); }, 60000);
+  $("#quitHoard").addEventListener("click", async () => {
+    const r = await apiPost("/api/quit");
+    if (!r.ok) { toast(r.data.error || "Hoard didn't quit."); return; }
+    document.body.innerHTML = '<p style="font: 600 18px sans-serif; color: #c9b9a4; text-align: center; margin-top: 30vh">Hoard has stopped. You can close this tab.</p>';
+  });
 }
 
 /* ---------- the setup assistant: on first start, and from Settings (Set up Hoard) */

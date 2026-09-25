@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.4.0
+
+Hoard is a Windows app now: no command prompt, no Python to install.
+
+- **An installer:** `Hoard-Setup-<version>.exe` installs Hoard for you only (no administrator prompt), with a
+  Start menu entry, an optional desktop icon and an uninstaller. Updating is running the newer setup. Your
+  data is never touched by installing, updating or uninstalling. A portable zip of the same app is there too.
+- **Its own window,** using Microsoft Edge WebView2 (part of Windows). Closing it quits Hoard cleanly: a download
+  in progress stops (and resumes next time), and store browsers close. Links to store pages open in your web
+  browser. Without WebView2, Hoard says so and opens in your browser, with **Quit Hoard** in Settings.
+- **One copy at a time:** opening Hoard again brings its window to the front.
+- **No console:** anything Hoard would print goes to `logs\hoard.log` in its app-data folder, handy when
+  reporting a problem.
+- **The command line** is `hoard-cli.exe` in Hoard's folder (`hoard-cli sync`, `hoard-cli verify`, ...). New:
+  `self-test`, which checks a copy of Hoard has everything it needs.
+- From source, `Hoard.bat` also starts Hoard without leaving a console open.
+- Built on GitHub for every release from hash-locked dependencies (`requirements-app.txt`), checked with the
+  self-test, with signed build provenance.
+
 ## 2.3.1
 
 - **Sync button:** next to Stores and Settings (and in Downloads). It reads what you own from each store

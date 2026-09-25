@@ -1,0 +1,10 @@
+# What the Windows app (Hoard.exe, built by .github/workflows/release.yml) needs: Hoard's own dependencies, its
+# window (pywebview, which uses Microsoft Edge WebView2) and the build tool (PyInstaller). requirements-app.txt is
+# generated from this for Windows and Python 3.12, with exact versions and hashes:
+#   uv pip compile requirements-app.in --python-platform x86_64-pc-windows-msvc --python-version 3.12 \
+#     --generate-hashes --no-header --output-file requirements-app.txt
+# Don't edit requirements-app.txt by hand; change this file (or requirements.in) and regenerate it.
+-r requirements.in
+pywebview>=5.3,<7
+pyinstaller>=6.10,<7
+pyinstaller-hooks-contrib

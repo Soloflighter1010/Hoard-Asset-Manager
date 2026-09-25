@@ -40,3 +40,22 @@ jobs:
         run: python scripts/build_release.py
       - name: Build the Unity package (fails if a file has no .meta)
         run: python scripts/build_vpm.py
+
+  # The Windows app, built as a release would build it, and checked with its self-test (no installer).
+  app-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked dependencies (every file hash-checked)
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-app.txt
+      - name: Build Hoard.exe and hoard-cli.exe
+        run: |
+          python packaging/version_info.py
+          python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
+      - name: Check the build has everything it needs
+        run: dist\Hoard\hoard-cli.exe self-test
