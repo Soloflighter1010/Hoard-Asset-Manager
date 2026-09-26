@@ -3,6 +3,10 @@
 ## 2.8.1
 
 - **Hoard for Unity loads large libraries quickly,** and recognises your own catalog: see its 0.2.0 changelog.
+- **Faster with large libraries.** Tags with a matching word are found through each name's words instead of trying
+  every such tag on every name: 20,000 names with 300 matching tags take about 0.1 s instead of 28 s, every time
+  the library loads. And the Downloads index is rebuilt without holding up anything else: a sync no longer
+  pauses after each download while the Downloads page asks for the index, and the Library page never waits for it.
 - **The catalog is sealed again when Hoard starts,** if it isn't sealed with this computer's key. The Unity window
   reads `catalog.json`, and one sealed by a Hoard with a different key (Hoard on another computer, an earlier
   install, or Hoard run on Microsoft Store Python) showed there as "made on another computer" until the next

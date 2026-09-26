@@ -133,10 +133,10 @@ but nothing should fall over at that size.
 | P-01 | `/api/assets` and `/api/library` send the whole library | **Confirmed; roadmap.** Paging and filtering on the server is an architecture change for both pages. |
 | P-02 | The Downloads page draws every card | **Confirmed; roadmap**, with P-01: only what's on screen should be drawn. |
 | P-03 | The Unity window draws every row and keeps every thumbnail | **Fixed** in Hoard for Unity 0.2.0: loaded in the background, only visible rows drawn, pictures read in the background and at most 256 kept. Tests: `CoreTests.cs` (visible rows; a 3,000-product library). |
-| P-04 | Tag matching tries every tag on every name | **Confirmed; roadmap** (a word-to-tags index). |
+| P-04 | Tag matching tries every tag on every name | **Fixed** in 2.8.1: a word index (`TagMatcher`) with exactly `name_has_word`'s answers. 20,000 names with 300 matching tags: about 28 s before, 0.1 s now. Tests: `TagMatching`. |
 | P-05 | Finding a picture walked the whole library | **Fixed.** A lookup table, made again whenever the list changes. 1,000 pictures in a 100,000-item library: 10.3 s before, 45 ms now. Test: `LibraryLookups`. |
 | P-06 | `/api/library` copied the library through JSON | **Fixed.** A snapshot (`Library.snapshot`): 730 ms before, 3 ms now at 100,000 items. Test: `LibraryLookups`. |
-| P-07 | The downloads index is rebuilt while holding its lock | **Confirmed; roadmap.** |
+| P-07 | The downloads index is rebuilt while holding its lock | **Fixed** in 2.8.1: rebuilt outside the lock, one rebuild at a time; a finished download never waits for it, and the library page takes the index as it was. Tests: `DownloadsIndex`. |
 | P-08 | Each manifest was rewritten after every file and product | **Fixed.** Saved at most every 10 seconds while downloading (`Manifest.checkpoint`), and whatever's newer is saved when each sync ends, however it ends. A 5,000-product sync with nothing new wrote its 1.4 MB manifest 5,000 times; it now writes it twice. This also fixed a bug found on the way: a file that had just finished when you pressed Stop went unrecorded and was downloaded again. Tests: `ManifestSaves`. |
 | P-09 | Every `asset.json` is rewritten on every catalog build | **Confirmed; roadmap.** |
 | P-10 | Jinxxy's default-banner cleanup hashes every picture and deletes any two that match | **Confirmed; roadmap.** Two products can share a real picture; only known banners should go. |
