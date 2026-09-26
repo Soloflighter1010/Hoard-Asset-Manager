@@ -1,0 +1,98 @@
+name: "🐛 Bug Report"
+description: "Report a bug, crash, or unexpected behavior in Hoard Asset Manager"
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please fill out the form below so we can reproduce and resolve the problem efficiently.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: "e.g., Hoard crashes when indexing a folder containing corrupted .unitypackage files..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hoard_version
+    attributes:
+      label: Hoard Version
+      description: What version of Hoard are you running?
+      options:
+        - "Latest Release"
+        - "Pre-release / Beta"
+        - "Built from Source (Main branch)"
+        - "Other / Unknown"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - "Windows 11"
+        - "Windows 10"
+        - "Linux"
+        - "macOS"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: asset_type
+    attributes:
+      label: Primary Asset Type Involved (if applicable)
+      description: Which type of VRChat asset was involved when the issue occurred?
+      options:
+        - "N/A - General UI / App issue"
+        - "Unity Package (.unitypackage)"
+        - "3D Model / Prefab (.fbx, .obj, .prefab)"
+        - "Avatars / Outfits"
+        - "Shaders / Textures"
+        - "Audio / Animations"
+        - "VRChat SDK / VCC Integration"
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can maintainers reproduce the issue?
+      placeholder: |
+        1. Open Hoard Asset Manager
+        2. Click on 'Import Assets'
+        3. Select a folder with 50+ .unitypackage files
+        4. Observe the crash / freeze at item #12
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen instead?
+      placeholder: "Hoard should finish indexing all packages in the background without freezing."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs / Screenshots
+      description: Paste any error messages, terminal/console output, or drag-and-drop screenshots here.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Validation Checklist
+      options:
+        - label: "I have checked existing GitHub Issues to make sure this is not a duplicate."
+          required: true
