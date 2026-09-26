@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .paths import HERE
 from .safety import DataFileError, read_json_file, safe_join, store_link
-from .tags import TagStore, tag_key, tag_overview
+from .tags import TagMatcher, TagStore, tag_key, tag_overview
 
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -152,8 +152,9 @@ def with_tags(index: dict) -> dict:
     data = TagStore().load()
     by_id = {a["id"]: a for a in index["assets"]}
     assets = []
+    matcher = TagMatcher(data["tags"])
     for a in index["assets"]:
-        mine = TagStore.tags_for(data, a["tag_key"], a["name"])
+        mine = TagStore.tags_for(data, a["tag_key"], a["name"], matcher)
         assets.append({**a, "tags": mine,
                        "suggested": [t for t in a["suggested"]
                                      if t not in mine and t not in data["tags"] and t not in data["hidden"]],

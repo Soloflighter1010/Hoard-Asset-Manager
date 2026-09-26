@@ -75,12 +75,66 @@ def clean_tag(value) -> str:
     return "" if t in TAG_RESERVED else t
 
 
-def name_has_word(name: str, word: str) -> bool:
-    """True when an item's name contains word on its own (plurals and joined-up CamelCase count)."""
-    text = unicodedata.normalize("NFKC", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name or "")).lower()
+def name_text(name: str) -> str:
+    """A name as tag matching reads it: joined-up CamelCase split, NFKC, lower case."""
+    return unicodedata.normalize("NFKC", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name or "")).lower()
+
+
+def _text_has_word(text: str, word: str) -> bool:
     if word.isascii():
         return re.search(rf"(?<![a-z0-9]){re.escape(word)}(?:s|es)?(?![a-z0-9])", text) is not None
     return word in text  # Japanese and other scripts don't separate words with spaces
+
+
+def name_has_word(name: str, word: str) -> bool:
+    """True when an item's name contains word on its own (plurals and joined-up CamelCase count)."""
+    return _text_has_word(name_text(name), word)
+
+
+_RUN = re.compile(r"[a-z0-9]+")
+
+
+class TagMatcher:
+    """Which matching tags a name has, found through its words instead of trying every tag on every name (review
+    finding P-04). Gives exactly name_has_word's answers:
+
+    - a word of only letters and digits matches when one of the name's words is it, or it plus "s" or "es": a
+      lookup, with nothing more to check;
+    - a phrase ("fox ears") can only match where the name has its first word ("fox") as a whole word: the index
+      finds those names, and name_has_word's own test confirms each;
+    - anything else (Japanese and other scripts, or a word starting with a symbol) is checked directly, which is a
+      plain text search.
+    """
+
+    def __init__(self, tags: dict):
+        self.first_word: dict[str, list] = {}   # a word's first letters-and-digits run -> [(tag, word, whole)]
+        self.direct: list = []
+        for tag, info in tags.items():
+            word = (info or {}).get("match") if isinstance(info, dict) else None
+            if not word:
+                continue
+            run = _RUN.match(word) if word.isascii() else None
+            if run:
+                self.first_word.setdefault(run.group(0), []).append((tag, word, run.end() == len(word)))
+            else:
+                self.direct.append((tag, word))
+
+    def tags(self, name: str) -> set:
+        text = name_text(name)
+        found = set()
+        for run in set(_RUN.findall(text)):
+            for tag, word, whole in self.first_word.get(run, ()):
+                if whole or _text_has_word(text, word):   # a whole word equal to the run: matched outright
+                    found.add(tag)
+            for cut in (1, 2):   # the run is a whole matching word plus "s" or "es"
+                if len(run) > cut and run.endswith(("s", "es")[cut - 1]):
+                    for tag, word, whole in self.first_word.get(run[:-cut], ()):
+                        if whole:
+                            found.add(tag)
+        for tag, word in self.direct:
+            if _text_has_word(text, word):
+                found.add(tag)
+        return found
 
 
 @contextlib.contextmanager
@@ -184,10 +238,11 @@ class TagStore:
             os.chmod(self.path.parent, 0o700)
 
     @staticmethod
-    def tags_for(data: dict, key: str, name: str) -> list[str]:
-        """The tags an item has: the ones you gave it, plus matching ones, minus any you took off it."""
+    def tags_for(data: dict, key: str, name: str, matcher: "TagMatcher | None" = None) -> list[str]:
+        """The tags an item has: the ones you gave it, plus matching ones, minus any you took off it. For a list of
+        items, pass one TagMatcher(data["tags"]) to every call."""
         mine = {t for t in data["items"].get(key, []) if t in data["tags"]}
-        auto = {t for t, info in data["tags"].items() if (info or {}).get("match") and name_has_word(name, info["match"])}
+        auto = (matcher or TagMatcher(data["tags"])).tags(name)
         return sorted((mine | auto) - set(data["excluded"].get(key, [])))
 
     def change(self, body: dict) -> None:

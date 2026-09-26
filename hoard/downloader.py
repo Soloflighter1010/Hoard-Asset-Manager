@@ -24,7 +24,7 @@ from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, vault
 from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
-from .tags import TagStore, clean_tag, tag_key
+from .tags import TagMatcher, TagStore, clean_tag, tag_key
 
 try:
     from tqdm import tqdm
@@ -1354,9 +1354,10 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
 
     index: dict[str, list] = {}
     catalog = []
+    matcher = TagMatcher(tagdata["tags"])
     for a, ts in zip(assets, toks):
         folder = f"{a['store']}/{a['folder']}"
-        mine = TagStore.tags_for(tagdata, tag_key(a["store"], a["name"]), a["name"])
+        mine = TagStore.tags_for(tagdata, tag_key(a["store"], a["name"]), a["name"], matcher)
         a_tags = sorted((ts & tags) - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,

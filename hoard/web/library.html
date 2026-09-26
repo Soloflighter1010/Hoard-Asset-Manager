@@ -877,13 +877,41 @@ function renderStores() {
   if (DATA.signins_note && !unprotected) $("#signinsNote").textContent = DATA.signins_note;
   $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
 }
-function renderGrid(list) {
-  $("#grid").innerHTML = list.map(a =>
+// Only the cards near the screen are drawn (review finding P-02): a batch now, and the next whenever the last one
+// drawn comes within about two screens of view. A redraw keeps at least as many as were showing, so the page
+// doesn't jump. Clicks, pictures, "Select all shown" and the marks work from the list, not from what's drawn.
+function lazyCards(box, batch = 120) {
+  let list = [], shown = 0, card = null;
+  const near = new IntersectionObserver(seen => { if (seen.some(e => e.isIntersecting)) more(); },
+                                        { rootMargin: "0px 0px 200% 0px" });
+  function more(count = batch) {
+    near.disconnect();
+    const next = list.slice(shown, shown + count);
+    if (next.length) {
+      box.insertAdjacentHTML("beforeend", next.map(card).join(""));
+      shown += next.length;
+      markSelected();   // cards drawn now get the marks the others have
+    }
+    if (shown < list.length && box.lastElementChild) near.observe(box.lastElementChild);
+  }
+  return {
+    show(items, cardFor) {
+      const keep = Math.max(batch, shown);
+      list = items; card = cardFor; shown = 0; box.innerHTML = "";
+      more(keep);
+    },
+    get drawn() { return shown; },
+  };
+}
+let cards = null;
+const slotHTML = a =>
     `<button class="slot" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
       `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span>` +
-      `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`).join("");
+      `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`;
+function renderGrid(list) {
+  (cards = cards || lazyCards($("#grid"))).show(list, slotHTML);
   const empty = $("#empty");
   if (DATA.error) {
     empty.innerHTML = `<h2>Can't reach your hoard</h2><p>${esc(DATA.error)}</p>`;

@@ -21,7 +21,7 @@ from .common import NotLoggedIn, now_iso
 from .net import STORE_HOSTS
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
-from .tags import TagStore, tag_key
+from .tags import TagMatcher, TagStore, tag_key
 
 
 STORES = {
@@ -1024,9 +1024,10 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
 
     groups: dict[str, list] = {}
     out = []
+    matcher = TagMatcher(tagdata["tags"])
     for i, ts in zip(items, toks):
         key = tag_key(i["store"], i["name"])
-        mine = TagStore.tags_for(tagdata, key, i["name"])
+        mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted((ts & keep) - set(mine)),
              "also_in": [], "copy_keys": [], "match_key": _norm(i["name"])}
         for k in ("creator_url", "url", "download_url"):  # also covers lists saved by older versions

@@ -214,6 +214,100 @@ class ImportingFromTheLibrary(unittest.TestCase):
                          ["itch:1001", "payhip:testshop.store:aB1", "payhip:testshop.store:cD2", "payhip:testshop.store:eF3"])
 
 
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class LargeLibrary(unittest.TestCase):
+    """Only the cards near the screen are drawn (review finding P-02), and nothing else notices."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
+                                   lan=False)
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = [library.item("booth", str(n), name=f"Item {n:04d}", creator=f"Creator {n % 40}")
+                                         for n in range(1000)]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.tmp.cleanup()
+
+    def open(self):
+        page = self.browser.new_page(viewport={"width": 1280, "height": 800})
+        page.goto(self.srv.entry_url())
+        page.locator(".slot").first.wait_for()
+        return page
+
+    @staticmethod
+    def drawn(page) -> int:
+        return page.locator("#grid .slot").count()
+
+    def scroll_until(self, page, at_least: int):
+        for _ in range(100):
+            if self.drawn(page) >= at_least:
+                return
+            page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+            page.wait_for_timeout(50)
+        self.fail(f"only {self.drawn(page)} cards drawn after scrolling")
+
+    def wait_for(self, page, ok):
+        for _ in range(100):
+            if ok(self.drawn(page)):
+                return
+            page.wait_for_timeout(50)
+        self.fail(f"{self.drawn(page)} cards drawn")
+
+    def test_only_what_is_near_the_screen_is_drawn(self):
+        page = self.open()
+        page.wait_for_timeout(300)
+        self.assertLessEqual(self.drawn(page), 240, "a batch or two, not all 1,000")
+        self.scroll_until(page, 1000)
+        self.assertEqual(self.drawn(page), 1000, "scrolling draws them all")
+        page.close()
+
+    def test_search_and_a_redraw(self):
+        page = self.open()
+        page.fill("#q", "Item 0999")   # (waited for from here: Hoard's policy won't let a page evaluate strings)
+        self.wait_for(page, lambda n: n == 1)
+        page.fill("#q", "")
+        self.wait_for(page, lambda n: n >= 120)
+        self.scroll_until(page, 480)
+        before = self.drawn(page)
+        page.evaluate("render()")   # what a tag change or a finished job does
+        self.assertGreaterEqual(self.drawn(page), before, "a redraw doesn't jump back to the top")
+        page.close()
+
+    def test_the_downloads_page_too(self):
+        from unittest import mock
+        catalog = [{"store": "Booth", "name": f"Item {n:04d}", "creator": f"Creator {n % 40}",
+                    "folder": f"Creator {n % 40}/Item {n:04d}", "files": []} for n in range(1000)]
+        with mock.patch.object(server, "collect_catalog", lambda cfg, root: (catalog, None)):
+            self.srv.forget_index()
+            page = self.open()
+            page.goto(self.srv.url + "downloads")
+            page.locator("#grid .slot").first.wait_for()
+            page.wait_for_timeout(300)
+            self.assertLessEqual(self.drawn(page), 240)
+            self.scroll_until(page, 1000)
+            self.assertEqual(self.drawn(page), 1000)
+            page.close()
+
+    def test_select_all_marks_cards_drawn_later(self):
+        page = self.open()
+        page.click("#selectBtn")
+        page.click("#bulkAll")
+        self.assertEqual(page.locator("#bulkCount").inner_text(), "1000 selected")
+        self.scroll_until(page, 600)
+        self.assertEqual(page.locator('#grid .slot:not([aria-pressed="true"])').count(), 0)
+        page.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
