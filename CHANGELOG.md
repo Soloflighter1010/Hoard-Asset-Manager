@@ -1,8 +1,9 @@
 # Changelog
 
-## 2.8.2
+## 2.8.3
 
-Faster with large libraries, in both pages and behind them.
+Faster with large libraries, in both pages and behind them. (There's no 2.8.2: a release by that name was
+published by mistake without its files.)
 
 - **Only the cards near the screen are drawn.** Both pages drew every card on each filter click or search
   keystroke; now they draw the first 120 and add more as you scroll.
