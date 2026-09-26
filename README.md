@@ -5,6 +5,15 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest"><img src="https://img.shields.io/github/v/release/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&logo=github" alt="Latest Release"></a>
+  <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases"><img src="https://img.shields.io/github/downloads/Soloflighter1010/Hoard-Asset-Manager/total?style=for-the-badge&color=blue" alt="Downloads"></a>
+  <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/stargazers"><img src="https://img.shields.io/github/stars/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&color=yellow" alt="Stars"></a>
+  <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues"><img src="https://img.shields.io/github/issues/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&color=orange" alt="Issues"></a>
+  <a href="https://soloflighter1010.github.io/Hoard-Asset-Manager/"><img src="https://img.shields.io/badge/VCC-Supported-00a896?style=for-the-badge&logo=unity" alt="VCC Supported"></a>
+  <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge" alt="License"></a>
+</p>
+
 <p align="center"><b>Every avatar asset you've bought, in one pile.</b><br>
 Booth, Gumroad, Jinxxy, Payhip and itch.io purchases in a single library you can search, filter and keep.</p>
 
@@ -19,6 +28,22 @@ files? Hoard answers those without opening four tabs.
 
 Guides for everything, from installing to fixing a problem, are in the
 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**.
+
+---
+
+## 📖 Table of Contents
+- [Install (Windows)](#install-windows)
+- [Using Hoard](#using-hoard)
+- [Hoard in Unity](#hoard-in-unity)
+- [How Hoard keeps you safe](#how-hoard-keeps-you-safe)
+- [Your sign-ins](#your-sign-ins)
+- [Tags](#tags)
+- [Offline](#offline)
+- [Reporting a Problem & Contributing](#reporting-a-problem--contributing)
+- [For developers](#for-developers)
+- [Legal](#legal)
+
+---
 
 ## Install (Windows)
 
@@ -240,13 +265,13 @@ and leaves your saved library and downloads as they were.
 - Downloading doesn't change what you're allowed to do with an asset. Follow each creator's license
   and each store's terms.
 
-## Reporting a problem
+## Reporting a Problem & Contributing
 
-Open an issue with what you did and what happened. If a store isn't being read correctly, run
-`Hoard.bat debug <store>` or `Hoard.bat probe jinxxy` and attach the output, after
-checking it: those files show your purchases, and screenshots can show your account name.
-
-Found a security problem? Please report it privately, as [SECURITY.md](SECURITY.md) describes.
+- **Bugs & Issues:** Found a glitch? Open a [Bug Report](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml) with what you did and what happened. If a store isn't being read correctly, run `Hoard.bat debug <store>` or `Hoard.bat probe jinxxy` and attach the output, after checking it: those files show your purchases, and screenshots can show your account name.
+- **Feature Requests:** Have an idea to improve the workflow? Open a [Feature Request](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=feature_request.yml).
+- **New Storefronts:** Want to see another platform supported? Submit a [Storefront Integration Request](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=storefront_integration.yml).
+- **Discussions & Support:** Have a general question? Start a thread in [Discussions](https://github.com/Soloflighter1010/Hoard-Asset-Manager/discussions).
+- **Security Problems:** Please report them privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## Made with AI
 
