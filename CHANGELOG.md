@@ -1,15 +1,22 @@
 # Changelog
 
+## 2.8.3
+
+Faster with large libraries, in both pages and behind them. (There's no 2.8.2: a release by that name was
+published by mistake without its files.)
+
+- **Only the cards near the screen are drawn.** Both pages drew every card on each filter click or search
+  keystroke; now they draw the first 120 and add more as you scroll.
+- **Tags that match a word are found through a word index,** instead of trying every such tag on every name:
+  20,000 names with 300 matching tags take about 0.1 s instead of 28 s, every time the library loads.
+- **The Downloads index is rebuilt without holding anything up.** A sync no longer pauses after each download while
+  the Downloads page asks for the index, and the Library page never waits for it.
+- **The library and downloads lists are gzipped** when they're large: 28 times smaller, which helps when Hoard is
+  opened from another device.
+
 ## 2.8.1
 
 - **Hoard for Unity loads large libraries quickly,** and recognises your own catalog: see its 0.2.0 changelog.
-- **Faster with large libraries.** Tags with a matching word are found through each name's words instead of trying
-  every such tag on every name: 20,000 names with 300 matching tags take about 0.1 s instead of 28 s, every time
-  the library loads. And the Downloads index is rebuilt without holding up anything else: a sync no longer
-  pauses after each download while the Downloads page asks for the index, and the Library page never waits for it.
-  Both pages now draw only the cards near the screen, adding more as you scroll, instead of redrawing every card
-  on each filter click or search keystroke. And the library and downloads lists are gzipped when they're large,
-  28 times smaller, which helps when Hoard is opened from another device.
 - **The catalog is sealed again when Hoard starts,** if it isn't sealed with this computer's key. The Unity window
   reads `catalog.json`, and one sealed by a Hoard with a different key (Hoard on another computer, an earlier
   install, or Hoard run on Microsoft Store Python) showed there as "made on another computer" until the next
