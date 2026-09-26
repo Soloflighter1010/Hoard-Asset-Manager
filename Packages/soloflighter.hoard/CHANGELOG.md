@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0 (in progress)
+
+The next release, alongside Hoard 3.0.0.
+
 ## 0.2.0
 
 Fast with large libraries, and no more "made on another computer" for your own catalog.

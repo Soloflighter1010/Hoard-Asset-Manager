@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.0 (in progress)
+
+The next release, collecting everything until the roadmap is done. Until then, releases are held: `main` stays
+at 2.8.3, and this work lives on the `v3` branch.
+
 ## 2.8.3
 
 Faster with large libraries, in both pages and behind them. (There's no 2.8.2: a release by that name was
