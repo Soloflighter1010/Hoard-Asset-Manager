@@ -1,0 +1,43 @@
+name: "💡 Feature Request"
+description: "Suggest a new feature, workflow improvement, or enhancement for Hoard"
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make managing VRChat assets faster or easier? Share your thoughts below!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement / Workflow Need
+      description: What friction or missing capability in your current VRChat asset management workflow does this feature solve?
+      placeholder: "e.g., Managing multiple avatar texture variations is cumbersome because I can't preview color variants side-by-side..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe how you envision this feature working inside Hoard.
+      placeholder: "Add a side-by-side thumbnail comparison view when selecting multiple texture assets..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or workarounds you've tried?
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Screenshots, Wireframes, or Examples
+      description: Attach mockups or references to existing tools if helpful.
+    validations:
+      required: false
