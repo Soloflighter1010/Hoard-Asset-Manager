@@ -1462,6 +1462,46 @@ class DownloadsIndex(unittest.TestCase):
         self.assertEqual(self.srv.index()["assets"][0]["id"], 1)
 
 
+class CompressedLists(unittest.TestCase):
+    """The library and downloads lists are gzipped for a browser that accepts it, when they're large."""
+
+    def setUp(self):
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tempfile.mkdtemp(),
+                                                       "setup_done": True}, lan=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+    def get(self, path, gzip_ok=True):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=30)
+        headers = {"X-Hoard-Key": self.srv.key, "Cookie": f"hoard_key={self.srv.key}"}
+        if gzip_ok:
+            headers["Accept-Encoding"] = "gzip, deflate, br"
+        c.request("GET", path, headers=headers)
+        r = c.getresponse()
+        return r, r.read()
+
+    def test_large_lists(self):
+        import gzip
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] = [library.item("booth", str(n), name=f"Item {n}", creator="Kitsu")
+                                          for n in range(2000)]
+        r, body = self.get("/api/library")
+        self.assertEqual(r.getheader("Content-Encoding"), "gzip")
+        self.assertEqual(len(json.loads(gzip.decompress(body))["items"]), 2000)
+        r, body = self.get("/api/library", gzip_ok=False)
+        self.assertIsNone(r.getheader("Content-Encoding"), "only when the browser accepts it")
+        self.assertEqual(len(json.loads(body)["items"]), 2000)
+
+    def test_small_replies_are_sent_as_they_are(self):
+        r, body = self.get("/api/library")
+        self.assertIsNone(r.getheader("Content-Encoding"))
+        r, body = self.get("/api/status")
+        self.assertIsNone(r.getheader("Content-Encoding"))
+
+
 if __name__ == "__main__":
     unittest.main()
 

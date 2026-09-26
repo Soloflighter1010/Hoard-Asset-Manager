@@ -8,6 +8,7 @@ Content-Security-Policy; everything else is sandboxed.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import mimetypes
 import secrets
@@ -306,10 +307,16 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
-    def _json(self, obj, status=200):
-        """Send obj as JSON that the browser won't cache."""
-        self._send(status, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8",
-                   {"Cache-Control": "no-store"})
+    def _json(self, obj, status=200, compress: bool = False):
+        """Send obj as JSON that the browser won't cache. With compress, a large reply is gzipped for a browser that
+        accepts it (the library and downloads lists: 5 MB for 10,000 items becomes about 0.2 MB, which matters when
+        Hoard is opened from another device). Only for replies that carry no secrets."""
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        headers = {"Cache-Control": "no-store"}
+        if compress and len(body) > 64 * 1024 and "gzip" in (self.headers.get("Accept-Encoding") or "").lower():
+            body = gzip.compress(body, compresslevel=5)
+            headers.update({"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+        self._send(status, body, "application/json; charset=utf-8", headers)
 
     def _host_ok(self) -> bool:
         """False when a request names a host other than this computer (a DNS-rebinding attempt)."""
@@ -363,7 +370,7 @@ class Handler(BaseHTTPRequestHandler):
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None,
-                               "display": display_settings(srv.cfg)})
+                               "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/status":
             return self._json({"job": srv.jobs.state, "stores": srv.lib.snapshot()[1]})
         if path == "/api/assets":
@@ -372,7 +379,7 @@ class Handler(BaseHTTPRequestHandler):
                 hidden = MarkStore().load()["hidden"]
                 index = {**index, "assets": [a for a in index["assets"] if a.get("tag_key") not in hidden]}
             return self._json({**index, "version": __version__, "job": srv.jobs.state, "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)})
+                               "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/update":
