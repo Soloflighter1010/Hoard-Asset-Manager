@@ -433,6 +433,7 @@ dialog.pin .checks input { letter-spacing: normal; font-size: 15px; }
 dialog.pin #itchKey { font: 500 14px var(--body); letter-spacing: 0; }
 dialog.pin .keysteps { margin: 10px 0; padding-left: 20px; font-size: 14px; line-height: 1.55; }
 dialog.pin .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
+.eta { display: block; font-size: 13px; color: var(--dust); margin-top: 2px; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -969,10 +970,38 @@ function syncControls() {
 }
 
 /* ---------- refresh and sign-in */
+function fmtSize(n) {
+  if (n == null) return "";
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + " " + u[i];
+}
+// The file being downloaded: how much of it, the speed, and roughly how long it has left.
+function timeLeft(s) {
+  if (s < 60) return "less than a minute left";
+  const m = Math.round(s / 60);
+  if (m < 60) return `about ${m} min left`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return `about ${h} h${r ? ` ${r} min` : ""} left`;
+}
+function transferText(t) {
+  if (!t || !t.file) return "";
+  const bits = [t.total ? `${fmtSize(t.done)} of ${fmtSize(t.total)}` : fmtSize(t.done)];
+  if (t.speed) bits.push(`${fmtSize(t.speed)}/s`);
+  if (t.left != null) bits.push(timeLeft(t.left));
+  return `${t.file}: ${bits.join(" · ")}`;
+}
 function showJob(job) {
   const el = $("#job");
   el.hidden = !(job && job.running && job.message);
   el.textContent = job && job.message || "";
+  const eta = job && job.running && transferText(job.transfer);
+  if (eta) {
+    const line = document.createElement("span");
+    line.className = "eta";
+    line.textContent = eta;
+    el.append(line);
+  }
 }
 function startPolling() {
   if (polling) return;

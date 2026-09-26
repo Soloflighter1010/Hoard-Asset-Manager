@@ -35,6 +35,13 @@ def release(tag, **extra):
             "body": "What's new", "published_at": "2026-09-01T00:00:00Z", "assets": [], **extra}
 
 
+def complete_release(tag, **extra):
+    """A release as the release workflow makes it: its installer and checksums attached."""
+    version = tag.lstrip("v")
+    files = [{"name": updater.SETUP_NAME.format(version)}, {"name": updater.SUMS_NAME}]
+    return release(tag, assets=files, **extra)
+
+
 class _GitHub:
     """A stand-in api.github.com and file host on this computer. Asset links point at the API server, which
     redirects to the file host, as GitHub's do."""
@@ -126,12 +133,22 @@ class Versions(unittest.TestCase):
     def test_only_hoards_own_published_releases(self):
         """Not the Unity package's releases, drafts, pre-releases or anything not tagged vX.Y.Z; the highest wins,
         whatever order GitHub lists them in."""
-        picked = updater.pick_latest([release("v2.5.0"), release("unity-v9.9.9"), release("v9.0.0", draft=True),
-                                      release("v8.0.0", prerelease=True), release("v7.0.0-rc1"), release("v2.10.0"),
-                                      release("v2.9.0"), "junk", None])
+        picked = updater.pick_latest([complete_release("v2.5.0"), complete_release("unity-v9.9.9"),
+                                      complete_release("v9.0.0", draft=True), complete_release("v8.0.0", prerelease=True),
+                                      complete_release("v7.0.0-rc1"), complete_release("v2.10.0"),
+                                      complete_release("v2.9.0"), "junk", None])
         self.assertEqual(picked["tag_name"], "v2.10.0")
         self.assertIsNone(updater.pick_latest([release("unity-v3.0.0")]))
         self.assertIsNone(updater.pick_latest({"message": "Not Found"}))
+
+    def test_a_release_without_its_files_is_never_offered(self):
+        """2.8.2 was published by hand without its files: the updater offered it, and it couldn't be installed."""
+        empty = release("v2.8.2")
+        only_installer = release("v2.8.4", assets=[{"name": updater.SETUP_NAME.format("2.8.4")}])
+        picked = updater.pick_latest([complete_release("v2.8.1"), empty, only_installer])
+        self.assertEqual(picked["tag_name"], "v2.8.1")
+        self.assertIsNone(updater.pick_latest([empty]))
+        self.assertEqual(updater.pick_latest([empty, complete_release("v2.8.3")])["tag_name"], "v2.8.3")
 
     def test_what_the_page_is_shown(self):
         r = release("v3.1.0", html_url="https://evil.example/", body="x" * 10000)

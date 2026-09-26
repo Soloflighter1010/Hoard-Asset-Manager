@@ -8,7 +8,8 @@ import time
 from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
 from .safety import store_link
 from .setup import browser_problem, install_browser
-from .common import Cancelled, NotLoggedIn, capture_log
+from .common import Cancelled, NotLoggedIn, capture_log, capture_transfers
+from .transfers import Transfers
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
@@ -214,8 +215,13 @@ class Jobs:
 
         args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=False, only=only,
                                headed=False)
+        transfers = Transfers()
+
+        def on_bytes(name, done, total):   # the file being downloaded: size, speed and time left
+            self._set(transfer=transfers.update(name, done, total))
+
         try:
-            with capture_log(progress):
+            with capture_log(progress), capture_transfers(on_bytes):
                 report = cmd_sync(self.cfg, args)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
@@ -224,6 +230,7 @@ class Jobs:
         except Cancelled:
             self._set(message="Stopped. Anything half-downloaded resumes next time.")
         finally:
+            self._set(transfer=None)
             self.on_download_done()
 
     def _logout(self, stores: list[str]) -> None:

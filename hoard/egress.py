@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -23,6 +24,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPSConnection
 from urllib3.connectionpool import HTTPSConnectionPool
 
+from .common import report_transfer
 from .browser import _on_sites
 from .safety import _connect_public, move_into_place, open_part
 
@@ -211,6 +213,9 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
             bar = tqdm(total=expected, initial=have, unit="B", unit_scale=True, unit_divisor=1024,
                        desc=desc[:40], leave=False) if tqdm else None
             written = have
+            name = Path(desc).name if desc else dest.name
+            report_transfer(name, written, expected)
+            reported = time.monotonic()
             fh, identity = open_part(part, resume=resume)
             with fh:
                 for chunk in r.iter_content(1 << 20):
@@ -218,6 +223,10 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
                     written += len(chunk)
                     if bar:
                         bar.update(len(chunk))
+                    if time.monotonic() - reported >= 0.5:   # the app's speed and time left
+                        report_transfer(name, written, expected)
+                        reported = time.monotonic()
+                report_transfer(name, written, expected)
             if bar:
                 bar.close()
             if expected is not None and written != expected:

@@ -298,6 +298,22 @@ class LargeLibrary(unittest.TestCase):
             self.assertEqual(self.drawn(page), 1000)
             page.close()
 
+    def test_the_download_estimate_is_shown(self):
+        mb = 1024 * 1024
+        self.srv.jobs.state.update(running=True, task="download", message="Booth: Rusk",
+                                   transfer={"file": "Rusk.unitypackage", "done": 340 * mb, "total": 1200 * mb,
+                                             "speed": 12 * mb, "left": 72, "files": 3, "bytes": 900 * mb})
+        try:
+            page = self.open()
+            self.assertIn("Rusk.unitypackage: 340 MB of 1.2 GB · 12 MB/s · about 1 min left",
+                          page.locator("#job").inner_text())
+            page.goto(self.srv.url + "downloads")
+            page.locator("#dlTransfer").wait_for()
+            self.assertIn("about 1 min left · 3 files so far this sync, 900 MB", page.locator("#dlTransfer").inner_text())
+            page.close()
+        finally:
+            self.srv.jobs.state.update(running=False, task=None, transfer=None)
+
     def test_select_all_marks_cards_drawn_later(self):
         page = self.open()
         page.click("#selectBtn")

@@ -1502,6 +1502,62 @@ class CompressedLists(unittest.TestCase):
         self.assertIsNone(r.getheader("Content-Encoding"))
 
 
+class DownloadEstimate(unittest.TestCase):
+    """While downloading: the file's size, the speed, the time it has left, and this sync's totals."""
+
+    def test_speed_and_time_left(self):
+        from hoard.transfers import Transfers
+        now = [0.0]
+        t = Transfers(clock=lambda: now[0])
+        mb = 1024 * 1024
+        first = t.update("Rusk.unitypackage", 0, 100 * mb)
+        self.assertEqual((first["files"], first["speed"], first["left"]), (1, None, None), "no speed from one sample")
+        now[0] = 1
+        view = t.update("Rusk.unitypackage", 10 * mb, 100 * mb)
+        self.assertEqual((view["speed"], view["left"]), (10 * mb, 9))
+        now[0] = 2
+        self.assertEqual(t.update("Rusk.unitypackage", 20 * mb, 100 * mb)["left"], 8)
+        now[0] = 3   # a resumed file: its first 50 MB were already there, and aren't speed
+        view = t.update("Mochi.zip", 50 * mb, 60 * mb)
+        self.assertEqual((view["files"], view["bytes"], view["left"]), (2, 20 * mb, 1))
+        now[0] = 4
+        self.assertIsNone(t.update("Mochi.zip", 51 * mb, None)["left"], "no size, no time left")
+
+    def test_the_speed_is_smoothed(self):
+        from hoard.transfers import Transfers
+        now = [0.0]
+        t = Transfers(clock=lambda: now[0])
+        t.update("a", 0, None)
+        done = 0
+        for _ in range(10):   # 10 MB/s for 5 s
+            now[0] += 0.5
+            done += 5 * 1024 * 1024
+            t.update("a", done, None)
+        now[0] += 0.5   # then a half-second stall
+        speed = t.update("a", done, None)["speed"]
+        self.assertGreater(speed, 8 * 1024 * 1024, "one slow moment doesn't halve the speed")
+
+    def test_the_job_shows_it(self):
+        from types import SimpleNamespace
+        from unittest import mock
+        from hoard import common
+        seen = []
+        j = jobs.Jobs({**config.load_config(), "root": tempfile.mkdtemp()}, library.Library(Path(tempfile.mkdtemp()) / "l.json"))
+
+        def fake_sync(cfg, args):
+            for n in range(4):
+                common.report_transfer("Rusk.unitypackage", n * 1000, 4000)
+                time.sleep(0.05)
+                seen.append(dict(j.state.get("transfer") or {}))
+            return SimpleNamespace(new_assets=[], new_files=[], updated=[], skipped=[], failed=[])
+        with mock.patch.object(downloader, "cmd_sync", fake_sync):
+            j._download(["booth"], None)
+        self.assertEqual(seen[-1]["file"], "Rusk.unitypackage")
+        self.assertEqual(seen[-1]["done"], 3000)
+        self.assertIsNotNone(seen[-1]["speed"])
+        self.assertIsNone(j.state.get("transfer"), "cleared when the download ends")
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -79,14 +79,23 @@ def _session():
     return s
 
 
+def complete(release: dict) -> bool:
+    """A release as the release workflow makes it: with its Windows installer and the checksums to check it by.
+    One without them (say, published by hand from the Releases page) is never offered: it couldn't be installed,
+    and as the highest version it would hide the release that can."""
+    v = version_of(release.get("tag_name"))
+    return bool(v and _asset(release, SETUP_NAME.format(".".join(map(str, v)))) and _asset(release, SUMS_NAME))
+
+
 def pick_latest(releases) -> dict | None:
-    """The newest published Hoard release in GitHub's list: not a draft, not a pre-release, tagged vX.Y.Z."""
+    """The newest published Hoard release in GitHub's list: not a draft, not a pre-release, tagged vX.Y.Z, and
+    complete (see complete())."""
     best = None
     for r in releases if isinstance(releases, list) else []:
         if not isinstance(r, dict) or r.get("draft") or r.get("prerelease"):
             continue
         v = version_of(r.get("tag_name")) if str(r.get("tag_name") or "").startswith("v") else None
-        if v and (best is None or v > best[0]):
+        if v and complete(r) and (best is None or v > best[0]):
             best = (v, r)
     return best[1] if best else None
 
