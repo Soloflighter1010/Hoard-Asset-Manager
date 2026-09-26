@@ -5,6 +5,11 @@
 The next release, collecting everything until the roadmap is done. Until then, releases are held: `main` stays
 at 2.8.3, and this work lives on the `v3` branch.
 
+- **How long a download has left.** While Hoard downloads, the Library and Downloads pages show the file being
+  downloaded, how much of it has arrived, the speed, and about how long it has left (for example "340 MB of 1.2 GB ·
+  12 MB/s · about 1 min left"), and the Downloads panel how many files and how much this sync has downloaded. The
+  speed follows the last few seconds, so it doesn't jump about. (A sync finds its files as it goes, so the estimate
+  is for the file in hand rather than the whole sync.)
 - **Updates are only offered when they can be installed.** A release without its Windows installer and checksums
   (like the 2.8.2 published by mistake) is passed over, instead of hiding the release before it.
 

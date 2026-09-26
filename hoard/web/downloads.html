@@ -363,6 +363,7 @@ body.selecting .toast { bottom: 96px; }
 .ondisk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--bone); }
 .ondisk::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #4CC38A; }
 body.selecting .dlpanel { bottom: 96px; }
+.eta { display: block; font-size: 13px; color: var(--dust); margin-top: 2px; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -514,6 +515,7 @@ body.selecting .dlpanel { bottom: 96px; }
   <div class="dlhead"><h2 id="dlTitle">Downloading</h2>
     <button class="ghost sm" id="dlStop">Stop</button><button class="ghost sm" id="dlClose" hidden>Close</button></div>
   <p id="dlMessage" class="dlmsg" aria-live="polite"></p>
+  <p id="dlTransfer" class="dlmsg eta" hidden></p>
   <ul id="dlProblems" class="problems" hidden></ul>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
 </section>
@@ -580,6 +582,21 @@ const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }
 const fileUrl = p => keyed("/files/" + p.split("/").map(encodeURIComponent).join("/"));
 const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
+// The file being downloaded: how much of it, the speed, and roughly how long it has left.
+function timeLeft(s) {
+  if (s < 60) return "less than a minute left";
+  const m = Math.round(s / 60);
+  if (m < 60) return `about ${m} min left`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return `about ${h} h${r ? ` ${r} min` : ""} left`;
+}
+function transferText(t) {
+  if (!t || !t.file) return "";
+  const bits = [t.total ? `${fmtSize(t.done)} of ${fmtSize(t.total)}` : fmtSize(t.done)];
+  if (t.speed) bits.push(`${fmtSize(t.speed)}/s`);
+  if (t.left != null) bits.push(timeLeft(t.left));
+  return `${t.file}: ${bits.join(" · ")}`;
+}
 function fmtSize(n) {
   if (n == null) return "";
   const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
@@ -1210,6 +1227,9 @@ function showDownload(job) {
   $("#dlTitle").textContent = job.running ? (job.sync && job.task !== "download" ? "Syncing: reading your stores" : job.sync ? "Syncing: downloading" : "Downloading")
     : stopped ? "Stopped" : "Finished";
   $("#dlMessage").textContent = job.message || "";
+  const t = job.running && job.transfer && job.transfer.file ? job.transfer : null;
+  $("#dlTransfer").hidden = !t;
+  $("#dlTransfer").textContent = t ? transferText(t) + (t.files > 1 ? ` · ${t.files} files so far this sync, ${fmtSize(t.bytes)}` : "") : "";
   $("#dlLog").textContent = (job.log || []).join("\n");
   $("#dlStop").hidden = !job.running;
   $("#dlClose").hidden = !!job.running;

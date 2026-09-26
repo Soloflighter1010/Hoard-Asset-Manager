@@ -1235,6 +1235,16 @@ class EgressOverHTTPS(unittest.TestCase):
                        urllib.parse.quote(f"https://store.localhost:{self.port}/page", safe=""), ["store.localhost"])
         self.assertEqual(r.status_code, 200, "pages and APIs follow redirects on the store's own site")
 
+    def test_a_download_reports_its_bytes(self):
+        """For the app's speed and time left: the name, the bytes so far, and the size, up to the whole file."""
+        seen = []
+        cdn = urllib.parse.quote(f"https://cdn.localhost:{self.port}/file", safe="")
+        with common.capture_transfers(lambda *a: seen.append(a)):
+            egress.download(egress.session(), f"https://store.localhost:{self.port}/go?to={cdn}", self.dest,
+                            ["store.localhost"], desc="Kitsu Studio/Rusk.unitypackage")
+        self.assertEqual(seen[0], ("Rusk.unitypackage", 0, 4))
+        self.assertEqual(seen[-1], ("Rusk.unitypackage", 4, 4))
+
     def test_redirects_home_are_still_refused(self):
         home = urllib.parse.quote(f"https://localhost:{self.port}/secret", safe="")
         with self.assertRaises(Exception):
