@@ -1345,6 +1345,123 @@ class CatalogSeal(unittest.TestCase):
             self.assertFalse(paths.store_python())
 
 
+class TagMatching(unittest.TestCase):
+    """Matching tags go through a word index (review finding P-04), with exactly name_has_word's answers."""
+
+    def test_same_answers(self):
+        import random
+        from hoard.tags import TagMatcher, name_has_word
+        rng = random.Random(7)
+        parts = ["fox", "foxes", "foxs", "foxess", "box", "boxes", "Fox", "FoxEars", "fox-ears", "fox ears", "ear",
+                 "v-roid", "3d", "3D", "model", "models", "ラスク", "ﾗｽｸ", "Kemonomimi", "cat's", "v2", "_", "-", "【", "】",
+                 "x", "xs", "xes", "es", "s"]
+        words = ["fox", "box", "ear", "fox ears", "v-roid", "3d model", "3d", "model", "ラスク", "kemono", "fox-", "-x",
+                 "Fox", "x", "es", "s", "cat's", "ﾗｽｸ", "fox ear"]
+        tags = {f"t{n}": {"match": w} for n, w in enumerate(words)} | {"plain": {"match": None}}
+        matcher = TagMatcher(tags)
+        names = [" ".join(rng.choice(parts) for _ in range(rng.randint(1, 6))) for _ in range(2000)]
+        names += ["".join(rng.choice(parts) for _ in range(rng.randint(1, 4))) for _ in range(1000)]
+        for name in names:
+            want = {t for t, i in tags.items() if i["match"] and name_has_word(name, i["match"])}
+            self.assertEqual(matcher.tags(name), want, name)
+
+    def test_big_library(self):
+        import random
+        from hoard.tags import TagMatcher, TagStore
+        rng = random.Random(3)
+        vocab = [f"word{n}" for n in range(3000)]
+        data = {"items": {}, "excluded": {}, "hidden": [],
+                "tags": {f"tag{n}": {"match": vocab[n * 7 % 3000]} for n in range(300)}}
+        names = [" ".join(rng.choice(vocab) for _ in range(5)) for _ in range(20000)]
+        start = time.time()
+        matcher = TagMatcher(data["tags"])
+        for n, name in enumerate(names):
+            TagStore.tags_for(data, f"Booth/{n}", name, matcher)
+        self.assertLess(time.time() - start, 5, "20,000 names with 300 matching tags (every tag on every name: ~30 s)")
+
+
+class DownloadsIndex(unittest.TestCase):
+    """The downloads index is rebuilt outside its lock (review finding P-07): downloads never wait for it."""
+
+    def setUp(self):
+        from unittest import mock
+        self.builds, self.started, self.release = 0, threading.Event(), threading.Event()
+        self.release.set()
+
+        def slow_build(root, catalog):
+            self.builds += 1
+            self.started.set()
+            self.release.wait(10)
+            return {"root": str(root), "assets": [{"id": self.builds, "tag_key": f"k{self.builds}"}], "status": {}}
+        self.patches = [mock.patch.object(server, "build_index", slow_build),
+                        mock.patch.object(server, "collect_catalog", lambda cfg, root: ([], None))]
+        for p in self.patches:
+            p.start()
+        self.cfg = {**config.load_config(), "root": tempfile.mkdtemp()}
+        self.srv = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False)
+
+    def tearDown(self):
+        self.release.set()
+        self.srv.server_close()
+        for p in self.patches:
+            p.stop()
+
+    def rebuild_in_background(self):
+        self.started.clear()
+        self.release.clear()
+        t = threading.Thread(target=self.srv.index, daemon=True)
+        t.start()
+        self.assertTrue(self.started.wait(5))
+        return t
+
+    def test_a_download_never_waits_for_a_rebuild(self):
+        t = self.rebuild_in_background()
+        start = time.time()
+        self.srv.forget_index()
+        self.assertLess(time.time() - start, 0.2)
+        self.release.set()
+        t.join(5)
+
+    def test_the_library_page_gets_the_index_as_it_was(self):
+        self.srv.index()
+        self.srv.forget_index()
+        t = self.rebuild_in_background()
+        start = time.time()
+        self.assertEqual(self.srv.index(stale_ok=True)["assets"][0]["id"], 1)
+        self.assertLess(time.time() - start, 0.2)
+        self.release.set()
+        t.join(5)
+
+    def test_one_rebuild_for_everyone_waiting(self):
+        t = self.rebuild_in_background()
+        results = []
+        others = [threading.Thread(target=lambda: results.append(self.srv.index()["assets"][0]["id"])) for _ in range(5)]
+        for o in others:
+            o.start()
+        time.sleep(0.2)
+        self.release.set()
+        for o in [t, *others]:
+            o.join(5)
+        self.assertEqual(self.builds, 1)
+        self.assertEqual(results, [1] * 5)
+
+    def test_a_change_during_a_rebuild_is_not_missed(self):
+        t = self.rebuild_in_background()
+        self.srv.forget_index()   # a download finishes while the index is being rebuilt
+        self.release.set()
+        t.join(5)
+        self.assertEqual(self.srv.index()["assets"][0]["id"], 2, "rebuilt again for the new download")
+        self.assertEqual(self.srv.index()["assets"][0]["id"], 2, "and then kept")
+        self.assertEqual(self.srv.index(rescan=True)["assets"][0]["id"], 3, "a rescan always rebuilds")
+
+    def test_a_failed_rebuild_never_leaves_anyone_waiting(self):
+        from unittest import mock
+        with mock.patch.object(server, "build_index", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.srv.index()
+        self.assertEqual(self.srv.index()["assets"][0]["id"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
 

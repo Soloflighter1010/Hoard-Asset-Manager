@@ -183,7 +183,10 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._entries_lock = threading.Lock()
         self.lib = Library(LIBRARY_FILE)
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index)
+        # The downloads index: rebuilt outside the lock, one rebuild at a time (review finding P-07). _wanted counts
+        # "the downloads changed"; _built_for is the count the current index was built for.
         self._index, self._index_lock = None, threading.Lock()
+        self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
         self.schedule = Schedule(cfg, self.jobs)
 
@@ -223,21 +226,47 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         return until is not None and until > time.time()
 
     def forget_index(self) -> None:
-        """The downloads changed: rebuild the index next time it's asked for."""
+        """The downloads changed: rebuild the index next time it's asked for. Never waits for a rebuild in progress
+        (downloads call this after every file)."""
         with self._index_lock:
-            self._index = None
+            self._wanted += 1
 
-    def index(self, rescan: bool = False) -> dict:
-        """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan."""
-        root = root_dir(self.cfg)
+    def index(self, rescan: bool = False, stale_ok: bool = False) -> dict:
+        """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan.
+
+        The rebuild runs without holding the lock, one at a time: others who need it fresh wait for that rebuild,
+        and with stale_ok a caller gets the index as it was straight away (the library page only needs to know
+        what's downloaded). If the downloads change during a rebuild, the next request rebuilds again."""
+        root = str(root_dir(self.cfg))
         with self._index_lock:
-            if rescan or self._index is None or self._index.get("root") != str(root):
+            if rescan:
+                self._wanted += 1
+            target = self._wanted
+        while True:
+            with self._index_lock:
+                current = self._index if self._index is not None and self._index.get("root") == root else None
+                if current is not None and (self._built_for >= target or stale_ok):
+                    return current
+                if self._rebuild is None:
+                    self._rebuild, building, goal = threading.Event(), True, self._wanted
+                else:
+                    building, waiting = False, self._rebuild
+            if not building:
+                waiting.wait(300)
+                continue
+            fresh = None
+            try:
                 try:
-                    self._index = build_index(root, collect_catalog(self.cfg, root)[0])
+                    fresh = build_index(Path(root), collect_catalog(self.cfg, Path(root))[0])
                 except Exception as e:  # show the problem in the page instead of a blank grid
-                    self._index = {"root": str(root), "assets": [], "status": library_status(root),
-                                   "error": f"Couldn't read the downloads: {e}"}
-            return self._index
+                    fresh = {"root": root, "assets": [], "status": library_status(Path(root)),
+                             "error": f"Couldn't read the downloads: {e}"}
+            finally:   # whatever happened, the next caller isn't left waiting for this rebuild
+                with self._index_lock:
+                    if fresh is not None:
+                        self._index, self._built_for = fresh, goal
+                    done, self._rebuild = self._rebuild, None
+                done.set()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -313,7 +342,7 @@ class Handler(BaseHTTPRequestHandler):
             items, stores = srv.lib.snapshot()   # enrich() makes new items, so the library's own are never changed
             tagdata = TagStore().load()
             items = enrich(items, srv.cfg["tags"], tagdata)
-            on_disk = {a["tag_key"]: a["id"] for a in srv.index()["assets"]}
+            on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
             marks, unlocked = MarkStore().load(), self._unlocked()
             shown = []
             for i in items:
