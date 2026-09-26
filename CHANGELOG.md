@@ -5,6 +5,9 @@
 The next release, collecting everything until the roadmap is done. Until then, releases are held: `main` stays
 at 2.8.3, and this work lives on the `v3` branch.
 
+- **Updates are only offered when they can be installed.** A release without its Windows installer and checksums
+  (like the 2.8.2 published by mistake) is passed over, instead of hiding the release before it.
+
 ## 2.8.3
 
 Faster with large libraries, in both pages and behind them. (There's no 2.8.2: a release by that name was
