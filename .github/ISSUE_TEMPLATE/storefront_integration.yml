@@ -1,0 +1,47 @@
+name: "🛒 Storefront Integration Request"
+description: "Request metadata parsing, library syncing, or tracking support for a new asset storefront (e.g., Booth, Gumroad, Payhip)"
+title: "[Storefront]: "
+labels: ["storefront", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to request support for syncing, tracking, or parsing asset metadata from a new creator platform or storefront.
+
+  - type: input
+    id: storefront_name
+    attributes:
+      label: Storefront Name & Domain
+      description: Which platform or storefront should Hoard integrate with?
+      placeholder: "e.g., Booth.pm, Gumroad, Payhip, Ko-fi, Jofi"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: integration_type
+    attributes:
+      label: Desired Capabilities
+      description: What features should Hoard support for this storefront?
+      options:
+        - label: "Metadata & Thumbnail Extraction (Parse listing title, tags, creator info, cover art)"
+        - label: "Library / Order Syncing (Import purchased items or order history)"
+        - label: "Asset Update Alerts (Notify when a creator uploads a new version of a package)"
+        - label: "Direct Download Support (Fetch package files directly via purchase key or account token)"
+        - label: "Browser Quick-Add / URL Import (Paste URL to automatically log asset metadata)"
+
+  - type: textarea
+    id: workflow_details
+    attributes:
+      label: Expected Workflow
+      description: How should this integration behave inside Hoard?
+      placeholder: "e.g., When I paste a Booth item URL into Hoard, it should fetch the item name, cover photo, creator handle, and associate it with my downloaded .unitypackage..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical_info
+    attributes:
+      label: API Specs, Public Sample Links, or Documentation
+      description: Provide links to public product pages, API documentation, or developer references if available.
+    validations:
+      required: false
