@@ -130,8 +130,8 @@ but nothing should fall over at that size.
 
 | ID | Finding | 2.4.2 |
 |---|---|---|
-| P-01 | `/api/assets` and `/api/library` send the whole library | **Confirmed; roadmap.** Paging and filtering on the server is an architecture change for both pages. |
-| P-02 | The Downloads page draws every card | **Confirmed; roadmap**, with P-01: only what's on screen should be drawn. |
+| P-01 | `/api/assets` and `/api/library` send the whole library | **Measured; paging stays on the roadmap.** 1,000 items: 0.5 MB in 0.07 s; 10,000: 5 MB in 0.45 s; 50,000: 25 MB in 2.4 s. Paging on the server would rework both pages' filtering, sorting and facets for no noticeable gain at those sizes. Since 2.8.1 both lists are gzipped for browsers that accept them (28 times smaller). Test: `CompressedLists`. |
+| P-02 | The Downloads page draws every card | **Fixed** in 2.8.1, in both pages: cards are drawn in batches of 120 as they come near the screen. Tests: `LargeLibrary` (1,000 items). |
 | P-03 | The Unity window draws every row and keeps every thumbnail | **Fixed** in Hoard for Unity 0.2.0: loaded in the background, only visible rows drawn, pictures read in the background and at most 256 kept. Tests: `CoreTests.cs` (visible rows; a 3,000-product library). |
 | P-04 | Tag matching tries every tag on every name | **Fixed** in 2.8.1: a word index (`TagMatcher`) with exactly `name_has_word`'s answers. 20,000 names with 300 matching tags: about 28 s before, 0.1 s now. Tests: `TagMatching`. |
 | P-05 | Finding a picture walked the whole library | **Fixed.** A lookup table, made again whenever the list changes. 1,000 pictures in a 100,000-item library: 10.3 s before, 45 ms now. Test: `LibraryLookups`. |

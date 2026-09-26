@@ -42,7 +42,8 @@
 - Application
 	- Implement an app updater
 - Large libraries (from the 2.3.1 review, see docs/security-review-2.3.1-response.md)
-	- Page the library and downloads on the server, and only draw what's on screen, in both views (P-01, P-02)
+	- **Done** (2.8.1): only draw what's on screen, in both views (P-02); the lists are gzipped
+	- Page the library and downloads on the server (P-01): measured at 0.07 s for 1,000 items, so only worth it for libraries of tens of thousands
 	- **Done** (Hoard for Unity 0.2.0): the Unity window loads in the background and only draws what's on screen (P-03)
 	- **Done** (2.8.1): match tags through a word index instead of trying every tag on every name (P-04)
 	- **Done** (2.8.1): rebuild the downloads index without holding up other requests (P-07)
