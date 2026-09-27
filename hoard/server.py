@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, itch, updater, vault
+from . import __version__, diagnostics, itch, updater, vault
 from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog, reseal_catalog
@@ -42,7 +42,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
-           "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install")
+           "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
+           "/api/diagnostics/report", "/api/diagnostics/open-folder")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -63,6 +64,11 @@ def display_settings(cfg: dict) -> dict:
     d = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
     return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
             "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion"))}
+
+
+def public_job(job: dict) -> dict:
+    """Job state safe for the browser: raw exception diagnostics stay inside the Hoard process."""
+    return {k: v for k, v in (job or {}).items() if k != "diagnostic"}
 
 
 def public_settings(cfg: dict) -> dict:
@@ -363,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
             return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": stores,
                                "privacy": privacy,
-                               "labels": {k: v["label"] for k, v in STORES.items()}, "job": srv.jobs.state,
+                               "labels": {k: v["label"] for k, v in STORES.items()}, "job": public_job(srv.jobs.state),
                                "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
                                "itch_key": vault.load_key(srv.cfg, "itch") is not None,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
@@ -372,13 +378,13 @@ class Handler(BaseHTTPRequestHandler):
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None,
                                "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/status":
-            return self._json({"job": srv.jobs.state, "stores": srv.lib.snapshot()[1]})
+            return self._json({"job": public_job(srv.jobs.state), "stores": srv.lib.snapshot()[1]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
             if not self._unlocked():   # hidden products' downloads stay out of view too
                 hidden = MarkStore().load()["hidden"]
                 index = {**index, "assets": [a for a in index["assets"] if a.get("tag_key") not in hidden]}
-            return self._json({**index, "version": __version__, "job": srv.jobs.state, "store_sites": store_sites(),
+            return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
@@ -573,6 +579,20 @@ class Handler(BaseHTTPRequestHandler):
             save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
             srv.forget_index()
             return self._json({"ok": True, "settings": public_settings(srv.cfg)})
+        if path == "/api/diagnostics/open-folder":
+            try:
+                folder = diagnostics.support_report_dir()
+                folder.mkdir(parents=True, exist_ok=True)
+                return self._json({"ok": True, "opened_in": reveal(folder), "folder": str(folder)})
+            except OSError as e:
+                return self._json({"error": str(e)}, 500)
+        if path == "/api/diagnostics/report":
+            try:
+                result = diagnostics.create_support_report(srv.cfg, srv.lib, srv.jobs.state, str(body.get("notes") or "")[:6000], body.get("context"))
+            except Exception as e:
+                diagnostics.record_exception(e, area="support-report", task="create-report")
+                return self._json({"error": "Hoard couldn't create the support report. Check that your Documents folder is writable."}, 500)
+            return self._json(result)
         if path == "/api/open":
             target = safe_join(root_dir(srv.cfg), str(body.get("path", "")))
             if not target or not target.exists():
