@@ -151,6 +151,8 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         log_path = log_to_file()
     else:
         log_path = None
+    from . import diagnostics
+    diagnostics.install_exception_hooks()
     lock = InstanceLock(data_dir() / "running.lock")
     if not lock.acquire():
         if show_running_copy():
