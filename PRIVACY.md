@@ -24,6 +24,7 @@ Hoard, and I never receive any of your information.
 | What you've archived, hidden or removed, and your hidden library's PIN (only as a salted, slow hash, never the PIN itself) | So those choices last, even after refreshing | `marks.json` in the same private `Hoard` folder |
 | Your settings | So Hoard remembers your choices | `config.json` in Hoard's app-data folder |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug` in Hoard's app-data folder |
+| Local error history and support reports | So errors can be investigated and a sanitized report can be shared by you | `diagnostics/incidents.jsonl` in app-data, and `Support Reports` in Hoard's local app-data folder for exported reports |
 
 None of this leaves your computer unless you share it yourself.
 
@@ -51,7 +52,7 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   downloads the new installer from GitHub.
 
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
-has no telemetry and no crash reporting, and it works offline except for refreshing, signing in, downloading
+has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading
 and checking for updates.
 
 ## Using Hoard on your network
@@ -63,8 +64,9 @@ running the tool can.
 
 ## Sharing troubleshooting files
 
-If you attach `debug` or `probe` output to a GitHub issue, it becomes public. Those files can show your
-purchases and your account name, so remove anything you don't want public before attaching them.
+The normal way to report a problem is **Settings → Create support report** (or **Create report** next to a failed store or download). Hoard builds the ZIP locally and sanitizes it before saving it to `Support Reports` in Hoard's local app-data folder. It includes technical details, error information and sanitized logs, but not your sign-ins, library file, downloaded files, passwords, cookies or API keys. Review the preview and the ZIP before attaching it to a public GitHub issue.
+
+The command-line `debug` and `probe` files are still available for deeper troubleshooting. They can contain purchase details and should be reviewed carefully before sharing them.
 
 ## Deleting your information
 
