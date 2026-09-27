@@ -30,7 +30,7 @@ None of this leaves your computer unless you share it yourself.
 
 ## Support reports
 
-When you choose **Create support report**, Hoard writes a sanitized ZIP to `Support Reports` in Hoard's local app-data folder. The raw logs, sign-ins, library file and other private app-data files are not copied into the ZIP. Review the report before attaching it to a public issue.
+When you choose **Create support report**, Hoard writes a sanitized ZIP to `Documents/Hoard/Support Reports` and opens the folder/selects the new report. This export folder is outside Hoard's private app-data so the ZIP is easy to find and attach. The raw logs, sign-ins, library file and other private app-data files are not copied into the ZIP. Review the report before attaching it to a public issue.
 
 ## Your downloads folder
 
