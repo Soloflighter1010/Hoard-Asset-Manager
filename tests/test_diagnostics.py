@@ -88,6 +88,10 @@ class Sanitizing(unittest.TestCase):
 
 
 class ServerExposure(unittest.TestCase):
+    def test_default_export_folder_is_user_visible(self):
+        expected = diagnostics.documents_dir() / "Hoard" / "Support Reports"
+        self.assertEqual(diagnostics.support_report_dir(), expected)
+
     def test_report_endpoint_creates_local_sanitized_zip(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
