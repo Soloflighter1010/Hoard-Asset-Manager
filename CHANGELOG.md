@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.8.4
 
 - **Local support reports.** Settings, store errors and failed downloads can now create a sanitized support ZIP without using the command line. The report is built locally, keeps raw diagnostics and tracebacks private, replaces local paths, credentials, tokens, purchase names and creator names with placeholders, and is never uploaded automatically.
 
