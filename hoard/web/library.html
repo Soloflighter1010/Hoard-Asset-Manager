@@ -664,7 +664,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <p id="supportStatus" class="muted">The report is built locally and sanitized before it is saved.</p>
   <div class="support-safe">
     <strong>Nothing is uploaded automatically.</strong>
-    <span class="muted">Hoard creates a ZIP on this computer. It is up to you whether you attach it to a GitHub issue or send it to someone else.</span>
+    <span class="muted">Hoard creates a ZIP in your local Documents/Hoard/Support Reports folder. It is up to you whether you attach it to a GitHub issue or send it to someone else.</span>
   </div>
   <div class="support-cols">
     <div><strong>Included</strong><ul class="support-list"><li>Hoard and browser versions</li><li>Operating system details</li><li>Sanitized error messages and tracebacks</li><li>Store/job counts and status</li><li>Recent sanitized log entries</li></ul></div>
@@ -1615,7 +1615,7 @@ async function createSupportReport() {
     button.disabled = false;
     return;
   }
-  status.textContent = "Saved locally. Hoard did not upload anything.";
+  status.textContent = "Saved locally. Hoard did not upload anything. The report folder has been opened.";
   $("#supportFile").textContent = r.data.filename || "Support report";
   $("#supportPath").textContent = r.data.path || "";
   $("#supportPreview").textContent = r.data.preview || "";
