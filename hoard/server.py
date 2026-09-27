@@ -591,7 +591,12 @@ class Handler(BaseHTTPRequestHandler):
                 result = diagnostics.create_support_report(srv.cfg, srv.lib, srv.jobs.state, str(body.get("notes") or "")[:6000], body.get("context"))
             except Exception as e:
                 diagnostics.record_exception(e, area="support-report", task="create-report")
-                return self._json({"error": "Hoard couldn't create the support report. Check that your Documents folder is writable."}, 500)
+                return self._json({"error": "Hoard couldn't save the support report. Make sure your Documents folder is writable, then try again."}, 500)
+            try:
+                result["opened_in"] = reveal(Path(result["path"]))
+            except OSError:
+                # The ZIP is already safely written; failure to open Explorer must not make the report look failed.
+                result["opened_in"] = None
             return self._json(result)
         if path == "/api/open":
             target = safe_join(root_dir(srv.cfg), str(body.get("path", "")))
