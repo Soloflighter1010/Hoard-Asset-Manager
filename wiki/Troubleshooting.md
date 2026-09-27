@@ -161,11 +161,14 @@ See [Your library](Library#the-hidden-library).
 
 ## Reporting a problem
 
-1. Note your version (bottom of every page) and what you did.
-2. Look in `logs/hoard.log` in Hoard's app-data folder (see
-   [Where Hoard keeps things](Where-Hoard-Keeps-Things)) for the error.
-3. [Open an issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) with both. Leave out anything
-   personal: issues are public.
+The easiest way is to let Hoard prepare the technical details for you:
+
+1. Reproduce the problem if you can.
+2. Choose **Create support report** in **Settings**, or use the **Create report** button shown next to a failed store or download.
+3. Read the report preview, then save it. Hoard builds the ZIP on your computer and sanitizes it before it is exported; nothing is uploaded automatically.
+4. [Open an issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) and attach the ZIP. It is still a public issue, so review the ZIP yourself before sharing it.
+
+The older `hoard-cli debug <store>` and `hoard-cli probe jinxxy` commands are still available when a maintainer asks for deeper troubleshooting.
 
 Found a security problem? Report it privately instead: see
 [Security and privacy](Security-and-Privacy#reporting-a-security-problem).

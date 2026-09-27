@@ -329,6 +329,32 @@ body.selecting .toast { bottom: 96px; }
 .tagrows .tbtns { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .tagpanel details summary { cursor: pointer; font: 700 13px var(--body); color: var(--dust); margin-top: 18px; }
 
+
+/* local support report */
+.support-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 26px 28px; border: 0;
+  border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
+.support-dialog::backdrop { background: rgb(10 8 6 / .76); }
+.support-dialog h2 { margin: 0 0 10px; font: 400 26px var(--display); }
+.support-dialog p { line-height: 1.55; margin: 8px 0; }
+.support-dialog .muted { color: var(--dust); font-size: 13px; }
+.support-safe { margin: 16px 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); }
+.support-safe strong { display: block; margin-bottom: 6px; }
+.support-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.support-list { margin: 0; padding-left: 20px; color: var(--dust); font-size: 13px; line-height: 1.55; }
+.support-dialog textarea { width: 100%; min-height: 88px; box-sizing: border-box; margin-top: 6px; padding: 10px 12px; border-radius: 10px; border: 0;
+  resize: vertical; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.support-dialog textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.support-result { margin-top: 16px; padding: 14px; border-radius: 12px; background: var(--stone); }
+.support-result .report-path { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--cave); color: var(--bone);
+  font: 500 12px ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; user-select: text; }
+.support-preview { max-height: 240px; overflow: auto; margin: 10px 0 0; padding: 10px; border-radius: 9px; background: var(--cave);
+  color: var(--dust); font: 500 11.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.support-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
+.support-actions .spacer { flex: 1; }
+.support-link { color: var(--gold); text-decoration: none; font-size: 13px; align-self: center; }
+.support-link:hover { text-decoration: underline; }
+@media (max-width: 650px) { .support-cols { grid-template-columns: 1fr; } .support-dialog { padding: 22px 20px; } }
+
 /* the two views, settings, and downloading */
 .apptabs { display: flex; gap: 4px; flex: none; }
 .apptabs a { padding: 7px 12px; border-radius: 9px; font-weight: 700; font-size: 14px; color: var(--dust); text-decoration: none; }
@@ -537,7 +563,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
-        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues" target="_blank" rel="noopener noreferrer">Report a problem</a>
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" id="reportProblem">Report a problem</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/TERMS.md" target="_blank" rel="noopener noreferrer">Terms</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/AI-DISCLOSURE.md" target="_blank" rel="noopener noreferrer">Made with AI</a>
@@ -600,6 +626,9 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
   <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
+  <h3>Troubleshooting</h3>
+  <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
+  <button class="ghost sm" id="makeSupportReport">Create support report</button>
   <div class="actions"><button class="primary" id="setSave">Save</button><button class="ghost" id="setCancel">Cancel</button></div>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
@@ -609,6 +638,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
     <button class="ghost sm" id="dlStop">Stop</button><button class="ghost sm" id="dlClose" hidden>Close</button></div>
   <p id="dlMessage" class="dlmsg" aria-live="polite"></p>
   <ul id="dlProblems" class="problems" hidden></ul>
+  <button class="ghost sm" id="dlReport" hidden>Create support report</button>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
 </section>
 <section id="impPanel" class="dlpanel imppanel" hidden aria-labelledby="impTitle">
@@ -628,6 +658,38 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
     </div>
   </div>
 </div>
+
+<dialog id="supportDialog" class="support-dialog" aria-labelledby="supportTitle">
+  <h2 id="supportTitle">Create a support report</h2>
+  <p id="supportStatus" class="muted">The report is built locally and sanitized before it is saved.</p>
+  <div class="support-safe">
+    <strong>Nothing is uploaded automatically.</strong>
+    <span class="muted">Hoard creates a ZIP in your local Documents/Hoard/Support Reports folder. It is up to you whether you attach it to a GitHub issue or send it to someone else.</span>
+  </div>
+  <div class="support-cols">
+    <div><strong>Included</strong><ul class="support-list"><li>Hoard and browser versions</li><li>Operating system details</li><li>Sanitized error messages and tracebacks</li><li>Store/job counts and status</li><li>Recent sanitized log entries</li></ul></div>
+    <div><strong>Removed</strong><ul class="support-list"><li>Passwords, cookies and API keys</li><li>Email addresses and local user paths</li><li>Downloaded files and your library list</li><li>Purchase names and creator names</li><li>Signed URL values and other tokens</li></ul></div>
+  </div>
+  <label for="supportNotes"><strong>What were you doing when it failed?</strong></label>
+  <textarea id="supportNotes" maxlength="5000" placeholder="Optional. For example: I clicked Sync, Booth opened normally, then the job stopped with an error."></textarea>
+  <div id="supportResult" class="support-result" hidden>
+    <strong id="supportFile">Support report</strong>
+    <span id="supportIncident" class="muted"></span>
+    <span id="supportPath" class="report-path"></span>
+    <pre id="supportPreview" class="support-preview"></pre>
+    <div class="support-actions">
+      <button class="ghost sm" id="supportCopyPath">Copy path</button>
+      <button class="ghost sm" id="supportOpenFolder">Open report folder</button>
+      <a class="support-link" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" target="_blank" rel="noopener noreferrer">Open GitHub bug report</a>
+    </div>
+  </div>
+  <div class="support-actions">
+    <span class="spacer"></span>
+    <button class="ghost" id="supportClose">Close</button>
+    <button class="primary" id="supportCreate">Create report</button>
+  </div>
+</dialog>
+
 <dialog id="pinDialog" class="pin" aria-labelledby="pinTitle">
   <h2 id="pinTitle">Hidden library</h2>
   <p id="pinText"></p>
@@ -860,7 +922,7 @@ function renderStores() {
       (downloadable(s) ? `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` : "") +
       (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
       `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button></span>` +
-      (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}</span>` : "") +
+      (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}${!/^Signed out/.test(info.error) ? ` <button class="linkish" data-report-store="${esc(s)}">Create report</button>` : ""}</span>` : "") +
       ((info.found_shops || []).length ? `<span class="found">Your library has products from ${info.found_shops.length} more ` +
         `Payhip ${info.found_shops.length === 1 ? "shop" : "shops"} on their own addresses. <button class="linkish" data-review-shops>Review</button></span>` : "") +
       `</div>`;
@@ -1524,6 +1586,77 @@ async function apiPost(url, body) {
   }
 }
 
+
+/* ---------- local support reports: everything stays on this computer until the user chooses to share the ZIP. */
+let SUPPORT_CONTEXT = {};
+function closeSupportReport() {
+  const d = $("#supportDialog");
+  if (d && d.open) d.close();
+}
+function openSupportReport(context = {}) {
+  const d = $("#supportDialog");
+  if (!d) return;
+  SUPPORT_CONTEXT = context || {};
+  $("#supportResult").hidden = true;
+  $("#supportStatus").textContent = "The report is built locally and sanitized before it is saved.";
+  $("#supportCreate").disabled = false;
+  $("#supportNotes").value = "";
+  if (d.showModal) d.showModal();
+  else d.hidden = false;
+}
+async function createSupportReport() {
+  const button = $("#supportCreate"), status = $("#supportStatus"), result = $("#supportResult");
+  button.disabled = true;
+  result.hidden = true;
+  status.textContent = "Building the sanitized report…";
+  const r = await apiPost("/api/diagnostics/report", { notes: $("#supportNotes").value, context: SUPPORT_CONTEXT });
+  if (!r.ok) {
+    status.textContent = r.data.error || "Hoard couldn't create the report.";
+    button.disabled = false;
+    return;
+  }
+  status.textContent = "Saved locally. Hoard did not upload anything. The report folder has been opened.";
+  $("#supportFile").textContent = r.data.filename || "Support report";
+  $("#supportPath").textContent = r.data.path || "";
+  $("#supportPreview").textContent = r.data.preview || "";
+  $("#supportIncident").textContent = r.data.id ? `Incident ID: ${r.data.id}` : "";
+  result.hidden = false;
+  button.disabled = false;
+}
+async function openSupportFolder() {
+  const r = await apiPost("/api/diagnostics/open-folder");
+  if (!r.ok) { toast(r.data.error || "Couldn't open the report folder."); return; }
+  closeSupportReport();
+}
+async function copySupportPath() {
+  const path = $("#supportPath").textContent;
+  if (!path) return;
+  try { await navigator.clipboard.writeText(path); toast("Report path copied."); }
+  catch (e) { toast("Couldn't copy the report path."); }
+}
+function wireSupportReport() {
+  const footer = $("#reportProblem");
+  if (footer) footer.addEventListener("click", e => { e.preventDefault(); openSupportReport({ source: "footer" }); });
+  const settings = $("#makeSupportReport");
+  if (settings) settings.addEventListener("click", () => openSupportReport({ source: "settings" }));
+  const storeRows = $("#storeRows");
+  if (storeRows) storeRows.addEventListener("click", e => {
+    const b = e.target.closest("[data-report-store]");
+    if (!b) return;
+    const store = b.dataset.reportStore || "";
+    const info = DATA.stores && DATA.stores[store] || {};
+    openSupportReport({ source: "store", store, error: info.error || "" });
+  });
+  const dlReport = $("#dlReport");
+  if (dlReport) dlReport.addEventListener("click", () => openSupportReport({ source: "job", store: (DATA.job && DATA.job.store) || "" }));
+  $("#supportCreate").addEventListener("click", createSupportReport);
+  $("#supportClose").addEventListener("click", closeSupportReport);
+  $("#supportOpenFolder").addEventListener("click", openSupportFolder);
+  $("#supportCopyPath").addEventListener("click", copySupportPath);
+  const d = $("#supportDialog");
+  if (d) d.addEventListener("click", e => { if (e.target === d) closeSupportReport(); });
+}
+
 function closeSettings() {
   $("#settingsPanel").hidden = true;
   $("#settingsBtn").setAttribute("aria-expanded", "false");
@@ -1659,6 +1792,7 @@ function showDownload(job) {
   const problems = (!job.running && job.report && job.report.problems) || [];
   $("#dlProblems").hidden = !problems.length;
   $("#dlProblems").innerHTML = problems.map(p => `<li>${esc(p)}</li>`).join("");
+  if ($("#dlReport")) { $("#dlReport").hidden = !!job.running || !(job.error || problems.length); }
 }
 
 async function startSync() {
@@ -1673,6 +1807,7 @@ async function startSync() {
 function wireApp() {
   $("#syncBtn").addEventListener("click", startSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
+  wireSupportReport();
   $("#setSave").addEventListener("click", saveSettings);
   $("#setCancel").addEventListener("click", closeSettings);
   $("#updCheck").addEventListener("click", checkUpdate);

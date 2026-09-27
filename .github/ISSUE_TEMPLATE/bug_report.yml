@@ -8,6 +8,8 @@ body:
       value: |
         Thanks for taking the time to report an issue! Please fill out the form below so we can reproduce and resolve the problem efficiently.
 
+        **Using Hoard's support report makes this much easier.** In Hoard, choose **Settings → Create support report** (or the **Create report** button beside a failed store/download). Review the preview and attach the resulting ZIP below. It is created locally and sanitized before export; Hoard does not upload it automatically.
+
   - type: textarea
     id: summary
     attributes:
@@ -84,7 +86,7 @@ body:
     id: logs
     attributes:
       label: Error Logs / Screenshots
-      description: Paste any error messages, terminal/console output, or drag-and-drop screenshots here.
+      description: Attach the Hoard support-report ZIP here when available. For manual logs, paste only sanitized output. Screenshots are welcome when they help show the problem.
       render: text
     validations:
       required: false

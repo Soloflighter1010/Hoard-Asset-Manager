@@ -9,6 +9,7 @@ from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _
 from .safety import store_link
 from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
+from . import diagnostics
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
@@ -81,6 +82,7 @@ class Schedule:
             try:
                 self.tick()
             except Exception as e:   # never let the schedule die: say so, and try again next minute
+                diagnostics.record_exception(e, area="scheduler", task="sync", include_traceback=True)
                 print(f"Automatic sync: {type(e).__name__}: {e}", flush=True)
 
 
@@ -97,7 +99,7 @@ class Jobs:
         self.stop = threading.Event()
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
-                      "log": [], "report": None, "sync": False, "scheduled": False}
+                      "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None}
 
     def _set(self, **kw):
         """Update the job state the page polls."""
@@ -109,7 +111,7 @@ class Jobs:
         if not self.busy.acquire(blocking=False):
             return False
         self.stop.clear()
-        self.state.update(error=None, log=[], report=None, scheduled=scheduled)
+        self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled)
         if task == "download":
             target = lambda s: self._download(s, only)  # noqa: E731
         elif task == "sync":
@@ -131,10 +133,14 @@ class Jobs:
             self._set(running=True)
             fn(stores)
         except (ProfileBusy, SigninsUnprotected) as e:
-            self._set(message=str(e), error=str(e))
+            diagnostic = diagnostics.record_exception(e, area="job", task=self.state.get("task"),
+                                                       store=self.state.get("store"), include_traceback=False)
+            self._set(message=str(e), error=str(e), diagnostic=diagnostic)
         except Exception as e:
             why = browser_problem(e) or f"Stopped: {e}"
-            self._set(message=why, error=why)
+            diagnostic = diagnostics.record_exception(e, area="job", task=self.state.get("task"),
+                                                       store=self.state.get("store"), include_traceback=True)
+            self._set(message=why, error=why, diagnostic=diagnostic)
         finally:
             self._set(running=False, task=None, store=None, scheduled=False)
             self.busy.release()
@@ -165,7 +171,8 @@ class Jobs:
         except RuntimeError as e:   # already a plain explanation
             why = str(e)[:1].upper() + str(e)[1:]
             print(why, flush=True)
-            self._set(message=why, error=why)
+            self._set(message=why, error=why, diagnostic=diagnostics.record_note(
+                area="browser-install", task="install-browser", message=why))
             return
         self._set(message="Hoard's browser is installed.")
 
