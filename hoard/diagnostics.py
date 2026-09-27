@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Iterable
 
 from . import __version__
-from .paths import data_dir
+from .paths import data_dir, documents_dir
 from .safety import scrub, write_file_safely
 
 
@@ -64,8 +64,12 @@ def install_exception_hooks() -> None:
 
 
 def support_report_dir() -> Path:
-    """A user-visible folder for sanitized reports inside Hoard's local app-data."""
-    return data_dir() / "Support Reports"
+    """A user-visible local folder for reports. Reports are exported outside Hoard's private app-data.
+
+    This is still entirely local: Hoard never uploads the file. Keeping the export in the user's
+    Documents/Hoard folder makes the result easy to find and attach to a bug report.
+    """
+    return documents_dir() / "Hoard" / "Support Reports"
 
 
 def incidents_file() -> Path:
