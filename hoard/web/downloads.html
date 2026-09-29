@@ -11,6 +11,9 @@
 @font-face { font-family: "Zen Maru Gothic"; src: url("/fonts/ZenMaruGothic-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
 @font-face { font-family: "Zen Maru Gothic"; src: url("/fonts/ZenMaruGothic-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 /* Hoard: warm cave neutrals so the art is the loudest thing on screen; gold means "yours" or "do this". */
+/* The window's size, in the page's own units: text size is a zoom on the whole page, which would scale 100vh and
+   100vw too, leaving panels sized to the window taller and wider than it (issue #48). */
+:root { --zoom: 1; --vh: calc(100vh / var(--zoom)); --vw: calc(100vw / var(--zoom)); }
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
   --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --warn: #FF9F6B;
@@ -103,8 +106,8 @@ a { color: var(--gold); text-underline-offset: 3px; }
 
 /* stores panel */
 .stores {
-  position: fixed; z-index: 25; right: 24px; top: calc(var(--bar-h) + 6px); width: min(470px, calc(100vw - 32px));
-  max-height: calc(100vh - var(--bar-h) - 24px); overflow: auto;
+  position: fixed; z-index: 25; right: 24px; top: calc(var(--bar-h) + 6px); width: min(470px, calc(var(--vw) - 32px));
+  max-height: calc(var(--vh) - var(--bar-h) - 24px); overflow: auto;
   background: var(--ledge); border-radius: 16px; padding: 10px 20px 20px; box-shadow: 0 0 0 1px var(--seam), 0 20px 50px rgb(0 0 0 / .45);
 }
 .stores h2 { font: 400 20px var(--display); margin: 12px 0 4px; }
@@ -128,7 +131,7 @@ a { color: var(--gold); text-underline-offset: 3px; }
 /* layout */
 .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); }
 .side {
-  position: sticky; top: calc(var(--bar-h) + 45px); align-self: start; height: calc(100vh - var(--bar-h) - 45px);
+  position: sticky; top: calc(var(--bar-h) + 45px); align-self: start; height: calc(var(--vh) - var(--bar-h) - 45px);
   overflow: auto; padding: 18px 20px 28px 24px;
 }
 .side h2 { font: 700 13px var(--body); color: var(--dust); margin: 20px 0 10px; }
@@ -203,7 +206,7 @@ main { padding: 22px 24px 64px 8px; min-width: 0; }
 /* details */
 .scrim { position: fixed; inset: 0; background: rgb(20 16 12 / .5); z-index: 19; }
 .detail {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; width: min(470px, 100vw);
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; width: min(470px, var(--vw));
   overflow: auto; padding: 18px 24px 36px; background: var(--ledge); box-shadow: -1px 0 0 var(--seam);
   transform: translateX(100%); visibility: hidden; transition: transform .2s ease-out, visibility 0s .2s;
 }
@@ -330,7 +333,7 @@ body.selecting .slot[aria-pressed="true"] .art { outline: 3px solid var(--gold);
 body.selecting main { padding-bottom: 140px; }
 body.selecting .toast { bottom: 96px; }
 .bulk { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 22; display: flex; flex-wrap: wrap;
-  align-items: center; gap: 8px 10px; width: min(820px, calc(100vw - 24px)); padding: 10px 14px; background: var(--ledge);
+  align-items: center; gap: 8px 10px; width: min(820px, calc(var(--vw) - 24px)); padding: 10px 14px; background: var(--ledge);
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
 .bulk input { flex: 1 1 160px; }
@@ -349,7 +352,7 @@ body.selecting .toast { bottom: 96px; }
 .tagpanel details summary { cursor: pointer; font: 700 13px var(--body); color: var(--dust); margin-top: 18px; }
 
 /* local support report */
-.support-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 26px 28px; border: 0;
+.support-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 26px 28px; border: 0;
   border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
 .support-dialog::backdrop { background: rgb(10 8 6 / .76); }
 .support-dialog h2 { margin: 0 0 10px; font: 400 26px var(--display); }
@@ -391,7 +394,7 @@ body.selecting .toast { bottom: 96px; }
 .settings .check.sub { padding-left: 26px; color: var(--dust); font-size: 13px; }
 .settings .check input { width: 16px; height: 16px; accent-color: var(--gold); }
 .settings .actions { margin-top: 20px; display: flex; gap: 8px; }
-.dlpanel { position: fixed; right: 18px; bottom: 18px; z-index: 23; width: min(440px, calc(100vw - 36px)); padding: 14px 16px;
+.dlpanel { position: fixed; right: 18px; bottom: 18px; z-index: 23; width: min(440px, calc(var(--vw) - 36px)); padding: 14px 16px;
   background: var(--ledge); border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
 .dlpanel .dlhead { display: flex; align-items: center; gap: 8px; }
 .dlpanel h2 { flex: 1; margin: 0; font: 400 17px var(--display); }
@@ -696,6 +699,9 @@ let PAUSE = false;
 function applyDisplay(d) {
   if (!d) return;
   document.documentElement.style.zoom = d.text_size && d.text_size !== 100 ? String(d.text_size / 100) : "";
+  // Zoom scales every length, the window's own size (vh, vw) included: --zoom undoes that for --vh and --vw, so
+  // what's sized to the window still fits it at a larger text size (issue #48)
+  document.documentElement.style.setProperty("--zoom", String((d.text_size || 100) / 100));
   document.body.classList.toggle("less-motion", !!d.reduce_motion);
   if (!!d.pause_animations === PAUSE) return;
   PAUSE = !!d.pause_animations;
