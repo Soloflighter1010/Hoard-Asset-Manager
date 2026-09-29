@@ -5,8 +5,8 @@ import json
 import threading
 import time
 
-from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin,
-                      launch, old_signins_waiting, profile_dir, sign_out, signins_root)
+from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
+from .browser import old_signins_waiting, profile_dir
 from .safety import store_link
 from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
