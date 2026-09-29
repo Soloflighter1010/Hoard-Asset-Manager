@@ -495,6 +495,41 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.close()
 
 
+    def test_the_largest_text_still_fits_the_window(self):
+        """Issue #48: at the Largest text size, Settings (and everything else sized to the window) grew taller and
+        wider than the window, so you couldn't scroll to Save to make the text smaller again."""
+        from unittest import mock
+        fits = """() => {
+          const out = [];
+          for (const el of document.querySelectorAll("#settingsPanel, .side")) {
+            if (el.hidden || getComputedStyle(el).display === "none") continue;
+            el.scrollTop = el.scrollHeight;   // as far down as it goes
+            const r = el.getBoundingClientRect();
+            if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1) out.push(`${el.id || el.className}: ${Math.round(r.right)}x${Math.round(r.bottom)}`);
+          }
+          const save = document.querySelector("#setSave").getBoundingClientRect();
+          if (save.bottom > innerHeight + 1) out.push(`Save at ${Math.round(save.bottom)}`);
+          return out;
+        }"""
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            page.set_viewport_size({"width": 1000, "height": 640})
+            page.click("#settingsBtn")
+            page.wait_for_function("() => document.querySelector('#setTextSize').value === '100'")
+            page.select_option("#setTextSize", "150")
+            page.click("#setSave")
+            page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
+            for where in ("library", "downloads"):
+                if where == "downloads":
+                    page.goto(f"{self.srv.url}downloads")
+                    page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
+                if page.locator("#settingsPanel").is_hidden():
+                    page.click("#settingsBtn")
+                page.locator("#setSave").wait_for()
+                self.assertEqual(page.evaluate(fits), [], where)
+                page.click("#setSave")   # and Save can be clicked: the text goes back to normal from there
+            page.close()
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class SetupAssistant(unittest.TestCase):
     """Issue #34: a sign-in started from the setup assistant keeps going if the assistant is closed, and the
