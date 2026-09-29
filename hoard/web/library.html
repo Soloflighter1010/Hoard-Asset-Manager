@@ -190,6 +190,11 @@ main { padding: 22px 24px 64px 8px; min-width: 0; }
   position: absolute; left: 8px; top: 8px; font-size: 11px; font-weight: 700;
   padding: 2px 8px; border-radius: 6px; background: rgb(20 16 12 / .78); color: #F4EDE3;
 }
+/* downloaded (issue #17): a small tray-and-arrow in the top-right corner of what's on disk */
+.ondisk-mark { position: absolute; right: 7px; top: 7px; width: 24px; height: 24px; display: grid; place-items: center;
+  border-radius: 7px; background: rgb(20 16 12 / .78); color: #F4EDE3; }
+.ondisk-mark svg { width: 14px; height: 14px; }
+body.selecting .ondisk-mark { display: none; }   /* the selection tick goes there */
 .ph { width: 100%; height: 100%; display: grid; place-content: center; background: hsl(var(--h) var(--ph-s) var(--ph-l)); }
 .ph b { font: 400 calc(var(--slot-size) * .26)/1 var(--display); opacity: .85; }
 .nm-t, .slot .nm { font-weight: 700; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -540,6 +545,8 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
     <datalist id="tagList"></datalist>
+    <h2>Downloaded</h2>
+    <div id="disk" class="chips" role="group" aria-label="Downloaded or not"></div>
     <h2>Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
     <ul id="creators" class="creators"></ul>
@@ -775,7 +782,10 @@ const usedStores = () => STORE_ORDER.filter(shown);
 const importable = s => (DATA.importable || ["booth", "jinxxy", "payhip", "itch"]).includes(s);
 const downloadable = s => (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).includes(s);
 let importStore = null, importing = null;
-const state = { view: "library", q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null };
+const state = { view: "library", q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "" };
+// Downloaded, or not yet (issue #17): "yes", "no", or "" for both
+const DISK = { yes: "Downloaded", no: "Not downloaded yet" };
+const onDisk = a => a.on_disk != null;
 let DATA = { items: [], stores: {}, labels: {}, job: {} }, byKey = new Map(), openKey = null, lastFocus = null, polling = null;
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
@@ -882,6 +892,7 @@ async function load() {
 function matches(a, skip) {
   if (!inView(a)) return false;
   if (state.copies && a.match_key !== state.copies.key) return false;
+  if (skip !== "disk" && state.disk && (state.disk === "yes") !== onDisk(a)) return false;
   if (state.store && a.store !== state.store) return false;
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   if (!shown(a.store)) return false;
@@ -894,7 +905,7 @@ const SORTS = {
   creator: (a, b) => coll.compare(a.creator, b.creator) || coll.compare(a.name, b.name),
   store: (a, b) => STORE_ORDER.indexOf(a.store) - STORE_ORDER.indexOf(b.store) || coll.compare(a.name, b.name),
 };
-const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies;
+const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk;
 
 /* ---------- rendering */
 function render() {
@@ -970,8 +981,9 @@ function lazyCards(box, batch = 120) {
 let cards = null;
 const slotHTML = a =>
     `<button class="slot" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
-      `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
+      `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}${onDisk(a) ? ", downloaded" : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, a.also_in)}<i class="tick" aria-hidden="true"></i>` +
+        (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span>` +
       `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`;
 function renderGrid(list) {
@@ -996,6 +1008,10 @@ function renderGrid(list) {
 function renderFacets(list) {
   renderTagFacets(list);
 
+  const dn = { yes: 0, no: 0 };
+  for (const a of DATA.items) if (matches(a, "disk")) dn[onDisk(a) ? "yes" : "no"]++;
+  $("#disk").innerHTML = Object.entries(DISK).map(([k, l]) =>
+    `<button class="chip" data-disk="${k}" aria-pressed="${state.disk === k}">${l}<span class="n">${dn[k]}</span></button>`).join("");
   const cc = new Map();
   for (const a of DATA.items) if (matches(a, "creator")) cc.set(a.creator, (cc.get(a.creator) || 0) + 1);
   if (state.creator && !cc.has(state.creator)) cc.set(state.creator, 0);
@@ -1014,6 +1030,7 @@ function renderStatus(list) {
   if (state.q) pills.push(["q", "", "Search", state.q]);
   if (state.store) pills.push(["store", "", "Store", label(state.store)]);
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
+  if (state.disk) pills.push(["disk", "", "Show", DISK[state.disk]]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   const total = DATA.items.filter(a => inView(a) && shown(a.store)).length;   // this view: Library, Archive, ...
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
@@ -1127,6 +1144,7 @@ function saveHash() {
   if (state.q) p.set("q", state.q);
   if (state.store) p.set("store", state.store);
   if (state.creator) p.set("creator", state.creator);
+  if (state.disk) p.set("downloaded", state.disk);
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.sort !== "name") p.set("sort", state.sort);
   const h = p.toString(); history.replaceState(null, "", h ? "#" + h : location.pathname);
@@ -1135,6 +1153,7 @@ function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
+  state.disk = DISK[p.get("downloaded")] ? p.get("downloaded") : "";
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
 }
 
@@ -1347,9 +1366,10 @@ try { const z = localStorage.getItem("hoard-tile-size"); if (z) setZoom(z); } ca
 
 const toggle = (set, v) => set.has(v) ? set.delete(v) : set.add(v);
 $("#filters").addEventListener("click", e => {
-  const t = e.target.closest("[data-tag]"), c = e.target.closest("[data-creator]");
+  const t = e.target.closest("[data-tag]"), c = e.target.closest("[data-creator]"), d = e.target.closest("[data-disk]");
   if (t) toggle(state.tags, t.dataset.tag);
   else if (c) state.creator = state.creator === c.dataset.creator ? "" : c.dataset.creator;
+  else if (d) state.disk = state.disk === d.dataset.disk ? "" : d.dataset.disk;
   else return;
   render();
 });
@@ -1357,8 +1377,9 @@ document.addEventListener("click", e => {
   if (e.target.closest("#openStores")) { openStores(true); return; }
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.copies = null; }
+  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.copies = null; state.disk = ""; }
   else if (k === "copies") state.copies = null;
+  else if (k === "disk") state.disk = "";
   else if (k === "q") state.q = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v);
   render();
@@ -1384,7 +1405,7 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
-  else if (b.dataset.act === "others") { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); render(); }
+  else if (b.dataset.act === "others") { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
 });
 $("#scrim").addEventListener("click", closeDetail);
 document.addEventListener("keydown", e => {
