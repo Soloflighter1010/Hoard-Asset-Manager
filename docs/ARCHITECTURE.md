@@ -138,6 +138,14 @@ from when that shop isn't in the user's list (it's only added when the user conf
   Gumroad or Booth, the same file name under a new label on Jinxxy, or a different name or size shown for
   the same file on itch.io (its MD5, or else its name, size and date). itch.io files marked for an operating system (game builds)
   are skipped while `itch.skip_game_builds` is on.
+- Checking for updates (issue #26) is a dry run of the same sync (`jobs.Jobs._download(check=True)`, from
+  `POST /api/check-updates`): nothing is downloaded, and each store's `would_get()` notes a file the store has
+  that isn't on disk. For a product already downloaded (and not a file deleted here), it goes in
+  `Report.available`; `asset_updates.AssetUpdates` keeps those in `asset-updates.json` in the app data folder,
+  replacing only what an earlier check found for the stores (or products) this one read to the end.
+  `/api/assets` adds each asset's `update` files and `updates_checked`; `/api/library` an `update` flag.
+  `POST /api/download` and `/api/check-updates` take `keys` (tag keys), which `skip_product()` limits the sync
+  to; a download takes a product off the list once a file of its is saved and none of its files failed.
 - `collect_catalog()` builds the catalog and tags from the manifests; `build_catalog()` writes them to
   `catalog.json`, `tags.json` and each product's `asset.json`. With nothing downloaded, an existing
   `catalog.json` and `tags.json` are rewritten empty, so they never go on listing what's gone; a folder

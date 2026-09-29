@@ -171,7 +171,7 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(st.change, "archived", {rusk}, False)
         page.goto(f"{self.srv.url}downloads")
         page.locator("#views [data-view='archive']").wait_for()
-        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Archive\n1"])
+        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Updates\n0", "Archive\n1"])
         self.assertEqual(page.locator("#grid .slot").count(), 0, "not among the other downloads")
         self.assertEqual(page.locator("#creators li").count(), 0, "nor counted under its creator here")
         self.assertIn("1 thing, ", page.locator("#totals").inner_text())
@@ -184,6 +184,50 @@ class AccessKey(unittest.TestCase):
         page.reload()
         page.locator("#grid .slot").first.wait_for()
         self.assertEqual(page.locator("#views [aria-checked='true']").inner_text(), "Archive\n1", "kept on reload")
+        self.assertEqual(refused, [])
+
+    def test_updates_view_and_updating_one(self):
+        """Issue #26: what a check for updates found shows in the Downloads page's Updates view, on the card and in
+        the details, with Update (just that product) and Check for updates; the Library's details link to it."""
+        from hoard import tags
+        from hoard.asset_updates import AssetUpdates
+        rusk = tags.tag_key("booth", "Rusk")
+        store = AssetUpdates()
+        store.record_check(["booth"], None, [{"store": "booth", "key": rusk, "name": "Rusk", "creator": "Kitsu Studio",
+                                              "file": "Rusk_v2.zip", "kind": "new"}])
+        self.addCleanup(store.path.unlink, missing_ok=True)
+        started = []
+
+        def start(task, stores, skip_imported=False, only=None, scheduled=False, keys=None):
+            started.append((task, stores, keys))
+            return True
+        with mock.patch.object(self.srv.jobs, "start", side_effect=start):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.click()
+            page.get_by_role("link", name="Update available").wait_for()
+            page.goto(f"{self.srv.url}downloads")
+            page.locator("#views [data-view='updates']").wait_for()
+            self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Updates\n1")
+            page.click("#views [data-view='updates']")
+            self.assertIn("1 download has newer files", page.locator("#viewBar").inner_text())
+            self.assertIn("Last checked", page.locator("#viewBar").inner_text())
+            page.locator("#grid .slot .flag.upd").wait_for()
+            page.click("#grid .slot")
+            self.assertIn("Rusk_v2.zip", page.locator("#detail .update").inner_text())
+            page.click("#detail [data-act='update-one']")
+            page.wait_for_function("() => !document.querySelector('#dlPanel').hidden")
+            page.click("#detail [data-act='check-one']")
+            for _ in range(50):
+                if len(started) >= 2:
+                    break
+                page.wait_for_timeout(100)
+            page.click("#viewBar [data-upd='check']")
+            for _ in range(50):
+                if len(started) >= 3:
+                    break
+                page.wait_for_timeout(100)
+        self.assertEqual(started, [("download", ["booth"], [rusk]), ("check-updates", ["booth"], [rusk]),
+                                   ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
 
     def test_the_downloads_page_has_the_update_setting(self):
