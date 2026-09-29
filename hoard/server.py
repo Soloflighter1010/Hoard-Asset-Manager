@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__, diagnostics, itch, updater, vault
+from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog, reseal_catalog
@@ -42,7 +43,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
-           "/api/diagnostics/report", "/api/diagnostics/open-folder")
+           "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -369,9 +370,11 @@ class Handler(BaseHTTPRequestHandler):
             items = enrich(items, srv.cfg["tags"], tagdata)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
             marks, unlocked = MarkStore().load(), self._unlocked()
+            updates = AssetUpdates().load()["items"]
             shown = []
             for i in items:
                 i["on_disk"] = on_disk.get(i["tag_key"])
+                i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
                 i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                              else "archived" if is_archived(i, marks) else None)
                 if i["mark"] != "hidden" or unlocked:   # hidden items never leave the server while it's locked
@@ -397,14 +400,16 @@ class Handler(BaseHTTPRequestHandler):
             # page has the same views (issue #29); hidden products' downloads stay out of view while it's locked
             marks, unlocked = MarkStore().load(), self._unlocked()
             by_store = {tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
+            updates = AssetUpdates().load()   # what the last check for updates found (issue #26)
             assets = []
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if mark != "hidden" or unlocked:
-                    assets.append({**a, "mark": mark})
-            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}}
+                    assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", [])})
+            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
+                     "updates_checked": updates["checked"]}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":
@@ -686,16 +691,19 @@ class Handler(BaseHTTPRequestHandler):
             stores = [s for s in stores if srv.cfg[s].get("enabled", True)]
         if path == "/api/login" and stores == ["itch"]:
             return self._json({"error": "itch.io signs in with an API key: choose Sign in on its row in Stores."}, 400)
-        if path == "/api/download" and stores and not any(s in DOWNLOADABLE for s in stores):
+        if path in ("/api/download", "/api/check-updates") and stores and not any(s in DOWNLOADABLE for s in stores):
             return self._json({"error": "Hoard lists what you own on Payhip, and doesn't download from it. Open the "
                                         "product's download page from its details, and download it there."}, 400)
         if not stores:
             return self._json({"error": "Unknown store." if path != "/api/sync" else "No stores are switched on in Settings."}, 400)
         task = {"/api/login": "login", "/api/logout": "logout", "/api/download": "download",
-                "/api/sync": "sync"}.get(path, "refresh")
+                "/api/sync": "sync", "/api/check-updates": "check-updates"}.get(path, "refresh")
         only = str(body.get("only") or "").strip()[:200] or None
+        # products chosen on the Downloads page (to update, or to check), by their tag_key
+        keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:5000]
+                if isinstance(k, str) and 0 < len(k) <= 400] or None
         if not srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
-                              skip_imported=bool(body.get("all")), only=only):
+                              skip_imported=bool(body.get("all")), only=only, keys=keys):
             return self._json({"error": "Hoard is busy. Wait for the current job to finish."}, 409)
         self._json({"ok": True}, 202)
 

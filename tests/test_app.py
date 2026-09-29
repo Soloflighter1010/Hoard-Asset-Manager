@@ -1074,6 +1074,58 @@ class ItchAPI(unittest.TestCase):
         catalog, _tags = downloader.collect_catalog(config.load_config(), root)
         self.assertEqual(downloader.validate_catalog_entry(catalog[0]), [])
 
+    def test_checking_for_updates_and_updating(self):
+        """Issue #26: a check reads itch.io without downloading anything, and lists what the creator changed on
+        what you've downloaded; a file deleted here isn't an update; updating downloads just those files, and the
+        list is cleared once they're saved."""
+        import types
+        from unittest import mock
+        from hoard import tags
+        from hoard.asset_updates import AssetUpdates
+        cfg = _ItchStandIn.use(self)
+        root = Path(tempfile.mkdtemp())
+        updates = AssetUpdates(Path(tempfile.mkdtemp()) / "asset-updates.json")
+        key = tags.tag_key("itch", "Paw Suit")
+        folder = root / "Itch" / "Kitsu Studio" / "Paw Suit"
+
+        def run(dry_run, keys=None):
+            report = downloader.Report()
+            args = types.SimpleNamespace(headed=False, only=None, dry_run=dry_run, keys=keys)
+            downloader.sync_itch(cfg, root, args, report)
+            report.stores_done.append("itch")
+            if dry_run:
+                updates.record_check(report.stores_done, keys, report.available)
+            else:
+                updates.after_download(report.got, report.failed)
+            return report
+
+        with mock.patch.object(downloader, "save_thumbnail", lambda *a, **k: None):
+            self.assertEqual(run(True).available, [], "never downloaded: that's Download new, not an update")
+            run(False)
+            self.assertEqual(run(True).available, [], "up to date")
+            self.assertEqual(updates.load()["items"], {})
+
+            (folder / "PawSuit_v1.2.unitypackage").unlink()   # deleted here, unchanged on itch.io
+            self.assertEqual(run(True).available, [], "deleted here isn't an update")
+            run(False)
+
+            _ItchStandIn.DATA[5550001] = b"PAW2" * 1000   # the creator updates it
+            _ItchStandIn.uploads[0]["filename"] = "PawSuit_v1.3.unitypackage"
+            try:
+                found = run(True).available
+                self.assertEqual([(a["key"], a["file"], a["kind"]) for a in found],
+                                 [(key, "PawSuit_v1.3.unitypackage", "changed")])
+                self.assertFalse((folder / "PawSuit_v1.3.unitypackage").exists(), "a check downloads nothing")
+                self.assertEqual(updates.load()["items"][key]["files"], [{"file": "PawSuit_v1.3.unitypackage", "kind": "changed"}])
+                self.assertIn("itch", updates.load()["checked"])
+                self.assertEqual(run(False, keys={"itch:someotherthing"}).got, set(), "only the products asked for")
+                self.assertIn(key, updates.load()["items"], "still to update")
+                run(False, keys={key})
+                self.assertEqual((folder / "PawSuit_v1.3.unitypackage").read_bytes(), b"PAW2" * 1000)
+                self.assertEqual(updates.load()["items"], {}, "updated, so off the list")
+            finally:
+                _ItchStandIn.DATA[5550001] = b"PAW" * 1000
+
     def test_a_file_that_doesnt_match_its_checksum(self):
         from unittest import mock
         cfg = _ItchStandIn.use(self)
@@ -1489,6 +1541,50 @@ class TagMatching(unittest.TestCase):
         for n, name in enumerate(names):
             TagStore.tags_for(data, f"Booth/{n}", name, matcher)
         self.assertLess(time.time() - start, 5, "20,000 names with 300 matching tags (every tag on every name: ~30 s)")
+
+
+class CheckingForUpdates(unittest.TestCase):
+    """Issue #26: the check-updates job runs the downloader as a dry run, keeps what it found, and says so; a store
+    it couldn't read keeps what an earlier check found for it."""
+
+    def test_the_job(self):
+        from unittest import mock
+        from hoard import asset_updates
+        path = Path(tempfile.mkdtemp()) / "asset-updates.json"
+        seen = []
+
+        def cmd_sync(cfg, args):
+            seen.append((args.dry_run, args.keys))
+            report = downloader.Report()
+            report.stores_done.append("booth")   # Gumroad couldn't be read
+            report.failed.append("Gumroad: not signed in")
+            report.available += [{"store": "booth", "key": "booth:rusk", "name": "Rusk", "creator": "K", "file": "v2.zip", "kind": "new"},
+                                 {"store": "booth", "key": "booth:rusk", "name": "Rusk", "creator": "K", "file": "tex.zip", "kind": "changed"}]
+            return report
+        store = asset_updates.AssetUpdates(path)
+        store.record_check(["gumroad"], None, [{"store": "gumroad", "key": "gumroad:suit", "name": "Suit", "creator": "M",
+                                                 "file": "suit.zip", "kind": "changed"}])
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        with mock.patch.object(asset_updates, "updates_file", lambda: path), \
+                mock.patch("hoard.downloader.cmd_sync", cmd_sync):
+            job._download(["booth", "gumroad", "payhip"], None, check=True)
+        self.assertEqual(seen, [(True, None)], "a dry run: nothing is downloaded")
+        self.assertEqual(job.state["report"]["updates"], 1)
+        self.assertEqual(job.state["message"], "Checked: 1 item has updates (2 in all). Couldn't check Gumroad.")
+        items = store.load()["items"]
+        self.assertEqual([f["file"] for f in items["booth:rusk"]["files"]], ["v2.zip", "tex.zip"])
+        self.assertIn("gumroad:suit", items, "kept: Gumroad couldn't be checked this time")
+        self.assertEqual(sorted(store.load()["checked"]), ["booth", "gumroad"])
+
+    def test_what_a_damaged_file_gives(self):
+        from hoard.asset_updates import AssetUpdates
+        path = Path(tempfile.mkdtemp()) / "asset-updates.json"
+        path.write_text('{"items": {"booth:x": {"store": "nowhere", "files": [{"file": "a"}]}, '
+                        '"booth:y": {"store": "booth", "files": [{"file": "b", "kind": "odd"}]}}, "checked": [1]}')
+        self.assertEqual(AssetUpdates(path).load(), {"checked": {}, "items": {
+            "booth:y": {"store": "booth", "name": "", "creator": "", "files": [{"file": "b", "kind": "new"}]}}})
+        path.write_text("{not json")
+        self.assertEqual(AssetUpdates(path).load(), AssetUpdates.empty())
 
 
 class DeletedFromDisk(unittest.TestCase):

@@ -107,14 +107,16 @@ class Jobs:
         self.state.update(kw)
 
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
-              scheduled: bool = False) -> bool:
+              scheduled: bool = False, keys: list[str] | None = None) -> bool:
         """Start a job in the background. False when one is already running. scheduled: an automatic sync."""
         if not self.busy.acquire(blocking=False):
             return False
         self.stop.clear()
         self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled)
         if task == "download":
-            target = lambda s: self._download(s, only)  # noqa: E731
+            target = lambda s: self._download(s, only, keys)  # noqa: E731
+        elif task == "check-updates":
+            target = lambda s: self._download(s, only, keys, check=True)  # noqa: E731
         elif task == "sync":
             target = self._sync
         elif task == "install-browser":
@@ -192,24 +194,27 @@ class Jobs:
 
     def cancel(self) -> bool:
         """Stop the running download (or sync) after the file it's on. False when neither is running."""
-        if self.state["running"] and (self.state["task"] == "download" or self.state.get("sync")):
+        if self.state["running"] and (self.state["task"] in ("download", "check-updates") or self.state.get("sync")):
             self.stop.set()
             self._set(message="Stopping after the current file")
             return True
         return False
 
-    def _download(self, stores: list[str], only: str | None) -> None:
-        """Download everything new or changed from these stores, passing progress to the page as it goes. (Payhip is
-        only read, so it's left out.)"""
+    def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False) -> None:
+        """Download everything new or changed from these stores (or only the products keys names), passing progress
+        to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
+        each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
         from types import SimpleNamespace
         from .downloader import cmd_sync
+        from .asset_updates import AssetUpdates
+        task = "check-updates" if check else "download"
         stores = [s for s in stores if s in DOWNLOADABLE]
         if not stores:
-            self._set(task="download", message="Nothing to download: Hoard lists what you own on Payhip, and you "
-                                                "download it from Payhip yourself.")
+            self._set(task=task, message="Nothing to download: Hoard lists what you own on Payhip, and you "
+                                         "download it from Payhip yourself.")
             self.on_download_done()
             return
-        self._set(task="download", store=stores[0] if len(stores) == 1 else None, message="Starting")
+        self._set(task=task, store=stores[0] if len(stores) == 1 else None, message="Starting")
         lines: list[str] = []
 
         def progress(msg):
@@ -220,19 +225,29 @@ class Jobs:
                 self.stop.clear()   # the catalog is still rebuilt on the way out
                 raise Cancelled()
 
-        args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=False, only=only,
-                               headed=False)
+        args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=check, only=only,
+                               headed=False, keys=set(keys) if keys else None)
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
+            if check:
+                total = AssetUpdates().record_check(report.stores_done, args.keys, report.available)
+                found = len({a["key"] for a in report.available})
+                missed = [STORES[s]["label"] for s in stores if s not in report.stores_done and self.cfg[s].get("enabled", True)]
+                self._set(report={"updates": found, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
+                          message=(f"Checked: {found} {'item has' if found == 1 else 'items have'} updates" if found
+                                   else "Checked: no updates") + (f" ({total} in all)" if total != found and not keys else "")
+                                  + (f". Couldn't check {', '.join(missed)}." if missed else "."))
+                return
+            AssetUpdates().after_download(report.got, report.failed)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
                       message=(f"Done: {summary['new_assets']} new, {summary['updated']} updated"
                                + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
         except Cancelled:
-            self._set(message="Stopped. Anything half-downloaded resumes next time.")
+            self._set(message="Stopped checking for updates." if check else "Stopped. Anything half-downloaded resumes next time.")
         finally:
-            self.on_download_done()
+            self.on_download_done()   # a check can record files it finds already on disk, too
 
     def _logout(self, stores: list[str]) -> None:
         """Sign out of one store, or of every store, and mark the affected stores as signed out."""

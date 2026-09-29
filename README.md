@@ -98,6 +98,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads.
 - **Downloads** shows what's on your computer, with its files, sizes and folders. **Download new** fetches
   anything new or updated, with progress as it goes; **Stop** pauses safely, and it carries on next time.
+  **Check for updates** (under **Updates**) lists what creators added or changed since you downloaded it,
+  without downloading anything; then **Update** one, or **Update all**.
 - **Payhip** is listed, not downloaded: Hoard shows everything you bought there, with each product's
   download page, and you download the files from Payhip yourself. Payhip keeps your purchases under the
   shops you bought from, one library page per shop, so the easy way in is to save each shop's library

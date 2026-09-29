@@ -98,6 +98,10 @@ class Report:
     updated: list = field(default_factory=list)
     skipped: list = field(default_factory=list)
     failed: list = field(default_factory=list)
+    # a check for updates (a dry run): per product already downloaded, what the store has that isn't on disk
+    available: list = field(default_factory=list)
+    got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
+    stores_done: list = field(default_factory=list)   # stores read to the end, without an error
 
     def print(self) -> None:
         """Print the summary, then the updated, skipped and failed items one per line."""
@@ -110,6 +114,26 @@ class Report:
                 log(f"\n{title}:")
                 for line in items:
                     log(f"  - {line}")
+
+
+def skip_product(args, store: str, name: str, creator: str) -> bool:
+    """Is this product outside what was asked for: --only (a name or creator), or keys (products chosen on the
+    Downloads page, by tag_key)?"""
+    if args.only and args.only.lower() not in f"{name} {creator}".lower():
+        return True
+    keys = getattr(args, "keys", None)
+    return bool(keys) and tag_key(store, name) not in keys
+
+
+def would_get(args, report: Report, store: str, rec: dict, name: str, creator: str, file: str, changed: bool,
+              deleted_here: bool = False) -> None:
+    """A dry run: note a file the store has that isn't on disk. For a product already downloaded, a file the store
+    changed or added goes on the list of updates the Downloads page shows (issue #26); one downloaded before and
+    since deleted from disk, unchanged, isn't an update (it's downloaded again all the same)."""
+    log(f"    would {'update' if changed else 'download again' if deleted_here else 'download'}: {file}")
+    if rec.get("files") and not deleted_here:
+        report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
+                                 "file": file, "kind": "changed" if changed else "new"})
 
 
 SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
@@ -405,7 +429,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
         prod, pur = card.get("product") or {}, card.get("purchase") or {}
         name = (prod.get("name") or "Untitled").strip()
         creator = ((prod.get("creator") or {}).get("name") or "Unknown Creator").strip()
-        if args.only and args.only.lower() not in f"{name} {creator}".lower():
+        if skip_product(args, "gumroad", name, creator):
             continue
         page_url = pur.get("download_url")
         if not page_url:
@@ -459,7 +483,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
             is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
             label = f"{creator} / {name} / {relpath}"
             if args.dry_run:
-                log(f"    would {'update' if is_update else 'download'}: {relpath}")
+                would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
                 continue
             try:
                 url = gr.file_url(page_url, token, fid, f.get("download_url"))
@@ -469,6 +493,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
                 continue
             log(f"    {'updated' if is_update else 'saved'}: {relpath}")
             (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
+            report.got.add(tag_key("gumroad", name))
             rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
             got_any = True
             man.checkpoint()
@@ -742,7 +767,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if old and rel_to_path(folder, old["path"]).exists():
             continue
         if args.dry_run:
-            log(f"    would download: {k}")
+            would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
             continue
         current = find(allow_all)  # re-tag; the page may have re-rendered
         match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
@@ -774,6 +799,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         rec["files"][k] = {"path": fname, "size": target.stat().st_size, "label": label, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"{store}: {creator} / {name} / {fname}")
+        report.got.add(tag_key(store, name))
         got_any = True
         man.checkpoint()
     return got_any
@@ -841,7 +867,7 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report) -> None:
     key = urlparse(url).path.rstrip("/").split("/")[-1]
     name = (info.get("name") or key).strip()
     creator = (info.get("creator") or "Unknown Creator").strip()
-    if args.only and args.only.lower() not in f"{name} {creator}".lower():
+    if skip_product(args, "jinxxy", name, creator):
         return
     if removed_product("jinxxy", name, report):
         return
@@ -1063,7 +1089,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                 for b in items:
                     name = (b["name"] or f"Booth item {b['id']}").strip()
                     creator = (b["creator"] or "Unknown Creator").strip()
-                    if args.only and args.only.lower() not in f"{name} {creator}".lower():
+                    if skip_product(args, "booth", name, creator):
                         continue
                     if removed_product("booth", name, report):
                         continue
@@ -1092,7 +1118,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                             rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
                             continue
                         if args.dry_run:
-                            log(f"    would download: {guess}")
+                            would_get(args, report, "booth", rec, name, creator, f["name"] or guess, bool(replaces), old is not None)
                             continue
                         on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
                         try:
@@ -1111,6 +1137,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
                         log(f"    {'updated' if is_update else 'saved'}: {fname}")
                         (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
+                        report.got.add(tag_key("booth", name))
                         got_any = True
                         man.checkpoint()
                         time.sleep(delay)
@@ -1161,7 +1188,7 @@ def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
             g = itch.game_of(k)
             name = clean_text(g["title"], 300) or f"itch.io project {g['id']}"
             creator = clean_text(g["creator"], 200) or "Unknown Creator"
-            if not g["id"] or (args.only and args.only.lower() not in f"{name} {creator}".lower()):
+            if not g["id"] or skip_product(args, "itch", name, creator):
                 continue
             if removed_product("itch", name, report):
                 continue
@@ -1208,7 +1235,8 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifes
                                   "downloaded (Settings, itch.io: Skip game builds)")
             continue
         if args.dry_run:
-            log(f"    would {'update' if old else 'download'}: {label}")
+            would_get(args, report, "itch", rec, name, creator, label, old is not None and old.get("shown", shown) != shown,
+                      old is not None and old.get("shown", shown) == shown)
             continue
         fname = distinct_name(safe_name(u.get("filename") or label, 150), fid, rec, offered)
         target = folder / fname
@@ -1230,6 +1258,7 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifes
         rec["files"][fid] = {"path": fname, "size": size, "label": label, "shown": shown, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"itch.io: {creator} / {name} / {fname}")
+        report.got.add(tag_key("itch", name))
         got_any = True
         man.checkpoint()
     if got_any and is_new_asset:
@@ -1550,6 +1579,7 @@ def cmd_sync(cfg: dict, args) -> None:
                 continue
             try:
                 syncers[store](cfg, root, args, report)
+                report.stores_done.append(store)
             except SigninsUnprotected as e:
                 report.failed.append(str(e))
                 break

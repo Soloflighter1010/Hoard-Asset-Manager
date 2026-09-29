@@ -1097,7 +1097,8 @@ function showDetail(a, focus = true) {
       (storeUrl(a.store, a.download_url) ? `<a class="primary" href="${esc(storeUrl(a.store, a.download_url))}" target="_blank" rel="noopener noreferrer">Open download page</a>` : "") +
       pageLink + `</div>` +
     `<p class="copy">${a.on_disk != null
-      ? `<a class="ondisk" href="/downloads#open=${a.on_disk}">On disk. Show it in Downloads</a>`
+      ? `<a class="ondisk" href="/downloads#open=${a.on_disk}">On disk. Show it in Downloads</a>` +
+        (a.update ? ` <a class="ondisk" href="/downloads#view=updates&amp;open=${a.on_disk}">Update available</a>` : "")
       : downloadable(a.store) ? `<button class="ghost sm" data-act="download">Download a copy</button>`
       : `<span class="muted">Hoard doesn't download from ${store}. Open its download page to get the files.</span>`}</p>` +
     `<div class="marks">${markButtons(a)}</div>` +

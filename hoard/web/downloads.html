@@ -270,6 +270,12 @@ body.less-motion .slot:hover .art { transform: none; }
 .flag { position: absolute; right: 8px; top: 8px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--warn); color: #2A1400; }
 .ph { justify-items: center; gap: 6px; }
 .ph small { font-size: 12px; font-weight: 700; opacity: .7; }
+.flag.upd { background: var(--gold); color: var(--gold-ink); }
+.slot .flag.upd + .flag { top: 34px; }
+.update { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
+.update ul { margin: 6px 0 10px; padding-left: 18px; overflow-wrap: anywhere; }
+.update .muted { display: block; margin-top: 8px; color: var(--dust); font-size: 13px; }
+.update .muted-inline { color: var(--dust); font-size: 12.5px; }
 .also { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
 .files li { grid-template-columns: minmax(0, 1fr) auto auto; }
 .files .fs { color: var(--dust); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
@@ -772,23 +778,72 @@ function render() {
 }
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
-const VIEWS = { downloads: "Downloads", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+const VIEWS = { downloads: "Downloads", updates: "Updates", archive: "Archive", removed: "Removed", hidden: "Hidden" };
 const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
-const inView = a => viewOf(a) === state.view;
+// Updates: what the last check found, from the Downloads and the Archive (issue #26)
+const hasUpdate = a => !!(a.update && a.update.length);
+const inView = a => state.view === "updates" ? hasUpdate(a) && a.mark !== "removed" : viewOf(a) === state.view;
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.assets) count[viewOf(a)] = (count[viewOf(a)] || 0) + 1;
+  count.updates = DATA.assets.filter(a => hasUpdate(a) && a.mark !== "removed").length;
   const n = v => count[v] || 0;
-  $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === state.view || n(v)
+  $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === "updates" || v === state.view || n(v)
       || (v === "hidden" && p.pin_set)).map(v =>
     `<button role="radio" data-view="${v}" aria-checked="${state.view === v}">${VIEWS[v]}` +
     (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>` : `<span class="n">${n(v)}</span>`) + `</button>`).join("");
   const bar = $("#viewBar");
   bar.hidden = state.view === "downloads";
-  bar.innerHTML = state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
+  bar.innerHTML = state.view === "updates" ? updatesBar(n("updates"))
+    : state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
     : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them.</p>`
     : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Lock it again in the Library.</p>` : "";
 }
+/* ---------- updates (issue #26): a check reads your stores without downloading anything, and lists what each
+   download is missing that its store has now: files the creator added or changed. Update downloads just those. */
+const STORE_IDS = { booth: "booth", gumroad: "gumroad", jinxxy: "jinxxy", itch: "itch", payhip: "payhip" };
+const storeId = a => STORE_IDS[a.store.toLowerCase()] || a.store.toLowerCase();
+const canDownload = a => storeId(a) !== "payhip";
+function whenChecked() {
+  const times = Object.values(DATA.updates_checked || {}).filter(Boolean).sort();
+  if (!times.length) return "";
+  const d = new Date(times[times.length - 1]);   // the latest check
+  return isNaN(d) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+function updatesBar(n) {
+  const when = whenChecked();
+  return `<p>${n ? `${n} ${n === 1 ? "download has" : "downloads have"} newer files on the store: files the creator added or changed since you downloaded them.`
+                 : "Nothing to update."} ${when ? `Last checked ${esc(when)}.` : "Not checked yet."}</p>` +
+    `<button class="ghost sm" data-upd="check">Check for updates</button>` +
+    (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
+}
+function updateSection(a) {
+  if (!canDownload(a)) return "";
+  if (!hasUpdate(a)) return `<div class="update"><button class="ghost sm" data-act="check-one">Check for updates</button>` +
+    `<span class="muted">Reads ${storeName(a.store)} for this one, without downloading anything.</span></div>`;
+  return `<div class="update"><strong>Update available</strong><ul>${a.update.map(f =>
+      `<li>${esc(f.file)} <span class="muted-inline">(${f.kind === "changed" ? "changed" : "new"})</span></li>`).join("")}</ul>` +
+    `<button class="primary sm" data-act="update-one">Update</button> <button class="ghost sm" data-act="check-one">Check again</button></div>`;
+}
+function updateItems(list) {
+  const chosen = list.filter(a => canDownload(a));
+  if (!chosen.length) return;
+  startDownload([...new Set(chosen.map(storeId))], null, chosen.map(a => a.tag_key));
+}
+async function checkUpdates(list) {
+  if (!navigator.onLine) { toast("You're offline. Checking for updates needs a connection."); return; }
+  const body = list ? { stores: [...new Set(list.map(storeId))], keys: list.map(a => a.tag_key) } : {};
+  const r = await apiPost("/api/check-updates", body);
+  if (!r.ok) { toast(r.data.error || "Checking for updates didn't start."); return; }
+  dlActive = true;
+  showDownload({ running: true, task: "check-updates", message: "Starting", log: [] });
+  pollDownload();
+}
+$("#viewBar").addEventListener("click", e => {
+  const b = e.target.closest("[data-upd]"); if (!b) return;
+  if (b.dataset.upd === "check") checkUpdates(null);
+  else updateItems(DATA.assets.filter(inView));
+});
 function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
     toast("Unlock Hidden in the Library first. Its downloads then show here too.");
@@ -830,7 +885,7 @@ const slotHTML = a =>
       `${a.also_in.length ? `, also from ${a.also_in.map(o => storeName(o.store)).join(" and ")}` : ""}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
       `<span class="art">${art(a)}${notch(a.store.toLowerCase(), a.also_in.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
-        `${a.missing ? '<span class="flag">Missing files</span>' : ""}</span>` +
+        `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}</span>` +
       `<span class="nm">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span>` +
     `</button>`;
 function renderGrid(list) {
@@ -929,6 +984,7 @@ function showDetail(a, focus = true) {
       `<button class="linkish" data-act="goto" data-id="${o.id}">View that copy</button></p>`).join("") +
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button></div>` +
+    updateSection(a) +
     tagSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
     `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}</span>` +
@@ -1041,6 +1097,8 @@ detail.addEventListener("click", e => {
   else if (act === "open") reveal(b.dataset.path);
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
+  else if (act === "update-one") updateItems([byId.get(openId)]);
+  else if (act === "check-one") checkUpdates([byId.get(openId)]);
   else if (act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
 });
 $("#scrim").addEventListener("click", closeDetail);
@@ -1426,9 +1484,9 @@ async function installUpdate() {
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
 }
 
-async function startDownload(stores, only) {
+async function startDownload(stores, only, keys) {
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
-  const r = await apiPost("/api/download", { stores, only });
+  const r = await apiPost("/api/download", { stores, only, keys });
   if (!r.ok) { toast(r.data.error || "Downloading didn't start."); return; }
   dlActive = true;
   showDownload({ running: true, message: "Starting", log: [] });
@@ -1443,7 +1501,7 @@ async function pollDownload() {
     if (dlActive) dlTimer = setTimeout(pollDownload, 2000);
     return;
   }
-  const running = job.running && (job.task === "download" || job.sync);   // a sync counts, refreshing included
+  const running = job.running && (job.task === "download" || job.task === "check-updates" || job.sync);   // a sync counts, refreshing included
   if (running || dlActive) showDownload({ ...job, running });
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
@@ -1451,7 +1509,8 @@ async function pollDownload() {
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
-  $("#dlTitle").textContent = job.running ? (job.sync && job.task !== "download" ? "Syncing: reading your stores" : job.sync ? "Syncing: downloading" : "Downloading")
+  $("#dlTitle").textContent = job.running ? (job.task === "check-updates" ? "Checking for updates"
+      : job.sync && job.task !== "download" ? "Syncing: reading your stores" : job.sync ? "Syncing: downloading" : "Downloading")
     : stopped ? "Stopped" : "Finished";
   $("#dlMessage").textContent = job.message || "";
   $("#dlLog").textContent = (job.log || []).join("\n");

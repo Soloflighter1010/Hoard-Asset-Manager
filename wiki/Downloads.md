@@ -57,6 +57,21 @@ Gumroad or Booth, the same file name under a new label on Jinxxy, or a new name 
 on itch.io. Updated files are downloaded again and listed as updated in the summary. (When the new version has
 a different name, the old file stays in the folder too; Hoard never deletes your files.)
 
+### Checking for updates without downloading
+
+**Check for updates** (in Downloads, under **Updates** on the left) reads your stores the way a download
+would, but downloads nothing. It lists each thing you've downloaded that has newer files on its store: files
+the creator **added** since you downloaded it, and files they **changed**. They show in the **Updates** view,
+and with an **Update** badge on the card. Choose **Update all** there, or open one and choose **Update** to
+download just that one. Each item's details also have **Check for updates**, to check only it. In the Library,
+an item with updates says **Update available**, with a link to it in Downloads.
+
+What counts as changed depends on what each store shows: a new file, size or file link on Booth and Gumroad,
+itch.io's checksum (or else the name, size and date it shows), and on Jinxxy a new or renamed download button.
+Jinxxy doesn't show sizes, so a file the creator replaced under the same button name isn't spotted there.
+A file you deleted from your computer isn't counted as an update; **Download new** fetches it again. Payhip isn't
+checked, because Hoard doesn't download from it.
+
 ## Resuming
 
 A download that stops partway leaves a `.part` file, and the next download picks up where it ended. Hoard only
