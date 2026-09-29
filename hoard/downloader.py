@@ -590,6 +590,19 @@ def jinxxy_require_login(page) -> None:
         raise NotLoggedIn("Not signed in to Jinxxy")
 
 
+def jinxxy_link(u) -> bool:
+    """Is this parsed link on Jinxxy itself: https, on jinxxy.com or one of its subdomains, with no user name,
+    password or unusual port? (Not "jinxxy.com" anywhere in the address: notjinxxy.com, jinxxy.com.example.net and
+    example.net/?jinxxy.com aren't Jinxxy.)"""
+    try:
+        port = u.port
+    except ValueError:
+        return False
+    host = (u.hostname or "").lower()
+    return (u.scheme == "https" and port in (None, 443) and u.username is None and u.password is None
+            and (host == "jinxxy.com" or host.endswith(".jinxxy.com")))
+
+
 def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
     """Scroll / click 'load more' until this page stops growing. Returns numbered-page links seen."""
     page_links: list[str] = []
@@ -598,7 +611,7 @@ def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
         before = len(found)
         for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
             u = urlparse(href)
-            if not u.netloc.endswith("jinxxy.com"):
+            if not jinxxy_link(u):
                 continue
             path = u.path.rstrip("/")
             if path == inv_path and re.search(r"(^|&)page=\d+", u.query):

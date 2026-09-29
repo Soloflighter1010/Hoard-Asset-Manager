@@ -731,10 +731,9 @@ def _prepare_import(cfg: dict, store: str | None, filename: str, text: str, trus
     if store not in IMPORTABLE:
         raise ValueError(f"{STORES[store]['label']} doesn't need importing; its refresh reads everything")
     base = source_url or IMPORT_BASES[store]
-    page_html = re.sub(r"<script\b[^>]*>.*?</script>", "", page_html, flags=re.S | re.I)  # don't run the saved page
-    head = re.search(r"<head[^>]*>", page_html, re.I)
-    base_tag = f'<base href="{html.escape(base, quote=True)}">'
-    page_html = page_html[:head.end()] + base_tag + page_html[head.end():] if head else base_tag + page_html
+    # inert_html removes every script (and every <base>) from the saved page. The readers get the page's address
+    # as prep["base"]; a <base> tag here would be removed by inert_html along with any the page brought, so none
+    # is added (earlier versions added one that was then always removed).
     return {"store": store, "html": inert_html(page_html), "base": base, "shop_page": shop_page, "images": images}
 
 

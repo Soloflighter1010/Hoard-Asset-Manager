@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import gzip
 import json
-import mimetypes
 import secrets
 import sys
 import threading
@@ -24,13 +23,13 @@ from . import __version__, diagnostics, itch, updater, vault
 from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog, reseal_catalog
-from .downloads import IMAGE_EXT, build_index, library_status, reveal, with_tags
+from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import SYNC_CHOICES, Jobs, Schedule
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
-from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, content_security_policy, network_tls,
-                     open_under, safe_join, store_sites, UnsafePath)
+from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
+                     header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status
@@ -55,8 +54,13 @@ MAX_IMPORT_FILES = 50   # saved pages in one request; the page sends more as sev
 
 
 def font_path(name: str) -> Path | None:
-    """One of the bundled font files, or None."""
-    return WEB / "fonts" / name if name in FONT_FILES and (WEB / "fonts" / name).is_file() else None
+    """One of the bundled font files, or None. The path is built from Hoard's own list of names, never from the
+    name asked for, so no request can name any other file."""
+    for known in FONT_FILES:
+        if known == name:
+            path = WEB / "fonts" / known
+            return path if path.is_file() else None
+    return None
 
 
 def display_settings(cfg: dict) -> dict:
@@ -151,6 +155,9 @@ def apply_settings(cfg: dict, body: dict) -> dict:
 
 
 MAX_SERVED_IMAGE = 30 * 1024 * 1024
+# The type each image in the downloads folder is served as: from this fixed list, never worked out from the request
+SERVED_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+                      ".gif": "image/gif"}
 MAX_CONNECTIONS = 64      # at once; more are closed straight away, so held-open connections can't pile up
 
 
@@ -286,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send(self, status, body: bytes, ctype: str, headers: dict | None = None):
         """Send a reply with the security headers; pages get their own policy, everything else is sandboxed."""
+        ctype = header_safe(ctype)   # every header is checked for line breaks before anything is sent
+        extra = [(header_safe(k), header_safe(v)) for k, v in (headers or {}).items()]
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -295,7 +304,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Security-Policy", content_security_policy(body))
         else:
             self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
-        for k, v in (headers or {}).items():
+        for k, v in extra:
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -398,17 +407,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
         if path.startswith("/files/"):
-            rel = unquote(path[len("/files/"):])
-            if Path(rel).suffix.lower() not in IMAGE_EXT or not safe_join(root_dir(srv.cfg), rel):
+            root = root_dir(srv.cfg)
+            rel = contained_rel(root, unquote(path[len("/files/"):]))   # plain, and inside the downloads folder
+            ctype = SERVED_IMAGE_TYPES.get(Path(rel).suffix.lower()) if rel else None
+            if not rel or not ctype or not safe_join(root, rel):   # safe_join: no link out of the folder either
                 return self._send(404, b"Not found", "text/plain")
             try:   # opened without following any link below the downloads folder; what's served is what was opened
-                with open_under(root_dir(srv.cfg), rel) as fh:
+                with open_under(root, rel) as fh:
                     data = fh.read(MAX_SERVED_IMAGE + 1)
             except (UnsafePath, OSError):
                 return self._send(404, b"Not found", "text/plain")
             if len(data) > MAX_SERVED_IMAGE:
                 return self._send(404, b"Not found", "text/plain")
-            ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"
             return self._send(200, data, ctype, {"Cache-Control": "max-age=3600"})
         self._send(404, b"Not found", "text/plain")
 

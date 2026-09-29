@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Security: the September 2026 code-scanning findings.** Nothing here is known to have been exploitable (the
+  server already needed this run's access key, and imported pages were already opened with scripts off), but each
+  guard is now one CodeQL can follow, with tests for each:
+  - Imported store pages are cleaned with an HTML parser instead of patterns, so no way of writing a script tag
+    (`<SCRIPT>`, `</script >`, a tag split over lines) or an event handler slips through, and `<style>` inside SVG
+    can't carry markup.
+  - The page scripts' Content-Security-Policy hashes are found the same way, however the tags are written.
+  - Images from the downloads folder are served from a path rebuilt from a checked path inside the folder, with a
+    type from a fixed list; fonts from Hoard's own list of names.
+  - No response header can carry a line break.
+  - Jinxxy links are recognised by their host (`jinxxy.com` or a subdomain, over https), not by the text
+    "jinxxy.com" somewhere in the address.
+  - Support reports hide asset and creator names without patterns that could take very long on an unusual line.
+
 ## 2.8.4
 
 - **Local support reports.** Settings, store errors and failed downloads can now create a sanitized support ZIP without using the command line. The report is built locally, keeps raw diagnostics and tracebacks private, replaces local paths, credentials, tokens, purchase names and creator names with placeholders, and is never uploaded automatically.

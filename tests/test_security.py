@@ -164,7 +164,7 @@ class Pages(unittest.TestCase):
     def test_every_request_carries_the_key(self):
         """S-01: the pages reach Hoard's server only through api() (the key in a header) and keyed() (images)."""
         for page in PAGES:
-            script = re.search(r"<script>(.*?)</script>", page.read_text("utf-8"), re.S).group(1)
+            script = safety.inline_scripts(page.read_bytes())[0].decode("utf-8")
             self.assertEqual(len(re.findall(r"\bfetch\(", script)), 2, f"{page.name}: api() and the one-time link only")
             self.assertIn(f'"{safety.ACCESS_HEADER}": ACCESS.key', script, page.name)
             self.assertNotRegex(script, r"""src=["'`]/(thumb|files)/""", f"{page.name}: an image without the key")
@@ -172,9 +172,13 @@ class Pages(unittest.TestCase):
     def test_pages_have_no_inline_handlers_or_outside_resources(self):
         for page in PAGES:
             html = page.read_text("utf-8")
-            markup = re.sub(r"<script>.*?</script>", "", html, flags=re.S)
+            scripts = safety.inline_scripts(page.read_bytes())
+            markup = html
+            for script in scripts:   # the markup around the one script
+                markup = markup.replace(script.decode("utf-8"), "", 1)
             self.assertNotRegex(markup, r"\son[a-z]+=", f"{page.name}: inline event handler")
-            self.assertEqual(len(re.findall(r"<script\b", html)), 1, page.name)
+            self.assertEqual(len(scripts), 1, page.name)
+            self.assertEqual(len(re.findall(r"(?i)<script\b", html)), 1, page.name)
             self.assertNotRegex(html, r'<(link|script)[^>]+(href|src)="https?://', f"{page.name} loads something from outside")
 
     def test_server_headers(self):
@@ -950,7 +954,7 @@ class _Hops(http.server.BaseHTTPRequestHandler):
         type(self).seen.append((self.server.server_port, self.path, self.headers.get("Cookie")))
         if self.path.startswith("/go?to="):
             self.send_response(302)
-            self.send_header("Location", urllib.parse.unquote(self.path[len("/go?to="):]))
+            self.send_header("Location", safety.header_safe(urllib.parse.unquote(self.path[len("/go?to="):])))
             self.end_headers()
         else:
             self.send_response(200)
@@ -1192,6 +1196,7 @@ class EgressOverHTTPS(unittest.TestCase):
         cls.cert = str(data / "localhost-cert.pem")
         srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Hops)
         tls = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        tls.minimum_version = ssl.TLSVersion.TLSv1_2   # the stand-in store is held to what Hoard itself accepts
         tls.load_cert_chain(cls.cert, str(data / "localhost-key.pem"))
         srv.socket = tls.wrap_socket(srv.socket, server_side=True)
         srv.daemon_threads = True
@@ -1379,6 +1384,128 @@ class ScriptHashLineEndings(unittest.TestCase):
         for ending in ("\n", "\r\n", "\r"):
             page = ("<html><body><script>" + script.replace("\n", ending) + "</script></body></html>").encode()
             self.assertIn(want, safety.content_security_policy(page), repr(ending))
+
+
+class CodeScanningFindings(unittest.TestCase):
+    """The CodeQL findings of September 2026 (code-scanning alerts 1-22): each test names the alerts it guards."""
+
+    def test_inline_scripts_are_found_however_the_tags_are_written(self):
+        """Alerts 9, 11, 12: the page scripts' hashes don't depend on one way of writing <script>."""
+        cases = {b"<script>a</script>": [b"a"], b"<SCRIPT>b</SCRIPT >": [b"b"], b"<script type=x>c</script\n>": [b"c"],
+                 b"<script>d</script\t\n bar>": [b"d"], b"<scripts>no</scripts>": [], b"<script>e</scriptx></script>": [b"e</scriptx>"],
+                 b"<script>unclosed": [b"unclosed"]}
+        for page, want in cases.items():
+            self.assertEqual(safety.inline_scripts(page), want, page)
+
+    def test_imported_pages_lose_everything_that_runs(self):
+        """Alerts 8, 10, 13, 14: imported pages are read with an HTML parser, not patterns."""
+        hostile = [
+            "<SCRIPT>ran()</SCRIPT >", "<script>ran()</script\t\n bar>", "<ScRiPt src=x></sCrIpT>",
+            "<img src=x onerror=ran()>", "<IMG SRC=x ONLOAD='ran()'>", '<a href=" jav&#x09;ascript:ran()">x</a>',
+            '<a href="JaVaScRiPt:ran()">x</a>', "<iframe srcdoc='<script>ran()</script>'></iframe>",
+            '<meta http-equiv="refresh" content="0;url=javascript:ran()">', '<base href="javascript:ran()//">',
+            "<svg><style><img src=x onerror=ran()></style></svg>", "<object data=x><param>ran()</object>",
+            '<svg><set attributeName="onclick" to="ran()"/><animate attributeName="href" values="javascript:ran()"/></svg>',
+            "<embed src=x>", "<!-- <script>ran()</script> -->",
+        ]
+        from html.parser import HTMLParser
+
+        class Tags(HTMLParser):   # every tag and attribute in the cleaned page, as a browser would read them
+            def __init__(self):
+                super().__init__()
+                self.seen = []
+
+            def handle_starttag(self, tag, attrs):
+                self.seen.append((tag, dict(attrs)))
+
+            handle_startendtag = handle_starttag
+
+        for page in hostile:
+            clean = safety.inert_html(f"<html><head></head><body><p>kept</p>{page}</body></html>")
+            self.assertIn("<p>kept</p>", clean, page)
+            self.assertNotIn("javascript:", clean.lower(), page)
+            reader = Tags()
+            reader.feed(clean.replace("<style>", "<div>").replace("</style>", "</div>"))   # style read as markup too (SVG)
+            for tag, attrs in reader.seen:
+                self.assertNotIn(tag, ("script", "iframe", "object", "embed", "base"), page)
+                self.assertFalse(tag == "meta" and "http-equiv" in attrs, page)
+                self.assertFalse([a for a in attrs if a.startswith("on") or a == "srcdoc"], page)
+                self.assertFalse(str(attrs.get("attributename", "")).lower().startswith("on"), page)
+
+    def test_imported_pages_keep_what_is_read(self):
+        """The readers still see the page's cards, links, text and attributes as they were."""
+        page = ('<!DOCTYPE html><html><head><title>A &amp; B</title><style>a>b{color:red}</style></head><body>'
+                '<div class="card" data-id="7"><a href="https://booth.pm/items/7">Paw &lt;Suit&gt; &#9829;</a>'
+                "<img src='https://booth.pximg.net/x.png' alt='\"q\"'><br/></div></body></html>")
+        clean = safety.inert_html(page)
+        for kept in ('<!DOCTYPE html>', '<title>A &amp; B</title>', "<style>a>b{color:red}</style>",
+                     '<div class="card" data-id="7">', '<a href="https://booth.pm/items/7">Paw &lt;Suit&gt; &#9829;</a>',
+                     '<img src="https://booth.pximg.net/x.png" alt="&quot;q&quot;">', "<br />"):
+            self.assertIn(kept, clean)
+
+    def test_a_long_line_in_a_support_report_is_quick(self):
+        """Alerts 21, 22: hiding asset names in logs takes the same short time on any line."""
+        from hoard import diagnostics
+        started = time.monotonic()
+        for line in ("[Booth] " + " " * 50000 + "x", "saved: " + " " * 50000 + "x", "[Booth] a" + " " * 50000 + "/",
+                     "[Gumroad] " + "/" * 50000):
+            diagnostics._anon_assets(line)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(diagnostics._anon_assets("[Booth] Maker  /  Paw Suit  \n  saved:  Paw Suit\nfailed: [x]"),
+                         "[Booth] <CREATOR_001> / <ASSET_001>\n  saved:  <ASSET_001>\nfailed: [x]")
+
+    def test_jinxxy_links_are_checked_by_host(self):
+        """Alert 16: "jinxxy.com" somewhere in an address doesn't make it Jinxxy's."""
+        from urllib.parse import urlparse
+        for good in ("https://jinxxy.com/my/inventory?page=2", "https://www.jinxxy.com/x", "https://JINXXY.com:443/x"):
+            self.assertTrue(downloader.jinxxy_link(urlparse(good)), good)
+        for bad in ("https://notjinxxy.com/x", "https://jinxxy.com.example.net/x", "https://example.net/?u=jinxxy.com",
+                    "http://jinxxy.com/x", "https://user@jinxxy.com/x", "https://jinxxy.com:8443/x",
+                    "https://jinxxy.com:bad/x", "javascript://jinxxy.com/%0aran()"):
+            self.assertFalse(downloader.jinxxy_link(urlparse(bad)), bad)
+
+    def test_headers_cant_carry_a_line_break(self):
+        """Alerts 17-20: no header Hoard sends (or its tests' stand-in servers send) can start another."""
+        self.assertEqual(safety.header_safe("image/png"), "image/png")
+        for bad in ("a\r\nSet-Cookie: x=1", "a\nb", "a\rb", "a\x00b"):
+            with self.assertRaises(ValueError):
+                safety.header_safe(bad)
+
+    def test_paths_from_requests_stay_inside(self):
+        """Alerts 2-7: a path in a request is rebuilt from a checked path inside its folder, or refused."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(safety.contained_rel(root, "Booth/Maker/a.png"), "Booth/Maker/a.png")
+            for bad in ("../a.png", "a/../../b.png", "/etc/passwd", "C:/x.png", "a\\..\\b.png", "", "a//b.png", " a.png"):
+                self.assertIsNone(safety.contained_rel(root, bad), bad)
+        self.assertIsNone(server.font_path("../library.html"))
+        self.assertIsNone(server.font_path("x.woff2"))
+        self.assertIsNotNone(server.font_path(server.FONT_FILES[0]))
+        from hoard.downloads import IMAGE_EXT
+        self.assertEqual(set(server.SERVED_IMAGE_TYPES), IMAGE_EXT, "every image the Downloads page shows has a type")
+
+    def test_files_are_served_with_their_fixed_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "a.webp").write_bytes(b"RIFF0000WEBP")
+            Path(tmp, "b.txt").write_bytes(b"text")
+            srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp}, lan=False)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                def get(path):
+                    c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=10)
+                    c.request("GET", path + f"?k={srv.key}")
+                    r = c.getresponse()
+                    r.read()
+                    c.close()
+                    return r
+                got = get("/files/a.webp")
+                self.assertEqual((got.status, got.getheader("Content-Type")), (200, "image/webp"))
+                for bad in ("/files/b.txt", "/files/..%2Fa.webp", "/files/%2e%2e/a.webp", "/files/a.webp%0d%0aX-Bad:%201",
+                            "/fonts/..%2Flibrary.html"):
+                    self.assertEqual(get(bad).status, 404, bad)
+            finally:
+                srv.shutdown()
+                srv.server_close()
 
 
 if __name__ == "__main__":
