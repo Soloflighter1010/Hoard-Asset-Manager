@@ -6,7 +6,6 @@ import threading
 import time
 
 from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
-from .browser import old_signins_waiting, profile_dir
 from .safety import store_link
 from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
@@ -15,6 +14,7 @@ from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
 from .paths import data_dir
+from .browser import old_signins_waiting, profile_dir   # (issue #31)
 from .safety import DataFileError, read_json_file, write_file_safely
 
 
