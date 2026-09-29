@@ -1849,7 +1849,7 @@ function wireApp() {
 }
 
 /* ---------- the setup assistant: on first start, and from Settings (Set up Hoard) */
-const SETUP = { step: 0, st: null, timer: null, busy: false };
+const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false };
 const setupSteps = () => ["welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
 async function setupStatus() {
@@ -1863,7 +1863,12 @@ async function openSetup() {
   $("#setup").hidden = false;
   renderSetup();
 }
-function closeSetup() { $("#setup").hidden = true; clearTimeout(SETUP.timer); }
+function closeSetup() {
+  $("#setup").hidden = true; clearTimeout(SETUP.timer);
+  // A sign-in or browser install the assistant started keeps going once it's closed: the library page follows it
+  // from here, so what it reads still shows up (in 2.8.4 nothing watched it any more, and the counts stayed 0).
+  if (SETUP.watching) { SETUP.watching = false; startPolling(); }
+}
 
 const PASSWORD_HELP = `<details><summary>Where are my saved passwords?</summary>
   <p class="muted">Hoard's window is its own browser, so it doesn't have the passwords your usual browser saved. Copy yours from there:</p>
@@ -1927,11 +1932,12 @@ const SETUP_VIEWS = {
 
 function pollSetup(onDone, show) {
   clearTimeout(SETUP.timer);
+  SETUP.watching = true;
   SETUP.timer = setTimeout(async () => {
     let st;
     try { st = await setupStatus(); } catch (e) { return pollSetup(onDone, show); }
     if (st.job && st.job.running) { show(st.job); pollSetup(onDone, show); }
-    else onDone(st);
+    else { SETUP.watching = false; onDone(st); }
   }, 1000);
 }
 const SETUP_WIRES = {

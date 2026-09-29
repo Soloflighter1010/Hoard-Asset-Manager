@@ -277,8 +277,13 @@ def signin_protection(cfg: dict) -> str:
     return "not saved, because this computer has no keyring to protect them"
 
 
+class CookiesInUse(Exception):
+    """A browser has the profile open, and on Windows it keeps its cookie database to itself until it closes."""
+
+
 def _cookie_rows(profile: Path, query: str) -> list:
-    """Run a read-only query on a profile's cookie database (a copy, so a running browser isn't disturbed)."""
+    """Run a read-only query on a profile's cookie database (a copy, so a running browser isn't disturbed).
+    Raises CookiesInUse while a browser on Windows has the database open: it can't even be read then."""
     import sqlite3
     import tempfile
     for rel in ("Default/Network/Cookies", "Default/Cookies"):
@@ -286,7 +291,10 @@ def _cookie_rows(profile: Path, query: str) -> list:
         if db.is_file():
             with tempfile.TemporaryDirectory() as tmp:
                 copy = Path(tmp) / "Cookies"
-                shutil.copyfile(db, copy)
+                try:
+                    shutil.copyfile(db, copy)
+                except PermissionError as e:   # Windows: the browser opened it without letting others read it
+                    raise CookiesInUse(str(e)) from None
                 con = sqlite3.connect(f"file:{copy}?mode=ro", uri=True)
                 try:
                     return con.execute(query).fetchall()
@@ -525,7 +533,10 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
     lock = ProfileLock(target)
     lock.acquire()
     try:
-        count = (_cookie_rows(target, "SELECT COUNT(*) FROM cookies") or [(0,)])[0][0]
+        try:
+            count = (_cookie_rows(target, "SELECT COUNT(*) FROM cookies") or [(0,)])[0][0]
+        except CookiesInUse:   # a browser still has it open; deleting the folder below says so if it can't
+            count = None
         remote = _end_store_session(p, cfg, target, store) if online else None
         _remove_tree(target)
     finally:
@@ -535,14 +546,19 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
     # no other store's folder should hold this store's cookies; if one somehow does, clear them there too
     for other in STORE_SITES:
         other_dir = profile_dir(cfg, other)
-        if other != store and other_dir.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(other_dir)):
+        try:
+            theirs = other != store and other_dir.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(other_dir))
+        except CookiesInUse:   # in use by a browser: it's open for that store, so its cookies are that store's
+            theirs = False
+        if theirs:
             ctx = launch_context(p, cfg, True, other)
             try:
                 for site in STORE_SITES[store]:
                     ctx.clear_cookies(domain=re.compile(rf"(^|\.){re.escape(site)}$"))
             finally:
                 ctx.close()
-    said = f"{label}: deleted the saved sign-in ({count} {'cookie' if count == 1 else 'cookies'}, plus the store's site data)."
+    said = (f"{label}: deleted the saved sign-in ({count} {'cookie' if count == 1 else 'cookies'}, plus the store's site data)."
+            if count is not None else f"{label}: deleted the saved sign-in and the store's site data.")
     if remote:
         return said + f" {label} also confirmed you're signed out."
     if remote is None:

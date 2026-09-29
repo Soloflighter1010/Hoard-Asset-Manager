@@ -441,3 +441,54 @@ class HighlightsAndAccessibility(unittest.TestCase):
         self.assertFalse(page.evaluate("document.body.classList.contains('less-motion')"))
         self.assertEqual(self.srv.cfg["display"], {"text_size": 100, "pause_animations": False, "reduce_motion": False})
         page.close()
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class SetupAssistant(unittest.TestCase):
+    """Issue #34: a sign-in started from the setup assistant keeps going if the assistant is closed, and the
+    library page has to pick it up; before, nothing watched it any more and the item counts stayed at 0."""
+
+    def test_closing_the_assistant_during_a_sign_in(self):
+        import time
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": False},
+                               lan=False)
+        done = threading.Event()
+
+        def sign_in(task, stores, **_kw):   # stands in for the sign-in window and the reading after it
+            def run():
+                srv.jobs.state.update(running=True, task="login", store=stores[0], message="Waiting for you to sign in")
+                done.wait(20)
+                srv.lib.replace_store(stores[0], [library.item(stores[0], f"k{i}", name=f"Thing {i}", creator="Kitsu")
+                                                  for i in range(4)])
+                srv.jobs.state.update(running=False, task=None, message="Library updated")
+            threading.Thread(target=run, daemon=True).start()
+            return True
+
+        with srv.lib.lock:   # a first start: nothing in the library yet, so the assistant opens by itself
+            srv.lib.data["items"], srv.lib.data["stores"] = [], {}
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with sync_playwright() as p, mock.patch.object(srv.jobs, "start", side_effect=sign_in), \
+                mock.patch.object(srv.lib, "save"):   # in memory only, as elsewhere here
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(srv.entry_url())
+            page.locator("#setup:not([hidden])").wait_for()
+            for _ in range(8):
+                if page.locator('#setupBody [data-signin="gumroad"]').count():
+                    break
+                page.click("#setupNext")
+                page.wait_for_timeout(200)
+            page.click('#setupBody [data-signin="gumroad"]')
+            page.wait_for_function("() => /sign in/i.test(document.querySelector('#signinProgress').textContent)")
+            page.keyboard.press("Escape")   # closed while the sign-in is still going
+            self.assertTrue(page.locator("#setup").is_hidden())
+            time.sleep(1.5)
+            done.set()
+            page.locator("#storeSeg", has_text="Gumroad").wait_for(timeout=10000)
+            self.assertIn("4", page.locator('#storeSeg [data-store="gumroad"]').inner_text())
+            self.assertEqual(page.locator(".slot").count(), 4)
+            browser.close()
