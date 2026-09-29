@@ -86,6 +86,51 @@ class Sanitizing(unittest.TestCase):
         forbidden = {"config.json", "library.json", "integrity.key", "running.json", "cookies.sqlite"}
         self.assertTrue(names.isdisjoint(forbidden))
 
+    def test_what_the_first_real_reports_let_through(self):
+        """Found in support reports from 2.8.4 (the names here are made up): a Windows user name inside a path
+        written with doubled backslashes, as Python writes one in an error message, and downloaded file names at
+        the start of progress bars. Both are now hidden, and the log uses the same placeholders as the report."""
+        log = (diagnostics.data_dir() / "logs" / "hoard.log")
+        log.write_text(
+            "PermissionError: [Errno 13] Permission denied: "
+            "'C:\\\\Users\\\\kitsune\\\\AppData\\\\Local\\\\Hoard\\\\sign-ins\\\\gumroad\\\\Default\\\\Network\\\\Cookies'\n"
+            "FileNotFoundError: 'C:\\\\\\\\Users\\\\\\\\kitsune\\\\\\\\Downloads'\n"
+            "Mochi Deluxe Hair.unitypackage:  82%|########2 | 1.00M/1.22M [00:00<00:00, 3.45MB/s]\n"
+            "Rusk_Licenses.pdf: 100%|##########| 198k/198k [00:00<00:00, 1.01MB/s]\n"
+            "[Jinxxy] Secret Creator / My Private Asset\n"
+            "    downloading: Rusk_Licenses.pdf\n"
+            "    saved: Mochi Deluxe Hair.unitypackage\n"
+            "Tagged 4 assets with 0 suggested tags. Top: -\n", encoding="utf-8")
+        lib = library.Library(Path(self.tmp.name) / "library.json")
+        with lib.lock:
+            lib.data["items"] = [library.item("jinxxy", "111", name="My Private Asset", creator="Secret Creator", thumbnail=None)]
+        result = diagnostics.create_support_report(self.cfg, lib, job={"store": "jinxxy", "running": True,
+                                                                       "message": "[Jinxxy] Secret Creator / My Private Asset"})
+        with zipfile.ZipFile(result["path"]) as archive:
+            files = {n: archive.read(n).decode("utf-8") for n in archive.namelist()}
+        everything = "\n".join(files.values())
+        for private in ("kitsune", "Mochi Deluxe Hair", "Rusk_Licenses", "Secret Creator", "My Private Asset"):
+            self.assertNotIn(private, everything)
+        app_log = files["application-log.txt"]
+        self.assertIn("<WINDOWS_USER>", app_log)
+        self.assertIn("82%|", app_log, "the progress itself is kept")
+        self.assertIn("Tagged 4 assets", app_log, "and ordinary lines are left alone")
+        bar_name = app_log.splitlines()[2].split(":")[0]
+        self.assertIn(f"saved: {bar_name}", app_log, "a file's progress bar and its saved: line share a placeholder")
+        store_line = next(line for line in app_log.splitlines() if line.startswith("[Jinxxy]"))
+        self.assertIn(store_line, files["report.txt"], "the log names the item as the report does")
+
+    def test_the_webview_is_reported_when_its_there(self):
+        """pywebview has no __version__, so every 2.8.4 report said "WebView: not installed" beside a check that
+        found it."""
+        fake = type(sys)("webview")
+        with mock.patch.dict(sys.modules, {"webview": fake}):
+            env = diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg))
+        self.assertTrue(env["webview"])
+        with mock.patch.dict(sys.modules, {"webview": None}):
+            env = diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg))
+        self.assertIsNone(env["webview"])
+
 
 class ServerExposure(unittest.TestCase):
     def test_default_export_folder_is_user_visible(self):
