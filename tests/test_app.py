@@ -747,6 +747,32 @@ class SetupAssistant(unittest.TestCase):
         con.commit(); con.close()
         self.assertTrue(setup.signed_in(cfg, "booth"))
 
+    def test_status_while_a_browser_has_the_sign_in_open(self):
+        """Issue #34: on Windows, a browser keeps its cookie database to itself while it's open (signing in, or
+        reading the store), so copying it fails with PermissionError. That took /api/setup down with it every
+        second of a sign-in. Now the last answer stands until the browser closes."""
+        from unittest import mock
+        from hoard import browser, setup
+        cfg = {**config.load_config(), "advanced_signin_location": True, "profile_dir": tempfile.mkdtemp()}
+        db = browser.profile_dir(cfg, "gumroad") / "Default" / "Network" / "Cookies"
+        db.parent.mkdir(parents=True)
+        import sqlite3
+        con = sqlite3.connect(db)
+        con.execute("CREATE TABLE cookies (host_key TEXT, encrypted_value BLOB, value TEXT)")
+        con.execute("INSERT INTO cookies VALUES ('.gumroad.com', x'7631', '')")
+        con.commit(); con.close()
+        setup._last_signed_in.pop("gumroad", None)
+        denied = PermissionError(13, "Permission denied", str(db))
+        with mock.patch.object(browser.shutil, "copyfile", side_effect=denied):
+            with self.assertRaises(browser.CookiesInUse):
+                browser._cookie_hosts(browser.profile_dir(cfg, "gumroad"))
+            self.assertFalse(setup.signed_in(cfg, "gumroad"), "no answer yet: not signed in")
+            st = setup.setup_status(cfg)   # no exception: the assistant gets its answer
+            self.assertFalse(st["stores"]["gumroad"]["signed_in"])
+        self.assertTrue(setup.signed_in(cfg, "gumroad"))
+        with mock.patch.object(browser.shutil, "copyfile", side_effect=denied):
+            self.assertTrue(setup.signed_in(cfg, "gumroad"), "the last answer stands while the browser is open")
+
     def test_endpoints(self):
         srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
         threading.Thread(target=srv.serve_forever, daemon=True).start()

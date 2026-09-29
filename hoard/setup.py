@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .browser import _cookie_hosts, _on_sites, _playwright, channel_installed, chosen_channel, profile_dir, use_browsers_folder, STORE_SITES
+from .browser import CookiesInUse, _cookie_hosts, _on_sites, _playwright, channel_installed, chosen_channel, profile_dir, use_browsers_folder, STORE_SITES
 from .config import payhip_shops, root_dir, save_config
 from .library import STORES, Library
 from .paths import LIBRARY_FILE, default_downloads
@@ -79,14 +79,26 @@ def browser_problem(error: BaseException) -> str | None:
     return None
 
 
+_last_signed_in: dict[str, bool] = {}   # each store's last answer, for while its browser is open
+
+
 def signed_in(cfg: dict, store: str) -> bool:
     """Does Hoard hold a sign-in for this store? (Cookies for the store's site in its profile; whether the store
-    still accepts them is only known when Hoard next reads the store.)"""
+    still accepts them is only known when Hoard next reads the store.)
+
+    While a browser has the store's profile open (signing in, or reading the store), Windows won't let its
+    cookies be read, so the last answer stands until the browser closes. (In 2.8.4 the question failed then,
+    and the setup assistant and anything else asking it went without an answer.)"""
     if store == "itch":   # an API key, not a browser sign-in
         from .vault import load_key
         return load_key(cfg, "itch") is not None
     profile = profile_dir(cfg, store)
-    return profile.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(profile))
+    try:
+        answer = profile.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(profile))
+    except CookiesInUse:
+        return _last_signed_in.get(store, False)
+    _last_signed_in[store] = answer
+    return answer
 
 
 def setup_status(cfg: dict) -> dict:
