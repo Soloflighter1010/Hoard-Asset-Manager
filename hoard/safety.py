@@ -560,11 +560,22 @@ def rel_to_path(base: Path, rel: str) -> Path:
 # O_EXCL, and folder handles), and on Windows, where os.open can't refuse links, confirm afterwards where the open
 # file really is (GetFinalPathNameByHandle) and refuse it if that isn't the expected place.
 
-_REPARSE = 0x400   # FILE_ATTRIBUTE_REPARSE_POINT: Windows links and junctions
+_REPARSE = 0x400               # FILE_ATTRIBUTE_REPARSE_POINT: links and junctions, but cloud files too (below)
+_NAME_SURROGATE = 0x20000000   # a reparse tag with this bit stands for another file or folder (IsReparseTagNameSurrogate)
 
 
 def _is_link(st: os.stat_result) -> bool:
-    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & _REPARSE)
+    """A link: a symlink, or on Windows a reparse point that stands for somewhere else (a symlink, a junction, a
+    mount point). Windows marks other files as reparse points too, and those hold their own data: OneDrive's
+    (and other sync apps') cloud files, IO_REPARSE_TAG_CLOUD_*, and deduplicated files. Treating those as links
+    refused every browser download into a OneDrive folder, whose files OneDrive marks as it syncs them (issue #32).
+    A reparse point whose tag can't be read is still taken as a link."""
+    if stat.S_ISLNK(st.st_mode):
+        return True
+    if not getattr(st, "st_file_attributes", 0) & _REPARSE:
+        return False
+    tag = getattr(st, "st_reparse_tag", 0)
+    return not tag or bool(tag & _NAME_SURROGATE)
 
 
 def _final_path(fd: int) -> str | None:
@@ -831,9 +842,23 @@ def save_browser_download(dl, folder: Path, fname: str) -> Path:
         move_into_place(staged, folder / fname, (here.st_dev, here.st_ino))
         return folder / fname
     finally:
-        for leftover in private.glob("*"):
-            leftover.unlink(missing_ok=True)
-        private.rmdir()
+        _remove_staging(private)
+
+
+def _remove_staging(private: Path) -> None:
+    """Remove a download's private staging folder. A sync app such as OneDrive can hold a new folder open for a
+    moment, and a folder that stays behind is harmless (the next download makes a new one), so that's no reason
+    to call a finished download failed."""
+    for attempt in range(10):
+        try:
+            for leftover in private.glob("*"):
+                leftover.unlink(missing_ok=True)
+            private.rmdir()
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            time.sleep(0.2)
 
 
 def no_link(path: Path) -> Path:

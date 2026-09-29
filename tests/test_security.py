@@ -1298,6 +1298,110 @@ class FileRaces(unittest.TestCase):
                 safety.open_under(self.dir, rel).close()
 
 
+class CloudFolders(unittest.TestCase):
+    """Issue #32: downloads into a OneDrive folder. Windows marks OneDrive's files (and other sync apps' and
+    deduplicated ones) as reparse points, like links, but they hold their own data. Only a reparse point that
+    stands for somewhere else (a symlink, junction or mount point) is a link."""
+
+    CLOUD = 0x9000001A        # IO_REPARSE_TAG_CLOUD (OneDrive Files On-Demand uses CLOUD_1 to CLOUD_F too)
+    SYMLINK = 0xA000000C      # IO_REPARSE_TAG_SYMLINK
+    JUNCTION = 0xA0000003     # IO_REPARSE_TAG_MOUNT_POINT
+    DEDUP = 0x80000013        # IO_REPARSE_TAG_DEDUP
+
+    class Stat:
+        """A Windows stat result: a real one, with Windows' file attributes and reparse tag laid over it."""
+        def __init__(self, real, attributes=0, tag=0):
+            self._real, self.st_file_attributes, self.st_reparse_tag = real, attributes, tag
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    def windows_stat(self, attributes, tag=0):
+        real = os.stat(__file__)
+        return self.Stat(real, attributes, tag)
+
+    def test_what_counts_as_a_link(self):
+        cases = {(0, 0): False, (0x20, 0): False,                                  # plain files
+                 (0x400 | 0x20, self.CLOUD): False, (0x400 | 0x20 | 0x400000, self.CLOUD | 0x3000): False,
+                 (0x400, self.DEDUP): False,
+                 (0x400, self.SYMLINK): True, (0x400 | 0x10, self.JUNCTION): True,
+                 (0x400, 0): True}                                                 # a tag that couldn't be read
+        for (attributes, tag), link in cases.items():
+            with self.subTest(attributes=hex(attributes), tag=hex(tag)):
+                self.assertIs(safety._is_link(self.windows_stat(attributes, tag)), link)
+
+    def _cloudy_stat(self, folder):
+        """os.stat, with every file under folder showing up as a OneDrive file, as it does once OneDrive syncs it."""
+        real_stat = os.stat
+
+        def fake(path, *args, **kwargs):
+            st = real_stat(path, *args, **kwargs)
+            inside = str(folder) in str(path)
+            return self.Stat(st, 0x400 | 0x20, self.CLOUD) if inside and stat.S_ISREG(st.st_mode) else st
+        return fake
+
+    def test_a_browser_download_into_onedrive(self):
+        folder = Path(tempfile.mkdtemp()) / "OneDrive" / "Hoard" / "Jinxxy" / "Creator" / "Item"
+
+        class Download:
+            def save_as(self, path):
+                Path(path).write_bytes(b"unitypackage")
+
+            def failure(self):
+                return None
+
+        with mock.patch.object(safety.os, "stat", self._cloudy_stat(folder.parent.parent.parent)):
+            saved = safety.save_browser_download(Download(), folder, "Item.unitypackage")
+        self.assertEqual(saved.read_bytes(), b"unitypackage")
+        self.assertEqual([p.name for p in folder.iterdir()], ["Item.unitypackage"], "and the staging folder is gone")
+
+    def test_a_staging_folder_held_open_for_a_moment(self):
+        folder = Path(tempfile.mkdtemp())
+
+        class Download:
+            def save_as(self, path):
+                Path(path).write_bytes(b"zip")
+
+            def failure(self):
+                return None
+
+        real_rmdir, calls = Path.rmdir, []
+
+        def busy_once(path):
+            calls.append(path)
+            if len(calls) == 1:
+                raise PermissionError(13, "The process cannot access the file", str(path))
+            real_rmdir(path)
+
+        with mock.patch.object(Path, "rmdir", busy_once), mock.patch.object(safety.time, "sleep"):
+            saved = safety.save_browser_download(Download(), folder, "file.zip")
+        self.assertEqual(saved.read_bytes(), b"zip")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([p.name for p in folder.iterdir()], ["file.zip"])
+
+        with mock.patch.object(Path, "rmdir", side_effect=PermissionError(13, "held")), \
+                mock.patch.object(safety.time, "sleep"):
+            saved = safety.save_browser_download(Download(), folder, "other.zip")   # still saved, folder left behind
+        self.assertEqual(saved.read_bytes(), b"zip")
+
+    def test_a_real_link_is_still_refused(self):
+        folder = Path(tempfile.mkdtemp())
+        outside = Path(tempfile.mkdtemp()) / "victim.txt"
+        outside.write_text("keep me")
+
+        class Download:
+            def save_as(self, path):
+                Path(path).symlink_to(outside)
+
+            def failure(self):
+                return None
+
+        with self.assertRaises(safety.UnsafePath):
+            safety.save_browser_download(Download(), folder, "file.zip")
+        self.assertFalse((folder / "file.zip").exists())
+        self.assertEqual(outside.read_text(), "keep me")
+
+
 class NameCollisions(unittest.TestCase):
     """Names that clean up alike never share a folder or overwrite each other (H-08)."""
 
