@@ -351,7 +351,13 @@ class ArchiveHideRemove(unittest.TestCase):
         st = self.store()
         st.set_pin("4821")
         raw = st.path.read_text()
-        self.assertNotIn("4821", raw)
+        # the PIN isn't kept as any value in the file (a hash or salt can hold "4821" by chance: checking the raw
+        # text for it failed a few times in every 1,000 runs, as in CI on PR #38)
+        def values(x):
+            return [v for y in x.values() for v in values(y)] if isinstance(x, dict) else \
+                   [v for y in x for v in values(y)] if isinstance(x, list) else [str(x)]
+        self.assertNotIn("4821", values(json.loads(raw)))
+        self.assertNotIn('"4821"', raw)
         self.assertIn("scrypt" if "scrypt" in raw else '"n"', raw)
         st.check_pin("4821")
         for _ in range(marks.FREE_TRIES):
