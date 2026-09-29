@@ -113,10 +113,12 @@ def _replace_paths(text: str, cfg: dict | None = None) -> str:
     for old, new in sorted(replacements, key=lambda pair: len(pair[0]), reverse=True):
         text = text.replace(old, new).replace(old.replace("\\", "/"), new)
         if "\\" in old:
-            text = re.sub(re.escape(old).replace(r"\\", r"[\\\\/]"), new, text, flags=re.I)
-    # Catch conventional absolute user-profile paths that weren't discoverable above.
-    text = re.sub(r"(?i)(?:[A-Z]:[\\/]+Users[\\/])[^\\/\r\n]+", r"<WINDOWS_USER>", text)
-    text = re.sub(r"(?i)(?:/home/|/Users/)[^/\r\n]+", r"<USER>", text)
+            # any run of separators: a path in an error message is often written with doubled backslashes
+            # (C:\\Users\\name, as Python shows a path inside quotes), and in 2.8.4 those got through
+            text = re.sub(re.escape(old).replace(r"\\", r"[\\\\/]+"), new, text, flags=re.I)
+    # Catch conventional absolute user-profile paths that weren't discoverable above, doubled backslashes included.
+    text = re.sub(r"(?i)(?:[A-Z]:[\\/]+Users[\\/]+)[^\\/'\"\r\n]+", r"<WINDOWS_USER>", text)
+    text = re.sub(r"(?i)(?:/home/|/Users/)[^/'\"\r\n]+", r"<USER>", text)
     return text
 
 
@@ -136,7 +138,7 @@ def _redact_credentials(text: str) -> str:
 
 
 _STORE_TAGS = ("[Booth]", "[Gumroad]", "[Jinxxy]", "[Payhip]", "[itch.io]")
-_ASSET_PREFIXES = ("would update", "would download", "updated:", "saved:", "downloaded:", "failed:")
+_ASSET_PREFIXES = ("would update", "would download", "updated:", "saved:", "downloaded:", "downloading:", "failed:")
 
 
 def _store_line(line: str) -> tuple[str, str, str] | None:
@@ -186,6 +188,19 @@ def _asset_line(line: str) -> tuple[str, str] | None:
     return lead, body
 
 
+def _progress_line(line: str) -> tuple[str, str] | None:
+    """A download progress bar ("name.unitypackage:  82%|####  | 1.00M/1.22M ...") split into (name, the rest), or
+    None. Found with string operations (see _store_line): the file name is whatever comes before ": " and a
+    percentage followed by "|"."""
+    at = line.find("%|")
+    if at < 0:
+        return None
+    colon = line.rfind(": ", 0, at)
+    if colon < 0 or not line[colon + 2:at].strip().isdigit():
+        return None
+    return line[:colon], line[colon:]
+
+
 def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict[str, str] | None = None) -> str:
     """Hide likely purchased asset names in common Hoard log lines while keeping repeated references stable."""
     creators = creators if creators is not None else {}
@@ -202,6 +217,10 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
 
     lines: list[str] = []
     for line in text.splitlines():
+        bar = _progress_line(line)
+        if bar:   # a download's progress bar starts with the file's name
+            lines.append(f"{anon(assets, bar[0], 'ASSET') if bar[0].strip() else bar[0]}{bar[1]}")
+            continue
         store = _store_line(line)
         if store:
             lead, creator, asset = store
@@ -404,14 +423,19 @@ def record_note(*, area: str, message: str, task: str | None = None, store: str 
 
 
 def _environment(cfg: dict, sanitizer: _ReportSanitizer) -> dict:
+    import importlib.metadata as metadata
     try:
-        import importlib.metadata as metadata
         playwright_version = metadata.version("playwright")
     except Exception:
         playwright_version = None
     try:
         import webview
-        webview_version = getattr(webview, "__version__", None)
+        # pywebview has no __version__: its package details give it, and where a packaged app left those out,
+        # "installed" still tells it apart from a WebView that's missing (in 2.8.4 both said "not installed")
+        try:
+            webview_version = metadata.version("pywebview")
+        except Exception:
+            webview_version = getattr(webview, "__version__", None) or "installed"
     except Exception:
         webview_version = None
     frozen = bool(getattr(__import__("sys"), "frozen", False))
@@ -590,7 +614,7 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
             ),
             "report.json": json.dumps(report, ensure_ascii=False, indent=2),
             "report.txt": _human_report(report),
-            "application-log.txt": sanitize_text(_read_tail(log_dir / "hoard.log", MAX_LOG_BYTES), cfg, asset_names=True),
+            "application-log.txt": application_log,   # the report's own names (<CREATOR_001>...), as everywhere in it
         }
         old_log = log_dir / "hoard.old.log"
         if old_log.exists():

@@ -761,6 +761,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         # the same filename under a different label means the creator updated that file
         prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
         is_update = prev is not None or target.exists()
+        log(f"    downloading: {fname}")   # the browser shows no progress, so a stop here is at least visible
         try:
             save_browser_download(dl, folder, fname)
         except Exception as e:
