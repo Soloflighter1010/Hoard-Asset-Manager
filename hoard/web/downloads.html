@@ -839,9 +839,10 @@ function renderFacets(list) {
 
   const total = DATA.assets.reduce((s, a) => s + a.size, 0);
   const missing = DATA.assets.reduce((s, a) => s + a.missing, 0);
-  $("#totals").textContent = DATA.assets.length
+  const gone = DATA.gone || 0;   // downloaded before, every file since deleted from disk (issue #24)
+  $("#totals").textContent = (DATA.assets.length
     ? `${DATA.assets.length} things, ${fmtSize(total)} on disk.` + (missing ? ` ${missing} ${missing === 1 ? "file" : "files"} missing.` : "")
-    : "";
+    : "") + (gone ? ` ${gone} ${gone === 1 ? "download was" : "downloads were"} deleted from disk and ${gone === 1 ? "isn't" : "aren't"} shown; the library offers ${gone === 1 ? "it" : "them"} to download again.` : "");
 }
 
 function renderStatus(list) {
