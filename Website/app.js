@@ -2,8 +2,11 @@ import { baseLayerLuminance, StandardLuminance } from './vendor/fluent-web-compo
 
 const LISTING_URL = "{{ listingInfo.Url }}";
 
+// The package-list-action fills this in with Scriban when it builds the listing. Its loop tags are wrapped in /* */
+// so this file is valid JavaScript before it's filled in as well (CodeQL reads it as it is here). Scriban renders
+// each tag as nothing, leaving an empty /**/ comment, so the built app.js is the same as before.
 const PACKAGES = {
-{{~ for package in packages ~}}
+/*{{~ for package in packages ~}}*/
   "{{ package.Name }}": {
     name: "{{ package.Name }}",
     displayName: "{{ if package.DisplayName; package.DisplayName; end; }}",
@@ -14,19 +17,19 @@ const PACKAGES = {
       url: "{{ if package.Author.Url; package.Author.Url; end; }}",
     },
     dependencies: {
-      {{~ for dependency in package.Dependencies ~}}
+      /*{{~ for dependency in package.Dependencies ~}}*/
         "{{ dependency.Name }}": "{{ dependency.Version }}",
-      {{~ end ~}}
+      /*{{~ end ~}}*/
     },
     keywords: [
-      {{~ for keyword in package.Keywords ~}}
+      /*{{~ for keyword in package.Keywords ~}}*/
         "{{ keyword }}",
-      {{~ end ~}}
+      /*{{~ end ~}}*/
     ],
     license: "{{ package.License }}",
     licensesUrl: "{{ package.LicensesUrl }}",
   },
-{{~ end ~}}
+/*{{~ end ~}}*/
 };
 
 const setTheme = () => {
