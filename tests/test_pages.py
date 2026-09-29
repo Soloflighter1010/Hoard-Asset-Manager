@@ -173,6 +173,8 @@ class AccessKey(unittest.TestCase):
         page.locator("#views [data-view='archive']").wait_for()
         self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Archive\n1"])
         self.assertEqual(page.locator("#grid .slot").count(), 0, "not among the other downloads")
+        self.assertEqual(page.locator("#creators li").count(), 0, "nor counted under its creator here")
+        self.assertIn("1 thing, ", page.locator("#totals").inner_text())
         self.assertIn("archived, removed or hidden", page.locator("#empty").inner_text())
         page.click("#views [data-view='archive']")
         page.locator("#grid .slot").first.wait_for()
