@@ -395,6 +395,63 @@ class SignIns(unittest.TestCase):
                     m._launch(None, self.cfg, m.profile_dir(self.cfg, "booth"), True)
                 self.assertIn("not saved", m.signin_protection(self.cfg))
 
+    def test_the_same_browser_with_and_without_a_window(self):
+        """Issue #33: with no window, Playwright starts its "headless shell" unless a channel is named, and on a Mac
+        that program always uses a stand-in for the Keychain (headless/app/headless_shell.cc appends
+        --use-mock-keychain), so it couldn't read sign-ins saved from the sign-in window. Hoard names the channel
+        every time, Hoard's own browser ("chromium") included, and keeps the switches that weaken the key off."""
+        class Chromium:
+            def __init__(self):
+                self.calls = []
+
+            def launch_persistent_context(self, **kwargs):
+                self.calls.append(kwargs)
+                return kwargs
+
+        for m in SIGN_INS:
+            fake = type("P", (), {"chromium": Chromium()})()
+            with mock.patch.object(m.sys, "platform", "darwin"), mock.patch.object(m, "use_channel", return_value="chromium"):
+                for headless in (False, True):
+                    m._launch(fake, self.cfg, m.profile_dir(self.cfg, "booth"), headless)
+            with mock.patch.object(m.sys, "platform", "win32"), mock.patch.object(m, "use_channel", return_value="msedge"):
+                m._launch(fake, self.cfg, m.profile_dir(self.cfg, "booth"), True)
+            window, background, edge = fake.chromium.calls
+            self.assertEqual(window["channel"], "chromium")
+            self.assertEqual(background["channel"], "chromium", "the same Chromium, not the headless shell")
+            self.assertTrue(background["headless"])
+            self.assertEqual(edge["channel"], "msedge")
+            for call in fake.chromium.calls:
+                self.assertEqual(call["ignore_default_args"], m.WEAK_KEY_SWITCHES)
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and Path("/proc/self/exe").exists(), "reads /proc")
+    def test_no_window_still_runs_the_full_chromium(self):
+        """The real thing: the program Hoard's headless browser runs is Playwright's Chromium, the one its sign-in
+        window uses, and not chrome-headless-shell."""
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                full = p.chromium.executable_path
+                if not Path(full).is_file():
+                    self.skipTest("Playwright's Chromium isn't installed")
+                cfg = {**self.cfg, "browser_channel": "chromium", "allow_unprotected_signins": True}
+                profile = browser.profile_dir(cfg, "booth")
+                with mock.patch.object(browser, "linux_keyring", return_value=None):
+                    ctx = browser._launch(p, cfg, profile, True)
+                try:
+                    running = set()
+                    for pid in filter(str.isdigit, os.listdir("/proc")):
+                        try:
+                            args = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+                            if any(str(profile).encode() in a for a in args) and not any(a.startswith(b"--type=") for a in args):
+                                running.add(os.path.realpath(f"/proc/{pid}/exe"))
+                        except OSError:
+                            continue
+                finally:
+                    ctx.close()
+        except ImportError:
+            self.skipTest("Playwright isn't installed")
+        self.assertEqual(running, {os.path.realpath(full)})
+
     def _cookie_db(self, profile, values):
         db = profile / "Default" / "Network" / "Cookies"
         db.parent.mkdir(parents=True, exist_ok=True)

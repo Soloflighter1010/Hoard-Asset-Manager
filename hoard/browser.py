@@ -363,9 +363,11 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
                 "unlock one (GNOME Keyring, KeePassXC with Secret Service turned on, or KWallet), then try again. "
                 "On a computer without a desktop you can instead set \"allow_unprotected_signins\": true in "
                 "config.json; sign-ins are then protected only by your user account's folder permissions.")
-    channel = use_channel(cfg)
-    if channel != "chromium":
-        kwargs["channel"] = channel
+    # Always named, "chromium" too: without it, Playwright starts a different program when there's no window, its
+    # "headless shell", and on a Mac that one always uses a stand-in for the Keychain. Sign-ins saved from the
+    # sign-in window (with the real Keychain) then couldn't be read, so every store said "Not signed in" after
+    # you'd signed in (issue #33). Named, it's the same Chromium with or without a window.
+    kwargs["channel"] = use_channel(cfg)
     return p.chromium.launch_persistent_context(**kwargs)
 
 
@@ -403,7 +405,9 @@ def _migrate_old_signins(p, cfg: dict) -> None:
     old_places += [(o, "1.0") for o in dict.fromkeys(x.resolve() for x in legacy) if o.is_dir()]
 
     for old, era in old_places:
-        start = {} if era == "1.0" else {"ignore_default_args": WEAK_KEY_SWITCHES}  # read with the key it was saved under
+        # read with the key it was saved under: 1.0 used Playwright's defaults, later ones the real keyring (and so
+        # the same Chromium as its window, see _launch)
+        start = {} if era == "1.0" else {"ignore_default_args": WEAK_KEY_SWITCHES, "channel": "chromium"}
         src = p.chromium.launch_persistent_context(str(old), headless=True, **start)
         try:
             cookies = src.cookies()
