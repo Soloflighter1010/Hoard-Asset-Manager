@@ -207,16 +207,109 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
             updater.finish(state["srv"].updates)
 
 
+DEFAULT_SIZE, MIN_SIZE = (1440, 920), (900, 600)
+
+
+def place_file() -> Path:
+    return data_dir() / "window-place.json"
+
+
+def _screens(webview) -> list[tuple[int, int, int, int]]:
+    """Each screen's x, y, width and height (in the same units as the window's), or [] when they can't be read."""
+    try:
+        return [(int(s.x), int(s.y), int(s.width), int(s.height)) for s in webview.screens][:16]
+    except Exception:
+        return []
+
+
+def window_place(screens: list[tuple[int, int, int, int]]) -> dict:
+    """Where the window opens (issue #16): its size and place when it was last closed, and maximized if it was.
+    A place that's no longer on any screen (a screen unplugged, or its resolution lowered) isn't used, so the
+    window never opens out of sight; it opens centred instead, no bigger than the screen."""
+    from .safety import DataFileError, read_json_file
+    try:
+        raw = read_json_file(place_file(), 64 * 1024) if place_file().exists() else {}
+    except (DataFileError, OSError, ValueError, RecursionError):
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+
+    def number(key, low, high):
+        v = raw.get(key)
+        return v if isinstance(v, int) and not isinstance(v, bool) and low <= v <= high else None
+
+    width, height = number("width", MIN_SIZE[0], 16384) or DEFAULT_SIZE[0], number("height", MIN_SIZE[1], 16384) or DEFAULT_SIZE[1]
+    x, y = number("x", -32768, 32768), number("y", -32768, 32768)
+    place = {"width": width, "height": height, "maximized": raw.get("maximized") is True}
+    # the screen the title bar is on: enough of it showing to take hold of (120 by 40)
+    home = next((s for s in screens if x is not None and y is not None
+                 and min(x + width, s[0] + s[2]) - max(x, s[0]) >= 120 and s[1] <= y <= s[1] + s[3] - 40), None)
+    if home:
+        place.update(x=x, y=y)
+    fit = home or (max(screens, key=lambda s: s[2] * s[3]) if screens else None)
+    if fit:   # never bigger than the screen it's on (the minimum size still stands)
+        place["width"] = max(MIN_SIZE[0], min(place["width"], fit[2]))
+        place["height"] = max(MIN_SIZE[1], min(place["height"], fit[3]))
+    return place
+
+
+class PlaceKeeper:
+    """Follows the window's size and place from its events, to save when it closes. Only a normal window's are
+    kept, so a maximized or minimized one comes back to where it was before. (Nothing here asks the window for its
+    size: on macOS that waits for the main thread, which is the one closing it.)"""
+
+    def __init__(self, place: dict):
+        self.place = dict(place)
+        self.minimized = False
+
+    def watch(self, window) -> None:
+        events = getattr(window, "events", None)
+        if events is None:
+            return
+        events.resized += self.resized
+        events.moved += self.moved
+        events.maximized += self.maximized
+        events.minimized += self.minimize
+        events.restored += self.restored
+
+    def resized(self, width, height):
+        if not (self.place["maximized"] or self.minimized) and width >= MIN_SIZE[0] // 2 and height >= MIN_SIZE[1] // 2:
+            self.place.update(width=int(width), height=int(height))
+
+    def moved(self, x, y):
+        if not (self.place["maximized"] or self.minimized) and -10000 < x < 32768 and -10000 < y < 32768:
+            self.place.update(x=int(x), y=int(y))   # (a minimized window on Windows is "at" -32000)
+
+    def maximized(self):
+        self.place["maximized"], self.minimized = True, False
+
+    def minimize(self):
+        self.minimized = True
+
+    def restored(self):
+        self.place["maximized"], self.minimized = False, False
+
+    def save(self) -> None:
+        from .safety import write_file_safely
+        keep = {k: self.place[k] for k in ("width", "height", "x", "y", "maximized") if k in self.place}
+        try:
+            write_file_safely(place_file(), json.dumps(keep))
+        except OSError as e:
+            print(f"Couldn't save the window's size and place: {e}")
+
+
 def open_window(srv) -> None:
-    """Hoard's own window, opened with a one-time link to its page. Blocks until it's closed."""
+    """Hoard's own window, opened with a one-time link to its page, where it was last time. Blocks until it's
+    closed."""
     import webview
     try:
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True   # store pages open in your browser, not in Hoard
         webview.settings["ALLOW_DOWNLOADS"] = False
     except Exception:
         pass
-    window = webview.create_window("Hoard", srv.entry_url(), width=1440, height=920, min_size=(900, 600),
-                                   background_color="#221c17", text_select=True)
+    keeper = PlaceKeeper(window_place(_screens(webview)))
+    window = webview.create_window("Hoard", srv.entry_url(), min_size=MIN_SIZE, background_color="#221c17",
+                                   text_select=True, **keeper.place)
+    keeper.watch(window)
 
     def show():
         window.restore()
@@ -229,6 +322,7 @@ def open_window(srv) -> None:
     storage = data_dir() / "window"
     storage.mkdir(parents=True, exist_ok=True)
     webview.start(private_mode=False, storage_path=str(storage))
+    keeper.save()   # once it's closed (and only when it opened)
 
 
 def run_in_browser(srv) -> None:
