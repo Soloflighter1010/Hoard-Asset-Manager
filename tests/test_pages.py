@@ -134,6 +134,30 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_the_downloads_page_has_the_librarys_views(self):
+        """Issue #29: archiving an item in the Library moves its download to the Downloads page's Archive view,
+        as in the Library, instead of leaving no way to tell it apart."""
+        from hoard import marks, tags
+        st, rusk = marks.MarkStore(), tags.tag_key("booth", "Rusk")
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        st.change("archived", {rusk}, True)   # as the Library's Archive button does
+        self.addCleanup(st.change, "archived", {rusk}, False)
+        page.goto(f"{self.srv.url}downloads")
+        page.locator("#views [data-view='archive']").wait_for()
+        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Archive\n1"])
+        self.assertEqual(page.locator("#grid .slot").count(), 0, "not among the other downloads")
+        self.assertIn("archived, removed or hidden", page.locator("#empty").inner_text())
+        page.click("#views [data-view='archive']")
+        page.locator("#grid .slot").first.wait_for()
+        self.assertIn("Rusk", page.locator("#grid .slot").first.get_attribute("aria-label"))
+        self.assertEqual(page.locator("#count").inner_text(), "1 thing archived")
+        self.assertIn("view=archive", page.evaluate("location.hash"))
+        page.reload()
+        page.locator("#grid .slot").first.wait_for()
+        self.assertEqual(page.locator("#views [aria-checked='true']").inner_text(), "Archive\n1", "kept on reload")
+        self.assertEqual(refused, [])
+
     def test_the_downloads_page_has_the_update_setting(self):
         """Issue #28: Check for updates is in the Downloads page's Settings too, and saving it there keeps it."""
         from playwright.sync_api import expect

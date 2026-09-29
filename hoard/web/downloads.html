@@ -149,6 +149,15 @@ a { color: var(--gold); text-underline-offset: 3px; }
   width: 100%; display: flex; justify-content: space-between; gap: 8px; text-align: left;
   padding: 5px 8px; border: 0; border-radius: 8px; background: none; font-size: 14px;
 }
+/* views: library, archive, removed, hidden */
+.views { display: flex; flex-direction: column; gap: 2px; margin: 0 0 18px; }
+.views button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--dust); font: 700 14px var(--body); text-align: left; cursor: pointer; }
+.views button:hover { background: var(--stone); color: var(--bone); }
+.views button[aria-checked="true"] { background: var(--ledge); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.views .n { margin-left: auto; font-weight: 500; color: var(--dust); font-size: 12.5px; }
+.viewbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; padding: 12px 14px;
+  border-radius: 12px; background: var(--stone); font-size: 13.5px; }
 .creators button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .creators button:hover { background: var(--ledge); }
 .creators button[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); font-weight: 700; }
@@ -447,6 +456,7 @@ body.selecting .dlpanel { bottom: 96px; }
 </section>
 <div class="layout">
   <nav id="filters" class="side" aria-label="Filters">
+    <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
     <h2 class="sidehead">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
     <h2>Suggested</h2>
@@ -464,6 +474,7 @@ body.selecting .dlpanel { bottom: 96px; }
     <div class="headrow"><h2 id="count" class="count" aria-live="polite"></h2>
       <button id="selectBtn" class="ghost sm" aria-pressed="false" title="Select several items to tag them together">Select</button></div>
     <div id="status" class="status"></div>
+    <div id="viewBar" class="viewbar" hidden></div>
     <div id="grid" class="grid" aria-label="Assets"></div>
     <div id="empty" class="empty" hidden></div>
     <footer class="foot">
@@ -627,7 +638,7 @@ async function api(url, opts = {}) {
 const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
 const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
 const grid = $("#grid"), detail = $("#detail");
-const state = { q: "", store: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
+const state = { view: "downloads", q: "", store: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
@@ -754,9 +765,37 @@ const filtersActive = () => state.q || state.store || state.creator || state.tag
 
 /* ---------- rendering */
 function render() {
-  const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
-  renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
+  const list = DATA.assets.filter(a => inView(a) && matches(a)).sort(SORTS[state.sort]);
+  renderViews(); renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
+
+/* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
+const VIEWS = { downloads: "Downloads", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
+const inView = a => viewOf(a) === state.view;
+function renderViews() {
+  const p = DATA.privacy || {}, count = {};
+  for (const a of DATA.assets) count[viewOf(a)] = (count[viewOf(a)] || 0) + 1;
+  const n = v => count[v] || 0;
+  $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === state.view || n(v)
+      || (v === "hidden" && p.pin_set)).map(v =>
+    `<button role="radio" data-view="${v}" aria-checked="${state.view === v}">${VIEWS[v]}` +
+    (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>` : `<span class="n">${n(v)}</span>`) + `</button>`).join("");
+  const bar = $("#viewBar");
+  bar.hidden = state.view === "downloads";
+  bar.innerHTML = state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
+    : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them.</p>`
+    : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Lock it again in the Library.</p>` : "";
+}
+function showView(v) {
+  if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
+    toast("Unlock Hidden in the Library first. Its downloads then show here too.");
+    return;
+  }
+  state.view = v; sel.ids.clear(); closeDetail(); render();
+}
+$("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
 
 // Only the cards near the screen are drawn (review finding P-02): a batch now, and the next whenever the last one
 // drawn comes within about two screens of view. A redraw keeps at least as many as were showing, so the page
@@ -815,6 +854,10 @@ function renderGrid(list) {
         : `<p>Sign in to your stores (in the Library, choose <strong>Stores</strong>), then choose <strong>Download new</strong>. ` +
           `Files go to <code>${esc(DATA.root)}</code>; you can pick another folder in Settings.</p>` + (other ? `<ul>${other}</ul>` : "")) +
       (Object.values(st.stores).some(i => i.found) ? `<p>Choose <strong>Download new</strong> to download everything you own.</p>` : "");
+  } else if (!list.length && !filtersActive()) {
+    empty.innerHTML = `<h2>${{ downloads: "Nothing here", archive: "Nothing archived is downloaded", removed: "Nothing removed is downloaded",
+                               hidden: "Nothing hidden is downloaded" }[state.view]}</h2>` +
+      (state.view === "downloads" ? `<p>Everything downloaded is archived, removed or hidden in the Library.</p>` : "");
   } else if (!list.length) {
     empty.innerHTML = `<h2>Nothing in your downloads matches that</h2><p><button class="linkish" data-clear="all">Clear filters</button></p>`;
   }
@@ -845,7 +888,7 @@ function renderFacets(list) {
 }
 
 function renderStatus(list) {
-  const total = DATA.assets.length;
+  const total = DATA.assets.filter(inView).length;   // this view: Downloads, Archive, ...
   const pills = [];
   if (state.q) pills.push(["q", "", `Search`, state.q]);
   if (state.store) pills.push(["store", "", "Store", storeName(state.store)]);
@@ -854,7 +897,8 @@ function renderStatus(list) {
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   $("#count").hidden = !total;
-  $("#count").innerHTML = filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>` : `${things(total)} on disk`;
+  $("#count").innerHTML = filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
+    : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}`;
   $("#status").innerHTML =
     pills.map(([k, v, label, text]) =>
       `<button class="pill" data-clear="${k}" data-v="${esc(v)}" aria-label="Remove ${label.toLowerCase()} filter ${esc(text)}">` +
@@ -929,6 +973,7 @@ function saveHash() {
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.types.size) p.set("types", [...state.types].join(","));
   if (state.sort !== "name") p.set("sort", state.sort);
+  if (state.view !== "downloads") p.set("view", state.view);
   const h = p.toString();
   history.replaceState(null, "", h ? "#" + h : location.pathname);
 }
@@ -938,6 +983,7 @@ function readHash() {
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
+  state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   if (/^\d+$/.test(p.get("open") || "")) openId = +p.get("open");  // "Show it in Downloads" from the Library
 }
 
