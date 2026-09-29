@@ -419,6 +419,50 @@ class ArchiveHideRemove(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
+    def test_downloads_carry_the_librarys_marks(self):
+        """Issue #29: the Downloads page gets each download's mark from the Library (archived by you or by the
+        store, removed, hidden), and a hidden one's download only while this browser is unlocked."""
+        from unittest import mock
+        from hoard import marks, tags
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        with srv.lib.lock:
+            srv.lib.data["items"] = [library.item("gumroad", "g1", name="Store Archived", archived=True),
+                                     library.item("gumroad", "g2", name="Moved Back", archived=True)]
+        names = ["Secret Suit", "Old Hat", "Store Archived", "Moved Back", "Gone Pack", "Plain Hat"]
+        key = {n: tags.tag_key("gumroad" if n in ("Store Archived", "Moved Back") else "booth", n) for n in names}
+        index = {"root": "x", "assets": [{"id": i, "name": n, "store": "gumroad" if n in ("Store Archived", "Moved Back") else "booth",
+                                          "tag_key": key[n], "suggested": [], "also_in": []} for i, n in enumerate(names)]}
+        st = marks.MarkStore()
+        st.set_pin("4821")
+        st.change("hidden", {key["Secret Suit"]}, True)
+        st.change("archived", {key["Old Hat"]}, True)
+        st.change("unarchived", {key["Moved Back"]}, True)
+        st.change("removed", {key["Gone Pack"]}, True)
+        try:
+            def call(method, path, body=None, cookie=None):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                headers = {**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: srv.key,
+                           **({"Cookie": cookie} if cookie else {})}
+                c.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return data, r.getheader("Set-Cookie")
+            with mock.patch.object(srv, "index", lambda rescan=False, stale_ok=False: index), \
+                    mock.patch.object(srv.lib, "save"):
+                locked = call("GET", "/api/assets")[0]
+                self.assertEqual({a["name"]: a["mark"] for a in locked["assets"]},
+                                 {"Old Hat": "archived", "Store Archived": "archived", "Moved Back": None,
+                                  "Gone Pack": "removed", "Plain Hat": None})
+                self.assertEqual(locked["privacy"], {"pin_set": True, "unlocked": False})
+                cookie = call("POST", "/api/unlock", {"pin": "4821"})[1].split(";")[0]
+                unlocked = call("GET", "/api/assets", cookie=cookie)[0]
+                self.assertEqual({a["name"]: a["mark"] for a in unlocked["assets"]}["Secret Suit"], "hidden")
+                self.assertTrue(unlocked["privacy"]["unlocked"])
+        finally:
+            marks.MarkStore().path.unlink(missing_ok=True)
+            srv.shutdown()
+            srv.server_close()
+
     def test_removed_products_arent_downloaded(self):
         from hoard import marks, tags
         st = marks.MarkStore()
