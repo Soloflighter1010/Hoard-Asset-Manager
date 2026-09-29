@@ -470,6 +470,45 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.get_by_text("Mochi").first.wait_for()
         return page
 
+    SAMPLE_SPLASH = """window.__splash = 0;   // how visible the splash got, sampled as the page loads
+        setInterval(() => { const e = document.getElementById("splash");
+                            if (e) window.__splash = Math.max(window.__splash, +getComputedStyle(e).opacity); }, 25);"""
+
+    def test_the_splash_screen(self):
+        """Issue #50: the logo shows while the window's first page reads your library, for at least a moment, then
+        goes; later pages only show it when reading takes a while; and it goes even when reading fails."""
+        import time
+        page = self.browser.new_page()
+        page.add_init_script(self.SAMPLE_SPLASH)
+        began = time.monotonic()
+        page.goto(self.srv.entry_url())
+        self.assertIn("first", page.locator("#splash").get_attribute("class") or "")
+        page.get_by_text("Mochi").first.wait_for(state="attached")
+        page.locator("#splash").wait_for(state="detached")
+        self.assertGreater(time.monotonic() - began, 1.1, "on screen for a moment, not a flicker")
+        self.assertEqual(page.evaluate("window.__splash"), 1)
+        page.get_by_text("Mochi").first.click()   # nothing in the way once it's gone
+
+        # a later page (the same window): not straight away; only once reading takes a while
+        page.goto(f"{self.srv.url}downloads")
+        self.assertNotIn("first", page.locator("#splash").get_attribute("class") or "")
+        page.locator("#splash").wait_for(state="detached")
+
+        def slow(route):
+            time.sleep(1.0)
+            route.continue_()
+        page.route("**/api/library*", slow)
+        page.goto(f"{self.srv.url}")
+        page.locator("#splash").wait_for(state="detached", timeout=10000)
+        self.assertEqual(page.evaluate("window.__splash"), 1, "shown while reading took a while")
+        page.close()
+
+        page = self.browser.new_page()   # a new window whose library can't be read
+        page.route("**/api/library*", lambda route: route.abort())
+        page.goto(self.srv.entry_url())
+        page.locator("#splash").wait_for(state="detached", timeout=10000)
+        page.close()
+
     def test_the_open_item_is_marked(self):
         page = self.open()
         mochi = page.locator(".slot", has_text="Mochi")
