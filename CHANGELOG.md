@@ -16,6 +16,10 @@
     "jinxxy.com" somewhere in the address.
   - Support reports hide asset and creator names without patterns that could take very long on an unusual line.
 
+- **Store sign-ins and setup.** On macOS, background store reads now use the same full Chromium as the sign-in window so Keychain-encrypted cookies can be read. On Windows, an open browser's locked cookie database no longer makes setup status fail; the Library takes over count updates if the setup assistant is closed during sign-in. Settings, sign-in messages, logs and support reports now show which browser Hoard actually uses, including fallback to its own browser.
+- **Downloads and library.** Jinxxy browser downloads now accept OneDrive cloud files without treating them as symlinks. Fully deleted downloads leave Downloads on rescan and can be downloaded again; partially missing ones remain marked. Downloads gains Archive, Removed and Hidden views, with sidebar counts following the current view. Removing a browser store's sign-in folder while Hoard is closed clears that store's refreshed Library list at startup without deleting downloaded files or imported lists.
+- **Privacy and interface.** Support reports now redact Windows user paths with doubled separators and downloaded filenames in progress lines, using consistent placeholders throughout the ZIP. Locking Hidden clears any open hidden-item details. Downloads Settings now includes the update controls. A PIN test no longer fails if its digits happen to occur inside a random hash.
+
 ## 2.8.4
 
 - **Local support reports.** Settings, store errors and failed downloads can now create a sanitized support ZIP without using the command line. The report is built locally, keeps raw diagnostics and tracebacks private, replaces local paths, credentials, tokens, purchase names and creator names with placeholders, and is never uploaded automatically.
