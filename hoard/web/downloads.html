@@ -744,6 +744,7 @@ async function load(rescan = false) {
 
 /* ---------- filtering */
 function matches(a, skip) {
+  if (!inView(a)) return false;   // Downloads, Archive, Removed or Hidden, as in the Library
   if (state.store && a.store !== state.store) return false;
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
@@ -767,7 +768,7 @@ const filtersActive = () => state.q || state.store || state.creator || state.tag
 /* ---------- rendering */
 function render() {
   if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
-  const list = DATA.assets.filter(a => inView(a) && matches(a)).sort(SORTS[state.sort]);
+  const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
 
@@ -885,7 +886,7 @@ function renderFacets(list) {
   const missing = DATA.assets.reduce((s, a) => s + a.missing, 0);
   const gone = DATA.gone || 0;   // downloaded before, every file since deleted from disk (issue #24)
   $("#totals").textContent = (DATA.assets.length
-    ? `${DATA.assets.length} things, ${fmtSize(total)} on disk.` + (missing ? ` ${missing} ${missing === 1 ? "file" : "files"} missing.` : "")
+    ? `${DATA.assets.length} ${DATA.assets.length === 1 ? "thing" : "things"}, ${fmtSize(total)} on disk.` + (missing ? ` ${missing} ${missing === 1 ? "file" : "files"} missing.` : "")
     : "") + (gone ? ` ${gone} ${gone === 1 ? "download was" : "downloads were"} deleted from disk and ${gone === 1 ? "isn't" : "aren't"} shown; the library offers ${gone === 1 ? "it" : "them"} to download again.` : "");
 }
 
