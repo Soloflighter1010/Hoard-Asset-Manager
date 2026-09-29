@@ -531,6 +531,14 @@ body.selecting .dlpanel { bottom: 96px; }
     <option value="chromium">Hoard's own browser</option>
   </select>
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
+  <h3>Updates</h3>
+  <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
+  <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
+    version. GitHub sees your IP address, as with any website; nothing else is sent.</p>
+  <p class="hint" id="updStatus" aria-live="polite"></p>
+  <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
+    <button class="primary sm" id="updInstall" hidden></button>
+    <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
   <h3>Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
@@ -1271,6 +1279,8 @@ async function openSettings(open) {
   $("#settingsBtn").setAttribute("aria-expanded", "true");
   $("#setRoot").value = SETTINGS.root;
   $("#setOffline").checked = SETTINGS.offline_images;
+  $("#setUpdates").checked = SETTINGS.check_for_updates;
+  showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
@@ -1288,6 +1298,7 @@ async function openSettings(open) {
 async function saveSettings() {
   const root = $("#setRoot").value.trim();
   const body = { root: root === SETTINGS.default_root ? "" : root, offline_images: $("#setOffline").checked,
+                 check_for_updates: $("#setUpdates").checked,
                  browser_channel: $("#setBrowser").value, stores: {},
                  auto_sync_hours: Number($("#setAutoSync").value),
                  display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
@@ -1302,6 +1313,61 @@ async function saveSettings() {
   closeSettings();
   toast("Settings saved.");
   T.reload();
+}
+
+/* ---------- updates: checked with GitHub when you ask (or daily, if you turned that on); installed by Hoard itself
+   only in the app Hoard-Setup installed on Windows */
+let UPDATE = null, updTimer = null;
+function ago(iso) {   // the Library page has this in its own part; the Downloads page needs it for "Last checked"
+  if (!iso) return "never";
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (s < 90) return "just now";
+  const [n, u] = s < 3600 ? [s / 60, "minute"] : s < 86400 ? [s / 3600, "hour"] : [s / 86400, "day"];
+  const r = Math.round(n); return `${r} ${u}${r === 1 ? "" : "s"} ago`;
+}
+function describeUpdate(u) {
+  if (u.error) return u.error;
+  if (u.busy) return u.message || "Getting the update";
+  if (u.available) return `Hoard ${u.latest.version} is available (you have ${u.current}).` +
+    (u.can_install ? "" : " Download it from the releases page, and install it over this one.");
+  if (u.checked) return `Hoard ${u.current} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
+  return `You have Hoard ${u.current}.`;
+}
+async function showUpdate(u) {
+  if (!u) {
+    try {
+      const r = await api("/api/update", { cache: "no-store" });
+      if (!r.ok) return;   // not this page's key (yet), or Hoard has stopped to update
+      u = await r.json();
+    } catch (e) { return; }
+  }
+  UPDATE = u;
+  $("#updStatus").textContent = describeUpdate(u);
+  $("#updInstall").hidden = !u.can_install || u.busy;
+  $("#updInstall").textContent = u.available ? `Update to ${u.latest.version}` : "";
+  $("#updCheck").disabled = !!u.busy;
+  $("#updLink").hidden = !u.available;
+  $("#updLink").href = u.available ? u.latest.url : u.releases_page;
+  const note = $("#updateNote");   // the header's "Update to ..." link, on the Library page
+  if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${u.latest.version}` : ""; }
+  clearTimeout(updTimer);
+  if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
+}
+async function checkUpdate() {
+  if (!navigator.onLine) { toast("You're offline. Checking for updates needs a connection."); return; }
+  $("#updCheck").disabled = true;
+  $("#updStatus").textContent = "Checking";
+  const r = await apiPost("/api/update/check");
+  if (!r.ok) { $("#updCheck").disabled = false; $("#updStatus").textContent = r.data.error || "Couldn't check for updates."; return; }
+  showUpdate(r.data);
+}
+async function installUpdate() {
+  if (!UPDATE || !UPDATE.available) return;
+  if (!confirm(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
+               "Your library, settings, sign-ins and downloads stay as they are.")) return;
+  const r = await apiPost("/api/update/install");
+  if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
+  showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
 }
 
 async function startDownload(stores, only) {
@@ -1356,6 +1422,9 @@ function wireApp() {
   wireSupportReport();
   $("#setSave").addEventListener("click", saveSettings);
   $("#setCancel").addEventListener("click", closeSettings);
+  $("#updCheck").addEventListener("click", checkUpdate);
+  $("#updInstall").addEventListener("click", installUpdate);
+  if ($("#updateNote")) $("#updateNote").addEventListener("click", () => openSettings(true));
   $("#setupAgain").addEventListener("click", () => {
     if (typeof openSetup === "function") openSetup(); else location.href = "/#setup";
   });

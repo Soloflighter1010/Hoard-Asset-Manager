@@ -874,6 +874,7 @@ async function load() {
   renderStoreSeg(); renderStores(); render(); showJob(DATA.job);
   if (DATA.job && DATA.job.running) startPolling();
   if (openKey && byKey.has(openKey)) showDetail(byKey.get(openKey), false);
+  else if (openKey) forgetDetail();   // no longer shown (a hidden item, once locked): its details go too
 }
 
 /* ---------- filtering */
@@ -1111,6 +1112,11 @@ function closeDetail() {
   $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   const back = document.querySelector(`.slot[data-key="${CSS.escape(openKey)}"]`) || lastFocus;
   openKey = null; markCurrent(null); if (back) back.focus();
+}
+// Close the details and empty them, so nothing of the item stays in the page (it's only out of view once closed).
+function forgetDetail() {
+  closeDetail();
+  $("#detail").innerHTML = "";
 }
 
 /* ---------- URL state */
@@ -1736,8 +1742,8 @@ async function showUpdate(u) {
   $("#updCheck").disabled = !!u.busy;
   $("#updLink").hidden = !u.available;
   $("#updLink").href = u.available ? u.latest.url : u.releases_page;
-  $("#updateNote").hidden = !u.available;
-  $("#updateNote").textContent = u.available ? `Update to ${u.latest.version}` : "";
+  const note = $("#updateNote");   // the header's "Update to ..." link, on the Library page
+  if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${u.latest.version}` : ""; }
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
 }
@@ -1812,7 +1818,7 @@ function wireApp() {
   $("#setCancel").addEventListener("click", closeSettings);
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);
-  $("#updateNote").addEventListener("click", () => openSettings(true));
+  if ($("#updateNote")) $("#updateNote").addEventListener("click", () => openSettings(true));
   $("#setupAgain").addEventListener("click", () => {
     if (typeof openSetup === "function") openSetup(); else location.href = "/#setup";
   });
@@ -2186,7 +2192,11 @@ function wirePrivacy() {
   $("#viewBar").addEventListener("click", async e => {
     const b = e.target.closest("[data-privacy]");
     if (!b) return;
-    if (b.dataset.privacy === "lock") { await apiPost("/api/lock"); state.view = "library"; await load(); toast("Hidden items locked."); }
+    if (b.dataset.privacy === "lock") {
+      const open = openKey && byKey.get(openKey);
+      if (open && open.mark === "hidden") forgetDetail();   // straight away, before the server answers
+      await apiPost("/api/lock"); state.view = "library"; await load(); toast("Hidden items locked.");
+    }
     else if (b.dataset.privacy === "phrase") {
       if ((DATA.privacy || {}).recovery_set && !confirm("Make a new recovery phrase? The old words will stop working.")) return;
       await newPhrase(); await load();

@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import zlib
 from pathlib import Path
 
@@ -132,6 +133,27 @@ class AccessKey(unittest.TestCase):
         self.assertFalse(page.locator("#setUpdates").is_checked(), "automatic checks are off unless turned on")
         self.assertEqual(refused, [])
         page.close()
+
+    def test_the_downloads_page_has_the_update_setting(self):
+        """Issue #28: Check for updates is in the Downloads page's Settings too, and saving it there keeps it."""
+        from playwright.sync_api import expect
+        self.addCleanup(self.srv.cfg.update, check_for_updates=bool(self.srv.cfg.get("check_for_updates")))
+        self.srv.cfg["check_for_updates"] = False
+        with mock.patch.object(server, "save_config"):   # the test never writes your settings
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            page.goto(f"{self.srv.url}downloads")
+            page.get_by_text("Rusk").first.wait_for()
+            page.click("#settingsBtn")
+            page.locator("#setUpdates").wait_for()
+            page.get_by_text("You have Hoard").wait_for()   # its status, as on the Library page
+            expect(page.locator("#setUpdates")).not_to_be_checked()
+            page.locator("#setUpdates").check()
+            page.click("#setSave")
+            page.get_by_text("Settings saved.").wait_for()
+            self.assertTrue(self.srv.cfg["check_for_updates"])
+            self.assertEqual(refused, [])
+            page.close()
 
     def test_a_used_link_doesnt_work_again(self):
         link = self.srv.entry_url()
@@ -363,6 +385,29 @@ class HighlightsAndAccessibility(unittest.TestCase):
         self.assertIsNone(mochi.get_attribute("aria-current"), "only the one that's open")
         page.keyboard.press("Escape")
         page.wait_for_function("() => !document.querySelector('.slot[aria-current]')")
+        page.close()
+
+    def test_locking_closes_a_hidden_items_details(self):
+        """Issue #23: locking the hidden library closes the open hidden item's details and empties them."""
+        from hoard import marks
+        store = marks.MarkStore()
+        self.addCleanup(store.path.unlink, missing_ok=True)
+        store.set_pin("2468")
+        mochi = next(i for i in self.srv.lib.data["items"] if i["name"] == "Mochi")
+        store.change("hidden", {library.tag_key(mochi["store"], mochi["name"])}, True)
+        page = self.browser.new_page()
+        page.goto(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click('#views [data-view="hidden"]')
+        page.fill("#pinInput", "2468")
+        page.click("#pinOk")
+        page.locator(".slot", has_text="Mochi").click()
+        page.locator("#detail.open").wait_for()
+        page.click('#viewBar [data-privacy="lock"]')
+        page.get_by_text("Hidden items locked.").wait_for()
+        self.assertEqual(page.locator("#detail.open").count(), 0, "the details closed with the lock")
+        self.assertNotIn("Mochi", page.locator("#detail").inner_html(), "and nothing of the item is left in them")
+        self.assertEqual(page.get_by_text("Mochi").count(), 0)
         page.close()
 
     def test_owned_twice_is_striped(self):
