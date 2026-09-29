@@ -33,7 +33,7 @@ from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, c
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status
-from .tags import TagStore, tag_overview
+from .tags import TagStore, tag_key, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
 FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
@@ -393,9 +393,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"job": public_job(srv.jobs.state), "stores": srv.lib.snapshot()[1]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
-            if not self._unlocked():   # hidden products' downloads stay out of view too
-                hidden = MarkStore().load()["hidden"]
-                index = {**index, "assets": [a for a in index["assets"] if a.get("tag_key") not in hidden]}
+            # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
+            # page has the same views (issue #29); hidden products' downloads stay out of view while it's locked
+            marks, unlocked = MarkStore().load(), self._unlocked()
+            by_store = {tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
+            assets = []
+            for a in index["assets"]:
+                key = a.get("tag_key")
+                mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
+                        else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
+                if mark != "hidden" or unlocked:
+                    assets.append({**a, "mark": mark})
+            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":

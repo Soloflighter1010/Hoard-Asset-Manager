@@ -92,7 +92,7 @@ def library_status(root: Path) -> dict:
 def build_index(root: Path, catalog: list[dict]) -> dict:
 
     """The data behind the page: every downloaded asset with its files, sizes, image and matches."""
-    assets = []
+    assets, gone = [], 0
     for i, e in enumerate(catalog):
         folder = safe_join(root, e["folder"])
         if folder is None:  # a folder that would lead outside the downloads isn't shown
@@ -110,6 +110,11 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             except OSError:
                 missing += 1
                 files.append({"path": rel, "size": None, "missing": True})
+        if files and missing == len(files):
+            # every file was deleted from disk: it isn't a download any more, so it isn't shown, and the library
+            # offers it again (issue #24). Its record is kept, so downloading it again works as before.
+            gone += 1
+            continue
         thumb = _thumbnail(folder, e.get("files", []))
         assets.append({
             "id": i,
@@ -144,7 +149,7 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             a["also_in"] = [{"id": b["id"], "store": b["store"]} for b in group
                             if b["store"] != a["store"] and _same_creator(a["creator"], b["creator"])]
 
-    return {"root": str(root), "assets": assets, "status": library_status(root)}
+    return {"root": str(root), "assets": assets, "gone": gone, "status": library_status(root)}
 
 
 def with_tags(index: dict) -> dict:
