@@ -1450,6 +1450,37 @@ class TagMatching(unittest.TestCase):
         self.assertLess(time.time() - start, 5, "20,000 names with 300 matching tags (every tag on every name: ~30 s)")
 
 
+class DeletedFromDisk(unittest.TestCase):
+    """Issue #24: a download whose files were all deleted from disk leaves the Downloads page on the next rescan,
+    and the library offers it again. One with only some files gone stays, marked as missing them."""
+
+    def test_rescan_after_deleting(self):
+        from hoard.downloads import build_index
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+        for folder, names in (("booth/Rusk", ["rusk.zip"]), ("booth/Pollution", ["a.unitypackage", "b.zip"])):
+            (root / folder).mkdir(parents=True)
+            for n in names:
+                (root / folder / n).write_bytes(b"x" * 10)
+        catalog = [{"store": "booth", "name": "Rusk", "creator": "Maker", "folder": "booth/Rusk", "files": ["rusk.zip"]},
+                   {"store": "booth", "name": "Pollution", "creator": "Maker", "folder": "booth/Pollution",
+                    "files": ["a.unitypackage", "b.zip"]}]
+        before = build_index(root, catalog)
+        self.assertEqual([a["name"] for a in before["assets"]], ["Rusk", "Pollution"])
+        self.assertEqual(before["gone"], 0)
+
+        shutil.rmtree(root / "booth/Rusk")               # deleted the whole folder
+        (root / "booth/Pollution" / "b.zip").unlink()    # and one file of another
+        after = build_index(root, catalog)
+        self.assertEqual([a["name"] for a in after["assets"]], ["Pollution"], "Rusk is no longer shown")
+        self.assertEqual(after["gone"], 1)
+        pollution = after["assets"][0]
+        self.assertEqual((pollution["id"], pollution["missing"]), (1, 1), "ids stay the catalog's")
+
+        (root / "booth/Rusk").mkdir()                    # the folder is there, but empty: still gone
+        self.assertEqual(build_index(root, catalog)["gone"], 1)
+
+
 class DownloadsIndex(unittest.TestCase):
     """The downloads index is rebuilt outside its lock (review finding P-07): downloads never wait for it."""
 
