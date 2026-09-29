@@ -5,9 +5,10 @@ import json
 import threading
 import time
 
-from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
+from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin,
+                      chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
-from .setup import browser_problem, install_browser
+from .setup import BROWSER_NAMES, browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
 from . import diagnostics
 from .config import payhip_shops
@@ -331,12 +332,18 @@ class Jobs:
             self.lib.set_error(store, unreachable_message(store, "opened for signing in"))
             self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
             return
+        channel, chosen = use_channel(self.cfg), chosen_channel(self.cfg)
+        name = BROWSER_NAMES[channel]
+        # which browser, in the log and on screen: a chosen browser that isn't installed is stood in for by Hoard's
+        # own, and that used to happen without a word (issue #20)
+        print(f"Signing in to {label} with {name}" + (f" ({BROWSER_NAMES[chosen]} was chosen, and isn't installed)"
+                                                     if chosen != channel else ""), flush=True)
         with _playwright()() as p:
             ctx = launch(p, self.cfg, False, store)
             open_sign_in_pages(ctx, self.cfg, store)
             tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(ctx.pages) > 1 else ""
             self._set(task="login", store=store,
-                      message=f"Sign in to {label} in the browser window that opened{tabs}, then close that window.")
+                      message=f"Sign in to {label} in the {name} window that opened{tabs}, then close that window.")
             while True:  # wait for the window to be closed
                 try:
                     if not ctx.pages:

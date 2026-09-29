@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__, diagnostics, itch, updater, vault
-from .browser import SigninsUnprotected, signin_protection, signins_root
+from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog, reseal_catalog
 from .downloads import build_index, library_status, reveal, with_tags
@@ -84,6 +84,9 @@ def public_settings(cfg: dict) -> dict:
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "display": display_settings(cfg),
+        # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
+        # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
+        "browsers": {choice: use_channel({**cfg, "browser_channel": choice}) for choice in BROWSER_CHOICES},
         "stores": {s: {"enabled": bool(cfg[s].get("enabled", True)),
                        **({"include_gifts": bool(cfg[s].get("include_gifts", True)),
                            "include_free": bool(cfg[s].get("include_free", True))} if s == "booth" else {}),

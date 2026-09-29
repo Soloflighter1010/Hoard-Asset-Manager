@@ -690,6 +690,47 @@ class SetupAssistant(unittest.TestCase):
         self.assertIsNone(job.open_link("https://accounts.booth.pm/users/confirmation?token=x"))
         self.assertEqual(job.pending_link, "https://accounts.booth.pm/users/confirmation?token=x")
 
+    def test_signing_in_starts_the_chosen_browser_and_names_it(self):
+        """Issue #20: the browser chosen in Settings is the one a sign-in starts. The job says which one, and says
+        when Hoard's own stands in for a chosen browser that isn't installed."""
+        import contextlib
+        import io
+        from unittest import mock
+        started = []
+
+        class Window:
+            pages = []
+
+            def close(self):
+                pass
+
+        def launch(p, cfg, headless, store):
+            from hoard.browser import use_channel
+            started.append(use_channel(cfg))
+            return Window()
+
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        for installed, choice, used, name in (({"chrome", "msedge"}, "chrome", "chrome", "Google Chrome"),
+                                              ({"chrome", "msedge"}, "msedge", "msedge", "Microsoft Edge"),
+                                              ({"msedge"}, "chrome", "chromium", "Hoard's own browser")):
+            with self.subTest(choice=choice, installed=sorted(installed)):
+                job = jobs.Jobs({**config.load_config(), "browser_channel": choice}, lib)
+                said, out = [], io.StringIO()
+                with mock.patch("hoard.browser.channel_installed", lambda channel: channel in installed), \
+                        mock.patch.object(jobs, "reachable", lambda store: True), \
+                        mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                        mock.patch.object(jobs, "launch", launch), \
+                        mock.patch.object(jobs, "open_sign_in_pages", lambda ctx, cfg, store: None), \
+                        mock.patch.object(jobs, "check_saved_signin", lambda cfg, store: None), \
+                        mock.patch.object(job, "_refresh", lambda stores: None), \
+                        mock.patch.object(job, "_set", lambda **kw: said.append(kw.get("message", ""))), \
+                        contextlib.redirect_stdout(out):
+                    job._login_then_refresh(["gumroad"])
+                self.assertEqual(started[-1], used)
+                self.assertIn(f"in the {name} window", " ".join(said))
+                self.assertIn(f"Signing in to Gumroad with {name}", out.getvalue())
+                self.assertEqual("isn't installed" in out.getvalue(), used != choice)
+
     def test_a_chosen_browser_thats_missing(self):
         """Settings named Edge or Chrome, which isn't installed: setup offers Hoard's own browser, and once it's
         installed that's the one used and shown as ready (it kept saying the chosen one "isn't installed")."""
