@@ -135,6 +135,57 @@ def _redact_credentials(text: str) -> str:
     return text
 
 
+_STORE_TAGS = ("[Booth]", "[Gumroad]", "[Jinxxy]", "[Payhip]", "[itch.io]")
+_ASSET_PREFIXES = ("would update", "would download", "updated:", "saved:", "downloaded:", "failed:")
+
+
+def _store_line(line: str) -> tuple[str, str, str] | None:
+    """A "[Store] creator / asset" log line split into (lead, creator, asset), or None when it isn't one.
+    Read with string operations, not a pattern: a pattern for this can take very long on a line with a long run of
+    spaces, and support reports read whatever the logs hold."""
+    rest = line.lstrip()
+    tag = next((t for t in _STORE_TAGS if rest.startswith(t)), None)
+    if tag is None:
+        return None
+    after = rest[len(tag):]
+    body = after.lstrip()
+    if body == after or not body:   # the tag needs space after it, then something
+        return None
+    lead = line[:len(line) - len(body)]
+    slash = body.find("/", 1)   # the creator is at least one character
+    while slash >= 0:
+        asset = _after_slash(body[slash + 1:])
+        if asset:
+            return lead, body[:slash].rstrip(), asset
+        slash = body.find("/", slash + 1)
+    gap = len(after) - len(body)
+    if body.startswith("/") and gap >= 2 and _after_slash(body[1:]):   # no creator: "[Booth]  / asset"
+        return lead[:-1], lead[-1], _after_slash(body[1:])
+    return None
+
+
+def _after_slash(text: str) -> str:
+    """The asset part after a store line's slash: trimmed, or its last space if it's only spaces; "" if empty."""
+    return text.strip() or text[-1:]
+
+
+def _asset_line(line: str) -> tuple[str, str] | None:
+    """A "saved: asset" (downloaded:, failed:, would update ...) log line split into (lead, asset), or None."""
+    rest = line.lstrip()
+    low = rest.lower()
+    prefix = next((p for p in _ASSET_PREFIXES if low.startswith(p)), None)
+    if prefix is None:
+        return None
+    after = rest[len(prefix):]
+    body = after.strip()
+    if not after or not after[0].isspace():
+        return None
+    if not body:   # only spaces after it: nothing to hide
+        return line, ""
+    lead = line[:len(line) - len(after.lstrip())]
+    return lead, body
+
+
 def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict[str, str] | None = None) -> str:
     """Hide likely purchased asset names in common Hoard log lines while keeping repeated references stable."""
     creators = creators if creators is not None else {}
@@ -151,13 +202,14 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
 
     lines: list[str] = []
     for line in text.splitlines():
-        m = re.match(r"^(\s*\[(?:Booth|Gumroad|Jinxxy|Payhip|itch\.io)\]\s+)(.+?)\s*/\s*(.+?)\s*$", line)
-        if m:
-            line = f"{m.group(1)}{anon(creators, m.group(2), 'CREATOR')} / {anon(assets, m.group(3), 'ASSET')}"
+        store = _store_line(line)
+        if store:
+            lead, creator, asset = store
+            line = f"{lead}{anon(creators, creator, 'CREATOR')} / {anon(assets, asset, 'ASSET')}"
         else:
-            m = re.match(r"^(\s*(?:would (?:update|download)|(?:updated|saved|downloaded|failed):)\s+)(.+?)\s*$", line, re.I)
-            if m and not m.group(2).startswith("["):
-                line = m.group(1) + anon(assets, m.group(2), "ASSET")
+            saved = _asset_line(line)
+            if saved and not saved[1].startswith("["):
+                line = saved[0] + anon(assets, saved[1], "ASSET")
         lines.append(line)
     return "\n".join(lines)
 

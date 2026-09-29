@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import html
 import http.client
 import ipaddress
 import json
@@ -19,6 +20,7 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -427,11 +429,48 @@ class TLSServerMixin:
         super().finish_request(request, client_address)
 
 
+def _script_end(lower: bytes, start: int) -> int:
+    """Where the next </script> end tag begins in an already lower-cased page, from start, or -1. An end tag is
+    "</script" followed by whitespace, "/" or ">", as browsers read it (so "</script >" and "</SCRIPT>" count)."""
+    while True:
+        at = lower.find(b"</script", start)
+        if at < 0:
+            return -1
+        after = lower[at + 8:at + 9]
+        if not after or after in b" \t\n\r\f/>":
+            return at
+        start = at + 8
+
+
+def inline_scripts(page: bytes) -> list[bytes]:
+    """The text of each inline <script> in one of Hoard's own pages, exactly as a browser hashes it for the
+    Content-Security-Policy. Read by looking for the tags, case-insensitively and allowing attributes and spaces,
+    rather than with a pattern, so no way of writing a script tag is missed. (Hoard's pages are its own files:
+    this is not for cleaning pages from anywhere else; see inert_html for that.)"""
+    lower, found, at = page.lower(), [], 0
+    while True:
+        at = lower.find(b"<script", at)
+        if at < 0:
+            return found
+        after = lower[at + 7:at + 8]
+        if after and after not in b" \t\n\r\f/>":   # e.g. <scripts>: not a script tag
+            at += 7
+            continue
+        close = lower.find(b">", at)
+        if close < 0:
+            return found
+        end = _script_end(lower, close + 1)
+        if end < 0:   # never closed: the browser runs the rest of the page as the script
+            end = len(page)
+        found.append(page[close + 1:end])
+        at = end + 1
+
+
 def content_security_policy(page: bytes) -> str:
     """A policy that runs only the page's own inline script (by its hash) and loads nothing unexpected."""
     key = hashlib.sha256(page).hexdigest()
     if key not in _csp_cache:
-        scripts = re.findall(rb"<script>(.*?)</script>", page, re.S)
+        scripts = inline_scripts(page)
         # Browsers hash a script as HTML parsing leaves it, with every CRLF or CR turned into LF, so the same is
         # done here: a page saved with Windows line endings would otherwise have its script refused.
         hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(s.replace(b"\r\n", b"\n").replace(b"\r", b"\n")).digest()).decode()
@@ -625,23 +664,126 @@ def open_under(root: Path, rel: str):
 
 # ----------------------------------------------------------------------------- pages you saved
 
-_ACTIVE = [
-    re.compile(r"<script\b[^>]*>.*?</script\s*>", re.S | re.I),
-    re.compile(r"<(iframe|frame|object|embed)\b[^>]*>.*?</\1\s*>", re.S | re.I),
-    re.compile(r"<(iframe|frame|object|embed|base|meta\s+http-equiv)\b[^>]*>", re.I),
-]
-_HANDLERS = re.compile(r"""\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I)
-_JS_LINKS = re.compile(r"""(\s(?:href|src|action|formaction|xlink:href)\s*=\s*["']?)\s*javascript:""", re.I)
+# Read with Python's HTML parser and written out again, rather than cleaned with patterns: a pattern can always
+# miss some way of writing a tag (<SCRIPT>, </script >, </script\t\nfoo>, a tag split over lines), and the
+# parser reads tags much as a browser does. Everything written out is either a tag rebuilt from what the parser
+# read, with its attributes quoted and escaped again, or text escaped again, so the browser reading the result
+# sees the same tags the parser saw.
+
+_DROP_WITH_CONTENT = {"script", "iframe", "object", "noembed", "noframes"}   # removed along with everything inside
+_NESTS = {"object"}   # the others are text to a browser until their first end tag, so they can't hold another
+_DROP_TAG = {"frame", "embed", "base", "applet", "portal", "frameset"}     # removed; what's inside them stays
+_URL_ATTRS = {"href", "src", "action", "formaction", "xlink:href", "data", "poster", "background", "codebase",
+              "cite", "longdesc", "lowsrc", "dynsrc", "manifest", "ping", "srcset",
+              # SVG animation can set any attribute (href included) to these values
+              "to", "from", "values", "by"}
+_BAD_SCHEMES = ("javascript:", "vbscript:", "livescript:", "mocha:", "data:text/html")
+_RAW_TEXT = {"style"}   # the parser reads what's inside as text, but inside SVG a browser reads it as markup
+
+
+def _bad_link(value: str) -> bool:
+    """Would this attribute value run something when followed? Browsers ignore spaces and control characters
+    anywhere in a link's scheme, and letter case, so they're ignored here too."""
+    squeezed = "".join(c for c in value[:200] if c > " " and c != "\x7f").lower()
+    return squeezed.startswith(_BAD_SCHEMES)
+
+
+class _Inert(HTMLParser):
+    """Writes out the page it's fed with everything that could run left out (see inert_html)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.out: list[str] = []
+        self.skip: list[str] = []   # the elements being left out, innermost last, while inside one
+        self.raw: str | None = None   # the raw-text element being written, while inside one
+
+    def _attrs(self, attrs) -> str:
+        kept = []
+        for name, value in attrs:
+            name = (name or "").lower()
+            if (not name or name.startswith("on") or name in ("srcdoc", "formaction")
+                    or not all(c.isalnum() or c in "-_:." for c in name)):
+                continue   # event handlers (onerror=, onload=, ...), a frame's own page, and nonsense names
+            value = "" if value is None else value
+            if name in _URL_ATTRS and _bad_link(value):
+                value = "about:blank#"
+            if name == "attributename" and value.strip().lower().startswith("on"):
+                continue   # SVG animation that would set an event handler
+            kept.append(f' {name}="{html.escape(value, quote=True)}"')
+        return "".join(kept)
+
+    def _dropped(self, tag: str, attrs) -> bool:
+        if tag in _DROP_TAG:
+            return True
+        if tag == "meta" and any((n or "").lower() == "http-equiv" for n, _ in attrs):
+            return True   # <meta http-equiv="refresh"> and the like
+        return False
+
+    def handle_starttag(self, tag, attrs):
+        if self.skip:
+            if tag == self.skip[-1] and tag in _NESTS:
+                self.skip.append(tag)
+            return
+        if tag in _DROP_WITH_CONTENT:
+            self.skip.append(tag)
+            return
+        if self._dropped(tag, attrs):
+            return
+        self.out.append(f"<{tag}{self._attrs(attrs)}>")
+        if tag in _RAW_TEXT:
+            self.raw = tag
+
+    def handle_startendtag(self, tag, attrs):
+        if self.skip or tag in _DROP_WITH_CONTENT or self._dropped(tag, attrs):
+            return
+        self.out.append(f"<{tag}{self._attrs(attrs)} />")   # written as it was, so it's read as it would have been
+
+    def handle_endtag(self, tag):
+        if self.skip:
+            if tag == self.skip[-1]:
+                self.skip.pop()
+            return
+        if tag in _DROP_WITH_CONTENT or tag in _DROP_TAG:
+            return
+        if tag == self.raw:
+            self.raw = None
+        self.out.append(f"</{tag}>")
+
+    def handle_data(self, data):
+        if self.skip:
+            return
+        if self.raw:   # CSS, written as read except for "<": no tag can start inside it, whichever way it's read
+            self.out.append(data.replace("<", "&lt;"))
+        else:
+            self.out.append(html.escape(data, quote=False))
+
+    def handle_entityref(self, name):
+        if not self.skip:
+            self.out.append(f"&{name};" if name.isalnum() else html.escape(f"&{name}", quote=False))
+
+    def handle_charref(self, name):
+        if not self.skip:
+            self.out.append(f"&#{name};" if name.isalnum() else html.escape(f"&#{name}", quote=False))
+
+    def handle_decl(self, decl):
+        if not self.skip and decl.lower().startswith("doctype") and ">" not in decl:
+            self.out.append(f"<!{decl}>")
+
+    def unknown_decl(self, data):
+        if not self.skip and data.startswith("CDATA[") and "]]>" not in data:   # text inside SVG
+            self.out.append(html.escape(data[6:], quote=False))
+
+    # comments and processing instructions are left out: nothing in a saved page needs them
 
 
 def inert_html(page_html: str) -> str:
     """A saved page with everything that could run removed: scripts, frames and plugins, inline event handlers
-    (onerror=, onload=, ...), and javascript: links. Imported pages are also opened with scripts switched off;
-    this is the second layer."""
-    for pattern in _ACTIVE:
-        page_html = pattern.sub("", page_html)
-    page_html = _HANDLERS.sub("", page_html)
-    return _JS_LINKS.sub(r"\1about:blank#", page_html)
+    (onerror=, onload=, ...), javascript: links, <base> and <meta http-equiv>. Imported pages are also opened
+    with scripts switched off; this is the second layer."""
+    parser = _Inert()
+    parser.feed(page_html)
+    parser.close()
+    return "".join(parser.out)
 
 
 def offline_page(browser):
@@ -710,3 +852,29 @@ def safe_join(root: Path, rel: str) -> Path | None:
     except (OSError, ValueError):
         return None
     return p if p == base or base in p.parents else None
+
+
+def contained_rel(root: Path, rel: str) -> str | None:
+    """rel, a plain /-separated path (see valid_rel), rebuilt from a normalised full path proven to be inside root.
+    None when it isn't plain or would lead outside root.
+
+    This is a check on the path's text: it doesn't follow links, which is left to open_under, so a link inside
+    root is still refused there. What's returned is made from the checked path, not from the path asked for.
+    """
+    if not valid_rel(rel):
+        return None
+    base = os.path.normpath(os.path.abspath(root))
+    full = os.path.normpath(os.path.join(base, *rel.split("/")))
+    prefix = base if base.endswith(os.sep) else base + os.sep
+    if not full.startswith(prefix):
+        return None
+    return full[len(prefix):].replace(os.sep, "/")
+
+
+def header_safe(value) -> str:
+    """A response header's name or value, refused if it has a line break (which would let it start another header
+    or the body: HTTP response splitting). Every header Hoard's server sends goes through this."""
+    text = str(value)
+    if "\r" in text or "\n" in text or "\x00" in text:
+        raise ValueError("a response header can't contain a line break")
+    return text.replace("\r", "").replace("\n", "")

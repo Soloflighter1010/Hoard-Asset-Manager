@@ -24,7 +24,7 @@ os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-
 sys.path.insert(0, str(REPO))
 
 from hoard import __version__, config, egress, server, updater  # noqa: E402
-from hoard.safety import ACCESS_HEADER  # noqa: E402
+from hoard.safety import ACCESS_HEADER, header_safe  # noqa: E402
 
 NEXT = "99.0.0"   # always newer than this copy
 SETUP = f"Hoard-Setup-{NEXT}.exe"
@@ -56,8 +56,8 @@ class _GitHub:
                 self.send_response(status)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
-                for k, v in (headers or {}).items():
-                    self.send_header(k, v)
+                for k, v in (headers or {}).items():   # a Location made from the request: checked like Hoard's own
+                    self.send_header(header_safe(k), header_safe(v))
                 self.end_headers()
                 self.wfile.write(body)
 
