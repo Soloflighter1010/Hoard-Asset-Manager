@@ -466,10 +466,13 @@ class SetupAssistant(unittest.TestCase):
             threading.Thread(target=run, daemon=True).start()
             return True
 
+        with srv.lib.lock:   # a first start: nothing in the library yet, so the assistant opens by itself
+            srv.lib.data["items"], srv.lib.data["stores"] = [], {}
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
-        with sync_playwright() as p, mock.patch.object(srv.jobs, "start", side_effect=sign_in):
+        with sync_playwright() as p, mock.patch.object(srv.jobs, "start", side_effect=sign_in), \
+                mock.patch.object(srv.lib, "save"):   # in memory only, as elsewhere here
             browser = p.chromium.launch()
             page = browser.new_page()
             page.goto(srv.entry_url())
