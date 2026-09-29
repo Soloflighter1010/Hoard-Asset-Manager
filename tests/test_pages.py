@@ -230,6 +230,36 @@ class AccessKey(unittest.TestCase):
                                    ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
 
+    def test_downloaded_or_not_yet(self):
+        """Issue #17: in the Library, what's on disk is marked on its card and in its label, and Downloaded / Not
+        downloaded yet filter the library, with counts, kept in the address like the other filters."""
+        with self.srv.lib.lock:
+            before = list(self.srv.lib.data["items"])
+            self.srv.lib.data["items"] = before + [library.item("gumroad", "zz", name="Mochi", creator="Kitsu Studio")]
+        self.addCleanup(lambda: self.srv.lib.data.update(items=before))
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Mochi").first.wait_for()
+        rusk, mochi = page.locator(".slot", has_text="Rusk"), page.locator(".slot", has_text="Mochi")
+        self.assertEqual(rusk.locator(".ondisk-mark").count(), 1)
+        self.assertEqual(mochi.locator(".ondisk-mark").count(), 0)
+        self.assertIn(", downloaded", rusk.get_attribute("aria-label"))
+        self.assertNotIn("downloaded", mochi.get_attribute("aria-label"))
+        self.assertEqual(page.locator("#disk [data-disk]").all_inner_texts(), ["Downloaded1", "Not downloaded yet1"])
+
+        page.click("#disk [data-disk='no']")
+        self.assertEqual(page.locator("#grid .slot .nm-t").all_inner_texts(), ["Mochi"])
+        self.assertEqual(page.locator("#disk [data-disk='no']").get_attribute("aria-pressed"), "true")
+        self.assertIn("Not downloaded yet", page.locator("#status").inner_text())
+        self.assertIn("downloaded=no", page.url)
+        page.reload()
+        page.get_by_text("Mochi").first.wait_for()
+        self.assertEqual(page.locator("#grid .slot .nm-t").all_inner_texts(), ["Mochi"], "kept in the address")
+        page.click("#disk [data-disk='yes']")
+        self.assertEqual(page.locator("#grid .slot .nm-t").all_inner_texts(), ["Rusk"])
+        page.click("#status [data-clear='disk']")
+        self.assertEqual(sorted(page.locator("#grid .slot .nm-t").all_inner_texts()), ["Mochi", "Rusk"])
+        self.assertEqual(refused, [])
+
     def test_the_downloads_page_has_the_update_setting(self):
         """Issue #28: Check for updates is in the Downloads page's Settings too, and saving it there keeps it."""
         from playwright.sync_api import expect

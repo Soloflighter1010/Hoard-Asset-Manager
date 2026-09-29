@@ -95,7 +95,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   (Ctrl+S, "Webpage, Single File"): choose any number at once, a whole folder of them, or drop them on the
   window. Handy when a store blocks the refresh, or you'd rather not sign in there.
 - **Library** shows everything you own. Open an item to see its details, tag it, open its store page, or
-  **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads.
+  **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads, and have a
+  small download mark on their picture; **Downloaded** and **Not downloaded yet** (on the left) show just those.
 - **Downloads** shows what's on your computer, with its files, sizes and folders. **Download new** fetches
   anything new or updated, with progress as it goes; **Stop** pauses safely, and it carries on next time.
   **Check for updates** (under **Updates**) lists what creators added or changed since you downloaded it,
