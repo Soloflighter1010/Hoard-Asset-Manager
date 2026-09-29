@@ -21,11 +21,26 @@ from hoard import app, config  # noqa: E402
 from hoard.safety import ACCESS_HEADER  # noqa: E402
 
 
+class FakeEvent:
+    """pywebview's window event: handlers added with +=, called with what the window reports."""
+    def __init__(self):
+        self.handlers = []
+
+    def __iadd__(self, handler):
+        self.handlers.append(handler)
+        return self
+
+    def set(self, *args):
+        for h in self.handlers:
+            h(*args)
+
+
 class FakeWindow:
     def __init__(self, title, url, **kw):
         self.title, self.url, self.kw = title, url, kw
         self.shown, self.closed = 0, threading.Event()
         self.on_top = False
+        self.events = types.SimpleNamespace(**{e: FakeEvent() for e in ("resized", "moved", "maximized", "minimized", "restored")})
 
     def restore(self): pass
     def show(self): self.shown += 1
@@ -48,6 +63,7 @@ def fake_webview(fail=False):
         mod.start_kw = kw
         mod.windows[-1].closed.wait(30)
     mod.create_window, mod.start = create_window, start
+    mod.screens = [types.SimpleNamespace(x=0, y=0, width=1920, height=1080)]
     return mod
 
 
@@ -119,6 +135,64 @@ class DesktopApp(unittest.TestCase):
         lock = app.InstanceLock(app.data_dir() / "running.lock")
         self.assertTrue(lock.acquire(), "the next start isn't blocked")
         lock.release()
+
+    def test_the_window_opens_where_it_was(self):
+        """Issue #16: the window's size and place are kept when it closes, and it opens there next time, maximized
+        if it was; a place no longer on any screen isn't used, so the window never opens out of sight."""
+        app.place_file().unlink(missing_ok=True)
+        self.addCleanup(app.place_file().unlink, missing_ok=True)
+
+        def run(wv, then):
+            sys.modules["webview"] = wv
+            t, result, info = self.start()
+            window = wv.windows[-1]
+            then(window)
+            key = enter(window.url)
+            self.assertEqual(post(info["url"], "/api/quit", {}, key), 200)
+            t.join(15)
+            return window.kw
+
+        def moved_about(w):
+            w.events.resized.set(1200, 800)
+            w.events.moved.set(300, 120)
+        kw = run(fake_webview(), moved_about)
+        self.assertEqual((kw["width"], kw["height"], kw["maximized"]), (1440, 920, False), "the first time: the usual size")
+        self.assertNotIn("x", kw, "centred")
+        self.assertEqual(kw["min_size"], (900, 600))
+
+        def maximized_and_minimized(w):
+            w.events.maximized.set()
+            w.events.resized.set(1920, 1040)   # maximized: not its own size
+            w.events.minimized.set()
+            w.events.moved.set(-32000, -32000)   # minimized, on Windows
+            w.events.maximized.set()   # and back, maximized
+        kw = run(fake_webview(), maximized_and_minimized)
+        self.assertEqual((kw["width"], kw["height"], kw["x"], kw["y"], kw["maximized"]), (1200, 800, 300, 120, False))
+        kw = run(fake_webview(), lambda w: w.events.restored.set())
+        self.assertEqual((kw["width"], kw["height"], kw["x"], kw["y"], kw["maximized"]), (1200, 800, 300, 120, True),
+                         "maximized, and restores to where it was")
+
+        # that screen's gone: a smaller one, somewhere else
+        wv = fake_webview()
+        wv.screens = [types.SimpleNamespace(x=-1280, y=0, width=1280, height=720)]
+        kw = run(wv, lambda w: None)
+        self.assertNotIn("x", kw, "not out of sight")
+        self.assertEqual((kw["width"], kw["height"]), (1200, 720), "no bigger than the screen")
+
+    def test_where_the_window_goes_from_a_damaged_or_odd_file(self):
+        path = app.place_file()
+        self.addCleanup(path.unlink, missing_ok=True)
+        screens = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440)]
+        for text, expect in [
+                ("{not json", {"width": 1440, "height": 920, "maximized": False}),
+                ('{"width": "wide", "height": true, "x": 5, "y": 5, "maximized": 1}', {"width": 1440, "height": 920, "x": 5, "y": 5, "maximized": False}),
+                ('{"width": 50, "height": 99999, "x": 2000, "y": 10}', {"width": 1440, "height": 920, "x": 2000, "y": 10, "maximized": False}),
+                ('{"width": 1000, "height": 700, "x": -900, "y": 10}', {"width": 1000, "height": 700, "maximized": False}),   # 100 px of title bar showing
+                ('[1, 2]', {"width": 1440, "height": 920, "maximized": False})]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+            self.assertEqual(app.window_place(screens), expect, text)
+        self.assertEqual(app.window_place([]), {"width": 1440, "height": 920, "maximized": False}, "no screens known: as it was")
 
     def test_no_window_support_uses_the_browser(self):
         sys.modules["webview"] = fake_webview(fail=True)

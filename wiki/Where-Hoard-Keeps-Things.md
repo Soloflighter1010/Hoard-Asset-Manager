@@ -22,6 +22,7 @@ app-data folder that belongs to your user account.
 | `logs/hoard.log` | What Hoard would print, when it runs without a console: what it read, what it downloaded, and any errors (no passwords, cookies or page contents). Past 2 MB, the older part moves to `hoard.old.log` |
 | `diagnostics/incidents.jsonl` | Private local record of recent errors and crash tracebacks, used to build support reports; it is never sent automatically |
 | `window/` | The window's own storage |
+| `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again. Delete it to open at the usual size, centred |
 | `sync.json` | When the last sync started, so **Sync automatically** knows when the next is due |
 | `update.json` | When Hoard last checked for updates, and the newest version it found |
 | `updates/` | A new version's installer, downloaded and checked, while Hoard updates. Deleted once the update is installed |
