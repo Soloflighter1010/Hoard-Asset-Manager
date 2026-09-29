@@ -525,12 +525,22 @@ def _job_summary(job: dict, sanitizer: _ReportSanitizer) -> dict:
     return sanitize_json(out, sanitizer.cfg)
 
 
+def _browser_in_use(cfg: dict) -> str | None:
+    """The browser Hoard really starts for sign-ins on this computer (msedge, chrome or chromium)."""
+    try:
+        from .browser import use_channel
+        return use_channel(cfg)
+    except Exception:
+        return None
+
+
 def _settings_summary(cfg: dict) -> dict:
     display = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
     return {
         "enabled_stores": [s for s in ("booth", "gumroad", "jinxxy", "payhip", "itch")
                            if bool((cfg.get(s) or {}).get("enabled", True))],
         "browser_channel": cfg.get("browser_channel") or "automatic",
+        "browser_in_use": _browser_in_use(cfg),
         "offline_images": bool(cfg.get("offline_images", True)),
         "check_for_updates": bool(cfg.get("check_for_updates", False)),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in (0, 6, 12, 24, 168) else 0,

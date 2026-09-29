@@ -541,6 +541,7 @@ body.selecting .dlpanel { bottom: 96px; }
     <option value="chrome">Google Chrome</option>
     <option value="chromium">Hoard's own browser</option>
   </select>
+  <p class="hint" id="browserInUse" aria-live="polite"></p>
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
   <h3>Updates</h3>
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
@@ -1313,6 +1314,13 @@ function closeSettings() {
   $("#settingsPanel").hidden = true;
   $("#settingsBtn").setAttribute("aria-expanded", "false");
 }
+const BROWSER_NAMES = { msedge: "Microsoft Edge", chrome: "Google Chrome", chromium: "Hoard's own browser" };
+function showBrowserInUse() {   // what the chosen browser really is on this computer (issue #20)
+  const chosen = $("#setBrowser").value, used = ((SETTINGS && SETTINGS.browsers) || {})[chosen];
+  $("#browserInUse").textContent = !used ? ""
+    : chosen && used !== chosen ? `${BROWSER_NAMES[chosen]} isn't installed on this computer, so Hoard signs in with its own browser.`
+    : `Hoard signs in with ${BROWSER_NAMES[used]}.`;
+}
 async function openSettings(open) {
   if (!(open ?? $("#settingsPanel").hidden)) return closeSettings();
   T.closeOtherPanels();
@@ -1329,6 +1337,7 @@ async function openSettings(open) {
   $("#setUpdates").checked = SETTINGS.check_for_updates;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
+  showBrowserInUse();
   $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
@@ -1468,6 +1477,7 @@ function wireApp() {
   $("#settingsBtn").addEventListener("click", () => openSettings());
   wireSupportReport();
   $("#setSave").addEventListener("click", saveSettings);
+  $("#setBrowser").addEventListener("change", showBrowserInUse);
   $("#setCancel").addEventListener("click", closeSettings);
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);

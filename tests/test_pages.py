@@ -134,6 +134,32 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_settings_say_which_browser_signs_in(self):
+        """Issue #20: Settings says which browser Hoard really signs in with. A chosen browser that isn't installed
+        is stood in for by Hoard's own, and that used to happen without a word."""
+        from hoard import browser as hb
+        self.addCleanup(self.srv.cfg.update, browser_channel=self.srv.cfg.get("browser_channel", ""))
+        with mock.patch.object(server, "save_config"), \
+                mock.patch.object(hb, "channel_installed", lambda channel: channel == "msedge"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            for url in (None, f"{self.srv.url}downloads"):
+                if url:
+                    page.goto(url)
+                    page.get_by_text("Rusk").first.wait_for()
+                page.click("#settingsBtn")
+                page.locator("#settingsPanel:not([hidden])").wait_for()
+                page.select_option("#setBrowser", "chrome")
+                self.assertEqual(page.locator("#browserInUse").inner_text(),
+                                 "Google Chrome isn't installed on this computer, so Hoard signs in with its own browser.")
+                page.select_option("#setBrowser", "msedge")
+                self.assertEqual(page.locator("#browserInUse").inner_text(), "Hoard signs in with Microsoft Edge.")
+                page.select_option("#setBrowser", "chromium")
+                self.assertEqual(page.locator("#browserInUse").inner_text(), "Hoard signs in with Hoard's own browser.")
+                page.click("#setSave")
+                page.wait_for_function("() => document.querySelector('#settingsPanel').hidden")
+                self.assertEqual(self.srv.cfg["browser_channel"], "chromium", "the choice is saved")
+                self.srv.cfg["browser_channel"] = ""
     def test_the_downloads_page_has_the_librarys_views(self):
         """Issue #29: archiving an item in the Library moves its download to the Downloads page's Archive view,
         as in the Library, instead of leaving no way to tell it apart."""
@@ -516,3 +542,4 @@ class SetupAssistant(unittest.TestCase):
             self.assertIn("4", page.locator('#storeSeg [data-store="gumroad"]').inner_text())
             self.assertEqual(page.locator(".slot").count(), 4)
             browser.close()
+
