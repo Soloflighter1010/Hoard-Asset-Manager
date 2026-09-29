@@ -5,7 +5,8 @@ import json
 import threading
 import time
 
-from .browser import Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin, launch, sign_out, signins_root
+from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin,
+                      launch, old_signins_waiting, profile_dir, sign_out, signins_root)
 from .safety import store_link
 from .setup import browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, capture_log
@@ -18,6 +19,33 @@ from .safety import DataFileError, read_json_file, write_file_safely
 
 
 NO_BROWSER = ("itch",)   # read through an API with a key, rather than with a sign-in in a browser
+
+
+def forget_deleted_signins(cfg: dict, lib: Library) -> list[str]:
+    """A store whose sign-in folder was deleted (by hand, from Hoard's app data) is signed out, so its list goes
+    too, as when you choose Sign out: whoever signs in next never sees what that account owned (issue #31).
+    Downloaded files stay. Only lists read from a signed-in store count: imported pages don't need a sign-in, and
+    neither does itch.io (an API key). Returns the stores whose lists were removed."""
+    try:
+        if old_signins_waiting(cfg):   # an older version's shared sign-in, not split up yet: they may be in there
+            return []
+        folders = {store: profile_dir(cfg, store) for store in STORES if store not in NO_BROWSER}
+    except (SigninsUnprotected, OSError):
+        return []
+    forgot = []
+    with lib.lock:
+        listed = {i["store"] for i in lib.data["items"]}
+        read = {s for s, info in lib.data["stores"].items() if isinstance(info, dict) and info.get("source") == "refresh"}
+    for store, folder in folders.items():
+        if store in listed and store in read and not folder.exists():
+            label = STORES[store]["label"]
+            with lib.lock:
+                n = sum(1 for i in lib.data["items"] if i["store"] == store)
+            lib.clear_store(store, f"Signed out: Hoard's sign-in for {label} was deleted, so its list of {n} items was "
+                                   "removed too. Your downloaded files are still on disk. Sign in to see them again.")
+            print(f"{label}: its sign-in folder is gone, so its list of {n} items was removed", flush=True)
+            forgot.append(store)
+    return forgot
 SYNC_CHOICES = (0, 6, 12, 24, 168)   # hours between automatic syncs; 0 = off
 UNATTENDED = ("payhip",)   # never synced automatically: Payhip needs a visible window, for its bot check
 OFFLINE_RETRY = 15 * 60    # an automatic sync that found no connection tries again this much later

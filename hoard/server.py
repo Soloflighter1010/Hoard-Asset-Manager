@@ -24,7 +24,7 @@ from .browser import SigninsUnprotected, signin_protection, signins_root
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import collect_catalog, reseal_catalog
 from .downloads import build_index, library_status, reveal, with_tags
-from .jobs import SYNC_CHOICES, Jobs, Schedule
+from .jobs import SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
@@ -196,6 +196,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._entries: dict[str, float] = {}   # one-time links: token -> until when it can be used
         self._entries_lock = threading.Lock()
         self.lib = Library(LIBRARY_FILE)
+        forget_deleted_signins(cfg, self.lib)   # a sign-in folder deleted while Hoard was closed (issue #31)
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index)
         # The downloads index: rebuilt outside the lock, one rebuild at a time (review finding P-07). _wanted counts
         # "the downloads changed"; _built_for is the count the current index was built for.
