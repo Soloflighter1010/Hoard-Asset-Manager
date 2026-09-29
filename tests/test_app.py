@@ -727,6 +727,68 @@ class ComingFrom1x(unittest.TestCase):
         self.assertIn("no folder", setup.migrate_from(cfg, old / "missing", config_file, lib))
 
 
+class DeletedSignIns(unittest.TestCase):
+    """Issue #31: a store's sign-in folder deleted while Hoard was closed counts as signing out of it: its list
+    goes, as with Sign out, and the downloaded files stay. Imported lists, itch.io's (an API key) and sign-ins an
+    older version kept in one shared profile are left alone."""
+
+    def setUp(self):
+        from unittest import mock
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.cfg = {**config.load_config(), "root": str(self.tmp / "downloads")}
+        self.signins = self.tmp / "sign-ins"
+        for patch in (mock.patch.object(jobs, "signins_root", lambda cfg: self.signins),
+                      mock.patch.object(jobs, "profile_dir", lambda cfg, store: self.signins / store),
+                      mock.patch.object(jobs, "old_signins_waiting", lambda cfg: self.waiting)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.waiting = False
+        self.lib = library.Library(self.tmp / "library.json")
+        self.lib.replace_store("gumroad", [library.item("gumroad", "1", name="Suit")])
+        self.lib.replace_store("jinxxy", [library.item("jinxxy", "2", name="Hat")])
+        self.lib.merge_store("booth", [library.item("booth", "3", name="Imported")])
+        self.lib.replace_store("itch", [library.item("itch", "4", name="Tool")])
+        (self.signins / "jinxxy").mkdir(parents=True)   # still signed in to Jinxxy
+
+    def names(self):
+        return sorted(i["name"] for i in library.Library(self.lib.path).data["items"])
+
+    def test_a_deleted_sign_in_is_a_sign_out(self):
+        self.assertEqual(jobs.forget_deleted_signins(self.cfg, self.lib), ["gumroad"])
+        self.assertEqual(self.names(), ["Hat", "Imported", "Tool"])
+        note = self.lib.data["stores"]["gumroad"]
+        self.assertEqual(note["count"], 0)
+        self.assertIn("sign-in for Gumroad was deleted", note["error"])
+        self.assertIn("1 items", note["error"])
+        self.assertEqual(jobs.forget_deleted_signins(self.cfg, self.lib), [], "once")
+
+    def test_every_sign_in_deleted(self):
+        shutil.rmtree(self.signins)
+        self.assertEqual(sorted(jobs.forget_deleted_signins(self.cfg, self.lib)), ["gumroad", "jinxxy"])
+        self.assertEqual(self.names(), ["Imported", "Tool"])
+
+    def test_what_counts_as_old_sign_ins(self):
+        from unittest import mock
+        from hoard import browser
+        root = self.tmp / "real" / "sign-ins"
+        with mock.patch.object(browser, "signins_root", lambda cfg: root), \
+                mock.patch.object(browser, "LEGACY_PROFILE", self.tmp / "none" / ".browser-profile"):
+            self.assertFalse(browser.old_signins_waiting(self.cfg), "no sign-ins at all")
+            (root / "gumroad").mkdir(parents=True)
+            self.assertFalse(browser.old_signins_waiting(self.cfg), "one folder per store: nothing to split")
+            (root / "Local State").write_text("{}")
+            self.assertTrue(browser.old_signins_waiting(self.cfg), "1.2 to 1.5: one shared profile")
+            (root / "Local State").unlink()
+            (root.parent / "sign-ins.old").mkdir()
+            self.assertTrue(browser.old_signins_waiting(self.cfg), "a move that stopped part-way")
+
+    def test_old_shared_sign_ins_still_to_split(self):
+        self.waiting = True
+        self.assertEqual(jobs.forget_deleted_signins(self.cfg, self.lib), [])
+        self.assertEqual(self.names(), ["Hat", "Imported", "Suit", "Tool"])
+
+
 class SetupAssistant(unittest.TestCase):
     """What the onboarding assistant relies on."""
 

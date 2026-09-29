@@ -382,6 +382,18 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
 _migrated = False
 
 
+def old_signins_waiting(cfg: dict) -> bool:
+    """Are there sign-ins saved by an older version (one profile for every store) still to be split up? Until they
+    are, a store without a folder of its own may still be signed in."""
+    root = signins_root(cfg)
+    value = (cfg.get("profile_dir") or "").strip()
+    legacy = [LEGACY_PROFILE] + ([Path(os.path.expandvars(value)).expanduser()]
+                                 if value and Path(value).name == ".browser-profile" else [])
+    return ((root / "Local State").exists() or (root / "Default").exists()
+            or (root.parent / (root.name + ".old")).exists() or (root.parent / (root.name + ".moving")).exists()
+            or any((x if x.is_absolute() else HERE / x).is_dir() for x in legacy))
+
+
 def _migrate_old_signins(p, cfg: dict) -> None:
     """Split sign-ins saved by older versions (one profile for every store) into a profile per store."""
     global _migrated
