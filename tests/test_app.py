@@ -221,6 +221,35 @@ class Downloading(unittest.TestCase):
         self.assertFalse(job.state["running"])
         self.assertFalse(job.cancel(), "nothing left to stop")
 
+    def test_stop_reaches_the_job_whoever_else_is_logging(self):
+        """Log messages reach every listener, from any thread. Stop has to end the job itself, not whichever
+        thread happened to log next (on Windows CI, another test's leftover thread took the Stop, and the job ran on
+        to 'Done')."""
+        def slow(cfg, root, args, report):
+            for i in range(200):
+                common.log(f"Booth: file {i}")
+                time.sleep(0.05)
+        downloader.sync_booth = slow
+        chatter_on, stolen = threading.Event(), []
+
+        def chatter():
+            while not chatter_on.is_set():
+                try:
+                    common.log("elsewhere")
+                except BaseException as e:   # noqa: B036 - what the job's Stop would raise in the wrong thread
+                    stolen.append(type(e).__name__)
+                time.sleep(0.002)
+        other = threading.Thread(target=chatter, daemon=True)
+        other.start()
+        self.addCleanup(chatter_on.set)
+        job = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        self.run_job(job, stop_after=0.5)
+        chatter_on.set()
+        other.join(5)
+        self.assertEqual(stolen, [], "Stop was raised in another thread")
+        self.assertTrue(job.state["message"].startswith("Stopped"), job.state["message"])
+        self.assertLess(len([line for line in job.state["log"] if line.startswith("Booth")]), 60, "it stopped early")
+
     def test_stopped_is_never_overwritten_by_stopping(self):
         """Stop said "Stopping" after telling the job to stop: a job that stopped in between ended up saying
         "Stopping", and Tasks listed it as done instead of stopped."""

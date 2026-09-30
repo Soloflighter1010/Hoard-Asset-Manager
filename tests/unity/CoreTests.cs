@@ -11,6 +11,162 @@ public static class CoreTests
 {
     static int failures;
 
+    // GIF pictures (animated thumbnails): every frame as Chromium shows it (tests/unity/gifs, made by
+    // make_gif_fixtures.py), shrunk to thumbnail size the right way up, and damaged files never throwing
+    static void GifChecks(string gifs)
+    {
+        var expected = Json.Parse(File.ReadAllText(Path.Combine(gifs, "expected.json"), Encoding.UTF8));
+        foreach (var file in expected.Members)
+        {
+            var img = GifDecoder.Decode(File.ReadAllBytes(Path.Combine(gifs, file.Key)), 4096);
+            var want = file.Value.Items;
+            Check("gif " + file.Key + ": decoded", img != null);
+            if (img == null) continue;
+            Check("gif " + file.Key + ": every frame", img.Frames.Count == want.Count, img.Frames.Count + " of " + want.Count);
+            for (int i = 0; i < Math.Min(want.Count, img.Frames.Count); i++)
+            {
+                var w = want[i];
+                long ms = w.Long("ms") ?? 0;
+                Check("gif " + file.Key + " frame " + i + ": size", img.Width == w.Long("width") && img.Height == w.Long("height"),
+                      img.Width + "x" + img.Height);
+                Check("gif " + file.Key + " frame " + i + ": as Chromium shows it", Sha(TopDown(img.Frames[i], img.Width, img.Height)) == w.Str("sha256"));
+                Check("gif " + file.Key + " frame " + i + ": delay", img.DelaysMs[i] == (ms < 20 ? 100 : ms), img.DelaysMs[i] + " ms");
+            }
+        }
+
+        byte[] anim = File.ReadAllBytes(Path.Combine(gifs, "anim.gif"));
+        var small = GifDecoder.Decode(anim, 20);
+        Check("gif: shrunk to fit, keeping its shape", small != null && small.Width == 20 && small.Height == 15, small == null ? "null" : small.Width + "x" + small.Height);
+        var full = GifDecoder.Decode(anim, 4096);
+        // anim.gif's first frame: red wherever it's drawn, from column 1; its top-left pixel is transparent
+        var top = TopDown(full.Frames[0], full.Width, full.Height);
+        Check("gif: rows from the bottom, as Unity's textures are", full.Frames[0][((full.Height - 1) * full.Width + 1) * 4] == top[1 * 4]
+              && top[1 * 4] == 255 && top[3] == 0);
+        Check("gif: which frame shows when", full.FrameAt(0) == 0 && full.FrameAt(99) == 0 && full.FrameAt(100) == 1 &&
+              full.FrameAt(149) == 1 && full.FrameAt(150) == 2 && full.FrameAt(449) == 2 && full.FrameAt(450) == 0);
+
+        var cut = new byte[anim.Length / 2];
+        Array.Copy(anim, cut, cut.Length);
+        var partial = GifDecoder.Decode(cut);
+        Check("gif: a file cut short gives what could be read", partial != null && partial.Frames.Count >= 1);
+        Check("gif: not a GIF", GifDecoder.Decode(Encoding.ASCII.GetBytes("PNG pretending")) == null && GifDecoder.Decode(new byte[0]) == null &&
+              GifDecoder.Decode(null) == null);
+        var huge = (byte[])anim.Clone();
+        huge[6] = 0xFF; huge[7] = 0xFF;   // 65535 pixels wide
+        Check("gif: a canvas too big to be a thumbnail is refused", GifDecoder.Decode(huge) == null);
+        var rnd = new Random(51);
+        bool threw = false;
+        for (int n = 0; n < 300; n++)   // damaged anywhere: never throws, never hangs
+        {
+            var bad = (byte[])anim.Clone();
+            for (int k = 0; k < 8; k++) bad[6 + rnd.Next(bad.Length - 6)] = (byte)rnd.Next(256);
+            try { GifDecoder.Decode(bad); } catch (Exception) { threw = true; }
+        }
+        Check("gif: damaged files don't throw", !threw);
+    }
+
+    // which picture the window shows: a GIF thumbnail now; for a WebP one (which Unity can't show), a preview
+    // among the product's files, as Hoard's own pages choose
+    static void PictureChecks(string gifs)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "hoard-pictures-" + Guid.NewGuid().ToString("N"));
+        string a = Path.Combine(root, "Booth", "Kitsu", "Animated"), b = Path.Combine(root, "Booth", "Kitsu", "Webp"),
+               c = Path.Combine(root, "Booth", "Kitsu", "Plain");
+        foreach (string d in new[] { a, b, c }) Directory.CreateDirectory(d);
+        File.Copy(Path.Combine(gifs, "anim.gif"), Path.Combine(a, "_thumbnail.gif"));
+        File.WriteAllBytes(Path.Combine(b, "_thumbnail.webp"), new byte[] { 1 });
+        File.WriteAllBytes(Path.Combine(b, "readme.png"), new byte[] { 1 });
+        File.Copy(Path.Combine(gifs, "anim.gif"), Path.Combine(b, "Preview.gif"));
+        File.WriteAllBytes(Path.Combine(c, "texture.webp"), new byte[] { 1 });
+        File.WriteAllText(Path.Combine(root, "catalog.json"),
+            "{\"format\":\"hoard-catalog\",\"version\":3,\"assets\":[" +
+            "{\"store\":\"Booth\",\"name\":\"Animated\",\"creator\":\"Kitsu\",\"folder\":\"Booth/Kitsu/Animated\",\"files\":[]}," +
+            "{\"store\":\"Booth\",\"name\":\"Webp\",\"creator\":\"Kitsu\",\"folder\":\"Booth/Kitsu/Webp\",\"files\":[\"readme.png\",\"Preview.gif\"]}," +
+            "{\"store\":\"Booth\",\"name\":\"Plain\",\"creator\":\"Kitsu\",\"folder\":\"Booth/Kitsu/Plain\",\"files\":[\"texture.webp\"]}]}", Encoding.UTF8);
+        var cat = HoardCatalog.Load(root, (byte[])null);
+        Func<string, string> pic = n => { var x = cat.Assets.Find(y => y.Name == n); return x == null || x.ThumbPath == null ? null : Path.GetFileName(x.ThumbPath); };
+        Check("pictures: a GIF thumbnail is shown", pic("Animated") == "_thumbnail.gif", pic("Animated") ?? "none");
+        Check("pictures: a WebP thumbnail gives way to a preview among the files", pic("Webp") == "Preview.gif", pic("Webp") ?? "none");
+        Check("pictures: none the window can show", pic("Plain") == null, pic("Plain") ?? "none");
+        Directory.Delete(root, true);
+    }
+
+    static byte[] TopDown(byte[] bottomUp, int w, int h)
+    {
+        var o = new byte[bottomUp.Length];
+        for (int y = 0; y < h; y++) Array.Copy(bottomUp, (h - 1 - y) * w * 4, o, y * w * 4, w * 4);
+        return o;
+    }
+
+    static string Sha(byte[] b)
+    {
+        using (var sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(b)).Replace("-", "").ToLowerInvariant();
+    }
+
+    // the credits list (issue #51): one entry per product, sorted by creator, left-out ones gone, safe to paste
+    static void CreditsChecks()
+    {
+        var found = new List<CreditEntry> {
+            new CreditEntry { Store = "Booth", Name = "Rusk Avatar Base", Creator = "Kitsu Studio", Url = "https://booth.pm/ja/items/1" },
+            new CreditEntry { Store = "Gumroad", Name = "Paw Shader", Creator = "abyss", Url = "https://evil.example/x" },
+            new CreditEntry { Store = "Jinxxy", Name = "Tail Glow", Creator = "Norspil", Url = "https://jinxxy.com/norspil/tail" },
+            new CreditEntry { Store = "Booth", Name = "rusk avatar base", Creator = "Kitsu Studio" },               // the same product again
+            new CreditEntry { Store = "Booth", Name = "Hidden ‮gpj.exe\n- fake line", Creator = "Sneaky" },
+            new CreditEntry { Store = "Booth", Name = "  ", Creator = "Nobody" },                                   // no name: dropped
+            new CreditEntry { Store = "", Name = "Hair Pack", Creator = "", Url = "https://example.com/hair", Added = true },
+            new CreditEntry { Store = "", Name = "Old Thing", Creator = "Someone", Url = "http://example.com/", Added = true },
+        };
+        var left = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Jinxxy/Tail Glow" };
+        var list = Credits.Build(found, left);
+        var names = list.ConvertAll(e => e.Name);
+        Check("credits: one per product, left-out ones gone, sorted by creator", string.Join("|", names) ==
+              "Paw Shader|Rusk Avatar Base|Hidden gpj.exe - fake line|Old Thing|Hair Pack", string.Join("|", names));
+        var hidden = list.Find(e => e.Creator == "Sneaky");
+        Check("credits: no control or invisible characters, one line", hidden != null && hidden.Name.IndexOf('\n') < 0 && hidden.Name.IndexOf('‮') < 0);
+        Check("credits: a store link that isn't the product's store is dropped", list.Find(e => e.Name == "Paw Shader").Url == null);
+        Check("credits: the product's own store link is kept", list.Find(e => e.Name == "Rusk Avatar Base").Url == "https://booth.pm/ja/items/1");
+        Check("credits: a link added by hand must be https", list.Find(e => e.Name == "Old Thing").Url == null &&
+              list.Find(e => e.Name == "Hair Pack").Url == "https://example.com/hair");
+        Check("credits: odd links refused", Credits.Link(null, "javascript:alert(1)", true) == null &&
+              Credits.Link(null, "https://a.example/x)(y", true) == null && Credits.Link(null, "https://u:p@a.example/", true) == null);
+
+        var two = Credits.Build(new List<CreditEntry> {
+            new CreditEntry { Store = "Booth", Name = "Rusk", Creator = "Kitsu", Url = "https://booth.pm/ja/items/1" },
+            new CreditEntry { Store = "Booth", Name = "Ears", Creator = "Kitsu" },
+            new CreditEntry { Store = "Itch", Name = "[Pack](javascript:x)", Creator = "Zed_z" } }, null);
+        string plain = Credits.Format(two, CreditFormat.List);
+        Check("credits: a list", plain == "Assets used\n- Ears by Kitsu (Booth)\n- Rusk by Kitsu (Booth) https://booth.pm/ja/items/1\n" +
+              "- [Pack](javascript:x) by Zed_z (itch.io)\n", plain);
+        string md = Credits.Format(two, CreditFormat.Markdown, "Credits");
+        Check("credits: Markdown, with names that can't become links", md == "## Credits\n\n- Ears by Kitsu (Booth)\n" +
+              "- [Rusk](https://booth.pm/ja/items/1) by Kitsu (Booth)\n- \\[Pack\\]\\(javascript:x\\) by Zed\\_z (itch\\.io)\n", md);
+        string by = Credits.Format(two, CreditFormat.ByCreator, "");
+        Check("credits: by creator", by == "Kitsu: Ears, Rusk\nZed_z: [Pack](javascript:x)\n", by);
+        Check("credits: an empty list says so", Credits.Format(new List<CreditEntry>(), CreditFormat.List) == "Assets used\nNone yet.\n");
+        Check("credits: cut without splitting a character", Credits.OneLine("ab\U0001F98A", 3) == "ab");
+
+        // what you change is kept per project, and a damaged file starts again rather than failing
+        string dir = Path.Combine(Path.GetTempPath(), "hoard-credits-" + Guid.NewGuid().ToString("N"));
+        string file = Path.Combine(dir, "Hoard", "credits.json");
+        var f = new CreditsFile { Title = "Made with", Format = CreditFormat.Markdown };
+        f.Added.Add(new CreditEntry { Store = "", Name = "Hair Pack", Creator = "Mia", Url = "https://example.com/hair", Added = true });
+        f.LeftOut.Add("Jinxxy/Tail Glow");
+        f.Save(file);
+        f.Save(file);   // over an existing one
+        var back = CreditsFile.Load(file);
+        Check("credits file: kept", back.Title == "Made with" && back.Format == CreditFormat.Markdown && back.LeftOut.Contains("jinxxy/tail glow") &&
+              back.Added.Count == 1 && back.Added[0].Name == "Hair Pack" && back.Added[0].Url == "https://example.com/hair" && back.Added[0].Added,
+              File.ReadAllText(file));
+        File.WriteAllText(file, "{\"format\":\"hoard-unity-credits\",\"style\":\"Evil\",\"title\":\"x\\u0000y\",\"added\":[{\"name\":\"A\",\"url\":\"javascript:x\"},7]}");
+        var odd = CreditsFile.Load(file);
+        Check("credits file: odd values made safe", odd.Format == CreditFormat.List && odd.Title == "x y" && odd.Added.Count == 1 && odd.Added[0].Url == null);
+        File.WriteAllText(file, "{ not json");
+        var broken = CreditsFile.Load(file);
+        Check("credits file: damaged, starts again", broken.Added.Count == 0 && broken.Title == "Assets used");
+        Check("credits file: missing, starts again", CreditsFile.Load(Path.Combine(dir, "none.json")).Format == CreditFormat.List);
+        Directory.Delete(dir, true);
+    }
+
     static void Check(string name, bool ok, string detail = "")
     {
         Console.WriteLine((ok ? "PASS " : "FAIL ") + name + (ok ? "" : ": " + detail));
@@ -159,6 +315,10 @@ public static class CoreTests
         Check("big library: shared folders checked once", big.DiskChecks <= wanted * 3 + 200, big.DiskChecks + " disk checks for " + wanted + " products");
         Console.WriteLine("INFO big library: " + wanted + " products in " + watch.ElapsedMilliseconds + " ms, " + big.DiskChecks + " disk checks");
         Check("big library: loaded in under 10 seconds", watch.ElapsedMilliseconds < 10000, watch.ElapsedMilliseconds + " ms");
+
+        CreditsChecks();
+        GifChecks(Path.Combine(dir, "gifs"));
+        PictureChecks(Path.Combine(dir, "gifs"));
 
         Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
         return failures == 0 ? 0 : 1;

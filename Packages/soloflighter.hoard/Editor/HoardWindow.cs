@@ -125,7 +125,14 @@ namespace SoloFlighter.Hoard.Editor
                 Repaint();
             }
             if (thumbs.Pump()) Repaint();
+            else if (thumbs.Animating && EditorApplication.timeSinceStartup - animatedAt > 1.0 / 30)
+            {
+                animatedAt = EditorApplication.timeSinceStartup;   // an animated picture is showing: play it
+                Repaint();
+            }
         }
+
+        double animatedAt;
 
         void OnProjectChanged() { packages.ProjectChanged(); statusOf.Clear(); if (inProjectOnly) Filter(); Repaint(); }
 
@@ -170,6 +177,30 @@ namespace SoloFlighter.Hoard.Editor
             if (best == InProject.Unknown && ImportLog.Imported(a, log)) best = InProject.Partly;
             statusOf[a] = best;
             return best;
+        }
+
+        /// <summary>For the credits list (issue #51): the products this project uses. A product counts when its
+        /// assets are in the project, or when it was imported through Hoard and hasn't been found gone since (the
+        /// import log keeps products this computer's catalog doesn't have). stillChecking: packages not read yet,
+        /// so the list may grow.</summary>
+        public List<CreditEntry> UsedInProject(out int stillChecking, out bool ready)
+        {
+            var found = new List<CreditEntry>();
+            stillChecking = packages == null ? 0 : packages.Waiting;
+            ready = catalog != null;
+            if (catalog == null) return found;
+            log = ImportLog.Read();
+            statusOf.Clear();   // the project may have changed since the list was drawn
+            foreach (var a in catalog.Assets)
+                if (ProjectStatus(a) >= InProject.Partly)
+                    found.Add(new CreditEntry { Store = a.Store, Name = a.Name, Creator = a.Creator, Url = a.Url });
+            foreach (var e in log)
+            {
+                var a = catalog.Assets.Find(x => x.Store == e.Store && x.Name == e.Name);
+                if (a != null) continue;   // the catalog's own check above decided it
+                found.Add(new CreditEntry { Store = e.Store, Name = e.Name, Creator = e.Creator });
+            }
+            return found;
         }
 
         void Filter()
@@ -219,6 +250,7 @@ namespace SoloFlighter.Hoard.Editor
             GUILayout.FlexibleSpace();
             if (packages.Waiting > 0) GUILayout.Label("Checking packages: " + packages.Waiting + " to go", EditorStyles.miniLabel);
             if (loading && catalog != null) GUILayout.Label("Loading...", EditorStyles.miniLabel);
+            if (GUILayout.Button("Credits", EditorStyles.toolbarButton)) CreditsWindow.Open(this);
             if (GUILayout.Button("Reload", EditorStyles.toolbarButton)) Reload();
             if (GUILayout.Button("Folder...", EditorStyles.toolbarButton))
             {

@@ -1,0 +1,70 @@
+{
+ "anim.gif": [
+  {
+   "height": 30,
+   "ms": 0,
+   "sha256": "546b2df57c45cba16b0d2352f25b3589cc56363ea5d4cd2464c5359d15c9f361",
+   "width": 40
+  },
+  {
+   "height": 30,
+   "ms": 50,
+   "sha256": "ac87846b039ddd3e3605caf07fe8c4d33097cb6c176a412d9c017ddfd4c1cbe4",
+   "width": 40
+  },
+  {
+   "height": 30,
+   "ms": 300,
+   "sha256": "12e38ebb18811404db8d55da535cb730b9a517b1702b0733b77eb66d7ce81d4e",
+   "width": 40
+  }
+ ],
+ "interlaced.gif": [
+  {
+   "height": 17,
+   "ms": 0,
+   "sha256": "f06ba3b82b84cf8c03f0b31da2ff8aa63f7fabc0a46bda9afc4250e0a5806a0b",
+   "width": 33
+  }
+ ],
+ "noisy.gif": [
+  {
+   "height": 120,
+   "ms": 0,
+   "sha256": "a65bc5a393ecdc9c39811672ea65000ae350562cca449064cfe7a2621ba8dfea",
+   "width": 160
+  }
+ ],
+ "restore.gif": [
+  {
+   "height": 32,
+   "ms": 80,
+   "sha256": "47af1cf2c0bde2ac8843faa38bccf46c003a31a5a4c12ad40cd850b5bc079fe7",
+   "width": 32
+  },
+  {
+   "height": 32,
+   "ms": 80,
+   "sha256": "c8aad781ea0dad5334a462667a1ce7a34ed4cc11c87c713f6f4ab366d2d3130b",
+   "width": 32
+  },
+  {
+   "height": 32,
+   "ms": 80,
+   "sha256": "9e7382a4aed24436db7343207ebe80174fb1eaf2a36374c973bdd5e99b2d20e5",
+   "width": 32
+  },
+  {
+   "height": 32,
+   "ms": 80,
+   "sha256": "43157fc2cd98d9129e1f2ea2356ecde8ae6feae6cfd26201f1dd61d8e08db7e7",
+   "width": 32
+  },
+  {
+   "height": 32,
+   "ms": 80,
+   "sha256": "ecebf4cd35199c98dfc768afaa0eabcb591a2b9c56b6ed7543f6631a2ca94aa4",
+   "width": 32
+  }
+ ]
+}

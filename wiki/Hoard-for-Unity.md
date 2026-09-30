@@ -6,6 +6,7 @@ hunting for it or downloading it again.
 Open **Window › Hoard** to:
 
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails.
+  Animated ones (GIFs) play, from 0.3.0.
 - **See what's already in this project.** It reads the asset GUIDs inside each `.unitypackage`, without extracting
   anything, and marks products **In this project** or **Partly in project**. **Select** finds their assets in
   your Project window.
@@ -15,12 +16,31 @@ Open **Window › Hoard** to:
 Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a project remembers where its
 assets came from.
 
+## Credits
+
+Creators often ask to be credited when you use their assets. **Credits** in the window's toolbar lists the Hoard
+assets this project uses, ready to paste into an avatar or world description, a post or a store page:
+
+- **What's in it:** each product whose files are in the project, and each one imported through Hoard that hasn't
+  been removed since. Untick any you don't want credited. Assets that didn't come through Hoard can be added by
+  hand, with a link if you like.
+- **Styles:** a list (name, creator, store and store link), Markdown (names linked to their store pages), or
+  grouped by creator.
+- **Copy** puts it on the clipboard. **Save as...** writes a text file, in the project's own folder unless you
+  choose otherwise; outside `Assets`, it's never part of an upload.
+
+What you change (the title, style, unticked assets and ones added by hand) is kept in
+`ProjectSettings/Hoard/credits.json`, beside the import log, so it travels with the project and its version
+control. The list is made from what's on your computer; nothing is sent anywhere.
+
 ## What it needs
 
 - The Hoard app, 2.3.1 or newer, with some downloads. Hoard doesn't need to be running.
 - Unity 2022.3, the version VRChat uses.
 - For assets from itch.io, which Hoard downloads from 2.5.0: the package's 0.1.3 or newer. Earlier ones leave
   them out, since they only show stores they know.
+- For animated pictures and the credits list: 0.3.0 or newer. Pictures Hoard saved as WebP or AVIF can't be
+  shown in Unity; the window uses one of the product's own images instead when there is one.
 
 ## Installing
 
