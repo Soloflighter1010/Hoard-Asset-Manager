@@ -1,8 +1,10 @@
 name: Build Repo Listing
 
-# Builds the VCC listing (index.json) and its landing page (Website/) from every release's package .zip with
-# VRChat's package-list-action, as the template-package does, and deploys them to GitHub Pages. Runs after Build
-# Release, whenever a release changes, or by hand. Needs Settings > Pages > Source: GitHub Actions.
+# Builds the VCC listing (index.json) and its page (Website/) from every release's package .zip with VRChat's
+# package-list-action, as the template-package does, and deploys them to GitHub Pages with Hoard's website (site/,
+# issue #27) in front: the site at the root, the listing's page at vcc/, and index.json where VCC knows it. Runs
+# after Build Release, whenever a release changes, when the site or the listing's files change on main, or by hand.
+# Needs Settings > Pages > Source: GitHub Actions.
 # The listing's name, id and address are in source.json.
 #
 # Differences from the template:
@@ -20,6 +22,9 @@ env:
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["site/**", "Website/**", "source.json", ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
     types: [completed]
@@ -81,6 +86,17 @@ jobs:
 
       - name: Keep the earlier listing address (vpm/index.json) working
         run: mkdir -p ${{ env.listPublishDirectory }}/vpm && cp ${{ env.listPublishDirectory }}/index.json ${{ env.listPublishDirectory }}/vpm/index.json
+
+      # The listing's page (rendered above) moves to vcc/ with what it loads; index.json and banner.png stay at the
+      # root, where VCC and the listing expect them. Hoard's website takes the root.
+      - name: Put Hoard's website in front, and the listing's page at vcc/
+        working-directory: ${{ env.listPublishDirectory }}
+        run: |
+          mkdir vcc
+          mv index.html app.js vcc/
+          cp -r styles.css vendor favicon.ico banner.png vcc/
+          cp -r "$GITHUB_WORKSPACE/site/." .
+          test -f index.html && test -f vcc/index.html && test -f index.json && test -f vpm/index.json
 
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3

@@ -46,7 +46,7 @@ control. The list is made from what's on your computer; nothing is sent anywhere
 
 **With the VRChat Creator Companion (VCC):**
 
-1. Open the [listing page](https://soloflighter1010.github.io/Hoard-Asset-Manager/) and choose **Add to VCC**.
+1. Open [Hoard's website](https://soloflighter1010.github.io/Hoard-Asset-Manager/#unity) and choose **Add to VCC**.
    Or, in VCC, go to **Settings › Packages › Add Repository** and paste
    `https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json`.
 2. Add **Hoard** to your project, like any other package. VCC offers updates when there's a new version.

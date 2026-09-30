@@ -157,7 +157,7 @@ the asset GUIDs inside each `.unitypackage`), and **Import** one through Unity's
 downloading again. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
 nothing reaches your uploads.
 
-Add it in the VRChat Creator Companion: open [the listing page](https://soloflighter1010.github.io/Hoard-Asset-Manager/)
+Add it in the VRChat Creator Companion: open [Hoard's website](https://soloflighter1010.github.io/Hoard-Asset-Manager/#unity)
 and choose **Add to VCC**, or go to **Settings › Packages › Add Repository** and paste
 `https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json`. Then add **Hoard** to a project. Without
 VCC, import the `.unitypackage` from the package's [releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases).
