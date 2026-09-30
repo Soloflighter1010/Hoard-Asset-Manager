@@ -421,15 +421,22 @@ class SigningInPlainly(unittest.TestCase):
         # would (SIGTERM), which Chromium also closes properly for.
         headless = [] if os.name == "nt" else ["--headless=new"]
 
+        log = Path(tempfile.mkdtemp()) / "chromium.log"   # Chromium's own account, for when this fails
+
         def popen(args, **kw):
-            proc = subprocess.Popen(args[:-1] + headless + [args[-1]], **kw)
+            kw.update(stderr=open(log, "ab"))
+            proc = subprocess.Popen(args[:-1] + headless + ["--enable-logging=stderr", "--v=0", args[-1]], **kw)
             started.append(proc)
             return proc
         with sync_playwright() as p, mock.patch.object(browser, "profile_dir", lambda cfg, store: profile), \
                 mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None):
             window = browser.SignInWindow(p, cfg, "gumroad", [f"http://127.0.0.1:{server.server_port}/"], popen=popen)
         try:
-            self.assertTrue(served.wait(60), "the sign-in page was opened")
+            if not served.wait(60):
+                said = log.read_text("utf-8", "replace")[-3000:] if log.exists() else "(no log)"
+                self.fail(f"the sign-in page was never asked for. Started: {[p.args for p in started]}; still running: "
+                          f"{[p.poll() is None for p in started]}; profile: {sorted(x.name for x in profile.iterdir())[:30]}; "
+                          f"Chromium said:\n{said}")
             time.sleep(3)
             if os.name != "nt":
                 # Headless, SIGTERM may not wait for Chromium's next write (about 30 s after a change): wait for it.
