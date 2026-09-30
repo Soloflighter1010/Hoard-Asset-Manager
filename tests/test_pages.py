@@ -804,6 +804,14 @@ class WindowsTabsAndTasks(unittest.TestCase):
         cls.jobs_file.stop()
         cls.tmp.cleanup()
 
+    def setUp(self):
+        # The last test's job may still be finishing after its page has moved on; one of these tests' jobs would
+        # then wait behind it. Start each test with nothing running and nothing waiting.
+        jobs = self.srv.jobs
+        self.assertTrue(jobs.busy.acquire(timeout=30), "the last test's job didn't finish")
+        jobs.busy.release()
+        self.assertEqual(jobs.state["queue"], [])
+
     def open(self, ctx=None):
         page = ctx.new_page() if ctx else self.browser.new_page(viewport={"width": 1400, "height": 860})
         self.errors = []
