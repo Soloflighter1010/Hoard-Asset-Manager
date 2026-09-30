@@ -660,6 +660,20 @@ class SignInWindow:
     def is_open(self) -> bool:
         return self.proc.poll() is None or _profile_in_use(self.profile)
 
+    def wait_released(self, timeout: float = 20.0) -> None:
+        """Once the window has closed: wait (a little) until its cookie database can be read. On Windows the browser's
+        last process, or a virus scan of the file it just wrote, can hold it a moment longer, and Hoard reading the
+        profile then would find no sign-in."""
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                _cookie_rows(self.profile, "SELECT 1 LIMIT 1")
+                return
+            except CookiesInUse:
+                if time.monotonic() > deadline:
+                    return
+                time.sleep(0.5)
+
     def close(self) -> None:
         """Let go of the profile (the window closed, or Hoard is stopping)."""
         self.lock.release()

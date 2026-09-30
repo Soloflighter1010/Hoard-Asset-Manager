@@ -630,6 +630,7 @@ class Jobs:
                     self._set(message=f"Opened the link from your email in the {label} window. Finish there, "
                                       f"then {close}.")
                 time.sleep(0.5)
+            window.wait_released()
         finally:
             window.close()
 

@@ -444,6 +444,11 @@ class SigningInPlainly(unittest.TestCase):
                     break
                 time.sleep(0.2)
             self.assertFalse(window.is_open(), "closed: Hoard stops waiting")
+            window.wait_released()   # as the sign-in does, before Hoard reads the profile
+            try:
+                on_disk = [r[0] for r in browser._cookie_rows(profile, "SELECT name FROM cookies")]
+            except browser.CookiesInUse as e:
+                on_disk = f"still locked: {e}"
         finally:
             window.close()
             for proc in started:
@@ -455,4 +460,5 @@ class SigningInPlainly(unittest.TestCase):
                 got = {c["name"]: c["value"] for c in ctx.cookies()}
             finally:
                 ctx.close()
-        self.assertEqual(got.get("session"), "signed-in")
+        self.assertEqual(got.get("session"), "signed-in",
+                         f"cookies in the database after the window closed: {on_disk}; Hoard's window read: {sorted(got)}")
