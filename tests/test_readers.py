@@ -120,6 +120,14 @@ PAYHIP_SHOP = ('<html><head><meta charset="utf-8"><title>Dashboard - Test Shop</
                          f'<div class="card-meta">September 11, 2026</div></div></div>' for c in ("aB1", "cD2"))
                + '</div></body></html>')
 
+# The same page when it's your own shop's (issue #25): a Payhip creator's purchases from every shop are listed there,
+# and its menu has the Creator/Customer switch, the Customer side leading back to this page.
+PAYHIP_OWN_SHOP = PAYHIP_SHOP.replace(
+    '</header>', '<ul class="dropdown-menu"><div class="account-type-switcher-wrapper"><div class="account-type-switcher-links-wrapper">'
+    '<a href="https://payhip.com/dashboard" class="account-type-switcher-link"><span class="text">Creator</span></a>'
+    '<a href="https://testshop.store/b-account" class="account-type-switcher-link"><span class="text">Customer</span></a>'
+    '</div></div></ul></header>')
+
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class BoothAndPayhip(unittest.TestCase):
@@ -153,6 +161,34 @@ class BoothAndPayhip(unittest.TestCase):
                          [("Product aB1", "Test Shop", "https://testshop.store/b-account/digital/aB1"),
                           ("Product cD2", "Test Shop", "https://testshop.store/b-account/digital/cD2")])
         self.assertEqual(cards[0]["creator_url"], "https://testshop.store")
+
+    def test_your_own_payhip_shop_doesnt_credit_you(self):
+        """Your own shop's library lists what you bought from other creators without naming them: those were all
+        credited to you, the shop's owner (issue #25). Now they're Unknown creator."""
+        pg = self.page_at("https://testshop.store/b-account", PAYHIP_OWN_SHOP)
+        result = pg.evaluate(library.PAYHIP_SHOP_JS)
+        self.assertTrue(result["own"])
+        self.assertEqual([(c["name"], c["creator"], c["creator_url"], c["url"]) for c in result["cards"]],
+                         [("Product aB1", "", "", "https://testshop.store/b-account/digital/aB1"),
+                          ("Product cD2", "", "", "https://testshop.store/b-account/digital/cD2")])
+        items = [library.payhip_item(c) for c in result["cards"]]
+        self.assertEqual({(i["creator"], i["creator_url"]) for i in items}, {("Unknown creator", None)})
+        # Someone else's shop, seen while you're signed in as a creator: its Customer link leads to your own shop,
+        # so its products are still that shop's.
+        other = PAYHIP_OWN_SHOP.replace('href="https://testshop.store/b-account" class="account-type-switcher-link"',
+                                        'href="https://myown.store/b-account" class="account-type-switcher-link"')
+        pg.set_content(other)
+        cards = pg.evaluate(library.PAYHIP_SHOP_JS)["cards"]
+        self.assertEqual({(c["creator"], c["creator_url"]) for c in cards}, {("Test Shop", "https://testshop.store")})
+
+    def test_a_payhip_card_from_another_shop_is_credited_to_that_shop(self):
+        """A shop's library can list products from other shops, each linking into its own shop: those were credited
+        to the shop whose page it was (issue #25)."""
+        page = PAYHIP_SHOP.replace("https://testshop.store/b-account/digital/cD2", "https://othershop.store/b-account/digital/cD2")
+        page = page.replace("https://testshop.store/b-account/digital/aB1", "https://payhip.com/Some%20Maker/b-account/digital/aB1")
+        cards = self.page_at("https://testshop.store/b-account", page).evaluate(library.PAYHIP_SHOP_JS)["cards"]
+        self.assertEqual([(c["creator"], c["creator_url"]) for c in cards],
+                         [("Some Maker", "https://payhip.com/Some%20Maker"), ("othershop.store", "https://othershop.store")])
 
     def test_importing_a_shop_page_needs_your_say_so(self):
         """A shop named inside an imported file is only trusted once you confirm its exact address (audit H-07)."""

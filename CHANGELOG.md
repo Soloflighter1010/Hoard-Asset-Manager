@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.11.1
+
+- **Fixed: Payhip products bought from other creators were credited to you** (issue #25). If you sell on Payhip
+  too, your own shop's library page lists everything you've bought on Payhip, from every shop, and doesn't say
+  who made each one. Hoard credited them all to the shop whose page it was: yours. Now they show as Unknown
+  creator. And a product another shop's library page lists from a different shop is now credited to the shop it's
+  from (its link says which), not to the shop whose page it was.
+- **The release's VirusTotal check no longer looks stuck.** It waited for each file's scan in turn, without a word,
+  which with several new files could run for most of an hour. Now it sends every file first, waits for all the
+  scans together, and says how they're getting on. It gives up after 40 minutes, naming the files still being
+  scanned, and running it again picks up where VirusTotal got to.
+
 ## 2.11.0
 
 Sign in with Google, Discord or X.
