@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -157,7 +158,11 @@ def _length(r: requests.Response) -> int | None:
     return n if n >= 0 else None
 
 
-def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: str = "") -> int:
+STALL_SECONDS = 120    # a download that sends nothing for this long has stalled: it's stopped (and tried again)
+PROGRESS_EVERY = 5.0   # seconds between progress reports while downloading
+
+
+def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: str = "", progress=None) -> int:
     """Download url to dest through a .part file (resuming one left from last time), following redirects one checked
     hop at a time. Returns the file's size. Refuses anything that isn't https to a public address.
 
@@ -165,7 +170,10 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
     starting where the .part file ends), and only counts as finished when the store says the file ends there (416,
     Content-Range naming that size). Anything else starts the file again rather than joining two different ones. A
     file is only put in place once it's as long as the store said it would be; otherwise the .part file is kept, and
-    the next sync resumes it. The file's own bytes are asked for (no compression), so every size is exact."""
+    the next sync resumes it. The file's own bytes are asked for (no compression), so every size is exact.
+
+    A store that sends nothing for STALL_SECONDS is given up on (the .part file is kept). progress(bytes so far,
+    whole size or None) is called every PROGRESS_EVERY seconds while the file comes in; it may raise to stop."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     anon = session(store_sess.headers.get("User-Agent", ""))
@@ -174,7 +182,7 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
     except OSError:
         have = 0
     for _ in range(MAX_HOPS):
-        r = _send(store_sess, anon, url, sites, stream=True, timeout=(20, 300),
+        r = _send(store_sess, anon, url, sites, stream=True, timeout=(20, STALL_SECONDS),
                   headers={"Accept-Encoding": "identity", **({"Range": f"bytes={have}-"} if have else {})})
         with r:
             if r.is_redirect:
@@ -212,12 +220,16 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
                        desc=desc[:40], leave=False) if tqdm else None
             written = have
             fh, identity = open_part(part, resume=resume)
+            said = time.monotonic()
             with fh:
-                for chunk in r.iter_content(1 << 20):
+                for chunk in r.iter_content(1 << 18):   # a piece at a time, so progress (and Stop) come often
                     fh.write(chunk)
                     written += len(chunk)
                     if bar:
                         bar.update(len(chunk))
+                    if progress and time.monotonic() - said >= PROGRESS_EVERY:
+                        said = time.monotonic()
+                        progress(written, expected)
             if bar:
                 bar.close()
             if expected is not None and written != expected:

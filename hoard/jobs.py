@@ -9,7 +9,7 @@ from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, 
                       chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
 from .setup import BROWSER_NAMES, browser_problem, install_browser
-from .common import Cancelled, NotLoggedIn, capture_log
+from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
@@ -377,10 +377,11 @@ class Jobs:
             self.state["sync"] = False
 
     def cancel(self) -> bool:
-        """Stop the running download (or sync) after the file it's on. False when neither is running."""
+        """Stop the running download (or sync) within a few seconds; a file it was part way through resumes next time
+        where it can. False when neither is running."""
         if self.state["running"] and (self.state["task"] in ("download", "check-updates") or self.state.get("sync")):
             self.stop.set()
-            self._set(message="Stopping after the current file")
+            self._set(message="Stopping")
             return True
         return False
 
@@ -402,9 +403,12 @@ class Jobs:
         lines: list[str] = []
 
         def progress(msg):
-            lines.extend(line.rstrip() for line in str(msg).splitlines() if line.strip())
-            del lines[:-300]
-            self._set(message=lines[-1] if lines else "", log=lines[-80:])
+            if isinstance(msg, Progress):   # how far a download has got: shown, not kept in the log or Tasks
+                self.state["message"] = str(msg)
+            else:
+                lines.extend(line.rstrip() for line in str(msg).splitlines() if line.strip())
+                del lines[:-300]
+                self._set(message=lines[-1] if lines else "", log=lines[-80:])
             if self.stop.is_set():
                 self.stop.clear()   # the catalog is still rebuilt on the way out
                 raise Cancelled()

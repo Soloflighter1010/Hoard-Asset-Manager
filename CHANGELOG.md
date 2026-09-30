@@ -27,6 +27,12 @@
   a week (**New in your library** in Settings: a day to a month, or never), and **New** under **Show** filters to
   them. **Recently added** sorts the newest first. What was already there when Hoard first read a store isn't new.
 - While your hidden library is locked, hidden products' names are left out of job progress and the Tasks list.
+- **Downloads that stall no longer hang Hoard.** A file the store stopped sending part way through, without hanging
+  up, used to wait for ever when it came through the browser (Jinxxy, and Booth when it turns direct downloads
+  away): the download never finished, its item stayed busy, and every job after it waited, with **Stop** unable to
+  reach it. Now a download with nothing new for 2 minutes is given up on and tried again, whichever way it comes.
+- **Stop works part way through a file,** within a few seconds, and what's running shows how much of the file has
+  come in so far.
 
 - **Check for updates to what you've downloaded.** In Downloads, **Check for updates** (under **Updates**) reads
   your stores without downloading anything, and lists each download whose store has newer files: files the

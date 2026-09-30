@@ -17,7 +17,7 @@ from urllib.parse import unquote, urljoin, urlparse
 import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
-from .common import NotLoggedIn, log, now_iso
+from .common import NotLoggedIn, log, now_iso, tick
 from .library import DOWNLOADABLE, STORES
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
@@ -169,6 +169,87 @@ def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
             wait = RETRY_WAITS[min(n, len(RETRY_WAITS) - 1)]
             log(f"    {what}: {e} - trying again in {wait:.0f} s ({n + 1} of {tries})")   # Stop is noticed here
             sleep(wait)
+
+
+def amount(n: int) -> str:
+    """A size in bytes, as people read it."""
+    for unit in ("bytes", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n} {unit}" if unit == "bytes" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def downloading(fname: str):
+    """A progress callback for egress.download: how much of fname has come in, shown while it downloads."""
+    return lambda got, whole: tick(f"    downloading {fname}: {amount(got)}" + (f" of {amount(whole)}" if whole else ""))
+
+
+def browser_download_file(dl) -> Path | None:
+    """Where the browser is writing a download, from Playwright's own record of it (Chromium writes to that name
+    plus .crdownload until it's complete, then renames it). None when Playwright doesn't say."""
+    try:
+        where = dl._impl_obj._artifact._initializer.get("absolutePath")
+    except Exception:
+        return None
+    return Path(where) if isinstance(where, str) and where else None
+
+
+def _file_size(path: Path) -> int | None:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
+
+
+def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> None:
+    """Wait for a download the browser is making to end, saying how far it's got.
+
+    Saving a browser download waits for it to finish, with no time limit and no way for Stop to reach it. So a
+    download the store stopped sending without hanging up would hold up the whole job (and every job after it)
+    for ever. Here, a download that gets no bigger for stall_s seconds is cancelled and raised as a failure, which
+    is tried again like any other; and Stop cancels it at once. Returns when the file is complete or the browser
+    has given up on it (saving it then says which)."""
+    where = browser_download_file(dl)
+    if where is None:
+        return
+    stall_s = egress.STALL_SECONDS if stall_s is None else stall_s
+    part = where.with_name(where.name + ".crdownload")
+    size, seen, ended = -1, False, False
+    began = moved = said = time.monotonic()
+    try:
+        while True:
+            done, growing = _file_size(where), _file_size(part)
+            if done is not None and growing is None:
+                ended = True   # complete
+                return
+            now = time.monotonic()
+            if growing is None and (seen or now - began >= 5):   # (or it was over before its file appeared)
+                ended = True   # the browser gave up on it (and deleted what it had): saving it says why
+                return
+            if growing is not None:
+                seen = True
+                if growing != size:
+                    size, moved = growing, now
+            if now - moved >= stall_s:
+                raise RuntimeError(f"the download stalled: nothing more came in for {stall_s:.0f} s")
+            if now - said >= egress.PROGRESS_EVERY:
+                said = now
+                tick(f"    downloading {fname}: {amount(max(size, 0))} so far")   # Stop is noticed here
+            _pause(dl, 0.5)
+    finally:
+        if not ended:   # stalled, or stopped
+            try:
+                dl.cancel()
+            except Exception:
+                pass
+
+
+def _pause(dl, seconds: float) -> None:
+    """Wait a moment, letting Playwright handle what the browser says meanwhile (unless the tab has closed)."""
+    try:
+        dl.page.wait_for_timeout(seconds * 1000)
+    except Exception:
+        time.sleep(seconds)
 
 
 SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
@@ -523,7 +604,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
             try:
                 got = with_retries(report, relpath, lambda fid=fid, f=f, target=target, relpath=relpath: egress.download(
                     gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, STORE_SITES["gumroad"],
-                    desc=relpath))
+                    desc=relpath, progress=downloading(relpath)))
             except Exception as e:
                 report.failed.append(f"Gumroad: {label} - {e}")
                 continue
@@ -821,8 +902,9 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
             # the same filename under a different label means the creator updated that file
             prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
             is_update = prev is not None or (folder / fname).exists()
-            log(f"    downloading: {fname}")   # the browser shows no progress, so a stop here is at least visible
+            log(f"    downloading: {fname}")
             try:
+                wait_for_browser_download(dl, fname)
                 save_browser_download(dl, folder, fname)
             except Exception as e:
                 raise RuntimeError(f"{fname} - {e}") from e
@@ -1093,6 +1175,7 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
         raise RuntimeError("Booth didn't start the download")
     dl = started[0]
     fname = name_for(booth_filename(label, dl.suggested_filename or dl.url, f"file-{fid}"))
+    wait_for_browser_download(dl, fname)
     target = save_browser_download(dl, folder, fname)
     return fname, target.stat().st_size
 
@@ -1105,7 +1188,8 @@ def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeou
         try:
             loc = booth_file_location(sess, f["url"])
             fname = name_for(booth_filename(f["name"], loc, f"file-{fid}"))
-            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname)
+            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname,
+                                          progress=downloading(fname))
         except (NotLoggedIn, RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
             route["direct"] = False
             log(f"    Booth turned the direct download away ({e}), so Hoard downloads through the browser instead.")
@@ -1286,7 +1370,8 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifes
         prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
         is_update = old is not None or prev is not None or target.exists()
         def fetch(fid=fid, target=target, fname=fname, u=u):
-            got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname)
+            got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname,
+                                 progress=downloading(fname))
             expected = str(u.get("md5_hash") or "").lower()
             if expected and md5_of(target) != expected:
                 target.unlink(missing_ok=True)

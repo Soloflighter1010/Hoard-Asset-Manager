@@ -2080,7 +2080,7 @@ function wireApp() {
   });
   $("#dlStop").addEventListener("click", async () => {
     const r = await apiPost("/api/cancel");
-    if (r.ok) $("#dlMessage").textContent = "Stopping after the current file";
+    if (r.ok) $("#dlMessage").textContent = "Stopping";
   });
   $("#dlClose").addEventListener("click", () => { $("#dlPanel").hidden = true; });
   pollDownload();  // a download started from the other view, or before this page opened

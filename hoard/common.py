@@ -34,6 +34,19 @@ def log(msg: str) -> None:
         sink(msg)
 
 
+class Progress(str):
+    """A passing note of how far something has got (a download's size so far): shown while it's current, not kept."""
+
+
+def tick(msg: str) -> None:
+    """Say how far something has got, for the app to show while it's current. Unlike log, it isn't printed or kept,
+    so it can be said every few seconds; and a job's sink checks for Stop on every tick, as it does on every log."""
+    with _sink_lock:
+        sinks = list(_sinks)
+    for sink in sinks:
+        sink(Progress(msg))
+
+
 @contextlib.contextmanager
 def capture_log(sink):
     """Send every progress message to sink while inside this block (sink may raise Cancelled to stop)."""

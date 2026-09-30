@@ -153,7 +153,7 @@ from when that shop isn't in the user's list (it's only added when the user conf
 - `downloads.py` builds the Downloads view's index from the manifests. The server caches it and rebuilds
   it after a download, a tag change, a settings change or a rescan. Its routes are `/downloads`,
   `/api/assets`, `/files/<image>` and `POST /api/open` (open a folder). `POST /api/download` starts a
-  download job; `POST /api/cancel` stops it after the current file.
+  download job; `POST /api/cancel` stops it within a few seconds (a half-downloaded file resumes next time where the store allows).
 - `jobs.Jobs._download` runs the same sync as the command line, but captures its progress messages
   (`common.capture_log`) for the page, which polls `/api/status`. Stopping raises `common.Cancelled`, a
   `BaseException` so per-file error handling can't swallow it; the catalog is still rebuilt on the way out.

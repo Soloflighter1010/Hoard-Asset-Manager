@@ -25,13 +25,19 @@ while something is running, and it's **queued**, and starts when its turn comes.
 
 **Tasks** (next to Library and Downloads) shows what's running, with its progress, what's waiting, and what
 finished, newest first, each with how it went, how long it took, any problems and its full progress. Take a
-waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync after the file
-it's on. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
+waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync within a few
+seconds. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
 left out of it.
 
-**Stop** pauses safely after the file it's on. Anything half-downloaded resumes where it stopped next time,
-and everything that finished is recorded. Closing Hoard's window stops a download the same way.
+**Stop** pauses safely within a few seconds, even part way through a big file. A file Hoard downloads itself
+(Gumroad, itch.io, and Booth unless it turns Hoard away) resumes where it stopped next time; one the browser
+downloads (Jinxxy, and Booth when it does) starts again. Everything that finished is recorded. Closing Hoard's
+window stops a download the same way.
+
+While a file downloads, how much has come in so far shows in what's running. A download that stops coming in
+(the store stops sending it but doesn't hang up) is given up on after 2 minutes with nothing new, and tried again
+like any other failed download, so it can't hold up the job, or the jobs waiting after it.
 
 Hoard waits a moment between pages on a store (1 second, `request_delay` in
 [`config.json`](Settings#settings-only-in-configjson)) to stay polite.
