@@ -120,6 +120,39 @@ class Sanitizing(unittest.TestCase):
         store_line = next(line for line in app_log.splitlines() if line.startswith("[Jinxxy]"))
         self.assertIn(store_line, files["report.txt"], "the log names the item as the report does")
 
+    def test_the_summary_a_sync_ends_with(self):
+        """The Updated, Skipped and Failed lines at the end of a sync name products and creators in their own format
+        ("Booth: creator / product / file - why"), and in 2.8.4 went into reports as they were."""
+        lib = library.Library(Path(self.tmp.name) / "library.json")
+        with lib.lock:
+            lib.data["items"] = [library.item("booth", "111", name="Secret Fox Avatar", creator="Kitsu Studio"),
+                                 library.item("gumroad", "abc", name="Hidden Hoodie", creator="Mochi Works")]
+        (diagnostics.data_dir() / "logs" / "hoard.log").write_text(
+            "\n=== Summary ===\n"
+            "Updated on the store since last sync:\n"
+            "  - Booth: Kitsu Studio / Secret Fox Avatar / SecretFox_v2.unitypackage\n"
+            "Skipped:\n"
+            "  - Gumroad: Hidden Hoodie - no download page (refunded or membership inactive)\n"
+            "  - Booth: Unlisted Thing / extra.zip - streaming only, no download\n"
+            "  - Booth: not signed in, so skipped. Sign in from Stores to include it.\n"
+            "Failed:\n"
+            "  - Gumroad: Mochi Works / Hidden Hoodie / hoodie.zip - HTTP 500\n"
+            "  - itch.io: Mochi Works / Hidden Hoodie - timed out\n", encoding="utf-8")
+        result = diagnostics.create_support_report(self.cfg, lib)
+        with zipfile.ZipFile(result["path"]) as archive:
+            log = archive.read("application-log.txt").decode("utf-8")
+        for name in ("Kitsu Studio", "Secret", "Fox", "Hidden Hoodie", "Mochi Works", "SecretFox_v2", "Unlisted Thing",
+                     "extra.zip", "hoodie.zip"):
+            self.assertNotIn(name, log)
+        self.assertIn("  - Gumroad: <CREATOR_002> / <ASSET_002> / <ASSET_", log, "the same name, the same placeholder")
+        self.assertIn(" - HTTP 500", log, "what went wrong stays")
+        self.assertIn("  - Booth: not signed in, so skipped. Sign in from Stores to include it.", log, "not a name")
+
+    def test_a_name_with_secret_in_it(self):
+        """"secret" or "token" followed by a word isn't a credential unless the word looks like one."""
+        self.assertEqual(diagnostics._redact_credentials("Secret Fox Avatar and token soup"), "Secret Fox Avatar and token soup")
+        self.assertEqual(diagnostics._redact_credentials("token abcdefghijklmnop1234"), "token [credential]")
+
     def test_the_webview_is_reported_when_its_there(self):
         """pywebview has no __version__, so every 2.8.4 report said "WebView: not installed" beside a check that
         found it."""

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **Check for updates to what you've downloaded.** In Downloads, **Check for updates** (under **Updates**) reads
+  your stores without downloading anything, and lists each download whose store has newer files: files the
+  creator added or changed since you downloaded it. **Update all**, or **Update** one from its details (which also
+  have **Check for updates** for just that one). In the Library, such items say **Update available**.
+- **Downloaded, or not yet.** Library items you've downloaded have a small download mark on their picture, and
+  **Downloaded** and **Not downloaded yet** on the left filter the library to just those.
+- **The window opens where you left it:** its size, its place, and maximized if it was. A place that's no longer on
+  any screen isn't used, so it never opens out of sight.
+- **A splash screen** with the logo while your library loads, the first time the window opens.
+- **Larger text sizes:** Settings, Stores, the details panel and dialogs fit the window again at **Large** and
+  **Largest** (Settings could grow taller than the window, with **Save** out of reach).
+- **Fixed: support reports showed product and creator names from the end of a sync.** The list of what was
+  updated, skipped and failed that ends each sync in `hoard.log` went into reports as it was. Those names are now
+  hidden like the rest, and a name with "secret" or "token" in it is no longer mangled as if it were a password.
+- **Fixed: sign-ins kept on another drive** (`advanced_signin_location`) that wasn't plugged in when Hoard
+  started made every store's list disappear, as if you'd signed out. Hoard now leaves the lists alone when that
+  whole folder is missing.
+- **Fixed: "Hoard is busy" just after starting.** The check of the catalog's seal no longer holds up the first
+  thing you choose when there's nothing to reseal.
+- The pages' script runs in strict mode again (the splash's code had been put before `"use strict"`, which
+  switched it off), and `PRIVACY.md` says where support reports really go: `Hoard\Support Reports` in your
+  Documents folder.
 - **Security: the September 2026 code-scanning findings.** Nothing here is known to have been exploitable (the
   server already needed this run's access key, and imported pages were already opened with scripts off), but each
   guard is now one CodeQL can follow, with tests for each:
