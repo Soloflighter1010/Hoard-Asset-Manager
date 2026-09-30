@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hoard: your VRChat assets from every store, in one library</title>
+  <meta name="description" content="Hoard lists everything you've bought for VRChat on Booth, Gumroad, Jinxxy, Payhip and itch.io in one library, downloads it, and keeps it up to date. Free and open source, for Windows, macOS and Linux.">
+  <meta property="og:title" content="Hoard">
+  <meta property="og:description" content="Your VRChat assets from every store, in one library. Free and open source.">
+  <meta property="og:type" content="website">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the page</a>
+  <header class="bar">
+    <a class="brand" href="./"><img src="img/mark.svg" alt="" width="32" height="32"><span>hoard</span></a>
+    <nav aria-label="Site">
+      <a href="#features">What it does</a>
+      <a href="#unity">Unity</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <h1>Your VRChat assets from every store, in one library</h1>
+      <p class="lede">Hoard lists everything you've bought on Booth, Gumroad, Jinxxy, Payhip and itch.io, downloads
+        it, and keeps your copies up to date when creators update them. Free, open source, and it runs only on your
+        computer.</p>
+      <div class="actions">
+        <a class="button primary" id="getIt" href="#download">Download Hoard</a>
+        <a class="button" href="#unity">Get Hoard for Unity</a>
+      </div>
+      <p class="small" id="getItNote">For Windows, macOS and Linux.</p>
+      <picture class="shot">
+        <source srcset="img/library-light.webp" media="(prefers-color-scheme: light)">
+        <img src="img/library-dark.webp" width="1600" height="950"
+             alt="Hoard's library: products from five stores as picture tiles, with store tabs, search, tags and creators down the side.">
+      </picture>
+      <p class="small caption">A library of sample products. Yours shows what you've bought.</p>
+    </section>
+
+    <section id="features" class="features" aria-labelledby="featuresTitle">
+      <h2 id="featuresTitle">What it does</h2>
+      <div class="grid">
+        <article>
+          <h3>One library</h3>
+          <p>Everything you own from five stores, together. Search it, sort it, filter by store, creator, tag or file
+            type, and see what's new since you last looked.</p>
+        </article>
+        <article>
+          <h3>Downloads that finish</h3>
+          <p><strong>Sync</strong> reads each store and downloads anything new, with progress, speed and time left.
+            Stop is safe: a file part way through carries on from where it was next time.</p>
+        </article>
+        <article>
+          <h3>Updates, noticed</h3>
+          <p>When a creator updates something you've downloaded, Hoard tells you, and fetches only the new files.</p>
+        </article>
+        <article>
+          <h3>Tags, hidden and archived</h3>
+          <p>Tag your assets your way, archive what you're done with, and keep a hidden library behind a PIN.</p>
+        </article>
+        <article>
+          <h3>Sign in your way</h3>
+          <p>Sign in to each store once, on its own page, with your password, a passkey, or Google, Discord or X.
+            Hoard never sees your password.</p>
+        </article>
+        <article>
+          <h3>Yours, on your computer</h3>
+          <p>No account, no server, no tracking. Your sign-ins are encrypted with your computer's own keyring, and
+            everything stays in your folders.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="unity" class="unity" aria-labelledby="unityTitle">
+      <div>
+        <h2 id="unityTitle">Hoard for Unity</h2>
+        <p>Everything you've downloaded, inside the Unity editor: <strong>Window › Hoard</strong>. Search your
+          library with pictures (animated ones play), see which assets are already in this project, and import one
+          without downloading it again.</p>
+        <p><strong>Credits</strong> lists the creators of every asset your project uses, ready to paste into your
+          avatar's description.</p>
+        <p class="small">Editor only: nothing from it goes into your uploads. Unity 2022.3, the version VRChat uses.</p>
+      </div>
+      <div class="vcc">
+        <a class="button primary" id="addToVcc" href="vcc://vpm/addRepo?url=https%3A%2F%2Fsoloflighter1010.github.io%2FHoard-Asset-Manager%2Findex.json">Add to VCC</a>
+        <label class="small" for="listingUrl">Or add this listing in VCC › Settings › Packages › Add Repository:</label>
+        <div class="copyrow">
+          <input id="listingUrl" readonly value="https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json">
+          <button class="button" id="copyListing" type="button">Copy</button>
+        </div>
+        <a class="small" href="vcc/">See the listing's packages</a>
+      </div>
+    </section>
+
+    <section id="download" class="download" aria-labelledby="downloadTitle">
+      <h2 id="downloadTitle">Download</h2>
+      <p class="small" id="latest">From the <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest">latest release</a> on GitHub.</p>
+      <div class="grid three">
+        <article data-os="windows">
+          <h3>Windows</h3>
+          <p>Windows 10 or 11. Installs for you only, with no administrator prompt, and updates itself.</p>
+          <a class="button primary" data-file="Hoard-Setup-" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest">Download the installer</a>
+          <p class="small">Windows may say it "protected your PC": Hoard isn't code-signed yet. Choose <strong>More
+            info</strong>, then <strong>Run anyway</strong>.</p>
+        </article>
+        <article data-os="mac">
+          <h3>macOS</h3>
+          <p>macOS 11 or newer. A package for your Mac's chip; Hoard goes in Applications.</p>
+          <a class="button primary" data-file="-macos-apple-silicon.pkg" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest">Apple Silicon (M1 and newer)</a>
+          <a class="button" data-file="-macos-intel.pkg" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest">Intel</a>
+          <p class="small">It isn't signed by Apple yet: open it, choose <strong>Done</strong>, then <strong>System
+            Settings › Privacy &amp; Security › Open Anyway</strong>.</p>
+        </article>
+        <article data-os="linux">
+          <h3>Linux</h3>
+          <p>A Flatpak for x86_64. Open it with your software centre, or <code>flatpak install --user</code> it.</p>
+          <a class="button primary" data-file="-linux-x86_64.flatpak" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest">Download the Flatpak</a>
+          <p class="small">Uses the GNOME runtime from <a href="https://flathub.org/setup">Flathub</a>.</p>
+        </article>
+      </div>
+      <p class="small">Every file is built on GitHub from this project's code, with a signed record of how, and checked
+        by VirusTotal before it's published. <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard">How to install, update and check a download</a>.
+        Or <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard#from-source-windows-macos-linux">run it from source</a> with Python.</p>
+    </section>
+
+    <section class="trust" aria-labelledby="trustTitle">
+      <h2 id="trustTitle">Safe by design</h2>
+      <ul>
+        <li><strong>Your passwords stay yours.</strong> You type them into each store's own page, in a browser that
+          belongs to Hoard alone. Hoard keeps only the "stay signed in" pass, encrypted by Windows, your Mac's
+          Keychain or your Linux keyring.</li>
+        <li><strong>Downloads are checked.</strong> Files go only where they belong, a download that stops is
+          resumed and verified, and nothing a store sends can land outside your downloads folder.</li>
+        <li><strong>Nothing is sent anywhere.</strong> Hoard talks only to the stores you use, and to GitHub if you
+          turn on update checks.</li>
+        <li><strong>Open source.</strong> MIT licensed, with its code, security reviews and every release on
+          <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
+    <p>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a> ·
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">What's new</a> ·
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues">Report a problem</a> ·
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md">Privacy</a> ·
+      <a href="vcc/">VCC listing</a>
+    </p>
+    <p class="small">Not affiliated with VRChat, Booth, Gumroad, Jinxxy, Payhip or itch.io.</p>
+  </footer>
+  <script src="site.js" defer></script>
+</body>
+</html>

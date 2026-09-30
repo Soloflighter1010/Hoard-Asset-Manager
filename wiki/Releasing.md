@@ -86,6 +86,15 @@ Once, when setting the repository up: add the repository variable `PACKAGE_NAME`
 (**Settings › Secrets and variables › Actions › Variables**), and set **Settings › Pages › Source** to **GitHub
 Actions**. Pages only deploys from `main`, so a listing build started by a release event is re-run on `main`.
 
+## The website
+
+Hoard's website (https://soloflighter1010.github.io/Hoard-Asset-Manager/) is the `site/` folder, deployed by
+**Build Repo Listing** with the VCC listing: the site at the root, VRChat's listing page at `vcc/`, and
+`index.json` (and the older `vpm/index.json`) where VCC finds them. A change to `site/` reaching `main` deploys
+it. It loads nothing from other sites (a test checks); its download buttons ask GitHub's API for the latest
+release's files, and open the releases page without it. Its fonts are the app's, cut down to Latin characters
+with `pyftsubset` (fontTools), and its screenshot is of the app with a sample library.
+
 ## The wiki
 
 The wiki is written in the repository's `wiki/` folder and reviewed like code. When a change to `wiki/` reaches
