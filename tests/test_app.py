@@ -1242,6 +1242,32 @@ class SetupAssistant(unittest.TestCase):
             with mock.patch.object(browser.sys, "platform", other):
                 self.assertFalse(browser._without_sandbox("chromium"), other)
 
+    def test_on_windows_the_sandbox_may_read_hoards_browser(self):
+        """Chromium's own log on Windows: "Sandbox cannot access executable" (Playwright's Chromium, downloaded into
+        AppData, doesn't let the sandbox's groups read it), and its network service died: nothing loaded. A plain
+        window of Hoard's own browser first lets them read its folder, as an installer does; if that fails, it
+        starts without the sandbox rather than not work."""
+        from unittest import mock
+        from hoard import browser
+        ran = []
+
+        def icacls(ok):
+            def run(args, **kw):
+                ran.append(args)
+                return mock.Mock(returncode=0 if ok else 5)
+            return run
+        program = str(Path(tempfile.mkdtemp()) / "chrome-win64" / "chrome.exe")
+        with mock.patch.object(browser.os, "name", "nt"), mock.patch.object(browser.subprocess, "run", icacls(True)):
+            self.assertTrue(browser._let_sandbox_read(program))
+        self.assertEqual([a[0] for a in ran], ["icacls", "icacls"])
+        self.assertEqual({a[1] for a in ran}, {os.path.dirname(program)}, "the browser's own folder, nothing else")
+        self.assertEqual(sorted(a[3] for a in ran), ["*S-1-15-2-1:(OI)(CI)(RX)", "*S-1-15-2-2:(OI)(CI)(RX)"],
+                         "read and run only, for the sandbox's two groups")
+        with mock.patch.object(browser.os, "name", "nt"), mock.patch.object(browser.subprocess, "run", icacls(False)):
+            self.assertFalse(browser._let_sandbox_read(program))
+        with mock.patch.object(browser.os, "name", "posix"):
+            self.assertTrue(browser._let_sandbox_read(program), "nothing to do elsewhere")
+
     def test_a_profile_in_use(self):
         """How Hoard tells the browser still has a profile open: Chromium's own lock in it."""
         import os as _os

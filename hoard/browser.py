@@ -630,6 +630,30 @@ def _without_sandbox(channel: str) -> bool:
     return False
 
 
+# The groups Chromium's sandboxed processes run as on Windows ("ALL APPLICATION PACKAGES" and "ALL RESTRICTED
+# APPLICATION PACKAGES"): they must be able to read the browser's folder, or its network service can't start.
+SANDBOX_GROUPS = ("*S-1-15-2-1", "*S-1-15-2-2")
+
+
+def _let_sandbox_read(program: str) -> bool:
+    """Windows: let Chromium's sandbox read Playwright's Chromium, as its installer would. Playwright downloads it
+    into your AppData without that (it always starts it without the sandbox), and a plain window's network service
+    then can't start ("Sandbox cannot access executable"): nothing loads. Installed Edge and Chrome already allow
+    it. True when it's allowed (or it's not Windows)."""
+    if os.name != "nt":
+        return True
+    folder = os.path.dirname(program)
+    try:
+        for group in SANDBOX_GROUPS:
+            done = subprocess.run(["icacls", folder, "/grant", f"{group}:(OI)(CI)(RX)", "/T", "/C", "/Q"],
+                                  capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            if done.returncode != 0:
+                return False
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 class SignInWindow:
     """A store's sign-in, in the browser's own window (not driven by Hoard). Holds the store's profile lock until
     it's closed."""
@@ -642,9 +666,11 @@ class SignInWindow:
         self.lock.acquire()
         try:
             _lock_down(self.profile)
-            self.base = [browser_program(p, cfg), f"--user-data-dir={self.profile}", "--no-first-run",
+            program = browser_program(p, cfg)
+            self.base = [program, f"--user-data-dir={self.profile}", "--no-first-run",
                          "--no-default-browser-check", *_key_args(cfg)]
-            if _without_sandbox(use_channel(cfg)):
+            channel = use_channel(cfg)
+            if _without_sandbox(channel) or (channel == "chromium" and not _let_sandbox_read(program)):
                 self.base.append("--no-sandbox")
             self.proc = popen(self.base + list(urls), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL, close_fds=True)

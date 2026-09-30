@@ -80,6 +80,10 @@ all in `browser.py`):
   process runs or Chromium's own lock is held in the profile (`_profile_in_use`: `SingletonLock` naming a live
   process, or a `lockfile` held open on Windows). A link pasted from an email is passed to the open window by
   starting the browser again on the same profile. `automated_sign_in` keeps the old Playwright window.
+  Chromium's own sandbox stays on where it can start (`_without_sandbox`: off in the Flatpak, as root, and for
+  Playwright's Chromium under Ubuntu's AppArmor user-namespace restriction). On Windows, Playwright's Chromium is
+  first given the sandbox groups' read access to its folder (`_let_sandbox_read`, icacls), without which its
+  network service can't start; if that fails, it starts without the sandbox.
 - `sign_out()` asks the store to end the session (Gumroad's `/logout`, or the store's own sign-out
   control via `SIGN_OUT_JS`), deletes the store's profile, checks no other profile holds its cookies,
   and returns a sentence saying what happened.
