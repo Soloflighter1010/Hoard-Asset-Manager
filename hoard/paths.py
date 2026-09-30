@@ -49,7 +49,7 @@ def log_files() -> list[Path]:
                     pass
     except OSError:
         return []
-    return [p for _, p in sorted(found, key=lambda t: t[0], reverse=True)]
+    return [p for _, p in sorted(found, key=lambda t: (t[0], t[1].name), reverse=True)]   # (same time: by name)
 
 
 def tidy_logs(now: float | None = None) -> int:

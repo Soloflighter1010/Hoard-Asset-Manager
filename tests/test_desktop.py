@@ -244,6 +244,8 @@ class DesktopApp(_Harness):
         self.assertIn("hello from a test", first.read_text("utf-8"))
         self.assertEqual(first.parent, app.data_dir() / "logs")
         self.assertRegex(first.name, r"^hoard-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(-\d+)?\.log$")
+        earlier = time.time() - 60   # (two launches a moment apart can have the same file time on Windows)
+        os.utime(first, (earlier, earlier))
         second = self.log("and from the next launch")
         self.assertNotEqual(first, second, "each launch its own, even within the same second")
         self.assertNotIn("next launch", first.read_text("utf-8"))
