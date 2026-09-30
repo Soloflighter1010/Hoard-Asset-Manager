@@ -130,7 +130,9 @@ def _redact_credentials(text: str) -> str:
         (re.compile(r"(?i)(x-api-key\s*[:=]\s*)[^\s,]+"), r"\1[credential]"),
         (re.compile(r"(?i)\b(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|token|secret|password|passwd|credential)\b\s*[:=]\s*[^\s,;&]+"),
          r"\1=[credential]"),
-        (re.compile(r"(?i)\b(token|secret)\b\s+[^\s,;&)\]}]+"), r"\1 [credential]"),
+        # "token abc123..." without a colon: only a value that looks like one (long, no spaces), so a name such as
+        # "Secret Fox Avatar" keeps its words
+        (re.compile(r"(?i)\b(token|secret)\b\s+[A-Za-z0-9._~+/=-]{16,}"), r"\1 [credential]"),
     )
     for pattern, replacement in patterns:
         text = pattern.sub(replacement, text)
@@ -138,6 +140,7 @@ def _redact_credentials(text: str) -> str:
 
 
 _STORE_TAGS = ("[Booth]", "[Gumroad]", "[Jinxxy]", "[Payhip]", "[itch.io]")
+_STORE_LABELS = ("Booth", "Gumroad", "Jinxxy", "Payhip", "itch.io")
 _ASSET_PREFIXES = ("would update", "would download", "updated:", "saved:", "downloaded:", "downloading:", "failed:")
 
 
@@ -164,6 +167,34 @@ def _store_line(line: str) -> tuple[str, str, str] | None:
     if body.startswith("/") and gap >= 2 and _after_slash(body[1:]):   # no creator: "[Booth]  / asset"
         return lead[:-1], lead[-1], _after_slash(body[1:])
     return None
+
+
+def _summary_line(line: str) -> tuple[str, str] | None:
+    """A line of the summary a sync ends with ("  - Booth: creator / product / file - why") split into (lead, the
+    rest after the store's name), or None. These name products and creators too, in their own format."""
+    rest = line.lstrip()
+    if not rest.startswith("- "):
+        return None
+    body = rest[2:]
+    label = next((x for x in _STORE_LABELS if body.startswith(x + ": ")), None)
+    if label is None:
+        return None
+    item = body[len(label) + 2:]
+    return line[:len(line) - len(item)], item
+
+
+def _anon_summary(item: str, anon) -> str:
+    """Hide the names in a summary line's item: "creator / product / file - why" (and the shorter "product /
+    file - why" and "creator / product - why"). The reason after " - " stays, for what went wrong. An item without
+    " / " is left to the library's own names (see _ReportSanitizer.text)."""
+    parts = item.split(" / ")
+    if len(parts) < 2:
+        return item
+    last, reason = (parts[-1].split(" - ", 1) + [None])[:2]
+    first = parts[0]
+    names = [anon(first, "CREATOR" if len(parts) >= 3 else None)] + [anon(p, "ASSET") for p in parts[1:-1]]
+    names.append(anon(last, "ASSET"))
+    return " / ".join(names) + (f" - {reason}" if reason is not None else "")
 
 
 def _after_slash(text: str) -> str:
@@ -215,8 +246,18 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
             mapping[key] = f"<{label}_{len(mapping) + 1:03d}>"
         return mapping[key]
 
+    def anon_either(value: str, label: str | None) -> str:
+        """A name the summary doesn't label: a creator if it's already known as one, else a product."""
+        if label is None:
+            label = "CREATOR" if value.strip().casefold() in creators else "ASSET"
+        return anon(creators if label == "CREATOR" else assets, value, label)
+
     lines: list[str] = []
     for line in text.splitlines():
+        summary = _summary_line(line)
+        if summary:
+            lines.append(summary[0] + _anon_summary(summary[1], anon_either))
+            continue
         bar = _progress_line(line)
         if bar:   # a download's progress bar starts with the file's name
             lines.append(f"{anon(assets, bar[0], 'ASSET') if bar[0].strip() else bar[0]}{bar[1]}")
@@ -304,6 +345,8 @@ class _ReportSanitizer:
             self._dirty = True
         if replace_known:
             clean = self._replace_known(clean)
+        else:   # a log: the library's names are looked for only in the sync summaries, which is quick
+            clean = "\n".join(self._replace_known(line) if _summary_line(line) else line for line in clean.split("\n"))
         return _sanitize_urls(clean, asset_names=True)
 
 
@@ -556,7 +599,7 @@ def _settings_summary(cfg: dict) -> dict:
 
 def _checks(cfg: dict) -> dict:
     try:
-        import webview  # noqa: F401
+        __import__("webview")
         window = True
     except Exception:
         window = False

@@ -774,6 +774,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
+"use strict";   // first, or it applies to nothing
 /* ---------- splash (issue #50): the logo while the page first reads your library. It's in the markup, so it shows
    from the first paint; on the window's first page it stays at least a moment, and on later pages (Library to
    Downloads and back) the stylesheet only fades it in if reading takes more than a moment. */
@@ -795,7 +796,6 @@ const hideSplash = (() => {
   setTimeout(hide, 20000);   // never in the way for good, whatever happens
   return hide;
 })();
-"use strict";
 const $ = s => document.querySelector(s);
 /* ---------- the access key. Hoard's server only answers requests that carry this run's key (see server.py).
    Hoard opens this page with a one-time link (#enter=...) that's traded for it; the address `hoard serve`

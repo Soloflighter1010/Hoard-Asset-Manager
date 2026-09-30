@@ -1490,18 +1490,23 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     }), indent=2, ensure_ascii=False), root)
 
 
-def reseal_catalog(cfg: dict, root: Path) -> str | None:
-    """If catalog.json isn't sealed with this install's key (Hoard on another computer, an earlier install, a Hoard
-    whose files Windows keeps separately, or an edit), rebuild it from the store records, which seals it again.
-    Returns what its seal was, if it was rebuilt; None if it was already fine or there's no catalog."""
+def catalog_seal(root: Path) -> str | None:
+    """How catalog.json is sealed (see check_seal), "unreadable", or None when there isn't one."""
     path = root / "catalog.json"
     if not path.is_file():
         return None
     try:
-        status = check_seal(read_json_file(path))
+        return check_seal(read_json_file(path))
     except (DataFileError, OSError, ValueError):
-        status = "unreadable"
-    if status == "sealed":
+        return "unreadable"
+
+
+def reseal_catalog(cfg: dict, root: Path) -> str | None:
+    """If catalog.json isn't sealed with this install's key (Hoard on another computer, an earlier install, a Hoard
+    whose files Windows keeps separately, or an edit), rebuild it from the store records, which seals it again.
+    Returns what its seal was, if it was rebuilt; None if it was already fine or there's no catalog."""
+    status = catalog_seal(root)
+    if status in (None, "sealed"):
         return None
     build_catalog(cfg, root)
     log(f"catalog.json was {status}: rebuilt from the store records and sealed with this computer's key.")

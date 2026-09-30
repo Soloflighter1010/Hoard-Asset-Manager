@@ -30,6 +30,13 @@ def forget_deleted_signins(cfg: dict, lib: Library) -> list[str]:
     try:
         if old_signins_waiting(cfg):   # an older version's shared sign-in, not split up yet: they may be in there
             return []
+        # Sign-ins kept somewhere of your choosing (advanced_signin_location) may be on a drive that isn't plugged
+        # in: with no sign-ins folder there at all, nothing is known about them, so no list is removed.
+        if cfg.get("advanced_signin_location") and (cfg.get("profile_dir") or "").strip() \
+                and not signins_root(cfg).is_dir():
+            print(f"The sign-ins folder ({signins_root(cfg)}) isn't there (a drive not plugged in?), so Hoard left "
+                  "your stores' lists as they are.", flush=True)
+            return []
         folders = {store: profile_dir(cfg, store) for store in STORES if store not in NO_BROWSER}
     except (SigninsUnprotected, OSError):
         return []

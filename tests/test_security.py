@@ -161,6 +161,13 @@ class Pages(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", csp)
             self.assertIn("font-src 'self'", csp)
 
+    def test_scripts_run_in_strict_mode(self):
+        """"use strict" only counts as a script's very first statement: code put above it (the splash, in 2.8.4's
+        pages) quietly switched it off for the whole page."""
+        for page in PAGES:
+            (script,) = safety.inline_scripts(page.read_bytes())
+            self.assertTrue(script.lstrip().startswith(b'"use strict";'), page.name)
+
     def test_every_request_carries_the_key(self):
         """S-01: the pages reach Hoard's server only through api() (the key in a header) and keyed() (images)."""
         for page in PAGES:

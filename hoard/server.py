@@ -23,7 +23,7 @@ from . import __version__, diagnostics, itch, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import collect_catalog, reseal_catalog
+from .downloader import catalog_seal, collect_catalog, reseal_catalog
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
 from .net import is_network_error
@@ -711,7 +711,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def reseal_in_background(srv, cfg: dict) -> None:
     """At startup: if the downloads folder's catalog.json isn't sealed with this install's key, rebuild and seal it
-    (the Unity window reads it). Skipped when a job is already running: that job rebuilds the catalog anyway."""
+    (the Unity window reads it). Skipped when a job is already running: that job rebuilds the catalog anyway. The
+    seal is looked at first, without holding the job lock: only a rebuild takes it, so a catalog that's fine never
+    makes the first thing you choose after starting Hoard say it's busy."""
+    try:
+        if catalog_seal(root_dir(cfg)) in (None, "sealed"):
+            return
+    except Exception as e:
+        print(f"Couldn't check catalog.json's seal: {e}")
+        return
     if not srv.jobs.busy.acquire(blocking=False):
         return
     try:

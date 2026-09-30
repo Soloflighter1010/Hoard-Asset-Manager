@@ -136,8 +136,6 @@ namespace SoloFlighter.Hoard
             return host == site || host.EndsWith("." + site);
         }
 
-        /// <summary>The full path of one of an asset's files, only if it's a plain file inside the downloads folder,
-        /// reached without going through any link or junction. Null otherwise.</summary>
         /// <summary>Work out each product's files, picture and search text (see HoardAsset).</summary>
         public void Resolve()
         {
@@ -158,6 +156,8 @@ namespace SoloFlighter.Hoard
 
         public static bool IsUnityPackage(string file) { return file.EndsWith(".unitypackage", StringComparison.OrdinalIgnoreCase); }
 
+        /// <summary>The full path of one of an asset's files, only if it's a plain file inside the downloads folder,
+        /// reached without going through any link or junction. Null otherwise.</summary>
         public string FilePath(HoardAsset a, string file)
         {
             if (!PlainPath(a.Folder) || !PlainPath(file)) return null;

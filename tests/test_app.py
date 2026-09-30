@@ -768,6 +768,16 @@ class DeletedSignIns(unittest.TestCase):
         self.assertEqual(sorted(jobs.forget_deleted_signins(self.cfg, self.lib)), ["gumroad", "jinxxy"])
         self.assertEqual(self.names(), ["Imported", "Tool"])
 
+    def test_sign_ins_on_a_drive_thats_not_plugged_in(self):
+        """Sign-ins kept elsewhere (advanced_signin_location) with that whole folder missing: the drive may just be
+        unplugged, so nothing is removed. A store's own folder missing there still counts as signing out."""
+        cfg = {**self.cfg, "advanced_signin_location": True, "profile_dir": str(self.signins)}
+        shutil.rmtree(self.signins)
+        self.assertEqual(jobs.forget_deleted_signins(cfg, self.lib), [])
+        self.assertEqual(self.names(), ["Hat", "Imported", "Suit", "Tool"])
+        (self.signins / "jinxxy").mkdir(parents=True)   # plugged in again: Gumroad's sign-in isn't on it
+        self.assertEqual(jobs.forget_deleted_signins(cfg, self.lib), ["gumroad"])
+
     def test_what_counts_as_old_sign_ins(self):
         from unittest import mock
         from hoard import browser
@@ -1559,6 +1569,22 @@ class CatalogSeal(unittest.TestCase):
             srv.jobs.busy.release()
             server.reseal_in_background(srv, self.cfg)
             self.assertEqual(self.status(), "sealed")
+        finally:
+            srv.server_close()
+
+    def test_a_sealed_catalog_never_holds_up_a_job(self):
+        """Starting Hoard with a catalog that's fine doesn't take the job lock at all, so the first thing chosen
+        after starting never finds Hoard "busy"."""
+        from unittest import mock
+        self.catalog(bytes(range(32)))
+        first = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False)
+        server.reseal_in_background(first, self.cfg)   # sealed with this computer's key now
+        first.server_close()
+        self.assertEqual(self.status(), "sealed")
+        srv = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False)
+        try:
+            with mock.patch.object(srv.jobs, "busy", mock.Mock(**{"acquire.side_effect": AssertionError("took the job lock")})):
+                server.reseal_in_background(srv, self.cfg)
         finally:
             srv.server_close()
 
