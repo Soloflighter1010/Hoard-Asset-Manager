@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **The first setup goes through to the end (#21).** The first time Hoard opens, the setup assistant can't be
+  skipped or closed; a step that isn't done yet (Hoard's browser not installed, no store picked) keeps you on it,
+  and going on without signing in to any store, or without a Payhip shop, asks first. Run again from Settings, it
+  can still be left at any step.
+- **Hoard always installs into `%LOCALAPPDATA%\Programs\Hoard` (#21),** a folder only your account can change,
+  which Hoard's sign-in protection counts on. The installer no longer offers another folder, and a Hoard installed
+  elsewhere by an older setup is installed there when it updates (the old folder can then be deleted).
+
 ## 2.9.1
 
 - **Fixed: the page bounced when the pointer went along the store tabs.** A tab rising under the pointer made the

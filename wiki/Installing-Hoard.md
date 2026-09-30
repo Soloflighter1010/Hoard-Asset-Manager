@@ -5,7 +5,9 @@ Hoard is a Windows app. It also runs from source on Windows, macOS and Linux.
 1. Download **`Hoard-Setup-<version>.exe`** from the
    [latest release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest) and run it.
    It installs for you only, with no administrator prompt, into `%LOCALAPPDATA%\Programs\Hoard`, and adds
-   Hoard to the Start menu (a desktop icon is optional).
+   Hoard to the Start menu (a desktop icon is optional). The folder can't be changed: it's one only your account
+   can change, which keeps your store sign-ins safe. (Hoard installed somewhere else by an older setup is
+   installed here when it updates; the old folder can then be deleted.)
 2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (a certificate costs
    money every year). Choose **More info**, then **Run anyway**. To be sure the file is genuine first, see
    [Checking a download](#checking-a-download).

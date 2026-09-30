@@ -2474,7 +2474,7 @@ function queuedToast(r) {   // a job started while another runs waits its turn
 }
 
 /* ---------- the setup assistant: on first start, and from Settings (Set up Hoard) */
-const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false };
+const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false, firstRun: false };
 const setupSteps = () => ["welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
 async function setupStatus() {
@@ -2485,6 +2485,7 @@ async function openSetup() {
   try { await setupStatus(); } catch (e) { toast("Hoard isn't running. Open it again."); return; }
   closeSettings(); openStores(false); openTagPanel(false);
   SETUP.step = 0;
+  SETUP.firstRun = !SETUP.st.done;   // the first time, it's gone through to the end (issue #21); from Settings, it can be left
   $("#setup").hidden = false;
   renderSetup();
 }
@@ -2610,7 +2611,7 @@ function renderSetup() {
   $("#setupSteps").innerHTML = list.map((_, i) => `<span class="${i <= SETUP.step ? "done" : ""}"></span>`).join("");
   $("#setupBody").innerHTML = SETUP_VIEWS[name](SETUP.st);
   $("#setupBack").hidden = SETUP.step === 0;
-  $("#setupSkip").hidden = name === "done";
+  $("#setupSkip").hidden = name === "done" || SETUP.firstRun;
   $("#setupNext").textContent = name === "welcome" ? "Start" : name === "done" ? "Finish" : "Next";
   (SETUP_WIRES[name] || (() => {}))(SETUP.st);
   $("#setupNext").focus();
@@ -2632,12 +2633,29 @@ async function setupSave(name) {   // what leaving a step saves; false keeps you
   await setupStatus();
   return true;
 }
+// The first time through, a step that isn't done yet holds you there (or, where going on without it can make sense,
+// asks first), so nobody ends up in an empty Hoard without knowing why (issue #21).
+function setupNotDone(name) {
+  const st = SETUP.st;
+  if (name === "browser" && !st.browser.ready && st.browser.can_install)
+    return { stop: "Install Hoard's browser first: Hoard reads your stores with it." };
+  if (name === "stores" && ![...document.querySelectorAll("#setupBody [data-pick]")].some(c => c.checked))
+    return { stop: "Pick at least one store you've bought from." };
+  if (name === "payhip" && !$("#setupShops").value.trim())
+    return { ask: "You haven't added a Payhip shop, so Hoard won't find your Payhip purchases until you do (in Settings, or by importing a shop's page). Go on anyway?" };
+  if (name === "signin" && !STORE_ORDER.some(s => st.stores[s].enabled && st.stores[s].signed_in))
+    return { ask: "You haven't signed in to any store yet, so Hoard can't read your library until you do. Go on anyway?" };
+  return null;
+}
 function wireSetup() {
   $("#setupNext").addEventListener("click", async () => {
     if (SETUP.busy) return;
     SETUP.busy = true;
     try {
       const list = setupSteps(), name = list[SETUP.step];
+      const missing = SETUP.firstRun && setupNotDone(name);
+      if (missing && missing.stop) { toast(missing.stop); return; }
+      if (missing && missing.ask && !confirm(missing.ask)) return;
       if (!(await setupSave(name))) return;
       if (name === "done") {
         await apiPost("/api/setup/done", { done: true });
@@ -2652,7 +2670,7 @@ function wireSetup() {
     } finally { SETUP.busy = false; }
   });
   $("#setupBack").addEventListener("click", () => { SETUP.step = Math.max(0, SETUP.step - 1); renderSetup(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#setup").hidden) closeSetup(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#setup").hidden && !SETUP.firstRun) closeSetup(); });
   $("#setupSkip").addEventListener("click", async () => {
     await apiPost("/api/setup/done", { done: true });
     closeSetup();

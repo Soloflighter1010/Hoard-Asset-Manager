@@ -656,10 +656,11 @@ class SetupAssistant(unittest.TestCase):
     library page has to pick it up; before, nothing watched it any more and the item counts stayed at 0."""
 
     def test_closing_the_assistant_during_a_sign_in(self):
+        """Run again from Settings (the first time through, it can't be closed: see the next test)."""
         import time
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": False},
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": True},
                                lan=False)
         done = threading.Event()
 
@@ -673,7 +674,7 @@ class SetupAssistant(unittest.TestCase):
             threading.Thread(target=run, daemon=True).start()
             return True
 
-        with srv.lib.lock:   # a first start: nothing in the library yet, so the assistant opens by itself
+        with srv.lib.lock:
             srv.lib.data["items"], srv.lib.data["stores"] = [], {}
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)
@@ -683,12 +684,15 @@ class SetupAssistant(unittest.TestCase):
             browser = p.chromium.launch()
             page = browser.new_page()
             page.goto(srv.entry_url())
+            page.wait_for_function("() => typeof openSetup === 'function' && document.readyState === 'complete'")
+            page.evaluate("openSetup()")   # Set up Hoard, from Settings
             page.locator("#setup:not([hidden])").wait_for()
-            for _ in range(8):
+            for _ in range(8):   # each step saves on the way out: wait for the next one before going on
                 if page.locator('#setupBody [data-signin="gumroad"]').count():
                     break
+                title = page.locator("#setupTitle").inner_text()
                 page.click("#setupNext")
-                page.wait_for_timeout(200)
+                page.wait_for_function("t => document.querySelector('#setupTitle').textContent !== t", arg=title)
             page.click('#setupBody [data-signin="gumroad"]')
             page.wait_for_function("() => /sign in/i.test(document.querySelector('#signinProgress').textContent)")
             page.keyboard.press("Escape")   # closed while the sign-in is still going
@@ -698,6 +702,65 @@ class SetupAssistant(unittest.TestCase):
             page.locator("#storeSeg", has_text="Gumroad").wait_for(timeout=10000)
             self.assertIn("4", page.locator('#storeSeg [data-store="gumroad"]').inner_text())
             self.assertEqual(page.locator(".slot").count(), 4)
+            browser.close()
+
+
+    def test_the_first_time_it_goes_through_to_the_end(self):
+        """Issue #21: the first time Hoard starts, the assistant can't be skipped or closed; a step that isn't done
+        holds you there (no browser, no store picked), and going on without a sign-in asks first."""
+        from hoard import setup
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": False},
+                               lan=False)
+        with srv.lib.lock:   # a first start: nothing in the library yet, so the assistant opens by itself
+            srv.lib.data["items"], srv.lib.data["stores"] = [], {}
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        ready = {"value": False}
+        status = lambda cfg: {"channel": "chromium", "name": "Hoard's browser", "ready": ready["value"],  # noqa: E731
+                              "can_install": not ready["value"], "note": ""}
+        with sync_playwright() as p, mock.patch.object(setup, "browser_status", status), \
+                mock.patch.object(server, "save_config"), mock.patch.object(setup, "signed_in", lambda cfg, s: False):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            asked = []
+
+            def answer(d):
+                asked.append(d.message)
+                d.accept() if len(asked) > 1 else d.dismiss()
+            page.on("dialog", answer)
+            page.goto(srv.entry_url())
+            page.locator("#setup:not([hidden])").wait_for()
+            self.assertTrue(page.locator("#setupSkip").is_hidden(), "no Skip the first time")
+            page.keyboard.press("Escape")
+            self.assertTrue(page.locator("#setup").is_visible(), "and Escape doesn't close it")
+            page.click("#setupNext")   # welcome
+            page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()
+            page.click("#setupNext")
+            page.get_by_text("Install Hoard's browser first").wait_for()
+            self.assertIn("browser", page.locator("#setupTitle").inner_text(), "held on the step")
+            ready["value"] = True
+            page.evaluate("setupStatus()")
+            page.click("#setupNext")   # browser, now ready
+            page.locator("#setupTitle", has_text="Used Hoard before?").wait_for()
+            page.click("#setupNext")
+            page.locator("#setupTitle", has_text="Which stores").wait_for()
+            for box in page.locator("#setupBody [data-pick]").all():
+                box.uncheck()
+            page.click("#setupNext")
+            page.get_by_text("Pick at least one store").wait_for()
+            page.check('#setupBody [data-pick="gumroad"]')
+            page.click("#setupNext")
+            page.locator("#setupTitle", has_text="Sign in to your stores").wait_for()
+            page.click("#setupNext")   # nobody signed in: asked, and "no" stays
+            page.wait_for_timeout(300)
+            self.assertEqual(len(asked), 1)
+            self.assertIn("haven't signed in to any store", asked[0])
+            self.assertIn("Sign in to your stores", page.locator("#setupTitle").inner_text())
+            page.click("#setupNext")   # "yes" goes on
+            page.locator("#setupTitle", has_text="Where should downloads go?").wait_for()
             browser.close()
 
 
