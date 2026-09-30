@@ -568,6 +568,43 @@ def gumroad_files(items, prefix: str = ""):
             yield prefix, it
 
 
+def gumroad_page_images(content: dict) -> list[str]:
+    """The pictures a creator put in a download page itself (Gumroad's rich content), in page order. Some products
+    are only that: a set of PNG textures shown on the page, with no files listed."""
+    found: list[str] = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "image":
+                src = (node.get("attrs") or {}).get("src")
+                if isinstance(src, str) and urlparse(src).scheme == "https" and urlparse(src).hostname == "public-files.gumroad.com":
+                    found.append(src)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    for page in (content or {}).get("rich_content_pages") or []:
+        if isinstance(page, dict):
+            walk(page.get("description"))
+    return list(dict.fromkeys(found))
+
+
+PICTURE_TYPES = ((b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF87a", "gif"), (b"GIF89a", "gif"))
+
+
+def picture_extension(path: Path) -> str | None:
+    """What kind of picture a file is, from its first bytes (Gumroad's picture addresses don't say)."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(16)
+    except OSError:
+        return None
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return next((ext for magic, ext in PICTURE_TYPES if head.startswith(magic)), None)
+
+
 def gumroad_filename(f: dict) -> str:
     """A safe local name for a Gumroad file: its name plus its extension, in lower case."""
     name = (f.get("file_name") or f.get("id") or "file").strip()
@@ -601,6 +638,44 @@ def store_url(url: str, sites: list[str]) -> bool:
     """True when url is an https (or http) address on one of the store's own sites."""
     u = urlparse(url or "")
     return u.scheme == "https" and bool(u.hostname) and not u.username and _on_sites(u.hostname, sites)
+
+
+def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, creator: str, man, args,
+                         report: Report) -> bool:
+    """Save the pictures in a download page that lists no files, into "Page images", each named by its place on the
+    page and typed by what it is. True when one was downloaded."""
+    got_any = False
+    for n, src in enumerate(gumroad_page_images(content), 1):
+        token = urlparse(src).path.rstrip("/").rsplit("/", 1)[-1]
+        fid = "page-image:" + token
+        old = rec["files"].get(fid)
+        if old and rel_to_path(folder, old["path"]).exists():
+            continue
+        stem = f"Page images/{n:02d} {safe_name(token, 40)}"
+        if args.dry_run:
+            would_get(args, report, "gumroad", rec, name, creator, stem, False, old is not None)
+            continue
+        staged = rel_to_path(folder, stem + ".download")
+        try:
+            with_retries(report, stem, lambda src=src, staged=staged: egress.download(
+                gr.sess, src, staged, STORE_SITES["gumroad"], desc=stem, progress=downloading(stem)))
+        except Exception as e:
+            report.failed.append(f"Gumroad: {creator} / {name} / {stem} - {e}")
+            continue
+        ext = picture_extension(staged)
+        if not ext:   # not a picture after all: not kept
+            staged.unlink(missing_ok=True)
+            report.skipped.append(f"Gumroad: {name} / {stem} - not a picture")
+            continue
+        relpath = f"{stem}.{ext}"
+        os.replace(staged, rel_to_path(folder, relpath))
+        rec["files"][fid] = {"path": relpath, "size": rel_to_path(folder, relpath).stat().st_size, "downloaded_at": now_iso()}
+        log(f"    saved: {relpath}")
+        report.new_files.append(f"Gumroad: {creator} / {name} / {relpath}")
+        report.got.add(tag_key("gumroad", name))
+        got_any = True
+        man.checkpoint()
+    return got_any
 
 
 def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
@@ -704,6 +779,9 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
             rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
             got_any = True
             man.checkpoint()
+
+        if not offered:   # no files: what the creator put in the page itself, such as a set of textures
+            got_any = _gumroad_page_images(gr, content, rec, folder, name, creator, man, args, report) or got_any
 
         if got_any and is_new_asset:
             report.new_assets.append(f"Gumroad: {creator} / {name}")
@@ -1289,6 +1367,42 @@ def booth_filename(label: str, location: str, fallback: str) -> str:
     return safe_name(name, 150)
 
 
+BOOTH_ITEM_FILES_JS = r"""
+() => {
+  // A Booth item's own page (booth.pm/.../items/<id>): each file's download link, booth.pm/downloadables/<id>.
+  // Items in the library's "free downloads" list only have their files here.
+  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
+  const fileName = /[^\s\/\\]+\.[A-Za-z][A-Za-z0-9]{0,11}(?=\s|$)/;   // (an extension starts with a letter: not "Ver1.2")
+  const LINKS = 'a[href*="/downloadables/"], [data-href*="/downloadables/"]';
+  const idOf = e => { const m = (e.getAttribute('href') || e.getAttribute('data-href') || '').match(/\/downloadables\/(\d+)/); return m && m[1]; };
+  const out = new Map();
+  for (const e of document.querySelectorAll(LINKS)) {
+    let u; try { u = new URL(e.getAttribute('href') || e.getAttribute('data-href') || '', location.href); } catch (x) { continue; }
+    const m = u.pathname.match(/^\/downloadables\/(\d+)\/?$/);   // not a deeplink for Booth's app, not "open in browser"
+    if (!m || u.searchParams.has('browse') || !/(^|\.)booth\.pm$/.test(u.hostname) || out.has(m[1])) continue;
+    // the file's name: in its own row (widened from the link while the row is about this file only)
+    let row = e;
+    while (row.parentElement && row.parentElement !== document.body
+           && [...row.parentElement.querySelectorAll(LINKS)].every(x => idOf(x) === m[1])) row = row.parentElement;
+    const f = text(row).match(fileName);
+    const name = f ? f[0] : '';
+    out.set(m[1], { name, url: 'https://booth.pm/downloadables/' + m[1] });
+  }
+  return [...out.values()];
+}
+"""
+
+
+def booth_item_files(page, url: str) -> list[dict]:
+    """The files on a Booth item's own page, for an item the library lists without them (free downloads)."""
+    page.goto(url, wait_until="domcontentloaded")
+    settle(page)
+    u = urlparse(page.url)   # (an item page is public: only a move to the sign-in page means the session ended)
+    if "sign_in" in u.path or (u.hostname == "accounts.booth.pm" and page.locator("input[type=password]").count()):
+        raise NotLoggedIn("Not signed in to Booth")
+    return [f for f in page.evaluate(BOOTH_ITEM_FILES_JS) if store_url(f.get("url"), ["booth.pm"])]
+
+
 BOOTH_CLICK_JS = """url => { const a = document.createElement('a'); a.href = url; a.rel = 'noreferrer';
   document.body.appendChild(a); a.click(); a.remove(); }"""
 
@@ -1368,8 +1482,15 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
                     folder = rel_to_path(store_dir, rec["folder"])
                     log(f"\n[Booth] {creator} / {name}")
+                    if not b["files"] and store_url(b.get("url"), ["booth.pm"]):   # free items: on the item's page
+                        try:
+                            b["files"] = booth_item_files(page, b["url"])
+                        except NotLoggedIn:
+                            raise
+                        except Exception as e:
+                            log(f"    couldn't read the item's page for its files: {e}")
                     if not b["files"]:
-                        report.skipped.append(f"Booth: {name} - no files listed in your library")
+                        report.skipped.append(f"Booth: {name} - no files listed in your library or on its page")
                         continue
 
                     got_any = False

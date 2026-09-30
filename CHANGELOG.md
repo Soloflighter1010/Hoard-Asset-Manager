@@ -22,6 +22,12 @@ it's working.
 - **Keep Hoard running in the background.** A new setting, **Keep Hoard running when its window is closed**:
   closing the window hides it, and downloads, syncs and automatic syncs carry on. Open Hoard again to bring the
   window back; **Quit Hoard** in Settings stops it.
+- **Fixed: Booth's free items weren't downloaded.** Booth lists your free downloads without their files ("no
+  files listed in your library"); Hoard now opens each such item's page and downloads from its buttons there.
+- **Fixed: a Gumroad product that is only pictures downloaded nothing.** Some download pages list no files: the
+  product is pictures in the page itself (a set of PNG textures, say). Hoard now saves those into a **Page
+  images** folder, in page order, each typed by what it is. Pictures beside real files (previews, instructions)
+  still aren't downloaded.
 - **A log for each time Hoard starts,** kept for 30 days (the newest 10 however old), instead of one log that
   every run added to. **Open logs folder** in Settings (Troubleshooting) opens where they are, and a support
   report includes this run's log and the one before.
