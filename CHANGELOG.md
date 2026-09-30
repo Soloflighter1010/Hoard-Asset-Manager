@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.9.1
+
+- **Fixed: the page bounced when the pointer went along the store tabs.** A tab rising under the pointer made the
+  whole row of tabs taller, so everything below it moved down and back. Only the tab moves now.
+
 ## 2.9.0
 
 Folder tabs, floating windows, and jobs that wait their turn; downloads that can't stall.

@@ -445,12 +445,14 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 /* the shelf: a folder tab per store, raised when it's the one shown, with the view's tools beside them */
 .shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; align-items: flex-end; gap: 14px; padding: 6px 24px 0;
   background: var(--cave); border-bottom: 1px solid var(--seam); }
-.shelf .seg { position: static; flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 4px; padding: 0;
+.shelf .seg { position: static; flex: 1 1 auto; min-width: 0; height: 46px; display: flex; align-items: flex-end; gap: 4px; padding: 0;
   background: none; border: 0; overflow-x: auto; overflow-y: hidden; margin-bottom: -1px; }
 .seg button { height: 38px; padding: 0 16px; margin-top: 8px; border-radius: 12px 12px 0 0; color: var(--dust);
   background: var(--ledge); box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam), inset 0 -1px 0 var(--seam);
-  transition: height .12s ease-out, background .12s, color .12s; }
-.seg button:hover { height: 41px; color: var(--bone); background: var(--stone); }
+  transition: height .12s ease-out, margin-top .12s ease-out, background .12s, color .12s; }
+/* a tab grows upwards into its own margin, so the row (and everything below it) stays the same height: 46px, a
+   raised tab's height, for every tab however it's shown */
+.seg button:hover { height: 41px; margin-top: 5px; color: var(--bone); background: var(--stone); }
 .seg button[aria-checked="true"] { height: 46px; margin-top: 0; color: var(--bone); z-index: 1; background: var(--cave);
   box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam); }
 .seg button[aria-checked="true"]::after { top: 0; bottom: auto; left: 0; right: 0; height: 3px; border-radius: 12px 12px 0 0;
