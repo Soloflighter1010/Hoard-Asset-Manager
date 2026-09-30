@@ -221,6 +221,21 @@ class Downloading(unittest.TestCase):
         self.assertFalse(job.state["running"])
         self.assertFalse(job.cancel(), "nothing left to stop")
 
+    def test_stopped_is_never_overwritten_by_stopping(self):
+        """Stop said "Stopping" after telling the job to stop: a job that stopped in between ended up saying
+        "Stopping", and Tasks listed it as done instead of stopped."""
+        job = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        job.state.update(running=True, task="download")
+        seen = []
+
+        class Watched(threading.Event):
+            def set(self):
+                seen.append(job.state["message"])
+                super().set()
+        job.stop = Watched()
+        self.assertTrue(job.cancel())
+        self.assertEqual(seen, ["Stopping"], "said before the job can see it")
+
     def test_one_job_at_a_time(self):
         """A second job waits its turn (issue #49): it's queued, and runs once the first has finished."""
         started = threading.Event()

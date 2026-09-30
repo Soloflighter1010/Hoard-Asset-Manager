@@ -380,8 +380,8 @@ class Jobs:
         """Stop the running download (or sync) within a few seconds; a file it was part way through resumes next time
         where it can. False when neither is running."""
         if self.state["running"] and (self.state["task"] in ("download", "check-updates") or self.state.get("sync")):
+            self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
-            self._set(message="Stopping")
             return True
         return False
 
