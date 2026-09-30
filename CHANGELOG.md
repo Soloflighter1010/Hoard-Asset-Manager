@@ -2,13 +2,10 @@
 
 ## Unreleased
 
-### A new look, and jobs that wait their turn
+### Folder tabs, floating windows, and jobs that wait their turn
 
-- **A new look.** Deeper colour instead of flat brown: soft gradients behind everything, a glassy bar at the
-  top, pictures' stand-ins in two tones, and gold where it matters. The store tabs are folder tabs: the one
-  you're looking at is raised, in its store's colour, over the sheet the library sits on. Sort, tile size and
-  what's running moved up beside the tabs, so the top of the window isn't empty space. Light mode has the same
-  look in light colours.
+- **The store tabs are folder tabs:** the one you're looking at is raised, with its store's colour along its top.
+  Sort, tile size and what's running moved up beside the tabs.
 - **Tags, Stores and Settings are windows** that float over the page: move one by its title bar, resize it from
   its corner, keep several open side by side. A click elsewhere no longer closes them; **×** or Escape does
   (the one in front). Each opens where you left it.

@@ -482,105 +482,51 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
 #splash p { margin: 0; font: 700 15px var(--body); color: var(--dust); letter-spacing: .02em; }
 @keyframes splash-hop { 0%, 60%, 100% { translate: 0 0; } 30% { translate: 0 -9px; } }
 @media (prefers-reduced-motion: reduce) { #splash .b { animation: none; } #splash:not(.first) { animation-duration: 0s; } #splash { transition: none; } }
-/* ---------- the 2.9 look: colour and depth over the dark (gradients rather than flat brown), store folder tabs,
-   and Tags, Stores, Settings and Tasks as windows floating over the page. The same in both views. */
-:root {
-  --cave: #15121c; --ledge: #221d2d; --stone: #2d2739; --seam: #3e3651; --bone: #F4F0FA; --dust: #AEA6C1;
-  --gold: #F7BE3A; --sheet: #1a1623; --sheet-top: #241f30; --glass: rgb(22 18 30 / .8);
-  --tint: rgb(255 255 255 / .05); --tint2: rgb(255 255 255 / .1); --line: rgb(255 255 255 / .09);
-  --grad-page: radial-gradient(1100px 540px at 6% -10%, rgb(86 209 220 / .18), transparent 62%),
-               radial-gradient(900px 500px at 94% -6%, rgb(255 138 216 / .16), transparent 60%),
-               radial-gradient(1300px 760px at 50% 118%, rgb(149 160 255 / .13), transparent 62%),
-               linear-gradient(180deg, #1c1727 0%, #13101a 70%);
-  --grad-gold: linear-gradient(135deg, #FFD978 0%, #F7BE3A 45%, #EE8F2A 100%);
-  --grad-panel: linear-gradient(165deg, #2b2439 0%, #1e1929 100%);
-  --grad-bar: linear-gradient(90deg, rgb(86 209 220 / .12), rgb(255 138 216 / .11) 50%, rgb(247 190 58 / .12));
-  --shadow: 0 12px 32px rgb(0 0 0 / .38);
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --cave: #F2EFF7; --ledge: #FFFFFF; --stone: #ECE7F4; --seam: #D8D0E5; --bone: #1E1A26; --dust: #685F77;
-    --gold: #B07A00; --sheet: #FBFAFD; --sheet-top: #FFFFFF; --glass: rgb(250 248 253 / .82);
-    --tint: rgb(40 20 80 / .04); --tint2: rgb(40 20 80 / .08); --line: rgb(40 20 80 / .1);
-    --grad-page: radial-gradient(1100px 540px at 6% -10%, rgb(86 209 220 / .22), transparent 62%),
-                 radial-gradient(900px 500px at 94% -6%, rgb(255 138 216 / .2), transparent 60%),
-                 radial-gradient(1300px 760px at 50% 118%, rgb(149 160 255 / .18), transparent 62%),
-                 linear-gradient(180deg, #F6F3FA 0%, #EEEAF4 70%);
-    --grad-gold: linear-gradient(135deg, #F7C650 0%, #E9A21F 50%, #D9791A 100%);
-    --grad-panel: linear-gradient(165deg, #FFFFFF 0%, #F6F2FB 100%);
-    --shadow: 0 12px 32px rgb(40 20 80 / .14);
-  }
-}
-body { background: var(--grad-page) fixed, var(--cave); }
-.bar { background: var(--glass); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  padding: 10px 20px; gap: 14px; min-height: 0; }
-.search { max-width: 920px; }
-.search input { height: 42px; background: var(--tint); box-shadow: inset 0 0 0 1px var(--line); }
-.ghost, .btn { background: var(--tint); box-shadow: inset 0 0 0 1px var(--line); }
-.ghost:hover { background: var(--tint2); }
-.primary { background: var(--grad-gold); box-shadow: 0 6px 18px rgb(247 190 58 / .28); }
-.primary:hover { filter: brightness(1.07); box-shadow: 0 8px 22px rgb(247 190 58 / .38); }
-.tools select, .shelf-tools select { background-color: var(--tint); box-shadow: inset 0 0 0 1px var(--line); }
-.apptabs a, .apptabs button { padding: 7px 12px; border: 0; border-radius: 9px; background: none; font: 700 14px var(--body);
-  color: var(--dust); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
-.apptabs a:hover, .apptabs button:hover { color: var(--bone); background: var(--tint2); }
-.apptabs a[aria-current="page"], .apptabs button[aria-expanded="true"] { color: var(--bone); background: var(--tint2); box-shadow: inset 0 0 0 1px var(--line); }
-.tab-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--grad-gold); color: var(--gold-ink);
+/* ---------- store folder tabs, floating windows (Tags, Stores, Settings, Tasks), the sidebar that folds, and the
+   Tasks window, in Hoard's own colours. The same in both views. */
+.apptabs button { padding: 7px 12px; border: 0; border-radius: 9px; background: none; font: 700 14px var(--body);
+  color: var(--dust); display: inline-flex; align-items: center; gap: 6px; }
+.apptabs button:hover { color: var(--bone); background: var(--stone); }
+.apptabs button[aria-expanded="true"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.tab-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--gold); color: var(--gold-ink);
   font-size: 11px; line-height: 18px; text-align: center; }
 
 /* the shelf: a folder tab per store, raised when it's the one shown, with the view's tools beside them */
-.shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; align-items: flex-end; gap: 14px; padding: 6px 20px 0;
-  background: var(--glass); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); }
-.shelf .seg { position: static; flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 4px; padding: 0 0 0 4px;
-  background: none; border: 0; overflow-x: auto; overflow-y: hidden; }
+.shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; align-items: flex-end; gap: 14px; padding: 6px 24px 0;
+  background: var(--cave); border-bottom: 1px solid var(--seam); }
+.shelf .seg { position: static; flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 4px; padding: 0;
+  background: none; border: 0; overflow-x: auto; overflow-y: hidden; margin-bottom: -1px; }
 .seg button { height: 38px; padding: 0 16px; margin-top: 8px; border-radius: 12px 12px 0 0; color: var(--dust);
-  background: linear-gradient(180deg, var(--tint2), var(--tint)); box-shadow: inset 0 1px 0 var(--line), inset 1px 0 0 var(--line), inset -1px 0 0 var(--line);
+  background: var(--ledge); box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam), inset 0 -1px 0 var(--seam);
   transition: height .12s ease-out, background .12s, color .12s; }
-.seg button:hover { height: 41px; color: var(--bone); }
-.seg button[aria-checked="true"] { height: 46px; margin-top: 0; color: var(--bone); z-index: 1;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--c, var(--gold)) 22%, var(--sheet-top)) 0%, var(--sheet-top) 70%);
-  box-shadow: 0 -8px 20px rgb(0 0 0 / .22), inset 0 1px 0 var(--line), inset 1px 0 0 var(--line), inset -1px 0 0 var(--line); }
+.seg button:hover { height: 41px; color: var(--bone); background: var(--stone); }
+.seg button[aria-checked="true"] { height: 46px; margin-top: 0; color: var(--bone); z-index: 1; background: var(--cave);
+  box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam); }
 .seg button[aria-checked="true"]::after { top: 0; bottom: auto; left: 0; right: 0; height: 3px; border-radius: 12px 12px 0 0;
-  background: var(--c, var(--grad-gold)); }
+  background: var(--c, var(--gold)); }
 .shelf-tools { display: flex; align-items: center; gap: 10px; flex: none; padding-bottom: 7px; font-size: 13px; color: var(--dust); }
 .shelf-tools label { display: flex; align-items: center; gap: 8px; }
-.shelf-tools select { height: 34px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; appearance: none; -webkit-appearance: none; color: var(--bone);
+.shelf-tools select { height: 34px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; appearance: none; -webkit-appearance: none;
+  color: var(--bone); background-color: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 .shelf-tools .zoom input { width: 90px; accent-color: var(--gold); }
 .shelf-tools .zoom svg { width: 16px; height: 16px; }
-.shelf .job { flex: 0 1 auto; margin: 0; max-width: 340px; padding: 5px 12px; border: 0; border-radius: 999px; background: var(--tint2);
-  color: var(--bone); font: 700 12.5px var(--body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-
-/* the sheet: the folder the tabs belong to, the sidebar and the grid on it */
-.layout { margin: 0 12px; border-radius: 0 16px 0 0; background: linear-gradient(180deg, var(--sheet-top) 0, var(--sheet) 420px);
-  box-shadow: 0 0 0 1px var(--line), var(--shadow); min-height: calc(var(--vh) - var(--bar-h) - var(--shelf-h, 52px)); }
-.side { top: calc(var(--bar-h) + var(--shelf-h, 52px)); height: calc(var(--vh) - var(--bar-h) - var(--shelf-h, 52px));
-  border-right: 1px solid var(--line); padding-top: 12px; }
+.shelf .job { flex: 0 1 auto; margin: 0; max-width: 340px; padding: 5px 12px; border: 0; border-radius: 999px; background: var(--ledge);
+  box-shadow: inset 0 0 0 1px var(--seam); color: var(--bone); font: 700 12.5px var(--body); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; cursor: pointer; }
+.side { top: calc(var(--bar-h) + var(--shelf-h, 52px)); height: calc(var(--vh) - var(--bar-h) - var(--shelf-h, 52px)); }
 @media (min-width: 1100px) { .detail { top: calc(var(--bar-h) + var(--shelf-h, 52px)); } }
-.detail { background: var(--grad-panel); box-shadow: -1px 0 0 var(--line), -20px 0 50px rgb(0 0 0 / .35); }
-.art { background: var(--stone); box-shadow: inset 0 0 0 1px var(--line), 0 6px 16px rgb(0 0 0 / .26); transition: transform .12s ease-out, box-shadow .12s; }
-.slot:hover .art { box-shadow: inset 0 0 0 1px var(--line), 0 14px 30px rgb(0 0 0 / .4); }
-.count { background: linear-gradient(90deg, var(--bone), color-mix(in srgb, var(--bone) 70%, var(--gold)));
-  -webkit-background-clip: text; background-clip: text; }
-.viewbar, .note, .also, .update { background: var(--tint2); box-shadow: inset 0 0 0 1px var(--line); }
-.chip[aria-pressed="true"], .creators button[aria-pressed="true"] { background: var(--grad-gold); }
-.views button[aria-checked="true"] { background: var(--tint2); box-shadow: inset 0 0 0 1px var(--line); }
-.dlpanel { background: var(--grad-panel); box-shadow: 0 0 0 1px var(--line), 0 20px 50px rgb(0 0 0 / .45); }
+
 /* badges on a tile: New (issue #18), Gift, Archived */
 .badges { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .badges .badge { position: static; }
-/* a picture's stand-in: two tones of the creator's colour, rather than one flat one */
-.ph { background: linear-gradient(140deg, hsl(var(--h) 46% calc(var(--ph-l) + 8%)) 0%, hsl(calc(var(--h) + 38) 42% calc(var(--ph-l) - 6%)) 100%); }
-.layout { background: radial-gradient(900px 260px at 85% 0, rgb(255 138 216 / .06), transparent 70%),
-  radial-gradient(800px 260px at 25% 0, rgb(86 209 220 / .05), transparent 70%),
-  linear-gradient(180deg, var(--sheet-top) 0, var(--sheet) 420px); }
-.badge.new { background: var(--grad-gold); color: var(--gold-ink); box-shadow: 0 2px 10px rgb(247 190 58 / .45); }
+.badge.new { background: var(--gold); color: var(--gold-ink); }
 
 /* the sidebar: folds away to a strip, and each of its sections folds on its own */
 .side-fold { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 8px; padding: 6px 8px; border: 0; border-radius: 8px;
   background: none; color: var(--dust); font: 700 12.5px var(--body); }
-.side-fold:hover { background: var(--tint2); color: var(--bone); }
+.side-fold:hover { background: var(--ledge); color: var(--bone); }
 .side-fold svg { width: 16px; height: 16px; flex: none; transition: transform .15s; }
 body.side-folded .layout { grid-template-columns: 48px minmax(0, 1fr); }
 body.side-folded .side { padding: 12px 6px; overflow: hidden; }
@@ -599,16 +545,16 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* windows */
 .win { position: fixed; right: auto; bottom: auto; z-index: 60; display: flex; flex-direction: column; padding: 0;
   width: min(470px, calc(var(--vw) - 24px)); max-height: calc(var(--vh) - 16px); min-width: 300px; min-height: 160px;
-  resize: both; overflow: hidden; border-radius: 16px; background: var(--grad-panel);
-  box-shadow: 0 0 0 1px var(--line), 0 26px 70px rgb(0 0 0 / .5); }
+  resize: both; overflow: hidden; border-radius: 16px; background: var(--ledge);
+  box-shadow: 0 0 0 1px var(--seam), 0 20px 50px rgb(0 0 0 / .45); }
 .win[hidden] { display: none !important; }
 .win-bar { display: flex; align-items: center; gap: 10px; flex: none; padding: 9px 10px 9px 18px; cursor: grab; user-select: none;
-  border-bottom: 1px solid var(--line); background: var(--grad-bar); touch-action: none; }
+  border-bottom: 1px solid var(--seam); background: var(--stone); touch-action: none; }
 .win-bar:active { cursor: grabbing; }
 .win-bar h2 { flex: 1; min-width: 0; margin: 0 !important; padding: 0 !important; border: 0 !important; font: 400 18px var(--display); }
 .win-extra { font-size: 12px; color: var(--dust); white-space: nowrap; }
 .win-extra.ok { color: #4CC38A; }
-.win-x { flex: none; width: 32px; height: 32px; border: 0; border-radius: 9px; background: var(--tint2); font-size: 20px; line-height: 1; }
+.win-x { flex: none; width: 32px; height: 32px; border: 0; border-radius: 9px; background: var(--ledge); font-size: 20px; line-height: 1; }
 .win-x:hover { background: var(--seam); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
@@ -620,11 +566,11 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .tasks h3 .n { font-weight: 500; }
 .tasks h3 .linkish { font-size: 12px; margin-left: auto; }
 .tasks .none { margin: 0; }
-.task { display: block; margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; background: var(--tint); box-shadow: inset 0 0 0 1px var(--line); }
+.task { display: block; margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .task-top { display: flex; align-items: center; gap: 10px; }
 .task-top b { flex: 1; min-width: 0; }
 .task-msg { margin: 6px 0 0; font-size: 13px; color: var(--dust); overflow-wrap: anywhere; }
-.task.run { background: linear-gradient(90deg, rgb(247 190 58 / .14), var(--tint)); }
+.task.run { box-shadow: inset 3px 0 0 var(--gold); }
 .spin { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid var(--gold); border-right-color: transparent; animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .tasklist { list-style: none; margin: 0; padding: 0; }
@@ -636,7 +582,7 @@ details.task .when { grid-column: 2; font-size: 12px; color: var(--dust); }
 details.task summary b { overflow-wrap: anywhere; }
 .outcome { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; background: rgb(76 195 138 / .18); color: #4CC38A; }
 .done-failed .outcome { background: rgb(255 159 107 / .18); color: var(--warn); }
-.done-stopped .outcome { background: var(--tint2); color: var(--dust); }
+.done-stopped .outcome { background: var(--ledge); color: var(--dust); }
 .task pre, .task details pre { max-height: 260px; overflow: auto; margin: 8px 0 0; padding: 8px; border-radius: 8px; background: var(--cave);
   font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .task details summary { cursor: pointer; font-size: 12px; color: var(--dust); margin-top: 8px; }
@@ -646,7 +592,6 @@ details.task summary b { overflow-wrap: anywhere; }
   .shelf { position: static; padding: 6px 12px 0; flex-wrap: wrap; }
   .shelf-tools { order: -1; width: 100%; padding: 0 0 6px; }
   .shelf-tools .zoom { display: none; }
-  .layout { margin: 0; border-radius: 0; }
   .win { left: 8px !important; top: 60px !important; width: calc(var(--vw) - 16px) !important; height: auto !important; resize: none; }
   body.side-folded .layout { grid-template-columns: minmax(0, 1fr); }
 }
