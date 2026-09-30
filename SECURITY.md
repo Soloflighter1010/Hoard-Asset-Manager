@@ -105,6 +105,8 @@ It can't fully protect against:
   checked with `hoard-cli self-test`, with signed build provenance: verify a download
   with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. They aren't code-signed yet, so
   Windows SmartScreen warns the first time, and macOS won't open the package until you allow it.
+- Every file is scanned by VirusTotal before a release is published, and its report is linked in the release
+  notes. A file an engine flags keeps the release a draft until a person has checked it.
 - The Flatpak is built offline from files pinned by SHA-256, and its sandbox allows only the network, its
   window, your keyring (for sign-ins) and your home folder and drives (for your downloads folder).
 - The installer asks for no administrator rights and installs for the current user only. An update replaces

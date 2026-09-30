@@ -22,7 +22,9 @@ The **Release** workflow then:
 4. builds the Flatpak (flatpak-builder, in Flathub's GNOME 51 container; its build checks Hoard's window support
    and runs the self-test in the sandbox), and attaches `Hoard-<version>-linux-x86_64.flatpak` and
    `SHA256SUMS-linux.txt`;
-5. publishes the release, once every file is on it.
+5. has VirusTotal scan every file people download (`scripts/scan_release_virustotal.py`), and adds each file's
+   result and report link to the release notes;
+6. publishes the release, once every file is on it and none was flagged.
 
 Every file has signed build provenance (`gh attestation verify`). The Mac packages aren't signed or notarized by
 Apple, and the Windows installer isn't code-signed: see [Installing Hoard](Installing-Hoard) for what users see.
@@ -35,6 +37,23 @@ the release stays a draft until every file is attached.
 
 - **A run failed partway?** It leaves a draft. Fix the problem, then run the workflow again with the same tag: it
   fills in the draft and publishes it.
+- **VirusTotal flagged a file?** The release stays a draft, and its notes list each file's result with a link to
+  VirusTotal's report. Unsigned apps built with PyInstaller are sometimes flagged by one or two engines by
+  mistake. Open the report: if it's a false positive (a generic or heuristic name, from an engine or two), run the
+  workflow again for the tag with **Publish even if VirusTotal flags a file** ticked; it scans again, notes that
+  it was checked by hand, and publishes. If it looks real, don't publish: find out why first. (Reporting a false
+  positive to the engine's maker clears it for later releases.)
+
+### VirusTotal
+
+Once, when setting the repository up: make a free account at [virustotal.com](https://www.virustotal.com/), copy
+the API key from your profile, and add it as the repository secret `VT_API_KEY` (**Settings › Secrets and
+variables › Actions › New repository secret**). Without it the release stays a draft, saying so.
+
+The scan uses VirusTotal's public API (4 requests a minute, 500 a day): a file VirusTotal already knows is only
+looked up, a new one is uploaded and its scan waited for, so a release takes about 10 to 20 minutes more. Only the
+scan step sees the key. Files sent to VirusTotal are shared with its security partners, as with any upload there;
+they're the same files the release makes public.
 - **Published something broken?** Don't delete it expecting to reuse the version. Raise the version and release
   again (2.4.0 was re-released as 2.4.1 this way).
 
