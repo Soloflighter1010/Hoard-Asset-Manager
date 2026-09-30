@@ -535,9 +535,20 @@ details.task summary b { overflow-wrap: anywhere; }
   body.side-folded .layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } .seg button { transition: none; } }
+
+/* the glow: the selected store's colour rising from the bottom of the window; for Everything, the colours of the
+   stores you use drifting through it */
+#glow { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+#glow .glow-in { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; }
+#glow.flow .glow-in { width: 200%; animation: glow-flow 48s linear infinite; }
+@keyframes glow-flow { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { #glow.flow .glow-in { animation: none; } }
+body.less-motion #glow.flow .glow-in { animation: none; }
+.seg button[aria-checked="true"]::after { display: none; }
 </style>
 </head>
 <body>
+<div id="glow" aria-hidden="true"><div class="glow-in"></div></div>
 <div id="splash" role="status" aria-live="polite">
   <div class="splash-in">
     <svg viewBox="0 0 64 64" aria-hidden="true">
@@ -1166,6 +1177,8 @@ function renderStatus(list) {
 function syncControls() {
   const q = $("#q"); if (q.value !== state.q) q.value = state.q;
   for (const b of $("#stores").children) b.setAttribute("aria-checked", String(b.dataset.store === state.store));
+  // the stores you have downloads from, for Everything's glow
+  setGlow(state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));
   $("#sort").value = state.sort;
 }
 
@@ -1718,6 +1731,37 @@ async function startSync() {
   pollDownload();
 }
 
+/* ---------- the glow behind the page: the store you're looking at, in its colour, rising from the bottom of the
+   window. For Everything, each store you use in turn, drifting slowly across. */
+const GLOW_COLORS = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
+let glowShown = null;
+function setGlow(store, stores) {
+  const el = $("#glow");
+  if (!el) return;
+  const list = store ? [store] : (stores || []).filter(s => GLOW_COLORS.includes(s));
+  const key = (store ? "one:" : "all:") + list.join(",");
+  if (key === glowShown) return;
+  glowShown = key;
+  const light = matchMedia("(prefers-color-scheme: light)").matches;
+  const strength = light ? 32 : 48;
+  const tint = c => `color-mix(in srgb, var(--${c}) ${strength}%, transparent)`;
+  const inner = el.firstElementChild;
+  if (list.length <= 1) {   // one colour, the width of the window
+    const c = list[0];
+    el.classList.remove("flow");
+    inner.style.backgroundImage = c
+      ? `radial-gradient(ellipse 120% 95% at 50% 115%, ${tint(c)} 0%, transparent 75%)`
+      : `radial-gradient(ellipse 120% 95% at 50% 115%, color-mix(in srgb, var(--gold) ${strength - 16}%, transparent) 0%, transparent 75%)`;
+  } else {   // each colour in turn along twice the window's width, drifting left and around again
+    el.classList.add("flow");
+    const spots = [...list, ...list], step = 100 / spots.length;
+    inner.style.backgroundImage = spots.map((c, i) =>
+      `radial-gradient(ellipse ${Math.max(step * 1.9, 22)}% 95% at ${(i + 0.5) * step}% 115%, ${tint(c)} 0%, transparent 75%)`).join(", ");
+  }
+  if (!document.body.classList.contains("less-motion") && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: "ease-out" });
+  }
+}
 /* ---------- windows: Tags, Stores, Settings and Tasks float over the page. Move one by its title bar and resize it
    from its corner; each opens where you left it, and stays open (beside the others) until you close it. */
 const WINDOWS = { tagPanel: () => openTagPanel(false), stores: () => { if (typeof openStores === "function") openStores(false); },

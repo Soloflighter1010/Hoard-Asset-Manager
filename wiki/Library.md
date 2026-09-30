@@ -5,7 +5,8 @@ The **Library** shows everything you own on the stores you use, whether or not y
 
 - **Search** matches names, creators, stores, variants and tags.
 - **The store tabs** above the grid narrow it to one store, with a count for each. The tab you're looking at is
-  raised, with its store's colour along its top.
+  raised, and the page glows up from the bottom in that store's colour (on **Everything**, the colours of the
+  stores you're signed in to drift through it).
 - **Filters** on the left: your tags, suggested tags, **Show** (**Downloaded**, **Not downloaded yet** and
   **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;

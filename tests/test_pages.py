@@ -721,7 +721,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
                 library.item("gumroad", "2", name="Mochi", creator="Mochi Works", added=common.now_iso()),
                 library.item("booth", "3", name="Anko", creator="Kitsu Studio", added=old)]
             for s in ("booth", "gumroad"):
-                cls.srv.lib.data["stores"][s] = {"count": 1, "error": None, "source": "refresh", "first_read": "2024-01-01T00:00:00+00:00"}
+                cls.srv.lib.data["stores"][s] = {"count": 1, "error": None, "source": "refresh", "first_read": "2024-01-01T00:00:00+00:00",
+                                                 "updated": common.now_iso()}
         cls.srv.jobs.history = [{"id": "j1", "task": "sync", "label": "Sync: Booth", "stores": ["booth"],
                                  "started": "2026-09-30T09:00:00+00:00", "ended": "2026-09-30T09:02:00+00:00",
                                  "outcome": "failed", "message": "Stopped: Booth went away", "report": None,
@@ -836,6 +837,25 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.click('#storeSeg [data-store="booth"]')
         page.wait_for_timeout(250)
         self.assertGreater(tab("booth")["height"], tab("")["height"])
+        page.close()
+
+    def test_the_glow_follows_the_store(self):
+        """No colour bar on the selected tab: the page glows from the bottom in the store's colour instead, and for
+        Everything the stores you're signed in to drift through it."""
+        page = self.open()
+        glow = lambda: page.evaluate("() => [document.querySelector('#glow').classList.contains('flow'), "
+                                     "document.querySelector('#glow .glow-in').style.backgroundImage]")
+        flowing, image = glow()
+        self.assertTrue(flowing, "Everything: the stores' colours drift")
+        self.assertIn("--booth", image)
+        self.assertIn("--gumroad", image)
+        page.click('#storeSeg [data-store="gumroad"]')
+        flowing, image = glow()
+        self.assertFalse(flowing)
+        self.assertIn("--gumroad", image)
+        self.assertNotIn("--booth", image)
+        self.assertEqual(page.evaluate("""() => getComputedStyle(document.querySelector('#storeSeg [aria-checked="true"]'), '::after').display"""),
+                         "none", "no bar on the tab")
         page.close()
 
     def test_new_and_recently_added(self):

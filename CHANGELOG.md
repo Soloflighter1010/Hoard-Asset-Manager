@@ -4,8 +4,9 @@
 
 ### Folder tabs, floating windows, and jobs that wait their turn
 
-- **The store tabs are folder tabs:** the one you're looking at is raised, with its store's colour along its top.
-  Sort, tile size and what's running moved up beside the tabs.
+- **The store tabs are folder tabs:** the one you're looking at is raised, and the page glows up from the bottom in
+  its store's colour. On **Everything**, the colours of the stores you're signed in to drift slowly through the
+  glow (still, when motion is reduced). Sort, tile size and what's running moved up beside the tabs.
 - **Tags, Stores and Settings are windows** that float over the page: move one by its title bar, resize it from
   its corner, keep several open side by side. A click elsewhere no longer closes them; **×** or Escape does
   (the one in front). Each opens where you left it.
