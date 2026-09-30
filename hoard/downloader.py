@@ -1075,7 +1075,8 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                     if page.is_closed():
                         if reopened >= REOPENS:
                             raise RuntimeError(f"Jinxxy's browser closed by itself {reopened} times, so the rest of "
-                                               "Jinxxy was left for next time. hoard.log has what happened before each.")
+                                               "Jinxxy was left for next time. Hoard's log has what happened before each (Settings, "
+                                               "Open logs folder).")
                         reopened += 1
                         page = reopen_tab(p, cfg, args, "jinxxy", browser)
                     try:

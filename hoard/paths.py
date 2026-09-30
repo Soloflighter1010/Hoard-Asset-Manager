@@ -27,6 +27,46 @@ def data_dir() -> Path:
     return base / "Hoard"
 
 
+LOG_DAYS = 30        # a launch's log is kept this many days...
+LOG_KEEP = 10        # ...and the newest few are kept however old they are
+current_log: Path | None = None   # this launch's log, when Hoard runs without a console (app.log_to_file)
+
+
+def logs_dir() -> Path:
+    return data_dir() / "logs"
+
+
+def log_files() -> list[Path]:
+    """Hoard's logs, newest first: one per launch (hoard-<date>_<time>.log, and -part2... for a very long run), and
+    the single log of versions before 2.9.2 (hoard.log, hoard.old.log) until it's 30 days old."""
+    found = []
+    try:
+        for p in logs_dir().iterdir():
+            if p.suffix == ".log" and (p.name.startswith("hoard-") or p.name in ("hoard.log", "hoard.old.log")):
+                try:
+                    found.append((p.stat().st_mtime, p))
+                except OSError:
+                    pass
+    except OSError:
+        return []
+    return [p for _, p in sorted(found, key=lambda t: t[0], reverse=True)]
+
+
+def tidy_logs(now: float | None = None) -> int:
+    """Delete logs more than LOG_DAYS old, keeping the newest LOG_KEEP whatever their age. Returns how many went."""
+    import time
+    now = time.time() if now is None else now
+    gone = 0
+    for p in log_files()[LOG_KEEP:]:
+        try:
+            if now - p.stat().st_mtime > LOG_DAYS * 86400:
+                p.unlink()
+                gone += 1
+        except OSError:
+            pass
+    return gone
+
+
 def store_python() -> bool:
     """Is this Hoard running on Microsoft Store Python? Windows keeps a Store app's AppData separately (its writes
     go to a private copy under AppData\\Local\\Packages), so that Hoard has its own settings and sealing key,

@@ -14,7 +14,7 @@ it's working.
 - **Fixed: a sync could stop moving, and Stop couldn't end it.** Some of what Hoard asks a store's browser has no
   time limit, so a browser that stopped answering held the job, and every job after it, until Hoard was closed.
   Now Stop ends such a browser after 20 seconds, so the job finishes; and a job with no progress for 5 minutes
-  says so. Either way, `hoard.log` notes where it was waiting, so the cause can be found.
+  says so. Either way, Hoard's log notes where it was waiting, so the cause can be found.
 - **Downloading one product goes straight to it.** **Download a copy** (Library) and **Update** (Downloads) used
   to read through the whole store to find the product: on Jinxxy, opening every item's page, one after another,
   until the name matched. Now they open just that item's page on Jinxxy, and just that purchase's download page on
@@ -22,6 +22,9 @@ it's working.
 - **Keep Hoard running in the background.** A new setting, **Keep Hoard running when its window is closed**:
   closing the window hides it, and downloads, syncs and automatic syncs carry on. Open Hoard again to bring the
   window back; **Quit Hoard** in Settings stops it.
+- **A log for each time Hoard starts,** kept for 30 days (the newest 10 however old), instead of one log that
+  every run added to. **Open logs folder** in Settings (Troubleshooting) opens where they are, and a support
+  report includes this run's log and the one before.
 - **Closing Hoard while it's working asks first:** **Stop it, then close** (Hoard closes once what's running has
   stopped), **Keep working in the background**, or **Close now**, which closes at once, ending any store browser,
   for when stopping takes too long. **Quit Hoard** in Settings asks the same. Before, closing gave a download 5

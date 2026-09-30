@@ -222,16 +222,86 @@ class DesktopApp(_Harness):
         self.assertTrue(any("browser" in m for m in self.messages))
         self.assertEqual(result.get("code"), 0, "stopped by itself once no page was open")
 
-    def test_log_instead_of_a_console(self):
+    def log(self, text=""):
+        """Start a launch's log as the app does, print into it, and put the console back."""
+        from hoard import paths
         saved = sys.stdout, sys.stderr
+        self.addCleanup(setattr, paths, "current_log", None)
         try:
             path = app.log_to_file()
-            print("hello from a test")
+            if text:
+                print(text)
         finally:
             sys.stdout.close()
             sys.stdout, sys.stderr = saved
-        self.assertIn("hello from a test", path.read_text("utf-8"))
-        self.assertEqual(path.parent, app.data_dir() / "logs")
+        return path
+
+    def test_log_instead_of_a_console(self):
+        """2.9.2: a log for each launch, named for when it started (it was one file, added to by every launch)."""
+        import re
+        from hoard import paths
+        first = self.log("hello from a test")
+        self.assertIn("hello from a test", first.read_text("utf-8"))
+        self.assertEqual(first.parent, app.data_dir() / "logs")
+        self.assertRegex(first.name, r"^hoard-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(-\d+)?\.log$")
+        second = self.log("and from the next launch")
+        self.assertNotEqual(first, second, "each launch its own, even within the same second")
+        self.assertNotIn("next launch", first.read_text("utf-8"))
+        self.assertEqual(paths.log_files()[0], second, "newest first")
+        self.assertTrue(re.search(r"--- Hoard [\d.]+, started", second.read_text("utf-8")))
+
+    def test_a_very_long_run_goes_on_in_a_new_file(self):
+        saved = app.LOG_LIMIT
+        app.LOG_LIMIT = 200
+        self.addCleanup(setattr, app, "LOG_LIMIT", saved)
+        path = self.log("x" * 250)   # past the limit: what comes next goes to part 2
+        self.assertIn("x" * 250, path.read_text("utf-8"))
+        part2 = path.with_name(path.stem + "-part2.log")
+        self.assertTrue(part2.exists())
+
+    def test_logs_are_kept_30_days(self):
+        from hoard import paths
+        folder = paths.logs_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        for old in folder.glob("hoard*.log"):
+            old.unlink()
+        now = time.time()
+        made = []
+        for n, days in enumerate([0, 1, 5, 10, 20, 29, 31, 35, 40, 45, 50, 60, 90]):
+            f = folder / f"hoard-2026-01-{n + 1:02d}_00-00-00.log"
+            f.write_text("x")
+            os.utime(f, (now - days * 86400, now - days * 86400))
+            made.append((days, f))
+        legacy = folder / "hoard.log"   # the single log of versions before 2.9.2
+        legacy.write_text("old")
+        os.utime(legacy, (now - 100 * 86400, now - 100 * 86400))
+        other = folder / "notes.txt"
+        other.write_text("not a log")
+        gone = paths.tidy_logs(now)
+        kept = {f.name for f in folder.glob("*")}
+        for n, (days, f) in enumerate(made):
+            if days <= 30 or n < paths.LOG_KEEP:   # the newest ten are kept whatever their age (here, to 45 days)
+                self.assertIn(f.name, kept, days)
+            else:
+                self.assertNotIn(f.name, kept, days)
+        self.assertNotIn("hoard.log", kept, "the old single log goes once it's 30 days old too")
+        self.assertIn("notes.txt", kept, "only logs")
+        self.assertEqual(gone, 4)
+
+    def test_a_second_copy_keeps_no_log(self):
+        """Opening Hoard while it runs only brings it to the front: that doesn't leave a log behind each time."""
+        sys.modules["webview"] = fake_webview()
+        from hoard import paths
+        saved = app.has_console
+        app.has_console = lambda: False
+        self.addCleanup(setattr, app, "has_console", saved)
+        lock = app.InstanceLock(app.data_dir() / "running.lock")
+        self.assertTrue(lock.acquire())
+        self.addCleanup(lock.release)
+        before = set(paths.log_files())
+        with unittest.mock.patch.object(app, "show_running_copy", lambda: True):
+            self.assertEqual(app.run_app(config.load_config(), None), 0)
+        self.assertEqual(set(paths.log_files()), before)
 
     def test_self_test(self):
         # The stand-in, as the tests run from requirements.txt, which has no pywebview. The built app's own

@@ -37,8 +37,9 @@ left out of it.
 (Gumroad, itch.io, and Booth unless it turns Hoard away) resumes where it stopped next time; one the browser
 downloads (Jinxxy, and Booth when it does) starts again. Everything that finished is recorded. If the store's
 browser has stopped answering, so the job can't notice Stop, Hoard closes that browser after 20 seconds and the
-job ends; `hoard.log` notes where it was waiting. A job that goes 5 minutes without any progress says so, and
-`hoard.log` notes where it is.
+job ends; Hoard's log notes where it was waiting. A job that goes 5 minutes without any progress says so, and
+the log notes where it is (**Open logs folder** in [Settings](Settings); see
+[Where Hoard keeps things](Where-Hoard-Keeps-Things)).
 
 If a store's browser closes by itself part way through (Jinxxy, or Booth through the browser), Hoard opens it
 again and tries the product it was on once more, then carries on. If it keeps closing, Hoard leaves the rest of

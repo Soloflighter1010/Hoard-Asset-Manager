@@ -25,7 +25,7 @@ from .paths import data_dir
 
 re_local = re.compile(r"^http://127\.0\.0\.1:\d{1,5}/")
 IDLE_MINUTES = 5          # browser mode: stop this long after the last Hoard page closed
-LOG_LIMIT = 2 * 1024 * 1024
+LOG_LIMIT = 20 * 1024 * 1024   # one launch's log: past this, it carries on in a new file (-part2, -part3...)
 
 
 def has_console() -> bool:
@@ -33,16 +33,48 @@ def has_console() -> bool:
     return sys.stdout is not None and not getattr(sys, "frozen", False)
 
 
+class LaunchLog:
+    """Where print() goes when there's no console: this launch's own log file, carried on in a new one (-part2...)
+    if a very long run makes it larger than LOG_LIMIT, so no single file grows without end."""
+    encoding, errors = "utf-8", "replace"
+
+    def __init__(self, path: Path):
+        self.first, self.part = path, 1
+        self.fh = open(path, "a", encoding="utf-8", errors="replace", buffering=1)
+
+    def write(self, text: str) -> int:
+        n = self.fh.write(text)
+        if self.fh.tell() > LOG_LIMIT:
+            self.part += 1
+            self.fh.close()
+            self.fh = open(self.first.with_name(f"{self.first.stem}-part{self.part}.log"), "a", encoding="utf-8",
+                           errors="replace", buffering=1)
+        return n
+
+    def flush(self) -> None:
+        self.fh.flush()
+
+    def close(self) -> None:
+        self.fh.close()
+
+    def isatty(self) -> bool:
+        return False
+
+
 def log_to_file() -> Path:
-    """No console: whatever Hoard would print goes to logs/hoard.log in its app-data folder (the last two runs'
-    worth: a full log is kept once as hoard.old.log)."""
-    folder = data_dir() / "logs"
+    """No console: whatever Hoard would print goes to this launch's own log, logs/hoard-<date>_<time>.log in its
+    app-data folder. Logs are kept for 30 days (the newest 10 however old): older ones are deleted now."""
+    from . import paths
+    folder = paths.logs_dir()
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / "hoard.log"
-    if path.exists() and path.stat().st_size > LOG_LIMIT:
-        os.replace(path, folder / "hoard.old.log")
-    stream = open(path, "a", encoding="utf-8", errors="replace", buffering=1)
-    sys.stdout = sys.stderr = stream
+    paths.tidy_logs()
+    stamp, n = time.strftime('%Y-%m-%d_%H-%M-%S'), 1
+    path = folder / f"hoard-{stamp}.log"
+    while path.exists():   # started more than once within a second
+        n += 1
+        path = folder / f"hoard-{stamp}-{n}.log"
+    sys.stdout = sys.stderr = LaunchLog(path)
+    paths.current_log = path
     print(f"--- Hoard {__version__}, started {time.strftime('%Y-%m-%d %H:%M:%S')}")
     return path
 
@@ -147,18 +179,15 @@ def window_available() -> bool:
 def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
     """Start Hoard for the person at the computer: its window (or the browser), until it's closed or quit."""
     from .server import serve
-    if not has_console():
-        log_path = log_to_file()
-    else:
-        log_path = None
-    from . import diagnostics
-    diagnostics.install_exception_hooks()
     lock = InstanceLock(data_dir() / "running.lock")
-    if not lock.acquire():
+    if not lock.acquire():   # (before the log: a second copy only brings the first to the front, and keeps no log)
         if show_running_copy():
             return 0
         message("Hoard is already running, but isn't answering. Close it (or restart your computer) and open it again.")
         return 1
+    log_path = log_to_file() if not has_console() else None
+    from . import diagnostics
+    diagnostics.install_exception_hooks()
 
     token = secrets.token_urlsafe(24)
     ready, state = threading.Event(), {}

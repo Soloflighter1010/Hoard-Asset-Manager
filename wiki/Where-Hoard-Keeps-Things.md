@@ -19,7 +19,7 @@ app-data folder that belongs to your user account.
 | `integrity.key` | The key Hoard seals its records with (see [Seals](#seals)). Private to your account |
 | `sealed-files.json` | Which records this install has sealed, so a removed seal is noticed |
 | `cache/thumbs/` | Product pictures, saved so the library works offline |
-| `logs/hoard.log` | What Hoard would print, when it runs without a console: what it read, what it downloaded, and any errors (no passwords, cookies or page contents). Past 2 MB, the older part moves to `hoard.old.log` |
+| `logs/hoard-<date>_<time>.log` | What Hoard would print, when it runs without a console: what it read, what it downloaded, and any errors (no passwords, cookies or page contents). One for each time Hoard starts, kept for 30 days (the newest 10 whatever their age); a run that writes more than 20 MB carries on in `-part2`. **Open logs folder** in Settings opens this folder. (Before 2.9.2, one `hoard.log` for every run.) |
 | `diagnostics/incidents.jsonl` | Private local record of recent errors and crash tracebacks, used to build support reports; it is never sent automatically |
 | `window/` | The window's own storage |
 | `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again. Delete it to open at the usual size, centred |

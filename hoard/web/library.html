@@ -841,6 +841,8 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <h3>Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
+  <button class="ghost sm" id="openLogs">Open logs folder</button>
+  <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
@@ -2508,7 +2510,15 @@ async function askClose() {
   d.querySelector('[data-close="background"]').hidden = !DATA.can_background;
   d.showModal();
 }
+function wireLogs() {
+  const b = $("#openLogs");
+  if (b) b.addEventListener("click", async () => {
+    const r = await apiPost("/api/open-logs");
+    toast(r.ok ? "Opened the logs folder." : (r.data.error || "The logs folder didn't open."));
+  });
+}
 function wireClose() {
+  wireLogs();
   const d = $("#closeDialog");
   if (!d) return;
   window.addEventListener("hoard-close", askClose);   // Hoard's window, asked to close while something runs

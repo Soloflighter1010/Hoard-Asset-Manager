@@ -42,7 +42,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
-           "/api/app/close",
+           "/api/app/close", "/api/open-logs",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear")
@@ -731,6 +731,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "That file or folder isn't on disk anymore."}, 404)
             try:
                 return self._json({"ok": True, "opened_in": reveal(target)})
+            except OSError as e:
+                return self._json({"error": str(e)}, 500)
+        if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
+            from .paths import logs_dir
+            logs_dir().mkdir(parents=True, exist_ok=True)
+            try:
+                return self._json({"ok": True, "opened_in": reveal(logs_dir())})
             except OSError as e:
                 return self._json({"error": str(e)}, 500)
         if path == "/api/import":

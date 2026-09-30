@@ -133,7 +133,7 @@ MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
 FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped answering is ended
-STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to hoard.log
+STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
 WATCHED = ("download", "check-updates", "sync", "refresh")   # jobs that never wait on you (sign-ins do)
 
 
@@ -369,7 +369,7 @@ class Jobs:
             lines.append(line)
             del lines[:-40]
             self._set(message=line, log=lines[-20:])
-            print(f"Installing the browser: {line}", flush=True)   # in hoard.log too, for when it goes wrong
+            print(f"Installing the browser: {line}", flush=True)   # in Hoard's log too, for when it goes wrong
         try:
             install_browser(progress)
         except RuntimeError as e:   # already a plain explanation
@@ -416,7 +416,7 @@ class Jobs:
     def _force_stop(self, job_id, wait: float | None = None) -> None:
         """After Stop: a job still running FORCE_AFTER seconds later is waiting on a store browser that stopped
         answering (every other wait Hoard makes has a time limit). End that browser, so the job can finish, and say
-        in hoard.log where it was waiting."""
+        in Hoard's log where it was waiting."""
         deadline = time.monotonic() + (FORCE_AFTER if wait is None else wait)
         while time.monotonic() < deadline:
             if not self._still(job_id):
@@ -428,7 +428,7 @@ class Jobs:
             self._set(message="Stopping: the store's browser had stopped answering, so Hoard closed it")
 
     def _watch(self, job_id, every: float = 15.0) -> None:
-        """While a job runs: if it goes STUCK_AFTER seconds without a word, write where it is to hoard.log (once),
+        """While a job runs: if it goes STUCK_AFTER seconds without a word, write where it is to Hoard's log (once),
         and say so, so a stuck job can be told apart from a slow one, and the log shows why."""
         told = False
         while self._still(job_id):

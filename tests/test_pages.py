@@ -1046,7 +1046,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(closed, [])
             # Quit Hoard in Settings asks the same, while it's working
             page.click("#settingsBtn")
-            self.assertTrue(page.locator("#backgroundRow").is_visible(), "the setting, in Hoard's own window")
+            page.locator("#backgroundRow").wait_for(state="visible")   # the setting, in Hoard's own window
             page.check("#setBackground")
             for _ in range(40):
                 if self.srv.cfg.get("close_to_background"):
