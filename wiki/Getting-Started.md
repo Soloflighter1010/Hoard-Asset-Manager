@@ -1,5 +1,9 @@
 The first time you open Hoard, a setup assistant walks you through everything. It takes a few minutes, and
-you can run it again any time from **Settings**, then **Set up Hoard again**. **Skip setup** leaves it for later.
+you can run it again any time from **Settings**, then **Set up Hoard again**.
+
+The first time, the assistant goes through to the end: it can't be skipped or closed, a step that isn't done
+(Hoard's browser not installed yet, no store picked) keeps you on it, and going on without signing in to any
+store, or without a Payhip shop, asks first. Run again from Settings, it can be skipped or closed at any step.
 
 ## The setup assistant, step by step
 

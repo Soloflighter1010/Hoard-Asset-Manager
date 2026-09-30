@@ -241,8 +241,9 @@ class Packaging(unittest.TestCase):
         iss = (REPO / "packaging" / "hoard.iss").read_text()
         for needed in ("AppId={{E17FA814-69F9-5056-A999-C60F80574E31}", "PrivilegesRequired=lowest",
                        'Type: filesandordirs; Name: "{app}\\_internal"', "CloseApplications=force", "Source: \"..\\dist\\Hoard\\*\"",
-                       "UsePreviousAppDir=yes"):
+                       "DisableDirPage=yes", "UsePreviousAppDir=no"):
             self.assertIn(needed, iss, "the installer keeps its safe settings")
+        self.assertIn("DefaultDirName={autopf}\\Hoard", iss, "always in the user's own programs folder (issue #21)")
         self.assertNotIn("{localappdata}\\Hoard", iss, "never touches Hoard's own data folder")
 
     def test_app_dependencies_are_locked_and_match(self):

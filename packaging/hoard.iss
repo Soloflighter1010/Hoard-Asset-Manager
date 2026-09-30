@@ -25,8 +25,11 @@ VersionInfoDescription=Hoard setup
 PrivilegesRequired=lowest
 DefaultDirName={autopf}\Hoard
 DisableProgramGroupPage=yes
-DisableDirPage=auto
-UsePreviousAppDir=yes
+; Always %LOCALAPPDATA%\Programs\Hoard, a folder only you can change (issue #21): Hoard's sign-in protection counts on
+; nobody else being able to change its program files, and a folder chosen elsewhere (another drive, a shared folder)
+; may not keep that. An install somewhere else before this moves here on updating.
+DisableDirPage=yes
+UsePreviousAppDir=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
