@@ -467,7 +467,9 @@ class Jobs:
                 lines.extend(line.rstrip() for line in str(msg).splitlines() if line.strip())
                 del lines[:-300]
                 self._set(message=lines[-1] if lines else "", log=lines[-80:], transfer=None)
-            if self.stop.is_set():
+            # Stop ends this job, in its own thread: a message can come from any thread that logs (anything else
+            # running), and raising there would end that thread instead, and use up the Stop.
+            if self.stop.is_set() and threading.get_ident() == self._job_thread:
                 self.stop.clear()   # the catalog is still rebuilt on the way out
                 raise Cancelled()
 
