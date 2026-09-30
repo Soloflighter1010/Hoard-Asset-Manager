@@ -396,8 +396,11 @@ class SigningInPlainly(unittest.TestCase):
         from playwright.sync_api import sync_playwright
         from hoard import browser
 
+        served = threading.Event()
+
         class Store(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
+                served.set()
                 self.send_response(200)
                 self.send_header("Set-Cookie", "session=signed-in; Max-Age=86400; Path=/")
                 self.send_header("Content-Type", "text/html")
@@ -413,29 +416,34 @@ class SigningInPlainly(unittest.TestCase):
         cfg = {**config.load_config(), "browser_channel": "chromium", "allow_unprotected_signins": True}
         started = []
 
-        def popen(args, **kw):   # the window as the sign-in starts it, without a screen: headless
-            proc = subprocess.Popen(args[:-1] + ["--headless=new", args[-1]], **kw)
+        # The window as the sign-in starts it. On Windows a real one, closed as you would (a forced end there loses
+        # what Chromium hasn't written yet); elsewhere without a screen (headless), ended as a system shutting down
+        # would (SIGTERM), which Chromium also closes properly for.
+        headless = [] if os.name == "nt" else ["--headless=new"]
+
+        def popen(args, **kw):
+            proc = subprocess.Popen(args[:-1] + headless + [args[-1]], **kw)
             started.append(proc)
             return proc
         with sync_playwright() as p, mock.patch.object(browser, "profile_dir", lambda cfg, store: profile), \
                 mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None):
             window = browser.SignInWindow(p, cfg, "gumroad", [f"http://127.0.0.1:{server.server_port}/"], popen=popen)
         try:
-            # Chromium writes cookies to disk about 30 s after they change: wait until it has, then end it (as closing
-            # the window would, and without a window to close). The database can be read while it's open, except on
-            # Windows, where the browser keeps it to itself: there, wait past a second write instead.
-            deadline = time.monotonic() + 90
-            while time.monotonic() < deadline:
-                time.sleep(2)
-                if os.name == "nt":
-                    if time.monotonic() > deadline - 25:
-                        break
-                    continue
-                if self.saved(profile, "session"):
-                    break
+            self.assertTrue(served.wait(60), "the sign-in page was opened")
+            time.sleep(3)
+            if os.name != "nt":
+                # Headless, SIGTERM may not wait for Chromium's next write (about 30 s after a change): wait for it.
+                # (Linux and macOS can read the database while it's open.)
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline and not self.saved(profile, "session"):
+                    time.sleep(2)
             self.assertTrue(window.is_open())
             if os.name == "nt":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(started[0].pid)], capture_output=True)   # (no window to close)
+                subprocess.run(["taskkill", "/T", "/PID", str(started[0].pid)], capture_output=True)   # close the window
+                try:
+                    started[0].wait(30)
+                except subprocess.TimeoutExpired:
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(started[0].pid)], capture_output=True)
             else:
                 started[0].send_signal(signal.SIGTERM)
             started[0].wait(30)
