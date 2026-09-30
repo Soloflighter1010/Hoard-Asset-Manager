@@ -158,6 +158,18 @@ from when that shop isn't in the user's list (it's only added when the user conf
   (`common.capture_log`) for the page, which polls `/api/status`. Stopping raises `common.Cancelled`, a
   `BaseException` so per-file error handling can't swallow it; the catalog is still rebuilt on the way out.
 - Each library item gets `on_disk`: the Downloads id of the same product (matched by `tag_key`), if any.
+- A download of chosen products (the Library's item key, `items`; Downloads' `keys`; or `only`) is given
+  `args.targets` by `downloader.direct_targets`: those products from the library, for the stores whose readers can
+  open them one by one (a Jinxxy item's page, a Gumroad purchase's download page). Other stores are read in full.
+- Store browsers: `browser._track` notes each one Hoard starts, and `browser.end_browsers()` ends them all (and
+  Playwright's driver), from any thread, so a job waiting on one that stopped answering fails at once instead of
+  waiting for ever. `Jobs.cancel` does that when Stop hasn't taken effect after `FORCE_AFTER` seconds, and
+  `Jobs._watch` notes in `hoard.log` where a job is after `STUCK_AFTER` seconds without progress. A store tab or
+  browser that closes by itself is opened again (`downloader.reopen_tab`), up to `REOPENS` times a sync.
+- Closing the desktop window: `app.close_decision` quits, hides the window (`close_to_background`), or asks the
+  page (the `hoard-close` event), which answers at `POST /api/app/close` (`wait`: `app.quit_when_done`,
+  `background`, or `now`: `app.quit_now`). `POST /api/quit` answers 409 `busy` while something runs, and the
+  page asks the same.
 
 ## Tags
 

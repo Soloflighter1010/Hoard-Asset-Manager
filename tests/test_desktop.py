@@ -11,6 +11,7 @@ import threading
 import time
 import types
 import unittest
+import unittest.mock
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -31,20 +32,29 @@ class FakeEvent:
         return self
 
     def set(self, *args):
-        for h in self.handlers:
-            h(*args)
+        """Like pywebview's: True when a handler returned False (for closing: don't close)."""
+        return any([h(*args) is False for h in self.handlers])
 
 
 class FakeWindow:
     def __init__(self, title, url, **kw):
         self.title, self.url, self.kw = title, url, kw
-        self.shown, self.closed = 0, threading.Event()
+        self.shown, self.hidden, self.closed = 0, 0, threading.Event()
         self.on_top = False
-        self.events = types.SimpleNamespace(**{e: FakeEvent() for e in ("resized", "moved", "maximized", "minimized", "restored")})
+        self.scripts = []
+        self.events = types.SimpleNamespace(**{e: FakeEvent() for e in ("resized", "moved", "maximized", "minimized",
+                                                                         "restored", "closing")})
 
     def restore(self): pass
     def show(self): self.shown += 1
-    def destroy(self): self.closed.set()
+    def hide(self): self.hidden += 1
+    def evaluate_js(self, script): self.scripts.append(script)
+
+    def close_button(self):
+        """The window's own close button (and destroy(), as pywebview's does): closing handlers can say no."""
+        if not self.events.closing.set():
+            self.closed.set()
+    destroy = close_button
 
 
 def fake_webview(fail=False):
@@ -84,7 +94,8 @@ def enter(link):
     return data.get("key") if status == 200 else None
 
 
-class DesktopApp(unittest.TestCase):
+class _Harness(unittest.TestCase):
+    """Starts Hoard as the desktop app does, with a stand-in window."""
 
     def setUp(self):
         self.saved = sys.modules.get("webview"), app.message, app.webbrowser.open, app.has_console
@@ -110,6 +121,9 @@ class DesktopApp(unittest.TestCase):
                 break
             time.sleep(0.1)
         return t, result, json.loads(app.running_file().read_text())
+
+
+class DesktopApp(_Harness):
 
     def test_window_one_copy_and_quit(self):
         sys.modules["webview"] = wv = fake_webview()
@@ -224,6 +238,107 @@ class DesktopApp(unittest.TestCase):
         # self-test (hoard-cli.exe self-test, in both workflows) checks the real one.
         sys.modules["webview"] = fake_webview()
         self.assertEqual(app.self_test(), 0)
+
+
+class ClosingTheWindow(_Harness):
+    """What closing Hoard's window does: quit when nothing's running; while something is, ask (stop it first, carry
+    on in the background, or close at once); and with Keep Hoard running, hide the window and carry on."""
+
+    def test_decisions(self):
+        srv = types.SimpleNamespace(cfg={}, jobs=types.SimpleNamespace(state={"running": False, "queue": []}))
+        self.assertEqual(app.close_decision(srv), "quit")
+        srv.jobs.state["running"] = True
+        self.assertEqual(app.close_decision(srv), "ask")
+        srv.jobs.state.update(running=False, queue=[{"id": "q1"}])
+        self.assertEqual(app.close_decision(srv), "ask", "something waiting its turn counts too")
+        srv.cfg["close_to_background"] = True
+        self.assertEqual(app.close_decision(srv), "background")
+
+    def test_close_button(self):
+        decided = []
+        sys.modules["webview"] = wv = fake_webview()
+        saved = app.close_decision
+        app.close_decision = lambda srv: decided[-1]
+        self.addCleanup(setattr, app, "close_decision", saved)
+        t, result, info = self.start()
+        window = wv.windows[0]
+        key = enter(window.url)
+        decided.append("ask")
+        window.close_button()
+        time.sleep(0.3)
+        self.assertFalse(window.closed.is_set(), "not closed: the page asks first")
+        self.assertEqual(window.scripts, ["window.dispatchEvent(new Event('hoard-close'))"])
+        decided.append("background")
+        window.close_button()
+        time.sleep(0.3)
+        self.assertFalse(window.closed.is_set())
+        self.assertEqual(window.hidden, 1, "hidden: Hoard carries on")
+        self.assertEqual(app.run_app(config.load_config(), None), 0, "opening Hoard again...")
+        self.assertEqual(window.shown, 1, "...brings the window back")
+        decided.append("background")
+        self.assertEqual(post(info["url"], "/api/quit", {}, key), 200, "Quit Hoard still quits")
+        t.join(15)
+        self.assertTrue(window.closed.is_set())
+        self.assertEqual(result.get("code"), 0)
+
+    def test_choices_while_working(self):
+        from hoard import server as server_mod
+        sys.modules["webview"] = wv = fake_webview()
+        made = []
+        real = server_mod.AppServer.__init__
+
+        def remember(self_, *a, **k):
+            real(self_, *a, **k)
+            made.append(self_)
+        with unittest.mock.patch.object(server_mod.AppServer, "__init__", remember):
+            t, result, info = self.start()
+        srv, window = made[-1], wv.windows[0]
+        key = enter(window.url)
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def working(stores, only, keys=None, check=False, **_kw):
+            srv.jobs._set(task="download", message="downloading Big.zip")
+            while not srv.jobs.stop.is_set() and not release.is_set():
+                time.sleep(0.05)
+        with unittest.mock.patch.object(srv.jobs, "_download", working):
+            srv.jobs.start("download", ["booth"])
+            srv.jobs.start("download", ["gumroad"])   # waiting its turn
+            for _ in range(50):
+                if srv.jobs.state.get("task") == "download":
+                    break
+                time.sleep(0.05)
+            self.assertEqual(post(info["url"], "/api/quit", {}, key), 409, "busy: the page asks what to do")
+            self.assertEqual(post(info["url"], "/api/app/close", {"how": "background"}, key), 200)
+            time.sleep(0.5)
+            self.assertEqual(window.hidden, 1)
+            self.assertFalse(window.closed.is_set())
+            self.assertEqual(post(info["url"], "/api/app/close", {"how": "sideways"}, key), 400)
+            self.assertEqual(post(info["url"], "/api/app/close", {"how": "wait"}, key), 200)
+            t.join(15)
+        self.assertTrue(window.closed.is_set(), "closed once the download had stopped")
+        self.assertEqual(srv.jobs.state["queue"], [], "what was waiting was taken off the queue")
+        self.assertFalse(srv.jobs.state["running"], "the download was stopped")
+
+    def test_close_now_ends_the_browsers(self):
+        srv = types.SimpleNamespace(jobs=types.SimpleNamespace(clear_queue=lambda: None, cancel=lambda: True), calls=[])
+        srv.quit_app = lambda: srv.calls.append("quit")
+        from hoard import browser
+        with unittest.mock.patch.object(browser, "end_browsers", lambda: srv.calls.append("ended") or 1):
+            app.quit_now(srv)
+        self.assertEqual(srv.calls, ["ended", "quit"])
+
+    def test_waiting_gives_up_after_a_while(self):
+        """A job that won't stop (a sign-in waiting for you) doesn't keep Hoard open for ever."""
+        srv = types.SimpleNamespace(jobs=types.SimpleNamespace(clear_queue=lambda: None, cancel=lambda: False,
+                                                               state={"running": True}), calls=[])
+        srv.quit_app = lambda: srv.calls.append("quit")
+        began = time.monotonic()
+        from hoard import browser
+        with unittest.mock.patch.object(browser, "end_browsers", lambda: srv.calls.append("ended") or 1):
+            app.quit_when_done(srv, patience=0.5)
+        self.assertEqual(srv.calls, ["ended", "quit"], "its browser ended, then Hoard closed")
+        self.assertLess(time.monotonic() - began, 3)
 
 
 class Packaging(unittest.TestCase):

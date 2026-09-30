@@ -49,7 +49,10 @@ job has finished. Everything else changes straight away.
 Also here:
 
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
-- **Quit Hoard:** stops Hoard. A download in progress resumes next time.
+- **Keep Hoard running when its window is closed** (in Hoard's own window): closing the window hides it, and
+  downloads, syncs and automatic syncs carry on. Open Hoard again (from the Start menu) to bring the window back.
+- **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
+  window does: see [Closing Hoard while it's working](Downloads#closing-hoard-while-its-working).
 
 ## Settings only in config.json
 
@@ -64,6 +67,7 @@ and keep it valid JSON.
 | `auto_sync_hours` | `0` | Hours between automatic syncs while Hoard is open: `0` (off), `6`, `12`, `24` or `168` (**Sync automatically** in Settings) |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
+| `close_to_background` | `false` | Closing Hoard's window keeps Hoard running in the background (**Keep Hoard running when its window is closed** in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `new_days` | `7` | Days something new in your library is marked **New**: `0` (never), `1`, `3`, `7`, `14` or `30` (**New in your library** in Settings) |
 | `download_retries` | `2` | How many more times a failed file download is tried: `0` to `3` in Settings (**Failed downloads**), up to `5` here |

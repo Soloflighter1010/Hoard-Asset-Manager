@@ -310,15 +310,38 @@ def open_window(srv) -> None:
     window = webview.create_window("Hoard", srv.entry_url(), min_size=MIN_SIZE, background_color="#221c17",
                                    text_select=True, **keeper.place)
     keeper.watch(window)
+    leaving = threading.Event()   # set once Hoard is really quitting: the window may close then
 
     def show():
-        window.restore()
         window.show()
+        window.restore()
         window.on_top = True    # to the front, without staying there
         window.on_top = False
 
+    def quit_app():
+        leaving.set()
+        window.destroy()
+
+    def closing():
+        """The window's close button. Runs on the window's own thread and decides at once: anything that touches
+        the window (hiding it, asking the page) happens on another thread, or it would wait for itself."""
+        if leaving.is_set():
+            return True
+        decision = close_decision(srv)
+        if decision == "quit":
+            leaving.set()
+            return True
+        if decision == "background":
+            threading.Thread(target=window.hide, daemon=True).start()
+        else:   # something's running: the page asks what to do (stop it first, the background, or now)
+            threading.Thread(target=window.evaluate_js, args=("window.dispatchEvent(new Event('hoard-close'))",),
+                             daemon=True).start()
+        return False
+
     srv.show_window = show
-    srv.quit_app = window.destroy
+    srv.hide_window = window.hide
+    srv.quit_app = quit_app
+    window.events.closing += closing
     storage = data_dir() / "window"
     storage.mkdir(parents=True, exist_ok=True)
     webview.start(private_mode=False, storage_path=str(storage))
@@ -338,6 +361,45 @@ def run_in_browser(srv) -> None:
         if idle > IDLE_MINUTES * 60 and not srv.jobs.state.get("running"):
             print("No Hoard page has been open for a while, so Hoard stopped.")
             break
+
+
+def close_decision(srv) -> str:
+    """What closing Hoard's window does: "background" (it's hidden, and Hoard carries on: you chose that in
+    Settings), "ask" (something is running or waiting its turn: the page asks whether to stop it first, carry on in
+    the background, or close at once), or "quit"."""
+    if srv.cfg.get("close_to_background"):
+        return "background"
+    if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+        return "ask"
+    return "quit"
+
+
+def quit_when_done(srv, patience: float = 120.0) -> None:
+    """Close Hoard once what's running has stopped: what's waiting is taken off the queue, and a download or sync is
+    stopped (its browser ended if it has stopped answering); anything else (a refresh, a sign-in) is let finish.
+    After patience seconds, Hoard closes anyway, ending any store browser still open."""
+    srv.jobs.clear_queue()
+    srv.jobs.cancel()
+    deadline = time.monotonic() + patience
+    while srv.jobs.state.get("running") and time.monotonic() < deadline:
+        time.sleep(0.25)
+    if srv.jobs.state.get("running"):
+        from .browser import end_browsers
+        end_browsers()
+    if srv.quit_app:
+        srv.quit_app()
+
+
+def quit_now(srv) -> None:
+    """Close Hoard at once, whatever it's doing: for when waiting doesn't help. What's waiting is dropped, a
+    download is stopped where it is (a half-downloaded file resumes next time, where the store allows), and every
+    store browser is ended."""
+    from .browser import end_browsers
+    srv.jobs.clear_queue()
+    srv.jobs.cancel()
+    end_browsers()
+    if srv.quit_app:
+        srv.quit_app()
 
 
 def quit_cleanly(srv) -> None:

@@ -42,6 +42,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
+           "/api/app/close",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear")
@@ -139,6 +140,7 @@ def public_settings(cfg: dict) -> dict:
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
+        "close_to_background": bool(cfg.get("close_to_background")),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -175,6 +177,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["offline_images"] = bool(body["offline_images"])
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
+    if "close_to_background" in body:
+        change["close_to_background"] = bool(body["close_to_background"])
     if "auto_sync_hours" in body:
         if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
             raise ValueError("Choose how often to sync from the list.")
@@ -260,6 +264,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
+        self.hide_window = None   # the window only: Hoard carries on in the background
         self.quit_app = None
         self.show_token = None
         self.last_seen = time.time()
@@ -473,7 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None,
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
             tasks, hidden = srv.jobs.tasks(), self._hidden_names()
@@ -502,7 +507,7 @@ class Handler(BaseHTTPRequestHandler):
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"]}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
@@ -767,7 +772,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/quit":
             if not srv.quit_app:
                 return self._json({"error": "Hoard is running as a server; stop it where it was started."}, 409)
+            if (srv.jobs.state.get("running") or srv.jobs.state.get("queue")) and not body.get("anyway"):
+                return self._json({"busy": True, "error": "Hoard is still working."}, 409)   # the page asks what to do
             threading.Timer(0.3, srv.quit_app).start()   # after this answer is on its way
+            return self._json({"ok": True})
+        if path == "/api/app/close":   # what to do about closing while something runs (the page asked you)
+            from .app import quit_now, quit_when_done
+            how = body.get("how")
+            if not srv.quit_app:
+                return self._json({"error": "Hoard is running as a server; stop it where it was started."}, 409)
+            if how == "background":
+                if not srv.hide_window:
+                    return self._json({"error": "Hoard carries on in the background only in its own window."}, 409)
+                threading.Timer(0.3, srv.hide_window).start()
+            elif how == "wait":
+                threading.Thread(target=quit_when_done, args=(srv,), daemon=True).start()
+            elif how == "now":
+                threading.Timer(0.3, quit_now, args=(srv,)).start()
+            else:
+                return self._json({"error": "Unknown choice."}, 400)
             return self._json({"ok": True})
         if path == "/api/signin-link":
             why = srv.jobs.open_link(str(body.get("url") or "").strip()[:2000])

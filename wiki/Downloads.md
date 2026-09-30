@@ -11,7 +11,10 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   progress shows like any sync, and **Stop** stops it. Hoard doesn't sync while it's closed.
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
   your Library list first. A store's **Download** button does one store.
-- **Download a copy** in an item's details (in the Library) downloads just that product.
+- **Download a copy** in an item's details (in the Library) downloads just that product, and so do **Update**
+  and **Update all** in Downloads. Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
+  page). On Booth it still reads your library list (Booth lists the files there), and on itch.io it asks
+  itch.io's API.
 
 Progress shows as Hoard works. At the end, a summary lists what's new, what was updated, what was skipped and
 anything that couldn't be downloaded, with the reason. A file that fails to download is tried again first (twice,
@@ -32,8 +35,26 @@ left out of it.
 
 **Stop** pauses safely within a few seconds, even part way through a big file. A file Hoard downloads itself
 (Gumroad, itch.io, and Booth unless it turns Hoard away) resumes where it stopped next time; one the browser
-downloads (Jinxxy, and Booth when it does) starts again. Everything that finished is recorded. Closing Hoard's
-window stops a download the same way.
+downloads (Jinxxy, and Booth when it does) starts again. Everything that finished is recorded. If the store's
+browser has stopped answering, so the job can't notice Stop, Hoard closes that browser after 20 seconds and the
+job ends; `hoard.log` notes where it was waiting. A job that goes 5 minutes without any progress says so, and
+`hoard.log` notes where it is.
+
+If a store's browser closes by itself part way through (Jinxxy, or Booth through the browser), Hoard opens it
+again and tries the product it was on once more, then carries on. If it keeps closing, Hoard leaves the rest of
+that store for next time, with one message saying so, rather than a failure for every product left.
+
+### Closing Hoard while it's working
+
+Closing Hoard's window (or **Quit Hoard** in Settings) while something is running, or waiting its turn, asks
+what to do:
+
+- **Stop it, then close:** what's waiting is taken off the queue, what's running is stopped as **Stop** does,
+  and Hoard closes as soon as it has.
+- **Keep working in the background** (in Hoard's own window): the window hides and Hoard carries on. Open Hoard
+  again to bring the window back. To always do this when the window closes, turn on **Keep Hoard running when
+  its window is closed** in [Settings](Settings).
+- **Close now:** Hoard closes at once, ending any store browser it has open. Use it if stopping takes too long.
 
 While a file downloads, the download panel and Tasks show a progress bar with how much has come in, how fast,
 and how long is left (for a file coming through the browser, how much and how fast: the browser doesn't say how

@@ -1,7 +1,31 @@
 # Changelog
 
-## Unreleased
+## 2.9.2
 
+The downloader fix: a store browser that closes or stops answering no longer fails, or holds up, a whole sync.
+Downloading one product goes straight to it. And Hoard can carry on in the background, and close safely while
+it's working.
+
+- **Fixed: a Jinxxy sync failed every product after the browser closed.** When Hoard's browser for a store
+  closed by itself part way through (Jinxxy, or Booth through the browser), every product after it failed at once
+  ("Target page, context or browser has been closed"): 258 of them in one sync. Now Hoard opens the browser again
+  and tries that product once more, then carries on; if it keeps closing, the rest of that store is left for next
+  time with one message saying so.
+- **Fixed: a sync could stop moving, and Stop couldn't end it.** Some of what Hoard asks a store's browser has no
+  time limit, so a browser that stopped answering held the job, and every job after it, until Hoard was closed.
+  Now Stop ends such a browser after 20 seconds, so the job finishes; and a job with no progress for 5 minutes
+  says so. Either way, `hoard.log` notes where it was waiting, so the cause can be found.
+- **Downloading one product goes straight to it.** **Download a copy** (Library) and **Update** (Downloads) used
+  to read through the whole store to find the product: on Jinxxy, opening every item's page, one after another,
+  until the name matched. Now they open just that item's page on Jinxxy, and just that purchase's download page on
+  Gumroad. (Booth's files are only on its library pages, and itch.io is read through its API, as before.)
+- **Keep Hoard running in the background.** A new setting, **Keep Hoard running when its window is closed**:
+  closing the window hides it, and downloads, syncs and automatic syncs carry on. Open Hoard again to bring the
+  window back; **Quit Hoard** in Settings stops it.
+- **Closing Hoard while it's working asks first:** **Stop it, then close** (Hoard closes once what's running has
+  stopped), **Keep working in the background**, or **Close now**, which closes at once, ending any store browser,
+  for when stopping takes too long. **Quit Hoard** in Settings asks the same. Before, closing gave a download 5
+  seconds to stop.
 - **The first setup goes through to the end (#21).** The first time Hoard opens, the setup assistant can't be
   skipped or closed; a step that isn't done yet (Hoard's browser not installed, no store picked) keeps you on it,
   and going on without signing in to any store, or without a Payhip shop, asks first. Run again from Settings, it
