@@ -419,7 +419,10 @@ def _forget(ctx) -> None:
 def _driver_pid(ctx) -> int | None:
     """The process of Playwright's driver for this browser (which started it), or None when Playwright doesn't say."""
     try:
-        pid = ctx._impl_obj._connection._transport._proc.pid
+        proc = ctx._impl_obj._connection._transport._proc
+        if proc.returncode is not None:   # it has ended already: its number may be another program's by now
+            return None
+        pid = proc.pid
         return pid if isinstance(pid, int) and pid > 0 else None
     except Exception:
         return None

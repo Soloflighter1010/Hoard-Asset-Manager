@@ -258,6 +258,14 @@ class ABrowserThatStopsAnswering(unittest.TestCase):
         self.assertLess(got["after"], 15)
         self.assertEqual(browser.end_browsers(), 0, "nothing left to end")
 
+    def test_a_driver_that_has_ended_is_left_alone(self):
+        """Its process number may belong to another program by now: that's never ended in its place."""
+        proc = SimpleNamespace(pid=4321, returncode=0)
+        ctx = SimpleNamespace(_impl_obj=SimpleNamespace(_connection=SimpleNamespace(_transport=SimpleNamespace(_proc=proc))))
+        self.assertIsNone(browser._driver_pid(ctx))
+        proc.returncode = None
+        self.assertEqual(browser._driver_pid(ctx), 4321)
+
 
 class StuckJobs(unittest.TestCase):
     """What Stop does when a job doesn't stop, and what a job that goes quiet leaves in hoard.log."""

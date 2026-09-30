@@ -58,6 +58,8 @@ class GumroadPictures(unittest.TestCase):
         report = downloader.Report()
 
         def download(sess, url, dest, sites, desc="", progress=None):
+            self.assertEqual(list(sess.cookies), [], "public pictures: no sign-in sent")
+            self.assertEqual(sites, ["public-files.gumroad.com"])
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(bodies[url])
             return len(bodies[url])

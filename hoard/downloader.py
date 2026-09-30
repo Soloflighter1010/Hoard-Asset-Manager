@@ -645,6 +645,7 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
     """Save the pictures in a download page that lists no files, into "Page images", each named by its place on the
     page and typed by what it is. True when one was downloaded."""
     got_any = False
+    public = egress.session()   # public pictures: fetched without your Gumroad sign-in
     for n, src in enumerate(gumroad_page_images(content), 1):
         token = urlparse(src).path.rstrip("/").rsplit("/", 1)[-1]
         fid = "page-image:" + token
@@ -658,7 +659,7 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
         staged = rel_to_path(folder, stem + ".download")
         try:
             with_retries(report, stem, lambda src=src, staged=staged: egress.download(
-                gr.sess, src, staged, STORE_SITES["gumroad"], desc=stem, progress=downloading(stem)))
+                public, src, staged, ["public-files.gumroad.com"], desc=stem, progress=downloading(stem)))
         except Exception as e:
             report.failed.append(f"Gumroad: {creator} / {name} / {stem} - {e}")
             continue
