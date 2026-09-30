@@ -17,6 +17,7 @@ from .net import is_network_error, reachable
 from .paths import data_dir
 from .browser import old_signins_waiting, profile_dir   # (issue #31)
 from .safety import DataFileError, read_json_file, write_file_safely
+from .common import now_iso
 
 
 NO_BROWSER = ("itch",)   # read through an API with a key, rather than with a sign-in in a browser
@@ -108,7 +109,7 @@ class Schedule:
         if not any(reachable(s) for s in stores):
             self.not_before = now + OFFLINE_RETRY
             return False
-        started = self.jobs.start("sync", stores, skip_imported=False, scheduled=True)
+        started = self.jobs.start("sync", stores, skip_imported=False, scheduled=True, queue=False) == "started"
         if started:
             print(f"Syncing by itself ({', '.join(STORES[s]['label'] for s in stores)})", flush=True)
         return started
@@ -124,8 +125,33 @@ class Schedule:
 
 # ----------------------------------------------------------------------------- background jobs
 
+TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
+              "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser"}
+MAX_QUEUE = 50       # jobs waiting at once
+MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
+MAX_TRAIL = 400      # lines kept of each job's progress
+
+
+def tasks_file():
+    return data_dir() / "tasks.json"
+
+
+def describe_job(task: str, stores: list[str], only: str | None = None, keys: list | None = None,
+                 scheduled: bool = False) -> str:
+    """What a job does, in a few words: "Download: Booth, Gumroad (3 items)"."""
+    names = ("every store" if stores == ["all"] else
+             ", ".join(STORES[s]["label"] for s in stores if s in STORES)) if stores else ""
+    extra = [f"{len(keys)} {'item' if len(keys) == 1 else 'items'}"] if keys else []
+    extra += [f'"{only}"'] if only else []
+    extra += ["automatic"] if scheduled else []
+    return (TASK_NAMES.get(task, task) + (f": {names}" if names else "")
+            + (f" ({', '.join(extra)})" if extra else ""))
+
+
 class Jobs:
-    """One browser job at a time: refreshing stores, or waiting for you to sign in."""
+    """Background work, one job at a time: refreshing stores, signing in and out, downloading. A job started while
+    another runs waits in a queue and starts when its turn comes (issue #49); finished jobs are kept, with their
+    progress, for the Tasks tab."""
 
     def __init__(self, cfg: dict, lib: Library, on_download_done=None):
         """No job is running at first. on_download_done is called after every download job."""
@@ -135,19 +161,83 @@ class Jobs:
         self.stop = threading.Event()
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
-                      "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None}
+                      "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None,
+                      "queue": [], "job_id": None}
+        self._queue: list[dict] = []        # jobs waiting their turn, oldest first
+        self._qlock = threading.Lock()      # the queue, and taking the runner from it
+        self._current: dict | None = None
+        self._trail: list[str] = []         # the running job's progress, line by line
+        self._ids = 0
+        self.history: list[dict] = self._load_history()
 
     def _set(self, **kw):
-        """Update the job state the page polls."""
+        """Update the job state the page polls (and note each new message in the running job's progress)."""
+        message = kw.get("message")
+        if message and message != self.state.get("message") and self._current is not None:
+            self._trail.append(str(message)[:500])
+            del self._trail[:-MAX_TRAIL]
         self.state.update(kw)
 
+    # ---- the queue (issue #49)
+
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
-              scheduled: bool = False, keys: list[str] | None = None) -> bool:
-        """Start a job in the background. False when one is already running. scheduled: an automatic sync."""
-        if not self.busy.acquire(blocking=False):
-            return False
+              scheduled: bool = False, keys: list[str] | None = None, queue: bool = True) -> str | None:
+        """Start a job in the background, or when one is running, queue it to start after (and after anything
+        already waiting). Returns "started", "queued", or None: not started, because something is running and
+        queue is False, the same job is already waiting, or the queue is full."""
+        spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
+                "scheduled": scheduled, "keys": list(keys) if keys else None}
+        with self._qlock:
+            if not self._queue and self.busy.acquire(blocking=False):
+                self._launch(spec)
+                return "started"
+            same = [q for q in self._queue if all(q[k] == spec[k] for k in spec)]
+            if not queue or same or len(self._queue) >= MAX_QUEUE:
+                return None
+            self._ids += 1
+            self._queue.append({**spec, "id": f"q{self._ids}", "label": describe_job(task, stores, only, keys, scheduled),
+                                "queued": now_iso()})
+            self._publish_queue()
+        self.kick()   # the running job may have finished meanwhile
+        return "queued"
+
+    def kick(self) -> None:
+        """Start the next waiting job, if nothing is running. (Called whenever the runner is let go.)"""
+        with self._qlock:
+            if self._queue and self.busy.acquire(blocking=False):
+                spec = self._queue.pop(0)
+                self._publish_queue()
+                self._launch(spec)
+
+    def remove(self, job_id: str) -> bool:
+        """Take a waiting job off the queue. False when it isn't waiting (it may have started)."""
+        with self._qlock:
+            before = len(self._queue)
+            self._queue = [q for q in self._queue if q["id"] != job_id]
+            self._publish_queue()
+            return len(self._queue) != before
+
+    def clear_queue(self) -> int:
+        with self._qlock:
+            n, self._queue = len(self._queue), []
+            self._publish_queue()
+            return n
+
+    def _publish_queue(self) -> None:
+        self.state["queue"] = [{"id": q["id"], "task": q["task"], "label": q["label"], "queued": q["queued"]}
+                               for q in self._queue]
+
+    def _launch(self, spec: dict) -> None:
+        """Run spec now (the runner is already taken)."""
+        task, stores, only, keys = spec["task"], spec["stores"], spec.get("only"), spec.get("keys")
+        skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
+        self._ids += 1
+        self._current = {"id": f"j{self._ids}", "task": task, "stores": stores,
+                         "label": describe_job(task, stores, only, keys, scheduled), "started": now_iso()}
+        self._trail = []
         self.stop.clear()
-        self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled)
+        self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="",
+                          job_id=self._current["id"], job_label=self._current["label"])
         if task == "download":
             target = lambda s: self._download(s, only, keys)  # noqa: E731
         elif task == "check-updates":
@@ -162,11 +252,12 @@ class Jobs:
             target = self._logout
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
+        self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
         threading.Thread(target=self._wrap, args=(target, stores), daemon=True).start()
-        return True
 
     def _wrap(self, fn, stores):
-        """Run a job, recording any error for the page, and always free the runner afterwards."""
+        """Run a job, recording any error for the page, and always free the runner afterwards (then start the next
+        waiting job)."""
         try:
             self._set(running=True)
             fn(stores)
@@ -180,8 +271,66 @@ class Jobs:
                                                        store=self.state.get("store"), include_traceback=True)
             self._set(message=why, error=why, diagnostic=diagnostic)
         finally:
-            self._set(running=False, task=None, store=None, scheduled=False)
+            self._finish()
+            self._set(running=False, task=None, store=None, scheduled=False, job_id=None)
             self.busy.release()
+            self.kick()
+
+    # ---- the Tasks tab: finished jobs
+
+    def _finish(self) -> None:
+        """Keep the job that just ended, with how it went and its progress, for the Tasks tab."""
+        job = self._current
+        if job is None:
+            return
+        self._current = None
+        st = self.state
+        message = str(st.get("message") or "")
+        outcome = "failed" if st.get("error") else "stopped" if message.startswith("Stopped") else "done"
+        trail = self._trail + [line for line in (st.get("log") or []) if line not in self._trail]
+        report = st.get("report") if isinstance(st.get("report"), dict) else None
+        self.history.append({**job, "ended": now_iso(), "outcome": outcome, "message": message[:600],
+                             "report": report, "log": [str(x)[:500] for x in trail][-MAX_TRAIL:]})
+        del self.history[:-MAX_HISTORY]
+        try:
+            write_file_safely(tasks_file(), json.dumps({"history": self.history}, ensure_ascii=False))
+        except OSError as e:
+            print(f"Couldn't save the task log: {e}", flush=True)
+
+    def _load_history(self) -> list[dict]:
+        try:
+            raw = read_json_file(tasks_file()) if tasks_file().is_file() else {}
+        except (DataFileError, OSError):
+            return []
+        out = []
+        for h in (raw.get("history") if isinstance(raw, dict) and isinstance(raw.get("history"), list) else [])[-MAX_HISTORY:]:
+            if not isinstance(h, dict) or h.get("task") not in TASK_NAMES:
+                continue
+            out.append({"id": str(h.get("id") or "")[:20], "task": h["task"], "label": str(h.get("label") or "")[:300],
+                        "stores": [s for s in (h.get("stores") or []) if s in STORES or s == "all"] if isinstance(h.get("stores"), list) else [],
+                        "started": str(h.get("started") or "")[:40], "ended": str(h.get("ended") or "")[:40],
+                        "outcome": h.get("outcome") if h.get("outcome") in ("done", "failed", "stopped") else "done",
+                        "message": str(h.get("message") or "")[:600],
+                        "report": h.get("report") if isinstance(h.get("report"), dict) else None,
+                        "log": [str(x)[:500] for x in h.get("log") or [] if isinstance(x, str)][-MAX_TRAIL:]
+                        if isinstance(h.get("log"), list) else []})
+        return out
+
+    def tasks(self) -> dict:
+        """The Tasks tab: what's running (with its progress so far), what's waiting, and what finished, newest
+        first."""
+        current = None
+        if self.state.get("running") and self._current:
+            current = {**self._current, "message": self.state.get("message") or "",
+                       "log": (self._trail + [x for x in (self.state.get("log") or []) if x not in self._trail])[-MAX_TRAIL:]}
+        return {"current": current, "queue": list(self.state["queue"]), "history": list(reversed(self.history))}
+
+    def clear_history(self) -> None:
+        self.history = []
+        try:
+            tasks_file().unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def open_link(self, url: str) -> str | None:
         """Open a link from an email (a sign-in or "is this you?" link) in the sign-in window that's open now.

@@ -22,7 +22,9 @@ DEFAULT_CONFIG = {
     "allow_unprotected_signins": False,  # Linux without a keyring only: keep sign-ins protected by folder permissions
     "offline_images": True,        # save every product image after a refresh, so the library works offline
     "check_for_updates": False,    # ask GitHub once a day, when Hoard starts, whether there's a newer version
-    "auto_sync_hours": 0,          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
+    "auto_sync_hours": 0,
+    "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
+    "download_retries": 2,         # a file download that fails is tried again this many more times          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False},   # accessibility
     "gumroad": {"enabled": True, "include_archived": True, "save_thumbnails": True},
     "booth": {"enabled": True, "include_gifts": True, "include_free": True, "save_thumbnails": True},

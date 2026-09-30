@@ -43,7 +43,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
-           "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates")
+           "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
+           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -51,6 +52,17 @@ UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one brows
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 TEXT_SIZES = (100, 115, 130, 150)   # percent
+JOB_SETTINGS = ("root", "browser_channel", "stores", "payhip_shops")   # read by a running job: not changed during one
+NEW_DAYS = (0, 1, 3, 7, 14, 30)     # how long something new in the library is marked New (0: never)
+
+
+def new_cutoff(cfg: dict) -> str | None:
+    """Items added since this time are New (issue #18); None when New is switched off."""
+    days = cfg.get("new_days", 7)
+    if days not in NEW_DAYS or not days or isinstance(days, bool):
+        return None
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
 MAX_IMPORT_FILES = 50   # saved pages in one request; the page sends more as several requests
 
 
@@ -71,9 +83,28 @@ def display_settings(cfg: dict) -> dict:
             "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion"))}
 
 
-def public_job(job: dict) -> dict:
-    """Job state safe for the browser: raw exception diagnostics stay inside the Hoard process."""
-    return {k: v for k, v in (job or {}).items() if k != "diagnostic"}
+def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
+    """Job state safe for the browser: raw exception diagnostics stay inside the Hoard process, and while the hidden
+    library is locked, hidden products' names are taken out of its messages and log."""
+    out = {k: v for k, v in (job or {}).items() if k != "diagnostic"}
+    if hidden_names:
+        for k in ("message", "error"):
+            if isinstance(out.get(k), str):
+                out[k] = mask_names(out[k], hidden_names)
+        if isinstance(out.get("log"), list):
+            out["log"] = [mask_names(str(x), hidden_names) for x in out["log"]]
+        if isinstance(out.get("report"), dict):
+            out["report"] = {k: [mask_names(str(x), hidden_names) for x in v] if isinstance(v, list) else v
+                             for k, v in out["report"].items()}
+    return out
+
+
+def mask_names(text: str, names: list[str]) -> str:
+    """text with each of these names (hidden products) replaced by "a hidden item"."""
+    for name in names:
+        if name and name in text:
+            text = text.replace(name, "a hidden item")
+    return text
 
 
 def public_settings(cfg: dict) -> dict:
@@ -84,6 +115,7 @@ def public_settings(cfg: dict) -> dict:
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
+        "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
@@ -121,6 +153,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
             raise ValueError("Choose how often to sync from the list.")
         change["auto_sync_hours"] = body["auto_sync_hours"]
+    if "new_days" in body:
+        if body["new_days"] not in NEW_DAYS or isinstance(body["new_days"], bool):
+            raise ValueError("Choose how long things are marked New from the list.")
+        change["new_days"] = body["new_days"]
     if "display" in body:
         given = body["display"] if isinstance(body["display"], dict) else {}
         display = {}
@@ -327,6 +363,15 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _hidden_names(self) -> list[str]:
+        """The names of hidden products, longest first, while this browser hasn't unlocked the hidden library (so
+        they can be taken out of job logs); [] when it has, or nothing is hidden."""
+        hidden = MarkStore().load()["hidden"]
+        if not hidden or self._unlocked():
+            return []
+        names = {i["name"] for i in self.server.lib.snapshot()[0] if tag_key(i["store"], i["name"]) in hidden}
+        return sorted((n for n in names if len(n) >= 3), key=len, reverse=True)
+
     def _json(self, obj, status=200, compress: bool = False):
         """Send obj as JSON that the browser won't cache. With compress, a large reply is gzipped for a browser that
         accepts it (the library and downloads lists: 5 MB for 10,000 items becomes about 0.2 MB, which matters when
@@ -372,8 +417,12 @@ class Handler(BaseHTTPRequestHandler):
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
             marks, unlocked = MarkStore().load(), self._unlocked()
             updates = AssetUpdates().load()["items"]
+            cutoff = new_cutoff(srv.cfg)
+            first_read = {s: (info.get("first_read") or "") for s, info in stores.items()}
             shown = []
             for i in items:
+                added = i.get("added") or ""
+                i["new"] = bool(cutoff and added and added >= cutoff and added > first_read.get(i["store"], ""))
                 i["on_disk"] = on_disk.get(i["tag_key"])
                 i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
                 i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
@@ -385,7 +434,7 @@ class Handler(BaseHTTPRequestHandler):
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
             return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": stores,
                                "privacy": privacy,
-                               "labels": {k: v["label"] for k, v in STORES.items()}, "job": public_job(srv.jobs.state),
+                               "labels": {k: v["label"] for k, v in STORES.items()}, "job": public_job(srv.jobs.state, self._hidden_names()),
                                "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
                                "itch_key": vault.load_key(srv.cfg, "itch") is not None,
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
@@ -393,8 +442,14 @@ class Handler(BaseHTTPRequestHandler):
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None,
                                "display": display_settings(srv.cfg)}, compress=True)
+        if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
+            tasks, hidden = srv.jobs.tasks(), self._hidden_names()
+            if hidden:
+                for job in ([tasks["current"]] if tasks["current"] else []) + tasks["history"]:
+                    job.update(public_job({k: job.get(k) for k in ("message", "log", "report") if k in job}, hidden))
+            return self._json(tasks, compress=True)
         if path == "/api/status":
-            return self._json({"job": public_job(srv.jobs.state), "stores": srv.lib.snapshot()[1]})
+            return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
             # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
@@ -411,7 +466,7 @@ class Handler(BaseHTTPRequestHandler):
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"]}
-            return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state), "store_sites": store_sites(),
+            return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
@@ -537,8 +592,6 @@ class Handler(BaseHTTPRequestHandler):
         if not key:
             return self._json({"error": "That doesn't look like an itch.io API key. Copy the whole key from itch.io "
                                         "(Settings, API keys)."}, 400)
-        if srv.jobs.state["running"]:
-            return self._json({"error": "Hoard is busy. Wait for the current job to finish."}, 409)
         sess = itch.session(key)
         try:
             who = itch.profile(sess)
@@ -554,9 +607,9 @@ class Handler(BaseHTTPRequestHandler):
             vault.save_key(srv.cfg, "itch", key)
         except (SigninsUnprotected, OSError) as e:
             return self._json({"error": str(e)}, 500)
-        srv.jobs.start("refresh", ["itch"])
+        started = srv.jobs.start("refresh", ["itch"])   # queued after anything running
         name = str(who.get("display_name") or who.get("username") or "")[:100]
-        return self._json({"ok": True, "user": name, "kept": vault.key_protection(srv.cfg)})
+        return self._json({"ok": True, "user": name, "kept": vault.key_protection(srv.cfg), "queued": started == "queued"})
 
     # ---- acting
     def do_POST(self):
@@ -596,8 +649,13 @@ class Handler(BaseHTTPRequestHandler):
             srv.forget_index()
             return self._json({"ok": True})
         if path == "/api/settings":
-            if srv.jobs.state["running"]:
-                return self._json({"error": "Wait for the current job to finish before changing settings."}, 409)
+            # Settings save as they're changed. Only the ones a running job reads as it goes wait for it to finish:
+            # where files go, which browser, which stores, and Payhip's shops.
+            busy = [k for k in JOB_SETTINGS if k in body]
+            if srv.jobs.state["running"] and busy:
+                return self._json({"error": "That setting can't change while Hoard is refreshing or downloading. It's "
+                                            "put back: change it again once the current job has finished.",
+                                   "settings": public_settings(srv.cfg)}, 409)
             try:
                 change = apply_settings(srv.cfg, body)
             except ValueError as e:
@@ -640,6 +698,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._itch_key(body)
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
+        if path == "/api/queue/remove":   # a job waiting its turn (issue #49)
+            return self._json({"ok": srv.jobs.remove(str(body.get("id") or "")[:20])})
+        if path == "/api/queue/clear":
+            return self._json({"ok": True, "removed": srv.jobs.clear_queue()})
+        if path == "/api/tasks/clear":
+            srv.jobs.clear_history()
+            return self._json({"ok": True})
         if path == "/api/update/check":
             try:
                 srv.updates.check()
@@ -672,8 +737,10 @@ class Handler(BaseHTTPRequestHandler):
             why = srv.jobs.open_link(str(body.get("url") or "").strip()[:2000])
             return self._json({"error": why}, 400) if why else self._json({"ok": True})
         if path == "/api/setup/browser":
-            if not srv.jobs.start("install-browser", []):
-                return self._json({"error": "Hoard is busy. Wait for the current job to finish."}, 409)
+            started = srv.jobs.start("install-browser", [])
+            if not started:
+                return self._json({"error": "Installing Hoard's browser is already waiting its turn."}, 409)
+            return self._json({"ok": True, "queued": started == "queued"}, 202)
             return self._json({"ok": True}, 202)
         if path == "/api/setup/done":
             srv.cfg["setup_done"] = bool(body.get("done", True))
@@ -703,10 +770,11 @@ class Handler(BaseHTTPRequestHandler):
         # products chosen on the Downloads page (to update, or to check), by their tag_key
         keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:5000]
                 if isinstance(k, str) and 0 < len(k) <= 400] or None
-        if not srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
-                              skip_imported=bool(body.get("all")), only=only, keys=keys):
-            return self._json({"error": "Hoard is busy. Wait for the current job to finish."}, 409)
-        self._json({"ok": True}, 202)
+        started = srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
+                                 skip_imported=bool(body.get("all")), only=only, keys=keys)
+        if not started:
+            return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
+        self._json({"ok": True, "queued": started == "queued"}, 202)
 
 
 def reseal_in_background(srv, cfg: dict) -> None:
@@ -728,6 +796,7 @@ def reseal_in_background(srv, cfg: dict) -> None:
         print(f"Couldn't check catalog.json's seal: {e}")
     finally:
         srv.jobs.busy.release()
+        srv.jobs.kick()   # anything queued meanwhile
 
 
 def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool = True, tls_cert: str | None = None,

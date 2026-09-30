@@ -31,6 +31,7 @@ os.environ["HOARD_DATA_DIR"] = str(_TEST_HOME / "Hoard")   # tests never touch y
 sys.path.insert(0, str(REPO))
 
 from hoard import browser, common, config, downloader, library, safety, server, tags  # noqa: E402
+downloader.RETRY_WAITS = (0.0, 0.0, 0.0)   # failed downloads are still tried again, without the wait
 
 
 def reset_keys():

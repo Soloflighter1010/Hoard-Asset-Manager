@@ -102,6 +102,7 @@ class Report:
     available: list = field(default_factory=list)
     got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
     stores_done: list = field(default_factory=list)   # stores read to the end, without an error
+    retries: int = 2   # how many more times a failed file download is tried (Settings; see with_retries)
 
     def print(self) -> None:
         """Print the summary, then the updated, skipped and failed items one per line."""
@@ -134,6 +135,40 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
     if rec.get("files") and not deleted_here:
         report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
                                  "file": file, "kind": "changed" if changed else "new"})
+
+
+RETRY_WAITS = (5.0, 15.0, 30.0)   # seconds before each try again (issue #19)
+NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't change by asking again
+
+
+def download_retries(cfg: dict) -> int:
+    n = cfg.get("download_retries", 2)
+    return n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 5 else 2
+
+
+def worth_retrying(e: BaseException) -> bool:
+    """Could trying the same file again go differently? Not after a refusal Hoard made itself (an unsafe address or
+    path), a sign-in that's gone, or a store saying the file isn't there or isn't yours."""
+    if isinstance(e, (NotLoggedIn, egress.UnsafeRequest, UnsafePath, SigninsUnprotected)):
+        return False
+    status = getattr(getattr(e, "response", None), "status_code", None)
+    return status not in NO_RETRY_STATUS
+
+
+def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
+    """attempt(), tried again (up to download_retries more times, waiting a little longer each time) when it fails
+    in a way that might go differently next time: a dropped connection, a timeout, a busy server, a checksum that
+    didn't match. The last failure is raised as it was. A download stopped with Stop still stops at once."""
+    tries = report.retries
+    for n in range(tries + 1):
+        try:
+            return attempt()
+        except Exception as e:
+            if n >= tries or not worth_retrying(e):
+                raise
+            wait = RETRY_WAITS[min(n, len(RETRY_WAITS) - 1)]
+            log(f"    {what}: {e} - trying again in {wait:.0f} s ({n + 1} of {tries})")   # Stop is noticed here
+            sleep(wait)
 
 
 SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
@@ -486,8 +521,9 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
                 would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
                 continue
             try:
-                url = gr.file_url(page_url, token, fid, f.get("download_url"))
-                got = egress.download(gr.sess, url, target, STORE_SITES["gumroad"], desc=relpath)
+                got = with_retries(report, relpath, lambda fid=fid, f=f, target=target, relpath=relpath: egress.download(
+                    gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, STORE_SITES["gumroad"],
+                    desc=relpath))
             except Exception as e:
                 report.failed.append(f"Gumroad: {label} - {e}")
                 continue
@@ -769,31 +805,37 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
             continue
-        current = find(allow_all)  # re-tag; the page may have re-rendered
-        match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
-        if not match:
-            report.failed.append(f"{store}: {name} / {k} - button disappeared")
-            continue
-        dl = click_download(ctx, page, match["idx"], timeout_s)
-        if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
-            page.goto(url, wait_until="domcontentloaded")
-            settle(page)
-        if not dl:
-            report.failed.append(f"{store}: {name} / {k} - clicking download didn't start a download")
-            continue
-        fname = distinct_name(safe_name(dl.suggested_filename or k, 150), k, rec, {key for _label, key in wanted})
-        target = folder / fname
-        # the same filename under a different label means the creator updated that file
-        prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
-        is_update = prev is not None or target.exists()
-        log(f"    downloading: {fname}")   # the browser shows no progress, so a stop here is at least visible
+        def attempt(label=label, k=k, pos=pos):
+            """Click the file's button and save what it downloads (tried again by with_retries)."""
+            current = find(allow_all)  # re-tag; the page may have re-rendered
+            match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
+            if not match:
+                raise RuntimeError("button disappeared")
+            dl = click_download(ctx, page, match["idx"], timeout_s)
+            if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
+                page.goto(url, wait_until="domcontentloaded")
+                settle(page)
+            if not dl:
+                raise RuntimeError("clicking download didn't start a download")
+            fname = distinct_name(safe_name(dl.suggested_filename or k, 150), k, rec, {key for _label, key in wanted})
+            # the same filename under a different label means the creator updated that file
+            prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
+            is_update = prev is not None or (folder / fname).exists()
+            log(f"    downloading: {fname}")   # the browser shows no progress, so a stop here is at least visible
+            try:
+                save_browser_download(dl, folder, fname)
+            except Exception as e:
+                raise RuntimeError(f"{fname} - {e}") from e
+            finally:
+                close_if_popup(dl.page, page)
+            return fname, prev, is_update
+
         try:
-            save_browser_download(dl, folder, fname)
+            fname, prev, is_update = with_retries(report, label or k, attempt)
         except Exception as e:
-            report.failed.append(f"{store}: {name} / {fname} - {e}")
+            report.failed.append(f"{store}: {name} / {k} - {e}")
             continue
-        finally:
-            close_if_popup(dl.page, page)
+        target = folder / fname
         if prev:
             rec["files"].pop(prev, None)
         rec["files"][k] = {"path": fname, "size": target.stat().st_size, "label": label, "downloaded_at": now_iso()}
@@ -1123,8 +1165,9 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
                         try:
                             offered = {(re.search(r"/downloadables/(\d+)", x["url"]) or [None, x["url"]])[1] for x in b["files"]}
-                            fname, got = booth_fetch(page, sess, f, folder, fid, route, timeout_s,
-                                                     name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered))
+                            fname, got = with_retries(report, f["name"] or guess, lambda f=f, fid=fid, offered=offered: booth_fetch(
+                                page, sess, f, folder, fid, route, timeout_s,
+                                name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered)))
                             prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
                             is_update = had_files or prev is not None or fname in on_disk
                         except NotLoggedIn:
@@ -1242,12 +1285,15 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifes
         target = folder / fname
         prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
         is_update = old is not None or prev is not None or target.exists()
-        try:
-            size = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname)
+        def fetch(fid=fid, target=target, fname=fname, u=u):
+            got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname)
             expected = str(u.get("md5_hash") or "").lower()
             if expected and md5_of(target) != expected:
                 target.unlink(missing_ok=True)
-                raise RuntimeError("the file didn't match itch.io's checksum, so it was deleted; the next sync tries again")
+                raise RuntimeError("the file didn't match itch.io's checksum, so it was deleted")
+            return got
+        try:
+            size = with_retries(report, fname, fetch)
         except NotLoggedIn:
             raise
         except Exception as e:
@@ -1570,7 +1616,7 @@ def cmd_sync(cfg: dict, args) -> None:
     root = root_dir(cfg)
     root.mkdir(parents=True, exist_ok=True)
     log(f"Downloading into {root}")
-    report = Report()
+    report = Report(retries=download_retries(cfg))
     asked = list(DOWNLOADABLE) if args.store == "all" else ([args.store] if isinstance(args.store, str) else list(args.store))
     stores = [s for s in asked if s in DOWNLOADABLE]   # Payhip is read, never downloaded from
     syncers = {"booth": sync_booth, "gumroad": sync_gumroad, "jinxxy": sync_jinxxy, "itch": sync_itch}
