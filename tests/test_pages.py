@@ -839,6 +839,25 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertGreater(tab("booth")["height"], tab("")["height"])
         page.close()
 
+    def test_hovering_a_tab_moves_nothing_else(self):
+        """A tab rises a little when the pointer's on it, but only the tab: in 2.9.0 the whole row grew with it, and
+        the page under it bounced up and down as the pointer went along the tabs."""
+        page = self.open()
+        where = lambda: page.evaluate("() => [document.querySelector('.shelf').offsetHeight, "   # noqa: E731
+                                      "Math.round(document.querySelector('.slot').getBoundingClientRect().top)]")
+        page.mouse.move(700, 700)
+        page.wait_for_timeout(300)
+        still = where()
+        for s in ("booth", "gumroad", ""):
+            before = page.locator(f'#storeSeg [data-store="{s}"]').bounding_box()
+            page.hover(f'#storeSeg [data-store="{s}"]')
+            page.wait_for_timeout(300)   # the rise has finished
+            self.assertEqual(where(), still, f"hovering {s or 'Everything'}")
+            if s:
+                self.assertGreater(page.locator(f'#storeSeg [data-store="{s}"]').bounding_box()["height"], before["height"],
+                                   "the tab itself still rises")
+        page.close()
+
     def test_the_glow_follows_the_store(self):
         """No colour bar on the selected tab: the page glows from the bottom in the store's colour instead, and for
         Everything the stores you're signed in to drift through it."""
