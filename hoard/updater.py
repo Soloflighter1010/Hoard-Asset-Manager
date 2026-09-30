@@ -11,7 +11,9 @@ release's SHA256SUMS-windows.txt. Hoard then quits cleanly (a download in progre
 and the installer opens the new Hoard when it's done. Your settings, library, sign-ins and downloads aren't
 touched: an update replaces only the program files.
 
-Everything else (the portable zip, pip, other systems) is told there's a newer version, with a link to it.
+Everything else is told there's a newer version, with a link to it and which file to get (how_to_update): the
+Mac app its .pkg for this Mac's chip, the Flatpak its .flatpak bundle, and the portable zip, pip or source the
+releases page.
 """
 from __future__ import annotations
 
@@ -71,6 +73,20 @@ def installed_copy() -> bool:
     if sys.platform != "win32" or not getattr(sys, "frozen", False):
         return False
     return any(Path(sys.executable).parent.glob("unins*.exe"))
+
+
+def how_to_update(version: str) -> str:
+    """What to download to update a copy of Hoard that can't update itself, for this kind of copy."""
+    from .paths import in_flatpak
+    if in_flatpak():
+        return (f"Download Hoard-{version}-linux-x86_64.flatpak from the releases page and open it, or run "
+                f"flatpak install Hoard-{version}-linux-x86_64.flatpak. It replaces this one.")
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        import platform
+        chip = "apple-silicon" if platform.machine() == "arm64" else "intel"
+        return (f"Download Hoard-{version}-macos-{chip}.pkg from the releases page and open it. It replaces this "
+                "one in Applications.")
+    return "Download it from the releases page, and install it over this one."
 
 
 def _session():
@@ -250,7 +266,7 @@ class Updates:
         available = bool(latest and newer(latest.get("version", "")))
         return {**self.state, "available": available, "can_install": bool(can_install and available
                 and latest.get("has_installer")), "auto": bool(self.cfg.get("check_for_updates")),
-                "releases_page": RELEASES_PAGE}
+                "releases_page": RELEASES_PAGE, "how": how_to_update(latest["version"]) if available else ""}
 
     def _save(self) -> None:
         try:

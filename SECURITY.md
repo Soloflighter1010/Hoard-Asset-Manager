@@ -99,11 +99,14 @@ It can't fully protect against:
   Windows, by checking where the opened file really is), and what's served is exactly what was opened.
 - Two products or files whose names clean up alike never share a folder or overwrite each other.
 
-**The Windows app**
+**The apps (Windows, macOS, and the Linux Flatpak)**
 - Built by GitHub Actions from this repository for each release, from hash-locked dependencies
-  (`requirements-app.txt`), checked with `hoard-cli self-test`, with signed build provenance: verify a download
-  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. It isn't code-signed yet, so
-  Windows SmartScreen warns the first time.
+  (`requirements-app.txt`, `requirements-mac.txt`, `requirements-flatpak.txt`, all pinned to the same versions),
+  checked with `hoard-cli self-test`, with signed build provenance: verify a download
+  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. They aren't code-signed yet, so
+  Windows SmartScreen warns the first time, and macOS won't open the package until you allow it.
+- The Flatpak is built offline from files pinned by SHA-256, and its sandbox allows only the network, its
+  window, your keyring (for sign-ins) and your home folder and drives (for your downloads folder).
 - The installer asks for no administrator rights and installs for the current user only. An update replaces
   the program files completely, so nothing from an older version lingers.
 - One copy runs at a time (an operating-system lock that ends with the process). A second copy can only ask the

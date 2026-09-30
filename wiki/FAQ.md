@@ -16,8 +16,9 @@ you're allowed to do with an asset, so follow each creator's license and each st
 
 ## Does it work on a Mac or Linux?
 
-Yes, from source: see [Installing Hoard](Installing-Hoard#from-source-windows-macos-linux). The installer and the
-windowed app are for Windows. Hoard for Unity works wherever Unity 2022.3 does.
+Yes. There's a package for macOS 11 or newer (Apple Silicon and Intel), and a Flatpak for Linux (x86_64), each
+opening in Hoard's own window: see [Installing Hoard](Installing-Hoard#macos). It also runs from source anywhere
+with Python 3.10 or newer. Hoard for Unity works wherever Unity 2022.3 does.
 
 ## Will it download the same file twice?
 

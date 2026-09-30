@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.10.0
+
+Hoard is now an app on macOS and Linux too: a package for the Mac, and a Flatpak for Linux, each opening in Hoard's
+own window, like the Windows app.
+
+- **Hoard for macOS.** `Hoard-2.10.0-macos-apple-silicon.pkg` (M-series Macs) and
+  `Hoard-2.10.0-macos-intel.pkg` install **Hoard** in Applications. macOS 11 or newer. They aren't signed by
+  Apple yet, so macOS won't open them at first: choose **Done**, then **System Settings › Privacy & Security ›
+  Open Anyway**.
+- **Hoard for Linux, as a Flatpak.** `Hoard-2.10.0-linux-x86_64.flatpak` installs from your software centre or
+  with `flatpak install --user`, on the GNOME runtime from Flathub. Its sandbox allows the network, its window,
+  your keyring (for sign-ins), and your home folder and drives (for your downloads folder), and nothing else. It
+  uses the same `~/.local/share/Hoard` as Hoard run from source, so your library carries over and Hoard for
+  Unity finds it. The manifest follows Flathub's rules, ready to submit there.
+- **Updates say which file to get.** On the Mac and in the Flatpak, **Settings › Updates** names the new
+  version's package for your computer (the Windows app still updates itself).
+- Every file on a release has signed build provenance and a checksum file, and every pull request builds the
+  Mac app and the Flatpak, with their self-tests, as a release would.
+
 ## 2.9.2
 
 The downloader fix: a store browser that closes or stops answering no longer fails, or holds up, a whole sync.

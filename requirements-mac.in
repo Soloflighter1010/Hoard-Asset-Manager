@@ -1,0 +1,12 @@
+# What the macOS app (Hoard.app, in Hoard-<version>-macos-<chip>.pkg, built by .github/workflows/release.yml)
+# needs: Hoard's own dependencies, its window (pywebview, which uses the Mac's own WebKit through PyObjC) and the
+# build tool (PyInstaller). requirements-mac.txt is generated from this for macOS and Python 3.12, with exact
+# versions and hashes (the same versions for Apple Silicon and Intel):
+#   uv pip compile requirements-mac.in -c requirements.txt -c requirements-app.txt --python-platform aarch64-apple-darwin \
+#     --python-version 3.12 --generate-hashes --no-header --output-file requirements-mac.txt
+# (-c: the same versions as a source install and the Windows app.)
+# Don't edit requirements-mac.txt by hand; change this file (or requirements.in) and regenerate it.
+-r requirements.in
+pywebview>=5.3,<7
+pyinstaller>=6.10,<7
+pyinstaller-hooks-contrib

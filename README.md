@@ -33,6 +33,7 @@ Guides for everything, from installing to fixing a problem, are in the
 
 ## 📖 Table of Contents
 - [Install (Windows)](#install-windows)
+- [Install (macOS and Linux)](#install-macos-and-linux)
 - [Using Hoard](#using-hoard)
 - [Hoard in Unity](#hoard-in-unity)
 - [How Hoard keeps you safe](#how-hoard-keeps-you-safe)
@@ -62,7 +63,7 @@ Guides for everything, from installing to fixing a problem, are in the
 2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (a certificate costs
    money every year). Choose **More info**, then **Run anyway**. To check the download really came from
    this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
-3. Open **Hoard** from the Start menu. It opens in its own window; closing the window quits Hoard. A short
+3. Open **Hoard** from the Start menu. It opens in its own window. A short
    setup assistant walks you through the rest: which stores you use, signing in to each one, your Payhip
    shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**.
 
@@ -77,7 +78,20 @@ Prefer no installer? `Hoard-<version>-windows.zip` is the same app: extract it a
 Hoard's window uses Microsoft Edge WebView2, part of Windows 11 and kept up to date on Windows 10; without it,
 Hoard opens in your web browser instead (quit it from **Settings**).
 
-**From source, or on Linux and macOS:** install [Python 3.10 or newer](https://www.python.org/downloads/),
+## Install (macOS and Linux)
+
+- **macOS 11 or newer:** download `Hoard-<version>-macos-apple-silicon.pkg` (M-series Macs) or
+  `Hoard-<version>-macos-intel.pkg` from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
+  and open it. It isn't signed by Apple yet, so macOS won't open it at first: choose **Done**, then **System
+  Settings › Privacy & Security › Open Anyway**. Hoard goes in **Applications**.
+- **Linux (x86_64):** download `Hoard-<version>-linux-x86_64.flatpak` and open it with your software centre, or
+  run `flatpak install --user Hoard-<version>-linux-x86_64.flatpak`. It uses the GNOME runtime from
+  [Flathub](https://flathub.org/setup).
+
+Both open in Hoard's own window. To update, install the newer file the same way (**Settings › Updates** says
+which). Details: [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard).
+
+**From source (any system):** install [Python 3.10 or newer](https://www.python.org/downloads/),
 download `Hoard-<version>.zip`, extract it, and run `Hoard.bat` (Windows) or `./run.sh`. It sets up a private
 Python environment (every package checked against a recorded fingerprint), then opens Hoard.
 

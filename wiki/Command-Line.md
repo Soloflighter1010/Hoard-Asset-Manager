@@ -11,6 +11,8 @@ without a desktop (a NAS, say).
   ```
 
 - **The portable zip:** `hoard-cli.exe` in the folder you extracted.
+- **The Mac app:** `/Applications/Hoard.app/Contents/MacOS/hoard-cli <command>`.
+- **The Flatpak:** `flatpak run io.github.soloflighter1010.Hoard <command>`.
 - **From source:** `Hoard.bat <command>` on Windows, `./run.sh <command>` on macOS and Linux.
 
 The examples below say `hoard-cli`; use whichever of these fits. Without a command, Hoard opens in its window
@@ -73,7 +75,8 @@ hoard-cli verify
 
 - **Windows:** in **Task Scheduler**, create a task that runs
   `%LOCALAPPDATA%\Programs\Hoard\hoard-cli.exe` with the argument `sync`, as your own account.
-- **macOS and Linux:** a cron job or systemd timer running `./run.sh sync` in Hoard's folder.
+- **macOS and Linux:** a cron job or systemd timer running `sync` with the Mac app's `hoard-cli`,
+  `flatpak run io.github.soloflighter1010.Hoard sync`, or `./run.sh sync` in Hoard's folder.
 
 Sign in to your stores first, in the app or with `login`. `sync` never opens Payhip (Hoard only lists what you
 bought there), so it needs nobody at the computer. If Hoard is busy with a store at the same moment, the command

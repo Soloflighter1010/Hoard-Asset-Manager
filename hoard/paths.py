@@ -14,6 +14,11 @@ PACKAGE = Path(__file__).resolve().parent
 WEB = PACKAGE / "web"   # the pages, and their fonts
 
 
+def in_flatpak() -> bool:
+    """Is this Hoard the Flatpak (packaging/flatpak), running in its sandbox?"""
+    return bool(os.environ.get("FLATPAK_ID")) or Path("/.flatpak-info").exists()
+
+
 def data_dir() -> Path:
     """Hoard's private folder in this user account's app data. HOARD_DATA_DIR moves it (tests, portable use)."""
     if os.environ.get("HOARD_DATA_DIR"):
@@ -22,6 +27,10 @@ def data_dir() -> Path:
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
+    elif in_flatpak():
+        # The Flatpak sets XDG_DATA_HOME to its own folder (~/.var/app/...); Hoard keeps using the one every Linux
+        # Hoard uses (it can see your home folder), so your library carries over and Hoard for Unity finds it.
+        base = Path(os.environ.get("HOST_XDG_DATA_HOME") or Path.home() / ".local" / "share")
     else:
         base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
     return base / "Hoard"

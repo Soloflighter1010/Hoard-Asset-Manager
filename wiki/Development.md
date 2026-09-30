@@ -10,7 +10,7 @@ For working on Hoard itself. How it's built, in depth, is in
 | `Packages/soloflighter.hoard/` | Hoard for Unity. `Editor/Core` is plain C# with no Unity references, so it can be tested without Unity |
 | `tests/` | Every test (see below) |
 | `scripts/` | `build_release.py` (the source zip) and `build_vpm.py` (the Unity package) |
-| `packaging/` | The Windows app: PyInstaller spec, Inno Setup installer, icon |
+| `packaging/` | The apps: PyInstaller spec (Windows and Mac), Inno Setup installer, icons, and `flatpak/` (the Linux Flatpak's manifest and files) |
 | `docs/` | Architecture, command line, data formats, and responses to security reviews |
 | `wiki/` | This wiki. It's published from here (see [Releasing](Releasing#the-wiki)) |
 | `Website/` | The VCC listing's page on GitHub Pages |
@@ -38,7 +38,7 @@ python -m unittest discover -s tests -v
 - The Unity core tests need Mono (`mono-mcs` and `mono-runtime` on Debian and Ubuntu).
 - Without those, their tests are skipped. GitHub Actions has both, and the **Check** workflow runs everything on
   Ubuntu and Windows for every pull request and every push to `main`, then builds the zips, the Unity package and
-  the Windows app, and runs the app's self-test.
+  the Windows app, the Mac app and its `.pkg`, and the Flatpak, and runs each app's self-test.
 
 Each security test names the review finding it guards.
 

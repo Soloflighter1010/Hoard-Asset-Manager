@@ -7,6 +7,10 @@ app-data folder that belongs to your user account.
 |---|---|---|
 | `%LOCALAPPDATA%\Hoard` | `~/Library/Application Support/Hoard` | `~/.local/share/Hoard` |
 
+The Linux Flatpak uses `~/.local/share/Hoard` too (not a folder of its own under `~/.var/app`), so it shares a
+library with Hoard run from source, and Hoard for Unity finds it. Only its copy of Hoard's browser is its own, in
+`~/.var/app/io.github.soloflighter1010.Hoard/cache`.
+
 | What | What it's for |
 |---|---|
 | `sign-ins/` | Your store sign-ins, one folder per store, encrypted by your operating system. Never share this folder |
@@ -87,8 +91,12 @@ If your downloads folder is somewhere else on the new computer, choose it in [Se
 
 1. In **Stores**, choose **Sign out of every store**. That ends the sessions where Hoard can and removes every
    store's items from your library.
-2. Uninstall Hoard (see [Installing Hoard](Installing-Hoard#uninstalling)).
+2. Uninstall Hoard (see [Installing Hoard](Installing-Hoard#uninstalling): on a Mac, drag it from Applications
+   to the Trash; the Flatpak, `flatpak uninstall --delete-data io.github.soloflighter1010.Hoard`).
 3. Delete Hoard's app-data folder (above), and your downloads folder if you don't want the files.
+4. Hoard's own browser, if it downloaded one: `%LOCALAPPDATA%\ms-playwright` on Windows,
+   `~/Library/Caches/ms-playwright` on a Mac, `~/.cache/ms-playwright` on Linux (the Flatpak's goes with
+   `--delete-data`). Other programs that use Playwright may share it.
 
 The full list, with the reason for each, is in
 [PRIVACY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md).

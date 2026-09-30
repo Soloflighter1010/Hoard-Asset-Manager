@@ -1,0 +1,48 @@
+# Hoard as a Flatpak, for Linux. Built by .github/workflows/release.yml (and check.yml) with flatpak-builder:
+#   flatpak-builder --user --install --force-clean build packaging/flatpak/io.github.soloflighter1010.Hoard.yml
+# It runs Hoard's own code (hoard/) with the GNOME runtime's Python, and shows it in its own window through the
+# runtime's WebKitGTK. Hoard's own browser (Playwright's Chromium) is downloaded into the sandbox's cache by the
+# setup assistant, as on any computer: the stores are read with it, never with your everyday browser.
+#
+# For Flathub: the same manifest, with the "dir" source below swapped for this repository at a release tag
+# (type: git, url, tag, commit), and screenshots added to the metainfo.
+app-id: io.github.soloflighter1010.Hoard
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: hoard
+finish-args:
+  - --share=network                        # the stores (and downloading Hoard's own browser)
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --talk-name=org.freedesktop.secrets    # store sign-ins are encrypted with your keyring (GNOME Keyring,
+  - --talk-name=org.kde.kwalletd5          #   KeePassXC, KWallet); without one, Hoard won't keep them
+  - --talk-name=org.kde.kwalletd6
+  - --filesystem=home                      # the downloads folder you choose (Documents/Hoard unless you pick one)
+  - --filesystem=/media                    #   and on other drives
+  - --filesystem=/run/media
+  - --filesystem=/mnt
+  - --env=PYWEBVIEW_GUI=gtk                # Hoard's window: the runtime's WebKitGTK, on KDE too
+modules:
+  - python3-deps.json                      # generated: python scripts/flatpak_deps.py
+
+  - name: hoard
+    buildsystem: simple
+    build-commands:
+      - mkdir -p ${FLATPAK_DEST}/lib/hoard
+      - cp -r hoard LICENSE ${FLATPAK_DEST}/lib/hoard/
+      - install -Dm755 packaging/flatpak/hoard.sh ${FLATPAK_DEST}/bin/hoard
+      - install -Dm644 packaging/flatpak/io.github.soloflighter1010.Hoard.desktop ${FLATPAK_DEST}/share/applications/io.github.soloflighter1010.Hoard.desktop
+      - install -Dm644 packaging/flatpak/io.github.soloflighter1010.Hoard.metainfo.xml ${FLATPAK_DEST}/share/metainfo/io.github.soloflighter1010.Hoard.metainfo.xml
+      - install -Dm644 packaging/icons/hoard-128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/io.github.soloflighter1010.Hoard.png
+      - install -Dm644 packaging/icons/hoard-256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/io.github.soloflighter1010.Hoard.png
+      - install -Dm644 packaging/icons/hoard-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/io.github.soloflighter1010.Hoard.png
+      # Hoard's window needs the runtime's WebKitGTK for GTK 3: fail the build, not the first start, without it
+      - python3 -c "import gi; gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1'); from gi.repository import WebKit2"
+      # everything Hoard needs is in place: its pages, fonts and words, Playwright's driver, and its server
+      - HOARD_DATA_DIR=$(mktemp -d) ${FLATPAK_DEST}/bin/hoard self-test
+    sources:
+      - type: dir
+        path: ../..

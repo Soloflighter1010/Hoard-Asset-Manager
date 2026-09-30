@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Hoard
+GenericName=Asset library
+Comment=Everything you've bought for VRChat, from Booth, Gumroad, Jinxxy, Payhip and itch.io, in one library
+Exec=hoard
+Icon=io.github.soloflighter1010.Hoard
+Terminal=false
+StartupNotify=true
+Categories=Utility;Graphics;
+Keywords=VRChat;avatar;assets;Booth;Gumroad;Jinxxy;Payhip;itch.io;Unity;

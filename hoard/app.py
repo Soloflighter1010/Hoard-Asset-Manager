@@ -29,8 +29,10 @@ LOG_LIMIT = 20 * 1024 * 1024   # one launch's log: past this, it carries on in a
 
 
 def has_console() -> bool:
-    """Is there a console to print to? Not in the installed app, or when started with pythonw."""
-    return sys.stdout is not None and not getattr(sys, "frozen", False)
+    """Is there a console to print to? Not in the installed app (Windows or Mac), the Flatpak (started from the
+    desktop, what it prints goes nowhere you'd look), or when started with pythonw."""
+    from .paths import in_flatpak
+    return sys.stdout is not None and not getattr(sys, "frozen", False) and not in_flatpak()
 
 
 class LaunchLog:

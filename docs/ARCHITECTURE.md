@@ -33,8 +33,13 @@ Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
 scripts/build_release.py   builds the release zip
-packaging/             the Windows app: hoard.spec (PyInstaller: Hoard.exe and hoard-cli.exe), hoard.iss
-                       (Inno Setup installer), the icon; built by release.yml, checked by check.yml
+packaging/             the apps: hoard.spec (PyInstaller: Hoard.exe and hoard-cli.exe on Windows; Hoard.app on
+                       macOS), hoard.iss (Inno Setup installer), the icons; flatpak/ (the Linux Flatpak's
+                       manifest, python3-deps.json, launcher, .desktop and metainfo); built by release.yml,
+                       checked by check.yml
+requirements-app/-mac/-flatpak.in/.txt   each app's hash-locked dependencies, pinned to requirements.txt's
+scripts/build_macos_pkg.sh   wraps dist/Hoard.app in Hoard-<version>-macos-<chip>.pkg (pkgbuild, /Applications)
+scripts/flatpak_deps.py   writes packaging/flatpak/python3-deps.json from requirements-flatpak.txt
 scripts/build_vpm.py   builds Hoard for Unity's release files: the .zip, a .unitypackage and package.json
 Packages/soloflighter.hoard/  Hoard for Unity (a VPM package, editor-only). Editor/Core is plain C# with no
                        Unity references (catalog, seal, .unitypackage GUIDs), tested by tests/test_unity.py
@@ -282,7 +287,8 @@ bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`
 2. Run **Actions → Release → Run workflow** with the tag (`v<version>`), or push the tag. `release.yml`
    makes a tag that doesn't exist yet (after checking it matches `__version__`) and runs
    `scripts/build_release.py`, which checks the versions, compiles the Python and builds the zips from an
-   explicit file list. It makes the release as a draft, adds the Windows app, then publishes it with that
+   explicit file list. It makes the release as a draft, adds the Windows app, the Mac packages (Apple Silicon
+   and Intel runners) and the Flatpak, then publishes it with that
    version's changelog section. Published releases are immutable, and so is their tag: a failed run leaves a
    draft that running it again fills in. The wiki's Releasing page has the details.
 
@@ -327,7 +333,9 @@ reachable it waits `OFFLINE_RETRY` rather than recording errors on every store r
 `updater.py` asks `api.github.com/repos/<repo>/releases` (through egress) and picks the highest published
 `vX.Y.Z` release: drafts, pre-releases and `unity-v` tags are ignored. It asks when **Check now** is chosen
 (`POST /api/update/check`), and at start once a day only when `check_for_updates` is on; the last answer is kept in
-`update.json`. `POST /api/update/install` works only in the installed Windows app (an `unins*.exe` beside
+`update.json`. A copy that can't install an update gets `how` in `/api/update` (`updater.how_to_update`): the
+Mac app's `.pkg` for its chip, the Flatpak's `.flatpak` (`paths.in_flatpak`), or the releases page.
+`POST /api/update/install` works only in the installed Windows app (an `unins*.exe` beside
 `Hoard.exe`) and never during a job: it downloads `Hoard-Setup-<version>.exe` into `updates/`, requires its SHA-256
 to match the release's `SHA256SUMS-windows.txt` and the asset's `digest` (when GitHub lists one) and its size to
 match, then quits. `app.run_app` runs the installer only after the server has stopped and the instance lock is

@@ -1,13 +1,17 @@
 # PyInstaller build: pyinstaller packaging/hoard.spec  ->  dist/Hoard/ with Hoard.exe (the app, no console) and
 # hoard-cli.exe (the command line), sharing one set of libraries. Run packaging/version_info.py first on Windows.
-# Works on Linux and macOS too (as Hoard and hoard-cli), which is how the packaging is tested off Windows.
+# On macOS it also makes dist/Hoard.app (Hoard, with hoard-cli beside it in Contents/MacOS), which
+# .github/workflows/release.yml puts in a .pkg. Works on Linux too, which is how the packaging is tested there.
+import re
 import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 REPO = Path(SPECPATH).parent
-WINDOWS = sys.platform == "win32"
+WINDOWS, MAC = sys.platform == "win32", sys.platform == "darwin"
+VERSION = re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py").read_text("utf-8")).group(1)
+APP_ID = "io.github.soloflighter1010.Hoard"   # the same as the Flatpak's (packaging/flatpak)
 version_file = REPO / "build" / "version_info.txt"
 
 datas = [
@@ -16,8 +20,8 @@ datas = [
 ]
 datas += collect_data_files("playwright")                                 # Playwright's driver (Node and its package)
 hidden = collect_submodules("hoard")
-if WINDOWS:
-    datas += collect_data_files("webview")   # pywebview's WebView2 parts (its own build rules handle the rest)
+if WINDOWS or MAC:
+    datas += collect_data_files("webview")   # pywebview's parts (WebView2, or the Mac's WebKit; its build rules do the rest)
 
 
 def analysis(script):
@@ -27,11 +31,20 @@ def analysis(script):
 
 def program(a, name, console):
     return EXE(PYZ(a.pure), a.scripts, [], exclude_binaries=True, name=name, console=console,
-               icon=str(REPO / "packaging" / "hoard.ico"), upx=False,
+               icon=str(REPO / "packaging" / ("hoard.icns" if MAC else "hoard.ico")), upx=False,
                version=str(version_file) if WINDOWS and version_file.exists() else None)
 
 
 app, cli = analysis("hoard_app.py"), analysis("hoard_cli.py")
-COLLECT(program(app, "Hoard", console=False), app.binaries, app.datas,
-        program(cli, "hoard-cli", console=True), cli.binaries, cli.datas,
-        name="Hoard", upx=False)
+coll = COLLECT(program(app, "Hoard", console=False), app.binaries, app.datas,
+               program(cli, "hoard-cli", console=True), cli.binaries, cli.datas,
+               name="Hoard", upx=False)
+if MAC:
+    BUNDLE(coll, name="Hoard.app", icon=str(REPO / "packaging" / "hoard.icns"), bundle_identifier=APP_ID,
+           version=VERSION, info_plist={
+               "CFBundleName": "Hoard", "CFBundleDisplayName": "Hoard",
+               "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
+               "LSMinimumSystemVersion": "11.0", "NSHighResolutionCapable": True,
+               "LSApplicationCategoryType": "public.app-category.utilities",
+               "NSHumanReadableCopyright": "MIT licensed. Not affiliated with VRChat or any store.",
+           })
