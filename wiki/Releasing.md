@@ -51,7 +51,11 @@ the API key from your profile, and add it as the repository secret `VT_API_KEY` 
 variables › Actions › New repository secret**). Without it the release stays a draft, saying so.
 
 The scan uses VirusTotal's public API (4 requests a minute, 500 a day): a file VirusTotal already knows is only
-looked up, a new one is uploaded and its scan waited for, so a release takes about 10 to 20 minutes more. Only the
+looked up, and new ones are all uploaded, then their scans waited for together, so a release takes about 10 to 20
+minutes more. The log says what it's doing as it goes (`Waiting for VirusTotal (6 min so far): … queued`): a busy
+day's queue can be slow, so leave it running. It waits up to 40 minutes; if VirusTotal still hasn't finished, the
+job fails saying which files, and **Re-run failed jobs** later picks up the finished scans without sending anything
+again. Only the
 scan step sees the key. Files sent to VirusTotal are shared with its security partners, as with any upload there;
 they're the same files the release makes public.
 - **Published something broken?** Don't delete it expecting to reuse the version. Raise the version and release

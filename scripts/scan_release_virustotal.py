@@ -1,7 +1,10 @@
 """Scan a release's files with VirusTotal before the release is published (.github/workflows/release.yml).
 
 Every file people download from the release (the zips, the Windows installer, the Mac packages, the Flatpak) is
-looked up on VirusTotal by its SHA-256, and uploaded when VirusTotal hasn't seen it, then its scan is waited for.
+looked up on VirusTotal by its SHA-256, and uploaded when VirusTotal hasn't seen it. Once every new file is sent,
+their scans are waited for together (VirusTotal runs them side by side), up to VT_WAIT_MINUTES (40), saying how
+they're getting on as it goes. A scan still unfinished then fails the job; run it again later and the files already
+scanned are only looked up.
 The results go in dist/VT_REPORT.md (added to the release notes) and the job summary. When any engine flags a
 file as malicious or suspicious, this fails, so the release stays a draft for a person to look at; a run with
 VT_ALLOW_DETECTIONS=true (the workflow's "publish anyway" choice, after checking the report) reports the same
@@ -30,8 +33,8 @@ SCANNED = (".zip", ".exe", ".pkg", ".flatpak")   # what people download; not the
 SPACING = 16                                     # seconds between requests: the public API allows 4 a minute
 MAX_UPLOAD = 650 * 1024 * 1024                   # VirusTotal's limit
 DIRECT_UPLOAD = 32 * 1024 * 1024                 # bigger files go to an upload address VirusTotal gives out
-POLLS = 45                                       # a scan waited for this many times, POLL_WAIT apart (plus SPACING)
-POLL_WAIT = 20
+WAIT_MINUTES = 40                                # how long the scans are waited for, all together
+POLL_WAIT = 20                                   # seconds between rounds of checking on them (plus SPACING each)
 
 
 class VirusTotal:
@@ -82,26 +85,43 @@ class VirusTotal:
         body = head + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
         return self.request("POST", url, body, f"multipart/form-data; boundary={boundary}")["data"]["id"]
 
-    def wait(self, analysis_id: str, name: str) -> dict:
-        """The finished scan's stats."""
-        for _ in range(POLLS):
-            attrs = self.request("GET", f"{BASE}/analyses/{analysis_id}")["data"]["attributes"]
-            if attrs.get("status") == "completed":
-                return attrs.get("stats", {})
-            self.sleep(POLL_WAIT)
-        raise RuntimeError(f"VirusTotal hadn't finished scanning {name} after {POLLS} checks")
-
-    def scan(self, path: Path) -> tuple[str, dict, bool]:
-        """(sha256, stats, whether it was already known) for one file."""
+    def digest(self, path: Path) -> str:
         h = hashlib.sha256()
         with path.open("rb") as f:
             for block in iter(lambda: f.read(1 << 20), b""):
                 h.update(block)
-        digest = h.hexdigest()
-        stats = self.known(digest)
-        if stats is not None:
-            return digest, stats, True
-        return digest, self.wait(self.upload(path), path.name), False
+        return h.hexdigest()
+
+    def wait_all(self, pending: dict[str, str], minutes: float = WAIT_MINUTES) -> dict[str, dict]:
+        """Each file's finished scan stats, for {file name: analysis id}, checked on in rounds until all are done."""
+        done: dict[str, dict] = {}
+        start = self.clock()
+        while True:
+            states = {}
+            for name, analysis_id in pending.items():
+                if name in done:
+                    continue
+                attrs = self.request("GET", f"{BASE}/analyses/{analysis_id}")["data"]["attributes"]
+                if attrs.get("status") == "completed":
+                    done[name] = attrs.get("stats", {})
+                    say(f"{name}: scanned")
+                else:
+                    states[name] = attrs.get("status") or "waiting"
+            if not states:
+                return done
+            waited = (self.clock() - start) / 60
+            if waited >= minutes:
+                raise RuntimeError(
+                    f"VirusTotal hadn't finished scanning {', '.join(sorted(states))} after {waited:.0f} minutes. The "
+                    "files it has keep being scanned there: run this job again later (Re-run failed jobs) and they're "
+                    "only looked up, not sent again.")
+            say(f"Waiting for VirusTotal ({waited:.0f} min so far): "
+                + ", ".join(f"{n} {st}" for n, st in sorted(states.items())))
+            self.sleep(POLL_WAIT)
+
+
+def say(text: str) -> None:
+    print(text, flush=True)
 
 
 def files_to_scan(folder: Path) -> list[Path]:
@@ -143,12 +163,24 @@ def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.envir
     files = files_to_scan(folder)
     if not files:
         raise RuntimeError(f"No release files in {folder}/ to scan, so the release isn't published")
+    digests, stats, pending = {}, {}, {}
+    for path in files:   # look each one up, and send the ones VirusTotal hasn't seen
+        digests[path.name] = vt.digest(path)
+        say(f"{path.name}: looking it up")
+        known = vt.known(digests[path.name])
+        if known is not None:
+            stats[path.name] = known
+            continue
+        say(f"{path.name}: sending it to be scanned ({path.stat().st_size / 1024 / 1024:.1f} MB)")
+        pending[path.name] = vt.upload(path)
+    if pending:          # then wait for all their scans at once
+        stats.update(vt.wait_all(pending, float(env.get("VT_WAIT_MINUTES") or WAIT_MINUTES)))
     results = []
     for path in files:
-        digest, stats, known = vt.scan(path)
-        print(f"{path.name}: {stats.get('malicious', 0)} malicious, {stats.get('suspicious', 0)} suspicious"
-              + (" (already known to VirusTotal)" if known else ""), flush=True)
-        results.append((path.name, digest, stats, known))
+        name, st = path.name, stats[path.name]
+        say(f"{name}: {st.get('malicious', 0)} malicious, {st.get('suspicious', 0)} suspicious"
+            + ("" if name in pending else " (already known to VirusTotal)"))
+        results.append((name, digests[name], st, name not in pending))
     text, flagged = report(results, allowed)
     (folder / "VT_REPORT.md").write_text(text, encoding="utf-8")
     if env.get("GITHUB_STEP_SUMMARY"):

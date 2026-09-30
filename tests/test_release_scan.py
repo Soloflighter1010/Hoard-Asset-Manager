@@ -4,6 +4,7 @@ is kept, a flagged file keeps the release a draft unless a person chose to publi
 of everything but the scan."""
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import re
@@ -130,8 +131,29 @@ class Scanning(unittest.TestCase):
     def test_a_scan_that_never_finishes(self):
         folder = release_folder({"Hoard-2.11.0.zip": b"PK"})
         fake = FakeVirusTotal(polls_before_done=10 ** 6)
-        with self.assertRaisesRegex(RuntimeError, "hadn't finished scanning Hoard-2.11.0.zip"):
+        with contextlib.redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(RuntimeError, "hadn't finished scanning Hoard-2.11.0.zip after 40 minutes.*again later"):
             run(fake, folder)
+        self.assertLess(fake.now - 1000, 42 * 60, "it gives up after VT_WAIT_MINUTES, not hours later")
+
+    def test_the_scans_are_waited_for_together(self):
+        """Each file used to be waited for before the next was sent, silently: with a few new files that ran for most
+        of an hour saying nothing, and looked stuck. Now every file is sent first, then all are waited for at once,
+        and it says how they're getting on."""
+        folder = release_folder({f"Hoard-{n}.zip": bytes([n]) for n in range(3)})
+        fake = FakeVirusTotal(polls_before_done=3)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(run(fake, folder), 0)
+        kinds = ["upload" if r[0] == "POST" else "check" if "/analyses/" in r[1] else "lookup" for r in fake.requests]
+        self.assertEqual(kinds[:6], ["lookup", "upload"] * 3, "every file is sent before any scan is waited for")
+        self.assertEqual(set(kinds[6:]), {"check"})
+        self.assertEqual(kinds.count("check"), 3 * 4, "each scan checked once a round, and no more once it's done")
+        text = out.getvalue()
+        self.assertIn("Hoard-0.zip: sending it to be scanned", text)
+        self.assertIn("Waiting for VirusTotal (", text)
+        self.assertIn("Hoard-2.zip queued", text)
+        self.assertIn("Hoard-1.zip: scanned", text)
 
     def test_virustotal_errors_are_said_plainly(self):
         folder = release_folder({"Hoard-2.11.0.zip": b"PK"})
@@ -181,6 +203,11 @@ class TheWorkflow(unittest.TestCase):
     def setUp(self):
         self.text = (REPO / ".github" / "workflows" / "release.yml").read_text("utf-8")
         self.jobs = {m.group(1): m.group(2) for m in re.finditer(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", self.text, re.M | re.S)}
+
+    def test_the_scan_has_a_time_limit(self):
+        limit = int(re.search(r"timeout-minutes: (\d+)", self.jobs["virustotal"]).group(1))
+        self.assertGreater(limit, vt.WAIT_MINUTES, "room to wait for the scans, and to report on them")
+        self.assertLessEqual(limit, 90)
 
     def test_publishing_waits_for_the_scan(self):
         self.assertIn("needs: [release, windows, macos, flatpak-release]", self.jobs["virustotal"], "every file is attached first")
