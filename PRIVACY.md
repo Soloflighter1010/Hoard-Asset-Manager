@@ -23,6 +23,7 @@ Hoard, and I never receive any of your information.
 | The window's own storage (its layout choices) | So the window remembers how you left it | `window` in Hoard's app-data folder |
 | What you've archived, hidden or removed, and your hidden library's PIN (only as a salted, slow hash, never the PIN itself) | So those choices last, even after refreshing | `marks.json` in the same private `Hoard` folder |
 | Your settings | So Hoard remembers your choices | `config.json` in Hoard's app-data folder |
+| The last 60 finished jobs (refreshes, syncs, downloads): what each did, how it went, and its progress, which names products and creators | So the Tasks window can show them after Hoard restarts | `tasks.json` in Hoard's app-data folder (Clear in Tasks empties it) |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug` in Hoard's app-data folder |
 | Local error history and support reports | So errors can be investigated and a sanitized report can be shared by you | `diagnostics/incidents.jsonl` in app-data; reports you create go to `Documents\\Hoard\\Support Reports` (see below) |
 

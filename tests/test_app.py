@@ -20,6 +20,7 @@ os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-
 sys.path.insert(0, str(REPO))
 
 from hoard import cli, common, config, downloader, jobs, library, paths, server  # noqa: E402
+downloader.RETRY_WAITS = (0.0, 0.0, 0.0)   # failed downloads are still tried again, without the wait
 from hoard.safety import ACCESS_HEADER, header_safe  # noqa: E402
 
 
@@ -220,7 +221,23 @@ class Downloading(unittest.TestCase):
         self.assertFalse(job.state["running"])
         self.assertFalse(job.cancel(), "nothing left to stop")
 
+    def test_stopped_is_never_overwritten_by_stopping(self):
+        """Stop said "Stopping" after telling the job to stop: a job that stopped in between ended up saying
+        "Stopping", and Tasks listed it as done instead of stopped."""
+        job = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        job.state.update(running=True, task="download")
+        seen = []
+
+        class Watched(threading.Event):
+            def set(self):
+                seen.append(job.state["message"])
+                super().set()
+        job.stop = Watched()
+        self.assertTrue(job.cancel())
+        self.assertEqual(seen, ["Stopping"], "said before the job can see it")
+
     def test_one_job_at_a_time(self):
+        """A second job waits its turn (issue #49): it's queued, and runs once the first has finished."""
         started = threading.Event()
         release = threading.Event()
 
@@ -231,11 +248,235 @@ class Downloading(unittest.TestCase):
         job = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
         done = threading.Event()
         job.on_download_done = done.set
-        self.assertTrue(job.start("download", ["booth"]))
+        self.assertEqual(job.start("download", ["booth"]), "started")
         started.wait(5)
-        self.assertFalse(job.start("refresh", ["booth"]), "a second job must wait")
+        self.assertEqual(job.start("download", ["booth"], only="Rusk"), "queued", "a second job waits its turn")
+        self.assertEqual([q["label"] for q in job.state["queue"]], ['Download: Booth ("Rusk")'])
         release.set()
         done.wait(10)
+
+
+class JobQueue(unittest.TestCase):
+    """Issue #49: jobs started while another runs wait in a queue, in order, and can be taken off it; finished
+    jobs are kept for the Tasks tab."""
+
+    def setUp(self):
+        from unittest import mock
+        self.job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        self.job.history = []
+        self.ran, self.gates = [], {}
+
+        def fake(stores, only, keys=None, check=False):
+            self.ran.append(only)
+            self.job._set(message=f"working on {only}")
+            gate = self.gates.get(only)
+            if gate:
+                gate.wait(10)
+            if only == "boom":
+                raise RuntimeError("the store went away")
+        patch = mock.patch.object(self.job, "_download", fake)
+        patch.start()
+        self.addCleanup(patch.stop)
+        where = Path(tempfile.mkdtemp()) / "tasks.json"
+        saving = mock.patch.object(jobs, "tasks_file", lambda: where)
+        saving.start()
+        self.addCleanup(saving.stop)
+
+    def wait_idle(self):
+        for _ in range(200):
+            if not self.job.state["running"] and not self.job.state["queue"]:
+                return
+            time.sleep(0.02)
+        self.fail("the queue never finished")
+
+    def test_in_order_and_removable(self):
+        self.gates["a"] = threading.Event()
+        self.assertEqual(self.job.start("download", ["booth"], only="a"), "started")
+        self.assertEqual(self.job.start("download", ["booth"], only="b"), "queued")
+        self.assertEqual(self.job.start("download", ["booth"], only="c"), "queued")
+        self.assertEqual(self.job.start("download", ["gumroad"], only="d"), "queued")
+        self.assertIsNone(self.job.start("download", ["booth"], only="c"), "the same job isn't queued twice")
+        self.assertIsNone(self.job.start("download", ["booth"], only="e", queue=False), "not queued when asked not to")
+        waiting = self.job.state["queue"]
+        self.assertEqual([q["label"] for q in waiting], ['Download: Booth ("b")', 'Download: Booth ("c")',
+                                                         'Download: Gumroad ("d")'])
+        self.assertTrue(self.job.remove(waiting[1]["id"]))
+        self.assertFalse(self.job.remove(waiting[1]["id"]), "already gone")
+        self.gates["a"].set()
+        self.wait_idle()
+        self.assertEqual(self.ran, ["a", "b", "d"])
+
+    def test_the_task_log(self):
+        self.job.start("download", ["booth"], only="ok")
+        self.job.start("download", ["booth"], only="boom")
+        self.wait_idle()
+        newest, oldest = self.job.tasks()["history"]
+        self.assertEqual((oldest["outcome"], newest["outcome"]), ("done", "failed"))
+        self.assertIn("working on ok", oldest["log"])
+        self.assertIn("the store went away", newest["message"])
+        self.assertTrue(newest["started"] <= newest["ended"])
+        again = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        self.assertEqual([h["outcome"] for h in again.history], ["done", "failed"], "kept in tasks.json")
+
+    def test_a_scheduled_sync_never_queues(self):
+        self.gates["a"] = threading.Event()
+        self.job.start("download", ["booth"], only="a")
+        self.assertIsNone(self.job.start("sync", ["booth"], scheduled=True, queue=False))
+        self.gates["a"].set()
+        self.wait_idle()
+
+    def test_the_runner_let_go_by_something_else(self):
+        """Something that holds the runner without being a job (resealing the catalog at startup) starts what
+        queued meanwhile when it lets go."""
+        self.job.busy.acquire()
+        self.assertEqual(self.job.start("download", ["booth"], only="x"), "queued")
+        self.job.busy.release()
+        self.job.kick()
+        self.wait_idle()
+        self.assertEqual(self.ran, ["x"])
+
+
+class Retries(unittest.TestCase):
+    """Issue #19: a file download that fails is tried again (download_retries more times) before it counts as
+    failed, unless trying again can't help."""
+
+    def report(self, retries=2):
+        return downloader.Report(retries=retries)
+
+    def test_tried_again_until_it_works(self):
+        calls, waits = [], []
+
+        def flaky():
+            calls.append(1)
+            if len(calls) < 3:
+                raise ConnectionError("connection reset")
+            return "got it"
+        self.assertEqual(downloader.with_retries(self.report(), "a.zip", flaky, sleep=waits.append), "got it")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(waits), 2)
+
+    def test_gives_up_after_the_last_try(self):
+        calls = []
+
+        def broken():
+            calls.append(1)
+            raise TimeoutError("timed out")
+        with self.assertRaises(TimeoutError):
+            downloader.with_retries(self.report(1), "a.zip", broken, sleep=lambda s: None)
+        self.assertEqual(len(calls), 2)
+        calls.clear()
+        with self.assertRaises(TimeoutError):
+            downloader.with_retries(self.report(0), "a.zip", broken, sleep=lambda s: None)
+        self.assertEqual(len(calls), 1, "0: not tried again")
+
+    def test_not_when_trying_again_cant_help(self):
+        import requests
+        from hoard import egress
+        gone = requests.HTTPError("404 Not Found", response=mock_response(404))
+        busy = requests.HTTPError("503", response=mock_response(503))
+        for e, again in ((gone, False), (common.NotLoggedIn("signed out"), False),
+                         (egress.UnsafeRequest("refused"), False), (busy, True), (ConnectionError(), True)):
+            calls = []
+
+            def fails(e=e):
+                calls.append(1)
+                raise e
+            with self.assertRaises(type(e)):
+                downloader.with_retries(self.report(), "a.zip", fails, sleep=lambda s: None)
+            self.assertEqual(len(calls), 3 if again else 1, repr(e))
+
+    def test_the_setting(self):
+        self.assertEqual(config.DEFAULT_CONFIG["download_retries"], 2)
+        for value, n in ((0, 0), (5, 5), (9, 2), ("3", 2), (True, 2)):
+            self.assertEqual(downloader.download_retries({"download_retries": value}), n)
+
+    def test_a_file_host_having_a_bad_moment(self):
+        """itch.io's file host answers 503 once: the file is fetched on the next try, and nothing failed."""
+        from unittest import mock
+        _ItchStandIn.start()
+        self.addCleanup(_ItchStandIn.stop)
+        cfg = _ItchStandIn.use(self)
+        root = Path(tempfile.mkdtemp())
+        _ItchStandIn.fail_next = 1
+        import types
+        report = downloader.Report(retries=2)
+        with mock.patch.object(downloader, "save_thumbnail", lambda *a, **k: None):
+            downloader.sync_itch(cfg, root, types.SimpleNamespace(headed=False, only=None, dry_run=False), report)
+        self.assertEqual(report.failed, [])
+        self.assertEqual(_ItchStandIn.fail_next, 0)
+        self.assertTrue((root / "Itch" / "Kitsu Studio" / "Paw Suit" / "PawSuit_v1.2.unitypackage").is_file())
+
+
+def mock_response(status):
+    from unittest import mock
+    return mock.Mock(status_code=status)
+
+
+class RecentlyAdded(unittest.TestCase):
+    """Issue #18: when each item first appeared in the library, for Recently added and the New badge."""
+
+    def setUp(self):
+        self.lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+
+    def test_a_stores_first_read_isnt_new(self):
+        self.lib.replace_store("booth", [library.item("booth", "1", name="Rusk")])
+        (rusk,) = self.lib.data["items"]
+        first = self.lib.data["stores"]["booth"]["first_read"]
+        self.assertEqual(rusk["added"], first, "dated, but not after the first read: not new")
+        time.sleep(1.1)
+        self.lib.replace_store("booth", [library.item("booth", "1", name="Rusk"), library.item("booth", "2", name="Mochi")])
+        rusk, mochi = self.lib.data["items"]
+        self.assertEqual(rusk["added"], first, "an item seen before keeps its time")
+        self.assertGreater(mochi["added"], self.lib.data["stores"]["booth"]["first_read"])
+        again = library.Library(self.lib.path)
+        self.assertEqual([i["added"] for i in again.data["items"]], [rusk["added"], mochi["added"]], "kept in library.json")
+        self.assertEqual(again.data["stores"]["booth"]["first_read"], first)
+
+    def test_a_library_from_before_times_were_kept(self):
+        """Items listed before this version have no time; anything that appears from then on is new."""
+        self.lib.data["items"] = [library.item("booth", "1", name="Rusk")]
+        self.lib.data["stores"]["booth"] = {"count": 1, "error": None, "source": "refresh"}
+        self.lib.replace_store("booth", [library.item("booth", "1", name="Rusk"), library.item("booth", "2", name="Mochi")])
+        rusk, mochi = self.lib.data["items"]
+        self.assertIsNone(rusk["added"])
+        self.assertEqual(self.lib.data["stores"]["booth"]["first_read"], "")
+        self.assertTrue(mochi["added"])
+
+    def test_bad_times_are_dropped(self):
+        for bad in ("yesterday", "2026-01-01", "<script>", 12345):
+            self.assertIsNone(library.item("booth", "1", name="Rusk", added=bad)["added"])
+        self.assertEqual(library.item("booth", "1", added="2026-09-30T10:00:00+00:00")["added"], "2026-09-30T10:00:00+00:00")
+
+    def test_new_in_the_library_page(self):
+        cfg = {**config.load_config(), "new_days": 7}
+        srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            old = "2020-01-01T00:00:00+00:00"
+            with srv.lib.lock:
+                srv.lib.data["stores"]["booth"] = {"count": 3, "error": None, "source": "refresh", "first_read": old}
+                srv.lib.data["items"] = [library.item("booth", "1", name="Old", added=old),
+                                         library.item("booth", "2", name="Fresh", added=common.now_iso()),
+                                         library.item("booth", "3", name="Undated")]
+
+            def library_page():
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                c.request("GET", "/api/library", headers={ACCESS_HEADER: srv.key})
+                data = json.loads(c.getresponse().read()); c.close()
+                return {i["name"]: i["new"] for i in data["items"]}
+            self.assertEqual(library_page(), {"Old": False, "Fresh": True, "Undated": False})
+            srv.cfg["new_days"] = 0
+            self.assertEqual(library_page(), {"Old": False, "Fresh": False, "Undated": False}, "0: nothing is marked")
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_the_setting(self):
+        cfg = config.load_config()
+        self.assertEqual(server.apply_settings(cfg, {"new_days": 14}), {"new_days": 14})
+        for bad in (2, "7", True):
+            with self.assertRaises(ValueError):
+                server.apply_settings(cfg, {"new_days": bad})
 
 
 class SigningOut(unittest.TestCase):
@@ -965,6 +1206,7 @@ class _ItchStandIn:
     DATA = {5550001: b"PAW" * 1000}
     seen: list = []
     uploads: list = []
+    fail_next = 0
 
     @classmethod
     def start(cls):
@@ -990,6 +1232,9 @@ class _ItchStandIn:
                 u = urlparse(self.path)
                 stand_in.seen.append((self.server.server_port, u.path, self.headers.get("Authorization")))
                 if self.server is stand_in.files:
+                    if stand_in.fail_next:   # a file host having a bad moment (issue #19)
+                        stand_in.fail_next -= 1
+                        return self.send(503, b"busy", "text/plain")
                     data = stand_in.DATA.get(int(u.path.rsplit("/", 1)[-1]), b"")
                     return self.send(200, data, "application/octet-stream")
                 if self.headers.get("Authorization") != f"Bearer {stand_in.KEY}":
@@ -1846,7 +2091,7 @@ class AutomaticSync(unittest.TestCase):
         self.cfg = {**config.load_config(), "setup_done": True, "auto_sync_hours": 24}
         self.started = []
         self.fake = mock.Mock(state={"running": False})
-        self.fake.start = lambda task, stores, **kw: self.started.append((task, stores, kw)) or True
+        self.fake.start = lambda task, stores, **kw: self.started.append((task, stores, kw)) or "started"
         self.schedule = jobs.Schedule(self.cfg, self.fake)
         self.schedule.not_before = 0
         jobs._sync_file().unlink(missing_ok=True)
@@ -1858,7 +2103,7 @@ class AutomaticSync(unittest.TestCase):
         now = time.time()
         self.assertTrue(self.schedule.tick(now))
         (task, stores, kw), = self.started
-        self.assertEqual((task, kw), ("sync", {"skip_imported": False, "scheduled": True}))
+        self.assertEqual((task, kw), ("sync", {"skip_imported": False, "scheduled": True, "queue": False}))
         self.assertNotIn("payhip", stores, "Payhip needs you there for its bot check")
         self.assertIn("booth", stores)
         jobs._record_sync()   # what the sync itself does as it starts
@@ -1920,3 +2165,100 @@ class AutomaticSync(unittest.TestCase):
                 server.apply_settings(cfg, {"display": {"text_size": bad}})
         shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
         self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")
+
+
+class TasksAPI(unittest.TestCase):
+    """The Tasks window's server side: GET /api/tasks, taking jobs off the queue, and hidden products' names kept
+    out of job logs while the hidden library is locked."""
+
+    def setUp(self):
+        from unittest import mock
+        self.srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        self.srv.jobs.history = []   # only this test's
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+        self.gate = threading.Event()
+        self.addCleanup(self.gate.set)
+
+        def fake(stores, only, keys=None, check=False):
+            self.srv.jobs._set(message=f"[Booth] Kitsu Studio / {only}", log=[f"    saved: {only}.zip"])
+            self.gate.wait(10)
+        patch = mock.patch.object(self.srv.jobs, "_download", fake)
+        patch.start()
+        self.addCleanup(patch.stop)
+        where = Path(tempfile.mkdtemp()) / "tasks.json"
+        saving = mock.patch.object(jobs, "tasks_file", lambda: where)
+        saving.start()
+        self.addCleanup(saving.stop)
+
+    def call(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: self.srv.key})
+        r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+        return r.status, data
+
+    def test_queue_and_tasks(self):
+        self.assertEqual(self.call("POST", "/api/download", {"stores": ["booth"], "only": "Rusk"}), (202, {"ok": True, "queued": False}))
+        status, answer = self.call("POST", "/api/download", {"stores": ["gumroad"], "only": "Mochi"})
+        self.assertEqual((status, answer), (202, {"ok": True, "queued": True}))
+        self.assertEqual(self.call("POST", "/api/download", {"stores": ["gumroad"], "only": "Mochi"})[0], 409, "already waiting")
+        status, tasks = self.call("GET", "/api/tasks")
+        self.assertEqual(tasks["current"]["label"], 'Download: Booth ("Rusk")')
+        self.assertEqual([q["label"] for q in tasks["queue"]], ['Download: Gumroad ("Mochi")'])
+        self.assertEqual(self.call("POST", "/api/queue/remove", {"id": tasks["queue"][0]["id"]}), (200, {"ok": True}))
+        self.gate.set()
+        for _ in range(100):
+            if not self.srv.jobs.state["running"]:
+                break
+            time.sleep(0.05)
+        history = self.call("GET", "/api/tasks")[1]["history"]
+        self.assertEqual([h["label"] for h in history], ['Download: Booth ("Rusk")'])
+        self.assertEqual(self.call("POST", "/api/tasks/clear", {}), (200, {"ok": True}))
+        self.assertEqual(self.call("GET", "/api/tasks")[1]["history"], [])
+
+    def test_hidden_names_stay_out_of_job_logs(self):
+        from hoard import marks, tags
+        store = marks.MarkStore(Path(tempfile.mkdtemp()) / "marks.json")
+        store.set_pin("4821")
+        from unittest import mock
+        patch = mock.patch.object(server, "MarkStore", lambda: store)
+        patch.start()
+        self.addCleanup(patch.stop)
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] = [library.item("booth", "1", name="Secret Suit", creator="Kitsu Studio")]
+        store.change("hidden", {tags.tag_key("booth", "Secret Suit")}, True)
+        self.srv.jobs.start("download", ["booth"], only="Secret Suit")
+        for _ in range(100):
+            if "Secret Suit" in (self.srv.jobs.state.get("message") or ""):
+                break
+            time.sleep(0.02)
+        job = self.call("GET", "/api/status")[1]["job"]
+        self.assertNotIn("Secret Suit", json.dumps(job))
+        self.assertIn("a hidden item", job["message"])
+        current = self.call("GET", "/api/tasks")[1]["current"]
+        self.assertNotIn("Secret Suit", json.dumps(current["log"]) + current["message"])
+
+
+class PageLayout(unittest.TestCase):
+    """How you left the pages (windows' places, the sidebar, tile sizes) is kept in config.json: the pages' own
+    storage goes with the server's address, which is new each time Hoard starts."""
+
+    def test_only_what_makes_sense_is_kept(self):
+        cfg = config.load_config()
+        change = server.apply_settings(cfg, {"ui": {
+            "windows": {"tagPanel": {"x": 120, "y": 80.5, "w": 500, "h": True, "z": 9}, "evil": {"x": 1},
+                        "stores": {"x": 99999}},
+            "sections": {"creators": False, "your-tags": True, "x" * 60: False, "suggested": "no"},
+            "side_folded": True, "tile_size": 200, "dl_tile_size": 9000, "other": 1}})
+        self.assertEqual(change["ui"], {"windows": {"tagPanel": {"x": 120, "y": 80.5, "w": 500}, "stores": {}},
+                                        "sections": {"creators": False, "your-tags": True},
+                                        "side_folded": True, "tile_size": 200})
+        config.deep_merge(cfg, change)
+        config.deep_merge(cfg, server.apply_settings(cfg, {"ui": {"windows": {"stores": {"x": 10, "y": 20}}}}))
+        shown = server.ui_settings(cfg)
+        self.assertEqual(shown["windows"], {"tagPanel": {"x": 120, "y": 80.5, "w": 500}, "stores": {"x": 10, "y": 20}},
+                         "one window's move doesn't forget the others")
+        self.assertEqual(server.ui_settings({"ui": "junk"}), {"windows": {}, "sections": {}})
+        self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")

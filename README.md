@@ -97,6 +97,10 @@ your library list and downloads folder: choose the folder you ran 1.x from.
 - **Library** shows everything you own. Open an item to see its details, tag it, open its store page, or
   **Download a copy**. Items you already have say **On disk**, with a link to them in Downloads, and have a
   small download mark on their picture; **Downloaded** and **Not downloaded yet** (on the left) show just those.
+- **Tasks** shows what's running, what's waiting its turn, and what finished, with its progress. Start
+  something while another job runs and it's queued rather than refused; take it off the queue in Tasks.
+- **Tags**, **Stores** and **Settings** open as windows you can move and resize, and keep open side by side.
+  Settings are saved as you change them.
 - **Downloads** shows what's on your computer, with its files, sizes and folders. **Download new** fetches
   anything new or updated, with progress as it goes; **Stop** pauses safely, and it carries on next time.
   **Check for updates** (under **Updates**) lists what creators added or changed since you downloaded it,

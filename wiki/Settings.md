@@ -1,6 +1,11 @@
-Everyday choices are in the **Settings** panel (top right). A few rarer ones only live in `config.json`.
+Everyday choices are in the **Settings** window (top right). A few rarer ones only live in `config.json`.
 
-## The Settings panel
+## The Settings window
+
+Settings opens as a window you can move (by its title bar) and resize (from its corner). It stays open while you
+use the rest of Hoard, and opens where you left it. Each change is **saved as you make it**: a box or a list
+straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
+
 
 - **Downloads folder:** where downloaded files are saved. A `Hoard` folder in your Documents unless you choose
   another; **Default** puts it back. Changing it doesn't move files you've already downloaded, so move those
@@ -14,6 +19,12 @@ Everyday choices are in the **Settings** panel (top right). A few rarer ones onl
   `payhip.com/ShopName`. Importing a shop's saved page adds it for you. Hoard lists what you bought there, and
   you download it from Payhip yourself. See [Stores](Stores#payhip).
 - **Offline:** **Save product images, so the library works offline**.
+- **New in your library:** how long something that appeared in your library after a refresh keeps its **New**
+  badge: a day, 3 days, a week (unless you choose otherwise), 2 weeks or a month, or never. See
+  [Library](Library#finding-things).
+- **Failed downloads:** a file download that fails (a dropped connection, a busy server) is tried again after a
+  short wait: twice unless you choose otherwise, once, 3 times, or not at all. A store saying the file isn't
+  there, or isn't yours, isn't tried again.
 - **Sync automatically:** **Off** (only when you choose **Sync**), or every 6 hours, every 12 hours, once a day or
   once a week, while Hoard is open. Payhip is left out. See [Downloads](Downloads#downloading).
 - **Accessibility:**
@@ -31,7 +42,9 @@ Everyday choices are in the **Settings** panel (top right). A few rarer ones onl
   **Microsoft Edge**, **Google Chrome** or **Hoard's own browser**. After changing it, you may need to sign in to
   your stores again.
 
-Then **Save**. Settings can't change while Hoard is busy refreshing or downloading.
+While Hoard is refreshing or downloading, the downloads folder, the browser, the stores and the Payhip shops
+can't change (the job is using them): a change to one of those is put back, and you can make it again once the
+job has finished. Everything else changes straight away.
 
 Also here:
 
@@ -52,6 +65,8 @@ and keep it valid JSON.
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
+| `new_days` | `7` | Days something new in your library is marked **New**: `0` (never), `1`, `3`, `7`, `14` or `30` (**New in your library** in Settings) |
+| `download_retries` | `2` | How many more times a failed file download is tried: `0` to `3` in Settings (**Failed downloads**), up to `5` here |
 | `payhip.bot_check_wait` | `180` | Seconds to wait for you to complete Payhip's bot check |
 | `jinxxy.item_link_pattern` | | Which links on Jinxxy's inventory page are your items |
 | `tags.min_count`, `tags.max_share` | `3`, `0.4` | When a word becomes a suggested tag: in at least this many names, and in no more than this share of them |

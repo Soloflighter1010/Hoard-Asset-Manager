@@ -156,9 +156,13 @@ class AccessKey(unittest.TestCase):
                 self.assertEqual(page.locator("#browserInUse").inner_text(), "Hoard signs in with Microsoft Edge.")
                 page.select_option("#setBrowser", "chromium")
                 self.assertEqual(page.locator("#browserInUse").inner_text(), "Hoard signs in with Hoard's own browser.")
-                page.click("#setSave")
-                page.wait_for_function("() => document.querySelector('#settingsPanel').hidden")
+                page.locator("#settingsPanel .win-extra", has_text="Saved").wait_for()   # saved as it's chosen
+                for _ in range(50):
+                    if self.srv.cfg["browser_channel"] == "chromium":
+                        break
+                    page.wait_for_timeout(100)
                 self.assertEqual(self.srv.cfg["browser_channel"], "chromium", "the choice is saved")
+                page.locator("#settingsPanel .win-x").click()
                 self.srv.cfg["browser_channel"] = ""
     def test_the_downloads_page_has_the_librarys_views(self):
         """Issue #29: archiving an item in the Library moves its download to the Downloads page's Archive view,
@@ -275,8 +279,7 @@ class AccessKey(unittest.TestCase):
             page.get_by_text("You have Hoard").wait_for()   # its status, as on the Library page
             expect(page.locator("#setUpdates")).not_to_be_checked()
             page.locator("#setUpdates").check()
-            page.click("#setSave")
-            page.get_by_text("Settings saved.").wait_for()
+            page.locator("#settingsPanel .win-extra", has_text="Saved").wait_for()   # saved as it's changed
             self.assertTrue(self.srv.cfg["check_for_updates"])
             self.assertEqual(refused, [])
             page.close()
@@ -599,9 +602,9 @@ class HighlightsAndAccessibility(unittest.TestCase):
         expect(page.locator("#setPause")).to_be_checked()
         page.locator("#setPause").uncheck()
         page.locator("#setMotion").uncheck()
-        page.select_option("#setTextSize", "100")
-        page.click("#setSave")
+        page.select_option("#setTextSize", "100")   # each saved as it's changed
         page.wait_for_function("() => !document.querySelector('canvas.still')")
+        page.wait_for_function("() => document.documentElement.style.zoom === ''")
         self.assertEqual(page.evaluate("document.documentElement.style.zoom"), "")
         self.assertFalse(page.evaluate("document.body.classList.contains('less-motion')"))
         self.assertEqual(self.srv.cfg["display"], {"text_size": 100, "pause_animations": False, "reduce_motion": False})
@@ -620,8 +623,12 @@ class HighlightsAndAccessibility(unittest.TestCase):
             const r = el.getBoundingClientRect();
             if (r.bottom > innerHeight + 1 || r.right > innerWidth + 1) out.push(`${el.id || el.className}: ${Math.round(r.right)}x${Math.round(r.bottom)}`);
           }
-          const save = document.querySelector("#setSave").getBoundingClientRect();
-          if (save.bottom > innerHeight + 1) out.push(`Save at ${Math.round(save.bottom)}`);
+          const x = document.querySelector("#settingsPanel .win-x").getBoundingClientRect();   // it can be closed
+          if (x.bottom > innerHeight + 1 || x.right > innerWidth + 1) out.push(`close at ${Math.round(x.right)}x${Math.round(x.bottom)}`);
+          const body = document.querySelector("#settingsPanel .win-body");
+          body.scrollTop = body.scrollHeight;   // and scrolled to the end, its last line shows
+          const end = document.querySelector("#setupAgain").getBoundingClientRect();
+          if (end.bottom > innerHeight + 1) out.push(`the end of Settings at ${Math.round(end.bottom)}`);
           return out;
         }"""
         with mock.patch.object(server, "save_config"):
@@ -629,8 +636,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
             page.set_viewport_size({"width": 1000, "height": 640})
             page.click("#settingsBtn")
             page.wait_for_function("() => document.querySelector('#setTextSize').value === '100'")
-            page.select_option("#setTextSize", "150")
-            page.click("#setSave")
+            page.select_option("#setTextSize", "150")   # saved and applied as it's chosen
             page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
             for where in ("library", "downloads"):
                 if where == "downloads":
@@ -638,9 +644,10 @@ class HighlightsAndAccessibility(unittest.TestCase):
                     page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
                 if page.locator("#settingsPanel").is_hidden():
                     page.click("#settingsBtn")
-                page.locator("#setSave").wait_for()
+                page.locator("#setTextSize").wait_for()
                 self.assertEqual(page.evaluate(fits), [], where)
-                page.click("#setSave")   # and Save can be clicked: the text goes back to normal from there
+            page.select_option("#setTextSize", "100")   # and the text size can be put back from there
+            page.wait_for_function("() => document.documentElement.style.zoom === ''")
             page.close()
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -693,3 +700,254 @@ class SetupAssistant(unittest.TestCase):
             self.assertEqual(page.locator(".slot").count(), 4)
             browser.close()
 
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class WindowsTabsAndTasks(unittest.TestCase):
+    """The 2.9 layout: Tags, Stores, Settings and Tasks as floating windows that stay open side by side, Settings
+    saved as they change, a sidebar that folds, store folder tabs, the Tasks window (issue #49's queue included),
+    and New with Recently added (issue #18)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from hoard import common, jobs
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
+                                   lan=False)
+        old = "2025-01-01T00:00:00+00:00"
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = [
+                library.item("booth", "1", name="Rusk", creator="Kitsu Studio", added=old),
+                library.item("gumroad", "2", name="Mochi", creator="Mochi Works", added=common.now_iso()),
+                library.item("booth", "3", name="Anko", creator="Kitsu Studio", added=old)]
+            for s in ("booth", "gumroad"):
+                cls.srv.lib.data["stores"][s] = {"count": 1, "error": None, "source": "refresh", "first_read": "2024-01-01T00:00:00+00:00",
+                                                 "updated": common.now_iso()}
+        cls.srv.jobs.history = [{"id": "j1", "task": "sync", "label": "Sync: Booth", "stores": ["booth"],
+                                 "started": "2026-09-30T09:00:00+00:00", "ended": "2026-09-30T09:02:00+00:00",
+                                 "outcome": "failed", "message": "Stopped: Booth went away", "report": None,
+                                 "log": ["Reading Booth", "Booth went away"]}]
+        cls.jobs_file = mock_patch(jobs, "tasks_file", lambda: Path(cls.tmp.name) / "tasks.json")
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.jobs_file.stop()
+        cls.tmp.cleanup()
+
+    def open(self, ctx=None):
+        page = ctx.new_page() if ctx else self.browser.new_page(viewport={"width": 1400, "height": 860})
+        self.errors = []
+        page.on("pageerror", lambda e: self.errors.append(str(e)))
+        page.goto(self.srv.entry_url())
+        page.locator(".slot", has_text="Mochi").wait_for()
+        return page
+
+    def test_windows_stay_open_move_and_remember(self):
+        ctx = self.browser.new_context(viewport={"width": 1400, "height": 860})
+        page = self.open(ctx)
+        for button, win in (("#settingsBtn", "#settingsPanel"), ("#storesBtn", "#stores"), ("#tagsBtn", "#tagPanel")):
+            page.click(button)
+            page.locator(win + ".win:not([hidden])").wait_for()
+        page.mouse.click(700, 500)   # a click on the page no longer closes them
+        for win in ("#settingsPanel", "#stores", "#tagPanel"):
+            self.assertTrue(page.locator(win).is_visible(), win)
+        bar = page.locator("#tagPanel .win-bar").bounding_box()
+        page.mouse.move(bar["x"] + 40, bar["y"] + 12)
+        page.mouse.down()
+        page.mouse.move(bar["x"] - 300, bar["y"] + 160, steps=6)
+        page.mouse.up()
+        moved = page.locator("#tagPanel").bounding_box()
+        self.assertLess(abs(moved["x"] - (bar["x"] - 340)), 4)
+        for _ in range(40):   # kept in Hoard's settings (a moment after it's let go)
+            if (self.srv.cfg.get("ui") or {}).get("windows", {}).get("tagPanel"):
+                break
+            page.wait_for_timeout(100)
+        self.assertEqual(self.srv.cfg["ui"]["windows"]["tagPanel"]["x"], round(moved["x"]))
+        page.keyboard.press("Escape")   # the one in front
+        self.assertTrue(page.locator("#tagPanel").is_hidden())
+        self.assertTrue(page.locator("#stores").is_visible())
+        page.reload()
+        page.locator(".slot", has_text="Mochi").wait_for()
+        page.click("#tagsBtn")
+        again = page.locator("#tagPanel").bounding_box()
+        self.assertLess(abs(again["x"] - moved["x"]) + abs(again["y"] - moved["y"]), 4, "opens where it was left")
+        self.assertEqual(self.errors, [])
+        ctx.close()
+
+    def test_settings_save_as_they_change(self):
+        from unittest import mock
+        self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            page.click("#settingsBtn")
+            page.wait_for_function("() => document.querySelector('#setNewDays').value === '7'")
+            self.assertEqual(page.locator("#setSave").count(), 0, "there's nothing to save")
+            page.select_option("#setNewDays", "14")
+            page.select_option("#setRetries", "0")
+            page.locator("#settingsPanel .win-extra", has_text="Saved").wait_for()
+            for _ in range(50):
+                if self.srv.cfg.get("download_retries") == 0:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual((self.srv.cfg["new_days"], self.srv.cfg["download_retries"]), (14, 0))
+            # a setting a running job reads is put back while it runs, and the others still save
+            self.srv.jobs.state["running"] = True
+            try:
+                page.fill("#setRoot", "/somewhere/else")
+                page.locator("#setRoot").press("Tab")
+                page.get_by_text("can't change while Hoard is refreshing").wait_for()
+                page.wait_for_function("() => document.querySelector('#setRoot').value !== '/somewhere/else'")
+                page.select_option("#setNewDays", "3")
+                for _ in range(50):
+                    if self.srv.cfg.get("new_days") == 3:
+                        break
+                    page.wait_for_timeout(100)
+                self.assertEqual(self.srv.cfg["new_days"], 3)
+            finally:
+                self.srv.jobs.state["running"] = False
+            page.close()
+
+    def test_the_sidebar_folds(self):
+        ctx = self.browser.new_context(viewport={"width": 1400, "height": 860})
+        page = self.open(ctx)
+        page.click("#sideFold")
+        self.assertTrue(page.evaluate("document.body.classList.contains('side-folded')"))
+        self.assertTrue(page.locator("#creatorFind").is_hidden())
+        creators = page.locator(".sec-toggle", has_text="Creators")
+        page.click("#sideFold")
+        creators.click()
+        self.assertTrue(page.locator("#creatorFind").is_hidden(), "a section folds on its own")
+        page.reload()   # straight away: what just changed is sent as the page is left
+        page.locator(".slot", has_text="Mochi").wait_for()
+        self.assertTrue(page.locator("#creatorFind").is_hidden(), "and stays folded")
+        self.assertFalse(page.evaluate("document.body.classList.contains('side-folded')"))
+        ctx.close()
+
+    def test_folder_tabs(self):
+        page = self.open()
+        tab = lambda s: page.locator(f'#storeSeg [data-store="{s}"]').bounding_box()
+        self.assertGreater(tab("")["height"], tab("booth")["height"], "the tab shown is raised")
+        page.click('#storeSeg [data-store="booth"]')
+        page.wait_for_timeout(250)
+        self.assertGreater(tab("booth")["height"], tab("")["height"])
+        page.close()
+
+    def test_the_glow_follows_the_store(self):
+        """No colour bar on the selected tab: the page glows from the bottom in the store's colour instead, and for
+        Everything the stores you're signed in to drift through it."""
+        page = self.open()
+        glow = lambda: page.evaluate("() => [document.querySelector('#glow').classList.contains('flow'), "
+                                     "document.querySelector('#glow .glow-in').style.backgroundImage]")
+        flowing, image = glow()
+        self.assertTrue(flowing, "Everything: the stores' colours drift")
+        self.assertIn("--booth", image)
+        self.assertIn("--gumroad", image)
+        page.click('#storeSeg [data-store="gumroad"]')
+        flowing, image = glow()
+        self.assertFalse(flowing)
+        self.assertIn("--gumroad", image)
+        self.assertNotIn("--booth", image)
+        self.assertEqual(page.evaluate("""() => getComputedStyle(document.querySelector('#storeSeg [aria-checked="true"]'), '::after').display"""),
+                         "none", "no bar on the tab")
+        page.close()
+
+    def test_new_and_recently_added(self):
+        page = self.open()
+        mochi = page.locator(".slot", has_text="Mochi")
+        self.assertEqual(mochi.locator(".badge.new").count(), 1)
+        self.assertEqual(page.locator(".slot", has_text="Rusk").locator(".badge.new").count(), 0)
+        page.select_option("#sort", "added")
+        self.assertEqual(page.locator(".slot .nm-t").first.inner_text(), "Mochi", "the newest first")
+        page.click("[data-fresh]")
+        self.assertEqual(page.locator(".slot").count(), 1)
+        page.close()
+
+    def test_the_tasks_window(self):
+        from unittest import mock
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+
+        def fake(stores, only, keys=None, check=False):
+            self.srv.jobs._set(message=f"working on {only}")
+            gate.wait(20)
+        with mock.patch.object(self.srv.jobs, "_download", fake):
+            self.srv.jobs.start("download", ["booth"], only="first")
+            self.srv.jobs.start("download", ["booth"], only="second")
+            self.srv.jobs.start("download", ["gumroad"], only="third")
+            page = self.open()
+            page.click("#tasksTab")
+            page.get_by_text('Download: Booth ("first")').wait_for()
+            page.locator("#tasksBody .task-msg", has_text="working on first").wait_for()
+            waiting = page.locator("#tasksBody .tasklist .task")
+            self.assertEqual(waiting.count(), 2)
+            self.assertEqual(page.locator("#tasksCount").inner_text(), "3")
+            waiting.nth(1).locator("[data-task=remove]").click()
+            page.wait_for_function("() => document.querySelectorAll('#tasksBody .tasklist .task').length === 1")
+            page.get_by_text("Stopped: Booth went away").wait_for(state="attached")   # a finished one, from before
+            self.assertTrue(page.locator("#job").is_visible(), "what's running shows on the shelf")
+            gate.set()
+            page.get_by_text("Nothing is running.").wait_for(timeout=15000)
+            page.close()
+
+    def test_a_file_downloading_shows_its_progress_speed_and_time_left(self):
+        from unittest import mock
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        mb = 1024 * 1024
+
+        def fake(stores, only, keys=None, check=False):
+            self.srv.jobs._set(task="download", message="    downloading Rusk.unitypackage: 20.0 MB of 80.0 MB (25%)",
+                               transfer={"file": "Rusk.unitypackage", "got": 20 * mb, "total": 80 * mb,
+                                         "speed": 2 * mb, "eta": 30})
+            gate.wait(20)
+        with mock.patch.object(self.srv.jobs, "_download", fake):
+            self.srv.jobs.start("download", ["booth"], only="Rusk")
+            page = self.open()
+            bar = page.locator("#dlXfer .xfer-bar")
+            bar.wait_for(timeout=10000)
+            self.assertEqual(bar.get_attribute("aria-valuenow"), "25")
+            self.assertEqual(page.locator("#dlXfer .xfer-file").inner_text(), "Rusk.unitypackage")
+            self.assertEqual(page.locator("#dlXfer .xfer-stats").inner_text().split(),
+                             "25% 20.0 MB of 80.0 MB · 2.0 MB/s · 30 s left".split())
+            self.assertTrue(page.locator("#dlMessage").is_hidden(), "the bar says it all")
+            self.srv.jobs.state["transfer"] = {"file": "Rusk.unitypackage", "got": 60 * mb, "total": 80 * mb,
+                                               "speed": 4 * mb, "eta": 5}
+            page.wait_for_function("() => document.querySelector('#dlXfer .xfer-bar').getAttribute('aria-valuenow') === '75'")
+            page.locator("#dlXfer .xfer-stats", has_text="5 s left").wait_for()
+            page.click("#tasksTab")
+            page.locator("#tasksBody .xfer .xfer-stats", has_text="4.0 MB/s").wait_for()
+            # a browser download: no size known, so the bar just says it's going
+            self.srv.jobs.state["transfer"] = {"file": "Anko.zip", "got": 3 * mb, "total": None, "speed": mb, "eta": None}
+            page.locator("#dlXfer .xfer-bar.unknown").wait_for()
+            page.locator("#dlXfer .xfer-stats", has_text="3.0 MB so far · 1.0 MB/s").wait_for()
+            gate.set()
+            page.locator("#dlXfer").wait_for(state="hidden", timeout=15000)
+            self.assertEqual(self.errors, [])
+            page.close()
+
+    def test_a_job_started_while_another_runs_waits(self):
+        from unittest import mock
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        with mock.patch.object(self.srv.jobs, "_download", lambda *a, **k: gate.wait(20)):
+            self.srv.jobs.start("download", ["booth"], only="busy")
+            page = self.open()
+            page.locator('.slot', has_text="Rusk").click()
+            page.click("#detail [data-act=download]")
+            page.get_by_text("Queued: it starts when what's running now is done").wait_for()
+            gate.set()
+            page.close()
+
+
+def mock_patch(target, name, value):
+    from unittest import mock
+    patcher = mock.patch.object(target, name, value)
+    patcher.start()
+    return patcher

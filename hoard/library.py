@@ -38,6 +38,9 @@ STORES = {
 DOWNLOADABLE = ("booth", "gumroad", "jinxxy", "itch")
 
 
+ADDED_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
+
+
 def item(store: str, id_, **fields) -> dict:
     """One library item in the shape every store reader produces. Links that aren't http(s) are dropped."""
     d = {"key": f"{store}:{id_}", "store": store, "id": str(id_), "name": "", "creator": "",
@@ -53,6 +56,8 @@ def item(store: str, id_, **fields) -> dict:
     d["creator"] = clean_text(d["creator"], 200) or "Unknown creator"
     d["variants"] = clean_text(d["variants"], 300) or None
     d["archived"], d["gift"] = d["archived"] is True, d["gift"] is True
+    added = d.get("added")
+    d["added"] = added if isinstance(added, str) and ADDED_TIME.fullmatch(added) else None
     return d
 
 
@@ -885,7 +890,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift")}
+                                             "variants", "archived", "gift", "added")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:
@@ -896,7 +901,7 @@ class Library:
                 out["stores"][store] = {
                     "count": info["count"] if isinstance(info.get("count"), int) else 0,
                     "error": clean_text(info.get("error"), 600) or None,
-                    **{k: clean_text(info[k], 40) for k in ("refreshed", "updated") if isinstance(info.get(k), str)},
+                    **{k: clean_text(info[k], 40) for k in ("refreshed", "updated", "first_read") if isinstance(info.get(k), str)},
                     **({"source": info["source"]} if info.get("source") in ("import", "refresh") else {}),
                     **({"found_shops": [f for f in info["found_shops"][:200] if isinstance(f, str) and clean_payhip_shop(f) == f]}
                        if store == "payhip" and isinstance(info.get("found_shops"), list) else {}),
@@ -908,20 +913,38 @@ class Library:
         write_file_safely(self.path, json.dumps(seal(self.data), indent=1, ensure_ascii=False))
         remember_sealed(self.path)
 
+    def _stamp(self, store: str, items: list[dict]) -> str:
+        """Note when each item first appeared in the library (issue #18: Recently added, and the New badge), and
+        return when this store was first read. An item seen before keeps its time (an item listed before Hoard
+        kept times has none). The first read of a store brings everything at once, so its items are dated then but
+        aren't new: an item is new when it appeared after the store's first read."""
+        now = now_iso()
+        before = {i["key"]: i for i in self.data["items"] if i["store"] == store}
+        info = self.data["stores"].get(store) or {}
+        # a store read before Hoard kept these times: anything appearing from now on is new ("" is before any time)
+        first = info.get("first_read") if isinstance(info.get("first_read"), str) else ("" if before else now)
+        for i in items:
+            i["added"] = before[i["key"]].get("added") if i["key"] in before else now
+        return first
+
     def replace_store(self, store: str, items: list[dict]) -> None:
         """Swap in a store's freshly read items and record the refresh."""
         with self.lock:
+            first = self._stamp(store, items)
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store] + items
-            self.data["stores"][store] = {"updated": now_iso(), "count": len(items), "error": None, "source": "refresh"}
+            self.data["stores"][store] = {"updated": now_iso(), "count": len(items), "error": None, "source": "refresh",
+                                          "first_read": first}
             self.save()
 
     def merge_store(self, store: str, items: list[dict]) -> int:
         """Add or update imported items without dropping ones from other imported pages."""
         with self.lock:
+            first = self._stamp(store, items)
             merged = {i["key"]: i for i in self.data["items"] if i["store"] == store}
             merged.update({i["key"]: i for i in items})
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store] + list(merged.values())
-            self.data["stores"][store] = {"updated": now_iso(), "count": len(merged), "error": None, "source": "import"}
+            self.data["stores"][store] = {"updated": now_iso(), "count": len(merged), "error": None, "source": "import",
+                                          "first_read": first}
             self.save()
             return len(merged)
 

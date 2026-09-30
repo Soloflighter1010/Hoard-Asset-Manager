@@ -153,7 +153,7 @@ from when that shop isn't in the user's list (it's only added when the user conf
 - `downloads.py` builds the Downloads view's index from the manifests. The server caches it and rebuilds
   it after a download, a tag change, a settings change or a rescan. Its routes are `/downloads`,
   `/api/assets`, `/files/<image>` and `POST /api/open` (open a folder). `POST /api/download` starts a
-  download job; `POST /api/cancel` stops it after the current file.
+  download job; `POST /api/cancel` stops it within a few seconds (a half-downloaded file resumes next time where the store allows).
 - `jobs.Jobs._download` runs the same sync as the command line, but captures its progress messages
   (`common.capture_log`) for the page, which polls `/api/status`. Stopping raises `common.Cancelled`, a
   `BaseException` so per-file error handling can't swallow it; the catalog is still rebuilt on the way out.
@@ -273,6 +273,33 @@ bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`
    explicit file list. It makes the release as a draft, adds the Windows app, then publishes it with that
    version's changelog section. Published releases are immutable, and so is their tag: a failed run leaves a
    draft that running it again fills in. The wiki's Releasing page has the details.
+
+### The job queue and Tasks
+
+`Jobs.start` runs a job at once when the runner (`busy`) is free and nothing is waiting, and otherwise queues it
+(issue #49); it returns `"started"`, `"queued"` or `None` (a duplicate of a waiting job, the queue full, or
+`queue=False`, which the scheduled sync uses). Whenever the runner is let go (`_wrap`, or `reseal_in_background`)
+`kick()` starts the next waiting job. Each job's messages are kept as it runs (`_set`), and when it ends
+`_finish()` adds it to `history` (the last 60, in `tasks.json`). `GET /api/tasks` gives the Tasks window the
+current job, the queue and the history; `POST /api/queue/remove`, `/api/queue/clear` and `/api/tasks/clear`
+change them. While the hidden library is locked, `public_job()` masks hidden products' names in job state, logs
+and labels (`/api/status`, `/api/library`, `/api/assets`, `/api/tasks`).
+
+`downloader.with_retries()` wraps each file download (Booth, Gumroad, itch.io, and Jinxxy's click-to-download):
+a failure is tried again `download_retries` times after `RETRY_WAITS`, except for refusals that can't change
+(`worth_retrying`: 4xx answers such as 404/403, `NotLoggedIn`, `UnsafeRequest`, `UnsafePath`). A Stop is still
+noticed at once, through the log line written before each wait.
+
+`Library._stamp()` gives each item the time it first appeared (`added`) and each store the time of its first
+read (`first_read`); `/api/library` marks an item `new` when it appeared after that first read and within
+`new_days`.
+
+### The pages' windows
+
+Both pages share one block of script for the Tags, Stores, Settings and Tasks windows (`makeWindow`: a title bar
+to move it, the corner to resize it, the position kept in `localStorage`, Escape closing the one in front), the
+sidebar that folds (`wireSidebar`), and Settings saved as they change (`autosave`, sending only the changed
+setting; `JOB_SETTINGS` wait for a running job to end).
 
 ### Automatic syncs
 

@@ -17,7 +17,7 @@ from urllib.parse import unquote, urljoin, urlparse
 import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
-from .common import NotLoggedIn, log, now_iso
+from .common import NotLoggedIn, log, now_iso, tick
 from .library import DOWNLOADABLE, STORES
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
@@ -102,6 +102,7 @@ class Report:
     available: list = field(default_factory=list)
     got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
     stores_done: list = field(default_factory=list)   # stores read to the end, without an error
+    retries: int = 2   # how many more times a failed file download is tried (Settings; see with_retries)
 
     def print(self) -> None:
         """Print the summary, then the updated, skipped and failed items one per line."""
@@ -134,6 +135,160 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
     if rec.get("files") and not deleted_here:
         report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
                                  "file": file, "kind": "changed" if changed else "new"})
+
+
+RETRY_WAITS = (5.0, 15.0, 30.0)   # seconds before each try again (issue #19)
+NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't change by asking again
+
+
+def download_retries(cfg: dict) -> int:
+    n = cfg.get("download_retries", 2)
+    return n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 5 else 2
+
+
+def worth_retrying(e: BaseException) -> bool:
+    """Could trying the same file again go differently? Not after a refusal Hoard made itself (an unsafe address or
+    path), a sign-in that's gone, or a store saying the file isn't there or isn't yours."""
+    if isinstance(e, (NotLoggedIn, egress.UnsafeRequest, UnsafePath, SigninsUnprotected)):
+        return False
+    status = getattr(getattr(e, "response", None), "status_code", None)
+    return status not in NO_RETRY_STATUS
+
+
+def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
+    """attempt(), tried again (up to download_retries more times, waiting a little longer each time) when it fails
+    in a way that might go differently next time: a dropped connection, a timeout, a busy server, a checksum that
+    didn't match. The last failure is raised as it was. A download stopped with Stop still stops at once."""
+    tries = report.retries
+    for n in range(tries + 1):
+        try:
+            return attempt()
+        except Exception as e:
+            if n >= tries or not worth_retrying(e):
+                raise
+            wait = RETRY_WAITS[min(n, len(RETRY_WAITS) - 1)]
+            log(f"    {what}: {e} - trying again in {wait:.0f} s ({n + 1} of {tries})")   # Stop is noticed here
+            sleep(wait)
+
+
+def amount(n: int) -> str:
+    """A size in bytes, as people read it."""
+    for unit in ("bytes", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n} {unit}" if unit == "bytes" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def duration(s: float) -> str:
+    """Seconds, as people read a time left."""
+    s = max(0, round(s))
+    if s < 60:
+        return f"{s} s"
+    if s < 3600:
+        return f"{round(s / 60)} min"
+    return f"{s // 3600} h {round(s % 3600 / 60)} min"
+
+
+class Transfer:
+    """How a file download is going, told to the app each time it's called with (bytes so far, whole size or None):
+    how much has come in, how fast (smoothed over the last few seconds, so it doesn't jump about) and how long is
+    left."""
+
+    def __init__(self, fname: str, clock=time.monotonic):
+        self.fname, self.clock = fname, clock
+        self.last: tuple[float, int] | None = None   # when it was last told, and how much had come in then
+        self.speed: float | None = None
+
+    def __call__(self, got: int, whole: int | None = None) -> None:
+        now = self.clock()
+        if self.last is not None and now > self.last[0]:
+            rate = max(0, got - self.last[1]) / (now - self.last[0])
+            self.speed = rate if self.speed is None else 0.3 * rate + 0.7 * self.speed
+        self.last = (now, got)
+        eta = (whole - got) / self.speed if whole and self.speed and whole > got else None
+        text = f"    downloading {self.fname}: {amount(got)}"
+        text += f" of {amount(whole)} ({min(100, got * 100 // whole)}%)" if whole else " so far"
+        if self.speed is not None:
+            text += f", {amount(int(self.speed))}/s"
+        if eta is not None:
+            text += f", {duration(eta)} left"
+        tick(text, {"file": self.fname, "got": got, "total": whole or None,
+                    "speed": None if self.speed is None else round(self.speed),
+                    "eta": None if eta is None else round(eta)})
+
+
+def downloading(fname: str) -> Transfer:
+    """A progress callback for egress.download: how fname's download is going, shown while it downloads."""
+    return Transfer(fname)
+
+
+def browser_download_file(dl) -> Path | None:
+    """Where the browser is writing a download, from Playwright's own record of it (Chromium writes to that name
+    plus .crdownload until it's complete, then renames it). None when Playwright doesn't say."""
+    try:
+        where = dl._impl_obj._artifact._initializer.get("absolutePath")
+    except Exception:
+        return None
+    return Path(where) if isinstance(where, str) and where else None
+
+
+def _file_size(path: Path) -> int | None:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
+
+
+def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> None:
+    """Wait for a download the browser is making to end, saying how far it's got.
+
+    Saving a browser download waits for it to finish, with no time limit and no way for Stop to reach it. So a
+    download the store stopped sending without hanging up would hold up the whole job (and every job after it)
+    for ever. Here, a download that gets no bigger for stall_s seconds is cancelled and raised as a failure, which
+    is tried again like any other; and Stop cancels it at once. Returns when the file is complete or the browser
+    has given up on it (saving it then says which)."""
+    where = browser_download_file(dl)
+    if where is None:
+        return
+    stall_s = egress.STALL_SECONDS if stall_s is None else stall_s
+    part = where.with_name(where.name + ".crdownload")
+    size, seen, ended = -1, False, False
+    began = moved = said = time.monotonic()
+    report = Transfer(fname)
+    try:
+        while True:
+            done, growing = _file_size(where), _file_size(part)
+            if done is not None and growing is None:
+                ended = True   # complete
+                return
+            now = time.monotonic()
+            if growing is None and (seen or now - began >= 5):   # (or it was over before its file appeared)
+                ended = True   # the browser gave up on it (and deleted what it had): saving it says why
+                return
+            if growing is not None:
+                seen = True
+                if growing != size:
+                    size, moved = growing, now
+            if now - moved >= stall_s:
+                raise RuntimeError(f"the download stalled: nothing more came in for {stall_s:.0f} s")
+            if now - said >= egress.PROGRESS_EVERY:
+                said = now
+                report(max(size, 0))   # Stop is noticed here
+            _pause(dl, 0.5)
+    finally:
+        if not ended:   # stalled, or stopped
+            try:
+                dl.cancel()
+            except Exception:
+                pass
+
+
+def _pause(dl, seconds: float) -> None:
+    """Wait a moment, letting Playwright handle what the browser says meanwhile (unless the tab has closed)."""
+    try:
+        dl.page.wait_for_timeout(seconds * 1000)
+    except Exception:
+        time.sleep(seconds)
 
 
 SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
@@ -486,8 +641,9 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
                 would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
                 continue
             try:
-                url = gr.file_url(page_url, token, fid, f.get("download_url"))
-                got = egress.download(gr.sess, url, target, STORE_SITES["gumroad"], desc=relpath)
+                got = with_retries(report, relpath, lambda fid=fid, f=f, target=target, relpath=relpath: egress.download(
+                    gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, STORE_SITES["gumroad"],
+                    desc=relpath, progress=downloading(relpath)))
             except Exception as e:
                 report.failed.append(f"Gumroad: {label} - {e}")
                 continue
@@ -769,31 +925,38 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
             continue
-        current = find(allow_all)  # re-tag; the page may have re-rendered
-        match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
-        if not match:
-            report.failed.append(f"{store}: {name} / {k} - button disappeared")
-            continue
-        dl = click_download(ctx, page, match["idx"], timeout_s)
-        if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
-            page.goto(url, wait_until="domcontentloaded")
-            settle(page)
-        if not dl:
-            report.failed.append(f"{store}: {name} / {k} - clicking download didn't start a download")
-            continue
-        fname = distinct_name(safe_name(dl.suggested_filename or k, 150), k, rec, {key for _label, key in wanted})
-        target = folder / fname
-        # the same filename under a different label means the creator updated that file
-        prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
-        is_update = prev is not None or target.exists()
-        log(f"    downloading: {fname}")   # the browser shows no progress, so a stop here is at least visible
+        def attempt(label=label, k=k, pos=pos):
+            """Click the file's button and save what it downloads (tried again by with_retries)."""
+            current = find(allow_all)  # re-tag; the page may have re-rendered
+            match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
+            if not match:
+                raise RuntimeError("button disappeared")
+            dl = click_download(ctx, page, match["idx"], timeout_s)
+            if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
+                page.goto(url, wait_until="domcontentloaded")
+                settle(page)
+            if not dl:
+                raise RuntimeError("clicking download didn't start a download")
+            fname = distinct_name(safe_name(dl.suggested_filename or k, 150), k, rec, {key for _label, key in wanted})
+            # the same filename under a different label means the creator updated that file
+            prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
+            is_update = prev is not None or (folder / fname).exists()
+            log(f"    downloading: {fname}")
+            try:
+                wait_for_browser_download(dl, fname)
+                save_browser_download(dl, folder, fname)
+            except Exception as e:
+                raise RuntimeError(f"{fname} - {e}") from e
+            finally:
+                close_if_popup(dl.page, page)
+            return fname, prev, is_update
+
         try:
-            save_browser_download(dl, folder, fname)
+            fname, prev, is_update = with_retries(report, label or k, attempt)
         except Exception as e:
-            report.failed.append(f"{store}: {name} / {fname} - {e}")
+            report.failed.append(f"{store}: {name} / {k} - {e}")
             continue
-        finally:
-            close_if_popup(dl.page, page)
+        target = folder / fname
         if prev:
             rec["files"].pop(prev, None)
         rec["files"][k] = {"path": fname, "size": target.stat().st_size, "label": label, "downloaded_at": now_iso()}
@@ -1051,6 +1214,7 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
         raise RuntimeError("Booth didn't start the download")
     dl = started[0]
     fname = name_for(booth_filename(label, dl.suggested_filename or dl.url, f"file-{fid}"))
+    wait_for_browser_download(dl, fname)
     target = save_browser_download(dl, folder, fname)
     return fname, target.stat().st_size
 
@@ -1063,7 +1227,8 @@ def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeou
         try:
             loc = booth_file_location(sess, f["url"])
             fname = name_for(booth_filename(f["name"], loc, f"file-{fid}"))
-            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname)
+            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname,
+                                          progress=downloading(fname))
         except (NotLoggedIn, RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
             route["direct"] = False
             log(f"    Booth turned the direct download away ({e}), so Hoard downloads through the browser instead.")
@@ -1123,8 +1288,9 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
                         try:
                             offered = {(re.search(r"/downloadables/(\d+)", x["url"]) or [None, x["url"]])[1] for x in b["files"]}
-                            fname, got = booth_fetch(page, sess, f, folder, fid, route, timeout_s,
-                                                     name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered))
+                            fname, got = with_retries(report, f["name"] or guess, lambda f=f, fid=fid, offered=offered: booth_fetch(
+                                page, sess, f, folder, fid, route, timeout_s,
+                                name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered)))
                             prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
                             is_update = had_files or prev is not None or fname in on_disk
                         except NotLoggedIn:
@@ -1242,12 +1408,16 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifes
         target = folder / fname
         prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
         is_update = old is not None or prev is not None or target.exists()
-        try:
-            size = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname)
+        def fetch(fid=fid, target=target, fname=fname, u=u):
+            got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname,
+                                 progress=downloading(fname))
             expected = str(u.get("md5_hash") or "").lower()
             if expected and md5_of(target) != expected:
                 target.unlink(missing_ok=True)
-                raise RuntimeError("the file didn't match itch.io's checksum, so it was deleted; the next sync tries again")
+                raise RuntimeError("the file didn't match itch.io's checksum, so it was deleted")
+            return got
+        try:
+            size = with_retries(report, fname, fetch)
         except NotLoggedIn:
             raise
         except Exception as e:
@@ -1570,7 +1740,7 @@ def cmd_sync(cfg: dict, args) -> None:
     root = root_dir(cfg)
     root.mkdir(parents=True, exist_ok=True)
     log(f"Downloading into {root}")
-    report = Report()
+    report = Report(retries=download_retries(cfg))
     asked = list(DOWNLOADABLE) if args.store == "all" else ([args.store] if isinstance(args.store, str) else list(args.store))
     stores = [s for s in asked if s in DOWNLOADABLE]   # Payhip is read, never downloaded from
     syncers = {"booth": sync_booth, "gumroad": sync_gumroad, "jinxxy": sync_jinxxy, "itch": sync_itch}
