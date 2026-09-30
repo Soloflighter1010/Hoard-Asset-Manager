@@ -7,14 +7,14 @@ import threading
 import time
 import traceback
 
-from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin,
-                      chosen_channel, launch, sign_out, signins_root, use_channel)
+from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
+                      check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
 from .setup import BROWSER_NAMES, browser_problem, install_browser
 from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
 from .config import payhip_shops
-from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
+from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, sign_in_urls, unreachable_message
 from .net import is_network_error, reachable
 from .paths import data_dir
 from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
@@ -602,6 +602,40 @@ class Jobs:
         # own, and that used to happen without a word (issue #20)
         print(f"Signing in to {label} with {name}" + (f" ({BROWSER_NAMES[chosen]} was chosen, and isn't installed)"
                                                      if chosen != channel else ""), flush=True)
+        if not self.cfg.get("automated_sign_in"):
+            self._sign_in_plainly(store, label, name)
+        else:
+            self._sign_in_in_hoards_window(store, label, name)
+        try:
+            check_saved_signin(self.cfg, store)
+        except SigninsUnprotected as e:
+            self.lib.set_error(store, str(e))
+            raise
+        self._refresh([store])
+
+    def _sign_in_plainly(self, store: str, label: str, name: str) -> None:
+        """Sign in in the browser's own window, which nothing drives, so Google (and "Sign in with Google" on a
+        store), Discord and the like accept it (issue #21). Wait until it's closed."""
+        with _playwright()() as p:
+            window = SignInWindow(p, self.cfg, store, sign_in_urls(self.cfg, store))
+        try:
+            tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(sign_in_urls(self.cfg, store)) > 1 else ""
+            close = "quit it (Command-Q)" if sys.platform == "darwin" else "close that window"
+            self._set(task="login", store=store,
+                      message=f"Sign in to {label} in the {name} window that opened{tabs}, then {close}.")
+            while window.is_open():
+                if self.pending_link:   # a link you pasted from an email: open it in that window
+                    link, self.pending_link = self.pending_link, None
+                    window.open(link)
+                    self._set(message=f"Opened the link from your email in the {label} window. Finish there, "
+                                      f"then {close}.")
+                time.sleep(0.5)
+        finally:
+            window.close()
+
+    def _sign_in_in_hoards_window(self, store: str, label: str, name: str) -> None:
+        """Sign in in a window Hoard drives (before 2.11, and with "automated_sign_in": true in config.json). Wait
+        until it's closed."""
         with _playwright()() as p:
             ctx = launch(p, self.cfg, False, store)
             open_sign_in_pages(ctx, self.cfg, store)
@@ -624,9 +658,3 @@ class Jobs:
                 ctx.close()
             except Exception:
                 pass
-        try:
-            check_saved_signin(self.cfg, store)
-        except SigninsUnprotected as e:
-            self.lib.set_error(store, str(e))
-            raise
-        self._refresh([store])

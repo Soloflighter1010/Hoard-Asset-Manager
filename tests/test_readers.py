@@ -361,3 +361,69 @@ class ImportingSeveralPages(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class SigningInPlainly(unittest.TestCase):
+    """Issue #21: a sign-in in the browser's own window (not driven by Hoard) is saved in the store's profile so that
+    Hoard's window reads it afterwards, encrypted the same way. With the real Chromium: a page sets a cookie in a
+    plain window; once it's closed, Hoard reads it. (About 40 seconds: Chromium writes cookies every 30.)"""
+
+    def test_a_sign_in_saved_in_the_plain_window_is_read_by_hoard(self):
+        import http.server
+        import signal
+        import subprocess
+        import threading
+        import time
+        from playwright.sync_api import sync_playwright
+        from hoard import browser
+
+        class Store(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Set-Cookie", "session=signed-in; Max-Age=86400; Path=/")
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<p>Signed in</p>")
+
+            def log_message(self, *a):
+                pass
+        server = http.server.HTTPServer(("127.0.0.1", 0), Store)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        profile = Path(tempfile.mkdtemp()) / "gumroad"
+        cfg = {**config.load_config(), "browser_channel": "chromium", "allow_unprotected_signins": True}
+        started = []
+
+        def popen(args, **kw):   # the window as the sign-in starts it, without a screen: headless
+            proc = subprocess.Popen(args[:-1] + ["--headless=new", args[-1]], **kw)
+            started.append(proc)
+            return proc
+        with sync_playwright() as p, mock.patch.object(browser, "profile_dir", lambda cfg, store: profile), \
+                mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None):
+            window = browser.SignInWindow(p, cfg, "gumroad", [f"http://127.0.0.1:{server.server_port}/"], popen=popen)
+        try:
+            time.sleep(35)
+            self.assertTrue(window.is_open())
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(started[0].pid)], capture_output=True)   # (no window to close)
+            else:
+                started[0].send_signal(signal.SIGTERM)
+            started[0].wait(30)
+            for _ in range(50):
+                if not window.is_open():
+                    break
+                time.sleep(0.2)
+            self.assertFalse(window.is_open(), "closed: Hoard stops waiting")
+        finally:
+            window.close()
+            for proc in started:
+                if proc.poll() is None:
+                    proc.kill()
+        with sync_playwright() as p:
+            ctx = browser._launch(p, cfg, profile, headless=True)
+            try:
+                got = {c["name"]: c["value"] for c in ctx.cookies()}
+            finally:
+                ctx.close()
+        self.assertEqual(got.get("session"), "signed-in")

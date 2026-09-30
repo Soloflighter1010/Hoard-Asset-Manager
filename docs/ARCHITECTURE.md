@@ -71,8 +71,15 @@ all in `browser.py`):
 - `_launch` drops Playwright's `--password-store=basic` and `--use-mock-keychain` switches, so cookies are
   encrypted by the operating system. On Linux it asks D-Bus for a Secret Service or KWallet keyring
   (`linux_keyring`) and passes it explicitly; with none it raises `SigninsUnprotected` unless
-  `allow_unprotected_signins` is set. After signing in, `check_saved_signin` reads the cookie database
-  and deletes the profile if any cookie used Chromium's fixed fallback key.
+  `allow_unprotected_signins` is set (`_key_args`). After signing in, `check_saved_signin` reads the cookie
+  database and deletes the profile if any cookie used Chromium's fixed fallback key.
+- Signing in (issue #21) starts the browser as itself, not through Playwright: `SignInWindow` runs
+  `browser_program` (the chosen channel's executable, or Playwright's Chromium) with `--user-data-dir` set to the
+  store's profile, the same `_key_args`, and the store's sign-in pages (`library.sign_in_urls`), holding the
+  store's `ProfileLock`. Google and similar providers refuse browsers under automation. The job waits while the
+  process runs or Chromium's own lock is held in the profile (`_profile_in_use`: `SingletonLock` naming a live
+  process, or a `lockfile` held open on Windows). A link pasted from an email is passed to the open window by
+  starting the browser again on the same profile. `automated_sign_in` keeps the old Playwright window.
 - `sign_out()` asks the store to end the session (Gumroad's `/logout`, or the store's own sign-out
   control via `SIGN_OUT_JS`), deletes the store's profile, checks no other profile holds its cookies,
   and returns a sentence saying what happened.

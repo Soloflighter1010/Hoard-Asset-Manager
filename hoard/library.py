@@ -488,12 +488,17 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
     return list(cards.values())
 
 
-def open_sign_in_pages(ctx, cfg: dict, store: str):
-    """Open the page(s) where you sign in to a store. For Payhip, one tab per shop in your settings (each shop keeps
-    its own buyer account); with no shops listed yet, Payhip's own sign-in page."""
-    first = ctx.pages[0] if ctx.pages else ctx.new_page()
+def sign_in_urls(cfg: dict, store: str) -> list[str]:
+    """The page(s) where you sign in to a store. For Payhip, one per shop in your settings (each shop keeps its own
+    buyer account); with no shops listed yet, Payhip's own sign-in page."""
     urls = [s + "/b-account" for s in payhip_shops(cfg)] if store == "payhip" else []
-    urls = urls or [STORES[store]["login"]]
+    return urls or [STORES[store]["login"]]
+
+
+def open_sign_in_pages(ctx, cfg: dict, store: str):
+    """Open the page(s) where you sign in to a store (sign_in_urls), one tab each, in Hoard's own window."""
+    first = ctx.pages[0] if ctx.pages else ctx.new_page()
+    urls = sign_in_urls(cfg, store)
     first.goto(urls[0])
     for url in urls[1:]:
         ctx.new_page().goto(url)

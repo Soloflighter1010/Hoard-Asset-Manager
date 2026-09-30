@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.11.0
+
+Sign in with Google, Discord or X.
+
+- **Sign in with Google, Discord or X works** (issue #21). Google and the others refuse to sign in from a browser
+  a program is driving, which Hoard's sign-in window was. Now signing in opens your chosen browser as itself (Edge,
+  Chrome or Hoard's own), on that store's own sign-in folder, so you can sign in however you normally do. Close the
+  window when you're done (on a Mac, quit the browser with Command-Q) and Hoard reads the store, as before. Your
+  sign-in is saved and protected exactly as it was. A link from a sign-in email still opens in that window when
+  you paste it into Hoard. `"automated_sign_in": true` in `config.json` brings back the old window if you need it.
+- **Fixed: Stop could miss the download it was meant to end.** Stop was acted on by whichever part of Hoard wrote
+  to the log next, which wasn't always the download. Only the download itself acts on it now.
+- **Every release is scanned by VirusTotal before it's published.** The release notes link each file's report.
+
 ## 2.10.0
 
 Hoard is now an app on macOS and Linux too: a package for the Mac, and a Flatpak for Linux, each opening in Hoard's

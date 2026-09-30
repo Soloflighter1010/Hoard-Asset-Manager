@@ -326,17 +326,23 @@ def _on_sites(host: str, sites: list[str]) -> bool:
     return any(host == s or host.endswith("." + s) for s in sites)
 
 
-def channel_installed(channel: str) -> bool:
-    """Is Microsoft Edge or Google Chrome installed where Playwright looks for it?"""
+def channel_path(channel: str) -> str | None:
+    """Where Microsoft Edge or Google Chrome is installed, where Playwright looks for it; None when it isn't."""
     if sys.platform == "win32":
         folders = {"msedge": ("Microsoft", "Edge", "Application", "msedge.exe"),
                    "chrome": ("Google", "Chrome", "Application", "chrome.exe")}[channel]
         bases = (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA"))
-        return any(b and Path(b, *folders).is_file() for b in bases)
+        return next((str(Path(b, *folders)) for b in bases if b and Path(b, *folders).is_file()), None)
     if sys.platform == "darwin":
         app = {"msedge": "Microsoft Edge", "chrome": "Google Chrome"}[channel]
-        return Path(f"/Applications/{app}.app/Contents/MacOS/{app}").is_file()
-    return bool(shutil.which({"msedge": "microsoft-edge", "chrome": "google-chrome"}[channel]))
+        path = Path(f"/Applications/{app}.app/Contents/MacOS/{app}")
+        return str(path) if path.is_file() else None
+    return shutil.which({"msedge": "microsoft-edge", "chrome": "google-chrome"}[channel])
+
+
+def channel_installed(channel: str) -> bool:
+    """Is Microsoft Edge or Google Chrome installed where Playwright looks for it?"""
+    return channel_path(channel) is not None
 
 
 def default_channel() -> str:
@@ -357,22 +363,31 @@ def use_channel(cfg: dict) -> str:
     return channel if channel == "chromium" or channel_installed(channel) else "chromium"
 
 
+def _key_args(cfg: dict) -> list[str]:
+    """The switches that make Chromium encrypt a profile's sign-ins with this computer's keyring (Linux only: Windows
+    and macOS always use theirs). The same for Hoard's own window and a plain sign-in window, so each can read what
+    the other saved."""
+    if not sys.platform.startswith("linux"):
+        return []
+    keyring = linux_keyring()
+    if keyring:
+        return [f"--password-store={keyring}"]
+    if cfg.get("allow_unprotected_signins"):
+        return ["--password-store=basic"]   # the user chose this in config.json
+    raise SigninsUnprotected(
+        "This computer has no keyring to protect store sign-ins, so Hoard won't save them. Install and "
+        "unlock one (GNOME Keyring, KeePassXC with Secret Service turned on, or KWallet), then try again. "
+        "On a computer without a desktop you can instead set \"allow_unprotected_signins\": true in "
+        "config.json; sign-ins are then protected only by your user account's folder permissions.")
+
+
 def _launch(p, cfg: dict, profile: Path, headless: bool):
     """Start Chromium on a profile with the strongest cookie protection this computer offers."""
     kwargs = dict(user_data_dir=str(profile), headless=headless, accept_downloads=True,
                   viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
-    if sys.platform.startswith("linux"):
-        keyring = linux_keyring()
-        if keyring:
-            kwargs["args"] = [f"--password-store={keyring}"]
-        elif cfg.get("allow_unprotected_signins"):
-            kwargs["args"] = ["--password-store=basic"]   # the user chose this in config.json
-        else:
-            raise SigninsUnprotected(
-                "This computer has no keyring to protect store sign-ins, so Hoard won't save them. Install and "
-                "unlock one (GNOME Keyring, KeePassXC with Secret Service turned on, or KWallet), then try again. "
-                "On a computer without a desktop you can instead set \"allow_unprotected_signins\": true in "
-                "config.json; sign-ins are then protected only by your user account's folder permissions.")
+    args = _key_args(cfg)
+    if args:
+        kwargs["args"] = args
     # Always named, "chromium" too: without it, Playwright starts a different program when there's no window, its
     # "headless shell", and on a Mac that one always uses a stand-in for the Keychain. Sign-ins saved from the
     # sign-in window (with the real Keychain) then couldn't be read, so every store said "Not signed in" after
@@ -550,6 +565,90 @@ def launch_context(p, cfg: dict, headless: bool, store: str):
         if ctx in _open:
             _open[ctx] = lock.release   # ended by force, it never says it closed: its sign-in is let go then
     return ctx
+
+
+# ----------------------------------------------------------------------------- signing in, in a plain window
+#
+# Google (and so "Sign in with Google" on a store), and some others, refuse to sign in from a browser another program
+# is driving, which Hoard's usual window is (issue #21). So a sign-in opens the same browser as an ordinary window,
+# not driven by anything, on the same store's profile: it keeps its sign-in there, encrypted the same way, and Hoard
+# reads it once the window is closed, as before.
+
+def browser_program(p, cfg: dict) -> str:
+    """The program of the browser Hoard uses (see use_channel)."""
+    channel = use_channel(cfg)
+    path = p.chromium.executable_path if channel == "chromium" else channel_path(channel)
+    if not path or not Path(path).is_file():
+        raise RuntimeError("Hoard's browser isn't installed yet. Open Settings, choose Set up Hoard again, and install it.")
+    return str(path)
+
+
+def _profile_in_use(profile: Path) -> bool:
+    """Is a browser running on this profile? Chromium keeps a lock in it while it's open: a link named SingletonLock
+    (macOS, Linux), or a file named lockfile held open (Windows)."""
+    if os.name != "nt":
+        link = profile / "SingletonLock"
+        if not os.path.lexists(link):
+            return False
+        # "<computer>-<process>": left behind by a browser that ended without tidying up (it crashed, or was ended)
+        # when that process is gone. Chromium itself takes such a lock over; so does this.
+        try:
+            host, _, pid = os.readlink(link).rpartition("-")
+            import socket
+            if host == socket.gethostname() and pid.isdigit():
+                os.kill(int(pid), 0)
+        except ProcessLookupError:
+            return False
+        except (OSError, ValueError):
+            pass   # another computer's, or can't be checked: in use
+        return True
+    lock = profile / "lockfile"
+    if not lock.exists():
+        return False
+    try:
+        with open(lock, "a"):
+            return False
+    except OSError:
+        return True
+
+
+class SignInWindow:
+    """A store's sign-in, in the browser's own window (not driven by Hoard). Holds the store's profile lock until
+    it's closed."""
+
+    def __init__(self, p, cfg: dict, store: str, urls: list[str], popen=subprocess.Popen):
+        _migrate_old_signins(p, cfg)
+        self.profile = profile_dir(cfg, store)
+        self.popen = popen
+        self.lock = ProfileLock(self.profile)
+        self.lock.acquire()
+        try:
+            _lock_down(self.profile)
+            self.base = [browser_program(p, cfg), f"--user-data-dir={self.profile}", "--no-first-run",
+                         "--no-default-browser-check", *_key_args(cfg)]
+            if sys.platform.startswith("linux"):
+                from .paths import in_flatpak
+                # Chromium's own sandbox can't start inside the Flatpak's, and Chromium refuses to run as root with
+                # it. (Hoard's own window always runs without it: Playwright's default.)
+                if in_flatpak() or os.geteuid() == 0:
+                    self.base.append("--no-sandbox")
+            self.proc = popen(self.base + list(urls), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, close_fds=True)
+        except BaseException:
+            self.lock.release()
+            raise
+
+    def open(self, url: str) -> None:
+        """Open a link in the window (the browser passes it to the one already open on this profile)."""
+        self.popen(self.base + [url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   close_fds=True)
+
+    def is_open(self) -> bool:
+        return self.proc.poll() is None or _profile_in_use(self.profile)
+
+    def close(self) -> None:
+        """Let go of the profile (the window closed, or Hoard is stopping)."""
+        self.lock.release()
 
 
 def check_saved_signin(cfg: dict, store: str) -> None:
