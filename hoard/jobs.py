@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
+import traceback
 
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, _playwright, _remove_tree, check_saved_signin,
                       chosen_channel, launch, sign_out, signins_root, use_channel)
@@ -15,7 +17,7 @@ from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, unreachable_message
 from .net import is_network_error, reachable
 from .paths import data_dir
-from .browser import old_signins_waiting, profile_dir   # (issue #31)
+from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
 from .safety import DataFileError, read_json_file, write_file_safely
 from .common import now_iso
 
@@ -130,6 +132,9 @@ TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "che
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
+FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped answering is ended
+STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
+WATCHED = ("download", "check-updates", "sync", "refresh")   # jobs that never wait on you (sign-ins do)
 
 
 def tasks_file():
@@ -167,12 +172,16 @@ class Jobs:
         self._qlock = threading.Lock()      # the queue, and taking the runner from it
         self._current: dict | None = None
         self._trail: list[str] = []         # the running job's progress, line by line
+        self._job_thread: int | None = None   # the running job's thread, to say where it is when it's stuck
+        self._moved = time.monotonic()      # when the running job last said anything
         self._ids = 0
         self.history: list[dict] = self._load_history()
 
     def _set(self, **kw):
         """Update the job state the page polls (and note each new message in the running job's progress)."""
         message = kw.get("message")
+        if message:
+            self._moved = time.monotonic()
         if message and message != self.state.get("message") and self._current is not None:
             self._trail.append(str(message)[:500])
             del self._trail[:-MAX_TRAIL]
@@ -181,12 +190,14 @@ class Jobs:
     # ---- the queue (issue #49)
 
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
-              scheduled: bool = False, keys: list[str] | None = None, queue: bool = True) -> str | None:
+              scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
+              items: list[str] | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
-        queue is False, the same job is already waiting, or the queue is full."""
+        queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
+        download is for, when it's for chosen ones, so it can go straight to them."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
-                "scheduled": scheduled, "keys": list(keys) if keys else None}
+                "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -230,6 +241,7 @@ class Jobs:
     def _launch(self, spec: dict) -> None:
         """Run spec now (the runner is already taken)."""
         task, stores, only, keys = spec["task"], spec["stores"], spec.get("only"), spec.get("keys")
+        items = spec.get("items")
         skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
         self._ids += 1
         self._current = {"id": f"j{self._ids}", "task": task, "stores": stores,
@@ -239,9 +251,9 @@ class Jobs:
         self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="", transfer=None,
                           job_id=self._current["id"], job_label=self._current["label"])
         if task == "download":
-            target = lambda s: self._download(s, only, keys)  # noqa: E731
+            target = lambda s: self._download(s, only, keys, items=items)  # noqa: E731
         elif task == "check-updates":
-            target = lambda s: self._download(s, only, keys, check=True)  # noqa: E731
+            target = lambda s: self._download(s, only, keys, check=True, items=items)  # noqa: E731
         elif task == "sync":
             target = self._sync
         elif task == "install-browser":
@@ -253,11 +265,16 @@ class Jobs:
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
+        self._moved = time.monotonic()
+        job_id = self._current["id"]   # (taken now: a quick job can be over before the next line runs)
         threading.Thread(target=self._wrap, args=(target, stores), daemon=True).start()
+        if task in WATCHED:
+            threading.Thread(target=self._watch, args=(job_id,), daemon=True).start()
 
     def _wrap(self, fn, stores):
         """Run a job, recording any error for the page, and always free the runner afterwards (then start the next
         waiting job)."""
+        self._job_thread = threading.get_ident()
         try:
             self._set(running=True)
             fn(stores)
@@ -352,7 +369,7 @@ class Jobs:
             lines.append(line)
             del lines[:-40]
             self._set(message=line, log=lines[-20:])
-            print(f"Installing the browser: {line}", flush=True)   # in hoard.log too, for when it goes wrong
+            print(f"Installing the browser: {line}", flush=True)   # in Hoard's log too, for when it goes wrong
         try:
             install_browser(progress)
         except RuntimeError as e:   # already a plain explanation
@@ -382,15 +399,55 @@ class Jobs:
         if self.state["running"] and (self.state["task"] in ("download", "check-updates") or self.state.get("sync")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
+            threading.Thread(target=self._force_stop, args=(self.state.get("job_id"),), daemon=True).start()
             return True
         return False
 
-    def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False) -> None:
+    # ---- a job that doesn't stop, or doesn't move
+
+    def _still(self, job_id) -> bool:
+        return bool(self.state.get("running")) and self.state.get("job_id") == job_id
+
+    def where(self) -> str:
+        """Where the running job is, as a Python stack (Hoard's own code only: no names or addresses)."""
+        frame = sys._current_frames().get(self._job_thread or -1)
+        return "".join(traceback.format_stack(frame)) if frame else "(not running)"
+
+    def _force_stop(self, job_id, wait: float | None = None) -> None:
+        """After Stop: a job still running FORCE_AFTER seconds later is waiting on a store browser that stopped
+        answering (every other wait Hoard makes has a time limit). End that browser, so the job can finish, and say
+        in Hoard's log where it was waiting."""
+        deadline = time.monotonic() + (FORCE_AFTER if wait is None else wait)
+        while time.monotonic() < deadline:
+            if not self._still(job_id):
+                return
+            time.sleep(0.25)
+        print(f"Stop hadn't taken effect after {FORCE_AFTER:.0f} s, so Hoard ended the store's browser. The job was "
+              f"at:\n{self.where()}", flush=True)
+        if end_browsers():
+            self._set(message="Stopping: the store's browser had stopped answering, so Hoard closed it")
+
+    def _watch(self, job_id, every: float = 15.0) -> None:
+        """While a job runs: if it goes STUCK_AFTER seconds without a word, write where it is to Hoard's log (once),
+        and say so, so a stuck job can be told apart from a slow one, and the log shows why."""
+        told = False
+        while self._still(job_id):
+            time.sleep(every)
+            quiet = time.monotonic() - self._moved
+            if not told and quiet >= STUCK_AFTER and self._still(job_id):
+                told = True
+                last = self.state.get("message") or ""
+                print(f"No progress for {quiet / 60:.0f} minutes (last: {last!r}). The job is at:\n{self.where()}", flush=True)
+                self.state["message"] = (f"No progress for {quiet / 60:.0f} minutes. Stop ends it (closing the store's "
+                                         f"browser if it has stopped answering). Last: {last}")[:500]
+
+    def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False,
+                  items: list[str] | None = None) -> None:
         """Download everything new or changed from these stores (or only the products keys names), passing progress
         to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
         each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
         from types import SimpleNamespace
-        from .downloader import cmd_sync
+        from .downloader import cmd_sync, direct_targets
         from .asset_updates import AssetUpdates
         task = "check-updates" if check else "download"
         stores = [s for s in stores if s in DOWNLOADABLE]
@@ -404,6 +461,7 @@ class Jobs:
 
         def progress(msg):
             if isinstance(msg, Progress):   # how far a download has got: shown, not kept in the log or Tasks
+                self._moved = time.monotonic()
                 self.state.update(message=str(msg), transfer=msg.transfer)
             else:
                 lines.extend(line.rstrip() for line in str(msg).splitlines() if line.strip())
@@ -414,7 +472,8 @@ class Jobs:
                 raise Cancelled()
 
         args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=check, only=only,
-                               headed=False, keys=set(keys) if keys else None)
+                               headed=False, keys=set(keys) if keys else None,
+                               targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items))
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)

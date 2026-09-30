@@ -126,6 +126,38 @@ def skip_product(args, store: str, name: str, creator: str) -> bool:
     return bool(keys) and tag_key(store, name) not in keys
 
 
+DIRECT_STORES = ("jinxxy", "gumroad")   # stores whose products can be opened one by one, from the library
+
+
+def direct_targets(library_items: list[dict], stores: list[str], only: str | None, keys, items) -> dict:
+    """For a download of chosen products (items: library keys, from the Library; keys: tag keys, from Downloads;
+    only: a name or creator): each store's chosen products, from the library, where the store's reader can go
+    straight to them (a Jinxxy item's page, a Gumroad purchase's download page) instead of reading through the whole
+    store to find them. A store that isn't in the result is read in full, as before: it can't be opened product by
+    product, or a chosen product isn't in the library, or has no link to open."""
+    if not (only or keys or items):
+        return {}
+    keys, items = set(keys or ()), set(items or ())
+    out = {}
+    for store in stores:
+        if store not in DIRECT_STORES:
+            continue
+        mine = [i for i in library_items if i.get("store") == store]
+        if items:
+            chosen = [i for i in mine if i.get("key") in items]
+        elif keys:
+            wanted = {k for k in keys if k.startswith(store + ":")}
+            chosen = [i for i in mine if tag_key(store, i.get("name") or "") in wanted]
+            if {tag_key(store, i.get("name") or "") for i in chosen} != wanted:
+                continue   # a chosen product the library doesn't have (by that name): read the store in full
+        else:
+            chosen = [i for i in mine if only.lower() in f"{i.get('name', '')} {i.get('creator', '')}".lower()]
+        link = "url" if store == "jinxxy" else "download_url"
+        if chosen and all(store_link(store, i.get(link)) for i in chosen):
+            out[store] = [dict(i) for i in chosen]
+    return out
+
+
 def would_get(args, report: Report, store: str, rec: dict, name: str, creator: str, file: str, changed: bool,
               deleted_here: bool = False) -> None:
     """A dry run: note a file the store has that isn't on disk. For a product already downloaded, a file the store
@@ -146,10 +178,21 @@ def download_retries(cfg: dict) -> int:
     return n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 5 else 2
 
 
+class BrowserClosed(RuntimeError):
+    """The browser tab a store was being read in closed (or the whole browser did) part way through a product."""
+
+
+def tab_closed(e: BaseException) -> bool:
+    """Does this error mean the browser tab it happened in (or the whole browser) has gone?"""
+    text = str(e)
+    return isinstance(e, BrowserClosed) or any(w in text for w in ("has been closed", "Target closed", "Connection closed"))
+
+
 def worth_retrying(e: BaseException) -> bool:
     """Could trying the same file again go differently? Not after a refusal Hoard made itself (an unsafe address or
-    path), a sign-in that's gone, or a store saying the file isn't there or isn't yours."""
-    if isinstance(e, (NotLoggedIn, egress.UnsafeRequest, UnsafePath, SigninsUnprotected)):
+    path), a sign-in that's gone, or a store saying the file isn't there or isn't yours; nor in a tab that has gone
+    (the store's loop opens a new one and tries the whole product again)."""
+    if isinstance(e, (NotLoggedIn, egress.UnsafeRequest, UnsafePath, SigninsUnprotected)) or tab_closed(e):
         return False
     status = getattr(getattr(e, "response", None), "status_code", None)
     return status not in NO_RETRY_STATUS
@@ -525,6 +568,43 @@ def gumroad_files(items, prefix: str = ""):
             yield prefix, it
 
 
+def gumroad_page_images(content: dict) -> list[str]:
+    """The pictures a creator put in a download page itself (Gumroad's rich content), in page order. Some products
+    are only that: a set of PNG textures shown on the page, with no files listed."""
+    found: list[str] = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "image":
+                src = (node.get("attrs") or {}).get("src")
+                if isinstance(src, str) and urlparse(src).scheme == "https" and urlparse(src).hostname == "public-files.gumroad.com":
+                    found.append(src)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    for page in (content or {}).get("rich_content_pages") or []:
+        if isinstance(page, dict):
+            walk(page.get("description"))
+    return list(dict.fromkeys(found))
+
+
+PICTURE_TYPES = ((b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF87a", "gif"), (b"GIF89a", "gif"))
+
+
+def picture_extension(path: Path) -> str | None:
+    """What kind of picture a file is, from its first bytes (Gumroad's picture addresses don't say)."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(16)
+    except OSError:
+        return None
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return next((ext for magic, ext in PICTURE_TYPES if head.startswith(magic)), None)
+
+
 def gumroad_filename(f: dict) -> str:
     """A safe local name for a Gumroad file: its name plus its extension, in lower case."""
     name = (f.get("file_name") or f.get("id") or "file").strip()
@@ -560,6 +640,45 @@ def store_url(url: str, sites: list[str]) -> bool:
     return u.scheme == "https" and bool(u.hostname) and not u.username and _on_sites(u.hostname, sites)
 
 
+def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, creator: str, man, args,
+                         report: Report) -> bool:
+    """Save the pictures in a download page that lists no files, into "Page images", each named by its place on the
+    page and typed by what it is. True when one was downloaded."""
+    got_any = False
+    public = egress.session()   # public pictures: fetched without your Gumroad sign-in
+    for n, src in enumerate(gumroad_page_images(content), 1):
+        token = urlparse(src).path.rstrip("/").rsplit("/", 1)[-1]
+        fid = "page-image:" + token
+        old = rec["files"].get(fid)
+        if old and rel_to_path(folder, old["path"]).exists():
+            continue
+        stem = f"Page images/{n:02d} {safe_name(token, 40)}"
+        if args.dry_run:
+            would_get(args, report, "gumroad", rec, name, creator, stem, False, old is not None)
+            continue
+        staged = rel_to_path(folder, stem + ".download")
+        try:
+            with_retries(report, stem, lambda src=src, staged=staged: egress.download(
+                public, src, staged, ["public-files.gumroad.com"], desc=stem, progress=downloading(stem)))
+        except Exception as e:
+            report.failed.append(f"Gumroad: {creator} / {name} / {stem} - {e}")
+            continue
+        ext = picture_extension(staged)
+        if not ext:   # not a picture after all: not kept
+            staged.unlink(missing_ok=True)
+            report.skipped.append(f"Gumroad: {name} / {stem} - not a picture")
+            continue
+        relpath = f"{stem}.{ext}"
+        os.replace(staged, rel_to_path(folder, relpath))
+        rec["files"][fid] = {"path": relpath, "size": rel_to_path(folder, relpath).stat().st_size, "downloaded_at": now_iso()}
+        log(f"    saved: {relpath}")
+        report.new_files.append(f"Gumroad: {creator} / {name} / {relpath}")
+        report.got.add(tag_key("gumroad", name))
+        got_any = True
+        man.checkpoint()
+    return got_any
+
+
 def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your Gumroad library."""
     store_dir = root / "Gumroad"
@@ -576,15 +695,23 @@ def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
 
 def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Manifest", args, report: Report) -> None:
     """Download everything new or changed, one purchase at a time (see sync_gumroad)."""
-    cards = list(gr.library())
-    log(f"Gumroad: {len(cards)} purchases in your library")
+    chosen = (getattr(args, "targets", None) or {}).get("gumroad")
+    if chosen:   # straight to the chosen purchases' download pages
+        cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")}},
+                  "purchase": {"id": i.get("id"), "download_url": i.get("download_url"), "variants": i.get("variants") or ""}}
+                 for i in chosen]
+        log(f"Gumroad: {len(cards)} chosen {'purchase' if len(cards) == 1 else 'purchases'}")
+    else:
+        cards = list(gr.library())
+        log(f"Gumroad: {len(cards)} purchases in your library")
     seen: set[str] = set()
 
-    for card in cards:
+    for n, card in enumerate(cards, 1):
+        tick(f"Gumroad: purchase {n} of {len(cards)}")   # Stop is noticed here too
         prod, pur = card.get("product") or {}, card.get("purchase") or {}
         name = (prod.get("name") or "Untitled").strip()
         creator = ((prod.get("creator") or {}).get("name") or "Unknown Creator").strip()
-        if skip_product(args, "gumroad", name, creator):
+        if not chosen and skip_product(args, "gumroad", name, creator):
             continue
         page_url = pur.get("download_url")
         if not page_url:
@@ -653,6 +780,9 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
             rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
             got_any = True
             man.checkpoint()
+
+        if not offered:   # no files: what the creator put in the page itself, such as a set of textures
+            got_any = _gumroad_page_images(gr, content, rec, folder, name, creator, man, args, report) or got_any
 
         if got_any and is_new_asset:
             report.new_assets.append(f"Gumroad: {creator} / {name}")
@@ -954,6 +1084,8 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         try:
             fname, prev, is_update = with_retries(report, label or k, attempt)
         except Exception as e:
+            if tab_closed(e) or page.is_closed():   # not this file's doing: every file after it would fail too
+                raise BrowserClosed(str(e)) from e
             report.failed.append(f"{store}: {name} / {k} - {e}")
             continue
         target = folder / fname
@@ -997,31 +1129,82 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
     delay = float(cfg.get("request_delay", 1.0))
 
     with _playwright()() as p:
-        ctx = launch_context(p, cfg, not args.headed, "jinxxy")
+        browser = {"ctx": launch_context(p, cfg, not args.headed, "jinxxy")}
         try:
+            ctx = browser["ctx"]
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            page.goto(JX_INVENTORY, wait_until="domcontentloaded")
-            settle(page, 1500)
-            jinxxy_require_login(page)
-            links = jinxxy_item_links(page, jcfg["item_link_pattern"])
-            if not links:
-                raise RuntimeError("found no items on the inventory page - run the command: probe jinxxy")
-            log(f"Jinxxy: {len(links)} items in your inventory")
+            chosen = (getattr(args, "targets", None) or {}).get("jinxxy")
+            if chosen:   # straight to the chosen items' pages (each checks the sign-in as it opens)
+                links = [i["url"] for i in chosen if jinxxy_link(urlparse(i["url"]))]
+                log(f"Jinxxy: {len(links)} chosen {'item' if len(links) == 1 else 'items'}")
+            else:
+                page.goto(JX_INVENTORY, wait_until="domcontentloaded")
+                settle(page, 1500)
+                jinxxy_require_login(page)
+                links = jinxxy_item_links(page, jcfg["item_link_pattern"])
+                if not links:
+                    raise RuntimeError("found no items on the inventory page - run the command: probe jinxxy")
+                log(f"Jinxxy: {len(links)} items in your inventory")
 
-            for url in links:
+            reopened = 0
+            for n, url in enumerate(links, 1):
+                tick(f"Jinxxy: item {n} of {len(links)}")   # Stop is noticed here, even when items fail fast
                 time.sleep(delay)
-                try:
-                    _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report)
-                except NotLoggedIn:
-                    raise
-                except Exception as e:
-                    report.failed.append(f"Jinxxy: {url} - {e}")
+                for again in (False, True):
+                    if page.is_closed():
+                        if reopened >= REOPENS:
+                            raise RuntimeError(f"Jinxxy's browser closed by itself {reopened} times, so the rest of "
+                                               "Jinxxy was left for next time. Hoard's log has what happened before each (Settings, "
+                                               "Open logs folder).")
+                        reopened += 1
+                        page = reopen_tab(p, cfg, args, "jinxxy", browser)
+                    try:
+                        _jinxxy_item(browser["ctx"], page, url, man, store_dir, jcfg, args, report, chosen=bool(chosen))
+                    except NotLoggedIn:
+                        raise
+                    except Exception as e:
+                        if not again and (tab_closed(e) or page.is_closed()):
+                            log(f"    Jinxxy's browser closed while on {url} ({e}); trying it again")
+                            if not page.is_closed():
+                                try:
+                                    page.close()
+                                except Exception:
+                                    pass
+                            continue
+                        report.failed.append(f"Jinxxy: {url} - {e}")
+                    break
         finally:
             man.save_changes()   # every finished file recorded, however the sync ended
-            ctx.close()
+            try:
+                browser["ctx"].close()
+            except Exception:
+                pass   # a browser that already closed by itself
 
 
-def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report) -> None:
+REOPENS = 3   # how often a store's browser that closed by itself is opened again in one sync
+
+
+def reopen_tab(p, cfg: dict, args, store: str, browser: dict):
+    """A new tab for a store whose tab closed by itself: in the same browser while it still answers, otherwise in
+    the browser started again with the store's sign-in (browser["ctx"] is then the new one)."""
+    label = STORES[store]["label"]
+    try:
+        page = browser["ctx"].new_page()
+        page.evaluate("1")   # answers?
+        log(f"    {label}'s browser tab closed by itself, so Hoard opened a new one")
+        return page
+    except Exception:
+        pass
+    try:
+        browser["ctx"].close()   # lets go of its sign-in
+    except Exception:
+        pass
+    browser["ctx"] = launch_context(p, cfg, not args.headed, store)
+    log(f"    {label}'s browser closed by itself, so Hoard started it again")
+    return browser["ctx"].pages[0] if browser["ctx"].pages else browser["ctx"].new_page()
+
+
+def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False) -> None:
     """Open one Jinxxy item and download the files its page offers."""
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
@@ -1030,7 +1213,7 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report) -> None:
     key = urlparse(url).path.rstrip("/").split("/")[-1]
     name = (info.get("name") or key).strip()
     creator = (info.get("creator") or "Unknown Creator").strip()
-    if skip_product(args, "jinxxy", name, creator):
+    if not chosen and skip_product(args, "jinxxy", name, creator):   # (a chosen item was picked by its page, not its name)
         return
     if removed_product("jinxxy", name, report):
         return
@@ -1185,6 +1368,42 @@ def booth_filename(label: str, location: str, fallback: str) -> str:
     return safe_name(name, 150)
 
 
+BOOTH_ITEM_FILES_JS = r"""
+() => {
+  // A Booth item's own page (booth.pm/.../items/<id>): each file's download link, booth.pm/downloadables/<id>.
+  // Items in the library's "free downloads" list only have their files here.
+  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
+  const fileName = /[^\s\/\\]+\.[A-Za-z][A-Za-z0-9]{0,11}(?=\s|$)/;   // (an extension starts with a letter: not "Ver1.2")
+  const LINKS = 'a[href*="/downloadables/"], [data-href*="/downloadables/"]';
+  const idOf = e => { const m = (e.getAttribute('href') || e.getAttribute('data-href') || '').match(/\/downloadables\/(\d+)/); return m && m[1]; };
+  const out = new Map();
+  for (const e of document.querySelectorAll(LINKS)) {
+    let u; try { u = new URL(e.getAttribute('href') || e.getAttribute('data-href') || '', location.href); } catch (x) { continue; }
+    const m = u.pathname.match(/^\/downloadables\/(\d+)\/?$/);   // not a deeplink for Booth's app, not "open in browser"
+    if (!m || u.searchParams.has('browse') || !/(^|\.)booth\.pm$/.test(u.hostname) || out.has(m[1])) continue;
+    // the file's name: in its own row (widened from the link while the row is about this file only)
+    let row = e;
+    while (row.parentElement && row.parentElement !== document.body
+           && [...row.parentElement.querySelectorAll(LINKS)].every(x => idOf(x) === m[1])) row = row.parentElement;
+    const f = text(row).match(fileName);
+    const name = f ? f[0] : '';
+    out.set(m[1], { name, url: 'https://booth.pm/downloadables/' + m[1] });
+  }
+  return [...out.values()];
+}
+"""
+
+
+def booth_item_files(page, url: str) -> list[dict]:
+    """The files on a Booth item's own page, for an item the library lists without them (free downloads)."""
+    page.goto(url, wait_until="domcontentloaded")
+    settle(page)
+    u = urlparse(page.url)   # (an item page is public: only a move to the sign-in page means the session ended)
+    if "sign_in" in u.path or (u.hostname == "accounts.booth.pm" and page.locator("input[type=password]").count()):
+        raise NotLoggedIn("Not signed in to Booth")
+    return [f for f in page.evaluate(BOOTH_ITEM_FILES_JS) if store_url(f.get("url"), ["booth.pm"])]
+
+
 BOOTH_CLICK_JS = """url => { const a = document.createElement('a'); a.href = url; a.rel = 'noreferrer';
   document.body.appendChild(a); a.click(); a.remove(); }"""
 
@@ -1251,7 +1470,8 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
             sess = session_from_context(ctx, "booth.pm")
             log(f"Booth: {len(items)} items in your library")
             try:
-                for b in items:
+                for n, b in enumerate(items, 1):
+                    tick(f"Booth: item {n} of {len(items)}")   # Stop is noticed here, even when items fail fast
                     name = (b["name"] or f"Booth item {b['id']}").strip()
                     creator = (b["creator"] or "Unknown Creator").strip()
                     if skip_product(args, "booth", name, creator):
@@ -1263,8 +1483,15 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
                     folder = rel_to_path(store_dir, rec["folder"])
                     log(f"\n[Booth] {creator} / {name}")
+                    if not b["files"] and store_url(b.get("url"), ["booth.pm"]):   # free items: on the item's page
+                        try:
+                            b["files"] = booth_item_files(page, b["url"])
+                        except NotLoggedIn:
+                            raise
+                        except Exception as e:
+                            log(f"    couldn't read the item's page for its files: {e}")
                     if not b["files"]:
-                        report.skipped.append(f"Booth: {name} - no files listed in your library")
+                        report.skipped.append(f"Booth: {name} - no files listed in your library or on its page")
                         continue
 
                     got_any = False

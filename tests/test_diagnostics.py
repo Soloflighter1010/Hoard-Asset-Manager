@@ -148,6 +148,31 @@ class Sanitizing(unittest.TestCase):
         self.assertIn(" - HTTP 500", log, "what went wrong stays")
         self.assertIn("  - Booth: not signed in, so skipped. Sign in from Stores to include it.", log, "not a name")
 
+    def test_this_launch_and_the_one_before(self):
+        """2.9.2: a log for each launch. The report takes this launch's (the one Hoard is writing), and the one
+        before it, not whichever log happens to be the newest file."""
+        import os
+        import time
+        from hoard import paths
+        folder = paths.logs_dir()
+        for other in folder.glob("hoard*.log"):   # only these two (other tests leave logs here too)
+            other.unlink()
+        before = folder / "hoard-2026-09-29_10-00-00.log"
+        before.write_text("[Jinxxy] earlier launch line\n", encoding="utf-8")
+        now = folder / "hoard-2026-09-30_10-00-00.log"
+        now.write_text("[Jinxxy] this launch line\n", encoding="utf-8")
+        stamp = time.time()
+        os.utime(before, (stamp - 7200, stamp - 7200))
+        os.utime(now, (stamp - 3600, stamp - 3600))
+        (folder / "hoard.log").unlink(missing_ok=True)   # (setUp's, as a pre-2.9.2 log)
+        paths.current_log = now
+        self.addCleanup(setattr, paths, "current_log", None)
+        result = diagnostics.create_support_report(self.cfg, library.Library(Path(self.tmp.name) / "library.json"))
+        with zipfile.ZipFile(result["path"]) as archive:
+            this, earlier = archive.read("application-log.txt").decode(), archive.read("application-old-log.txt").decode()
+        self.assertIn("this launch line", this)
+        self.assertIn("earlier launch line", earlier)
+
     def test_a_name_with_secret_in_it(self):
         """"secret" or "token" followed by a word isn't a credential unless the word looks like one."""
         self.assertEqual(diagnostics._redact_credentials("Secret Fox Avatar and token soup"), "Secret Fox Avatar and token soup")

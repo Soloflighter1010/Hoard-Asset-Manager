@@ -5,7 +5,9 @@ import os
 import re
 import shutil
 import subprocess
+import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -376,7 +378,84 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
     # sign-in window (with the real Keychain) then couldn't be read, so every store said "Not signed in" after
     # you'd signed in (issue #33). Named, it's the same Chromium with or without a window.
     kwargs["channel"] = use_channel(cfg)
-    return p.chromium.launch_persistent_context(**kwargs)
+    ctx = p.chromium.launch_persistent_context(**kwargs)
+    _track(ctx)
+    return ctx
+
+
+# ----------------------------------------------------------------------------- browsers that stop answering
+#
+# A store's browser can stop answering (or be ended by something else) while a job waits on it, and some of what a
+# job asks a browser (running a script on the page, closing a tab) has no time limit: the job would wait for ever,
+# and Stop, which a job notices between steps, could never reach it. end_browsers() ends every browser Hoard has
+# open, from any thread, so everything waiting on one fails at once and the job can finish.
+
+_open: dict = {}              # each browser Hoard has open -> what to do after it's ended (its sign-in's lock)
+_ended: set = set()           # browsers ended by force: closing one of those again can wait for ever
+_open_lock = threading.Lock()
+
+
+def _track(ctx, cleanup=None) -> None:
+    try:
+        with _open_lock:
+            _open[ctx] = cleanup
+        real_close = ctx.close
+    except (TypeError, AttributeError):   # not a browser Playwright started (a stand-in)
+        return
+
+    def close(*args, **kwargs):
+        if ctx in _ended:
+            return None
+        return real_close(*args, **kwargs)
+    ctx.close = close
+    ctx.on("close", lambda _ctx: _forget(ctx))
+
+
+def _forget(ctx) -> None:
+    with _open_lock:
+        _open.pop(ctx, None)
+
+
+def _driver_pid(ctx) -> int | None:
+    """The process of Playwright's driver for this browser (which started it), or None when Playwright doesn't say."""
+    try:
+        proc = ctx._impl_obj._connection._transport._proc
+        if proc.returncode is not None:   # it has ended already: its number may be another program's by now
+            return None
+        pid = proc.pid
+        return pid if isinstance(pid, int) and pid > 0 else None
+    except Exception:
+        return None
+
+
+def end_browsers() -> int:
+    """End every store browser Hoard has open, and Playwright's driver for it. Every call waiting on one then fails
+    at once ("Connection closed"), so a job stuck on a browser that stopped answering can finish. Returns how many
+    were ended."""
+    with _open_lock:
+        found = list(_open.items())
+        _open.clear()
+    ended, pids = 0, set()
+    for ctx, cleanup in found:
+        _ended.add(ctx)
+        pid = _driver_pid(ctx)
+        if pid and pid not in pids:
+            pids.add(pid)
+            try:
+                if sys.platform == "win32":   # the driver and everything it started: the browser too
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15,
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                else:                         # the browser ends when its driver's pipe closes
+                    os.kill(pid, signal.SIGKILL)
+                ended += 1
+            except (OSError, subprocess.SubprocessError):
+                pass
+        if cleanup:
+            try:
+                cleanup()
+            except Exception:
+                pass
+    return ended
 
 
 _migrated = False
@@ -467,6 +546,9 @@ def launch_context(p, cfg: dict, headless: bool, store: str):
         lock.release()
         raise
     ctx.on("close", lambda _ctx: lock.release())
+    with _open_lock:
+        if ctx in _open:
+            _open[ctx] = lock.release   # ended by force, it never says it closed: its sign-in is let go then
     return ctx
 
 

@@ -355,6 +355,9 @@ body.selecting .toast { bottom: 96px; }
 .support-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 26px 28px; border: 0;
   border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
 .support-dialog::backdrop { background: rgb(10 8 6 / .76); }
+.close-dialog { width: min(520px, calc(var(--vw) - 32px)); }
+.close-choices { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 16px 0 6px; }
+.close-choices .linkish { align-self: center; }
 .support-dialog h2 { margin: 0 0 10px; font: 400 26px var(--display); }
 .support-dialog p { line-height: 1.55; margin: 8px 0; }
 .support-dialog .muted { color: var(--dust); font-size: 13px; }
@@ -744,6 +747,12 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   </select>
   <p class="hint" id="browserInUse" aria-live="polite"></p>
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
+  <div id="backgroundRow" hidden>
+    <h3>Closing Hoard</h3>
+    <label class="check"><input type="checkbox" id="setBackground"> Keep Hoard running when its window is closed</label>
+    <p class="hint">Downloads, syncs and automatic syncs carry on with the window closed. Open Hoard again (from the
+      Start menu) to bring the window back, and quit it here, with <strong>Quit Hoard</strong>.</p>
+  </div>
   <h3>Updates</h3>
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
   <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
@@ -755,6 +764,8 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <h3>Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
+  <button class="ghost sm" id="openLogs">Open logs folder</button>
+  <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
@@ -771,6 +782,18 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <button class="ghost sm" id="dlReport" hidden>Create support report</button>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
 </section>
+<dialog id="closeDialog" class="support-dialog close-dialog" aria-labelledby="closeTitle">
+  <h2 id="closeTitle">Hoard is still working</h2>
+  <p id="closeWhat"></p>
+  <div class="close-choices" id="closeChoices">
+    <button class="primary" data-close="wait">Stop it, then close</button>
+    <button class="ghost" data-close="background">Keep working in the background</button>
+    <button class="ghost" data-close="now">Close now</button>
+    <button class="linkish" data-close="cancel">Cancel</button>
+  </div>
+  <p class="muted" id="closeHow">Stopping keeps what's finished, and a half-downloaded file resumes next time where the
+    store allows. <strong>Close now</strong> doesn't wait: use it if stopping takes too long.</p>
+</dialog>
 <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportTitle">
   <h2 id="supportTitle">Create a support report</h2>
   <p id="supportStatus" class="muted">The report is built locally and sanitized before it is saved.</p>
@@ -1626,6 +1649,8 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setUpdates").checked = SETTINGS.check_for_updates;
+  $("#setBackground").checked = !!SETTINGS.close_to_background;
+  $("#backgroundRow").hidden = !DATA.can_background;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
@@ -1945,6 +1970,7 @@ function settingsPart(el) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
     case "setUpdates": return { check_for_updates: el.checked };
+    case "setBackground": return { close_to_background: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setAutoSync": return { auto_sync_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
@@ -2116,6 +2142,49 @@ async function watchJobs() {
   } catch (e) { /* not running */ }
   setTimeout(watchJobs, 4000);
 }
+/* ---------- closing Hoard while it's working: stop it first, carry on in the background, or close at once */
+async function askClose() {
+  const d = $("#closeDialog");
+  if (!d || d.open) return;
+  let j = {};
+  try { j = (await (await api("/api/status", { cache: "no-store" })).json()).job || {}; } catch (e) { /* stopped */ }
+  const waiting = (j.queue || []).length;
+  $("#closeWhat").textContent = (j.running ? `${j.job_label || "A job"} is running` : "Nothing is running")
+    + (waiting ? `, and ${waiting} more ${waiting === 1 ? "is" : "are"} waiting their turn.` : ".");
+  $("#closeChoices").hidden = false;
+  d.querySelector('[data-close="wait"]').hidden = false;
+  d.querySelector('[data-close="background"]').hidden = !DATA.can_background;
+  d.showModal();
+}
+function wireLogs() {
+  const b = $("#openLogs");
+  if (b) b.addEventListener("click", async () => {
+    const r = await apiPost("/api/open-logs");
+    toast(r.ok ? "Opened the logs folder." : (r.data.error || "The logs folder didn't open."));
+  });
+}
+function wireClose() {
+  wireLogs();
+  const d = $("#closeDialog");
+  if (!d) return;
+  window.addEventListener("hoard-close", askClose);   // Hoard's window, asked to close while something runs
+  d.addEventListener("click", async e => {
+    const b = e.target.closest("[data-close]");
+    if (!b) return;
+    const how = b.dataset.close;
+    if (how === "cancel") { d.close(); return; }
+    const r = await apiPost("/api/app/close", { how });
+    if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+    if (how === "background") { d.close(); return; }
+    if (how === "wait") {   // only Close now is left, for when stopping takes too long
+      $("#closeWhat").textContent = "Stopping what's running. Hoard closes as soon as it has.";
+      d.querySelector('[data-close="wait"]').hidden = d.querySelector('[data-close="background"]').hidden = true;
+      return;
+    }
+    $("#closeWhat").textContent = "Closing Hoard.";
+    $("#closeChoices").hidden = true;
+  });
+}
 function queuedToast(r) {   // a job started while another runs waits its turn
   if (r && r.data && r.data.queued) { toast("Queued: it starts when what's running now is done. See Tasks."); return true; }
   return false;
@@ -2129,6 +2198,7 @@ function wireApp() {
   wireAutosave();
   wireSidebar();
   wireTasks();
+  wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);
   if ($("#updateNote")) $("#updateNote").addEventListener("click", () => openSettings(true));
@@ -2151,6 +2221,7 @@ function wireApp() {
   }, 60000);
   $("#quitHoard").addEventListener("click", async () => {
     const r = await apiPost("/api/quit");
+    if (!r.ok && r.data.busy) { askClose(); return; }   // it's working: stop it first, or close now
     if (!r.ok) { toast(r.data.error || "Hoard didn't quit."); return; }
     document.body.innerHTML = '<p style="font: 600 18px sans-serif; color: #c9b9a4; text-align: center; margin-top: 30vh">Hoard has stopped. You can close this tab.</p>';
   });

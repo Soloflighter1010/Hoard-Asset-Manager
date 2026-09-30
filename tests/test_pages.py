@@ -202,7 +202,7 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(store.path.unlink, missing_ok=True)
         started = []
 
-        def start(task, stores, skip_imported=False, only=None, scheduled=False, keys=None):
+        def start(task, stores, skip_imported=False, only=None, scheduled=False, keys=None, **_kw):
             started.append((task, stores, keys))
             return True
         with mock.patch.object(self.srv.jobs, "start", side_effect=start):
@@ -956,7 +956,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         gate = threading.Event()
         self.addCleanup(gate.set)
 
-        def fake(stores, only, keys=None, check=False):
+        def fake(stores, only, keys=None, check=False, **_kw):
             self.srv.jobs._set(message=f"working on {only}")
             gate.wait(20)
         with mock.patch.object(self.srv.jobs, "_download", fake):
@@ -984,7 +984,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.addCleanup(gate.set)
         mb = 1024 * 1024
 
-        def fake(stores, only, keys=None, check=False):
+        def fake(stores, only, keys=None, check=False, **_kw):
             self.srv.jobs._set(task="download", message="    downloading Rusk.unitypackage: 20.0 MB of 80.0 MB (25%)",
                                transfer={"file": "Rusk.unitypackage", "got": 20 * mb, "total": 80 * mb,
                                          "speed": 2 * mb, "eta": 30})
@@ -1013,6 +1013,52 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page.locator("#dlXfer").wait_for(state="hidden", timeout=15000)
             self.assertEqual(self.errors, [])
             page.close()
+
+    def test_closing_while_working_asks_first(self):
+        """2.9.2: closing Hoard's window while something runs asks: stop it first, carry on in the background (only
+        in Hoard's own window), or close at once; Keep Hoard running is a setting, there too."""
+        from unittest import mock
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        hidden, closed = [], []
+        self.addCleanup(setattr, self.srv, "hide_window", None)
+        self.addCleanup(setattr, self.srv, "quit_app", None)
+        self.addCleanup(self.srv.cfg.update, close_to_background=bool(self.srv.cfg.get("close_to_background")))
+        self.srv.hide_window, self.srv.quit_app = (lambda: hidden.append(1)), (lambda: closed.append(1))
+        with mock.patch.object(self.srv.jobs, "_download", lambda *a, **k: gate.wait(20)), \
+                mock.patch.object(server, "save_config"):
+            self.srv.jobs.start("download", ["booth"], only="Rusk")
+            self.srv.jobs.start("download", ["gumroad"])
+            page = self.open()
+            page.evaluate("() => window.dispatchEvent(new Event('hoard-close'))")   # what the window's close button does
+            dialog = page.locator("#closeDialog")
+            dialog.wait_for()
+            self.assertIn('Download: Booth ("Rusk") is running, and 1 more is waiting', page.locator("#closeWhat").inner_text())
+            dialog.locator("[data-close='cancel']").click()
+            self.assertTrue(dialog.is_hidden())
+            page.evaluate("() => window.dispatchEvent(new Event('hoard-close'))")
+            dialog.locator("[data-close='background']").click()
+            for _ in range(40):
+                if hidden:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(hidden, [1], "the window hid; Hoard carries on")
+            self.assertEqual(closed, [])
+            # Quit Hoard in Settings asks the same, while it's working
+            page.click("#settingsBtn")
+            page.locator("#backgroundRow").wait_for(state="visible")   # the setting, in Hoard's own window
+            page.check("#setBackground")
+            for _ in range(40):
+                if self.srv.cfg.get("close_to_background"):
+                    break
+                page.wait_for_timeout(100)
+            self.assertTrue(self.srv.cfg.get("close_to_background"), "saved as it changed")
+            page.click("#quitHoard")
+            dialog.wait_for()
+            self.srv.jobs.clear_queue()
+            gate.set()
+            page.close()
+        self.assertEqual(self.errors, [])
 
     def test_a_job_started_while_another_runs_waits(self):
         from unittest import mock

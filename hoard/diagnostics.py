@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Iterable
 
 from . import __version__
-from .paths import data_dir, documents_dir
+from . import paths
+from .paths import data_dir, documents_dir, log_files
 from .safety import scrub, write_file_safely
 
 
@@ -641,9 +642,14 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
             effective_job["error"] = str(given_context.get("error"))[:4000]
         sanitizer = _ReportSanitizer(cfg)
         sanitizer.seed_library(lib)
-        log_dir = data_dir() / "logs"
-        application_log = sanitizer.text(_read_tail(log_dir / "hoard.log", MAX_LOG_BYTES), asset_names=True, replace_known=False)
-        old_log_text = sanitizer.text(_read_tail(log_dir / "hoard.old.log", MAX_OLD_LOG_BYTES), asset_names=True, replace_known=False) if (log_dir / "hoard.old.log").exists() else None
+        # this launch's log (or the newest, when Hoard has a console), and the one before it
+        logs = log_files()
+        current = paths.current_log if paths.current_log and paths.current_log.exists() else (logs[0] if logs else None)
+        previous = next((p for p in logs if p != current), None)
+        application_log = (sanitizer.text(_read_tail(current, MAX_LOG_BYTES), asset_names=True, replace_known=False)
+                           if current else "[no log yet]")
+        old_log_text = (sanitizer.text(_read_tail(previous, MAX_OLD_LOG_BYTES), asset_names=True, replace_known=False)
+                        if previous else None)
 
         report = {
             "report_id": report_id,
@@ -669,8 +675,7 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
             "report.txt": _human_report(report),
             "application-log.txt": application_log,   # the report's own names (<CREATOR_001>...), as everywhere in it
         }
-        old_log = log_dir / "hoard.old.log"
-        if old_log.exists():
+        if previous:   # the launch before
             files["application-old-log.txt"] = old_log_text or "[log unavailable]"
         diagnostic = job.get("diagnostic") if isinstance(job, dict) else None
         if isinstance(diagnostic, dict):

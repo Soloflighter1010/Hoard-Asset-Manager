@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "allow_unprotected_signins": False,  # Linux without a keyring only: keep sign-ins protected by folder permissions
     "offline_images": True,        # save every product image after a refresh, so the library works offline
     "check_for_updates": False,    # ask GitHub once a day, when Hoard starts, whether there's a newer version
+    "close_to_background": False,  # closing Hoard's window keeps Hoard running (open it again to bring the window back)
     "auto_sync_hours": 0,
     "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
     "download_retries": 2,         # a file download that fails is tried again this many more times          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)

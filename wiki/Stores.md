@@ -52,6 +52,8 @@ person to sign in on this computer never sees what you bought. Your downloaded f
   in [Settings](Settings).
 - Files come from each item's download buttons. If Booth turns Hoard's direct download away, Hoard carries on
   through its browser instead, by itself.
+- Your free downloads are listed without their files, so for those Hoard opens the item's own page and takes the
+  download buttons from there.
 - Booth signs you in through pixiv.
 
 ## Gumroad
@@ -60,6 +62,9 @@ person to sign in on this computer never sees what you bought. Your downloaded f
   [Your library](Library#archive-removed-and-hidden)); leave them out altogether in [Settings](Settings).
 - A purchase with no download page (refunded, or a membership that ended) is skipped and listed in the
   summary. So are files Gumroad only streams.
+- Some creators put their product in the download page itself, as pictures (a set of PNG textures, say), with no
+  files listed. When a download page lists no files, Hoard saves its pictures into a **Page images** folder, in
+  page order. (Beside real files, pictures in the page are previews and instructions, and aren't downloaded.)
 
 ## Jinxxy
 
