@@ -85,7 +85,7 @@ jobs:
   flatpak:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48@sha256:50fea670968fd3ec4aeeb3a91d9d807d0af6eab3c3b44c33d4c40c311832c8fa
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

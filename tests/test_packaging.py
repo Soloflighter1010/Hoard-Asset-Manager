@@ -36,9 +36,9 @@ def blocks(text: str) -> list[str]:
 class LockedDependencies(unittest.TestCase):
 
     def test_the_mac_app(self):
-        lock = (REPO / "requirements-mac.txt").read_text()
+        lock = (REPO / "requirements-mac.txt").read_text("utf-8")
         self.assertTrue(all("--hash=sha256:" in b for b in blocks(lock)))
-        mac, source, windows = pins(lock), pins((REPO / "requirements.txt").read_text()), pins((REPO / "requirements-app.txt").read_text())
+        mac, source, windows = pins(lock), pins((REPO / "requirements.txt").read_text("utf-8")), pins((REPO / "requirements-app.txt").read_text("utf-8"))
         for name in ("pywebview", "pyinstaller", "pyobjc-core", "pyobjc-framework-webkit", "pyobjc-framework-cocoa"):
             self.assertIn(name, mac)
         self.assertNotIn("pythonnet", mac, "Windows only")
@@ -48,33 +48,35 @@ class LockedDependencies(unittest.TestCase):
             self.assertEqual(mac[name], windows[name], f"{name}: the same on Windows and the Mac")
 
     def test_the_flatpak(self):
-        lock = (REPO / "requirements-flatpak.txt").read_text()
+        lock = (REPO / "requirements-flatpak.txt").read_text("utf-8")
         self.assertTrue(all("--hash=sha256:" in b for b in blocks(lock)))
-        flatpak, source = pins(lock), pins((REPO / "requirements.txt").read_text())
+        flatpak, source = pins(lock), pins((REPO / "requirements.txt").read_text("utf-8"))
         self.assertIn("pywebview", flatpak)
         self.assertNotIn("pyinstaller", flatpak, "the Flatpak runs Hoard's code with the runtime's Python")
         for name, version in source.items():
             self.assertEqual(flatpak.get(name), version, f"{name}: the Flatpak and a source install use the same version")
 
     def test_the_flatpaks_files_are_the_locked_ones(self):
-        """python3-deps.json (made by scripts/flatpak_deps.py) installs one file per locked package, each one whose
-        hash is in the lock, from PyPI's file host."""
+        """python3-deps.json (made by scripts/flatpak_deps.py) installs the locked packages, from files whose hash
+        is in the lock, on PyPI's file host: one file each, or a wheel for each Python the runtime may have."""
         import flatpak_deps
-        locked = flatpak_deps.locked((REPO / "requirements-flatpak.txt").read_text())
-        module = json.loads((FLATPAK / "python3-deps.json").read_text())
+        locked = flatpak_deps.locked((REPO / "requirements-flatpak.txt").read_text("utf-8"))
+        module = json.loads((FLATPAK / "python3-deps.json").read_text("utf-8"))
         norm = lambda n: re.sub(r"[-_.]+", "-", n).lower()  # noqa: E731
-        by_name = {}
+        by_name: dict[str, list[dict]] = {}
         for src in module["sources"]:
             self.assertEqual(src["type"], "file")
             self.assertTrue(src["url"].startswith("https://files.pythonhosted.org/"), src["url"])
             filename = src["url"].rsplit("/", 1)[1]
-            name = norm(re.split(r"-\d", filename, 1)[0])
-            by_name[name] = src
+            by_name.setdefault(norm(re.split(r"-\d", filename, maxsplit=1)[0]), []).append(src)
         self.assertEqual(set(by_name), {norm(n) for n in locked})
         for name, (version, hashes) in locked.items():
-            src = by_name[norm(name)]
-            self.assertIn(src["sha256"], hashes, name)
-            self.assertIn(version, src["url"], name)
+            for src in by_name[norm(name)]:
+                self.assertIn(src["sha256"], hashes, name)
+                self.assertIn(version, src["url"], name)
+        greenlet = [s["url"].rsplit("/", 1)[1] for s in by_name["greenlet"]]
+        self.assertEqual([flatpak_deps.python_of(f) for f in greenlet], list(flatpak_deps.PYTHONS),
+                         "compiled: one for each Python the runtime may have")
         self.assertIn("--no-index", module["build-commands"][0], "installed from those files only")
 
     def test_choosing_a_packages_file(self):
@@ -83,7 +85,14 @@ class LockedDependencies(unittest.TestCase):
         self.assertEqual(rank("greenlet-3.5.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl"), 0)
         self.assertEqual(rank("requests-2.34.2-py3-none-any.whl"), 1)
         self.assertEqual(rank("proxy_tools-0.1.0.tar.gz"), 3)
+        self.assertEqual(rank("playwright-1.63.0-py3-none-manylinux1_x86_64.whl"), 0)
+        for usable in ("greenlet-3.5.6-cp313-cp313-manylinux_2_28_x86_64.whl",
+                       "greenlet-3.5.6-cp314-cp314-manylinux_2_28_x86_64.whl",
+                       "charset_normalizer-3.5.1-cp37-abi3-manylinux_2_28_x86_64.whl"):
+            self.assertEqual(rank(usable), 0, usable)
+        self.assertEqual(flatpak_deps.python_of("charset_normalizer-3.5.1-cp37-abi3-manylinux_2_28_x86_64.whl"), "abi3")
         for unusable in ("greenlet-3.5.6-cp311-cp311-manylinux_2_28_x86_64.whl",
+                         "greenlet-3.5.6-cp314-cp314t-manylinux_2_28_x86_64.whl",
                          "greenlet-3.5.6-cp312-cp312-manylinux_2_28_aarch64.whl",
                          "greenlet-3.5.6-cp312-cp312-musllinux_1_2_x86_64.whl",
                          "greenlet-3.5.6-cp312-cp312-win_amd64.whl",
@@ -94,7 +103,7 @@ class LockedDependencies(unittest.TestCase):
 class TheFlatpak(unittest.TestCase):
 
     def setUp(self):
-        self.manifest = MANIFEST.read_text()
+        self.manifest = MANIFEST.read_text("utf-8")
 
     def finish_args(self):
         part = self.manifest.split("finish-args:", 1)[1].split("modules:", 1)[0]
@@ -104,6 +113,11 @@ class TheFlatpak(unittest.TestCase):
         m = self.manifest
         self.assertIn(f"app-id: {APP_ID}", m)
         self.assertIn("runtime: org.gnome.Platform", m)
+        version = re.search(r"runtime-version: '(\d+)'", m).group(1)
+        for workflow in ("check.yml", "release.yml"):
+            text = (REPO / ".github" / "workflows" / workflow).read_text("utf-8")
+            self.assertEqual(re.findall(r"flatpak-github-actions:gnome-(\d+)@", text), [version],
+                             f"{workflow} builds in the runtime's own container")
         self.assertIn("sdk: org.gnome.Sdk", m)
         self.assertIn("command: hoard", m)
         self.assertIn("- python3-deps.json", m)
@@ -121,7 +135,7 @@ class TheFlatpak(unittest.TestCase):
             "--env=PYWEBVIEW_GUI=gtk"})
 
     def test_what_software_centres_show(self):
-        desktop = (FLATPAK / f"{APP_ID}.desktop").read_text()
+        desktop = (FLATPAK / f"{APP_ID}.desktop").read_text("utf-8")
         for line in ("Type=Application", "Name=Hoard", "Exec=hoard", f"Icon={APP_ID}", "Terminal=false"):
             self.assertIn(line, desktop.splitlines())
         info = ET.parse(FLATPAK / f"{APP_ID}.metainfo.xml").getroot()
@@ -139,7 +153,7 @@ class TheFlatpak(unittest.TestCase):
     def test_the_launcher(self):
         sh = FLATPAK / "hoard.sh"
         self.assertTrue(os.access(sh, os.X_OK) or os.name == "nt")
-        text = sh.read_text()
+        text = sh.read_text("utf-8")
         self.assertIn('PYTHONPATH="/app/lib/hoard', text)
         self.assertIn('exec python3 -m hoard "$@"', text)
 
@@ -190,22 +204,25 @@ class Updating(unittest.TestCase):
             view = u.view(False)
         self.assertTrue(view["available"])
         self.assertIn("Hoard-99.0.0-linux-x86_64.flatpak", view["how"])
-        self.assertIn("u.how", (REPO / "hoard" / "web" / "library.html").read_text(), "Settings shows it")
+        self.assertIn("u.how", (REPO / "hoard" / "web" / "library.html").read_text("utf-8"), "Settings shows it")
 
 
 class TheMacApp(unittest.TestCase):
 
     def test_the_bundle(self):
-        spec = (REPO / "packaging" / "hoard.spec").read_text()
+        spec = (REPO / "packaging" / "hoard.spec").read_text("utf-8")
         self.assertIn(f'APP_ID = "{APP_ID}"', spec)
         self.assertIn('BUNDLE(coll, name="Hoard.app"', spec)
         self.assertIn('"LSMinimumSystemVersion": "11.0"', spec)
         self.assertIn('"hoard.icns" if MAC else "hoard.ico"', spec)
 
     def test_the_package(self):
-        script = (REPO / "scripts" / "build_macos_pkg.sh").read_text()
+        script = (REPO / "scripts" / "build_macos_pkg.sh").read_text("utf-8")
         self.assertIn(f"--identifier {APP_ID}", script)
-        self.assertIn("BundleIsRelocatable -bool NO", script, "always installed in /Applications, where it says")
+        self.assertIn('plutil -replace "$i.BundleIsRelocatable" -bool NO', script,
+                      "every bundle in it (Hoard.app, its Python.framework) installed where it says, never moved "
+                      "onto another copy such as python.org's Python")
+        self.assertIn('while plutil -extract "$i" xml1', script, "each of them")
         self.assertIn('mkdir -p "$root/Applications"', script)
         self.assertIn("Hoard-$version-macos-$chip.pkg", script)
         self.assertTrue(os.access(REPO / "scripts" / "build_macos_pkg.sh", os.X_OK) or os.name == "nt")
@@ -226,8 +243,8 @@ class Icons(unittest.TestCase):
 class Workflows(unittest.TestCase):
 
     def setUp(self):
-        self.release = (REPO / ".github" / "workflows" / "release.yml").read_text()
-        self.check = (REPO / ".github" / "workflows" / "check.yml").read_text()
+        self.release = (REPO / ".github" / "workflows" / "release.yml").read_text("utf-8")
+        self.check = (REPO / ".github" / "workflows" / "check.yml").read_text("utf-8")
 
     def test_every_action_and_container_is_pinned(self):
         for text in (self.release, self.check):

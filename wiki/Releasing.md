@@ -19,7 +19,7 @@ The **Release** workflow then:
 3. builds the Mac app twice, on an Apple Silicon and an Intel runner (PyInstaller, then `Hoard.app` in a `.pkg`
    by `scripts/build_macos_pkg.sh`), runs its self-test, and attaches
    `Hoard-<version>-macos-apple-silicon.pkg` and `Hoard-<version>-macos-intel.pkg` with their checksums;
-4. builds the Flatpak (flatpak-builder, in Flathub's GNOME 48 container; its build checks Hoard's window support
+4. builds the Flatpak (flatpak-builder, in Flathub's GNOME 51 container; its build checks Hoard's window support
    and runs the self-test in the sandbox), and attaches `Hoard-<version>-linux-x86_64.flatpak` and
    `SHA256SUMS-linux.txt`;
 5. publishes the release, once every file is on it.

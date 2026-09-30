@@ -17,8 +17,8 @@
     },
     {
       "type": "file",
-      "url": "https://files.pythonhosted.org/packages/6f/89/bb5108dc6c3651dca963f2b0a3ba19bbcb370c94e1b6d3e0e844a58e6dca/charset_normalizer-3.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
-      "sha256": "b9af956078716df40d985fb0dfeb2c2120c5ca92ba4ff4b388acfd01cdc14d08"
+      "url": "https://files.pythonhosted.org/packages/9f/2f/fe3f187327aac18e2d54e9d2b08e15d27bf9b642d9e51c219f130fc34d1a/charset_normalizer-3.5.1-cp37-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "a6dac12ff6b846103483683f60c5f8fee205121adc58ffd87e90a90a3af69e99"
     },
     {
       "type": "file",
@@ -29,6 +29,16 @@
       "type": "file",
       "url": "https://files.pythonhosted.org/packages/66/6a/1594f3869c57c149abdb380492529e04d4c0229b5e4d79572c5bd0aaa673/greenlet-3.5.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
       "sha256": "975736b002ed080d124cf81a79cb7e05cb26d6b3f5c7a7b651c0fcce70353aa1"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/85/cb/ab0c123c514ed4e94c0dc9ee2e86362633e6b998cfc05de7fc9ac2eb9690/greenlet-3.5.6-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "f98e8215e172f567ce80eeaed9107fb4d32b6c44f26983d9b8334658136a205a"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/45/ac/28fa7a9e50f2859466214c4ac584d776db52c1604ad4dd158960a5af2a1f/greenlet-3.5.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "9a09d59bef1db94f384b5bcc2d523694d338f3df6b757aeeaf7baca5d0c0be88"
     },
     {
       "type": "file",

@@ -16,12 +16,24 @@ esac
 root=$(mktemp -d)
 mkdir -p "$root/Applications"
 cp -R dist/Hoard.app "$root/Applications/"
-# Installed where it says, always: not "relocated" to wherever an older copy was moved.
 pkgbuild --analyze --root "$root" "$root.plist"
-plutil -replace 0.BundleIsRelocatable -bool NO "$root.plist"
+# Every bundle in it (Hoard.app, and the Python.framework inside it) is installed exactly where it says: never
+# "relocated" onto another copy with the same identifier, such as python.org's Python in /Library/Frameworks.
+i=0
+while plutil -extract "$i" xml1 -o /dev/null "$root.plist" 2>/dev/null; do
+  plutil -replace "$i.BundleIsRelocatable" -bool NO "$root.plist"
+  i=$((i + 1))
+done
+[ "$i" -gt 0 ] || { echo "pkgbuild found no bundles in $root" >&2; exit 1; }
 pkg="Hoard-$version-macos-$chip.pkg"
 pkgbuild --root "$root" --component-plist "$root.plist" --install-location / \
   --identifier io.github.soloflighter1010.Hoard --version "$version" "dist/$pkg"
 rm -rf "$root" "$root.plist"
+# Check it: the package's own record lists no bundle Installer may relocate.
+pkgutil --expand "dist/$pkg" "$root.check"
+if grep -A20 "<relocate" "$root.check/PackageInfo" | grep -q "<bundle"; then
+  echo "dist/$pkg still has relocatable bundles" >&2; exit 1
+fi
+rm -rf "$root.check"
 (cd dist && shasum -a 256 "$pkg" > "SHA256SUMS-macos-$chip.txt")
 echo "Built dist/$pkg"

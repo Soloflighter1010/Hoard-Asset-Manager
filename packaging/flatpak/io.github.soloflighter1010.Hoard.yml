@@ -8,7 +8,7 @@
 # (type: git, url, tag, commit), and screenshots added to the metainfo.
 app-id: io.github.soloflighter1010.Hoard
 runtime: org.gnome.Platform
-runtime-version: '48'
+runtime-version: '51'
 sdk: org.gnome.Sdk
 command: hoard
 finish-args:
