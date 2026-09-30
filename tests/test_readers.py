@@ -369,6 +369,24 @@ class SigningInPlainly(unittest.TestCase):
     Hoard's window reads it afterwards, encrypted the same way. With the real Chromium: a page sets a cookie in a
     plain window; once it's closed, Hoard reads it. (About 40 seconds: Chromium writes cookies every 30.)"""
 
+    @staticmethod
+    def saved(profile, name) -> bool:
+        """Is a cookie by this name in the profile's cookie database yet? (Read without disturbing the browser.)"""
+        import sqlite3
+        db = profile / "Default" / "Cookies"
+        if not db.is_file():
+            db = profile / "Default" / "Network" / "Cookies"
+        if not db.is_file():
+            return False
+        try:
+            con = sqlite3.connect(f"file:{db}?mode=ro&immutable=1", uri=True)
+            try:
+                return bool(con.execute("SELECT 1 FROM cookies WHERE name = ?", (name,)).fetchone())
+            finally:
+                con.close()
+        except sqlite3.Error:
+            return False
+
     def test_a_sign_in_saved_in_the_plain_window_is_read_by_hoard(self):
         import http.server
         import signal
@@ -403,7 +421,18 @@ class SigningInPlainly(unittest.TestCase):
                 mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None):
             window = browser.SignInWindow(p, cfg, "gumroad", [f"http://127.0.0.1:{server.server_port}/"], popen=popen)
         try:
-            time.sleep(35)
+            # Chromium writes cookies to disk about 30 s after they change: wait until it has, then end it (as closing
+            # the window would, and without a window to close). The database can be read while it's open, except on
+            # Windows, where the browser keeps it to itself: there, wait past a second write instead.
+            deadline = time.monotonic() + 90
+            while time.monotonic() < deadline:
+                time.sleep(2)
+                if os.name == "nt":
+                    if time.monotonic() > deadline - 25:
+                        break
+                    continue
+                if self.saved(profile, "session"):
+                    break
             self.assertTrue(window.is_open())
             if os.name == "nt":
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(started[0].pid)], capture_output=True)   # (no window to close)

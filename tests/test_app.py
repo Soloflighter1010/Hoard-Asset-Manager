@@ -1225,7 +1225,7 @@ class SetupAssistant(unittest.TestCase):
         real_read = Path.read_text
 
         def read_text(self, *a, **k):
-            if str(self) == "/proc/sys/kernel/apparmor_restrict_unprivileged_userns":
+            if self.as_posix() == "/proc/sys/kernel/apparmor_restrict_unprivileged_userns":   # (on Windows too)
                 return "1\n" if restricted["on"] else "0\n"
             return real_read(self, *a, **k)
         with mock.patch.object(browser.sys, "platform", "linux"), mock.patch.object(Path, "read_text", read_text), \
