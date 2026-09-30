@@ -20,6 +20,7 @@ DEFAULT_CONFIG = {
     "profile_dir": "",             # "" = Hoard's private sign-in folder (one profile per store)
     "advanced_signin_location": False,   # only then is profile_dir used; never a network location
     "allow_unprotected_signins": False,  # Linux without a keyring only: keep sign-ins protected by folder permissions
+    "automated_sign_in": False,    # sign in in a window Hoard drives, as before 2.11 (Google and Discord refuse those)
     "offline_images": True,        # save every product image after a refresh, so the library works offline
     "check_for_updates": False,    # ask GitHub once a day, when Hoard starts, whether there's a newer version
     "close_to_background": False,  # closing Hoard's window keeps Hoard running (open it again to bring the window back)

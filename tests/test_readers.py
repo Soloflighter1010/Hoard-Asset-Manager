@@ -361,3 +361,119 @@ class ImportingSeveralPages(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class SigningInPlainly(unittest.TestCase):
+    """Issue #21: a sign-in in the browser's own window (not driven by Hoard) is saved in the store's profile so that
+    Hoard's window reads it afterwards, encrypted the same way. With the real Chromium: a page sets a cookie in a
+    plain window; once it's closed, Hoard reads it. (About 40 seconds: Chromium writes cookies every 30.)"""
+
+    @staticmethod
+    def saved(profile, name) -> bool:
+        """Is a cookie by this name in the profile's cookie database yet? (Read without disturbing the browser.)"""
+        import sqlite3
+        db = profile / "Default" / "Cookies"
+        if not db.is_file():
+            db = profile / "Default" / "Network" / "Cookies"
+        if not db.is_file():
+            return False
+        try:
+            con = sqlite3.connect(f"file:{db}?mode=ro&immutable=1", uri=True)
+            try:
+                return bool(con.execute("SELECT 1 FROM cookies WHERE name = ?", (name,)).fetchone())
+            finally:
+                con.close()
+        except sqlite3.Error:
+            return False
+
+    def test_a_sign_in_saved_in_the_plain_window_is_read_by_hoard(self):
+        import http.server
+        import signal
+        import subprocess
+        import threading
+        import time
+        from playwright.sync_api import sync_playwright
+        from hoard import browser
+
+        served = threading.Event()
+
+        class Store(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                served.set()
+                self.send_response(200)
+                self.send_header("Set-Cookie", "session=signed-in; Max-Age=86400; Path=/")
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<p>Signed in</p>")
+
+            def log_message(self, *a):
+                pass
+        server = http.server.HTTPServer(("127.0.0.1", 0), Store)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        profile = Path(tempfile.mkdtemp()) / "gumroad"
+        cfg = {**config.load_config(), "browser_channel": "chromium", "allow_unprotected_signins": True}
+        started = []
+
+        # The window as the sign-in starts it. On Windows a real one, closed as you would (a forced end there loses
+        # what Chromium hasn't written yet); elsewhere without a screen (headless), ended as a system shutting down
+        # would (SIGTERM), which Chromium also closes properly for.
+        headless = [] if os.name == "nt" else ["--headless=new"]
+
+        log = Path(tempfile.mkdtemp()) / "chromium.log"   # Chromium's own account, for when this fails
+
+        def popen(args, **kw):
+            kw.update(stderr=open(log, "ab"))
+            proc = subprocess.Popen(args[:-1] + headless + ["--enable-logging=stderr", "--v=0", args[-1]], **kw)
+            started.append(proc)
+            return proc
+        with sync_playwright() as p, mock.patch.object(browser, "profile_dir", lambda cfg, store: profile), \
+                mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None):
+            window = browser.SignInWindow(p, cfg, "gumroad", [f"http://127.0.0.1:{server.server_port}/"], popen=popen)
+        try:
+            if not served.wait(60):
+                said = log.read_text("utf-8", "replace")[-3000:] if log.exists() else "(no log)"
+                self.fail(f"the sign-in page was never asked for. Started: {[p.args for p in started]}; still running: "
+                          f"{[p.poll() is None for p in started]}; profile: {sorted(x.name for x in profile.iterdir())[:30]}; "
+                          f"Chromium said:\n{said}")
+            time.sleep(3)
+            if os.name != "nt":
+                # Headless, SIGTERM may not wait for Chromium's next write (about 30 s after a change): wait for it.
+                # (Linux and macOS can read the database while it's open.)
+                deadline = time.monotonic() + 60
+                while time.monotonic() < deadline and not self.saved(profile, "session"):
+                    time.sleep(2)
+            self.assertTrue(window.is_open())
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/T", "/PID", str(started[0].pid)], capture_output=True)   # close the window
+                try:
+                    started[0].wait(30)
+                except subprocess.TimeoutExpired:
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(started[0].pid)], capture_output=True)
+            else:
+                started[0].send_signal(signal.SIGTERM)
+            started[0].wait(30)
+            for _ in range(50):
+                if not window.is_open():
+                    break
+                time.sleep(0.2)
+            self.assertFalse(window.is_open(), "closed: Hoard stops waiting")
+            window.wait_released()   # as the sign-in does, before Hoard reads the profile
+            try:
+                on_disk = [r[0] for r in browser._cookie_rows(profile, "SELECT name FROM cookies")]
+            except browser.CookiesInUse as e:
+                on_disk = f"still locked: {e}"
+        finally:
+            window.close()
+            for proc in started:
+                if proc.poll() is None:
+                    proc.kill()
+        with sync_playwright() as p:
+            ctx = browser._launch(p, cfg, profile, headless=True)
+            try:
+                got = {c["name"]: c["value"] for c in ctx.cookies()}
+            finally:
+                ctx.close()
+        self.assertEqual(got.get("session"), "signed-in",
+                         f"cookies in the database after the window closed: {on_disk}; Hoard's window read: {sorted(got)}")

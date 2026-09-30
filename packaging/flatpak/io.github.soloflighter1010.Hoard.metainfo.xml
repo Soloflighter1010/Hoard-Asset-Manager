@@ -51,6 +51,11 @@
     <internet>always</internet>
   </requires>
   <releases>
+    <release version="2.11.0" date="2026-10-02">
+      <description>
+        <p>Sign in to stores with Google, Discord or X: the sign-in window is now your browser's own.</p>
+      </description>
+    </release>
     <release version="2.10.0" date="2026-10-01">
       <description>
         <p>Hoard is now available as a Flatpak for Linux, and as an installer for macOS.</p>

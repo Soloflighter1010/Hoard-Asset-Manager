@@ -25,6 +25,12 @@ Hoard only shows and reads the stores you use. Switch stores on or off in [Setti
 You sign in to each store once, in a browser window that belongs to Hoard alone, never your everyday browser.
 The Library and Downloads share those sign-ins.
 
+**Sign in with Google, Discord or X works.** From 2.11, the sign-in window is the browser's own, not one Hoard
+controls, so Google and the others accept it (they refuse browsers a program is driving). Sign in however you
+normally do on that store, then close the window (on a Mac, quit the browser with Command-Q); Hoard then reads
+the store. If that window ever gives you trouble, `"automated_sign_in": true` in `config.json` brings back the
+window Hoard drives, as before 2.11 (without Google sign-in).
+
 - **Hoard never sees your password.** You type it into the store's own page. Hoard only keeps the "stay
   signed in" pass the store hands out, the same thing your browser keeps. For help finding your saved
   passwords, see [Getting started](Getting-Started#signing-in-without-your-saved-passwords).

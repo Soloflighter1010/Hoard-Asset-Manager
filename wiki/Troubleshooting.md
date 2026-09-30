@@ -33,8 +33,9 @@ file first, see [Installing Hoard](Installing-Hoard#checking-a-download).
 
 ### Signing in with Google, Discord or X doesn't work
 
-Some stores' sign-in buttons refuse browsers they don't know. Set a password for your store account in your usual
-browser, then sign in with that in Hoard's window. See
+From 2.11 they work: the sign-in window is the browser's own, which Google and the others accept. If one still
+refuses (or you set `"automated_sign_in": true` in `config.json`), set a password for your store account in your
+usual browser, then sign in with that in Hoard's window. See
 [Getting started](Getting-Started#signing-in-without-your-saved-passwords) for finding saved passwords.
 
 ### "Not signed in to Booth", or "session expired"

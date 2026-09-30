@@ -7,6 +7,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -1106,7 +1107,7 @@ class SetupAssistant(unittest.TestCase):
                                               ({"chrome", "msedge"}, "msedge", "msedge", "Microsoft Edge"),
                                               ({"msedge"}, "chrome", "chromium", "Hoard's own browser")):
             with self.subTest(choice=choice, installed=sorted(installed)):
-                job = jobs.Jobs({**config.load_config(), "browser_channel": choice}, lib)
+                job = jobs.Jobs({**config.load_config(), "browser_channel": choice, "automated_sign_in": True}, lib)
                 said, out = [], io.StringIO()
                 with mock.patch("hoard.browser.channel_installed", lambda channel: channel in installed), \
                         mock.patch.object(jobs, "reachable", lambda store: True), \
@@ -1122,6 +1123,163 @@ class SetupAssistant(unittest.TestCase):
                 self.assertIn(f"in the {name} window", " ".join(said))
                 self.assertIn(f"Signing in to Gumroad with {name}", out.getvalue())
                 self.assertEqual("isn't installed" in out.getvalue(), used != choice)
+
+    def plain_sign_in(self, store="gumroad", cfg_extra=None, after_exit_in_use=0, link=None):
+        """Sign in with the browser's own window (issue #21), against a stand-in for starting programs. Returns what
+        was started, the messages, and whether the store was refreshed."""
+        import contextlib
+        import io
+        import types
+        from unittest import mock
+        from hoard import browser
+        tmp = Path(tempfile.mkdtemp())
+        program = tmp / "chromium"
+        program.write_text("")
+        cfg = {**config.load_config(), "browser_channel": "chromium", "allow_unprotected_signins": True,
+               **(cfg_extra or {})}
+        started, said, refreshed = [], [], []
+        state = {"polls": 0, "in_use": after_exit_in_use}
+
+        class Proc:
+            def poll(self):
+                state["polls"] += 1
+                if state["polls"] == 2 and link:
+                    job.pending_link = link   # pasted while the window is open
+                return None if state["polls"] < 4 else 0
+
+        def popen(args, **kw):
+            started.append(args)
+            return Proc()
+
+        def in_use(profile):
+            if state["in_use"] > 0:
+                state["in_use"] -= 1
+                return True
+            return False
+
+        p = types.SimpleNamespace(chromium=types.SimpleNamespace(executable_path=str(program)))
+        lib = library.Library(tmp / "library.json")
+        job = jobs.Jobs(cfg, lib)
+        with mock.patch.object(jobs, "reachable", lambda store: True), \
+                mock.patch.object(jobs, "_playwright", lambda: (lambda: contextlib.nullcontext(p))), \
+                mock.patch.object(jobs, "SignInWindow", lambda *a, **k: browser.SignInWindow(*a, popen=popen, **k)), \
+                mock.patch.object(browser, "_profile_in_use", in_use), \
+                mock.patch.object(browser, "profile_dir", lambda cfg, store: tmp / "sign-ins" / store), \
+                mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None), \
+                mock.patch.object(jobs, "check_saved_signin", lambda cfg, store: None), \
+                mock.patch.object(jobs.time, "sleep", lambda s: None), \
+                mock.patch.object(job, "_refresh", lambda stores: refreshed.append(stores)), \
+                mock.patch.object(job, "_set", lambda **kw: said.append(kw.get("message", ""))), \
+                contextlib.redirect_stdout(io.StringIO()):
+            job._login_then_refresh([store])
+        return started, said, refreshed, tmp / "sign-ins" / store, str(program)
+
+    def test_signing_in_in_the_browsers_own_window(self):
+        """Issue #21: Google, Discord and X refuse to sign in from a browser another program drives. So a sign-in
+        opens the browser as itself, on the store's own profile (so its sign-in is saved where Hoard reads it, with
+        the same protection), and nothing else: no automation, no remote control."""
+        from hoard.browser import ProfileLock
+        started, said, refreshed, profile, program = self.plain_sign_in()
+        first = started[0]
+        self.assertEqual(first[0], program, "the chosen browser's own program")
+        self.assertIn(f"--user-data-dir={profile}", first, "the store's own profile")
+        self.assertIn(library.STORES["gumroad"]["login"], first, "at the store's sign-in page")
+        for flag in first:
+            self.assertFalse(re.search(r"automation|remote-debugging|headless|webdriver", flag), flag)
+        if sys.platform.startswith("linux"):   # (Windows and macOS always use their own keyring)
+            self.assertIn("--password-store=basic", first, "the same protection Hoard's own window uses (here, as chosen)")
+        self.assertTrue(any("Sign in to Gumroad in the" in m for m in said))
+        self.assertEqual(refreshed, [["gumroad"]], "then the store is read, as before")
+        lock = ProfileLock(profile)
+        lock.acquire()   # (raises ProfileBusy if the sign-in was never let go)
+        lock.release()
+
+    def test_waiting_while_the_browser_still_has_the_profile(self):
+        """The program Hoard started can end while the window stays open: another window already had the profile and
+        took over, or (on a Mac) the window closed but the browser didn't quit. Hoard waits for the profile itself."""
+        started, said, refreshed, profile, program = self.plain_sign_in(after_exit_in_use=3)
+        self.assertEqual(refreshed, [["gumroad"]])
+
+    def test_a_link_from_an_email_opens_in_the_sign_in_window(self):
+        link = "https://app.gumroad.com/confirm?token=x"
+        started, said, refreshed, profile, program = self.plain_sign_in(link=link)
+        self.assertEqual(len(started), 2)
+        self.assertEqual(started[1][-1], link)
+        self.assertIn(f"--user-data-dir={profile}", started[1], "the same profile, so the open window takes it")
+        self.assertTrue(any("Opened the link from your email" in m for m in said))
+
+    def test_payhip_opens_every_shop(self):
+        shops = ["https://shop-one.store", "https://payhip.com/ShopTwo"]
+        started, said, refreshed, profile, program = self.plain_sign_in(
+            "payhip", {"payhip": {**config.load_config()["payhip"], "shops": shops}})
+        self.assertEqual(started[0][-2:], [s + "/b-account" for s in shops])
+        self.assertTrue(any("one tab per shop" in m for m in said))
+
+    def test_without_chromiums_own_sandbox_only_where_it_cant_start(self):
+        """Hoard's window always runs without Chromium's own sandbox (Playwright's default). A plain window keeps it,
+        except on Linux where it can't start: in the Flatpak, as root, or for Playwright's Chromium on a system that
+        stops programs without an AppArmor profile using it (Ubuntu 23.10 and later)."""
+        from unittest import mock
+        from hoard import browser
+        restricted = {"on": False}
+        real_read = Path.read_text
+
+        def read_text(self, *a, **k):
+            if self.as_posix() == "/proc/sys/kernel/apparmor_restrict_unprivileged_userns":   # (on Windows too)
+                return "1\n" if restricted["on"] else "0\n"
+            return real_read(self, *a, **k)
+        with mock.patch.object(browser.sys, "platform", "linux"), mock.patch.object(Path, "read_text", read_text), \
+                mock.patch("hoard.paths.in_flatpak", lambda: False), mock.patch.object(browser.os, "geteuid", lambda: 1000, create=True):
+            self.assertFalse(browser._without_sandbox("chromium"))
+            restricted["on"] = True
+            self.assertTrue(browser._without_sandbox("chromium"))
+            self.assertFalse(browser._without_sandbox("chrome"), "an installed browser brings its own profile")
+            with mock.patch.object(browser.os, "geteuid", lambda: 0, create=True):
+                self.assertTrue(browser._without_sandbox("chrome"), "as root")
+            with mock.patch("hoard.paths.in_flatpak", lambda: True):
+                self.assertTrue(browser._without_sandbox("chrome"), "in the Flatpak")
+        for other in ("win32", "darwin"):
+            with mock.patch.object(browser.sys, "platform", other):
+                self.assertFalse(browser._without_sandbox("chromium"), other)
+
+    def test_on_windows_the_sandbox_may_read_hoards_browser(self):
+        """Chromium's own log on Windows: "Sandbox cannot access executable" (Playwright's Chromium, downloaded into
+        AppData, doesn't let the sandbox's groups read it), and its network service died: nothing loaded. A plain
+        window of Hoard's own browser first lets them read its folder, as an installer does; if that fails, it
+        starts without the sandbox rather than not work."""
+        from unittest import mock
+        from hoard import browser
+        ran = []
+
+        def icacls(ok):
+            def run(args, **kw):
+                ran.append(args)
+                return mock.Mock(returncode=0 if ok else 5)
+            return run
+        program = str(Path(tempfile.mkdtemp()) / "chrome-win64" / "chrome.exe")
+        with mock.patch.object(browser.os, "name", "nt"), mock.patch.object(browser.subprocess, "run", icacls(True)):
+            self.assertTrue(browser._let_sandbox_read(program))
+        self.assertEqual([a[0] for a in ran], ["icacls", "icacls"])
+        self.assertEqual({a[1] for a in ran}, {os.path.dirname(program)}, "the browser's own folder, nothing else")
+        self.assertEqual(sorted(a[3] for a in ran), ["*S-1-15-2-1:(OI)(CI)(RX)", "*S-1-15-2-2:(OI)(CI)(RX)"],
+                         "read and run only, for the sandbox's two groups")
+        with mock.patch.object(browser.os, "name", "nt"), mock.patch.object(browser.subprocess, "run", icacls(False)):
+            self.assertFalse(browser._let_sandbox_read(program))
+        with mock.patch.object(browser.os, "name", "posix"):
+            self.assertTrue(browser._let_sandbox_read(program), "nothing to do elsewhere")
+
+    def test_a_profile_in_use(self):
+        """How Hoard tells the browser still has a profile open: Chromium's own lock in it."""
+        import os as _os
+        from hoard import browser
+        d = Path(tempfile.mkdtemp())
+        self.assertFalse(browser._profile_in_use(d))
+        if _os.name == "nt":
+            (d / "lockfile").write_text("")
+            self.assertFalse(browser._profile_in_use(d), "left behind by a browser that has ended")
+        else:
+            _os.symlink("host-1234", d / "SingletonLock")
+            self.assertTrue(browser._profile_in_use(d))
 
     def test_a_chosen_browser_thats_missing(self):
         """Settings named Edge or Chrome, which isn't installed: setup offers Hoard's own browser, and once it's

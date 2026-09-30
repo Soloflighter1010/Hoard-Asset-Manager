@@ -43,8 +43,9 @@ Other ways in:
 
 - **Forgot the password?** Use the store's own "Forgot password" link in Hoard's window. The new password
   works everywhere.
-- **Signed up with Google, Discord or X?** Try the same button in Hoard's window. If it says the browser isn't
-  supported, set a password for your store account in your usual browser, then sign in here with that.
+- **Signed up with Google, Discord or X?** Use the same button in Hoard's window: it's the browser's own window,
+  which they accept (from 2.11). If one still says the browser isn't supported, set a password for your store
+  account in your usual browser, then sign in here with that.
 - **Passkeys** on Windows Hello or your phone work in Hoard's window too.
 - **A sign-in or confirmation link by email?** Paste it into the assistant's box instead of clicking it, and
   Hoard opens it in its own window, where it belongs.
