@@ -144,9 +144,101 @@ jobs:
           $files = @(Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip, dist\SHA256SUMS-windows.txt | ForEach-Object FullName)
           gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
 
+  # The Mac app, as an installer package for each kind of Mac, built natively on each: Hoard.app, installed in
+  # /Applications. Built from requirements-mac.txt (every file hash-checked). Not signed (see the wiki).
+  macos:
+    needs: release
+    strategy:
+      matrix:
+        runner: [macos-15, macos-15-intel]   # Apple Silicon, Intel
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write        # add the package to the release
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked dependencies (every file hash-checked)
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-mac.txt
+      - name: Build Hoard.app
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
+      - name: Check the build has everything it needs
+        run: dist/Hoard.app/Contents/MacOS/hoard-cli self-test
+      - name: Build the installer package
+        run: scripts/build_macos_pkg.sh
+      - name: Sign build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/Hoard-*-macos-*.pkg
+      - name: Add it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/Hoard-*-macos-*.pkg dist/SHA256SUMS-macos-*.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+  # The Linux Flatpak (packaging/flatpak), as a bundle: flatpak install Hoard-<version>-linux-x86_64.flatpak.
+  # Its build checks Hoard's window support and runs its self-test inside the sandbox.
+  flatpak:
+    needs: release
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48@sha256:50fea670968fd3ec4aeeb3a91d9d807d0af6eab3c3b44c33d4c40c311832c8fa
+      options: --privileged
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
+        with:
+          manifest-path: packaging/flatpak/io.github.soloflighter1010.Hoard.yml
+          bundle: Hoard.flatpak
+          artifact-name: flatpak
+          cache: false
+
+  # The build's container has no gh, so the bundle is added to the release from here.
+  flatpak-release:
+    needs: flatpak
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # add the bundle to the release
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: flatpak
+          path: dist
+      - name: Name it by its version, and checksum it
+        run: |
+          cd dist
+          for f in *.flatpak; do [ "$f" = "Hoard-${TAG#v}-linux-x86_64.flatpak" ] || mv "$f" "Hoard-${TAG#v}-linux-x86_64.flatpak"; done
+          sha256sum Hoard-*-linux-x86_64.flatpak > SHA256SUMS-linux.txt
+      - name: Sign build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/Hoard-*-linux-x86_64.flatpak
+      - name: Add it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/Hoard-*-linux-x86_64.flatpak dist/SHA256SUMS-linux.txt --repo "$GITHUB_REPOSITORY" --clobber
+
   # Last: publishing makes the release immutable, so it waits until every file is attached.
   publish:
-    needs: [release, windows]
+    needs: [release, windows, macos, flatpak-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write        # publish the draft

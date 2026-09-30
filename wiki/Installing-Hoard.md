@@ -1,4 +1,4 @@
-Hoard is a Windows app. It also runs from source on Windows, macOS and Linux.
+Hoard is an app for Windows, macOS and Linux (a Flatpak). It also runs from source on all three.
 
 ## Windows
 
@@ -14,7 +14,8 @@ Hoard is a Windows app. It also runs from source on Windows, macOS and Linux.
 3. Open **Hoard** from the Start menu. It opens in its own window, and a short setup assistant walks you
    through the rest: see [Getting started](Getting-Started).
 
-Closing the window quits Hoard. A download in progress stops, and carries on from where it was next time.
+Closing the window quits Hoard. While it's downloading, it asks first: stop and close, keep going in the
+background, or close at once (a download stopped part way carries on from where it was next time).
 
 **Prefer no installer?** `Hoard-<version>-windows.zip` is the same app. Extract it anywhere of your own (a
 folder in your user folder is best) and run `Hoard.exe`.
@@ -34,8 +35,8 @@ update in the middle of a refresh or download: wait for it, or **Stop** it.
 starts; a newer version then shows as **Update to** at the bottom of the page. A check sends GitHub nothing but
 the request itself: see [Security and privacy](Security-and-Privacy).
 
-Hoard installs updates itself only when it was installed with `Hoard-Setup`. The portable zip, and Hoard run
-with Python, say there's a newer version and link to it. You can always run the newer setup yourself too.
+Hoard installs updates itself only when it was installed with `Hoard-Setup`. The portable zip, the Mac app, the
+Flatpak and Hoard run with Python say there's a newer version, which file to get, and link to it. You can always run the newer setup yourself too.
 There's no need to uninstall first, and an update replaces the program files completely, so nothing from the
 old version lingers.
 
@@ -56,9 +57,70 @@ built. With the [GitHub CLI](https://cli.github.com/):
 gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager
 ```
 
-Each release also lists checksums: `SHA256SUMS-windows.txt` for the installer and the Windows zip, and
-`SHA256SUMS.txt` for the source zip. In PowerShell, `Get-FileHash .\Hoard-Setup-<version>.exe` prints the one
-to compare.
+The same works for every file on a release (`Hoard-<version>-macos-apple-silicon.pkg`,
+`Hoard-<version>-linux-x86_64.flatpak`, and so on).
+
+Each release also lists checksums: `SHA256SUMS-windows.txt` for the installer and the Windows zip,
+`SHA256SUMS-macos-apple-silicon.txt` and `SHA256SUMS-macos-intel.txt` for the Mac packages,
+`SHA256SUMS-linux.txt` for the Flatpak, and `SHA256SUMS.txt` for the source zip. In PowerShell,
+`Get-FileHash .\Hoard-Setup-<version>.exe` prints the one to compare; on a Mac, `shasum -a 256 <file>`; on
+Linux, `sha256sum <file>`.
+
+## macOS
+
+Hoard runs on macOS 11 (Big Sur) or newer.
+
+1. Download the package for your Mac from the
+   [latest release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest):
+   **`Hoard-<version>-macos-apple-silicon.pkg`** for a Mac with an M-series chip, or
+   **`Hoard-<version>-macos-intel.pkg`** for an Intel Mac. (Apple menu › **About This Mac** says which: "Chip Apple
+   M…" or "Processor … Intel".)
+2. Open it. Hoard isn't signed by Apple yet (that costs money every year), so macOS says it **can't be opened**
+   or **can't check it for malicious software**. Choose **Done** (not Move to Trash), then open **System
+   Settings › Privacy & Security**, scroll down to the message about the Hoard package and choose **Open
+   Anyway**. To be sure the file is genuine first, see [Checking a download](#checking-a-download).
+3. The installer puts **Hoard** in **Applications** (it asks for your Mac's password, as any app installed for
+   every account does). Open it from Applications or Launchpad. It opens in its own window, and a short setup
+   assistant walks you through the rest: see [Getting started](Getting-Started).
+
+The first time Hoard's browser signs in to a store, macOS asks whether it may use the Keychain. Choose
+**Always Allow**. Hoard's browser (Chromium, about 150 MB) is downloaded once, into
+`~/Library/Caches/ms-playwright`.
+
+**Updating:** when **Settings › Updates** says there's a newer version, download that version's package and open
+it, as above; it replaces the old Hoard. **Uninstalling:** drag **Hoard** from Applications to the Trash. Your
+settings, library, sign-ins and tags are in `~/Library/Application Support/Hoard`, and stay unless you delete them
+(see [Where Hoard keeps things](Where-Hoard-Keeps-Things#deleting-everything)).
+
+## Linux (Flatpak)
+
+Hoard for Linux is a [Flatpak](https://flatpak.org/), for x86_64 (Intel and AMD) computers. Most desktop Linux
+systems have Flatpak already; if yours doesn't, see [flatpak.org/setup](https://flatpak.org/setup/).
+
+1. Download **`Hoard-<version>-linux-x86_64.flatpak`** from the
+   [latest release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest).
+2. Open it with your software centre (GNOME Software, KDE Discover), or install it from a terminal:
+
+   ```
+   flatpak install --user Hoard-<version>-linux-x86_64.flatpak
+   ```
+
+   Hoard runs on the GNOME runtime, which Flatpak gets from [Flathub](https://flathub.org/). If it says it
+   can't find `org.gnome.Platform`, add Flathub once and try again:
+   `flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo`
+3. Open **Hoard** from your applications menu (or `flatpak run io.github.soloflighter1010.Hoard`). It opens in
+   its own window, and a short setup assistant walks you through the rest: see [Getting started](Getting-Started).
+
+The Flatpak may use the network, show its window, your keyring (for your sign-ins: GNOME Keyring, KeePassXC with
+its Secret Service turned on, or KWallet) and your home folder and removable drives (for your downloads folder),
+and nothing else. It keeps its settings, library, sign-ins and tags in `~/.local/share/Hoard`, like every Linux
+Hoard, so a library from Hoard run from source carries over and Hoard for Unity finds it. Hoard's browser
+(Chromium, about 150 MB) is downloaded once, into `~/.var/app/io.github.soloflighter1010.Hoard/cache`.
+
+**Updating:** when **Settings › Updates** says there's a newer version, download that version's `.flatpak` and
+install it as above; it replaces the old one. **Uninstalling:** `flatpak uninstall io.github.soloflighter1010.Hoard`
+(or your software centre). That leaves your settings and library; see
+[Where Hoard keeps things](Where-Hoard-Keeps-Things#deleting-everything) to remove those too.
 
 ## From source (Windows, macOS, Linux)
 

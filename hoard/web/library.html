@@ -1999,7 +1999,7 @@ function describeUpdate(u) {
   if (u.error) return u.error;
   if (u.busy) return u.message || "Getting the update";
   if (u.available) return `Hoard ${u.latest.version} is available (you have ${u.current}).` +
-    (u.can_install ? "" : " Download it from the releases page, and install it over this one.");
+    (u.can_install ? "" : " " + (u.how || "Download it from the releases page, and install it over this one."));
   if (u.checked) return `Hoard ${u.current} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
   return `You have Hoard ${u.current}.`;
 }

@@ -294,9 +294,7 @@ class DesktopApp(_Harness):
         """Opening Hoard while it runs only brings it to the front: that doesn't leave a log behind each time."""
         sys.modules["webview"] = fake_webview()
         from hoard import paths
-        saved = app.has_console
-        app.has_console = lambda: False
-        self.addCleanup(setattr, app, "has_console", saved)
+        app.has_console = lambda: False   # (tearDown puts the real one back)
         lock = app.InstanceLock(app.data_dir() / "running.lock")
         self.assertTrue(lock.acquire())
         self.addCleanup(lock.release)

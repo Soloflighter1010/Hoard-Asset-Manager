@@ -1,7 +1,8 @@
 name: Check
 
 # On every push and pull request, on Linux and on Windows: install the locked dependencies (checking every
-# hash), run the tests (Windows runs its own file-safety code paths), and build the zip. Actions are pinned
+# hash), run the tests (Windows runs its own file-safety code paths), and build the zip; and build the Windows
+# app, the Mac app and the Linux Flatpak as a release would. Actions (and the Flatpak build's container) are pinned
 # to exact commits; the version is in the comment.
 
 on:
@@ -59,3 +60,40 @@ jobs:
           python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
       - name: Check the build has everything it needs
         run: dist\Hoard\hoard-cli.exe self-test
+
+  # The Mac app (Apple Silicon), built and packaged as a release would build it, and checked with its self-test.
+  app-macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked dependencies (every file hash-checked)
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-mac.txt
+      - name: Build Hoard.app
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
+      - name: Check the build has everything it needs
+        run: dist/Hoard.app/Contents/MacOS/hoard-cli self-test
+      - name: Build the installer package
+        run: scripts/build_macos_pkg.sh
+
+  # The Linux Flatpak, built as a release would build it. Its build checks Hoard's window support and runs its
+  # self-test inside the sandbox.
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48@sha256:50fea670968fd3ec4aeeb3a91d9d807d0af6eab3c3b44c33d4c40c311832c8fa
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
+        with:
+          manifest-path: packaging/flatpak/io.github.soloflighter1010.Hoard.yml
+          bundle: Hoard.flatpak
+          upload-artifact: false
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/**', 'requirements-flatpak.txt') }}

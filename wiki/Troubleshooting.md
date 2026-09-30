@@ -56,7 +56,7 @@ Service turned on, or KWallet. Install and unlock one, then sign in again. See [
 
 Open **Settings**, choose **Set up Hoard again**, and choose **Install Hoard's browser** (about 150 MB, once). If
 the message names a browser you chose in **Settings**, choose another there instead. On Linux, if the browser
-still won't start: `.venv/bin/python -m playwright install-deps chromium` in Hoard's folder.
+still won't start: `.venv/bin/python -m playwright install-deps chromium` in Hoard's folder (from source).
 
 ## Stores
 

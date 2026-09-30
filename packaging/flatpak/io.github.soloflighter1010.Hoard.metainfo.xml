@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What software centres (GNOME Software, KDE Discover, Flathub) show about Hoard. -->
+<component type="desktop-application">
+  <id>io.github.soloflighter1010.Hoard</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Hoard</name>
+  <summary>Your VRChat assets from every store, in one library</summary>
+  <developer id="io.github.soloflighter1010">
+    <name>SoloFlighter</name>
+  </developer>
+  <description>
+    <p>
+      Hoard lists everything you've bought for VRChat on Booth, Gumroad, Jinxxy, Payhip and itch.io in one
+      library, and keeps local copies of your files up to date when creators update them.
+    </p>
+    <ul>
+      <li>Search and filter your whole library, by store, creator, tag or file type</li>
+      <li>Download everything new with one sync, or just what you choose</li>
+      <li>See when creators update what you've downloaded</li>
+      <li>Tag your assets, and hide or archive the ones you don't want to see</li>
+    </ul>
+    <p>
+      Hoard runs only on your computer. You sign in to each store on its own page, in a browser that belongs to
+      Hoard alone, and your sign-ins are encrypted with your keyring. Hoard never sees your passwords.
+    </p>
+    <p>Not affiliated with VRChat or any of the stores.</p>
+  </description>
+  <launchable type="desktop-id">io.github.soloflighter1010.Hoard.desktop</launchable>
+  <url type="homepage">https://github.com/Soloflighter1010/Hoard-Asset-Manager</url>
+  <url type="bugtracker">https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues</url>
+  <url type="help">https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki</url>
+  <url type="vcs-browser">https://github.com/Soloflighter1010/Hoard-Asset-Manager</url>
+  <categories>
+    <category>Utility</category>
+    <category>Graphics</category>
+  </categories>
+  <keywords>
+    <keyword>VRChat</keyword>
+    <keyword>avatar</keyword>
+    <keyword>Booth</keyword>
+    <keyword>Gumroad</keyword>
+    <keyword>Jinxxy</keyword>
+  </keywords>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <internet>always</internet>
+  </requires>
+  <releases>
+    <release version="2.10.0" date="2026-10-01">
+      <description>
+        <p>Hoard is now available as a Flatpak for Linux, and as an installer for macOS.</p>
+      </description>
+    </release>
+  </releases>
+</component>
