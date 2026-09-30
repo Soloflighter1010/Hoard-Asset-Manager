@@ -1186,7 +1186,8 @@ class SetupAssistant(unittest.TestCase):
         self.assertIn(library.STORES["gumroad"]["login"], first, "at the store's sign-in page")
         for flag in first:
             self.assertFalse(re.search(r"automation|remote-debugging|headless|webdriver", flag), flag)
-        self.assertIn("--password-store=basic", first, "the same protection Hoard's own window uses (here, as chosen)")
+        if sys.platform.startswith("linux"):   # (Windows and macOS always use their own keyring)
+            self.assertIn("--password-store=basic", first, "the same protection Hoard's own window uses (here, as chosen)")
         self.assertTrue(any("Sign in to Gumroad in the" in m for m in said))
         self.assertEqual(refreshed, [["gumroad"]], "then the store is read, as before")
         lock = ProfileLock(profile)
@@ -1213,6 +1214,33 @@ class SetupAssistant(unittest.TestCase):
             "payhip", {"payhip": {**config.load_config()["payhip"], "shops": shops}})
         self.assertEqual(started[0][-2:], [s + "/b-account" for s in shops])
         self.assertTrue(any("one tab per shop" in m for m in said))
+
+    def test_without_chromiums_own_sandbox_only_where_it_cant_start(self):
+        """Hoard's window always runs without Chromium's own sandbox (Playwright's default). A plain window keeps it,
+        except on Linux where it can't start: in the Flatpak, as root, or for Playwright's Chromium on a system that
+        stops programs without an AppArmor profile using it (Ubuntu 23.10 and later)."""
+        from unittest import mock
+        from hoard import browser
+        restricted = {"on": False}
+        real_read = Path.read_text
+
+        def read_text(self, *a, **k):
+            if str(self) == "/proc/sys/kernel/apparmor_restrict_unprivileged_userns":
+                return "1\n" if restricted["on"] else "0\n"
+            return real_read(self, *a, **k)
+        with mock.patch.object(browser.sys, "platform", "linux"), mock.patch.object(Path, "read_text", read_text), \
+                mock.patch("hoard.paths.in_flatpak", lambda: False), mock.patch.object(browser.os, "geteuid", lambda: 1000, create=True):
+            self.assertFalse(browser._without_sandbox("chromium"))
+            restricted["on"] = True
+            self.assertTrue(browser._without_sandbox("chromium"))
+            self.assertFalse(browser._without_sandbox("chrome"), "an installed browser brings its own profile")
+            with mock.patch.object(browser.os, "geteuid", lambda: 0, create=True):
+                self.assertTrue(browser._without_sandbox("chrome"), "as root")
+            with mock.patch("hoard.paths.in_flatpak", lambda: True):
+                self.assertTrue(browser._without_sandbox("chrome"), "in the Flatpak")
+        for other in ("win32", "darwin"):
+            with mock.patch.object(browser.sys, "platform", other):
+                self.assertFalse(browser._without_sandbox("chromium"), other)
 
     def test_a_profile_in_use(self):
         """How Hoard tells the browser still has a profile open: Chromium's own lock in it."""

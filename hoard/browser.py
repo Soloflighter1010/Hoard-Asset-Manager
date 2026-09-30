@@ -612,6 +612,24 @@ def _profile_in_use(profile: Path) -> bool:
         return True
 
 
+def _without_sandbox(channel: str) -> bool:
+    """Must a plain window start without Chromium's own sandbox, as Hoard's window always does (Playwright's
+    default)? Only on Linux, where it can't start: inside the Flatpak's sandbox, as root, or, for Playwright's
+    Chromium, where the system stops programs without their own AppArmor profile from using what the sandbox needs
+    (Ubuntu 23.10 and later; installed Chrome and Edge bring a profile, so they keep theirs)."""
+    if not sys.platform.startswith("linux"):
+        return False
+    from .paths import in_flatpak
+    if in_flatpak() or os.geteuid() == 0:
+        return True
+    if channel == "chromium":
+        try:
+            return Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip() == "1"
+        except OSError:
+            return False
+    return False
+
+
 class SignInWindow:
     """A store's sign-in, in the browser's own window (not driven by Hoard). Holds the store's profile lock until
     it's closed."""
@@ -626,12 +644,8 @@ class SignInWindow:
             _lock_down(self.profile)
             self.base = [browser_program(p, cfg), f"--user-data-dir={self.profile}", "--no-first-run",
                          "--no-default-browser-check", *_key_args(cfg)]
-            if sys.platform.startswith("linux"):
-                from .paths import in_flatpak
-                # Chromium's own sandbox can't start inside the Flatpak's, and Chromium refuses to run as root with
-                # it. (Hoard's own window always runs without it: Playwright's default.)
-                if in_flatpak() or os.geteuid() == 0:
-                    self.base.append("--no-sandbox")
+            if _without_sandbox(use_channel(cfg)):
+                self.base.append("--no-sandbox")
             self.proc = popen(self.base + list(urls), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL, close_fds=True)
         except BaseException:
