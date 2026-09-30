@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+A credits list for your project, and animated pictures.
+
+- **Credits** (issue #51). The **Credits** button in the window's toolbar lists the creators of the Hoard assets
+  this project uses, ready to paste where you share your avatar or world: as a list with store links, as
+  Markdown, or grouped by creator. An asset counts when its files are in the project, or when it was imported
+  through Hoard and hasn't been removed since. Untick any you don't want credited, and add assets that didn't
+  come through Hoard by hand. **Copy** puts the list on the clipboard; **Save as...** writes a text file (in the
+  project's own folder by default, never part of an upload). What you change is kept in
+  `ProjectSettings/Hoard/credits.json`, so it travels with the project.
+- **Animated pictures show, and play.** Hoard saves a store's animated picture as `_thumbnail.gif`, which the
+  window didn't look for, and Unity can't read GIFs itself. The window now decodes GIFs (every frame, at the size
+  it shows them, checked against how a browser shows them) and plays them in the list and the details.
+- **A picture for more products.** When a product's saved picture is a kind Unity can't show (WebP or AVIF), the
+  window uses one of the product's own images instead: one named like a preview, else any, as Hoard's own pages
+  do.
+- Pictures are kept within a memory budget as well as a count, so a library of long animations can't fill the
+  editor's memory.
+
 ## 0.2.0
 
 Fast with large libraries, and no more "made on another computer" for your own catalog.

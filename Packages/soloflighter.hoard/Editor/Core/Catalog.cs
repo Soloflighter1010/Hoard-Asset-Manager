@@ -164,12 +164,37 @@ namespace SoloFlighter.Hoard
             return Inside(a.Folder + "/" + file, false);
         }
 
-        /// <summary>The asset's picture (_thumbnail.png or .jpg: the kinds Unity can show), or null.</summary>
+        /// <summary>Pictures the window can show: PNG and JPEG (Unity's own), and GIF, animated ones included
+        /// (GifDecoder). Not WebP or AVIF, which Hoard can save as a store's picture.</summary>
+        public static readonly string[] PictureTypes = { ".png", ".jpg", ".jpeg", ".gif" };
+        static readonly Regex PreviewHint = new Regex("preview|thumb|cover|icon|promo|banner", RegexOptions.IgnoreCase);
+
+        public static bool IsPicture(string file)
+        {
+            foreach (string ext in PictureTypes) if (file.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>The asset's picture, as Hoard's own pages choose it: the _thumbnail Hoard saved, else one of its
+        /// files that looks like a preview, else any picture among them. Only kinds the window can show; null when
+        /// there's none.</summary>
         public string Thumbnail(HoardAsset a)
         {
-            foreach (string ext in new[] { ".png", ".jpg", ".jpeg" })
+            foreach (string ext in PictureTypes)
             {
                 string p = Inside(a.Folder + "/_thumbnail" + ext, false);
+                if (p != null) return p;
+            }
+            var pictures = a.Files.FindAll(IsPicture);
+            foreach (string f in pictures)
+                if (PreviewHint.IsMatch(Path.GetFileNameWithoutExtension(f)))
+                {
+                    string p = FilePath(a, f);
+                    if (p != null) return p;
+                }
+            foreach (string f in pictures)
+            {
+                string p = FilePath(a, f);
                 if (p != null) return p;
             }
             return null;

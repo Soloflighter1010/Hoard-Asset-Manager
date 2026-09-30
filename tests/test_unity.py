@@ -163,6 +163,7 @@ class UnityCore(unittest.TestCase):
     def test_core_against_hoards_own_material(self):
         d = Path(tempfile.mkdtemp(prefix="hoard-unity-"))
         build_material(d)
+        shutil.copytree(REPO / "tests" / "unity" / "gifs", d / "gifs")   # GIFs and what Chromium shows for them
         # the release's .unitypackage, built by the release script, for the reader to read back
         built = subprocess.run([sys.executable, str(REPO / "scripts" / "build_vpm.py")], capture_output=True, text=True, timeout=120)
         self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
