@@ -99,6 +99,9 @@ Payhip has no single library: your purchases live in each shop you bought from, 
   each shop. Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
   appears, complete it there and Hoard carries on. It waits up to 3 minutes.
 
+If you sell on Payhip too, your own shop's library page lists everything you've bought on Payhip, from every shop,
+without saying who made each product. Hoard shows those as **Unknown creator** rather than crediting them to you.
+
 A shop on payhip.com lists your purchases from every shop, so one is often enough. Shops on their own domains
 that turn up in your library are offered in **Stores**: choose **Review** to add the ones that are yours.
 

@@ -441,6 +441,16 @@ PAYHIP_SHOP_JS = r"""
   const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
   const shopName = text(document.querySelector('a.logo-link, .logo-link'))
     || (document.title.includes(' - ') ? document.title.split(' - ').slice(1).join(' - ').trim() : '');
+  // A Payhip creator's own purchases, from every shop, are listed on their own shop's library page (its menu's
+  // Creator/Customer switch leads there), with nothing on the cards saying who made each one. Those aren't this
+  // shop's products, so they're left without a creator rather than credited to you (issue #25).
+  const ownShops = new Set([...document.querySelectorAll('.account-type-switcher-wrapper a[href], a.account-type-switcher-link')]
+    .filter(a => pathOf(a) === '/b-account').map(a => new URL(a.href).hostname));
+  // A card from another shop (its link is in that shop) is credited to that shop, not to the one whose page it is.
+  const logo = document.querySelector('a.logo-link[href]');
+  const pageShop = logo ? logo.href.split(/[?#]/)[0].split('/b-account')[0] : '';
+  const shopLabel = base => { const u = new URL(base); return u.hostname.replace(/^www\./, '') === 'payhip.com'
+    ? decodeURIComponent(u.pathname.split('/').filter(Boolean)[0] || u.hostname) : u.hostname; };
   const cards = new Map();
   for (const a of document.querySelectorAll('a[href]')) {
     if (!isProduct(a) || a.closest(LANDMARKS)) continue;
@@ -455,15 +465,16 @@ PAYHIP_SHOP_JS = r"""
     }
     const heading = c.querySelector('.product-name, h1, h2, h3, h4, h5');
     const img = c.querySelector('img');
-    const url = a.href.split(/[?#]/)[0], host = new URL(url).hostname;
+    const url = a.href.split(/[?#]/)[0], host = new URL(url).hostname, mine = ownShops.has(host);
+    const base = url.split('/b-account')[0], elsewhere = pageShop && base !== pageShop;
     cards.set(key, { id: host + ':' + key.split('/').pop(), name: text(heading) || text(a) || (img && img.alt) || '',
-                     creator: shopName || host, creator_url: url.split('/b-account')[0],
+                     creator: mine ? '' : elsewhere ? shopLabel(base) : shopName || host, creator_url: mine ? '' : base,
                      thumbnail: img ? (img.currentSrc || img.src || '') : '',
                      url, download_url: url, bought: text(c.querySelector('.card-meta')) });
   }
   const next = [...document.querySelectorAll('a[rel="next"], .pagination a, a.next')]
     .find(x => /next|›|»/i.test(text(x) + ' ' + (x.getAttribute('rel') || '')));
-  return { cards: [...cards.values()], next: next ? next.href : null, shop: shopName };
+  return { cards: [...cards.values()], next: next ? next.href : null, shop: shopName, own: ownShops.size > 0 };
 }
 """
 
@@ -480,7 +491,8 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
         result = page.evaluate(PAYHIP_SHOP_JS)
         for c in result["cards"]:
             cards.setdefault(c["id"], c)
-        progress(f"{result['shop']}: {len(cards)} products")
+        progress(f"{result['shop']}: {len(cards)} products" + (" (your own shop: it lists what you bought everywhere "
+                 "on Payhip without saying who made it, so those show as Unknown creator)" if result.get("own") else ""))
         if not result["next"] or result["next"] == url:
             break
         url = result["next"]

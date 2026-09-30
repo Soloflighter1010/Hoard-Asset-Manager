@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.11.1
+
+- **Fixed: Payhip products bought from other creators were credited to you** (issue #25). If you sell on Payhip
+  too, your own shop's library page lists everything you've bought on Payhip, from every shop, and doesn't say
+  who made each one. Hoard credited them all to the shop whose page it was: yours. Now they show as Unknown
+  creator. And a product another shop's library page lists from a different shop is now credited to the shop it's
+  from (its link says which), not to the shop whose page it was.
+
 ## 2.11.0
 
 Sign in with Google, Discord or X.
