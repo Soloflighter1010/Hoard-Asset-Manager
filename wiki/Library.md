@@ -4,10 +4,15 @@ The **Library** shows everything you own on the stores you use, whether or not y
 ## Finding things
 
 - **Search** matches names, creators, stores, variants and tags.
-- **The store bar** above the grid narrows it to one store, with a count for each.
-- **Filters** on the left: your tags, suggested tags and creators (**Find a creator** to search a long list).
-  Filters combine; **Clear filters** starts again.
-- **Sort** by name, creator or store.
+- **The store tabs** above the grid narrow it to one store, with a count for each. The tab you're looking at is
+  raised, in its store's colour.
+- **Filters** on the left: your tags, suggested tags, **Show** (**Downloaded**, **Not downloaded yet** and
+  **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
+  again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
+  both stay as you left them.
+- **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs.
+- **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
+  library** in Settings). What was already there when Hoard first read a store isn't new.
 
 Your search, filters and sort are kept in the page's address, so going back returns you to the same view.
 

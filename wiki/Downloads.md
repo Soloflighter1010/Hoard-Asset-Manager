@@ -14,7 +14,21 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 - **Download a copy** in an item's details (in the Library) downloads just that product.
 
 Progress shows as Hoard works. At the end, a summary lists what's new, what was updated, what was skipped and
-anything that couldn't be downloaded, with the reason.
+anything that couldn't be downloaded, with the reason. A file that fails to download is tried again first (twice,
+after a short wait; **Failed downloads** in [Settings](Settings)), unless the store says it isn't there or isn't
+yours.
+
+### One thing at a time, in turn
+
+Hoard does one job at a time, but you don't have to wait for it: start a sync, a download, a refresh or a sign-in
+while something is running, and it's **queued**, and starts when its turn comes. The same job isn't queued twice.
+
+**Tasks** (next to Library and Downloads) shows what's running, with its progress, what's waiting, and what
+finished, newest first, each with how it went, how long it took, any problems and its full progress. Take a
+waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync after the file
+it's on. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
+kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
+left out of it.
 
 **Stop** pauses safely after the file it's on. Anything half-downloaded resumes where it stopped next time,
 and everything that finished is recorded. Closing Hoard's window stops a download the same way.

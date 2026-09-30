@@ -2150,3 +2150,100 @@ class AutomaticSync(unittest.TestCase):
                 server.apply_settings(cfg, {"display": {"text_size": bad}})
         shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
         self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")
+
+
+class TasksAPI(unittest.TestCase):
+    """The Tasks window's server side: GET /api/tasks, taking jobs off the queue, and hidden products' names kept
+    out of job logs while the hidden library is locked."""
+
+    def setUp(self):
+        from unittest import mock
+        self.srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        self.srv.jobs.history = []   # only this test's
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+        self.gate = threading.Event()
+        self.addCleanup(self.gate.set)
+
+        def fake(stores, only, keys=None, check=False):
+            self.srv.jobs._set(message=f"[Booth] Kitsu Studio / {only}", log=[f"    saved: {only}.zip"])
+            self.gate.wait(10)
+        patch = mock.patch.object(self.srv.jobs, "_download", fake)
+        patch.start()
+        self.addCleanup(patch.stop)
+        where = Path(tempfile.mkdtemp()) / "tasks.json"
+        saving = mock.patch.object(jobs, "tasks_file", lambda: where)
+        saving.start()
+        self.addCleanup(saving.stop)
+
+    def call(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: self.srv.key})
+        r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+        return r.status, data
+
+    def test_queue_and_tasks(self):
+        self.assertEqual(self.call("POST", "/api/download", {"stores": ["booth"], "only": "Rusk"}), (202, {"ok": True, "queued": False}))
+        status, answer = self.call("POST", "/api/download", {"stores": ["gumroad"], "only": "Mochi"})
+        self.assertEqual((status, answer), (202, {"ok": True, "queued": True}))
+        self.assertEqual(self.call("POST", "/api/download", {"stores": ["gumroad"], "only": "Mochi"})[0], 409, "already waiting")
+        status, tasks = self.call("GET", "/api/tasks")
+        self.assertEqual(tasks["current"]["label"], 'Download: Booth ("Rusk")')
+        self.assertEqual([q["label"] for q in tasks["queue"]], ['Download: Gumroad ("Mochi")'])
+        self.assertEqual(self.call("POST", "/api/queue/remove", {"id": tasks["queue"][0]["id"]}), (200, {"ok": True}))
+        self.gate.set()
+        for _ in range(100):
+            if not self.srv.jobs.state["running"]:
+                break
+            time.sleep(0.05)
+        history = self.call("GET", "/api/tasks")[1]["history"]
+        self.assertEqual([h["label"] for h in history], ['Download: Booth ("Rusk")'])
+        self.assertEqual(self.call("POST", "/api/tasks/clear", {}), (200, {"ok": True}))
+        self.assertEqual(self.call("GET", "/api/tasks")[1]["history"], [])
+
+    def test_hidden_names_stay_out_of_job_logs(self):
+        from hoard import marks, tags
+        store = marks.MarkStore(Path(tempfile.mkdtemp()) / "marks.json")
+        store.set_pin("4821")
+        from unittest import mock
+        patch = mock.patch.object(server, "MarkStore", lambda: store)
+        patch.start()
+        self.addCleanup(patch.stop)
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] = [library.item("booth", "1", name="Secret Suit", creator="Kitsu Studio")]
+        store.change("hidden", {tags.tag_key("booth", "Secret Suit")}, True)
+        self.srv.jobs.start("download", ["booth"], only="Secret Suit")
+        for _ in range(100):
+            if "Secret Suit" in (self.srv.jobs.state.get("message") or ""):
+                break
+            time.sleep(0.02)
+        job = self.call("GET", "/api/status")[1]["job"]
+        self.assertNotIn("Secret Suit", json.dumps(job))
+        self.assertIn("a hidden item", job["message"])
+        current = self.call("GET", "/api/tasks")[1]["current"]
+        self.assertNotIn("Secret Suit", json.dumps(current["log"]) + current["message"])
+
+
+class PageLayout(unittest.TestCase):
+    """How you left the pages (windows' places, the sidebar, tile sizes) is kept in config.json: the pages' own
+    storage goes with the server's address, which is new each time Hoard starts."""
+
+    def test_only_what_makes_sense_is_kept(self):
+        cfg = config.load_config()
+        change = server.apply_settings(cfg, {"ui": {
+            "windows": {"tagPanel": {"x": 120, "y": 80.5, "w": 500, "h": True, "z": 9}, "evil": {"x": 1},
+                        "stores": {"x": 99999}},
+            "sections": {"creators": False, "your-tags": True, "x" * 60: False, "suggested": "no"},
+            "side_folded": True, "tile_size": 200, "dl_tile_size": 9000, "other": 1}})
+        self.assertEqual(change["ui"], {"windows": {"tagPanel": {"x": 120, "y": 80.5, "w": 500}, "stores": {}},
+                                        "sections": {"creators": False, "your-tags": True},
+                                        "side_folded": True, "tile_size": 200})
+        config.deep_merge(cfg, change)
+        config.deep_merge(cfg, server.apply_settings(cfg, {"ui": {"windows": {"stores": {"x": 10, "y": 20}}}}))
+        shown = server.ui_settings(cfg)
+        self.assertEqual(shown["windows"], {"tagPanel": {"x": 120, "y": 80.5, "w": 500}, "stores": {"x": 10, "y": 20}},
+                         "one window's move doesn't forget the others")
+        self.assertEqual(server.ui_settings({"ui": "junk"}), {"windows": {}, "sections": {}})
+        self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")

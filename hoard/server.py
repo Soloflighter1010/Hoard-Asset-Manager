@@ -23,7 +23,7 @@ from . import __version__, diagnostics, itch, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import catalog_seal, collect_catalog, reseal_catalog
+from .downloader import catalog_seal, collect_catalog, download_retries, reseal_catalog
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
 from .net import is_network_error
@@ -88,7 +88,7 @@ def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
     library is locked, hidden products' names are taken out of its messages and log."""
     out = {k: v for k, v in (job or {}).items() if k != "diagnostic"}
     if hidden_names:
-        for k in ("message", "error"):
+        for k in ("message", "error", "job_label", "label"):
             if isinstance(out.get(k), str):
                 out[k] = mask_names(out[k], hidden_names)
         if isinstance(out.get("log"), list):
@@ -107,6 +107,29 @@ def mask_names(text: str, names: list[str]) -> str:
     return text
 
 
+UI_WINDOWS = ("tagPanel", "stores", "settingsPanel", "tasksWin")
+
+
+def ui_settings(cfg: dict) -> dict:
+    """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
+    is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size."""
+    ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
+    out: dict = {"windows": {}, "sections": {}}
+    for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
+        if wid in UI_WINDOWS and isinstance(place, dict):
+            out["windows"][wid] = {k: v for k, v in place.items() if k in ("x", "y", "w", "h")
+                                   and isinstance(v, (int, float)) and not isinstance(v, bool) and -20000 <= v <= 20000}
+    for name, open_ in list((ui.get("sections") or {}).items())[:30] if isinstance(ui.get("sections"), dict) else ():
+        if isinstance(name, str) and len(name) <= 40 and isinstance(open_, bool):
+            out["sections"][name] = open_
+    if isinstance(ui.get("side_folded"), bool):
+        out["side_folded"] = ui["side_folded"]
+    for k in ("tile_size", "dl_tile_size"):   # the Library's and the Downloads page's
+        if isinstance(ui.get(k), int) and not isinstance(ui.get(k), bool) and 100 <= ui[k] <= 400:
+            out[k] = ui[k]
+    return out
+
+
 def public_settings(cfg: dict) -> dict:
     """The settings the page can show and change, with the downloads folder spelled out."""
     return {
@@ -116,6 +139,7 @@ def public_settings(cfg: dict) -> dict:
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
+        "download_retries": download_retries(cfg),
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
@@ -153,10 +177,17 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
             raise ValueError("Choose how often to sync from the list.")
         change["auto_sync_hours"] = body["auto_sync_hours"]
+    if "download_retries" in body:
+        if body["download_retries"] not in (0, 1, 2, 3) or isinstance(body["download_retries"], bool):
+            raise ValueError("Choose how many times to try a failed download again from the list.")
+        change["download_retries"] = body["download_retries"]
     if "new_days" in body:
         if body["new_days"] not in NEW_DAYS or isinstance(body["new_days"], bool):
             raise ValueError("Choose how long things are marked New from the list.")
         change["new_days"] = body["new_days"]
+    if "ui" in body:   # checked the same way as it's read back (ui_settings), and only what's valid is kept
+        change["ui"] = ui_settings({"ui": body["ui"]})
+        change["ui"] = {k: v for k, v in change["ui"].items() if v != {}}
     if "display" in body:
         given = body["display"] if isinstance(body["display"], dict) else {}
         display = {}
@@ -441,12 +472,14 @@ class Handler(BaseHTTPRequestHandler):
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None,
-                               "display": display_settings(srv.cfg)}, compress=True)
+                               "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
             tasks, hidden = srv.jobs.tasks(), self._hidden_names()
             if hidden:
-                for job in ([tasks["current"]] if tasks["current"] else []) + tasks["history"]:
-                    job.update(public_job({k: job.get(k) for k in ("message", "log", "report") if k in job}, hidden))
+                def mask(job):
+                    return {**job, **public_job({k: job.get(k) for k in ("message", "log", "report", "label") if k in job}, hidden)}
+                tasks = {"current": mask(tasks["current"]) if tasks["current"] else None,
+                         "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
         if path == "/api/status":
             return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1]})
@@ -467,7 +500,8 @@ class Handler(BaseHTTPRequestHandler):
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"]}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg)}, compress=True)
+                               "can_quit": srv.quit_app is not None, "display": display_settings(srv.cfg),
+                               "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/update":

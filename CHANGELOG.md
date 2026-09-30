@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### A new look, and jobs that wait their turn
+
+- **A new look.** Deeper colour instead of flat brown: soft gradients behind everything, a glassy bar at the
+  top, pictures' stand-ins in two tones, and gold where it matters. The store tabs are folder tabs: the one
+  you're looking at is raised, in its store's colour, over the sheet the library sits on. Sort, tile size and
+  what's running moved up beside the tabs, so the top of the window isn't empty space. Light mode has the same
+  look in light colours.
+- **Tags, Stores and Settings are windows** that float over the page: move one by its title bar, resize it from
+  its corner, keep several open side by side. A click elsewhere no longer closes them; **×** or Escape does
+  (the one in front). Each opens where you left it.
+- **Settings save as you change them.** No more **Save**: a box or a list is saved straight away, a folder or the
+  Payhip shops when you leave the field. While a job runs, only where files go, the browser, the stores and the
+  Payhip shops wait for it to finish; everything else changes at once.
+- **The sidebar folds.** **Hide filters** folds it to a thin strip, and each section (your tags, suggestions,
+  Show, creators) folds by its heading. Both are remembered.
+- **Tasks** (next to Library and Downloads) shows what's running with its progress, what's waiting, and what
+  finished, with how it went, how long it took, any problems and its full progress (the last 60, kept between
+  runs).
+- **Jobs wait their turn (#49).** Start a sync, download, refresh or sign-in while something is running, and it's
+  queued instead of refused ("Hoard is busy"); it starts when its turn comes. Take one off the queue in Tasks.
+- **Failed downloads are tried again (#19),** twice unless you choose otherwise in Settings (**Failed downloads**),
+  after a short wait, before they count as failed. A store saying the file isn't there, or isn't yours, isn't
+  tried again.
+- **New, and Recently added (#18).** Something that appears in your library after a refresh has a **New** badge for
+  a week (**New in your library** in Settings: a day to a month, or never), and **New** under **Show** filters to
+  them. **Recently added** sorts the newest first. What was already there when Hoard first read a store isn't new.
+- While your hidden library is locked, hidden products' names are left out of job progress and the Tasks list.
+
 - **Check for updates to what you've downloaded.** In Downloads, **Check for updates** (under **Updates**) reads
   your stores without downloading anything, and lists each download whose store has newer files: files the
   creator added or changed since you downloaded it. **Update all**, or **Update** one from its details (which also

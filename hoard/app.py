@@ -307,7 +307,7 @@ def open_window(srv) -> None:
     except Exception:
         pass
     keeper = PlaceKeeper(window_place(_screens(webview)))
-    window = webview.create_window("Hoard", srv.entry_url(), min_size=MIN_SIZE, background_color="#221c17",
+    window = webview.create_window("Hoard", srv.entry_url(), min_size=MIN_SIZE, background_color="#15121c",
                                    text_select=True, **keeper.place)
     keeper.watch(window)
 
