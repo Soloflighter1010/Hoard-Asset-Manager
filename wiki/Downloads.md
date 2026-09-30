@@ -35,7 +35,9 @@ left out of it.
 downloads (Jinxxy, and Booth when it does) starts again. Everything that finished is recorded. Closing Hoard's
 window stops a download the same way.
 
-While a file downloads, how much has come in so far shows in what's running. A download that stops coming in
+While a file downloads, the download panel and Tasks show a progress bar with how much has come in, how fast,
+and how long is left (for a file coming through the browser, how much and how fast: the browser doesn't say how
+big it is). A download that stops coming in
 (the store stops sending it but doesn't hang up) is given up on after 2 minutes with nothing new, and tried again
 like any other failed download, so it can't hold up the job, or the jobs waiting after it.
 

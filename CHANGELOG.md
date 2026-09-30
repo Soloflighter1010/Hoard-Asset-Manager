@@ -31,8 +31,11 @@
   up, used to wait for ever when it came through the browser (Jinxxy, and Booth when it turns direct downloads
   away): the download never finished, its item stayed busy, and every job after it waited, with **Stop** unable to
   reach it. Now a download with nothing new for 2 minutes is given up on and tried again, whichever way it comes.
-- **Stop works part way through a file,** within a few seconds, and what's running shows how much of the file has
-  come in so far.
+- **Stop works part way through a file,** within a few seconds.
+- **Download progress, speed and time left.** While a file downloads, the download panel and Tasks show it with a
+  progress bar, how much has come in of how much, how fast it's coming (smoothed over the last few seconds) and
+  how long is left. A file coming through the browser (Jinxxy, and Booth when it turns direct downloads away)
+  shows how much and how fast; the browser doesn't say how big it is, so there's no time left for those.
 
 - **Check for updates to what you've downloaded.** In Downloads, **Check for updates** (under **Updates**) reads
   your stores without downloading anything, and lists each download whose store has newer files: files the

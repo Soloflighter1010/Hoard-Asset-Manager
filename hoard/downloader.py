@@ -179,9 +179,47 @@ def amount(n: int) -> str:
         n /= 1024
 
 
-def downloading(fname: str):
-    """A progress callback for egress.download: how much of fname has come in, shown while it downloads."""
-    return lambda got, whole: tick(f"    downloading {fname}: {amount(got)}" + (f" of {amount(whole)}" if whole else ""))
+def duration(s: float) -> str:
+    """Seconds, as people read a time left."""
+    s = max(0, round(s))
+    if s < 60:
+        return f"{s} s"
+    if s < 3600:
+        return f"{round(s / 60)} min"
+    return f"{s // 3600} h {round(s % 3600 / 60)} min"
+
+
+class Transfer:
+    """How a file download is going, told to the app each time it's called with (bytes so far, whole size or None):
+    how much has come in, how fast (smoothed over the last few seconds, so it doesn't jump about) and how long is
+    left."""
+
+    def __init__(self, fname: str, clock=time.monotonic):
+        self.fname, self.clock = fname, clock
+        self.last: tuple[float, int] | None = None   # when it was last told, and how much had come in then
+        self.speed: float | None = None
+
+    def __call__(self, got: int, whole: int | None = None) -> None:
+        now = self.clock()
+        if self.last is not None and now > self.last[0]:
+            rate = max(0, got - self.last[1]) / (now - self.last[0])
+            self.speed = rate if self.speed is None else 0.3 * rate + 0.7 * self.speed
+        self.last = (now, got)
+        eta = (whole - got) / self.speed if whole and self.speed and whole > got else None
+        text = f"    downloading {self.fname}: {amount(got)}"
+        text += f" of {amount(whole)} ({min(100, got * 100 // whole)}%)" if whole else " so far"
+        if self.speed is not None:
+            text += f", {amount(int(self.speed))}/s"
+        if eta is not None:
+            text += f", {duration(eta)} left"
+        tick(text, {"file": self.fname, "got": got, "total": whole or None,
+                    "speed": None if self.speed is None else round(self.speed),
+                    "eta": None if eta is None else round(eta)})
+
+
+def downloading(fname: str) -> Transfer:
+    """A progress callback for egress.download: how fname's download is going, shown while it downloads."""
+    return Transfer(fname)
 
 
 def browser_download_file(dl) -> Path | None:
@@ -216,6 +254,7 @@ def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> N
     part = where.with_name(where.name + ".crdownload")
     size, seen, ended = -1, False, False
     began = moved = said = time.monotonic()
+    report = Transfer(fname)
     try:
         while True:
             done, growing = _file_size(where), _file_size(part)
@@ -234,7 +273,7 @@ def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> N
                 raise RuntimeError(f"the download stalled: nothing more came in for {stall_s:.0f} s")
             if now - said >= egress.PROGRESS_EVERY:
                 said = now
-                tick(f"    downloading {fname}: {amount(max(size, 0))} so far")   # Stop is noticed here
+                report(max(size, 0))   # Stop is noticed here
             _pause(dl, 0.5)
     finally:
         if not ended:   # stalled, or stopped

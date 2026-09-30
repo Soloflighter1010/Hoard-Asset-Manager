@@ -93,6 +93,8 @@ def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
                 out[k] = mask_names(out[k], hidden_names)
         if isinstance(out.get("log"), list):
             out["log"] = [mask_names(str(x), hidden_names) for x in out["log"]]
+        if isinstance(out.get("transfer"), dict):
+            out["transfer"] = {**out["transfer"], "file": mask_names(str(out["transfer"].get("file") or ""), hidden_names)}
         if isinstance(out.get("report"), dict):
             out["report"] = {k: [mask_names(str(x), hidden_names) for x in v] if isinstance(v, list) else v
                              for k, v in out["report"].items()}
@@ -477,7 +479,7 @@ class Handler(BaseHTTPRequestHandler):
             tasks, hidden = srv.jobs.tasks(), self._hidden_names()
             if hidden:
                 def mask(job):
-                    return {**job, **public_job({k: job.get(k) for k in ("message", "log", "report", "label") if k in job}, hidden)}
+                    return {**job, **public_job({k: job.get(k) for k in ("message", "log", "report", "label", "transfer") if k in job}, hidden)}
                 tasks = {"current": mask(tasks["current"]) if tasks["current"] else None,
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)

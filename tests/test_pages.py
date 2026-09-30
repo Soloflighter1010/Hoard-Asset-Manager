@@ -896,6 +896,42 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page.get_by_text("Nothing is running.").wait_for(timeout=15000)
             page.close()
 
+    def test_a_file_downloading_shows_its_progress_speed_and_time_left(self):
+        from unittest import mock
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        mb = 1024 * 1024
+
+        def fake(stores, only, keys=None, check=False):
+            self.srv.jobs._set(task="download", message="    downloading Rusk.unitypackage: 20.0 MB of 80.0 MB (25%)",
+                               transfer={"file": "Rusk.unitypackage", "got": 20 * mb, "total": 80 * mb,
+                                         "speed": 2 * mb, "eta": 30})
+            gate.wait(20)
+        with mock.patch.object(self.srv.jobs, "_download", fake):
+            self.srv.jobs.start("download", ["booth"], only="Rusk")
+            page = self.open()
+            bar = page.locator("#dlXfer .xfer-bar")
+            bar.wait_for(timeout=10000)
+            self.assertEqual(bar.get_attribute("aria-valuenow"), "25")
+            self.assertEqual(page.locator("#dlXfer .xfer-file").inner_text(), "Rusk.unitypackage")
+            self.assertEqual(page.locator("#dlXfer .xfer-stats").inner_text().split(),
+                             "25% 20.0 MB of 80.0 MB · 2.0 MB/s · 30 s left".split())
+            self.assertTrue(page.locator("#dlMessage").is_hidden(), "the bar says it all")
+            self.srv.jobs.state["transfer"] = {"file": "Rusk.unitypackage", "got": 60 * mb, "total": 80 * mb,
+                                               "speed": 4 * mb, "eta": 5}
+            page.wait_for_function("() => document.querySelector('#dlXfer .xfer-bar').getAttribute('aria-valuenow') === '75'")
+            page.locator("#dlXfer .xfer-stats", has_text="5 s left").wait_for()
+            page.click("#tasksTab")
+            page.locator("#tasksBody .xfer .xfer-stats", has_text="4.0 MB/s").wait_for()
+            # a browser download: no size known, so the bar just says it's going
+            self.srv.jobs.state["transfer"] = {"file": "Anko.zip", "got": 3 * mb, "total": None, "speed": mb, "eta": None}
+            page.locator("#dlXfer .xfer-bar.unknown").wait_for()
+            page.locator("#dlXfer .xfer-stats", has_text="3.0 MB so far · 1.0 MB/s").wait_for()
+            gate.set()
+            page.locator("#dlXfer").wait_for(state="hidden", timeout=15000)
+            self.assertEqual(self.errors, [])
+            page.close()
+
     def test_a_job_started_while_another_runs_waits(self):
         from unittest import mock
         gate = threading.Event()

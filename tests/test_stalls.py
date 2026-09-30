@@ -124,8 +124,27 @@ class DirectDownloads(unittest.TestCase):
         said = []
         with common.capture_log(said.append):
             downloader.downloading("Rusk.unitypackage")(3 * 1024 * 1024, 10 * 1024 * 1024)
-        self.assertEqual(said, ["    downloading Rusk.unitypackage: 3.0 MB of 10.0 MB"])
+        self.assertEqual(said, ["    downloading Rusk.unitypackage: 3.0 MB of 10.0 MB (30%)"])
         self.assertIsInstance(said[0], common.Progress)
+        self.assertEqual(said[0].transfer, {"file": "Rusk.unitypackage", "got": 3 * 1024 * 1024,
+                                            "total": 10 * 1024 * 1024, "speed": None, "eta": None})
+
+    def test_speed_and_time_left(self):
+        now = [100.0]
+        said = []
+        report = downloader.Transfer("Big.zip", clock=lambda: now[0])
+        mb = 1024 * 1024
+        with common.capture_log(said.append):
+            report(0, 100 * mb)
+            now[0] += 1
+            report(4 * mb, 100 * mb)    # 4 MB/s
+            now[0] += 1
+            report(6 * mb, 100 * mb)    # 2 MB/s just now: smoothed, not jumping straight there
+        self.assertEqual(said[1].transfer["speed"], 4 * mb)
+        self.assertEqual(said[1].transfer["eta"], 24)
+        self.assertEqual(said[2].transfer["speed"], round(0.3 * 2 * mb + 0.7 * 4 * mb))
+        self.assertEqual(str(said[2]), "    downloading Big.zip: 6.0 MB of 100.0 MB (6%), 3.4 MB/s, 28 s left")
+        self.assertEqual(downloader.duration(4000), "1 h 7 min")
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -236,6 +255,33 @@ class StoppingAJob(unittest.TestCase):
         kept = job.history[-1]["log"] + job.state["log"]
         self.assertIn("    downloading: Big.zip", kept)
         self.assertFalse([line for line in kept if "MB" in line], "progress isn't kept")
+        self.assertIsNone(job.state["transfer"], "and the bar goes when the job does")
+
+    def test_the_numbers_come_and_go_with_the_file(self):
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        seen = []
+
+        def one_file(cfg, root, args, report):
+            common.log("    downloading: Secret Thing.zip")
+            downloader.Transfer("Secret Thing.zip")(1000, 4000)
+            seen.append(dict(job.state["transfer"]))
+            seen.append(job.tasks()["current"]["transfer"])
+            common.log("    saved: Secret Thing.zip")
+            seen.append(job.state["transfer"])
+        done = threading.Event()
+        job.on_download_done = done.set
+        with mock.patch.object(downloader, "sync_booth", one_file), \
+                mock.patch.object(downloader, "reachable", lambda store, timeout=5.0: True), \
+                mock.patch.object(downloader, "build_catalog", lambda cfg, root: None), \
+                mock.patch.object(jobs, "tasks_file", lambda: Path(tempfile.mkdtemp()) / "tasks.json"):
+            job.start("download", ["booth"])
+            self.assertTrue(done.wait(10))
+        self.assertEqual(seen[0], {"file": "Secret Thing.zip", "got": 1000, "total": 4000, "speed": None, "eta": None})
+        self.assertEqual(seen[1], seen[0], "Tasks has it too")
+        self.assertIsNone(seen[2], "gone once the file is done")
+        from hoard import server
+        masked = server.public_job({"transfer": seen[0]}, ["Secret Thing"])
+        self.assertEqual(masked["transfer"]["file"], "a hidden item.zip", "a hidden product's name stays hidden")
 
 
 if __name__ == "__main__":

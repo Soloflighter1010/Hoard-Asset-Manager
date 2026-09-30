@@ -162,7 +162,7 @@ class Jobs:
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
                       "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None,
-                      "queue": [], "job_id": None}
+                      "queue": [], "job_id": None, "transfer": None}
         self._queue: list[dict] = []        # jobs waiting their turn, oldest first
         self._qlock = threading.Lock()      # the queue, and taking the runner from it
         self._current: dict | None = None
@@ -236,7 +236,7 @@ class Jobs:
                          "label": describe_job(task, stores, only, keys, scheduled), "started": now_iso()}
         self._trail = []
         self.stop.clear()
-        self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="",
+        self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="", transfer=None,
                           job_id=self._current["id"], job_label=self._current["label"])
         if task == "download":
             target = lambda s: self._download(s, only, keys)  # noqa: E731
@@ -272,7 +272,7 @@ class Jobs:
             self._set(message=why, error=why, diagnostic=diagnostic)
         finally:
             self._finish()
-            self._set(running=False, task=None, store=None, scheduled=False, job_id=None)
+            self._set(running=False, task=None, store=None, scheduled=False, job_id=None, transfer=None)
             self.busy.release()
             self.kick()
 
@@ -321,7 +321,7 @@ class Jobs:
         first."""
         current = None
         if self.state.get("running") and self._current:
-            current = {**self._current, "message": self.state.get("message") or "",
+            current = {**self._current, "message": self.state.get("message") or "", "transfer": self.state.get("transfer"),
                        "log": (self._trail + [x for x in (self.state.get("log") or []) if x not in self._trail])[-MAX_TRAIL:]}
         return {"current": current, "queue": list(self.state["queue"]), "history": list(reversed(self.history))}
 
@@ -404,11 +404,11 @@ class Jobs:
 
         def progress(msg):
             if isinstance(msg, Progress):   # how far a download has got: shown, not kept in the log or Tasks
-                self.state["message"] = str(msg)
+                self.state.update(message=str(msg), transfer=msg.transfer)
             else:
                 lines.extend(line.rstrip() for line in str(msg).splitlines() if line.strip())
                 del lines[:-300]
-                self._set(message=lines[-1] if lines else "", log=lines[-80:])
+                self._set(message=lines[-1] if lines else "", log=lines[-80:], transfer=None)
             if self.stop.is_set():
                 self.stop.clear()   # the catalog is still rebuilt on the way out
                 raise Cancelled()

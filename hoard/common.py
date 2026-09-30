@@ -35,16 +35,21 @@ def log(msg: str) -> None:
 
 
 class Progress(str):
-    """A passing note of how far something has got (a download's size so far): shown while it's current, not kept."""
+    """A passing note of how far something has got (a download's size so far): shown while it's current, not kept.
+    transfer, when it's a file download, is its numbers for the app: file, got, total, speed (bytes a second), eta
+    (seconds left)."""
+    transfer: dict | None = None
 
 
-def tick(msg: str) -> None:
+def tick(msg: str, transfer: dict | None = None) -> None:
     """Say how far something has got, for the app to show while it's current. Unlike log, it isn't printed or kept,
-    so it can be said every few seconds; and a job's sink checks for Stop on every tick, as it does on every log."""
+    so it can be said every second; and a job's sink checks for Stop on every tick, as it does on every log."""
+    note = Progress(msg)
+    note.transfer = transfer
     with _sink_lock:
         sinks = list(_sinks)
     for sink in sinks:
-        sink(Progress(msg))
+        sink(note)
 
 
 @contextlib.contextmanager

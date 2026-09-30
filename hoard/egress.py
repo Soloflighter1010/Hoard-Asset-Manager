@@ -159,7 +159,7 @@ def _length(r: requests.Response) -> int | None:
 
 
 STALL_SECONDS = 120    # a download that sends nothing for this long has stalled: it's stopped (and tried again)
-PROGRESS_EVERY = 5.0   # seconds between progress reports while downloading
+PROGRESS_EVERY = 1.0   # seconds between progress reports while downloading
 
 
 def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: str = "", progress=None) -> int:
@@ -173,7 +173,8 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
     the next sync resumes it. The file's own bytes are asked for (no compression), so every size is exact.
 
     A store that sends nothing for STALL_SECONDS is given up on (the .part file is kept). progress(bytes so far,
-    whole size or None) is called every PROGRESS_EVERY seconds while the file comes in; it may raise to stop."""
+    whole size or None) is called as the file starts coming in and every PROGRESS_EVERY seconds after; it may raise
+    to stop."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     anon = session(store_sess.headers.get("User-Agent", ""))
@@ -222,6 +223,8 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
             fh, identity = open_part(part, resume=resume)
             said = time.monotonic()
             with fh:
+                if progress:
+                    progress(written, expected)
                 for chunk in r.iter_content(1 << 18):   # a piece at a time, so progress (and Stop) come often
                     fh.write(chunk)
                     written += len(chunk)
