@@ -1641,7 +1641,7 @@ $("#detail").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = byKey.get(openKey);
   if (tagDetailAction(b.dataset.act, b, a)) return;
-  if (b.dataset.act === "download") { startDownload([a.store], a.name); return; }
+  if (b.dataset.act === "download") { startDownload([a.store], a.name, a.key); return; }
   if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "close") closeDetail();
@@ -2015,9 +2015,9 @@ async function installUpdate() {
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
 }
 
-async function startDownload(stores, only) {
+async function startDownload(stores, only, item) {   // item: the library item, so the download goes straight to it
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
-  const r = await apiPost("/api/download", { stores, only });
+  const r = await apiPost("/api/download", item ? { stores, only, item } : { stores, only });
   if (!r.ok) { toast(r.data.error || "Downloading didn't start."); return; }
   if (queuedToast(r)) return;
   dlActive = true;

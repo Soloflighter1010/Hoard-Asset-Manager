@@ -202,7 +202,7 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(store.path.unlink, missing_ok=True)
         started = []
 
-        def start(task, stores, skip_imported=False, only=None, scheduled=False, keys=None):
+        def start(task, stores, skip_imported=False, only=None, scheduled=False, keys=None, **_kw):
             started.append((task, stores, keys))
             return True
         with mock.patch.object(self.srv.jobs, "start", side_effect=start):
@@ -956,7 +956,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         gate = threading.Event()
         self.addCleanup(gate.set)
 
-        def fake(stores, only, keys=None, check=False):
+        def fake(stores, only, keys=None, check=False, **_kw):
             self.srv.jobs._set(message=f"working on {only}")
             gate.wait(20)
         with mock.patch.object(self.srv.jobs, "_download", fake):
@@ -984,7 +984,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.addCleanup(gate.set)
         mb = 1024 * 1024
 
-        def fake(stores, only, keys=None, check=False):
+        def fake(stores, only, keys=None, check=False, **_kw):
             self.srv.jobs._set(task="download", message="    downloading Rusk.unitypackage: 20.0 MB of 80.0 MB (25%)",
                                transfer={"file": "Rusk.unitypackage", "got": 20 * mb, "total": 80 * mb,
                                          "speed": 2 * mb, "eta": 30})

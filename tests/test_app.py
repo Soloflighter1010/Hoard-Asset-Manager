@@ -266,7 +266,7 @@ class JobQueue(unittest.TestCase):
         self.job.history = []
         self.ran, self.gates = [], {}
 
-        def fake(stores, only, keys=None, check=False):
+        def fake(stores, only, keys=None, check=False, **_kw):
             self.ran.append(only)
             self.job._set(message=f"working on {only}")
             gate = self.gates.get(only)
@@ -2181,7 +2181,7 @@ class TasksAPI(unittest.TestCase):
         self.gate = threading.Event()
         self.addCleanup(self.gate.set)
 
-        def fake(stores, only, keys=None, check=False):
+        def fake(stores, only, keys=None, check=False, **_kw):
             self.srv.jobs._set(message=f"[Booth] Kitsu Studio / {only}", log=[f"    saved: {only}.zip"])
             self.gate.wait(10)
         patch = mock.patch.object(self.srv.jobs, "_download", fake)

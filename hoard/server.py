@@ -806,8 +806,11 @@ class Handler(BaseHTTPRequestHandler):
         # products chosen on the Downloads page (to update, or to check), by their tag_key
         keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:5000]
                 if isinstance(k, str) and 0 < len(k) <= 400] or None
+        # the library item chosen in the Library, so the download can go straight to it
+        item = body.get("item") if isinstance(body.get("item"), str) and 0 < len(body.get("item")) <= 400 else None
         started = srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
-                                 skip_imported=bool(body.get("all")), only=only, keys=keys)
+                                 skip_imported=bool(body.get("all")), only=only, keys=keys,
+                                 items=[item] if item and task in ("download", "check-updates") else None)
         if not started:
             return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
         self._json({"ok": True, "queued": started == "queued"}, 202)
