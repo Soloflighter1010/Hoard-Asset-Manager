@@ -1,22 +1,45 @@
 name: Release
+
+# Builds the release zip and publishes it as a GitHub release.
+# Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
+# already exists (say an earlier build failed), or to release the branch you pick without making the tag
+# yourself, open Actions > Release > Run workflow and enter the tag with its "v" (v1.2.0, not 1.2.0). A tag
+# that doesn't exist yet is made on that branch's latest commit; the build refuses it unless it matches
+# the version in hoard/__init__.py.
+#
+# Releases here are immutable: once published, nothing can be added to them. So the release is made as a
+# draft, every job attaches its files to the draft, VirusTotal scans them, and the last job publishes it. A
+# failed build, or a file VirusTotal flags, leaves only a draft, which a re-run (or Run workflow) fills in and
+# publishes.
+#
+# Every action is pinned to an exact commit (the version tag is in the comment), so a changed or
+# compromised tag upstream can't alter what runs here. Update them deliberately.
+
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version tag to build, for example v1.2.0"
+        description: "Version tag to build a release for, for example v1.2.0"
         required: true
+      allow_detections:
+        description: "Publish even if VirusTotal flags a file (only after checking its report: a false positive)"
+        type: boolean
+        default: false
+
 permissions: {}
+
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
+
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write        # the tag (Run workflow), the release and its zips
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -29,22 +52,32 @@ jobs:
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
             echo "$TAG already exists; building it."
           else
-            version=$(gh api "repos/$GITHUB_REPOSITORY/contents/hoard/__init__.py?ref=$GITHUB_SHA" --jq .content | base64 -d | sed -n 's/^__version__ = "\(.*\)"/\1/p')
-            if [ "v$version" != "$TAG" ]; then echo "::error::$GITHUB_REF_NAME is version $version, so it can't be released as $TAG."; exit 1; fi
+            version=$(gh api "repos/$GITHUB_REPOSITORY/contents/hoard/__init__.py?ref=$GITHUB_SHA" --jq .content \
+              | base64 -d | sed -n 's/^__version__ = "\(.*\)"/\1/p')
+            if [ "v$version" != "$TAG" ]; then
+              echo "::error::$GITHUB_REF_NAME is version $version, so it can't be released as $TAG."; exit 1
+            fi
             gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
             echo "Made $TAG on $GITHUB_REF_NAME ($GITHUB_SHA)."
           fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
+
       - name: Build the zips
         run: python3 scripts/build_release.py --tag "$TAG"
+
+      # A signed record that these exact zips were built here, from this repository and tag.
+      # Anyone can check a download with:  gh attestation verify <zip> -R <owner>/<repo>
+      # (GitHub only offers this for public repositories on free plans.)
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*.zip
+
       - name: Make the release (a draft until every file is attached)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,15 +86,19 @@ jobs:
             gh release upload "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit "$TAG" --notes-file dist/RELEASE_NOTES.md --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "Hoard $TAG" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
+            gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" \
+              --title "Hoard $TAG" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
           fi
+
+  # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer and a portable zip,
+  # added to the same release. Built from requirements-app.txt (every file hash-checked).
   windows:
     needs: release
     runs-on: windows-latest
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write        # add the installer and zip to the release
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -72,15 +109,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Install locked dependencies
+
+      - name: Install the locked dependencies (every file hash-checked)
         run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-app.txt
+
       - name: Build Hoard.exe and hoard-cli.exe
         run: |
           python packaging/version_info.py
           python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
-      - name: Check the build
+
+      - name: Check the build has everything it needs
         run: dist\Hoard\hoard-cli.exe self-test
-      - name: Build installer
+
+      - name: Build the installer (Inno Setup, pinned version)
         shell: pwsh
         run: |
           $version = python -c "import hoard; print(hoard.__version__)"
@@ -91,6 +132,7 @@ jobs:
           Compress-Archive -Path dist\Hoard -DestinationPath "dist\Hoard-$version-windows.zip"
           Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS-windows.txt
+
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -98,23 +140,27 @@ jobs:
           subject-path: |
             dist/Hoard-Setup-*.exe
             dist/Hoard-*-windows.zip
-      - name: Add them to release
+
+      - name: Add them to the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $files = @(Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip, dist\SHA256SUMS-windows.txt | ForEach-Object FullName)
           gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
+
+  # The Mac app, as an installer package for each kind of Mac, built natively on each: Hoard.app, installed in
+  # /Applications. Built from requirements-mac.txt (every file hash-checked). Not signed (see the wiki).
   macos:
     needs: release
     strategy:
       matrix:
-        runner: [macos-15, macos-15-intel]
+        runner: [macos-15, macos-15-intel]   # Apple Silicon, Intel
     runs-on: ${{ matrix.runner }}
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write        # add the package to the release
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -125,23 +171,26 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Install locked dependencies
+      - name: Install the locked dependencies (every file hash-checked)
         run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-mac.txt
       - name: Build Hoard.app
         run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
-      - name: Check the build
+      - name: Check the build has everything it needs
         run: dist/Hoard.app/Contents/MacOS/hoard-cli self-test
-      - name: Build installer package
+      - name: Build the installer package
         run: scripts/build_macos_pkg.sh
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/Hoard-*-macos-*.pkg
-      - name: Add it to release
+      - name: Add it to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/Hoard-*-macos-*.pkg dist/SHA256SUMS-macos-*.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+  # The Linux Flatpak (packaging/flatpak), as a bundle: flatpak install Hoard-<version>-linux-x86_64.flatpak.
+  # Its build checks Hoard's window support and runs its self-test inside the sandbox.
   flatpak:
     needs: release
     runs-on: ubuntu-latest
@@ -161,13 +210,15 @@ jobs:
           bundle: Hoard.flatpak
           artifact-name: flatpak
           cache: false
+
+  # The build's container has no gh, so the bundle is added to the release from here.
   flatpak-release:
     needs: flatpak
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write        # add the bundle to the release
+      id-token: write        # sign the build provenance
+      attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -175,7 +226,7 @@ jobs:
         with:
           name: flatpak
           path: dist
-      - name: Name and checksum
+      - name: Name it by its version, and checksum it
         run: |
           cd dist
           for f in *.flatpak; do [ "$f" = "Hoard-${TAG#v}-linux-x86_64.flatpak" ] || mv "$f" "Hoard-${TAG#v}-linux-x86_64.flatpak"; done
@@ -185,50 +236,60 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/Hoard-*-linux-x86_64.flatpak
-      - name: Add it to release
+      - name: Add it to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/Hoard-*-linux-x86_64.flatpak dist/SHA256SUMS-linux.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+  # Every file people download is checked by VirusTotal (scripts/scan_release_virustotal.py) once all are
+  # attached, and the results are added to the release notes. If any engine flags one, this fails and the release
+  # stays a draft; Run workflow with "Publish even if VirusTotal flags a file" publishes it after a person has
+  # checked the report. Needs the VT_API_KEY repository secret (a free VirusTotal account's API key).
   virustotal:
     needs: [release, windows, macos, flatpak-release]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write        # read the draft's files, and add the results to its notes
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
-      VT_API_KEY: ${{ secrets.VT_API_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
-      - name: Check API key configured
-        run: test -n "$VT_API_KEY" || { echo '::error::Configure VT_API_KEY repository secret'; exit 1; }
-      - name: Download draft release artifacts
+
+      - name: Get the draft's files
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dist
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
-      - name: Scan distributable binaries
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
+
+      - name: Scan them with VirusTotal
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}   # only this step sees the key
+          VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}
         run: python3 scripts/scan_release_virustotal.py
-      - name: Add report links to draft release notes
+
+      - name: Add the results to the release notes
+        if: ${{ always() && hashFiles('dist/VT_REPORT.md') != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > dist/NOTES_WITH_SCAN.md
-          sed -i '/^## VirusTotal scan results$/,$d' dist/NOTES_WITH_SCAN.md
-          cat dist/VT_REPORT.md >> dist/NOTES_WITH_SCAN.md
-          gh release edit "$TAG" --notes-file dist/NOTES_WITH_SCAN.md --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > dist/NOTES.md
+          python3 scripts/scan_release_virustotal.py --notes dist/NOTES.md dist/VT_REPORT.md   # a re-run's results replace the last
+          gh release edit "$TAG" --notes-file dist/NOTES.md --repo "$GITHUB_REPOSITORY"
+
+  # Last: publishing makes the release immutable, so it waits until every file is attached and scanned.
   publish:
-    needs: [virustotal]
+    needs: [release, windows, macos, flatpak-release, virustotal]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write        # publish the draft
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Publish release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"

@@ -66,6 +66,10 @@ Each release also lists checksums: `SHA256SUMS-windows.txt` for the installer an
 `Get-FileHash .\Hoard-Setup-<version>.exe` prints the one to compare; on a Mac, `shasum -a 256 <file>`; on
 Linux, `sha256sum <file>`.
 
+Every file is also scanned by VirusTotal before a release is published: the release notes link each file's
+report. Because Hoard's apps aren't code-signed, an engine or two may occasionally flag one by mistake; the
+report shows which, and each release is checked by hand before it's published anyway.
+
 ## macOS
 
 Hoard runs on macOS 11 (Big Sur) or newer.

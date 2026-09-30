@@ -1,81 +1,174 @@
-"""Upload release binaries to VirusTotal and wait for scan results."""
+"""Scan a release's files with VirusTotal before the release is published (.github/workflows/release.yml).
+
+Every file people download from the release (the zips, the Windows installer, the Mac packages, the Flatpak) is
+looked up on VirusTotal by its SHA-256, and uploaded when VirusTotal hasn't seen it, then its scan is waited for.
+The results go in dist/VT_REPORT.md (added to the release notes) and the job summary. When any engine flags a
+file as malicious or suspicious, this fails, so the release stays a draft for a person to look at; a run with
+VT_ALLOW_DETECTIONS=true (the workflow's "publish anyway" choice, after checking the report) reports the same
+results but lets it through.
+
+Uses VirusTotal's public API: 4 requests a minute (so one every 16 seconds) and 500 a day, enough for a release.
+Needs VT_API_KEY (a repository secret), TAG, and GITHUB_REPOSITORY. Standard library only.
+
+    python3 scripts/scan_release_virustotal.py          (with the release's files in dist/)
+    python3 scripts/scan_release_virustotal.py --notes NOTES.md dist/VT_REPORT.md   (put the results in the notes)
+"""
+from __future__ import annotations
+
 import hashlib
 import json
 import os
-from pathlib import Path
 import sys
 import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
 BASE = "https://www.virustotal.com/api/v3"
-KEY = os.environ["VT_API_KEY"]
-TAG = os.environ["TAG"]
-REPO = os.environ["GITHUB_REPOSITORY"]
-last_request = 0.0
+SCANNED = (".zip", ".exe", ".pkg", ".flatpak")   # what people download; not the checksum lists
+SPACING = 16                                     # seconds between requests: the public API allows 4 a minute
+MAX_UPLOAD = 650 * 1024 * 1024                   # VirusTotal's limit
+DIRECT_UPLOAD = 32 * 1024 * 1024                 # bigger files go to an upload address VirusTotal gives out
+POLLS = 45                                       # a scan waited for this many times, POLL_WAIT apart (plus SPACING)
+POLL_WAIT = 20
 
 
-def request(method, url, data=None, content_type=None):
-    global last_request
-    delay = 16 - (time.monotonic() - last_request)
-    if delay > 0:
-        time.sleep(delay)
-    headers = {"x-apikey": KEY}
-    if content_type:
-        headers["Content-Type"] = content_type
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    last_request = time.monotonic()
-    try:
-        with urllib.request.urlopen(req, timeout=120) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"VirusTotal returned HTTP {exc.code}: {exc.read(500)!r}") from exc
+class VirusTotal:
+    """VirusTotal's API, one request at a time, never faster than the public API allows."""
+
+    def __init__(self, key: str, opener=urllib.request.urlopen, sleep=time.sleep, clock=time.monotonic):
+        self.key, self.opener, self.sleep, self.clock = key, opener, sleep, clock
+        self.last = None
+
+    def request(self, method: str, url: str, data: bytes | None = None, content_type: str | None = None,
+                missing_ok: bool = False) -> dict | None:
+        if self.last is not None:
+            wait = SPACING - (self.clock() - self.last)
+            if wait > 0:
+                self.sleep(wait)
+        headers = {"x-apikey": self.key, "Accept": "application/json"}
+        if content_type:
+            headers["Content-Type"] = content_type
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        self.last = self.clock()
+        try:
+            with self.opener(req, timeout=300) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            if missing_ok and exc.code == 404:
+                return None
+            detail = exc.read(300).decode("utf-8", "replace")
+            raise RuntimeError(f"VirusTotal answered HTTP {exc.code} for {method} {url.split('?')[0]}: {detail}") from None
+
+    def known(self, digest: str) -> dict | None:
+        """VirusTotal's last results for a file it has seen (its stats), or None."""
+        got = self.request("GET", f"{BASE}/files/{digest}", missing_ok=True)
+        if not got:
+            return None
+        attrs = got.get("data", {}).get("attributes", {})
+        stats = attrs.get("last_analysis_stats")
+        return stats if stats and attrs.get("last_analysis_date") else None
+
+    def upload(self, path: Path) -> str:
+        """Send a file to be scanned. Returns the analysis id."""
+        size = path.stat().st_size
+        if size > MAX_UPLOAD:
+            raise RuntimeError(f"{path.name} is bigger than VirusTotal's {MAX_UPLOAD // 1024 // 1024} MB limit")
+        url = self.request("GET", f"{BASE}/files/upload_url")["data"] if size > DIRECT_UPLOAD else f"{BASE}/files"
+        boundary = uuid.uuid4().hex
+        head = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{path.name}"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n").encode()
+        body = head + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+        return self.request("POST", url, body, f"multipart/form-data; boundary={boundary}")["data"]["id"]
+
+    def wait(self, analysis_id: str, name: str) -> dict:
+        """The finished scan's stats."""
+        for _ in range(POLLS):
+            attrs = self.request("GET", f"{BASE}/analyses/{analysis_id}")["data"]["attributes"]
+            if attrs.get("status") == "completed":
+                return attrs.get("stats", {})
+            self.sleep(POLL_WAIT)
+        raise RuntimeError(f"VirusTotal hadn't finished scanning {name} after {POLLS} checks")
+
+    def scan(self, path: Path) -> tuple[str, dict, bool]:
+        """(sha256, stats, whether it was already known) for one file."""
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for block in iter(lambda: f.read(1 << 20), b""):
+                h.update(block)
+        digest = h.hexdigest()
+        stats = self.known(digest)
+        if stats is not None:
+            return digest, stats, True
+        return digest, self.wait(self.upload(path), path.name), False
 
 
-def scan(path):
-    size = path.stat().st_size
-    if size > 650 * 1024 * 1024:
-        raise RuntimeError(f"{path.name} exceeds VirusTotal's 650 MB upload limit")
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    if size > 32 * 1024 * 1024:
-        url = request("GET", f"{BASE}/files/upload_url")["data"]
-    else:
-        url = f"{BASE}/files"
-    boundary = uuid.uuid4().hex
-    data = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{path.name}\"\r\nContent-Type: application/octet-stream\r\n\r\n".encode()
-            + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode())
-    analysis_id = request("POST", url, data, f"multipart/form-data; boundary={boundary}")["data"]["id"]
-    for _ in range(30):
-        result = request("GET", f"{BASE}/analyses/{analysis_id}")["data"]["attributes"]
-        if result["status"] == "completed":
-            stats = result["stats"]
-            return digest, stats.get("malicious", 0), stats.get("suspicious", 0)
-        time.sleep(20)
-    raise RuntimeError(f"Timed out waiting for VirusTotal analysis of {path.name}")
+def files_to_scan(folder: Path) -> list[Path]:
+    return sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in SCANNED)
 
 
-def main():
-    files = sorted(p for p in Path("dist").iterdir() if p.suffix.lower() in (".zip", ".exe", ".pkg", ".flatpak"))
+def report(results: list[tuple[str, str, dict, bool]], allowed: bool) -> tuple[str, bool]:
+    """The release notes' section, and whether anything was flagged."""
+    lines = [HEADING, "",
+             "Each file was checked by VirusTotal before this release was published. Results are a snapshot, "
+             "not a guarantee: open a file's report for the details.", ""]
+    flagged = False
+    for name, digest, stats, _known in results:
+        bad, odd = int(stats.get("malicious", 0)), int(stats.get("suspicious", 0))
+        engines = sum(int(v) for k, v in stats.items() if k in ("malicious", "suspicious", "undetected", "harmless"))
+        flagged |= bool(bad or odd)
+        lines.append(f"- [{name}](https://www.virustotal.com/gui/file/{digest}): {bad} malicious, {odd} suspicious"
+                     + (f" (of {engines} engines)" if engines else ""))
+    if flagged and allowed:
+        lines += ["", "Some engines flagged a file. It was checked by hand and published anyway: see each report."]
+    return "\n".join(lines) + "\n", flagged
+
+
+HEADING = "## VirusTotal scan results"
+
+
+def with_results(notes: str, results: str) -> str:
+    """Release notes with the scan results at the end, in place of any from an earlier run."""
+    kept = notes.split("\n" + HEADING, 1)[0] if not notes.startswith(HEADING) else ""
+    return kept.rstrip() + "\n\n" + results.strip() + "\n" if kept.strip() else results.strip() + "\n"
+
+
+def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.environ) -> int:
+    key = env.get("VT_API_KEY", "")
+    if not key and vt is None:
+        raise RuntimeError("VT_API_KEY isn't set: add it as a repository secret (Settings > Secrets and variables > Actions)")
+    vt = vt or VirusTotal(key)
+    allowed = env.get("VT_ALLOW_DETECTIONS", "").lower() == "true"
+    files = files_to_scan(folder)
     if not files:
-        raise RuntimeError("No release binaries downloaded; refusing to publish")
-    lines = ["## VirusTotal scan results", "", "VirusTotal results are a snapshot, not a guarantee of safety.", ""]
-    failed = False
+        raise RuntimeError(f"No release files in {folder}/ to scan, so the release isn't published")
+    results = []
     for path in files:
-        digest, malicious, suspicious = scan(path)
-        lines.append(f"- [{path.name}](https://www.virustotal.com/gui/file/{digest}): {malicious} malicious, {suspicious} suspicious detections")
-        failed |= bool(malicious or suspicious)
-    report = "\n".join(lines) + "\n"
-    Path("dist/VT_REPORT.md").write_text(report, encoding="utf-8")
-    with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-        summary.write(report)
-    if failed:
-        raise RuntimeError("VirusTotal detections found; leaving the release as a draft for review")
+        digest, stats, known = vt.scan(path)
+        print(f"{path.name}: {stats.get('malicious', 0)} malicious, {stats.get('suspicious', 0)} suspicious"
+              + (" (already known to VirusTotal)" if known else ""), flush=True)
+        results.append((path.name, digest, stats, known))
+    text, flagged = report(results, allowed)
+    (folder / "VT_REPORT.md").write_text(text, encoding="utf-8")
+    if env.get("GITHUB_STEP_SUMMARY"):
+        with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+            summary.write(text)
+    if flagged and not allowed:
+        print("::error::VirusTotal flagged a release file, so the release stays a draft. Check each report; if they're "
+              "false positives, run the Release workflow again for this tag with \"Publish even if VirusTotal flags a "
+              "file\" ticked.", flush=True)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main()
-    except (RuntimeError, KeyError, urllib.error.URLError) as exc:
-        print(f"::error::{exc}", file=sys.stderr)
+        if sys.argv[1:2] == ["--notes"]:
+            notes_file, results_file = Path(sys.argv[2]), Path(sys.argv[3])
+            notes_file.write_text(with_results(notes_file.read_text("utf-8"), results_file.read_text("utf-8")), "utf-8")
+            sys.exit(0)
+        sys.exit(main())
+    except (RuntimeError, OSError) as exc:
+        print(f"::error::{exc}", flush=True)
         sys.exit(1)
