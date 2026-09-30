@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.9.0
 
-### Folder tabs, floating windows, and jobs that wait their turn
+Folder tabs, floating windows, and jobs that wait their turn; downloads that can't stall.
 
 - **The store tabs are folder tabs:** the one you're looking at is raised, and the page glows up from the bottom in
   its store's colour. On **Everything**, the colours of the stores you're signed in to drift slowly through the
@@ -37,17 +37,8 @@
   how long is left. A file coming through the browser (Jinxxy, and Booth when it turns direct downloads away)
   shows how much and how fast; the browser doesn't say how big it is, so there's no time left for those.
 
-- **Check for updates to what you've downloaded.** In Downloads, **Check for updates** (under **Updates**) reads
-  your stores without downloading anything, and lists each download whose store has newer files: files the
-  creator added or changed since you downloaded it. **Update all**, or **Update** one from its details (which also
-  have **Check for updates** for just that one). In the Library, such items say **Update available**.
-- **Downloaded, or not yet.** Library items you've downloaded have a small download mark on their picture, and
-  **Downloaded** and **Not downloaded yet** on the left filter the library to just those.
-- **The window opens where you left it:** its size, its place, and maximized if it was. A place that's no longer on
-  any screen isn't used, so it never opens out of sight.
-- **A splash screen** with the logo while your library loads, the first time the window opens.
-- **Larger text sizes:** Settings, Stores, the details panel and dialogs fit the window again at **Large** and
-  **Largest** (Settings could grow taller than the window, with **Save** out of reach).
+### Fixed since 2.8.6
+
 - **Fixed: support reports showed product and creator names from the end of a sync.** The list of what was
   updated, skipped and failed that ends each sync in `hoard.log` went into reports as it was. Those names are now
   hidden like the rest, and a name with "secret" or "token" in it is no longer mangled as if it were a password.
@@ -59,6 +50,26 @@
 - The pages' script runs in strict mode again (the splash's code had been put before `"use strict"`, which
   switched it off), and `PRIVACY.md` says where support reports really go: `Hoard\Support Reports` in your
   Documents folder.
+
+## 2.8.6
+UI Improvements
+A UI and usability update focused on knowing what's downloaded, smoother startup, better window behavior and accessibility.
+
+- Downloaded status in the Library. Downloaded assets now show a small download indicator on their thumbnails, with an accessible label for screen readers. A new Downloaded filter provides `Downloaded` and `Not downloaded yet` options with live counts. Filters work with the existing filter system, can be cleared normally, survive reloads through the URL, and stay in sync with the item's actual on-disk status.
+
+- Splash screen while the Library loads. The Library and Downloads pages now show a full-window Hoard splash with the logo and "Opening your hoard" while the initial library is being read. The splash stays visible for at least 1.2 seconds, appears immediately on the first page, only fades in on later page loads when loading takes longer, and is removed after loading finishes, an error, or a 20-second safety timeout. Reduced-motion settings disable the animation.
+
+- Remember window size and position. Hoard now remembers the window's size, position and maximized state between launches. Invalid or damaged saved settings are ignored safely, off-screen windows are repositioned to the center, and the previous normal size and position are preserved when maximizing or minimizing.
+
+- Improved large-text layouts. Fixed an accessibility issue where the Largest text setting could cause panels sized relative to the window to extend beyond the visible area. Window-based sizing now accounts for the active zoom level across Settings, Stores, the sidebar, details panel, selection bar, dialogs, setup card and download panel.
+
+- **Check for updates to what you've downloaded.** In Downloads, **Check for updates** (under **Updates**) reads
+  your stores without downloading anything, and lists each download whose store has newer files: files the
+  creator added or changed since you downloaded it. **Update all**, or **Update** one from its details (which also
+  have **Check for updates** for just that one). In the Library, such items say **Update available**.
+
+## 2.8.5
+
 - **Security: the September 2026 code-scanning findings.** Nothing here is known to have been exploitable (the
   server already needed this run's access key, and imported pages were already opened with scripts off), but each
   guard is now one CodeQL can follow, with tests for each:
