@@ -170,6 +170,18 @@ class TheOtherPages(unittest.TestCase):
         self.assertIn('<a href="https://example.com">link</a>', page)
         self.assertNotIn('href="javascript:', page)
 
+    def test_bold_around_code_and_bare_addresses(self):
+        """As GitHub shows them: bold that contains code (2.9.2's install folder showed its asterisks), and a bare
+        https address as a link, without the full stop after it."""
+        line = changelog.inline("**Installs into `%LOCALAPPDATA%\\Programs\\Hoard` (#21),** see https://example.com/a.")
+        self.assertEqual(line, "<strong>Installs into <code>%LOCALAPPDATA%\\Programs\\Hoard</code> (#21),</strong> see "
+                               '<a href="https://example.com/a">https://example.com/a</a>.')
+        self.assertEqual(changelog.inline("[the wiki](https://example.com/w)"), '<a href="https://example.com/w">the wiki</a>')
+        self.assertEqual(changelog.inline("`**not bold**` and `<b>`"), "<code>**not bold**</code> and <code>&lt;b&gt;</code>")
+        self.assertEqual(changelog.inline("a ` stray"), "a ` stray")
+        whole = changelog.page((REPO / "CHANGELOG.md").read_text("utf-8"), {})
+        self.assertNotIn("**", re.sub(r"<code>.*?</code>", "", whole, flags=re.S), "every bold in the changelog closes")
+
     def test_lists_nest_and_carry_on_over_lines(self):
         md = "## 1.0.0\n\n- First\n  carried on.\n  - Inside\n- Second\n\nAfter.\n\n### Fixed\n\n- Third\n"
         body = changelog.blocks(md.split("\n")[2:])
@@ -179,6 +191,25 @@ class TheOtherPages(unittest.TestCase):
         built = (built_site() / "changelog.html").read_text("utf-8")
         self.assertEqual(built.count("<ul>"), built.count("</ul>"))
         self.assertEqual(len(re.findall(r"<li[ >]", built)), built.count("</li>"))
+
+
+class TheNextChangelog(unittest.TestCase):
+    """3.0.0's changelog, drafted in docs/ until it's released, uses only what the What's new page can show."""
+
+    def test_the_3_0_0_draft_reads_on_the_whats_new_page(self):
+        draft = (REPO / "docs" / "CHANGELOG-3.0.0.md").read_text("utf-8")
+        self.assertTrue(draft.startswith("<!--"))
+        body = draft.split("-->", 1)[1]
+        page = changelog.page("## 3.0.0\n" + body, {})
+        text = re.sub(r"<code>.*?</code>", "", page, flags=re.S)
+        self.assertNotIn("**", text, "every bold closes")
+        self.assertNotIn("`", text, "every code span closes")
+        self.assertEqual(page.count("<ul>"), page.count("</ul>"))
+        self.assertEqual(len(re.findall(r"<li[ >]", page)), page.count("</li>"))
+        self.assertNotRegex(body, r"^\s*(\d+\.|\||>|```)", "no numbered lists, tables, quotes or code blocks")
+        for heading in ("Hoard on every computer", "Signing in, your way", "Downloads you can leave running",
+                        "Upgrading from 2.8"):
+            self.assertIn(f"<h4>{heading}</h4>", page)
 
 
 class TheDeploy(unittest.TestCase):
