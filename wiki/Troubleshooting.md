@@ -26,7 +26,9 @@ The page lost Hoard's server: Hoard was quit or closed. Open Hoard again.
 
 ### "Windows protected your PC"
 
-Windows says this about apps that aren't code-signed yet. Choose **More info**, then **Run anyway**. To check the
+Windows says this about apps from a publisher it doesn't know well yet. Hoard is code-signed: choose **More
+info** and the publisher shows as **Sam Parker**, Hoard's maintainer. A new publisher earns Microsoft's trust as
+people install its releases, so the warning fades with time. Choose **Run anyway**. To check the
 file first, see [Installing Hoard](Installing-Hoard#checking-a-download).
 
 ## Signing in

@@ -60,8 +60,9 @@ Guides for everything, from installing to fixing a problem, are in the
 
 1. Download **`Hoard-Setup-<version>.exe`** from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
    and run it. It installs for you only, with no administrator prompt, and adds Hoard to the Start menu.
-2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (see
-   [CODE_SIGNING.md](CODE_SIGNING.md)). Choose **More info**, then **Run anyway**. To check the download really came from
+2. Windows may say **"Windows protected your PC"** for a while after a release. Hoard is code-signed (choose
+   **More info** and it names the publisher, Sam Parker), but a new publisher has to earn Microsoft's trust first:
+   see [CODE_SIGNING.md](CODE_SIGNING.md). Choose **Run anyway**. To check the download really came from
    this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
 3. Open **Hoard** from the Start menu. It opens in its own window. A short
    setup assistant walks you through the rest: which stores you use, signing in to each one, your Payhip
