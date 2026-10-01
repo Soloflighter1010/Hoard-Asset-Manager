@@ -26,19 +26,20 @@ VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
 def inline(text: str) -> str:
-    """One line of changelog text as HTML: escaped, with `code`, **bold** and https links."""
-    out = []
-    for n, part in enumerate(text.split("`")):
-        if n % 2:   # inside backticks: code, nothing else
-            out.append(f"<code>{html.escape(part)}</code>")
-            continue
-        part = html.escape(part, quote=True)
-        part = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", part)
-        part = re.sub(r"\[([^\]]+)\]\((https://[^)\s\"<>]+)\)", r'<a href="\2">\1</a>', part)
-        out.append(part)
-    if text.count("`") % 2:   # an unmatched backtick stays a backtick
-        return html.escape(text)
-    return "".join(out)
+    """One line of changelog text as HTML: escaped, with `code`, **bold** (around code too), [links](https://...)
+    and bare https addresses as links, as GitHub shows them."""
+    if text.count("`") % 2:   # an unmatched backtick: leave the line's backticks as they are
+        parts = [text]
+    else:
+        parts = text.split("`")
+    codes = [f"<code>{html.escape(p)}</code>" for p in parts[1::2]]
+    # Code is set aside (as \x00n\x00, which can't be in the text) while the rest is escaped and marked up.
+    rest = "".join(html.escape(p.replace("\x00", ""), quote=True) + (f"\x00{n}\x00" if n < len(codes) else "")
+                   for n, p in enumerate(parts[0::2]))
+    rest = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", rest)
+    rest = re.sub(r"\[([^\]]+)\]\((https://[^)\s\"<>\x00]+)\)", r'<a href="\2">\1</a>', rest)
+    rest = re.sub(r'(?<![="\w>])(https://[^\s<>"\x00]*[^\s<>"\x00.,;:!?)])', r'<a href="\1">\1</a>', rest)
+    return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], rest)
 
 
 def blocks(lines: list[str]) -> str:

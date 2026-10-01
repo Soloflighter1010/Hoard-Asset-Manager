@@ -98,6 +98,15 @@ class Wiki(unittest.TestCase):
         self.assertIn("contents: write", wf)
         self.assertNotIn("pull_request", wf, "a write token never runs for a pull request")
 
+    def test_the_wiki_is_copied_outside_the_checkout(self):
+        """The wiki was cloned into ./site, which broke publishing once the website arrived in site/ ("destination
+        path 'site' already exists"). It goes to the runner's temporary folder, so no folder here can clash."""
+        wf = (REPO / ".github" / "workflows" / "wiki.yml").read_text("utf-8")
+        dest = re.search(r'clone --quiet "https://github.com/\$GITHUB_REPOSITORY\.wiki\.git" (\S+);', wf).group(1)
+        self.assertEqual(dest, '"$RUNNER_TEMP/wiki"')
+        self.assertIn('cd "$RUNNER_TEMP/wiki"', wf)
+        self.assertNotRegex(wf, r"\bcd site\b|cp -R wiki/\. site/")
+
 
 if __name__ == "__main__":
     unittest.main()

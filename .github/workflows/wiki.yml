@@ -37,13 +37,13 @@ jobs:
         run: |
           # the token goes in a header for each command, never into a saved address or config
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
-          if ! git -c http.extraheader="$auth" clone --quiet "https://github.com/$GITHUB_REPOSITORY.wiki.git" site; then
+          if ! git -c http.extraheader="$auth" clone --quiet "https://github.com/$GITHUB_REPOSITORY.wiki.git" "$RUNNER_TEMP/wiki"; then
             echo "::error::Couldn't open the wiki. If it has no pages yet, open the Wiki tab, save any first page, then run this again."
             exit 1
           fi
-          find site -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +   # a page removed from wiki/ goes too
-          cp -R wiki/. site/
-          cd site
+          find "$RUNNER_TEMP/wiki" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +   # a page removed from wiki/ goes too
+          cp -R wiki/. "$RUNNER_TEMP/wiki/"
+          cd "$RUNNER_TEMP/wiki"   # outside the checkout, whose site/ is the website
           git add --all
           if git diff --cached --quiet; then
             echo "The wiki already matches wiki/."
