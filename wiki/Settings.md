@@ -1,9 +1,9 @@
-Everyday choices are in the **Settings** window (top right). A few rarer ones only live in `config.json`.
+Everyday choices are in **Settings** (top right). A few rarer ones only live in `config.json`.
 
-## The Settings window
+## The Settings panel
 
-Settings opens as a window you can move (by its title bar) and resize (from its corner). It stays open while you
-use the rest of Hoard, and opens where you left it. Each change is **saved as you make it**: a box or a list
+Settings opens in a panel over the page, like Tags, Stores and Tasks; one of them is open at a time. **×**,
+Escape or a click on the page around it closes it. Each change is **saved as you make it**: a box or a list
 straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
 
 

@@ -767,7 +767,7 @@ class SetupAssistant(unittest.TestCase):
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class WindowsTabsAndTasks(unittest.TestCase):
-    """The 2.9 layout: Tags, Stores, Settings and Tasks as floating windows that stay open side by side, Settings
+    """The layout: Tags, Stores, Settings and Tasks in one panel over the page (issue #84), Settings
     saved as they change, a sidebar that folds, store folder tabs, the Tasks window (issue #49's queue included),
     and New with Recently added (issue #18)."""
 
@@ -820,37 +820,33 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.locator(".slot", has_text="Mochi").wait_for()
         return page
 
-    def test_windows_stay_open_move_and_remember(self):
-        ctx = self.browser.new_context(viewport={"width": 1400, "height": 860})
-        page = self.open(ctx)
-        for button, win in (("#settingsBtn", "#settingsPanel"), ("#storesBtn", "#stores"), ("#tagsBtn", "#tagPanel")):
-            page.click(button)
+    def test_one_panel_at_a_time(self):
+        """Issue #84: Tags, Stores, Settings and Tasks open in one panel over the page, one at a time, instead of
+        floating windows that pile up; Escape, the × or a click around it closes it."""
+        page = self.open()
+        shade = page.locator("#winShade")
+        for button, win in (("#settingsBtn", "#settingsPanel"), ("#storesBtn", "#stores"), ("#tagsBtn", "#tagPanel"),
+                            ("#tasksTab", "#tasksWin")):
+            page.click(button)   # the title bar stays above the dimmed page, so its buttons swap the panel
             page.locator(win + ".win:not([hidden])").wait_for()
-        page.mouse.click(700, 500)   # a click on the page no longer closes them
-        for win in ("#settingsPanel", "#stores", "#tagPanel"):
-            self.assertTrue(page.locator(win).is_visible(), win)
-        bar = page.locator("#tagPanel .win-bar").bounding_box()
-        page.mouse.move(bar["x"] + 40, bar["y"] + 12)
-        page.mouse.down()
-        page.mouse.move(bar["x"] - 300, bar["y"] + 160, steps=6)
-        page.mouse.up()
-        moved = page.locator("#tagPanel").bounding_box()
-        self.assertLess(abs(moved["x"] - (bar["x"] - 340)), 4)
-        for _ in range(40):   # kept in Hoard's settings (a moment after it's let go)
-            if (self.srv.cfg.get("ui") or {}).get("windows", {}).get("tagPanel"):
-                break
-            page.wait_for_timeout(100)
-        self.assertEqual(self.srv.cfg["ui"]["windows"]["tagPanel"]["x"], round(moved["x"]))
-        page.keyboard.press("Escape")   # the one in front
-        self.assertTrue(page.locator("#tagPanel").is_hidden())
-        self.assertTrue(page.locator("#stores").is_visible())
-        page.reload()
-        page.locator(".slot", has_text="Mochi").wait_for()
+            self.assertEqual(page.locator(".win:not([hidden])").count(), 1, f"{win}: only it is open")
+            self.assertTrue(shade.is_visible(), win)
+            box, view = page.locator(win).bounding_box(), page.viewport_size
+            self.assertLess(abs(box["x"] + box["width"] / 2 - view["width"] / 2), 2, f"{win}: over the middle of the page")
+            self.assertLessEqual(box["y"] + box["height"], view["height"], win)
+        page.keyboard.press("Escape")
+        self.assertEqual(page.locator(".win:not([hidden])").count(), 0)
+        self.assertTrue(shade.is_hidden())
         page.click("#tagsBtn")
-        again = page.locator("#tagPanel").bounding_box()
-        self.assertLess(abs(again["x"] - moved["x"]) + abs(again["y"] - moved["y"]), 4, "opens where it was left")
+        page.locator("#tagPanel.win:not([hidden])").wait_for()
+        page.mouse.click(30, 700)   # around it
+        self.assertTrue(page.locator("#tagPanel").is_hidden())
+        self.assertTrue(shade.is_hidden())
+        page.click("#settingsBtn")
+        page.locator("#settingsPanel .win-x").click()
+        self.assertTrue(page.locator("#settingsPanel").is_hidden())
         self.assertEqual(self.errors, [])
-        ctx.close()
+        page.close()
 
     def test_settings_save_as_they_change(self):
         from unittest import mock

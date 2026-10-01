@@ -64,9 +64,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **Folder tabs and the glow.** The store tabs are folder tabs: the one you're looking at is raised, and the page
   glows up from the bottom in its store's colour. On **Everything**, the colours of the stores you use drift
   slowly through the glow (and stay still when you ask your system for less motion).
-- **Windows that float.** Tags, Stores and Settings open as windows over the page. Move one by its title bar,
-  resize it from its corner, and keep several open side by side. A click elsewhere no longer closes them; **×** or
-  Escape does. Each opens where you left it.
+- **One panel for Tags, Stores, Settings and Tasks** (issue #84). Each opens in a panel over the middle of the
+  page, one at a time: choosing another swaps it in, and the buttons along the top stay in reach. **×**, Escape or
+  a click on the page around it closes it.
 - **Settings save as you change them.** There's no **Save** button any more: a box or a list is saved straight
   away, and a folder or the Payhip shops when you leave the field. While a job runs, only the settings it depends
   on (where files go, the browser, the stores and the Payhip shops) wait for it to finish.
@@ -212,7 +212,7 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 - **On Windows,** update from **Settings › Updates** as usual, or install `Hoard-Setup-3.0.0.exe` over your copy.
   If your Hoard was installed somewhere other than `%LOCALAPPDATA%\Programs\Hoard`, the update installs it there;
   you can delete the old folder afterwards. Your settings, library, sign-ins and downloads stay where they are.
-- **The Settings window has no Save button:** changes save as you make them.
+- **Settings has no Save button:** changes save as you make them.
 - **Logs:** each start of Hoard has its own log now. Use **Open logs folder** in Settings to find them.
 - **Payhip sellers:** after your next refresh, products bought from other creators show as **Unknown creator**
   instead of your own shop's name.

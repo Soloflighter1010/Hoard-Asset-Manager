@@ -497,7 +497,7 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
 @media (prefers-reduced-motion: reduce) { .xfer-bar span { transition: none; } .xfer-bar.unknown span { animation: none; width: 100%; opacity: .45; } }
 body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 .xfer-stats { display: flex; gap: 10px; justify-content: space-between; color: var(--dust); font-variant-numeric: tabular-nums; }
-/* ---------- store folder tabs, floating windows (Tags, Stores, Settings, Tasks), the sidebar that folds, and the
+/* ---------- store folder tabs, the panel (Tags, Stores, Settings, Tasks), the sidebar that folds, and the
    Tasks window, in Hoard's own colours. The same in both views. */
 .apptabs button { padding: 7px 12px; border: 0; border-radius: 9px; background: none; font: 700 14px var(--body);
   color: var(--dust); display: inline-flex; align-items: center; gap: 6px; }
@@ -559,15 +559,17 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .sec.closed .sec-toggle .chev { transform: rotate(-45deg); margin-top: 0; }
 .sec.closed > .sec-body { display: none; }
 
-/* windows */
-.win { position: fixed; right: auto; bottom: auto; z-index: 60; display: flex; flex-direction: column; padding: 0;
-  width: min(470px, calc(var(--vw) - 24px)); max-height: calc(var(--vh) - 16px); min-width: 300px; min-height: 160px;
-  resize: both; overflow: hidden; border-radius: 16px; background: var(--ledge);
+/* the panel (issue #84): over the page, below the title bar, one at a time. The page below the bar is dimmed;
+   the bar stays in reach, so its buttons swap one panel for another. */
+.win { position: fixed; left: 50%; right: auto; bottom: auto; top: calc(var(--bar-h) + 12px); transform: translateX(-50%); z-index: 60; display: flex;
+  flex-direction: column; padding: 0; width: min(620px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
+  overflow: hidden; border-radius: 16px; background: var(--ledge);
   box-shadow: 0 0 0 1px var(--seam), 0 20px 50px rgb(0 0 0 / .45); }
 .win[hidden] { display: none !important; }
-.win-bar { display: flex; align-items: center; gap: 10px; flex: none; padding: 9px 10px 9px 18px; cursor: grab; user-select: none;
-  border-bottom: 1px solid var(--seam); background: var(--stone); touch-action: none; }
-.win-bar:active { cursor: grabbing; }
+.win-shade { position: fixed; inset: var(--bar-h) 0 0 0; z-index: 59; background: rgb(20 16 12 / .5); }
+.win-shade[hidden] { display: none; }
+.win-bar { display: flex; align-items: center; gap: 10px; flex: none; padding: 9px 10px 9px 18px;
+  border-bottom: 1px solid var(--seam); background: var(--stone); }
 .win-bar h2 { flex: 1; min-width: 0; margin: 0 !important; padding: 0 !important; border: 0 !important; font: 400 18px var(--display); }
 .win-extra { font-size: 12px; color: var(--dust); white-space: nowrap; }
 .win-extra.ok { color: #4CC38A; }
@@ -575,7 +577,7 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .win-x:hover { background: var(--seam); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
-.tasks.win { width: min(640px, calc(var(--vw) - 24px)); }
+.tasks.win { width: min(680px, calc(var(--vw) - 32px)); }
 
 /* the Tasks window: running, waiting and finished jobs */
 .tasks h3 { display: flex; align-items: center; gap: 8px; font: 700 13px var(--body); color: var(--dust); margin: 16px 0 8px;
@@ -609,7 +611,7 @@ details.task summary b { overflow-wrap: anywhere; }
   .shelf { position: static; padding: 6px 12px 0; flex-wrap: wrap; }
   .shelf-tools { order: -1; width: 100%; padding: 0 0 6px; }
   .shelf-tools .zoom { display: none; }
-  .win { left: 8px !important; top: 60px !important; width: calc(var(--vw) - 16px) !important; height: auto !important; resize: none; }
+  .win { top: 8px; width: calc(var(--vw) - 16px); max-height: calc(var(--vh) - 16px); }
   body.side-folded .layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } .seg button { transition: none; } }
@@ -2159,11 +2161,10 @@ function setGlow(store, stores) {
     el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 450, easing: "ease-out" });
   }
 }
-/* ---------- windows: Tags, Stores, Settings and Tasks float over the page. Move one by its title bar and resize it
-   from its corner; each opens where you left it, and stays open (beside the others) until you close it. */
+/* ---------- the panel (issue #84): Tags, Stores, Settings and Tasks each open in one panel over the page, one at a
+   time; opening another takes its place. Escape, the × or a click on the page around it closes it. */
 const WINDOWS = { tagPanel: () => openTagPanel(false), stores: () => { if (typeof openStores === "function") openStores(false); },
                   settingsPanel: () => closeSettings(), tasksWin: () => openTasks(false) };
-let winZ = 60, winCascade = 0;
 /* How you left the pages: windows' places, the sidebar, the tile size. Kept in Hoard's settings (config.json),
    not the page's own storage, which goes with the server's address, and that's new each time Hoard starts. */
 let UI = { windows: {}, sections: {} }, uiPending = null, uiTimer = null, uiApplied = false;
@@ -2197,37 +2198,23 @@ function applyUi(ui) {   // once, when the page first has its data
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
 }
-const pageZoom = () => parseFloat(document.documentElement.style.getPropertyValue("--zoom")) || 1;
-function winPlace(el, x, y, whole = false) {
-  // in the page's own units, kept where its title bar can still be taken hold of; whole: all of it in view (opening
-  // it, or when the window or the text size changes), narrowed if it has to be
-  const z = pageZoom(), vw = innerWidth / z, vh = innerHeight / z;
-  if (whole && el.offsetWidth > vw - 16) el.style.width = Math.max(300, vw - 16) + "px";
-  const w = el.offsetWidth;
-  const top = Math.round(Math.min(Math.max(y, 0), vh - 48));
-  el.style.left = Math.round(whole ? Math.min(Math.max(x, 8), vw - w - 8) : Math.min(Math.max(x, 60 - w), vw - 80)) + "px";
-  el.style.top = top + "px";
-  el.style.maxHeight = Math.max(160, vh - top - 8) + "px";   // never past the bottom of the window
+function winOpened(el) {   // one panel at a time: the others close as this one opens
+  for (const other of document.querySelectorAll(".win:not([hidden])")) if (other !== el) WINDOWS[other.id]();
+  winShade();
+  el.scrollTop = 0;
 }
-function winRemember(el) {
-  const place = { x: Math.round(parseFloat(el.style.left) || 0), y: Math.round(parseFloat(el.style.top) || 0) };
-  if (el.style.width) place.w = el.offsetWidth;
-  if (el.style.height) place.h = el.offsetHeight;
-  uiSave({ windows: { [el.id]: place } });
-}
-function winFront(el) { if (+el.style.zIndex !== winZ) el.style.zIndex = ++winZ; }
-function winOpened(el) {
-  const saved = (UI.windows || {})[el.id];
-  if (saved && typeof saved.x === "number") {
-    if (saved.w) el.style.width = saved.w + "px";
-    if (saved.h) el.style.height = saved.h + "px";
-    winPlace(el, saved.x, saved.y, true);
-  } else if (!el.style.left) {   // the first time: near the buttons, each a little lower than the last
-    const z = pageZoom(), step = (winCascade++ % 4) * 48;
-    const bar = (document.querySelector(".bar") || { offsetHeight: 60 }).offsetHeight;
-    winPlace(el, innerWidth / z - el.offsetWidth - 20 - step, bar + 8 + step, true);
-  } else winPlace(el, parseFloat(el.style.left), parseFloat(el.style.top), true);
-  winFront(el);
+function winShade() {   // the page behind an open panel is dimmed, and a click on it closes the panel
+  let shade = document.getElementById("winShade");
+  const open = !!document.querySelector(".win:not([hidden])");
+  if (!shade) {
+    if (!open) return;
+    shade = document.createElement("div");
+    shade.id = "winShade"; shade.className = "win-shade";
+    shade.addEventListener("click", closeTopWindow);
+    document.body.appendChild(shade);
+  }
+  shade.hidden = !open;
+  document.body.classList.toggle("win-open", open);
 }
 function makeWindow(el) {
   if (!el || el.classList.contains("win")) return;
@@ -2239,38 +2226,27 @@ function makeWindow(el) {
   if (title) bar.appendChild(title);
   const extra = document.createElement("span"); extra.className = "win-extra"; extra.setAttribute("aria-live", "polite");
   const x = document.createElement("button"); x.className = "win-x"; x.textContent = "×";
-  x.setAttribute("aria-label", "Close " + (title ? title.textContent.trim() : "window"));
+  x.setAttribute("aria-label", "Close " + (title ? title.textContent.trim() : "panel"));
   bar.append(extra, x);
   el.append(bar, body);
   el.setAttribute("role", "dialog");
   x.addEventListener("click", () => WINDOWS[el.id]());
-  el.addEventListener("pointerdown", () => winFront(el));
-  bar.addEventListener("pointerdown", e => {
-    if (e.button !== 0 || e.target.closest("button, a, input, select, textarea")) return;
-    const z = pageZoom(), r = el.getBoundingClientRect(), dx = e.clientX / z - r.left / z, dy = e.clientY / z - r.top / z;
-    bar.setPointerCapture(e.pointerId);
-    const move = ev => winPlace(el, ev.clientX / z - dx, ev.clientY / z - dy);
-    const up = () => { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); winRemember(el); };
-    bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
-  });
-  el.addEventListener("pointerup", e => { if (e.target === el) winRemember(el); });   // let go of the resize corner
-  new MutationObserver(() => { if (!el.hidden) winOpened(el); }).observe(el, { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(() => { if (!el.hidden) winOpened(el); else winShade(); })
+    .observe(el, { attributes: true, attributeFilter: ["hidden"] });
   if (!el.hidden) winOpened(el);
 }
-// Escape closes the window in front (and only it)
+// Escape closes the open panel
 function closeTopWindow() {
-  const open = [...document.querySelectorAll(".win:not([hidden])")].sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
-  if (!open.length) return false;
-  WINDOWS[open[0].id]();
+  const open = document.querySelector(".win:not([hidden])");
+  if (!open) return false;
+  WINDOWS[open.id]();
   return true;
 }
-function winNote(id, text, ok = false) {   // a word in a window's title bar: "Saved", "Saving..."
+function winNote(id, text, ok = false) {   // a word in a panel's title bar: "Saved", "Saving..."
   const n = document.querySelector(`#${id} .win-extra`);
   if (n) { n.textContent = text; n.classList.toggle("ok", ok); }
 }
-// a smaller window, or larger text: each open window is fitted in again
-function refitWindows() { for (const w of document.querySelectorAll(".win:not([hidden])")) winPlace(w, parseFloat(w.style.left), parseFloat(w.style.top), true); }
-addEventListener("resize", refitWindows);
+function refitWindows() {}   // the panel is sized by the page's own styles, at any text size
 
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
    Both are remembered. */
