@@ -11,7 +11,7 @@ Unity. Open **Window › Hoard** to:
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 
-- **Credit the creators.** **Credits** lists the Hoard assets this project uses, as a list, Markdown or
+- **Credit the creators.** **Create Credits List** lists the Hoard assets fully in this project, as a list, Markdown or
   grouped by creator, to copy or save. Untick any you don't want credited, or add assets that didn't come
   through Hoard.
 

@@ -15,6 +15,7 @@ from .safety import DataFileError, read_json_file, set_extra_sites, write_file_s
 DEFAULT_CONFIG = {
     "setup_done": False,           # set once the onboarding assistant has been completed (or skipped)
     "root": "",                    # where downloads go; "" = a Hoard folder in Documents
+    "edits_root": "",              # where editable copies go (issue #82); "" = "Hoard Edits" beside the downloads
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
     "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "chromium", "msedge" or "chrome"
     "profile_dir": "",             # "" = Hoard's private sign-in folder (one profile per store)
@@ -24,11 +25,12 @@ DEFAULT_CONFIG = {
     "offline_images": True,        # save every product image after a refresh, so the library works offline
     "check_for_updates": False,    # ask GitHub once a day, when Hoard starts, whether there's a newer version
     "close_to_background": False,  # closing Hoard's window keeps Hoard running (open it again to bring the window back)
-    "auto_sync_hours": 0,
+    "auto_sync_hours": 0,          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
     "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
-    "download_retries": 2,         # a file download that fails is tried again this many more times          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
+    "download_retries": 2,         # a file download that fails is tried again this many more times
+    "integrity_check_days": 7,     # check the downloads are as downloaded this often (issue #83); 0 = only when asked
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False},   # accessibility
-    "ui": {},                      # how you left the pages: windows' places, the sidebar folded, the tile size
+    "ui": {},                      # how you left the pages: the sidebar folded, the tile size
     "gumroad": {"enabled": True, "include_archived": True, "save_thumbnails": True},
     "booth": {"enabled": True, "include_gifts": True, "include_free": True, "save_thumbnails": True},
     "jinxxy": {"enabled": True, "item_link_pattern": "^/my/(inventory|purchases|library)/[^/]+/?$",
@@ -138,6 +140,17 @@ def load_config(path: Path | None = None) -> dict:
 def save_config(cfg: dict, path: Path | None = None) -> None:
     """Write the settings to config.json."""
     write_file_safely(path or CONFIG_FILE, json.dumps(cfg, indent=2, ensure_ascii=False))
+
+
+def edits_dir(cfg: dict) -> Path:
+    """Where editable copies of downloads go (issue #82): the chosen folder, else "Hoard Edits" beside the downloads
+    folder. Never inside the downloads folder, which Hoard checks and keeps as the stores sent it."""
+    value = str(cfg.get("edits_root") or "").strip()
+    root = root_dir(cfg)
+    if value:
+        chosen = Path(os.path.expandvars(value)).expanduser()
+        return chosen if chosen.is_absolute() else Path.home() / chosen
+    return root.parent / "Hoard Edits"
 
 
 def root_dir(cfg: dict) -> Path:

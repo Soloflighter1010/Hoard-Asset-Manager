@@ -11,7 +11,7 @@ releasing" notes in this file; delete this file. It uses only the Markdown the w
 
 Before releasing, check:
 - Code signing: keep "Signed for Windows" only if the release's Windows job signed (Azure Artifact Signing set up).
-- Hoard for Unity 0.3.0: keep its section only if 0.3.0 is out on VCC by then (Build Release, tag unity-v0.3.0).
+- Hoard for Unity 0.3.1: keep it in its section only if 0.3.1 is out on VCC by then (Build Release, tag unity-v0.3.1).
 - Add anything merged after this draft was written.
 -->
 
@@ -64,9 +64,11 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **Folder tabs and the glow.** The store tabs are folder tabs: the one you're looking at is raised, and the page
   glows up from the bottom in its store's colour. On **Everything**, the colours of the stores you use drift
   slowly through the glow (and stay still when you ask your system for less motion).
-- **Windows that float.** Tags, Stores and Settings open as windows over the page. Move one by its title bar,
-  resize it from its corner, and keep several open side by side. A click elsewhere no longer closes them; **×** or
-  Escape does. Each opens where you left it.
+- **One panel for Tags, Stores, Settings and Tasks** (issue #84). Each opens in a panel over the middle of the
+  page, one at a time: choosing another swaps it in, and the buttons along the top stay in reach. **×**, Escape or
+  a click on the page around it closes it.
+- **The download panel sits beside an asset's details** (issue #85) instead of over them, so you can keep using
+  them while it shows. In a narrow window the details end above it.
 - **Settings save as you change them.** There's no **Save** button any more: a box or a list is saved straight
   away, and a folder or the Payhip shops when you leave the field. While a job runs, only the settings it depends
   on (where files go, the browser, the stores and the Payhip shops) wait for it to finish.
@@ -103,6 +105,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   different shop is credited to the shop it's from.
 - While your hidden library is locked, hidden products' names stay out of job progress and the Tasks list, and
   locking it closes any hidden product's details you had open.
+- **Remove a download completely** (issue #81). Removing something you've downloaded asks whether to delete its
+  downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is also in Removed, in
+  the Library and in Downloads. Only the files Hoard downloaded go; anything of your own in the folder stays.
 
 ### Downloads you can leave running
 
@@ -135,6 +140,15 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   only some files missing stays, marked.
 - Removing a browser store's sign-in folder while Hoard is closed clears that store's list from the Library at the
   next start, without touching your downloads or imported pages.
+- **Make an editable copy** (issue #82). Want to change a texture? Open a download and make an editable copy: its
+  files go to a folder of their own (**Hoard Edits**, beside your downloads), which Hoard never checks or replaces,
+  so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
+  the copy says what it is.
+- **Routine checks of your downloads** (issue #83). Once a week (or a day, a month, or only when you ask, in
+  Settings), Hoard checks every downloaded file is there and unchanged since it was downloaded, by size and
+  SHA-256 fingerprint; after the first check, only files whose size or time changed are read again, so it's quick.
+  Downloads shows when it last checked and what it found, with **Check now**; Tasks names any changed or missing
+  files.
 
 ### Working in the background, and closing safely
 
@@ -185,14 +199,14 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - The pages' scripts run in strict mode again.
 - A PIN test could fail when its digits happened to appear inside a random hash.
 
-### Hoard for Unity 0.3.0
+### Hoard for Unity 0.3.0 and 0.3.1
 
 Released alongside, through VCC (Hoard's listing:
 https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 
-- **Credits** (issue #51). The **Credits** button lists the creators of the Hoard assets your project uses, ready to
-  paste where you share your avatar or world: as a list with store links, as Markdown, or grouped by creator.
-  Untick any you don't want credited and add others by hand; **Copy** or **Save as...**. Your changes travel with
+- **Create Credits List** (issues #51 and #79). The **Create Credits List** button lists the creators of the
+  Hoard assets fully in your project, ready to paste where you share your avatar or world: as a list with store
+  links, as Markdown, or grouped by creator. Untick any you don't want credited and add others by hand; **Copy** or **Save as...**. Your changes travel with
   the project.
 - **Animated pictures play** in the list and the details. Unity can't read GIFs, so the window decodes them itself.
 - **A picture for more products:** when a product's saved picture is a kind Unity can't show (WebP or AVIF), the
@@ -212,7 +226,7 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 - **On Windows,** update from **Settings › Updates** as usual, or install `Hoard-Setup-3.0.0.exe` over your copy.
   If your Hoard was installed somewhere other than `%LOCALAPPDATA%\Programs\Hoard`, the update installs it there;
   you can delete the old folder afterwards. Your settings, library, sign-ins and downloads stay where they are.
-- **The Settings window has no Save button:** changes save as you make them.
+- **Settings has no Save button:** changes save as you make them.
 - **Logs:** each start of Hoard has its own log now. Use **Open logs folder** in Settings to find them.
 - **Payhip sellers:** after your next refresh, products bought from other creators show as **Unknown creator**
   instead of your own shop's name.

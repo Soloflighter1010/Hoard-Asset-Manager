@@ -23,7 +23,7 @@ from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, vault
-from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
+from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, open_under, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagMatcher, TagStore, clean_tag, tag_key
 
 try:
@@ -1808,6 +1808,271 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
             index.setdefault(t, []).append(folder)
     catalog.sort(key=lambda e: (e["store"], e["creator"].lower(), e["name"].lower()))
     return catalog, dict(sorted(index.items(), key=lambda kv: (-len(kv[1]), kv[0])))
+
+
+def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
+    """Delete the files Hoard downloaded for these products (tag keys) (issue #81). The caller makes sure they're
+    products you removed from your library, and that nothing is downloading.
+
+    Only the files Hoard's records list are deleted, with the picture and asset.json Hoard saved beside them; anything
+    else in the folder (files of your own) stays, and a folder is removed only when that leaves it empty. Nothing is
+    followed through a link: a path that leads outside the store's folder, or is a link, is left alone. The deleted
+    files leave the product's record (so the catalog, Downloads and Hoard for Unity stop listing them, and a product
+    you restore is downloaded again); the record itself keeps its folder name. Returns what was deleted and kept."""
+    import stat as _stat
+    from .safety import _is_link
+    done = {"products": 0, "files": 0, "bytes": 0, "kept": []}
+    for store in STORE_DIRS.values():
+        sdir = root / store
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        manifest = Manifest(sdir)
+        for rec in manifest.assets.values():
+            if tag_key(store, rec.get("name") or "") not in keys:
+                continue
+            try:
+                folder = rel_to_path(sdir, rec["folder"])
+            except UnsafePath:
+                continue
+            paths = [f.get("path") for f in rec.get("files", {}).values()]
+            gone = set()
+            try:
+                paths += [p.name for p in folder.glob("_thumbnail.*")] + ["asset.json"]
+            except OSError:
+                pass
+            dirs, count = set(), 0
+            for rel in paths:
+                try:
+                    target = rel_to_path(folder, rel)
+                    st = os.stat(target, follow_symlinks=False)
+                except (UnsafePath, OSError):
+                    continue
+                if _is_link(st) or not _stat.S_ISREG(st.st_mode):
+                    continue
+                try:
+                    os.unlink(target)
+                except OSError as e:
+                    log(f"Couldn't delete {store}/{rec['folder']}/{rel}: {e.strerror or e}")
+                    continue
+                gone.add(rel)
+                count, done["files"], done["bytes"] = count + 1, done["files"] + 1, done["bytes"] + st.st_size
+                for parent in Path(rel).parents:
+                    if str(parent) != ".":
+                        dirs.add(folder / parent)
+            for d in sorted(dirs, key=lambda d: len(d.parts), reverse=True) + [folder, folder.parent]:
+                if d != sdir and sdir in d.parents:
+                    try:
+                        d.rmdir()   # only when empty
+                    except OSError:
+                        pass
+            # a recorded file that's gone now (deleted here, or before) leaves the record
+            rec["files"] = {k: f for k, f in rec.get("files", {}).items()
+                            if f.get("path") not in gone and _still_there(folder, f.get("path"))}
+            if count:
+                done["products"] += 1
+            if folder.is_dir():
+                done["kept"].append(f"{store}/{rec['folder']}")
+        manifest.save_changes()
+    if done["files"] or done["products"]:
+        log(f"Deleted {done['files']} downloaded files of {done['products']} removed products.")
+        build_catalog(cfg, root)
+    return done
+
+
+EDIT_NOTE = """This is an editable copy of a download, made by Hoard on {when}.
+
+    {name} by {creator} ({store})
+    The original: {original}
+
+Change anything here. Hoard never checks, updates or replaces this folder, and doesn't import from it: it's yours.
+
+The original stays as the store sent it. Hoard checks that one, and replaces a file there that was changed, so
+edit here instead. Only files that still matched what Hoard downloaded were copied. Anything you add to this
+folder (a texture from a website, a tool someone sent you) hasn't been checked by Hoard, so be as careful with it
+as with any download.
+"""
+
+
+def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
+    """Copy a product's downloaded files into a folder of their own under edits_dir (issue #82), for you to change.
+
+    Hoard checks and re-downloads files in the downloads folder, so edits there are lost, and an edited file can't
+    be told from one that something else changed. The copy is outside Hoard's care altogether. Only the files Hoard
+    recorded are copied, and only while they're still the size they were downloaded at; one that isn't is left out
+    and named, so a file changed behind Hoard's back isn't passed on as the store's. Nothing is read through a
+    link. The copy goes in a new folder each time ("Name (2)" beside an earlier copy), and a note in it says what
+    it is. Returns {"folder", "files", "bytes", "skipped": [(path, why)]}. Raises ValueError when there's nothing to copy."""
+    from .config import edits_dir
+    dest_root = edits_dir(cfg)
+    rroot, rdest = root.resolve(), dest_root.resolve()
+    if rdest == rroot or rroot in rdest.parents:
+        raise ValueError("The folder for editable copies can't be inside the downloads folder. Choose another in "
+                         "config.json (edits_root).")
+    for store in STORE_DIRS.values():
+        sdir = root / store
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        for rec in Manifest(sdir).assets.values():
+            if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
+                continue
+            try:
+                rel_to_path(sdir, rec["folder"])
+            except UnsafePath:
+                continue
+            base = dest_root / store / rec["folder"]
+            dest, n = base, 2
+            while os.path.lexists(dest):
+                dest, n = base.with_name(f"{base.name} ({n})"), n + 1
+            dest.mkdir(parents=True)
+            copied, size, skipped = 0, 0, []
+            for f in sorted(rec["files"].values(), key=lambda f: f.get("path") or ""):
+                rel = f.get("path")
+                try:
+                    src = open_under(root, f"{store}/{rec['folder']}/{rel}")
+                except UnsafePath:
+                    skipped.append((rel, "missing, or not a plain file"))
+                    continue
+                with src:
+                    got = os.fstat(src.fileno()).st_size
+                    if f.get("size") is not None and got != f["size"]:
+                        skipped.append((rel, "changed since Hoard downloaded it"))
+                        continue
+                    target = rel_to_path(dest, rel)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with open(target, "xb") as out:
+                        shutil.copyfileobj(src, out, 1024 * 1024)
+                copied, size = copied + 1, size + got
+            note = EDIT_NOTE.format(when=now_iso()[:10], name=rec.get("name"), creator=rec.get("creator"), store=store,
+                                    original=root / store / rec["folder"])
+            if skipped:
+                note += "\nLeft out:\n" + "".join(f"    {rel}: {why}\n" for rel, why in skipped)
+            (dest / "_EDITABLE COPY - read me.txt").write_text(note, "utf-8")
+            log(f"Made an editable copy of {store}/{rec['folder']} in {dest}: {copied} files"
+                + (f", {len(skipped)} left out" if skipped else ""))
+            return {"folder": str(dest), "files": copied, "bytes": size, "skipped": skipped}
+    raise ValueError("That download isn't on disk any more.")
+
+
+def integrity_file() -> Path:
+    from .paths import data_dir
+    return data_dir() / "integrity.json"
+
+
+def last_integrity() -> dict | None:
+    """What the last check of the downloads found (issue #83), or None if there hasn't been one."""
+    try:
+        raw = read_json_file(integrity_file()) if integrity_file().is_file() else None
+    except (DataFileError, OSError):
+        return None
+    if not isinstance(raw, dict) or not isinstance(raw.get("checked"), str):
+        return None
+    num = lambda k: raw[k] if isinstance(raw.get(k), int) and not isinstance(raw.get(k), bool) else 0  # noqa: E731
+    texts = lambda k: [str(x)[:500] for x in raw[k][:200]] if isinstance(raw.get(k), list) else []  # noqa: E731
+    return {"checked": raw["checked"][:40], "products": num("products"), "files": num("files"), "fine": num("fine"),
+            "changed": texts("changed"), "missing": texts("missing"), "data_changed": texts("data_changed"),
+            "complete": raw.get("complete") is not False}
+
+
+def check_integrity(root: Path, stop=None, progress=None) -> dict:
+    """Check the downloads are as Hoard downloaded them (issue #83): every data file's seal, and every recorded file's
+    size and SHA-256. A file's fingerprint is taken the first time it's checked and kept in its record; after that it's
+    read again only when its size or modified time changed, so a routine check is quick. Nothing is changed but the
+    records' fingerprints, and nothing is followed through a link. The result is kept in integrity.json (the
+    Downloads page shows it) and returned: products and files checked, which files changed or are missing, and which
+    data files were changed outside Hoard. stop: a threading.Event that ends the check early (it says so)."""
+    import stat as _stat
+    from .safety import _is_link
+    say = progress or (lambda line: None)
+    result = {"checked": now_iso(), "products": 0, "files": 0, "fine": 0, "changed": [], "missing": [],
+              "data_changed": [], "complete": True}
+    data_files = [root / d / "_manifest.json" for d in STORE_DIRS.values()] + [root / "catalog.json", root / "tags.json"]
+    for path in data_files:
+        if path.is_file():
+            try:
+                status = check_seal(read_json_file(path), path if path.name == "_manifest.json" else None)
+            except DataFileError:
+                status = "changed"
+            if status == "changed":
+                result["data_changed"].append(str(path.relative_to(root)).replace(os.sep, "/"))
+    for store in STORE_DIRS.values():
+        sdir = root / store
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        manifest = Manifest(sdir)
+        for rec in manifest.assets.values():
+            if stop is not None and stop.is_set():
+                result["complete"] = False
+                break
+            if not rec.get("files"):
+                continue
+            result["products"] += 1
+            say(f"Checking {store}: {rec.get('name')}")
+            try:
+                folder = rel_to_path(sdir, rec["folder"])
+            except UnsafePath:
+                continue
+            for f in rec["files"].values():
+                rel = f.get("path")
+                where = f"{store}/{rec['folder']}/{rel}"
+                shown = f"{rec.get('name')} ({store}): {rel}"   # by the product's name, so a hidden one can be masked
+                result["files"] += 1
+                try:
+                    target = rel_to_path(folder, rel)
+                    st = os.stat(target, follow_symlinks=False)
+                except (UnsafePath, OSError):
+                    result["missing"].append(shown)
+                    continue
+                if _is_link(st) or not _stat.S_ISREG(st.st_mode) or (f.get("size") is not None and st.st_size != f["size"]):
+                    result["changed"].append(shown)
+                    continue
+                if f.get("sha256") and f.get("mtime_ns") == st.st_mtime_ns:
+                    result["fine"] += 1
+                    continue
+                try:
+                    with open_under(root, where) as fh:
+                        digest = hashlib.sha256()
+                        for block in iter(lambda: fh.read(1024 * 1024), b""):
+                            digest.update(block)
+                except (UnsafePath, OSError):
+                    result["missing"].append(shown)
+                    continue
+                if f.get("sha256") and f["sha256"] != digest.hexdigest():
+                    result["changed"].append(shown)
+                    continue
+                f.update(sha256=digest.hexdigest(), mtime_ns=st.st_mtime_ns)   # the fingerprint, taken once
+                result["fine"] += 1
+            manifest.checkpoint()
+        manifest.save_changes()
+        if not result["complete"]:
+            break
+    try:
+        write_file_safely(integrity_file(), json.dumps(result, ensure_ascii=False))
+    except OSError as e:
+        log(f"Couldn't save what the check found: {e}")
+    return result
+
+
+def integrity_summary(r: dict) -> str:
+    """One line about a check, for the Tasks list and the page."""
+    if not r["complete"]:
+        return f"Stopped after checking {r['files']:,} files."
+    problems = []
+    if r["changed"]:
+        problems.append(f"{len(r['changed'])} changed since Hoard downloaded {'it' if len(r['changed']) == 1 else 'them'}")
+    if r["missing"]:
+        problems.append(f"{len(r['missing'])} missing")
+    if r["data_changed"]:
+        problems.append(f"{len(r['data_changed'])} of Hoard's own records changed outside Hoard")
+    if not problems:
+        return f"All {r['files']:,} files of {r['products']:,} downloads are as Hoard downloaded them."
+    return f"Checked {r['files']:,} files: " + ", ".join(problems) + "."
+
+
+def _still_there(folder: Path, rel) -> bool:
+    try:
+        return os.path.lexists(rel_to_path(folder, rel))
+    except UnsafePath:
+        return False
 
 
 # What catalog.json, tags.json and asset.json promise (docs/DATA-FORMATS.md describes them in full).

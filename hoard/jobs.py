@@ -61,6 +61,7 @@ SYNC_CHOICES = (0, 6, 12, 24, 168)   # hours between automatic syncs; 0 = off
 UNATTENDED = ("payhip",)   # never synced automatically: Payhip needs a visible window, for its bot check
 OFFLINE_RETRY = 15 * 60    # an automatic sync that found no connection tries again this much later
 FIRST_WAIT = 2 * 60        # after Hoard starts, before an automatic sync that's due
+CHECK_CHOICES = (0, 1, 7, 30)   # days between routine checks of the downloads (issue #83); 0 = only when you ask
 
 
 def _sync_file():
@@ -75,6 +76,15 @@ def last_sync() -> float:
         return 0.0
     last = data.get("last") if isinstance(data, dict) else None
     return float(last) if isinstance(last, (int, float)) and last > 0 else 0.0
+
+
+def _when(stamp: str) -> float:
+    """An ISO time (as now_iso writes it) as seconds, or 0."""
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(stamp).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _record_sync() -> None:
@@ -102,10 +112,29 @@ class Schedule:
         return bool(hours in SYNC_CHOICES and hours and self.cfg.get("setup_done") and now >= self.not_before
                     and not self.jobs.state["running"] and now - last_sync() >= hours * 3600 and self.stores())
 
+    def check_due(self, now: float | None = None) -> bool:
+        """A routine check of the downloads (issue #83): every integrity_check_days after the last, once setup is done,
+        never while another job runs, and only when something is downloaded."""
+        from .config import root_dir
+        from .downloader import STORE_DIRS, last_integrity
+        now = time.time() if now is None else now
+        days = self.cfg.get("integrity_check_days", 7)
+        if days not in CHECK_CHOICES or not days or isinstance(days, bool) or not self.cfg.get("setup_done") \
+                or now < self.not_before or self.jobs.state["running"]:
+            return False
+        last = last_integrity()
+        when = _when(last["checked"]) if last else 0.0
+        if now - when < days * 86400:
+            return False
+        root = root_dir(self.cfg)
+        return any((root / d / "_manifest.json").is_file() for d in STORE_DIRS.values())
+
     def tick(self, now: float | None = None) -> bool:
-        """Start a sync if one is due. True when it started."""
+        """Start a sync if one is due, else a check of the downloads if that's due. True when one started."""
         now = time.time() if now is None else now
         if not self.due(now):
+            if self.check_due(now):
+                return self.jobs.start("verify", [], scheduled=True, queue=False) == "started"
             return False
         stores = self.stores()
         if not any(reachable(s) for s in stores):
@@ -128,13 +157,14 @@ class Schedule:
 # ----------------------------------------------------------------------------- background jobs
 
 TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
-              "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser"}
+              "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
+              "verify": "Check downloads"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
 FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped answering is ended
 STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
-WATCHED = ("download", "check-updates", "sync", "refresh")   # jobs that never wait on you (sign-ins do)
+WATCHED = ("download", "check-updates", "sync", "refresh", "verify")   # jobs that never wait on you (sign-ins do)
 
 
 def tasks_file():
@@ -258,6 +288,8 @@ class Jobs:
             target = self._sync
         elif task == "install-browser":
             target = self._install_browser
+        elif task == "verify":
+            target = self._verify
         elif task == "login":
             target = self._login_then_refresh
         elif task == "logout":
@@ -380,6 +412,26 @@ class Jobs:
             return
         self._set(message="Hoard's browser is installed.")
 
+    def _quietly(self, line: str) -> None:
+        """Progress shown on the page (and counted as moving), but not kept in the job's log."""
+        self._moved = time.monotonic()
+        self.state["message"] = line
+
+    def _verify(self, stores: list[str]) -> None:
+        """Check the downloads are as Hoard downloaded them (issue #83), naming any file that isn't."""
+        from .config import root_dir
+        from .downloader import check_integrity, integrity_summary
+        self._set(task="verify", message="Checking your downloads")
+        result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly)
+        lines = ([f"Changed: {p}" for p in result["changed"][:100]] + [f"Missing: {p}" for p in result["missing"][:100]]
+                 + [f"Changed outside Hoard: {p}" for p in result["data_changed"]])
+        summary = integrity_summary(result)
+        if not result["complete"]:
+            summary = "Stopped. " + summary
+        self._set(message=summary, log=lines[-200:])
+        for line in [summary] + lines:
+            print(f"Check downloads: {line}", flush=True)
+
     def _sync(self, stores: list[str]) -> None:
         """Sync: read what you own from each store, then download anything new, as one job."""
         self.state["sync"] = True
@@ -396,7 +448,7 @@ class Jobs:
     def cancel(self) -> bool:
         """Stop the running download (or sync) within a few seconds; a file it was part way through resumes next time
         where it can. False when neither is running."""
-        if self.state["running"] and (self.state["task"] in ("download", "check-updates") or self.state.get("sync")):
+        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify") or self.state.get("sync")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
             threading.Thread(target=self._force_stop, args=(self.state.get("job_id"),), daemon=True).start()

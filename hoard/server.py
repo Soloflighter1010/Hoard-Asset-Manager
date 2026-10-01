@@ -23,9 +23,10 @@ from . import __version__, diagnostics, itch, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import catalog_seal, collect_catalog, download_retries, reseal_catalog
+from .downloader import (catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
+                         last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
-from .jobs import SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
+from .jobs import CHECK_CHOICES, SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
@@ -45,7 +46,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/app/close", "/api/open-logs",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
-           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear")
+           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -133,6 +134,23 @@ def ui_settings(cfg: dict) -> dict:
     return out
 
 
+def integrity_view(cfg: dict) -> dict:
+    """The last check of the downloads (issue #83), for the Downloads page: when, and how many files were fine,
+    changed or missing. Counts only: which files is in the check's log in Tasks, where hidden names are masked."""
+    last = last_integrity()
+    view = {"every_days": check_days(cfg), "checked": None}
+    if last:
+        view.update(checked=last["checked"], files=last["files"], fine=last["fine"], changed=len(last["changed"]),
+                    missing=len(last["missing"]), data_changed=len(last["data_changed"]), complete=last["complete"],
+                    summary=integrity_summary(last))
+    return view
+
+
+def check_days(cfg: dict) -> int:
+    days = cfg.get("integrity_check_days", 7)
+    return days if days in CHECK_CHOICES and not isinstance(days, bool) else 7
+
+
 def public_settings(cfg: dict) -> dict:
     """The settings the page can show and change, with the downloads folder spelled out."""
     return {
@@ -144,6 +162,7 @@ def public_settings(cfg: dict) -> dict:
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
+        "integrity_check_days": check_days(cfg),
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
@@ -187,6 +206,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if body["download_retries"] not in (0, 1, 2, 3) or isinstance(body["download_retries"], bool):
             raise ValueError("Choose how many times to try a failed download again from the list.")
         change["download_retries"] = body["download_retries"]
+    if "integrity_check_days" in body:
+        if body["integrity_check_days"] not in CHECK_CHOICES or isinstance(body["integrity_check_days"], bool):
+            raise ValueError("Choose how often to check your downloads from the list.")
+        change["integrity_check_days"] = body["integrity_check_days"]
     if "new_days" in body:
         if body["new_days"] not in NEW_DAYS or isinstance(body["new_days"], bool):
             raise ValueError("Choose how long things are marked New from the list.")
@@ -505,7 +528,7 @@ class Handler(BaseHTTPRequestHandler):
                 if mark != "hidden" or unlocked:
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
-                     "updates_checked": updates["checked"]}
+                     "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg)}, compress=True)
@@ -586,6 +609,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 400)
         srv.forget_index()
         return self._json({"ok": True})
+
+    def _delete_files(self, body: dict):
+        """Delete the downloaded files of products you removed from your library. Only removed ones (so nothing in
+        your library loses its files by a slip), only when confirmed, and not while a job could be writing them."""
+        srv = self.server
+        if body.get("confirm") is not True:
+            return self._json({"error": "Confirm first."}, 400)
+        raw = body.get("keys")
+        keys = {k for k in raw[:5000] if isinstance(k, str)} if isinstance(raw, list) else set()
+        marks = MarkStore().load()
+        keys &= marks["removed"]
+        if keys & marks["hidden"] and not self._unlocked():
+            return self._json({"error": "Unlock your hidden library first."}, 403)
+        if not keys:
+            return self._json({"error": "Only the files of products you've removed from your library can be deleted."}, 400)
+        if not srv.jobs.busy.acquire(blocking=False):
+            return self._json({"error": "Wait for the current task to finish, then delete the files."}, 409)
+        try:
+            done = delete_downloaded_files(srv.cfg, root_dir(srv.cfg), keys)
+        finally:
+            srv.jobs.busy.release()
+            srv.jobs.kick()
+        srv.forget_index()
+        return self._json({"ok": True, **done})
 
     def _import(self, body: dict):
         """Import library pages saved from your own browser: any number, sent a batch at a time. Each page gets its
@@ -768,6 +815,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/verify":   # check the downloads now (issue #83), after anything already running
+            started = srv.jobs.start("verify", [])
+            if not started:
+                return self._json({"error": "A check is already waiting its turn."}, 409)
+            return self._json({"ok": True, "queued": started == "queued"})
+        if path == "/api/edit-copy":   # a copy of a download to change, outside Hoard's care (issue #82)
+            key = str(body.get("key") or "")[:400]
+            if key in MarkStore().load()["hidden"] and not self._unlocked():
+                return self._json({"error": "Unlock your hidden library first."}, 403)
+            try:
+                done = make_editable_copy(srv.cfg, root_dir(srv.cfg), key)
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": f"Couldn't make the copy: {e.strerror or e}."}, 500)
+            opened = None
+            if body.get("open"):
+                try:
+                    opened = reveal(Path(done["folder"]))
+                except OSError:
+                    pass
+            return self._json({"ok": True, **done, "skipped": [{"path": p, "why": w} for p, w in done["skipped"]],
+                               "opened_in": opened})
+        if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
+            return self._delete_files(body)
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
                     "/api/pin/recover", "/api/pin/phrase"):
             return self._privacy_action(path, body)

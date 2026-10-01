@@ -117,6 +117,248 @@ class EmptyLibrary(unittest.TestCase):
         self.assertEqual(list(root.iterdir()), [])
 
 
+class DeletingRemovedDownloads(unittest.TestCase):
+    """Issue #81: removing something from the Library left its download in Downloads. Its downloaded files can now be
+    deleted too, after you confirm: only a removed product's, only the files Hoard downloaded, never through a link."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        folder = self.root / "Booth" / "Kitsu Studio" / "Rusk"
+        (folder / "Textures").mkdir(parents=True)
+        (folder / "rusk.unitypackage").write_bytes(b"pkg")
+        (folder / "Textures" / "body.png").write_bytes(b"png!")
+        (folder / "_thumbnail.png").write_bytes(b"t")
+        man = downloader.Manifest(self.root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "Textures/body.png", "size": 4}}
+        other = man.record("222", "Kitsu Studio", "Anko")
+        (self.root / "Booth" / "Kitsu Studio" / "Anko").mkdir()
+        (self.root / "Booth" / "Kitsu Studio" / "Anko" / "anko.zip").write_bytes(b"zip")
+        other["files"] = {"f1": {"path": "anko.zip", "size": 3}}
+        man.save()
+        self.folder = folder
+        from hoard import tags
+        self.key = tags.tag_key("Booth", "Rusk")
+
+    def test_only_its_downloaded_files_go(self):
+        mine = self.folder / "Textures" / "body-edited.png"   # something of your own, in the same folder
+        mine.write_bytes(b"mine")
+        done = downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
+        self.assertEqual((done["products"], done["files"], done["bytes"]), (1, 3, 8))
+        self.assertTrue(mine.exists(), "your own files stay")
+        self.assertFalse((self.folder / "rusk.unitypackage").exists())
+        self.assertEqual(done["kept"], ["Booth/Kitsu Studio/Rusk"])
+        self.assertTrue((self.root / "Booth" / "Kitsu Studio" / "Anko" / "anko.zip").exists(), "other products stay")
+        records = downloader.Manifest(self.root / "Booth").assets
+        self.assertEqual(records["111"]["files"], {}, "the record no longer lists them")
+        self.assertEqual(records["111"]["folder"], "Kitsu Studio/Rusk")
+        catalog = json.loads((self.root / "catalog.json").read_text("utf-8"))
+        self.assertEqual([a["name"] for a in catalog["assets"]], ["Anko"])
+
+    def test_an_emptied_folder_goes(self):
+        downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
+        self.assertFalse(self.folder.exists())
+        self.assertTrue((self.root / "Booth" / "Kitsu Studio").is_dir(), "the creator's folder still has Anko")
+
+    @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
+    def test_never_through_a_link(self):
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside, True)
+        (outside / "precious.txt").write_bytes(b"keep")
+        (self.folder / "rusk.unitypackage").unlink()
+        os.symlink(outside / "precious.txt", self.folder / "rusk.unitypackage")
+        shutil.rmtree(self.folder / "Textures")
+        os.symlink(outside, self.folder / "Textures")
+        (outside / "body.png").write_bytes(b"also")
+        downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
+        self.assertEqual(sorted(p.name for p in outside.iterdir()), ["body.png", "precious.txt"])
+
+    def test_the_server_only_deletes_removed_products(self):
+        from hoard import marks
+        cfg = {**config.load_config(), "root": str(self.root)}
+        srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(marks.MarkStore().path.unlink, missing_ok=True)
+        try:
+            def call(body):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                c.request("POST", "/api/delete-files", body=json.dumps(body),
+                          headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return r.status, data
+            self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 400, "not removed: nothing is deleted")
+            self.assertTrue((self.folder / "rusk.unitypackage").exists())
+            marks.MarkStore().change("removed", {self.key}, True)
+            self.assertEqual(call({"keys": [self.key]})[0], 400, "not confirmed")
+            self.assertTrue(srv.jobs.busy.acquire(timeout=5))
+            try:
+                self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 409, "not while a job runs")
+            finally:
+                srv.jobs.busy.release()
+            status, done = call({"keys": [self.key], "confirm": True})
+            self.assertEqual((status, done["files"]), (200, 3))
+            self.assertFalse(self.folder.exists())
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
+class EditableCopies(unittest.TestCase):
+    """Issue #82: files changed in the downloads folder are replaced by the next sync, and an edited file can't be
+    told from a tampered one. An editable copy goes to a folder of its own that Hoard never checks or replaces;
+    only files still as Hoard downloaded them are copied, so a changed one isn't passed on as the store's."""
+
+    def setUp(self):
+        from hoard import tags
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, True)
+        self.root = self.base / "Hoard"
+        folder = self.root / "Booth" / "Kitsu Studio" / "Rusk"
+        (folder / "Textures").mkdir(parents=True)
+        (folder / "rusk.unitypackage").write_bytes(b"pkg")
+        (folder / "Textures" / "body.png").write_bytes(b"png!")
+        man = downloader.Manifest(self.root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "Textures/body.png", "size": 4}}
+        man.save()
+        self.folder, self.key = folder, tags.tag_key("Booth", "Rusk")
+        self.cfg = {**config.load_config(), "root": str(self.root)}
+
+    def test_a_copy_beside_the_downloads(self):
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        copy = self.base / "Hoard Edits" / "Booth" / "Kitsu Studio" / "Rusk"
+        self.assertEqual((Path(done["folder"]), done["files"], done["bytes"], done["skipped"]), (copy, 2, 7, []))
+        self.assertEqual((copy / "Textures" / "body.png").read_bytes(), b"png!")
+        self.assertIn("never checks, updates or replaces", (copy / "_EDITABLE COPY - read me.txt").read_text("utf-8"))
+        (copy / "Textures" / "body.png").write_bytes(b"edited")   # yours to change; the original stays
+        self.assertEqual((self.folder / "Textures" / "body.png").read_bytes(), b"png!")
+        again = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        self.assertEqual(Path(again["folder"]).name, "Rusk (2)", "an earlier copy is never written over")
+        self.assertEqual((copy / "Textures" / "body.png").read_bytes(), b"edited")
+
+    def test_a_changed_file_is_left_out(self):
+        (self.folder / "Textures" / "body.png").write_bytes(b"something else")
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        self.assertEqual(done["skipped"], [("Textures/body.png", "changed since Hoard downloaded it")])
+        self.assertFalse((Path(done["folder"]) / "Textures" / "body.png").exists())
+        self.assertIn("Textures/body.png", (Path(done["folder"]) / "_EDITABLE COPY - read me.txt").read_text("utf-8"))
+
+    @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
+    def test_never_through_a_link(self):
+        secret = self.base / "secret.txt"
+        secret.write_bytes(b"pkg")   # the same size as the file it stands in for
+        (self.folder / "rusk.unitypackage").unlink()
+        os.symlink(secret, self.folder / "rusk.unitypackage")
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)   # a record leading outside isn't read
+        self.assertFalse((Path(done["folder"]) / "rusk.unitypackage").exists())
+        inside = self.folder / "inside.bin"   # and a link to somewhere inside isn't followed either
+        inside.write_bytes(b"png!")
+        (self.folder / "Textures" / "body.png").unlink()
+        os.symlink(inside, self.folder / "Textures" / "body.png")
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        self.assertEqual(done["skipped"], [("Textures/body.png", "missing, or not a plain file")])
+
+    def test_never_inside_the_downloads(self):
+        with self.assertRaises(ValueError):
+            downloader.make_editable_copy({**self.cfg, "edits_root": str(self.root / "Edits")}, self.root, self.key)
+        with self.assertRaises(ValueError):
+            downloader.make_editable_copy(self.cfg, self.root, "booth:nothing")
+        chosen = self.base / "Mine"
+        done = downloader.make_editable_copy({**self.cfg, "edits_root": str(chosen)}, self.root, self.key)
+        self.assertEqual(Path(done["folder"]), chosen / "Booth" / "Kitsu Studio" / "Rusk")
+
+    def test_the_server_makes_one(self):
+        srv = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", "/api/edit-copy", body=json.dumps({"key": self.key}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse(); data = json.loads(r.read()); c.close()
+            self.assertEqual((r.status, data["files"], data["skipped"]), (200, 2, []))
+            self.assertTrue(Path(data["folder"]).is_dir())
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
+class RoutineChecks(unittest.TestCase):
+    """Issue #83: you couldn't tell when (or whether) Hoard checked your downloads. A check now runs on a schedule (a
+    week by default) or when you ask: every recorded file is there, the size it was downloaded at, and has the same
+    SHA-256 as when first checked; Downloads says when it last ran and what it found."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.folder = self.root / "Booth" / "Kitsu Studio" / "Rusk"
+        self.folder.mkdir(parents=True)
+        (self.folder / "rusk.unitypackage").write_bytes(b"pkg")
+        (self.folder / "body.png").write_bytes(b"png!")
+        man = downloader.Manifest(self.root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "body.png", "size": 4},
+                        "f3": {"path": "gone.zip", "size": 9}}
+        man.save()
+        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+
+    def test_it_finds_changed_and_missing_files(self):
+        first = downloader.check_integrity(self.root)
+        self.assertEqual((first["files"], first["fine"], first["changed"]), (3, 2, []))
+        self.assertEqual(first["missing"], ["Rusk (Booth): gone.zip"])
+        rec = downloader.Manifest(self.root / "Booth").assets["111"]["files"]
+        self.assertEqual(len(rec["f2"]["sha256"]), 64, "the fingerprint is kept in the record")
+        png = self.folder / "body.png"
+        png.write_bytes(b"evil")   # the same size, different content
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 5_000_000_000))
+        again = downloader.check_integrity(self.root)
+        self.assertEqual(again["changed"], ["Rusk (Booth): body.png"])
+        self.assertIn("1 changed since Hoard downloaded it, 1 missing", downloader.integrity_summary(again))
+        self.assertEqual(downloader.last_integrity()["changed"], ["Rusk (Booth): body.png"])
+
+    def test_an_unchanged_file_isnt_read_again(self):
+        downloader.check_integrity(self.root)
+        from unittest import mock
+        with mock.patch.object(downloader, "open_under", side_effect=AssertionError("read again")):
+            r = downloader.check_integrity(self.root)
+        self.assertEqual(r["fine"], 2)
+
+    def test_stop_ends_it(self):
+        stop = threading.Event(); stop.set()
+        r = downloader.check_integrity(self.root, stop=stop)
+        self.assertFalse(r["complete"])
+        self.assertTrue(downloader.integrity_summary(r).startswith("Stopped"))
+
+    def test_it_runs_on_a_schedule(self):
+        cfg = {**config.load_config(), "root": str(self.root), "setup_done": True, "auto_sync_hours": 0}
+        state = {"running": False}
+        started = []
+        fake = type("J", (), {"state": state, "start": lambda self, task, stores, **kw: started.append((task, kw)) or "started"})()
+        sched = jobs.Schedule(cfg, fake)
+        now = time.time() + 3600
+        self.assertTrue(sched.tick(now), "never checked: due")
+        self.assertEqual(started, [("verify", {"scheduled": True, "queue": False})])
+        downloader.check_integrity(self.root)
+        self.assertFalse(sched.check_due(now), "checked just now")
+        self.assertTrue(sched.check_due(now + 8 * 86400), "a week later")
+        self.assertFalse(jobs.Schedule({**cfg, "integrity_check_days": 0}, fake).check_due(now + 99 * 86400), "off")
+        state["running"] = True
+        self.assertFalse(sched.check_due(now + 8 * 86400), "not while something runs")
+
+    def test_the_setting_and_the_page(self):
+        cfg = {**config.load_config(), "root": str(self.root)}
+        self.assertEqual(server.public_settings(cfg)["integrity_check_days"], 7)
+        self.assertEqual(server.apply_settings(cfg, {"integrity_check_days": 30}), {"integrity_check_days": 30})
+        for bad in (2, True, "7"):
+            with self.assertRaises(ValueError):
+                server.apply_settings(cfg, {"integrity_check_days": bad})
+        self.assertEqual(server.integrity_view(cfg), {"every_days": 7, "checked": None})
+        downloader.check_integrity(self.root)
+        view = server.integrity_view(cfg)
+        self.assertEqual((view["files"], view["fine"], view["missing"], view["changed"]), (3, 2, 1, 0))
+        self.assertNotIn("Rusk", json.dumps(view), "names stay in Tasks, where hidden ones are masked")
+
+
 class ManifestSaves(unittest.TestCase):
     """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
     after every file and every product; each sync still ends by saving everything, however it ends."""

@@ -49,7 +49,10 @@ The views on the left keep things out of your way:
 - **Archive** is for older products you want out of sight but still yours. Gumroad's archived purchases start
   there.
 - **Removed** is for things that don't belong in your library. They stay out, even after a refresh, and they
-  aren't downloaded. **Delete for good** takes them out of Hoard's list entirely.
+  aren't downloaded. **Delete for good** takes them out of Hoard's list entirely. When you remove something you've
+  downloaded, Hoard asks whether to delete its downloaded files too; say no and they stay (Downloads lists them
+  under Removed), and you can choose **Delete downloaded files** later, in either view. Only the files Hoard
+  downloaded are deleted: anything of your own in the same folder stays, and so does the folder.
 - **Hidden** puts products behind a PIN. See the next section.
 
 These choices apply in the Library and in Downloads alike.

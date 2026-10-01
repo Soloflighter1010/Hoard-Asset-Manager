@@ -132,6 +132,31 @@ again from the start.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
   say after you've tidied it yourself.
 
+### Checking your downloads
+
+While Hoard is open, it checks once a week (Settings, **Check your downloads**) that your downloads are as it
+downloaded them: every file there, the size it was downloaded at, and unchanged since. The first check reads each
+file in full and keeps its fingerprint (SHA-256) in Hoard's records; later checks read a file again only if its
+size or modified time changed, so they're quick. It also checks the seal on Hoard's own records.
+
+The Downloads sidebar says when it last checked and what it found, with **Check now**. The check is a task like a
+sync, so Tasks lists it, with the files that are missing or changed. A file that changed may be your own edit;
+see the next section for editing safely. Delete a changed file and sync to download it again as the store has it.
+
+### Changing a download: make an editable copy
+
+Hoard keeps the downloads folder as the stores sent it: a sync replaces a file there that was changed, so edits
+made there are lost. To change a texture or anything else, open the product and choose **Make an editable copy**.
+Hoard copies its files into a folder of their own, in **Hoard Edits** beside your downloads folder (or the folder
+`edits_root` names in `config.json`), and opens it. A read-me there says what it is.
+
+- Hoard never checks, updates or replaces the copy, and each copy is a new folder (`Rusk (2)` beside an earlier
+  one), so your edits stay yours.
+- Only files that still match what Hoard downloaded are copied. One that was changed or replaced since is left out,
+  and the read-me names it, so a file someone else changed isn't passed on as the store's.
+- What you add to the copy later (a texture from a website, a tool someone sent you) hasn't been checked by
+  Hoard. Be as careful with it as with any download.
+
 ## Payhip
 
 Hoard doesn't download from Payhip: its check for automated browsers made that unreliable. Your Payhip purchases

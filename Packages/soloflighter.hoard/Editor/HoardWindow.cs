@@ -179,10 +179,11 @@ namespace SoloFlighter.Hoard.Editor
             return best;
         }
 
-        /// <summary>For the credits list (issue #51): the products this project uses. A product counts when its
-        /// assets are in the project, or when it was imported through Hoard and hasn't been found gone since (the
-        /// import log keeps products this computer's catalog doesn't have). stillChecking: packages not read yet,
-        /// so the list may grow.</summary>
+        /// <summary>For the credits list (issues #51 and #79): the products this project uses. Only a product with
+        /// one of its packages fully in the project counts: one that's partly there, or that the import log alone
+        /// says was imported, isn't credited (it may have been removed, or only a piece of it kept). Products
+        /// added by hand in the Credits window are kept there. stillChecking: packages not read yet, so the list
+        /// may grow.</summary>
         public List<CreditEntry> UsedInProject(out int stillChecking, out bool ready)
         {
             var found = new List<CreditEntry>();
@@ -192,14 +193,8 @@ namespace SoloFlighter.Hoard.Editor
             log = ImportLog.Read();
             statusOf.Clear();   // the project may have changed since the list was drawn
             foreach (var a in catalog.Assets)
-                if (ProjectStatus(a) >= InProject.Partly)
+                if (ProjectStatus(a) == InProject.Yes)
                     found.Add(new CreditEntry { Store = a.Store, Name = a.Name, Creator = a.Creator, Url = a.Url });
-            foreach (var e in log)
-            {
-                var a = catalog.Assets.Find(x => x.Store == e.Store && x.Name == e.Name);
-                if (a != null) continue;   // the catalog's own check above decided it
-                found.Add(new CreditEntry { Store = e.Store, Name = e.Name, Creator = e.Creator });
-            }
             return found;
         }
 
@@ -250,7 +245,7 @@ namespace SoloFlighter.Hoard.Editor
             GUILayout.FlexibleSpace();
             if (packages.Waiting > 0) GUILayout.Label("Checking packages: " + packages.Waiting + " to go", EditorStyles.miniLabel);
             if (loading && catalog != null) GUILayout.Label("Loading...", EditorStyles.miniLabel);
-            if (GUILayout.Button("Credits", EditorStyles.toolbarButton)) CreditsWindow.Open(this);
+            if (GUILayout.Button("Create Credits List", EditorStyles.toolbarButton)) CreditsWindow.Open(this);
             if (GUILayout.Button("Reload", EditorStyles.toolbarButton)) Reload();
             if (GUILayout.Button("Folder...", EditorStyles.toolbarButton))
             {

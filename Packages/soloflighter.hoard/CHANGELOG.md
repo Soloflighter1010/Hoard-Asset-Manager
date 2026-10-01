@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- **Create Credits List** (issue #79). The toolbar's **Credits** button is now **Create Credits List**, and the
+  list only takes products fully in the project: one with a package whose files are all there. A product that's
+  only partly there, or that the import log says was imported but whose files are gone, is no longer credited.
+  Ones you added by hand stay.
+
 ## 0.3.0
 
 A credits list for your project, and animated pictures.
