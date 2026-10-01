@@ -1,24 +1,18 @@
 # Code signing policy
 
-Hoard's Windows programs (`Hoard.exe`, `hoard-cli.exe` and the installer, `Hoard-Setup-<version>.exe`) are to be
-signed through SignPath Foundation's free code signing for open-source projects:
+Hoard's Windows programs (`Hoard.exe`, `hoard-cli.exe` and the installer, `Hoard-Setup-<version>.exe`) aren't
+code-signed yet, so Windows may warn before running them (see [Install (Windows)](README.md#install-windows)). Until
+they are, you can check that a download is this project's own build: every release file carries GitHub's signed
+build provenance (`gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`) and a SHA-256 in the release's checksum files, and is scanned by VirusTotal before the release is
+published. This page says what signing will cover once it's in place.
 
-**Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
-[SignPath Foundation](https://signpath.org).**
-
-Hoard has applied; until signing is in place, Windows releases are unsigned (see [Install (Windows)](README.md#install-windows)).
-
-## What is signed
+## What will be signed
 
 Only files built from this repository's source, by its own GitHub Actions release workflow
 (`.github/workflows/release.yml`), from a version tag on `main`. Nothing built on anyone's own computer is signed,
 and nothing from another project is signed as Hoard's: the Python runtime, Playwright and the other libraries
 Hoard bundles keep their makers' own signatures, if they have any. The open-source software Hoard includes is
 listed in [COPYRIGHT.md](COPYRIGHT.md).
-
-Every release file also carries GitHub's signed build provenance
-(`gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`) and a SHA-256 in the release's checksum
-files, and is scanned by VirusTotal before the release is published.
 
 ## Team and roles
 
