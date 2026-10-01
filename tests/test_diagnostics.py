@@ -220,7 +220,10 @@ class ServerExposure(unittest.TestCase):
         self.addCleanup(srv.server_close)
         with mock.patch.object(diagnostics, "support_report_dir", return_value=report_dir):
             body = json.dumps({"notes": "Private Asset", "context": {"source": "job", "store": "booth"}})
-            conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+            # Making a report gathers the environment first (Python's platform lookups, which on Windows ask WMI,
+            # and pywebview's first import): on a cold Windows runner that alone has taken over 5 seconds. This
+            # checks what the report holds, not how fast it's made.
+            conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=60)
             conn.request("POST", "/api/diagnostics/report", body=body,
                          headers={safety.ACCESS_HEADER: srv.key, "Content-Type": "application/json"})
             response = conn.getresponse()

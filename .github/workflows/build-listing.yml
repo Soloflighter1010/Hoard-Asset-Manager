@@ -13,6 +13,7 @@ name: Build Repo Listing
 #   release each time. (Its current code skips releases already in the live listing without carrying them over,
 #   which would leave only newly released versions in each rebuilt listing.)
 # - The listing is also copied to vpm/index.json, the address used before this setup, so it keeps working.
+# - Building it is tried again (up to 4 times, 30 seconds apart) in case it ran while a release was being made.
 # - A release event runs on the release's tag, which github-pages refuses to deploy from, so for those the
 #   build is started again on the default branch instead.
 
@@ -75,15 +76,27 @@ jobs:
           clean: false
           persist-credentials: false
 
+      # Tried up to 4 times, 30 seconds apart: a run can start while a release is still being made (a push to main
+      # during Build Release, or Build Release's own run starting the moment it finishes), when its tag exists but
+      # its .zip isn't there to download yet ("Could not find valid zip file"). A failure that lasts is still one.
       - name: Build the listing from every release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_NAME: ${{ vars.PACKAGE_NAME }}
-        run: >-
-          ${{ env.pathToCi }}/build.cmd BuildRepoListing --root ${{ env.pathToCi }}
-          --list-publish-directory "$GITHUB_WORKSPACE/${{ env.listPublishDirectory }}"
-          --current-package-name "$PACKAGE_NAME"
-          --current-listing-url "https://${{ github.repository_owner }}.github.io/no-current-listing.json"
+        run: |
+          for attempt in 1 2 3 4; do
+            if ${{ env.pathToCi }}/build.cmd BuildRepoListing --root ${{ env.pathToCi }} \
+                --list-publish-directory "$GITHUB_WORKSPACE/${{ env.listPublishDirectory }}" \
+                --current-package-name "$PACKAGE_NAME" \
+                --current-listing-url "https://${{ github.repository_owner }}.github.io/no-current-listing.json"; then
+              exit 0
+            fi
+            [ "$attempt" = 4 ] && break
+            echo "::warning::The listing build failed (attempt $attempt of 4); trying again in 30 seconds, in case a release was still being made."
+            sleep 30
+          done
+          echo "::error::The listing build failed 4 times, 30 seconds apart: see the errors above."
+          exit 1
 
       - name: Keep the earlier listing address (vpm/index.json) working
         run: mkdir -p ${{ env.listPublishDirectory }}/vpm && cp ${{ env.listPublishDirectory }}/index.json ${{ env.listPublishDirectory }}/vpm/index.json
