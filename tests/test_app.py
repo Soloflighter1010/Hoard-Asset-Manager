@@ -283,6 +283,82 @@ class EditableCopies(unittest.TestCase):
             srv.server_close()
 
 
+class RoutineChecks(unittest.TestCase):
+    """Issue #83: you couldn't tell when (or whether) Hoard checked your downloads. A check now runs on a schedule (a
+    week by default) or when you ask: every recorded file is there, the size it was downloaded at, and has the same
+    SHA-256 as when first checked; Downloads says when it last ran and what it found."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.folder = self.root / "Booth" / "Kitsu Studio" / "Rusk"
+        self.folder.mkdir(parents=True)
+        (self.folder / "rusk.unitypackage").write_bytes(b"pkg")
+        (self.folder / "body.png").write_bytes(b"png!")
+        man = downloader.Manifest(self.root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "body.png", "size": 4},
+                        "f3": {"path": "gone.zip", "size": 9}}
+        man.save()
+        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+
+    def test_it_finds_changed_and_missing_files(self):
+        first = downloader.check_integrity(self.root)
+        self.assertEqual((first["files"], first["fine"], first["changed"]), (3, 2, []))
+        self.assertEqual(first["missing"], ["Rusk (Booth): gone.zip"])
+        rec = downloader.Manifest(self.root / "Booth").assets["111"]["files"]
+        self.assertEqual(len(rec["f2"]["sha256"]), 64, "the fingerprint is kept in the record")
+        png = self.folder / "body.png"
+        png.write_bytes(b"evil")   # the same size, different content
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 5_000_000_000))
+        again = downloader.check_integrity(self.root)
+        self.assertEqual(again["changed"], ["Rusk (Booth): body.png"])
+        self.assertIn("1 changed since Hoard downloaded it, 1 missing", downloader.integrity_summary(again))
+        self.assertEqual(downloader.last_integrity()["changed"], ["Rusk (Booth): body.png"])
+
+    def test_an_unchanged_file_isnt_read_again(self):
+        downloader.check_integrity(self.root)
+        from unittest import mock
+        with mock.patch.object(downloader, "open_under", side_effect=AssertionError("read again")):
+            r = downloader.check_integrity(self.root)
+        self.assertEqual(r["fine"], 2)
+
+    def test_stop_ends_it(self):
+        stop = threading.Event(); stop.set()
+        r = downloader.check_integrity(self.root, stop=stop)
+        self.assertFalse(r["complete"])
+        self.assertTrue(downloader.integrity_summary(r).startswith("Stopped"))
+
+    def test_it_runs_on_a_schedule(self):
+        cfg = {**config.load_config(), "root": str(self.root), "setup_done": True, "auto_sync_hours": 0}
+        state = {"running": False}
+        started = []
+        fake = type("J", (), {"state": state, "start": lambda self, task, stores, **kw: started.append((task, kw)) or "started"})()
+        sched = jobs.Schedule(cfg, fake)
+        now = time.time() + 3600
+        self.assertTrue(sched.tick(now), "never checked: due")
+        self.assertEqual(started, [("verify", {"scheduled": True, "queue": False})])
+        downloader.check_integrity(self.root)
+        self.assertFalse(sched.check_due(now), "checked just now")
+        self.assertTrue(sched.check_due(now + 8 * 86400), "a week later")
+        self.assertFalse(jobs.Schedule({**cfg, "integrity_check_days": 0}, fake).check_due(now + 99 * 86400), "off")
+        state["running"] = True
+        self.assertFalse(sched.check_due(now + 8 * 86400), "not while something runs")
+
+    def test_the_setting_and_the_page(self):
+        cfg = {**config.load_config(), "root": str(self.root)}
+        self.assertEqual(server.public_settings(cfg)["integrity_check_days"], 7)
+        self.assertEqual(server.apply_settings(cfg, {"integrity_check_days": 30}), {"integrity_check_days": 30})
+        for bad in (2, True, "7"):
+            with self.assertRaises(ValueError):
+                server.apply_settings(cfg, {"integrity_check_days": bad})
+        self.assertEqual(server.integrity_view(cfg), {"every_days": 7, "checked": None})
+        downloader.check_integrity(self.root)
+        view = server.integrity_view(cfg)
+        self.assertEqual((view["files"], view["fine"], view["missing"], view["changed"]), (3, 2, 1, 0))
+        self.assertNotIn("Rusk", json.dumps(view), "names stay in Tasks, where hidden ones are masked")
+
+
 class ManifestSaves(unittest.TestCase):
     """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
     after every file and every product; each sync still ends by saving everything, however it ends."""

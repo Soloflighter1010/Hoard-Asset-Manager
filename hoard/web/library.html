@@ -804,6 +804,16 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
+  <h3>Check your downloads</h3>
+  <select id="setCheckDays" aria-label="Check your downloads">
+    <option value="0">Only when I choose Check now</option>
+    <option value="1">Once a day</option>
+    <option value="7">Once a week</option>
+    <option value="30">Once a month</option>
+  </select>
+  <p class="hint">While Hoard is open, it checks this often that your downloads are as it downloaded them: none
+    missing, and none changed since. A file is read in full only the first time, or after it changed. Downloads
+    shows when it last checked; Tasks says which files, if any.</p>
   <h3>Sync automatically</h3>
   <select id="setAutoSync" aria-label="Sync automatically">
     <option value="0">Off: only when I choose Sync</option>
@@ -1990,6 +2000,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
   $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
+  $("#setCheckDays").value = String(SETTINGS.integrity_check_days ?? 7);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
@@ -2330,6 +2341,7 @@ function settingsPart(el) {
     case "setBackground": return { close_to_background: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setAutoSync": return { auto_sync_hours: Number(el.value) };
+    case "setCheckDays": return { integrity_check_days: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
     case "setTextSize": case "setPause": case "setMotion":
@@ -2486,11 +2498,14 @@ function wireTasks() {
   watchJobs();
 }
 // Keeps the Tasks count up to date, and brings up a download or sync that was waiting its turn when it starts.
+let lastTask = null;   // a check of the downloads that just ended: the Downloads page shows what it found
 async function watchJobs() {
   try {
     const r = await api("/api/status", { cache: "no-store" });
     if (r.ok) {
       const j = (await r.json()).job || {};
+      if (lastTask === "verify" && j.task !== "verify" && typeof renderIntegrity === "function") load();
+      lastTask = j.running ? j.task : null;
       taskCount((j.running ? 1 : 0) + (j.queue || []).length);
       const pill = $("#job");   // what's running, on the shelf
       if (pill) { pill.hidden = !(j.running && j.message); pill.textContent = j.message || ""; }

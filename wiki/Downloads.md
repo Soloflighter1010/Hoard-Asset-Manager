@@ -132,6 +132,17 @@ again from the start.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
   say after you've tidied it yourself.
 
+### Checking your downloads
+
+While Hoard is open, it checks once a week (Settings, **Check your downloads**) that your downloads are as it
+downloaded them: every file there, the size it was downloaded at, and unchanged since. The first check reads each
+file in full and keeps its fingerprint (SHA-256) in Hoard's records; later checks read a file again only if its
+size or modified time changed, so they're quick. It also checks the seal on Hoard's own records.
+
+The Downloads sidebar says when it last checked and what it found, with **Check now**. The check is a task like a
+sync, so Tasks lists it, with the files that are missing or changed. A file that changed may be your own edit;
+see the next section for editing safely. Delete a changed file and sync to download it again as the store has it.
+
 ### Changing a download: make an editable copy
 
 Hoard keeps the downloads folder as the stores sent it: a sync replaces a file there that was changed, so edits

@@ -1953,6 +1953,121 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
     raise ValueError("That download isn't on disk any more.")
 
 
+def integrity_file() -> Path:
+    from .paths import data_dir
+    return data_dir() / "integrity.json"
+
+
+def last_integrity() -> dict | None:
+    """What the last check of the downloads found (issue #83), or None if there hasn't been one."""
+    try:
+        raw = read_json_file(integrity_file()) if integrity_file().is_file() else None
+    except (DataFileError, OSError):
+        return None
+    if not isinstance(raw, dict) or not isinstance(raw.get("checked"), str):
+        return None
+    num = lambda k: raw[k] if isinstance(raw.get(k), int) and not isinstance(raw.get(k), bool) else 0  # noqa: E731
+    texts = lambda k: [str(x)[:500] for x in raw[k][:200]] if isinstance(raw.get(k), list) else []  # noqa: E731
+    return {"checked": raw["checked"][:40], "products": num("products"), "files": num("files"), "fine": num("fine"),
+            "changed": texts("changed"), "missing": texts("missing"), "data_changed": texts("data_changed"),
+            "complete": raw.get("complete") is not False}
+
+
+def check_integrity(root: Path, stop=None, progress=None) -> dict:
+    """Check the downloads are as Hoard downloaded them (issue #83): every data file's seal, and every recorded file's
+    size and SHA-256. A file's fingerprint is taken the first time it's checked and kept in its record; after that it's
+    read again only when its size or modified time changed, so a routine check is quick. Nothing is changed but the
+    records' fingerprints, and nothing is followed through a link. The result is kept in integrity.json (the
+    Downloads page shows it) and returned: products and files checked, which files changed or are missing, and which
+    data files were changed outside Hoard. stop: a threading.Event that ends the check early (it says so)."""
+    import stat as _stat
+    from .safety import _is_link
+    say = progress or (lambda line: None)
+    result = {"checked": now_iso(), "products": 0, "files": 0, "fine": 0, "changed": [], "missing": [],
+              "data_changed": [], "complete": True}
+    data_files = [root / d / "_manifest.json" for d in STORE_DIRS.values()] + [root / "catalog.json", root / "tags.json"]
+    for path in data_files:
+        if path.is_file():
+            try:
+                status = check_seal(read_json_file(path), path if path.name == "_manifest.json" else None)
+            except DataFileError:
+                status = "changed"
+            if status == "changed":
+                result["data_changed"].append(str(path.relative_to(root)).replace(os.sep, "/"))
+    for store in STORE_DIRS.values():
+        sdir = root / store
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        manifest = Manifest(sdir)
+        for rec in manifest.assets.values():
+            if stop is not None and stop.is_set():
+                result["complete"] = False
+                break
+            if not rec.get("files"):
+                continue
+            result["products"] += 1
+            say(f"Checking {store}: {rec.get('name')}")
+            try:
+                folder = rel_to_path(sdir, rec["folder"])
+            except UnsafePath:
+                continue
+            for f in rec["files"].values():
+                rel = f.get("path")
+                where = f"{store}/{rec['folder']}/{rel}"
+                shown = f"{rec.get('name')} ({store}): {rel}"   # by the product's name, so a hidden one can be masked
+                result["files"] += 1
+                try:
+                    target = rel_to_path(folder, rel)
+                    st = os.stat(target, follow_symlinks=False)
+                except (UnsafePath, OSError):
+                    result["missing"].append(shown)
+                    continue
+                if _is_link(st) or not _stat.S_ISREG(st.st_mode) or (f.get("size") is not None and st.st_size != f["size"]):
+                    result["changed"].append(shown)
+                    continue
+                if f.get("sha256") and f.get("mtime_ns") == st.st_mtime_ns:
+                    result["fine"] += 1
+                    continue
+                try:
+                    with open_under(root, where) as fh:
+                        digest = hashlib.sha256()
+                        for block in iter(lambda: fh.read(1024 * 1024), b""):
+                            digest.update(block)
+                except (UnsafePath, OSError):
+                    result["missing"].append(shown)
+                    continue
+                if f.get("sha256") and f["sha256"] != digest.hexdigest():
+                    result["changed"].append(shown)
+                    continue
+                f.update(sha256=digest.hexdigest(), mtime_ns=st.st_mtime_ns)   # the fingerprint, taken once
+                result["fine"] += 1
+            manifest.checkpoint()
+        manifest.save_changes()
+        if not result["complete"]:
+            break
+    try:
+        write_file_safely(integrity_file(), json.dumps(result, ensure_ascii=False))
+    except OSError as e:
+        log(f"Couldn't save what the check found: {e}")
+    return result
+
+
+def integrity_summary(r: dict) -> str:
+    """One line about a check, for the Tasks list and the page."""
+    if not r["complete"]:
+        return f"Stopped after checking {r['files']:,} files."
+    problems = []
+    if r["changed"]:
+        problems.append(f"{len(r['changed'])} changed since Hoard downloaded {'it' if len(r['changed']) == 1 else 'them'}")
+    if r["missing"]:
+        problems.append(f"{len(r['missing'])} missing")
+    if r["data_changed"]:
+        problems.append(f"{len(r['data_changed'])} of Hoard's own records changed outside Hoard")
+    if not problems:
+        return f"All {r['files']:,} files of {r['products']:,} downloads are as Hoard downloaded them."
+    return f"Checked {r['files']:,} files: " + ", ".join(problems) + "."
+
+
 def _still_there(folder: Path, rel) -> bool:
     try:
         return os.path.lexists(rel_to_path(folder, rel))

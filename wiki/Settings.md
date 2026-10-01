@@ -27,6 +27,8 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   there, or isn't yours, isn't tried again.
 - **Sync automatically:** **Off** (only when you choose **Sync**), or every 6 hours, every 12 hours, once a day or
   once a week, while Hoard is open. Payhip is left out. See [Downloads](Downloads#downloading).
+- **Check your downloads:** once a week unless you choose once a day, once a month, or only when you choose
+  **Check now**. See [Checking your downloads](Downloads#checking-your-downloads).
 - **Accessibility:**
   - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
@@ -70,6 +72,7 @@ and keep it valid JSON.
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `close_to_background` | `false` | Closing Hoard's window keeps Hoard running in the background (**Keep Hoard running when its window is closed** in Settings) |
 | `edits_root` | `""` | Where **Make an editable copy** puts copies; empty means **Hoard Edits** beside your downloads folder. Never inside the downloads folder. See [Changing a download](Downloads#changing-a-download-make-an-editable-copy) |
+| `integrity_check_days` | `7` | Days between checks of your downloads while Hoard is open: `0` (only when you choose **Check now**), `1`, `7` or `30` (**Check your downloads** in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `new_days` | `7` | Days something new in your library is marked **New**: `0` (never), `1`, `3`, `7`, `14` or `30` (**New in your library** in Settings) |
 | `download_retries` | `2` | How many more times a failed file download is tried: `0` to `3` in Settings (**Failed downloads**), up to `5` here |

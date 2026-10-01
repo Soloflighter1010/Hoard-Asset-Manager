@@ -144,6 +144,11 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   files go to a folder of their own (**Hoard Edits**, beside your downloads), which Hoard never checks or replaces,
   so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
   the copy says what it is.
+- **Routine checks of your downloads** (issue #83). Once a week (or a day, a month, or only when you ask, in
+  Settings), Hoard checks every downloaded file is there and unchanged since it was downloaded, by size and
+  SHA-256 fingerprint; after the first check, only files whose size or time changed are read again, so it's quick.
+  Downloads shows when it last checked and what it found, with **Check now**; Tasks names any changed or missing
+  files.
 
 ### Working in the background, and closing safely
 

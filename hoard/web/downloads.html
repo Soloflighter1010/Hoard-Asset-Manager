@@ -168,6 +168,8 @@ a { color: var(--gold); text-underline-offset: 3px; }
 .creators button[aria-pressed="true"] .n { color: inherit; }
 .none { color: var(--dust); font-size: 13px; }
 .totals { color: var(--dust); font-size: 13px; margin-top: 24px; line-height: 1.5; }
+.totals.integrity { margin-top: 8px; }
+.totals .warn { color: var(--warn); font-weight: 600; }
 
 /* the collection */
 main { padding: 22px 24px 64px 8px; min-width: 0; }
@@ -660,6 +662,7 @@ body.less-motion #glow.flow .glow-in { animation: none; }
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
     <ul id="creators" class="creators"></ul>
     <p id="totals" class="totals"></p>
+    <p id="integrity" class="totals integrity"></p>
   </nav>
   <main>
     <div class="headrow"><h2 id="count" class="count" aria-live="polite"></h2>
@@ -727,6 +730,16 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
+  <h3>Check your downloads</h3>
+  <select id="setCheckDays" aria-label="Check your downloads">
+    <option value="0">Only when I choose Check now</option>
+    <option value="1">Once a day</option>
+    <option value="7">Once a week</option>
+    <option value="30">Once a month</option>
+  </select>
+  <p class="hint">While Hoard is open, it checks this often that your downloads are as it downloaded them: none
+    missing, and none changed since. A file is read in full only the first time, or after it changed. Downloads
+    shows when it last checked; Tasks says which files, if any.</p>
   <h3>Sync automatically</h3>
   <select id="setAutoSync" aria-label="Sync automatically">
     <option value="0">Off: only when I choose Sync</option>
@@ -1196,10 +1209,30 @@ function renderFacets(list) {
   const total = DATA.assets.reduce((s, a) => s + a.size, 0);
   const missing = DATA.assets.reduce((s, a) => s + a.missing, 0);
   const gone = DATA.gone || 0;   // downloaded before, every file since deleted from disk (issue #24)
+  renderIntegrity();
   $("#totals").textContent = (DATA.assets.length
     ? `${DATA.assets.length} ${DATA.assets.length === 1 ? "thing" : "things"}, ${fmtSize(total)} on disk.` + (missing ? ` ${missing} ${missing === 1 ? "file" : "files"} missing.` : "")
     : "") + (gone ? ` ${gone} ${gone === 1 ? "download was" : "downloads were"} deleted from disk and ${gone === 1 ? "isn't" : "aren't"} shown; the library offers ${gone === 1 ? "it" : "them"} to download again.` : "");
 }
+
+/* issue #83: when the downloads were last checked to be as Hoard downloaded them, and what that found */
+function renderIntegrity() {
+  const v = DATA.integrity || {}, el = $("#integrity");
+  if (!el || !DATA.assets.length) { if (el) el.innerHTML = ""; return; }
+  const every = { 1: "every day", 7: "every week", 30: "every month" }[v.every_days];
+  const when = v.checked ? `Checked ${esc(ago(v.checked))}` : "Not checked yet";
+  const found = !v.checked ? "" : !v.complete ? " (stopped part way)." : (v.changed || v.missing || v.data_changed)
+    ? `: <strong class="warn">${esc(v.summary)}</strong> Which files is in Tasks.` : `: ${esc(v.summary)}`;
+  el.innerHTML = `${when}${found} ${every ? `Hoard checks ${every}` : "Hoard checks only when you ask"} (Settings). ` +
+    `<button class="linkish" id="checkNow">Check now</button>`;
+}
+async function checkDownloads() {
+  const r = await apiPost("/api/verify");
+  if (!r.ok) { toast(r.data.error || "The check didn't start."); return; }
+  if (queuedToast(r)) return;
+  toast("Checking your downloads. Follow it in Tasks.");
+}
+document.addEventListener("click", e => { if (e.target.closest("#checkNow")) checkDownloads(); });
 
 function renderStatus(list) {
   const total = DATA.assets.filter(inView).length;   // this view: Downloads, Archive, ...
@@ -1695,6 +1728,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
   $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
+  $("#setCheckDays").value = String(SETTINGS.integrity_check_days ?? 7);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
@@ -1987,6 +2021,7 @@ function settingsPart(el) {
     case "setBackground": return { close_to_background: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setAutoSync": return { auto_sync_hours: Number(el.value) };
+    case "setCheckDays": return { integrity_check_days: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
     case "setTextSize": case "setPause": case "setMotion":
@@ -2143,11 +2178,14 @@ function wireTasks() {
   watchJobs();
 }
 // Keeps the Tasks count up to date, and brings up a download or sync that was waiting its turn when it starts.
+let lastTask = null;   // a check of the downloads that just ended: the Downloads page shows what it found
 async function watchJobs() {
   try {
     const r = await api("/api/status", { cache: "no-store" });
     if (r.ok) {
       const j = (await r.json()).job || {};
+      if (lastTask === "verify" && j.task !== "verify" && typeof renderIntegrity === "function") load();
+      lastTask = j.running ? j.task : null;
       taskCount((j.running ? 1 : 0) + (j.queue || []).length);
       const pill = $("#job");   // what's running, on the shelf
       if (pill) { pill.hidden = !(j.running && j.message); pill.textContent = j.message || ""; }

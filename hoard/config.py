@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
     "auto_sync_hours": 0,          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
     "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
     "download_retries": 2,         # a file download that fails is tried again this many more times
+    "integrity_check_days": 7,     # check the downloads are as downloaded this often (issue #83); 0 = only when asked
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False},   # accessibility
     "ui": {},                      # how you left the pages: the sidebar folded, the tile size
     "gumroad": {"enabled": True, "include_archived": True, "save_thumbnails": True},
