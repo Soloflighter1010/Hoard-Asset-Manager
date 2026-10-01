@@ -41,8 +41,12 @@ the release stays a draft until every file is attached.
   VirusTotal's report. Unsigned apps built with PyInstaller are sometimes flagged by one or two engines by
   mistake. Open the report: if it's a false positive (a generic or heuristic name, from an engine or two), run the
   workflow again for the tag with **Publish even if VirusTotal flags a file** ticked; it scans again, notes that
-  it was checked by hand, and publishes. If it looks real, don't publish: find out why first. (Reporting a false
-  positive to the engine's maker clears it for later releases.)
+  it was checked by hand, and publishes. If it looks real, don't publish: find out why first. Report a false
+  positive to the engine's maker, which clears it: Windows won't let a browser download a file Microsoft's engine
+  flags, so the run keeps the flagged files under **Artifacts** (`virustotal-flagged-files`), in a zip with the
+  password `infected`. Upload that zip as it is (for Microsoft, at
+  [microsoft.com/wdsi/filesubmission](https://www.microsoft.com/en-us/wdsi/filesubmission), as a software
+  developer), and give the password where it asks.
 
 ### VirusTotal
 
