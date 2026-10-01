@@ -141,6 +141,16 @@ h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); margin: 0 0 .8em; }
 .tester::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none;
                   box-shadow: 0 0 10px var(--c); }
 
+/* Picture credits: each product shown in the screenshots, by whom, and where to get it */
+.credits { list-style: none; margin: 0 auto; padding: 0; max-width: 1000px; display: grid;
+           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.credit { display: flex; gap: 14px; align-items: center; padding: 12px; border-radius: var(--radius);
+          background: var(--ledge); border: 1px solid var(--seam); border-left: 4px solid var(--c); }
+.credit img { width: 96px; height: 96px; border-radius: 10px; object-fit: cover; flex: none; }
+.credit div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.credit strong { overflow-wrap: anywhere; }
+.credit div > span { color: var(--dust); font-size: .92rem; overflow-wrap: anywhere; }
+
 /* What's new: the releases down a line, newest first */
 .timeline { list-style: none; margin: 0 auto; padding: 0 0 24px; max-width: 860px; position: relative; }
 .timeline::before { content: ""; position: absolute; left: 11px; top: 8px; bottom: 0; width: 2px; background: var(--seam); }

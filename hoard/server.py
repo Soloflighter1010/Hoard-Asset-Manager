@@ -34,7 +34,7 @@ from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, c
                      header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
-from .setup import browser_problem, migrate_from, setup_status
+from .setup import browser_problem, migrate_from, setup_status, signed_in
 from .tags import TagStore, tag_key, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
@@ -519,6 +519,8 @@ class Handler(BaseHTTPRequestHandler):
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": public_job(srv.jobs.state, self._hidden_names()),
                                "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
                                "itch_key": vault.load_key(srv.cfg, "itch") is not None,
+                               # which stores Hoard holds a sign-in for, so Stores offers Sign in or Sign out, not both
+                               "signed_in": {s: signed_in(srv.cfg, s) for s in STORES if srv.cfg[s].get("enabled", True)},
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},

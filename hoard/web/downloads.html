@@ -513,7 +513,7 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* the panel (issue #84): over the page, below the title bar, one at a time. The page below the bar is dimmed;
    the bar stays in reach, so its buttons swap one panel for another. */
 .win { position: fixed; left: 50%; right: auto; bottom: auto; top: calc(var(--bar-h) + 12px); transform: translateX(-50%); z-index: 60; display: flex;
-  flex-direction: column; padding: 0; width: min(620px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
+  flex-direction: column; padding: 0; width: min(880px, calc(var(--vw) - 48px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
   overflow: hidden; border-radius: 16px; background: var(--ledge);
   box-shadow: 0 0 0 1px var(--seam), 0 20px 50px rgb(0 0 0 / .45); }
 .win[hidden] { display: none !important; }
@@ -528,10 +528,10 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .win-x:hover { background: var(--seam); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
-.tasks.win { width: min(680px, calc(var(--vw) - 32px)); }
+.tasks.win { width: min(880px, calc(var(--vw) - 48px)); }
 
 /* Projects (issue #86): the Unity projects that use your assets, and their credits */
-.projects.win { width: min(760px, calc(var(--vw) - 32px)); }
+.projects.win { width: min(960px, calc(var(--vw) - 48px)); }
 .proj { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .proj summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; cursor: pointer; list-style: none; }
 .proj summary::-webkit-details-marker { display: none; }

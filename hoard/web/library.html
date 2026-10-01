@@ -568,7 +568,7 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* the panel (issue #84): over the page, below the title bar, one at a time. The page below the bar is dimmed;
    the bar stays in reach, so its buttons swap one panel for another. */
 .win { position: fixed; left: 50%; right: auto; bottom: auto; top: calc(var(--bar-h) + 12px); transform: translateX(-50%); z-index: 60; display: flex;
-  flex-direction: column; padding: 0; width: min(620px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
+  flex-direction: column; padding: 0; width: min(880px, calc(var(--vw) - 48px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
   overflow: hidden; border-radius: 16px; background: var(--ledge);
   box-shadow: 0 0 0 1px var(--seam), 0 20px 50px rgb(0 0 0 / .45); }
 .win[hidden] { display: none !important; }
@@ -583,10 +583,10 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .win-x:hover { background: var(--seam); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
-.tasks.win { width: min(680px, calc(var(--vw) - 32px)); }
+.tasks.win { width: min(880px, calc(var(--vw) - 48px)); }
 
 /* Projects (issue #86): the Unity projects that use your assets, and their credits */
-.projects.win { width: min(760px, calc(var(--vw) - 32px)); }
+.projects.win { width: min(960px, calc(var(--vw) - 48px)); }
 .proj { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .proj summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; cursor: pointer; list-style: none; }
 .proj summary::-webkit-details-marker { display: none; }
@@ -1221,15 +1221,19 @@ function renderStores() {
   $("#storeRows").innerHTML = usedStores().map(s => {
     const info = DATA.stores[s] || {};
     const busy = job.running;
+    // Sign in or Sign out, whichever applies (itch.io's sign-in is its API key)
+    const signedIn = s === "itch" ? !!DATA.itch_key : !!(DATA.signed_in || {})[s];
     const meta = (info.updated ? `${plural(info.count, "item", "items")}, ${info.source === "import" ? "imported" : "refreshed"} ${ago(info.updated)}` : "Not refreshed yet")
       + (downloadable(s) ? "" : ". Listed, not downloaded");
     return `<div class="store-row"><span class="nm"><span class="dot ${s}"></span>${label(s)}</span>` +
       `<span class="meta">${esc(meta)}</span>` +
-      `<span class="btns"><button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>${s === "itch" ? (DATA.itch_key ? "Change API key" : "Add API key") : "Sign in"}</button>` +
+      `<span class="btns">` + (s === "itch"
+        ? `<button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>${DATA.itch_key ? "Change API key" : "Add API key"}</button>`
+        : signedIn ? "" : `<button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>Sign in</button>`) +
       `<button class="ghost sm" data-refresh="${s}" ${busy ? "disabled" : ""}>Refresh</button>` +
       (downloadable(s) ? `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` : "") +
       (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
-      `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button></span>` +
+      (signedIn ? `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button>` : "") + `</span>` +
       (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}${!/^Signed out/.test(info.error) ? ` <button class="linkish" data-report-store="${esc(s)}">Create report</button>` : ""}</span>` : "") +
       ((info.found_shops || []).length ? `<span class="found">Your library has products from ${info.found_shops.length} more ` +
         `Payhip ${info.found_shops.length === 1 ? "shop" : "shops"} on their own addresses. <button class="linkish" data-review-shops>Review</button></span>` : "") +

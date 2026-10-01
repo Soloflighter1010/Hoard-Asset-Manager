@@ -36,6 +36,8 @@ sys.path.insert(0, str(REPO))
 from hoard import config, downloader, jobs, library, projects, server  # noqa: E402
 from hoard.paths import THUMB_DIR  # noqa: E402
 from hoard.safety import safe_name  # noqa: E402
+sys.path.insert(0, str(REPO / "scripts"))
+from export_screenshot_products import public_link  # noqa: E402
 from hoard.tags import TagStore, tag_key  # noqa: E402
 
 STORES = ("booth", "gumroad", "jinxxy", "payhip", "itch")
@@ -61,7 +63,8 @@ def products(folder: Path) -> list[dict]:
         store = p.get("store", "jinxxy")
         if store not in STORES:
             sys.exit(f"{p['name']}: store must be one of {', '.join(STORES)}")
-        out.append({**p, "store": store, "id": str(1000 + n), "picture": pic})
+        out.append({**p, "store": store, "id": str(1000 + n), "picture": pic,
+                    "url": public_link(store, p.get("url"))})   # never a receipt or account page
     if len(out) < 4:
         sys.exit("Add at least 4 products, so the pages look like a library.")
     return out

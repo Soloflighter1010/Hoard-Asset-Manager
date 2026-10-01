@@ -49,8 +49,9 @@ files? Hoard answers those without opening four tabs.
 </picture>
 </p>
 
-<sub>Library, Downloads, Projects, your own packages and Stores, with real products from the maintainer's own library
-by 3Rr0r_418, Electro's Assets for VRChat, Hecka.Space, Mofcosmos, Morghus, nyakomake, PACIFIA Virtual Shop, Perfecto, Pointless Creations, Shep Shep, SherbDrgn, SOShop, tofumarket, udon-cat-works, Violentpainter, wispywoo, Wmup, Zekk, ろじらぼ and 雪械重工. Thank you for making them.</sub>
+<sub>Library, Downloads, Projects, your own packages and Stores, with real products from the maintainer's own library,
+shown with their creators' pictures. <a href="https://soloflighter1010.github.io/Hoard-Asset-Manager/credits.html">Who made
+each one, and where to get it</a>. Thank you for making them.</sub>
 
 Guides for everything, from installing to fixing a problem, are in the
 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**.

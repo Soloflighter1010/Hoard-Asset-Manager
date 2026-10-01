@@ -14,8 +14,10 @@ What's left out, always:
 - anything without a picture Hoard already saved (in its picture cache, or a download's _thumbnail): nothing is
   fetched from the internet.
 
-Nothing about your accounts goes in: no sign-ins, emails, order numbers or download links, only what the store shows
-everyone on the product's page. Newest first.
+Nothing about your accounts goes in: no sign-ins, emails, order numbers, receipts or download links, only what the
+store shows everyone on the product's page. A link is kept only when it's the product's public page (Gumroad's
+library links are your purchase receipts, which can download what you bought; Payhip's and Jinxxy's are pages of
+your account). Newest first.
 """
 from __future__ import annotations
 
@@ -40,6 +42,22 @@ PICTURES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 ADULT = re.compile(r"(?<![a-z0-9])(r-?18g?|r18|nsfw|18\+|18禁|adult|lewd|nude|nudity|naked|hentai|ecchi|erotic|ero|porn|"
                    r"sexy|futa|lingerie|nipples?|genitals?|explicit|uncensored|xxx)(?![a-z0-9])|成人向け|アダルト|エロ|裸",
                    re.IGNORECASE)
+
+
+# Only a product's public store page is kept. What a library links to is often private: Gumroad's link is your
+# purchase receipt (gumroad.com/d/..., which can download what you bought), Payhip's and Jinxxy's are pages of your
+# account. Those never go in the folder you share.
+PUBLIC_PAGES = {
+    "booth": re.compile(r"https://([a-z0-9-]+\.)?booth\.pm/([a-z]{2}/)?items/\d+"),
+    "gumroad": re.compile(r"https://[a-z0-9-]+\.gumroad\.com/l/[A-Za-z0-9_-]+"),
+    "itch": re.compile(r"https://[a-z0-9-]+\.itch\.io/[a-z0-9_-]+"),
+}
+
+
+def public_link(store: str, url) -> str | None:
+    """url if it's a product's public page on its store, else None (see PUBLIC_PAGES)."""
+    rx = PUBLIC_PAGES.get(store)
+    return url if isinstance(url, str) and rx and rx.fullmatch(url) else None
 
 
 def adult(*texts: str) -> bool:
@@ -117,7 +135,7 @@ def main(argv: list[str]) -> int:
             name = f"{len(chosen) + 1:02d}-{slug(i['name'])}{pic.suffix.lower()}"
             shutil.copy(pic, out / name)
             chosen.append({"image": name, "name": i["name"], "creator": i["creator"], "store": i["store"],
-                           "url": i.get("url"), "tags": mine[:5]})
+                           "url": public_link(i["store"], i.get("url")), "tags": mine[:5]})
     (out / "products.json").write_text(json.dumps(chosen, ensure_ascii=False, indent=1), "utf-8")
     cards = "".join(f'<figure><img src="{html.escape(p["image"])}" alt=""><figcaption><b>{html.escape(p["name"])}</b><br>'
                     f'{html.escape(p["creator"])} · {html.escape(p["store"])}<br><code>{html.escape(p["image"])}</code>'

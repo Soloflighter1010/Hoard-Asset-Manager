@@ -869,6 +869,20 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(self.errors, [])
             page.close()
 
+    def test_sign_in_or_sign_out_not_both(self):
+        """Stores showed Sign in and Sign out for every store at once. Now each store offers the one that applies, and
+        the panels are wider."""
+        from unittest import mock
+        with mock.patch.object(server, "signed_in", lambda cfg, s: s == "booth"):
+            page = self.open()
+            page.click("#storesBtn")
+            page.locator("#storeRows [data-logout='booth']").wait_for()
+            self.assertEqual(page.locator("#storeRows [data-login='booth']").count(), 0, "signed in: no Sign in")
+            self.assertEqual(page.locator("#storeRows [data-logout='gumroad']").count(), 0, "signed out: no Sign out")
+            self.assertEqual(page.locator("#storeRows [data-login='gumroad']").count(), 1)
+            self.assertGreater(page.locator("#stores").bounding_box()["width"], 800, "the panel uses the room it has")
+            page.close()
+
     def test_settings_save_as_they_change(self):
         from unittest import mock
         self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))
