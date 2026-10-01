@@ -270,7 +270,18 @@ class Jobs:
                                for q in self._queue]
 
     def _launch(self, spec: dict) -> None:
-        """Run spec now (the runner is already taken)."""
+        """Run spec now (the runner is already taken). If it can't even start, the runner is let go again, so one job
+        that fails to start never leaves every later one waiting behind it."""
+        try:
+            self._start(spec)
+        except BaseException:
+            self._current = None
+            self.state.update(running=False, task=None, job_id=None)
+            self.busy.release()
+            raise
+
+    def _start(self, spec: dict) -> None:
+        """Start spec's job on a thread of its own (see _launch)."""
         task, stores, only, keys = spec["task"], spec["stores"], spec.get("only"), spec.get("keys")
         items = spec.get("items")
         skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
@@ -435,7 +446,7 @@ class Jobs:
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
 
-
+    def _verify(self, stores: list[str]) -> None:
         """Check the downloads are as Hoard downloaded them (issue #83), naming any file that isn't."""
         from .config import root_dir
         from .downloader import check_integrity, integrity_summary

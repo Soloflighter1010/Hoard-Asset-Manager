@@ -359,6 +359,59 @@ class RoutineChecks(unittest.TestCase):
         self.assertNotIn("Rusk", json.dumps(view), "names stay in Tasks, where hidden ones are masked")
 
 
+class RealJobs(unittest.TestCase):
+    """The tasks added in 3.0, run by the real job runner, not a stand-in. ("Check now" once failed to start at all:
+    its function had lost its name, and the runner it had taken was never let go, so every task after it waited.)"""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+        self.cfg = {**config.load_config(), "root": str(self.root)}
+        self.jobs = jobs.Jobs(self.cfg, library.Library(self.root / "library.json"))
+        self.addCleanup(mock_tasks_file(self.root).stop)
+
+    def run_job(self, task, **kw):
+        self.assertEqual(self.jobs.start(task, [], **kw), "started")
+        for _ in range(200):
+            if not self.jobs.state["running"]:
+                break
+            time.sleep(0.05)
+        self.assertTrue(self.jobs.busy.acquire(timeout=5), "the runner is let go after the job")
+        self.jobs.busy.release()
+        return self.jobs.history[-1]
+
+    def test_check_downloads(self):
+        done = self.run_job("verify")
+        self.assertEqual(done["outcome"], "done", done["message"])
+        self.assertIsNotNone(downloader.last_integrity())
+
+    def test_add_to_local(self):
+        own = self.root.parent / (self.root.name + "-own")
+        own.mkdir()
+        self.addCleanup(shutil.rmtree, own, True)
+        (own / "pack.unitypackage").write_bytes(b"pkg")
+        done = self.run_job("add-local", local={"path": str(own), "copy": False})
+        self.assertEqual(done["outcome"], "done", done["message"])
+        self.assertIn("Added", done["message"])
+
+    def test_a_job_that_cant_start_lets_the_runner_go(self):
+        from unittest import mock
+        with mock.patch.object(self.jobs, "_start", side_effect=RuntimeError("broken")):
+            with self.assertRaises(RuntimeError):
+                self.jobs.start("verify", [])
+        self.assertFalse(self.jobs.state["running"])
+        self.assertTrue(self.jobs.busy.acquire(blocking=False), "not held by the job that never started")
+        self.jobs.busy.release()
+
+
+def mock_tasks_file(root):
+    from unittest import mock
+    patch = mock.patch.object(jobs, "tasks_file", lambda: root / "tasks.json")
+    patch.start()
+    return patch
+
+
 class ManifestSaves(unittest.TestCase):
     """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
     after every file and every product; each sync still ends by saving everything, however it ends."""
