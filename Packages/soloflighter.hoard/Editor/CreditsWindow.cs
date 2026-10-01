@@ -11,7 +11,7 @@ namespace SoloFlighter.Hoard.Editor
 {
     public sealed class CreditsWindow : EditorWindow
     {
-        static readonly string SettingsFile = Path.Combine("ProjectSettings", "Hoard", "credits.json");
+        public static readonly string SettingsFile = Path.Combine("ProjectSettings", "Hoard", "credits.json");
 
         HoardWindow source;
         CreditsFile settings;
@@ -67,6 +67,7 @@ namespace SoloFlighter.Hoard.Editor
             try { settings.Save(SettingsFile); }
             catch (IOException e) { Debug.LogWarning("Hoard: couldn't save the credits settings: " + e.Message); }
             Remake();
+            if (source != null) source.ReportSoon();   // Hoard's Projects view shows the same credits
         }
 
         void OnGUI()

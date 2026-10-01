@@ -40,7 +40,7 @@ TAG_PUNCTUATION = " -_.+&'"
 TAG_RESERVED = {"__proto__", "constructor", "prototype", "__defineGetter__", "__defineSetter__", "__lookupGetter__"}
 
 
-TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch):[^\W_]{1,300}$")
+TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):[^\W_]{1,300}$")   # local: your own (issue #80)
 
 
 _tag_lock = threading.Lock()

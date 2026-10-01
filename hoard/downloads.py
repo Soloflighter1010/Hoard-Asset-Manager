@@ -53,7 +53,7 @@ def _thumbnail(folder: Path, files: list[str]) -> str | None:
     return images[0] if images else None
 
 
-STORES = ("Booth", "Gumroad", "Jinxxy", "Payhip", "Itch")
+STORES = ("Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local")
 
 
 def library_status(root: Path) -> dict:
@@ -89,12 +89,21 @@ def library_status(root: Path) -> dict:
     return {"root_exists": root.is_dir(), "stores": stores, "elsewhere": elsewhere}
 
 
+def _linked_folder(location: str) -> Path | None:
+    """A Local item's own folder, if it's a plain absolute path that isn't a link."""
+    from .downloader import valid_location
+    if not valid_location(location) or os.path.islink(location):
+        return None
+    return Path(location)
+
+
 def build_index(root: Path, catalog: list[dict]) -> dict:
 
     """The data behind the page: every downloaded asset with its files, sizes, image and matches."""
     assets, gone = [], 0
     for i, e in enumerate(catalog):
-        folder = safe_join(root, e["folder"])
+        linked = e.get("location")   # a Local item listed where it is (issue #80)
+        folder = _linked_folder(linked) if linked else safe_join(root, e["folder"])
         if folder is None:  # a folder that would lead outside the downloads isn't shown
             continue
         files, total, missing, newest = [], 0, 0, 0.0
@@ -115,7 +124,7 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             # offers it again (issue #24). Its record is kept, so downloading it again works as before.
             gone += 1
             continue
-        thumb = _thumbnail(folder, e.get("files", []))
+        thumb = None if linked else _thumbnail(folder, e.get("files", []))   # (pictures are only served from the downloads)
         assets.append({
             "id": i,
             "store": e["store"],
@@ -125,6 +134,8 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             "url": store_link(e["store"], e.get("url")),
             "folder": e["folder"],
             "abs_folder": str(folder),
+            "linked": bool(linked),
+            "note": e.get("note"),
             "tag_key": tag_key(e["store"], e["name"]),
             "tags": [],
             "suggested": e.get("suggested_tags", []),

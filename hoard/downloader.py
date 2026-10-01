@@ -83,6 +83,11 @@ def clean_manifest(data, store_dir: Path, trust_links: bool = True) -> tuple[dic
         rec = {**rec, "files": files, "name": clean_text(rec.get("name"), 300) or "Untitled",
                "creator": clean_text(rec.get("creator"), 200) or "Unknown creator",
                "url": store_link(store, rec.get("url")) if trust_links else None}
+        if "location" in rec:   # a Local item listed where it is (issue #80): only from a manifest Hoard sealed here
+            if store != "local" or not trust_links or not valid_location(rec["location"]):
+                rec.pop("location")
+        if rec.get("note") is not None:
+            rec["note"] = clean_text(rec["note"], 300) or None
         if rec.get("variants") is not None:
             rec["variants"] = clean_text(rec["variants"], 300) or None
         kept[key] = rec
@@ -414,6 +419,23 @@ class Manifest:
                "files": {}, "first_seen": now_iso()}
         self.assets[key] = rec
         return rec
+
+
+def valid_location(value) -> bool:
+    """A Local item's own folder, as it's kept: a plain absolute path, written as the system writes it."""
+    return (isinstance(value, str) and 0 < len(value) <= 1000 and "\x00" not in value and os.path.isabs(value)
+            and os.path.normpath(value) == value)
+
+
+def record_folder(sdir: Path, rec: dict) -> Path:
+    """Where a record's files are: inside its store's folder, or for a Local item listed where it is (issue #80),
+    the folder you chose. Raises UnsafePath for a folder that isn't plain, or is a link."""
+    loc = rec.get("location")
+    if loc is None:
+        return rel_to_path(sdir, rec["folder"])
+    if sdir.name != "Local" or not valid_location(loc) or os.path.islink(loc):
+        raise UnsafePath("not a folder Hoard can list")
+    return Path(loc)
 
 
 def same_name_key(name: str) -> str:
@@ -1803,7 +1825,9 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,
                         "url": store_link(a["store"], a.get("url")), "variants": a.get("variants"), "added": added,
                         "files": sorted(f["path"] for f in a["files"].values()),
-                        "tags": mine, "suggested_tags": a_tags})
+                        "tags": mine, "suggested_tags": a_tags,
+                        **({"location": a["location"]} if a.get("location") else {}),
+                        **({"note": a["note"]} if a.get("note") else {})})
         for t in a_tags:
             index.setdefault(t, []).append(folder)
     catalog.sort(key=lambda e: (e["store"], e["creator"].lower(), e["name"].lower()))
@@ -1828,8 +1852,8 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
             continue
         manifest = Manifest(sdir)
         for rec in manifest.assets.values():
-            if tag_key(store, rec.get("name") or "") not in keys:
-                continue
+            if tag_key(store, rec.get("name") or "") not in keys or rec.get("location"):
+                continue   # (a Local item listed where it is: its files are yours, never deleted here)
             try:
                 folder = rel_to_path(sdir, rec["folder"])
             except UnsafePath:
@@ -1916,10 +1940,10 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
             if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
                 continue
             try:
-                rel_to_path(sdir, rec["folder"])
+                folder = record_folder(sdir, rec)
             except UnsafePath:
                 continue
-            base = dest_root / store / rec["folder"]
+            base = dest_root / store / (rec["folder"] if not rec.get("location") else safe_name(rec.get("name") or "Copy"))
             dest, n = base, 2
             while os.path.lexists(dest):
                 dest, n = base.with_name(f"{base.name} ({n})"), n + 1
@@ -1928,7 +1952,7 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
             for f in sorted(rec["files"].values(), key=lambda f: f.get("path") or ""):
                 rel = f.get("path")
                 try:
-                    src = open_under(root, f"{store}/{rec['folder']}/{rel}")
+                    src = open_under(folder, rel)
                 except UnsafePath:
                     skipped.append((rel, "missing, or not a plain file"))
                     continue
@@ -1943,7 +1967,7 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
                         shutil.copyfileobj(src, out, 1024 * 1024)
                 copied, size = copied + 1, size + got
             note = EDIT_NOTE.format(when=now_iso()[:10], name=rec.get("name"), creator=rec.get("creator"), store=store,
-                                    original=root / store / rec["folder"])
+                                    original=folder)
             if skipped:
                 note += "\nLeft out:\n" + "".join(f"    {rel}: {why}\n" for rel, why in skipped)
             (dest / "_EDITABLE COPY - read me.txt").write_text(note, "utf-8")
@@ -2003,8 +2027,8 @@ def check_integrity(root: Path, stop=None, progress=None) -> dict:
             if stop is not None and stop.is_set():
                 result["complete"] = False
                 break
-            if not rec.get("files"):
-                continue
+            if not rec.get("files") or rec.get("location"):
+                continue   # (a Local item listed where it is: your own working folder, yours to change)
             result["products"] += 1
             say(f"Checking {store}: {rec.get('name')}")
             try:
@@ -2097,6 +2121,10 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: folder isn't a plain relative path")
     if not isinstance(entry.get("files"), list) or not all(valid_rel(f) for f in entry["files"]):
         problems.append(f"{label}: a file path isn't a plain relative path")
+    if "location" in entry and (entry.get("store") != "Local" or not valid_location(entry["location"])):
+        problems.append(f"{label}: location is only for Local items, as a plain absolute path")
+    if entry.get("note") is not None and entry["note"] != clean_text(entry["note"], 300):
+        problems.append(f"{label}: note isn't clean text")
     if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
         problems.append(f"{label}: url isn't an https address on the store's own website")
     for key in ("tags", "suggested_tags"):
@@ -2217,7 +2245,8 @@ def cmd_verify(cfg: dict, root: Path) -> int:
 
 # ----------------------------------------------------------------------------- CLI
 
-STORE_DIRS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip", "itch": "Itch"}
+STORE_DIRS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip", "itch": "Itch",
+              "local": "Local"}   # Local: your own packages (issue #80), not a store; see hoard/local.py
 
 
 def unreachable_message(store: str) -> str:

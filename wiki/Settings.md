@@ -71,6 +71,7 @@ and keep it valid JSON.
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `close_to_background` | `false` | Closing Hoard's window keeps Hoard running in the background (**Keep Hoard running when its window is closed** in Settings) |
+| `local_copy` | `true` | Whether **Add your own** offers to copy into Hoard (`true`) or to list where it is (`false`). Set by your last choice |
 | `edits_root` | `""` | Where **Make an editable copy** puts copies; empty means **Hoard Edits** beside your downloads folder. Never inside the downloads folder. See [Changing a download](Downloads#changing-a-download-make-an-editable-copy) |
 | `integrity_check_days` | `7` | Days between checks of your downloads while Hoard is open: `0` (only when you choose **Check now**), `1`, `7` or `30` (**Check your downloads** in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- **Your own packages** (Hoard's issue #80). Hoard 3.0 keeps packages you make under **Local**, copied into its
+  downloads folder or listed where they are. The window lists them under **Local**, shows who they're for, and
+  imports them like any download. A Local item listed where it is has its own folder outside the downloads
+  folder; the window only uses it when Hoard sealed the catalog on this computer, and still never through a link.
+- **Projects in Hoard** (Hoard's issue #86). The window tells Hoard what this project uses: a few seconds after
+  anything changes, it writes a small report (the project's name and folder, each product in it and how much of
+  it, and the credits settings) to `projects/` in Hoard's own folder, and only when something in it changed.
+  Hoard 3.0's **Projects** lists every project with its assets, their updates and its credits list.
+
 ## 0.3.1
 
 - **Create Credits List** (issue #79). The toolbar's **Credits** button is now **Create Credits List**, and the

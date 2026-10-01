@@ -62,7 +62,7 @@ An `<asset>`:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `store` | string | `Booth`, `Gumroad`, `Jinxxy`, `Payhip` or `Itch` (itch.io). Skip an entry with a store you don't know: later versions may add stores |
+| `store` | string | `Booth`, `Gumroad`, `Jinxxy`, `Payhip`, `Itch` (itch.io) or `Local` (your own packages, from 3.0). Skip an entry with a store you don't know: later versions may add stores |
 | `name` | string | Product name |
 | `creator` | string | Creator or shop name |
 | `folder` | string | The product's folder, e.g. `Booth/Kitsu Studio/Rusk Avatar Base` |
@@ -72,6 +72,8 @@ An `<asset>`:
 | `files` | list of strings | Downloaded files, relative to `folder` |
 | `tags` | list of strings | Your tags |
 | `suggested_tags` | list of strings | Words shared by several asset names |
+| `location` | string, only on some `Local` entries | A Local item listed where it is: its own folder, as a full path written as the system writes it. `files` are relative to it, and `folder` (`Local/_linked/<id>`) is only a name. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
+| `note` | string, only on `Local` entries | Who or what it's for, as you wrote it |
 
 ## `asset.json` (in each product's folder)
 
@@ -113,7 +115,28 @@ This one belongs to Hoard. Don't write to it; use the Tags panel. It's private t
 account, Hoard check every entry when they read it, and a damaged copy is kept as
 `tags.damaged-<date>.json` rather than overwritten.
 
+## `projects/<id>.json` (in Hoard's app-data folder)
+
+Written by Hoard for Unity (0.4.0 and newer), one per Unity project, for Hoard's **Projects** (issue #86). `<id>` is
+the first 16 hex digits of the SHA-256 of the project's full path. Hoard reads every field as untrusted: it checks
+each one as it checks `catalog.json` entries, and leaves out what doesn't pass.
+
+```json
+{"format": "hoard-project", "version": 1, "name": "My Avatar", "path": "C:\\Unity\\My Avatar", "unity": "2022.3.22f1",
+ "updated": "2026-10-01T12:00:00+00:00",
+ "assets": [{"store": "Booth", "name": "...", "creator": "...", "folder": "Booth/...", "url": "https://booth.pm/...",
+             "status": "yes"}],
+ "credits": {"title": "Assets used", "style": "List", "left_out": ["Booth/<name>"],
+             "added": [{"name": "...", "creator": "...", "url": "https://..."}]}}
+```
+
+`status` is `yes` (a package of it is all in the project), `partly`, or `imported` (only the project's import log
+says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the product's `folder` in `catalog.json`.
+
 ## Version history
+
+- **3**, still, in 3.0: `Local` entries, with `location` and `note`. Readers that skip stores they don't know
+  carry on as before.
 
 - **3**, still, in 2.5.0: a new store, `Itch` (itch.io). Nothing else changed, so the version didn't; readers
   that skip stores they don't know carry on as before.

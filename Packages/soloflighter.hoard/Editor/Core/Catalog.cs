@@ -11,6 +11,8 @@ namespace SoloFlighter.Hoard
     public sealed class HoardAsset
     {
         public string Store, Name, Creator, Folder, Url, Variants, Added;
+        public string Location;   // a Local item listed where it is (Hoard's issue #80): its own folder; else null
+        public string Note;       // a Local item: who or what it's for
         public List<string> Files = new List<string>();
         public List<string> Tags = new List<string>();
         public List<string> SuggestedTags = new List<string>();
@@ -28,7 +30,7 @@ namespace SoloFlighter.Hoard
     {
         public const int NewestVersion = 3;
         const long MaxBytes = 64L * 1024 * 1024;
-        static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch" };
+        static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local" };
         static readonly Dictionary<string, string> StoreSites = new Dictionary<string, string>
         {
             { "Booth", "booth.pm" }, { "Gumroad", "gumroad.com" }, { "Jinxxy", "jinxxy.com" }, { "Payhip", "payhip.com" },
@@ -75,7 +77,7 @@ namespace SoloFlighter.Hoard
                 if (assets == null || assets.Kind != JsonKind.Array) { cat.Problem = "catalog.json has no asset list."; return cat; }
                 foreach (var entry in assets.Items)
                 {
-                    var asset = Read(entry, cat.SealStatus != SealState.Changed);
+                    var asset = Read(entry, cat.SealStatus != SealState.Changed, cat.SealStatus == SealState.Sealed);
                     if (asset != null) cat.Assets.Add(asset); else cat.LeftOut++;
                 }
                 cat.Resolve();
@@ -85,7 +87,10 @@ namespace SoloFlighter.Hoard
             return cat;
         }
 
-        static HoardAsset Read(JsonValue e, bool trustLinks)
+        /// <summary>One catalog entry, or null when it breaks a promise. trustPlaces: the catalog was sealed by Hoard on
+        /// this computer, so a Local item's own folder (outside the downloads folder) can be believed; otherwise
+        /// such an item is left out, as it can't be found.</summary>
+        static HoardAsset Read(JsonValue e, bool trustLinks, bool trustPlaces)
         {
             if (e == null || e.Kind != JsonKind.Object) return null;
             var a = new HoardAsset
@@ -101,6 +106,14 @@ namespace SoloFlighter.Hoard
             a.Tags = a.Tags.FindAll(t => CleanText(t, 40));
             a.SuggestedTags = a.SuggestedTags.FindAll(t => CleanText(t, 40));
             if (!trustLinks || !StoreLink(a.Store, a.Url)) a.Url = null;
+            string location = e.Str("location");
+            if (location != null)
+            {
+                if (a.Store != "Local" || !trustPlaces || !PlainLocation(location)) return null;
+                a.Location = location;
+            }
+            string note = e.Str("note");
+            a.Note = a.Store == "Local" && note != null && CleanText(note, 300) ? note : null;
             return a;
         }
 
@@ -124,6 +137,14 @@ namespace SoloFlighter.Hoard
             foreach (string part in p.Split('/'))
                 if (part.Length == 0 || part == "." || part == "..") return false;
             return true;
+        }
+
+        /// <summary>A Local item's own folder: a full path, written as the system writes it, with nothing odd in it.</summary>
+        public static bool PlainLocation(string p)
+        {
+            if (!CleanText(p, 1000) || !Path.IsPathRooted(p)) return false;
+            try { return Path.GetFullPath(p) == p; }
+            catch (Exception) { return false; }
         }
 
         /// <summary>An https address on the asset's own store (or a subdomain), with no user name or port.</summary>
@@ -160,8 +181,20 @@ namespace SoloFlighter.Hoard
         /// reached without going through any link or junction. Null otherwise.</summary>
         public string FilePath(HoardAsset a, string file)
         {
-            if (!PlainPath(a.Folder) || !PlainPath(file)) return null;
-            return Inside(a.Folder + "/" + file, false);
+            return PlainPath(file) ? Under(a, file, false) : null;
+        }
+
+        /// <summary>A file (or with file null, the folder) of an asset: inside the downloads folder, or for a Local item
+        /// listed where it is, inside its own folder. Never through a link or junction.</summary>
+        string Under(HoardAsset a, string file, bool folder)
+        {
+            if (a.Location != null)
+            {
+                if (!RealFolder(a.Location)) return null;
+                return file == null ? Path.GetFullPath(a.Location) : Inside(a.Location, file, folder);
+            }
+            if (!PlainPath(a.Folder)) return null;
+            return file == null ? Inside(Root, a.Folder, true) : Inside(Root, a.Folder + "/" + file, folder);
         }
 
         /// <summary>Pictures the window can show: PNG and JPEG (Unity's own), and GIF, animated ones included
@@ -182,7 +215,7 @@ namespace SoloFlighter.Hoard
         {
             foreach (string ext in PictureTypes)
             {
-                string p = Inside(a.Folder + "/_thumbnail" + ext, false);
+                string p = Under(a, "_thumbnail" + ext, false);
                 if (p != null) return p;
             }
             var pictures = a.Files.FindAll(IsPicture);
@@ -200,7 +233,7 @@ namespace SoloFlighter.Hoard
             return null;
         }
 
-        public string FolderPath(HoardAsset a) { return PlainPath(a.Folder) ? Inside(a.Folder, true) : null; }
+        public string FolderPath(HoardAsset a) { return Under(a, null, true); }
 
         // Folders already checked (a real folder, not a link or junction): many products share a store and creator
         // folder, so each is looked at once, not once per product. Only used by one thread at a time.
@@ -217,9 +250,9 @@ namespace SoloFlighter.Hoard
             return ok;
         }
 
-        string Inside(string rel, bool folder)
+        string Inside(string baseFolder, string rel, bool folder)
         {
-            string root = Root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string root = baseFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             string path = root;
             string[] parts = rel.Split('/');
             for (int n = 0; n < parts.Length; n++)

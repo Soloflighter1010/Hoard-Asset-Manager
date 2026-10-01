@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, updater, vault
+from . import __version__, diagnostics, itch, projects, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
@@ -46,7 +46,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/app/close", "/api/open-logs",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
-           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify")
+           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
+           "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -134,6 +135,25 @@ def ui_settings(cfg: dict) -> dict:
     return out
 
 
+def open_target(cfg: dict, rel: str) -> Path | None:
+    """What Open folder or Show in folder means: a path inside the downloads folder, or inside a Local item listed
+    where it is (issue #80), named by its place in the catalog ("Local/_linked/<key>/...")."""
+    root = root_dir(cfg)
+    parts = rel.replace("\\", "/").split("/")
+    if len(parts) >= 3 and parts[0] == "Local" and parts[1] == "_linked":
+        from . import local
+        found = local.by_folder(root, "/".join(parts[:3]))
+        if not found or not found[1].get("location"):
+            return None
+        from .downloader import record_folder
+        try:
+            folder = record_folder(local.local_dir(root), found[1])
+        except UnsafePath:
+            return None
+        return safe_join(folder, "/".join(parts[3:])) if len(parts) > 3 else folder
+    return safe_join(root, rel)
+
+
 def integrity_view(cfg: dict) -> dict:
     """The last check of the downloads (issue #83), for the Downloads page: when, and how many files were fine,
     changed or missing. Counts only: which files is in the check's log in Tasks, where hidden names are masked."""
@@ -163,6 +183,7 @@ def public_settings(cfg: dict) -> dict:
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
         "integrity_check_days": check_days(cfg),
+        "local_copy": cfg.get("local_copy", True) is not False,
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
@@ -520,18 +541,25 @@ class Handler(BaseHTTPRequestHandler):
             marks, unlocked = MarkStore().load(), self._unlocked()
             by_store = {tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
             updates = AssetUpdates().load()   # what the last check for updates found (issue #26)
+            used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
             assets = []
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if mark != "hidden" or unlocked:
-                    assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", [])})
+                    assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                                   "used_in": used.get(a.get("folder"), [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg)}, compress=True)
+        if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
+            found = self._visible_projects()
+            updates = AssetUpdates().load()["items"]
+            return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
+                               "hidden_left_out": not self._unlocked() and bool(MarkStore().load()["hidden"])}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/update":
@@ -609,6 +637,58 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 400)
         srv.forget_index()
         return self._json({"ok": True})
+
+    def _visible_projects(self) -> list[dict]:
+        """Projects' reports, without hidden products while the hidden library is locked (their names never leave
+        the server then, here as everywhere)."""
+        found = projects.read_all()
+        if self._unlocked():
+            return found
+        hidden = MarkStore().load()["hidden"]
+        if not hidden:
+            return found
+        return [{**p, "assets": [a for a in p["assets"] if tag_key(a["store"], a["name"]) not in hidden]} for p in found]
+
+    def _local(self, path: str, body: dict):
+        """Local: add a folder or file of your own (a task, since copying can take a while), rescan one listed where
+        it is, or take one out."""
+        from . import local
+        srv = self.server
+        if path == "/api/local/add":
+            copy = body.get("copy") is not False
+            what = {"path": str(body.get("path") or "")[:1000], "name": str(body.get("name") or "")[:300],
+                    "creator": str(body.get("creator") or "")[:200], "note": str(body.get("note") or "")[:300], "copy": copy}
+            try:
+                local.check_source(root_dir(srv.cfg), what["path"], copy)   # said straight away, not in Tasks
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            if srv.cfg.get("local_copy", True) != copy:   # the choice you made last time is offered next time
+                srv.cfg["local_copy"] = copy
+                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            started = srv.jobs.start("add-local", [], local=what)
+            if not started:
+                return self._json({"error": "That's already waiting its turn."}, 409)
+            return self._json({"ok": True, "queued": started == "queued"})
+        found = local.by_folder(root_dir(srv.cfg), str(body.get("folder") or "")[:1000])
+        if not found:
+            return self._json({"error": "That isn't in Local any more."}, 404)
+        if path == "/api/local/remove" and body.get("confirm") is not True:
+            return self._json({"error": "Confirm first."}, 400)
+        if not srv.jobs.busy.acquire(blocking=False):
+            return self._json({"error": "Wait for the current task to finish, then try again."}, 409)
+        try:
+            if path == "/api/local/rescan":
+                rec = local.rescan(srv.cfg, root_dir(srv.cfg), found[0])
+                done = {"files": len(rec["files"])}
+            else:
+                done = local.remove(srv.cfg, root_dir(srv.cfg), found[0])
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        finally:
+            srv.jobs.busy.release()
+            srv.jobs.kick()
+        srv.forget_index()
+        return self._json({"ok": True, **done})
 
     def _delete_files(self, body: dict):
         """Delete the downloaded files of products you removed from your library. Only removed ones (so nothing in
@@ -773,7 +853,7 @@ class Handler(BaseHTTPRequestHandler):
                 result["opened_in"] = None
             return self._json(result)
         if path == "/api/open":
-            target = safe_join(root_dir(srv.cfg), str(body.get("path", "")))
+            target = open_target(srv.cfg, str(body.get("path", "")))
             if not target or not target.exists():
                 return self._json({"error": "That file or folder isn't on disk anymore."}, 404)
             try:
@@ -815,6 +895,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
+            return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
+        if path.startswith("/api/local/"):   # your own packages (issue #80)
+            return self._local(path, body)
         if path == "/api/verify":   # check the downloads now (issue #83), after anything already running
             started = srv.jobs.start("verify", [])
             if not started:
