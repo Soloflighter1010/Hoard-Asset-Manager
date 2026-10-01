@@ -4,7 +4,9 @@ Hoard's Windows programs (`Hoard.exe`, `hoard-cli.exe` and the installer, `Hoard
 code-signed yet, so Windows may warn before running them (see [Install (Windows)](README.md#install-windows)). Until
 they are, you can check that a download is this project's own build: every release file carries GitHub's signed
 build provenance (`gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`) and a SHA-256 in the release's checksum files, and is scanned by VirusTotal before the release is
-published. This page says what signing will cover once it's in place.
+published. Signing is being set up with Microsoft's Azure Artifact Signing (Trusted Signing): the release workflow
+signs the Windows programs once it's in place (see the wiki's [Releasing](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Releasing)
+page). This page says what signing covers.
 
 ## What will be signed
 

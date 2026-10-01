@@ -65,6 +65,39 @@ they're the same files the release makes public.
 - **Published something broken?** Don't delete it expecting to reuse the version. Raise the version and release
   again (2.4.0 was re-released as 2.4.1 this way).
 
+### Code signing (Windows)
+
+`Hoard.exe`, `hoard-cli.exe` and the setup are signed with **Azure Artifact Signing** (Microsoft's Trusted
+Signing), so Windows and Defender know they're Hoard's. Signing happens in the release's Windows job, only where
+it's set up: a fork, or this repository before it's set up, builds unsigned, as before. The setup's uninstaller
+isn't signed yet.
+
+Once, when setting it up (an Azure subscription with a payment method; the Basic plan is about $10 a month):
+
+1. In the [Azure portal](https://portal.azure.com), create an **Artifact Signing account** (search "Artifact
+   Signing" or "Trusted Signing"), in a region near you, on the Basic plan. Note its **name** and its
+   **endpoint** (on its Overview, such as `https://eus.codesigning.azure.net/`).
+2. In the account, under **Identity validations**, start a **Public** validation for yourself as an individual,
+   and finish Microsoft's identity check. It can take a few days. (Before you can, you may need to give your own
+   Azure user the **Artifact Signing Identity Verifier** role on the account, under **Access control (IAM)**.)
+3. Once validated, under **Certificate profiles**, create a **Public Trust** profile using that validation, and
+   note its **name**.
+4. Let GitHub sign in without a password: in **Microsoft Entra ID › App registrations**, register an app (say
+   "Hoard release signing"). In it, under **Certificates & secrets › Federated credentials**, add one for
+   **GitHub Actions deploying Azure resources**: organisation `Soloflighter1010`, repository
+   `Hoard-Asset-Manager`, entity **Environment**, environment `release-signing`.
+5. On the signing account, under **Access control (IAM)**, give that app the **Artifact Signing Certificate Profile
+   Signer** role.
+6. In this repository, under **Settings › Environments**, open (or create) `release-signing`, and add:
+   - secrets `AZURE_CLIENT_ID` (the app's **Application (client) ID**), `AZURE_TENANT_ID` (its **Directory
+     (tenant) ID**) and `AZURE_SUBSCRIPTION_ID` (your subscription's ID);
+   - variables `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT` and `AZURE_SIGNING_PROFILE` (from steps 1 and 3).
+
+   Optionally, under the environment's **Deployment branches and tags**, allow only `main` and tags `v*`.
+
+The next release is signed. Its Windows job checks each signature as Windows sees it, and fails if one isn't
+valid. Reputation with SmartScreen and Defender builds over the first few signed releases.
+
 ### The Mac's and the Flatpak's dependencies
 
 Like `requirements-app.txt` for Windows, `requirements-mac.txt` and `requirements-flatpak.txt` are locked with
