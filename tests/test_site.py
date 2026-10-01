@@ -223,6 +223,32 @@ class TheDeploy(unittest.TestCase):
         self.assertIn('"CHANGELOG.md"', paths, "and when the changelog does, for its What's new page")
         self.assertIn('"scripts/build_site_changelog.py"', paths)
 
+    def test_the_listing_build_waits_out_a_release_being_made(self):
+        """Hoard for Unity 0.3.0's listing builds failed twice ("Could not find valid zip file"): each ran while the
+        release was still being made. The build is tried again, a few times, before it fails."""
+        step = self.text.split("- name: Build the listing from every release", 1)[1].split("- name:", 1)[0]
+        self.assertIn("for attempt in 1 2 3 4; do", step)
+        self.assertIn("sleep 30", step)
+        self.assertIn("exit 0", step, "it stops at the first success")
+        self.assertRegex(step, r"echo \"::error::[^\n]*\"\n\s+exit 1", "and fails when every try fails")
+        bash = shutil.which("bash")
+        if not bash or os.name == "nt":
+            self.skipTest("the step runs on Linux (needs bash)")
+        script = step.split("run: |", 1)[1]
+        script = "\n".join(line[10:] for line in script.splitlines() if line.strip())
+        script = script.replace("${{ env.pathToCi }}", "./ci").replace("${{ env.listPublishDirectory }}", "Website") \
+                       .replace("${{ github.repository_owner }}", "owner").replace("sleep 30", "sleep 0")
+        for fails, ok in ((0, True), (2, True), (4, False)):
+            work = Path(tempfile.mkdtemp())
+            (work / "ci").mkdir()
+            builder = work / "ci" / "build.cmd"   # fails its first `fails` runs, then works
+            builder.write_text(f'#!/bin/bash\nn=$(cat count 2>/dev/null || echo 0); echo $((n+1)) > count\n[ "$n" -ge {fails} ]\n')
+            builder.chmod(0o755)
+            run = subprocess.run([bash, "-e", "-c", script], cwd=work, capture_output=True, text=True,
+                                 env={**os.environ, "GITHUB_WORKSPACE": str(work), "PACKAGE_NAME": "p"})
+            self.assertEqual(run.returncode == 0, ok, (fails, run.stdout, run.stderr))
+            self.assertEqual(int((work / "count").read_text()), min(fails + 1, 4), "tries until it works, at most 4")
+
     def test_it_builds_the_whats_new_page(self):
         step = self.text.split("- name: Build the What's new page from the changelog", 1)[1].split("- uses:", 1)[0]
         self.assertIn("scripts/build_site_changelog.py", step)
