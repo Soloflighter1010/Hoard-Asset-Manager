@@ -9,7 +9,7 @@ Hoard is an app for Windows, macOS and Linux (a Flatpak). It also runs from sour
    can change, which keeps your store sign-ins safe. (Hoard installed somewhere else by an older setup is
    installed here when it updates; the old folder can then be deleted.)
 2. Windows may say **"Windows protected your PC"** for a while after a release. Hoard is code-signed: choose
-   **More info** and the publisher shows as **Sam Parker**, Hoard's maintainer. A new publisher earns Microsoft's
+   **More info** and the publisher shows as Hoard's maintainer. A new publisher earns Microsoft's
    trust as people install it, so the warning fades with time. Choose **Run anyway**. To be sure the file is genuine first, see
    [Checking a download](#checking-a-download).
 3. Open **Hoard** from the Start menu. It opens in its own window, and a short setup assistant walks you

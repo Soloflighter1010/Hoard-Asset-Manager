@@ -3,7 +3,7 @@
 Hoard's Windows programs (`Hoard.exe`, `hoard-cli.exe` and the installer, `Hoard-Setup-<version>.exe`) are
 code-signed from 2.11.1 on, with Microsoft's Azure Artifact Signing (Trusted Signing), by the release workflow on
 GitHub (see the wiki's [Releasing](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Releasing) page).
-Windows shows the publisher as **Sam Parker**, the maintainer's verified identity. A new publisher still has to
+Windows shows the publisher as the maintainer's verified name. A new publisher still has to
 earn Microsoft's reputation, so Windows may say it "protected your PC" for a while after a release: choose **More
 info** to see the publisher, then **Run anyway**. Every release file also carries GitHub's signed build
 provenance (`gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`) and a SHA-256 in the
