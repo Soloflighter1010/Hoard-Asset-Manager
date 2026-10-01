@@ -136,6 +136,11 @@ it. It loads nothing from other sites (a test checks); its download buttons ask 
 release's files, and open the releases page without it. Its fonts are the app's, cut down to Latin characters
 with `pyftsubset` (fontTools), and its screenshot is of the app with a sample library.
 
+Its **What's new** page (`changelog.html`) is built from `CHANGELOG.md` on each deploy
+(`scripts/build_site_changelog.py`), with each release's date from GitHub, so a change to the changelog reaching
+`main` updates it; nothing generated is kept in the repository. **Testers** (`site/testers.html`) thanks the people
+who test releases: add a name there, one `<li>` each.
+
 ## The wiki
 
 The wiki is written in the repository's `wiki/` folder and reviewed like code. When a change to `wiki/` reaches
