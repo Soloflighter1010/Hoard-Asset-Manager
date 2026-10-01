@@ -183,6 +183,11 @@ def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.envir
         results.append((name, digests[name], st, name not in pending))
     text, flagged = report(results, allowed)
     (folder / "VT_REPORT.md").write_text(text, encoding="utf-8")
+    # The flagged files, by name, for the workflow to hand over for a false-positive report (see release.yml): a
+    # browser on Windows won't download a file Defender flags, so the draft's own copy can't be sent to Microsoft.
+    names = [n for n, _d, st, _k in results if int(st.get("malicious", 0)) or int(st.get("suspicious", 0))]
+    if names:
+        (folder / "VT_FLAGGED.txt").write_text("\n".join(names) + "\n", encoding="utf-8")
     if env.get("GITHUB_STEP_SUMMARY"):
         with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
             summary.write(text)

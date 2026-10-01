@@ -187,6 +187,14 @@ class TheGate(unittest.TestCase):
         self.assertIn("1 malicious, 2 suspicious", (folder / "VT_REPORT.md").read_text("utf-8"),
                       "the report is still written, for the person who checks it")
 
+    def test_flagged_files_are_named_for_the_false_positive_report(self):
+        folder, fake = self.flagged()
+        run(fake, folder)
+        self.assertEqual((folder / "VT_FLAGGED.txt").read_text("utf-8"), "Hoard-Setup-2.11.0.exe\n")
+        clean = release_folder({"Hoard-2.11.0.zip": b"PK"})
+        run(FakeVirusTotal(), clean)
+        self.assertFalse((clean / "VT_FLAGGED.txt").exists(), "nothing flagged, nothing kept")
+
     def test_publishing_anyway_is_a_persons_choice(self):
         folder, fake = self.flagged()
         self.assertEqual(run(fake, folder, allow=True), 0)
@@ -218,6 +226,17 @@ class TheWorkflow(unittest.TestCase):
         step = self.jobs["virustotal"].split("- name: Scan them with VirusTotal", 1)[1].split("- name:", 1)[0]
         self.assertIn("VT_API_KEY: ${{ secrets.VT_API_KEY }}", step)
         self.assertNotIn("VT_API_KEY", self.jobs["virustotal"].split("steps:", 1)[0], "not the whole job's")
+
+    def test_flagged_files_are_kept_where_they_can_be_downloaded(self):
+        """Defender stops a browser downloading a file it flags, so the release's own copy can't be sent to Microsoft
+        as a false positive. The run keeps flagged files in a zip encrypted with "infected", as antivirus makers ask."""
+        job = self.jobs["virustotal"]
+        step = job.split("- name: Keep any flagged files, for a false-positive report", 1)[1].split("- name:", 1)[0]
+        self.assertIn("always() && hashFiles('dist/VT_FLAGGED.txt') != ''", step, "kept even when the scan step fails")
+        self.assertIn('zip -j -P infected "../flagged-$TAG.zip" "${flagged[@]}"', step)
+        self.assertRegex(step, r"uses: actions/upload-artifact@[0-9a-f]{40} # v")
+        self.assertNotIn("VT_API_KEY", step)
+        self.assertLess(job.index("Scan them with VirusTotal"), job.index("Keep any flagged files"))
 
     def test_publish_anyway_is_only_by_hand(self):
         self.assertRegex(self.text, r"allow_detections:\n\s+description: .+\n\s+type: boolean\n\s+default: false")

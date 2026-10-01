@@ -272,6 +272,24 @@ jobs:
           VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}
         run: python3 scripts/scan_release_virustotal.py
 
+      # A file an engine flags can't be downloaded from the release on Windows (Defender stops the browser), so it
+      # couldn't be sent to Microsoft or the engine's maker as a false positive. This keeps the flagged files in a zip
+      # encrypted with the password "infected", the form antivirus makers ask samples to be sent in, which Defender
+      # doesn't open: download it from this run's Artifacts and upload it to their false-positive form as it is.
+      - name: Keep any flagged files, for a false-positive report
+        if: ${{ always() && hashFiles('dist/VT_FLAGGED.txt') != '' }}
+        working-directory: dist
+        run: |
+          mapfile -t flagged < VT_FLAGGED.txt
+          zip -j -P infected "../flagged-$TAG.zip" "${flagged[@]}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && hashFiles('dist/VT_FLAGGED.txt') != '' }}
+        with:
+          name: virustotal-flagged-files (zip password infected)
+          path: flagged-${{ env.TAG }}.zip
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Add the results to the release notes
         if: ${{ always() && hashFiles('dist/VT_REPORT.md') != '' }}
         env:
