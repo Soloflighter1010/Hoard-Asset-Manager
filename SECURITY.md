@@ -103,8 +103,9 @@ It can't fully protect against:
 - Built by GitHub Actions from this repository for each release, from hash-locked dependencies
   (`requirements-app.txt`, `requirements-mac.txt`, `requirements-flatpak.txt`, all pinned to the same versions),
   checked with `hoard-cli self-test`, with signed build provenance: verify a download
-  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. They aren't code-signed yet, so
-  Windows SmartScreen warns the first time, and macOS won't open the package until you allow it.
+  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. The Windows programs are
+  code-signed (see `CODE_SIGNING.md`); SmartScreen may still warn while the publisher earns its reputation, and
+  macOS won't open the package until you allow it, as it isn't signed by Apple yet.
 - Every file is scanned by VirusTotal before a release is published, and its report is linked in the release
   notes. A file an engine flags keeps the release a draft until a person has checked it.
 - The Flatpak is built offline from files pinned by SHA-256, and its sandbox allows only the network, its

@@ -26,8 +26,9 @@ The **Release** workflow then:
    result and report link to the release notes;
 6. publishes the release, once every file is on it and none was flagged.
 
-Every file has signed build provenance (`gh attestation verify`). The Mac packages aren't signed or notarized by
-Apple, and the Windows installer isn't code-signed: see [Installing Hoard](Installing-Hoard) for what users see.
+Every file has signed build provenance (`gh attestation verify`). The Windows programs and installer are
+code-signed (see **Code signing (Windows)** below); the Mac packages aren't signed or notarized by Apple: see
+[Installing Hoard](Installing-Hoard) for what users see.
 
 ### Releases are immutable
 

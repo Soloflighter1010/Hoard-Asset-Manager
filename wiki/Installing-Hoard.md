@@ -8,8 +8,9 @@ Hoard is an app for Windows, macOS and Linux (a Flatpak). It also runs from sour
    Hoard to the Start menu (a desktop icon is optional). The folder can't be changed: it's one only your account
    can change, which keeps your store sign-ins safe. (Hoard installed somewhere else by an older setup is
    installed here when it updates; the old folder can then be deleted.)
-2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (a certificate costs
-   money every year). Choose **More info**, then **Run anyway**. To be sure the file is genuine first, see
+2. Windows may say **"Windows protected your PC"** for a while after a release. Hoard is code-signed: choose
+   **More info** and the publisher shows as Hoard's maintainer. A new publisher earns Microsoft's
+   trust as people install it, so the warning fades with time. Choose **Run anyway**. To be sure the file is genuine first, see
    [Checking a download](#checking-a-download).
 3. Open **Hoard** from the Start menu. It opens in its own window, and a short setup assistant walks you
    through the rest: see [Getting started](Getting-Started).
@@ -67,7 +68,8 @@ Each release also lists checksums: `SHA256SUMS-windows.txt` for the installer an
 Linux, `sha256sum <file>`.
 
 Every file is also scanned by VirusTotal before a release is published: the release notes link each file's
-report. Because Hoard's apps aren't code-signed, an engine or two may occasionally flag one by mistake; the
+report. Hoard's Mac packages aren't signed by Apple, and a newly signed program has little reputation yet, so an engine or
+two may occasionally flag one by mistake; the
 report shows which, and each release is checked by hand before it's published anyway.
 
 ## macOS
