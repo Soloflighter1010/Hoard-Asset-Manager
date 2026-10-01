@@ -173,6 +173,13 @@ class Pages(unittest.TestCase):
         """S-01: the pages reach Hoard's server only through api() (the key in a header) and keyed() (images)."""
         for page in PAGES:
             script = safety.inline_scripts(page.read_bytes())[0].decode("utf-8")
+            # The Save for Hoard bookmark's script is only text here: it runs in your own browser, on a Payhip shop,
+            # where it reads that shop's own library pages and nothing else
+            saver = re.search(r"const PAYHIP_SAVER = String\.raw`(.*?)`;", script, re.S)
+            if saver:
+                self.assertEqual(re.findall(r"\bfetch\(([^,)]*)", saver.group(1)), ["url"])
+                self.assertIn("n.origin === location.origin", saver.group(1), "the next page only from the same shop")
+                script = script.replace(saver.group(0), "")
             self.assertEqual(len(re.findall(r"\bfetch\(", script)), 2, f"{page.name}: api() and the one-time link only")
             self.assertIn(f'"{safety.ACCESS_HEADER}": ACCESS.key', script, page.name)
             self.assertNotRegex(script, r"""src=["'`]/(thumb|files)/""", f"{page.name}: an image without the key")

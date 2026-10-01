@@ -89,11 +89,18 @@ Payhip has no single library: your purchases live in each shop you bought from, 
 (`<shop>/b-account`), and a page shows 15 products at a time. There are two ways to read them:
 
 - **Import the pages** (the easy way). In your usual browser, open each shop's library page (the shop's
-  address followed by `/b-account`, such as `myshop.store/b-account`), sign in there if it asks, and save it
-  with **Ctrl+S** as **Webpage, Single File**, and each of its pages if it has several. Then choose **Import
-  pages** on Payhip's row, or **Import a folder** with all of them in it. See
-  [Importing saved pages](#importing-saved-pages). A shop that isn't in your list yet is added when you confirm
-  it: Hoard asks once for all of them, showing each address.
+  address followed by `/b-account`, such as `myshop.store/b-account`), sign in there if it asks, and save it:
+  - **With the Save for Hoard bookmark** (quickest). In **Stores**, under **Import saved pages**, drag **Save
+    for Hoard** to your browser's bookmarks bar (or choose **copy it**, make a new bookmark, and paste it as the
+    bookmark's address). On a shop's library page, choose the bookmark: it reads every page of that shop's
+    library, as you, and saves them as one file, `Payhip library - <shop>.html`, in your downloads. It only
+    reads that shop's own library pages, and sends nothing anywhere. Do the same on each shop.
+  - **By hand:** press **Ctrl+S** and save it as **Webpage, Single File**, and each of its pages if it has
+    several.
+
+  Then choose **Import pages** on Payhip's row and pick all the files at once, or **Import a folder** with all
+  of them in it. See [Importing saved pages](#importing-saved-pages). A shop that isn't in your list yet is
+  added when you confirm it: Hoard asks once for all of them, showing each address.
 - **Sign in and refresh.** Add your shops in **Settings** under **Payhip shops**, one per line: a shop's
   address is either its own domain (`myshop.store`) or `payhip.com/ShopName`. **Sign in** then opens a tab for
   each shop. Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
@@ -136,7 +143,8 @@ Instead of signing in, or when a store blocks the automatic refresh:
 1. Open your library on the store's website, in your usual browser.
 2. Scroll to the bottom, so everything has loaded.
 3. Press **Ctrl+S** and save it as **Webpage, Single File** (`.mhtml`), or as a web page (`.html`). If your
-   library has more pages (or, on Payhip, more shops), save each one.
+   library has more pages (or, on Payhip, more shops), save each one. On Payhip, the **Save for Hoard**
+   bookmark saves all of a shop's pages in one go: see [Payhip](#payhip).
 4. In **Stores**, choose **Import pages** and pick them all, or **Import a folder** and pick the folder you saved
    them in. You can also drop the files, or their folder, on Hoard's window.
 
