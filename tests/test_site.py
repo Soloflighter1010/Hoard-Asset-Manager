@@ -121,6 +121,35 @@ class TheSite(unittest.TestCase):
             self.assertLess(f.stat().st_size, 300_000, f.name)
         self.assertIn('media="(prefers-color-scheme: light)"', self.html, "the screenshot matches your light or dark")
 
+    def test_a_shared_link_shows_a_picture(self):
+        """A link to the site shared on Discord, X and the like showed no picture: every page names one, by its full
+        address (embeds don't follow relative ones), and it's here, the size those sites expect, and small."""
+        def jpeg_size(data: bytes):
+            """(width, height) from a JPEG's frame header, or None if it isn't a JPEG."""
+            if data[:2] != b"\xff\xd8":
+                return None
+            i = 2
+            while i + 9 < len(data):
+                marker, length = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
+                if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                    return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+                i += 2 + length
+            return None
+        base = "https://soloflighter1010.github.io/Hoard-Asset-Manager/"
+        site = built_site()
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html"):
+            html = (site / name).read_text("utf-8")
+            image = re.search(r'<meta property="og:image" content="([^"]+)">', html)
+            self.assertIsNotNone(image, f"{name}: no og:image")
+            self.assertTrue(image.group(1).startswith(base), f"{name}: the picture's full address")
+            self.assertIn('<meta name="twitter:card" content="summary_large_image">', html, name)
+            for tag in ("og:title", "og:description", "og:url", "og:image:alt"):
+                self.assertIn(f'<meta property="{tag}" content="', html, f"{name}: {tag}")
+            picture = SITE / image.group(1)[len(base):]
+            self.assertTrue(picture.is_file(), image.group(1))
+            self.assertLess(picture.stat().st_size, 300_000)
+            self.assertEqual(jpeg_size(picture.read_bytes()), (1200, 630), "a JPEG every site shows, at 1.91:1")
+
     def test_it_works_on_a_phone(self):
         self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', self.html)
         self.assertIn("@media (max-width: 760px)", (SITE / "styles.css").read_text("utf-8"))

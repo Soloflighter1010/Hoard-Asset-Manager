@@ -152,6 +152,18 @@ TEMPLATE = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>What's new in Hoard</title>
   <meta name="description" content="Every Hoard release, newest first: what changed, what was fixed, and when.">
+  <meta property="og:site_name" content="Hoard">
+  <meta property="og:title" content="What's new in Hoard">
+  <meta property="og:description" content="Every Hoard release, newest first: what changed, what was fixed, and when.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/changelog.html">
+  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Hoard's library: VRChat assets from Booth, Gumroad and Payhip as tiles, with tags and creators beside them">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#211C18">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="favicon.ico">
   <link rel="stylesheet" href="styles.css">
