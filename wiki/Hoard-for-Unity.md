@@ -18,11 +18,11 @@ assets came from.
 
 ## Credits
 
-Creators often ask to be credited when you use their assets. **Credits** in the window's toolbar lists the Hoard
-assets this project uses, ready to paste into an avatar or world description, a post or a store page:
+Creators often ask to be credited when you use their assets. **Create Credits List** in the window's toolbar lists the
+Hoard assets this project uses, ready to paste into an avatar or world description, a post or a store page:
 
-- **What's in it:** each product whose files are in the project, and each one imported through Hoard that hasn't
-  been removed since. Untick any you don't want credited. Assets that didn't come through Hoard can be added by
+- **What's in it:** each product fully in the project, with all the files of one of its packages there (0.3.1
+  and newer; 0.3.0 also took products only partly there, or imported through Hoard and removed since). Untick any you don't want credited. Assets that didn't come through Hoard can be added by
   hand, with a link if you like.
 - **Styles:** a list (name, creator, store and store link), Markdown (names linked to their store pages), or
   grouped by creator.

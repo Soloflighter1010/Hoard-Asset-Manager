@@ -11,7 +11,7 @@ releasing" notes in this file; delete this file. It uses only the Markdown the w
 
 Before releasing, check:
 - Code signing: keep "Signed for Windows" only if the release's Windows job signed (Azure Artifact Signing set up).
-- Hoard for Unity 0.3.0: keep its section only if 0.3.0 is out on VCC by then (Build Release, tag unity-v0.3.0).
+- Hoard for Unity 0.3.1: keep it in its section only if 0.3.1 is out on VCC by then (Build Release, tag unity-v0.3.1).
 - Add anything merged after this draft was written.
 -->
 
@@ -185,14 +185,14 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - The pages' scripts run in strict mode again.
 - A PIN test could fail when its digits happened to appear inside a random hash.
 
-### Hoard for Unity 0.3.0
+### Hoard for Unity 0.3.0 and 0.3.1
 
 Released alongside, through VCC (Hoard's listing:
 https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 
-- **Credits** (issue #51). The **Credits** button lists the creators of the Hoard assets your project uses, ready to
-  paste where you share your avatar or world: as a list with store links, as Markdown, or grouped by creator.
-  Untick any you don't want credited and add others by hand; **Copy** or **Save as...**. Your changes travel with
+- **Create Credits List** (issues #51 and #79). The **Create Credits List** button lists the creators of the
+  Hoard assets fully in your project, ready to paste where you share your avatar or world: as a list with store
+  links, as Markdown, or grouped by creator. Untick any you don't want credited and add others by hand; **Copy** or **Save as...**. Your changes travel with
   the project.
 - **Animated pictures play** in the list and the details. Unity can't read GIFs, so the window decodes them itself.
 - **A picture for more products:** when a product's saved picture is a kind Unity can't show (WebP or AVIF), the

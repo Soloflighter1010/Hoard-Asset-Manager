@@ -1,5 +1,5 @@
 // Hoard's Credits window (issue #51): the creators of the assets this project uses, ready to paste where you share
-// your avatar or world. Opened from the Credits button in Window > Hoard. What you change (entries added by hand,
+// your avatar or world. Opened from the Create Credits List button in Window > Hoard. What you change (entries added by hand,
 // ones left out, the title and style) is kept in ProjectSettings/Hoard/credits.json, so it travels with the project.
 using System.Collections.Generic;
 using System.IO;
@@ -25,7 +25,7 @@ namespace SoloFlighter.Hoard.Editor
 
         public static void Open(HoardWindow from)
         {
-            var w = GetWindow<CreditsWindow>(true, "Hoard Credits");
+            var w = GetWindow<CreditsWindow>(true, "Create Credits List");
             w.minSize = new Vector2(460, 420);
             w.source = from;
             w.Refresh();
