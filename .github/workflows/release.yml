@@ -92,12 +92,18 @@ jobs:
 
   # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer and a portable zip,
   # added to the same release. Built from requirements-app.txt (every file hash-checked).
+  # Code signing (Windows): Hoard.exe, hoard-cli.exe and the setup are signed with Azure Artifact Signing (Trusted
+  # Signing) when the repository has it set up (the AZURE_SIGNING_* variables and the AZURE_* secrets of the
+  # release-signing environment; see the wiki's Releasing page). Elsewhere, such as a fork, the build is unsigned,
+  # as before. Azure is signed in to with GitHub's OIDC token, so no password or key is stored here, and only this
+  # job, in the release-signing environment, can ask Azure to sign.
   windows:
     needs: release
     runs-on: windows-latest
+    environment: release-signing
     permissions:
       contents: write        # add the installer and zip to the release
-      id-token: write        # sign the build provenance
+      id-token: write        # sign the build provenance, and sign in to Azure to sign the programs
       attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
@@ -121,6 +127,41 @@ jobs:
       - name: Check the build has everything it needs
         run: dist\Hoard\hoard-cli.exe self-test
 
+      - name: Sign in to Azure, to sign the programs
+        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign Hoard.exe and hoard-cli.exe
+        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files: |
+            ${{ github.workspace }}\dist\Hoard\Hoard.exe
+            ${{ github.workspace }}\dist\Hoard\hoard-cli.exe
+          description: Hoard
+          description-url: https://github.com/${{ github.repository }}
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false        # the sign-in above
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Check the signed build still runs
+        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        run: dist\Hoard\hoard-cli.exe self-test
+
       - name: Build the installer (Inno Setup, pinned version)
         shell: pwsh
         run: |
@@ -129,6 +170,44 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup --version 6.4.3 -y --no-progress }
           & $iscc "/DAppVersion=$version" packaging\hoard.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Sign the installer
+        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe                     # dist\Hoard-Setup-<version>.exe (not the folders inside)
+          description: Hoard setup
+          description-url: https://github.com/${{ github.repository }}
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Check every signature, as Windows sees it
+        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        shell: pwsh
+        run: |
+          $files = @(Get-Item dist\Hoard\Hoard.exe, dist\Hoard\hoard-cli.exe) + @(Get-ChildItem dist\Hoard-Setup-*.exe)
+          foreach ($f in $files) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            "{0}: {1}, {2}" -f $f.Name, $sig.Status, $sig.SignerCertificate.Subject
+            if ($sig.Status -ne "Valid") { Write-Output "::error::$($f.Name) isn't validly signed ($($sig.Status))"; exit 1 }
+          }
+
+      - name: Zip the app, and list the files' checksums
+        shell: pwsh
+        run: |
+          $version = python -c "import hoard; print(hoard.__version__)"
           Compress-Archive -Path dist\Hoard -DestinationPath "dist\Hoard-$version-windows.zip"
           Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS-windows.txt

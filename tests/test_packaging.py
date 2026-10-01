@@ -263,6 +263,27 @@ class Workflows(unittest.TestCase):
         self.assertIn("Hoard-${TAG#v}-linux-x86_64.flatpak", r)
         self.assertIn("needs: [release, windows, macos, flatpak-release]", r, "published once every file is on it")
 
+    def test_windows_programs_are_signed_where_signing_is_set_up(self):
+        """Hoard.exe and hoard-cli.exe are signed before the installer and zip are made from them, the installer
+        before its checksum and provenance, all only where Azure signing is set up (a fork builds unsigned), with
+        no key or password stored: Azure is signed in to with GitHub's OIDC token, in the release-signing
+        environment."""
+        job = self.release.split("\n  windows:\n", 1)[1].split("\n  macos:\n", 1)[0]
+        self.assertIn("environment: release-signing", job)
+        self.assertIn("id-token: write", job)
+        steps = re.findall(r"- name: ([^\n]+)", job)
+        order = ["Sign in to Azure, to sign the programs", "Sign Hoard.exe and hoard-cli.exe",
+                 "Check the signed build still runs", "Build the installer (Inno Setup, pinned version)",
+                 "Sign the installer", "Check every signature, as Windows sees it",
+                 "Zip the app, and list the files' checksums", "Sign build provenance", "Add them to the release"]
+        self.assertEqual([s for s in steps if s in order], order)
+        for name in order[:3] + order[4:6]:
+            step = job.split(f"- name: {name}", 1)[1].split("- name:", 1)[0]
+            self.assertIn("if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}", step, name)
+        self.assertNotRegex(job, r"client-secret|AZURE_CLIENT_SECRET|password", "OIDC only, no stored secret")
+        self.assertEqual(job.count("exclude-azure-cli-credential: false"), 2, "both signings use the Azure sign-in")
+        self.assertIn('if ($sig.Status -ne "Valid")', job)
+
     def test_every_pull_request_builds_them(self):
         c = self.check
         for job in ("app-windows:", "app-macos:", "flatpak:"):
