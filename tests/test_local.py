@@ -36,7 +36,7 @@ def tree(folder: Path) -> dict:
 class LocalItems(unittest.TestCase):
 
     def setUp(self):
-        self.base = Path(tempfile.mkdtemp())
+        self.base = Path(tempfile.mkdtemp()).resolve()   # (Windows: the long form, as Hoard resolves it, not RUNNER~1)
         self.addCleanup(shutil.rmtree, self.base, True)
         self.root = self.base / "Hoard"
         self.root.mkdir()
