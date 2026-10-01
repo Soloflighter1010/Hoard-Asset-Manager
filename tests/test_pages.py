@@ -848,6 +848,27 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_the_download_panel_sits_beside_the_details(self):
+        """Issue #85: the download panel was drawn over an asset's details, so you couldn't use them while it showed."""
+        overlap = """() => {
+          const a = document.querySelector("#detail").getBoundingClientRect(), b = document.querySelector("#dlPanel").getBoundingClientRect();
+          return Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+        }"""
+        for width in (1400, 1000, 800):
+            page = self.browser.new_page(viewport={"width": width, "height": 860})
+            self.errors = []
+            page.on("pageerror", lambda e: self.errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.locator(".slot", has_text="Mochi").click()
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            page.evaluate("document.querySelector('#dlPanel').hidden = false")
+            page.wait_for_function("() => document.body.classList.contains('dl-showing')")
+            page.wait_for_timeout(300)   # the details slide in
+            self.assertEqual(page.evaluate(overlap), 0, f"{width}px wide")
+            self.assertTrue(page.locator("#dlPanel").is_visible(), width)
+            self.assertEqual(self.errors, [])
+            page.close()
+
     def test_settings_save_as_they_change(self):
         from unittest import mock
         self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))

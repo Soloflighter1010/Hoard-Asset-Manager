@@ -409,6 +409,12 @@ body.selecting .toast { bottom: 96px; }
 .ondisk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--bone); }
 .ondisk::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #4CC38A; }
 body.selecting .dlpanel { bottom: 96px; }
+/* issue #85: the download (and import) panel sits beside an asset's details, not over them. With room, to the
+   left of the details; without, the details end above it. An import panel shown with a download sits above it. */
+@media (min-width: 960px) { body.panel-open .dlpanel:not(.imppanel) { right: calc(min(470px, var(--vw)) + 18px); } }
+@media (max-width: 959.98px) { body.panel-open.dl-showing .detail { bottom: calc(var(--dl-all, 0px) + 18px); } }
+body.dl-both .imppanel { bottom: calc(30px + var(--dl-h, 0px)); }
+body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 /* splash (issue #50): the logo while the page reads your library, the first time the window opens. Later
    pages (Library to Downloads and back) only show it if reading takes a moment. */
 #splash { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: var(--cave);
@@ -2166,6 +2172,24 @@ function queuedToast(r) {   // a job started while another runs waits its turn
   return false;
 }
 
+/* ---------- the download panels beside the details (issue #85): the page's styles place them by these */
+function dockPanels() {
+  const shown = [...document.querySelectorAll(".dlpanel")].filter(p => !p.hidden);
+  const dl = shown.find(p => !p.classList.contains("imppanel")), imp = shown.find(p => p.classList.contains("imppanel"));
+  const s = document.body.style;
+  s.setProperty("--dl-h", (dl ? dl.offsetHeight : 0) + "px");
+  s.setProperty("--dl-all", shown.reduce((n, p) => n + p.offsetHeight + 12, 0) + "px");
+  document.body.classList.toggle("dl-showing", shown.length > 0);
+  document.body.classList.toggle("dl-both", !!(dl && imp));
+}
+function wireDock() {
+  const sizes = typeof ResizeObserver === "function" ? new ResizeObserver(dockPanels) : null;
+  for (const p of document.querySelectorAll(".dlpanel")) {
+    new MutationObserver(dockPanels).observe(p, { attributes: true, attributeFilter: ["hidden"] });
+    if (sizes) sizes.observe(p);
+  }
+  dockPanels();
+}
 function wireApp() {
   $("#syncBtn").addEventListener("click", startSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
@@ -2173,6 +2197,7 @@ function wireApp() {
   for (const id of ["tagPanel", "settingsPanel"]) makeWindow($("#" + id));
   wireAutosave();
   wireSidebar();
+  wireDock();
   wireTasks();
   wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);

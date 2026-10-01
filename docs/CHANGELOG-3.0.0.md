@@ -67,6 +67,8 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **One panel for Tags, Stores, Settings and Tasks** (issue #84). Each opens in a panel over the middle of the
   page, one at a time: choosing another swaps it in, and the buttons along the top stay in reach. **×**, Escape or
   a click on the page around it closes it.
+- **The download panel sits beside an asset's details** (issue #85) instead of over them, so you can keep using
+  them while it shows. In a narrow window the details end above it.
 - **Settings save as you change them.** There's no **Save** button any more: a box or a list is saved straight
   away, and a folder or the Payhip shops when you leave the field. While a job runs, only the settings it depends
   on (where files go, the browser, the stores and the Payhip shops) wait for it to finish.
