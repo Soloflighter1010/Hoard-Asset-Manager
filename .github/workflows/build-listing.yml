@@ -24,7 +24,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["site/**", "Website/**", "source.json", ".github/workflows/build-listing.yml"]
+    paths: ["site/**", "Website/**", "source.json", "CHANGELOG.md", "scripts/build_site_changelog.py",
+            ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
     types: [completed]
@@ -97,6 +98,16 @@ jobs:
           cp -r styles.css vendor favicon.ico banner.png vcc/
           cp -r "$GITHUB_WORKSPACE/site/." .
           test -f index.html && test -f vcc/index.html && test -f index.json && test -f vpm/index.json
+
+      # The website's What's new page, from CHANGELOG.md, with each release's date from GitHub (a release without
+      # one, or a failed lookup, is shown without a date).
+      - name: Build the What's new page from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 300 --json tagName,publishedAt > "$RUNNER_TEMP/dates.json" || echo "[]" > "$RUNNER_TEMP/dates.json"
+          python3 scripts/build_site_changelog.py "${{ env.listPublishDirectory }}/changelog.html" --dates "$RUNNER_TEMP/dates.json"
+          test -s "${{ env.listPublishDirectory }}/changelog.html"
 
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3

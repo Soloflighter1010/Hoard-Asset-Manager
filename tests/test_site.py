@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from html.parser import HTMLParser
@@ -17,6 +18,17 @@ REPO = Path(__file__).resolve().parent.parent
 SITE = REPO / "site"
 WORKFLOW = REPO / ".github" / "workflows" / "build-listing.yml"
 RELEASES = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest"
+
+sys.path.insert(0, str(REPO / "scripts"))
+import build_site_changelog as changelog  # noqa: E402
+
+
+def built_site() -> Path:
+    """The site as deployed: site/ with its What's new page built from CHANGELOG.md."""
+    out = Path(tempfile.mkdtemp()) / "site"
+    shutil.copytree(SITE, out)
+    changelog.main([str(out / "changelog.html")])
+    return out
 
 
 class Refs(HTMLParser):
@@ -46,15 +58,23 @@ class TheSite(unittest.TestCase):
         self.page.feed(self.html)
 
     def test_everything_it_uses_is_here(self):
-        for tag, key, value in self.page.refs:
-            if re.match(r"(https?|vcc|mailto):", value):
-                continue
-            if value.startswith("#"):
-                self.assertIn(value[1:], self.page.ids, value)
-                continue
-            if value in ("./", "vcc/"):
-                continue   # the site itself, and the listing's page put at vcc/ on deploy
-            self.assertTrue((SITE / value.split("#")[0]).is_file(), value)
+        site = built_site()
+        for name in ("index.html", "testers.html", "changelog.html"):
+            page = Refs()
+            page.feed((site / name).read_text("utf-8"))
+            for tag, key, value in page.refs:
+                if re.match(r"(https?|vcc|mailto):", value):
+                    continue
+                if value.startswith("#"):
+                    self.assertIn(value[1:], page.ids, f"{name}: {value}")
+                    continue
+                if value in ("./", "vcc/"):
+                    continue   # the site itself, and the listing's page put at vcc/ on deploy
+                target = value.split("#")[0][2:] if value.startswith("./") else value.split("#")[0]
+                self.assertTrue((site / (target or "index.html")).is_file(), f"{name}: {value}")
+                if "#" in value and target in ("", "index.html"):   # a section of the front page
+                    self.assertIn(value.split("#", 1)[1], self.page.ids, f"{name}: {value}")
+            self.assertEqual(page.external_loads, [], f"{name} loads nothing from other sites")
         css = (SITE / "styles.css").read_text("utf-8")
         for url in re.findall(r"url\(([^)]+)\)", css):
             self.assertTrue((SITE / url.strip("\"'")).is_file(), url)
@@ -106,6 +126,61 @@ class TheSite(unittest.TestCase):
         self.assertIn("@media (max-width: 760px)", (SITE / "styles.css").read_text("utf-8"))
 
 
+class TheOtherPages(unittest.TestCase):
+
+    def test_every_tester_is_thanked(self):
+        page = (SITE / "testers.html").read_text("utf-8")
+        names = re.findall(r'<li class="tester (\w+)">([^<]+)</li>', page)
+        self.assertEqual(len(names), 11)
+        self.assertIn(("booth", "puzzlella"), names)
+        self.assertIn("cheapthrill", [n for _, n in names])
+        self.assertTrue({c for c, _ in names} <= {"booth", "gumroad", "jinxxy", "payhip", "itch"})
+
+    def test_every_page_has_the_same_header_and_the_glow(self):
+        site = built_site()
+        for name in ("index.html", "testers.html", "changelog.html"):
+            page = (site / name).read_text("utf-8")
+            self.assertIn('<div class="glow" aria-hidden="true">', page, name)
+            self.assertIn('href="changelog.html"', page, name)
+            self.assertIn('href="testers.html"', page, name)
+            self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', page, name)
+
+    def test_the_changelog_has_every_release_newest_first(self):
+        md = (REPO / "CHANGELOG.md").read_text("utf-8")
+        versions = re.findall(r"^## (.+)$", md, re.M)
+        page = changelog.page(md, {})
+        self.assertEqual(re.findall(r'<h2><a href="#[^"]+">([^<]+)</a></h2>', page), versions)
+        self.assertEqual(page.count('class="latest-badge"'), 1)
+        self.assertLess(page.index("latest-badge"), page.index(f">{versions[1]}<"), "the newest is the one marked")
+        self.assertNotIn("<time", page, "no dates without GitHub's list")
+
+    def test_dates_come_from_the_releases(self):
+        md = "## 2.11.1\n\n- One.\n\n## 2.11.0\n\n- Two.\n"
+        page = changelog.page(md, {"v2.11.1": "2026-10-01T09:15:00Z"})
+        self.assertIn('<time datetime="2026-10-01">October 1, 2026</time>', page)
+        self.assertEqual(page.count("<time"), 1, "a release GitHub doesn't list has no date")
+
+    def test_nothing_in_the_changelog_becomes_markup(self):
+        md = ("## 9.9.9\n\nA <script>alert(1)</script> & **bold** `<b>code</b>` [link](https://example.com) "
+              "[bad](javascript:alert(1))\n")
+        page = changelog.page(md, {})
+        self.assertNotIn("<script>alert", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt; &amp; <strong>bold</strong>", page)
+        self.assertIn("<code>&lt;b&gt;code&lt;/b&gt;</code>", page)
+        self.assertIn('<a href="https://example.com">link</a>', page)
+        self.assertNotIn('href="javascript:', page)
+
+    def test_lists_nest_and_carry_on_over_lines(self):
+        md = "## 1.0.0\n\n- First\n  carried on.\n  - Inside\n- Second\n\nAfter.\n\n### Fixed\n\n- Third\n"
+        body = changelog.blocks(md.split("\n")[2:])
+        flat = re.sub(r"\s+", " ", body)
+        self.assertIn("<ul> <li> First carried on. <ul> <li> Inside </li></ul> </li> <li> Second </li></ul>", flat)
+        self.assertIn("<p>After.</p> <h4>Fixed</h4> <ul> <li> Third </li></ul>", flat)
+        built = (built_site() / "changelog.html").read_text("utf-8")
+        self.assertEqual(built.count("<ul>"), built.count("</ul>"))
+        self.assertEqual(len(re.findall(r"<li[ >]", built)), built.count("</li>"))
+
+
 class TheDeploy(unittest.TestCase):
 
     def setUp(self):
@@ -113,6 +188,16 @@ class TheDeploy(unittest.TestCase):
 
     def test_it_deploys_when_the_site_changes(self):
         self.assertRegex(self.text, r'push:\n\s+branches: \[main\]\n\s+paths: \[[^\]]*"site/\*\*"')
+        paths = re.search(r"paths: \[([^\]]*)\]", self.text).group(1)
+        self.assertIn('"CHANGELOG.md"', paths, "and when the changelog does, for its What's new page")
+        self.assertIn('"scripts/build_site_changelog.py"', paths)
+
+    def test_it_builds_the_whats_new_page(self):
+        step = self.text.split("- name: Build the What's new page from the changelog", 1)[1].split("- uses:", 1)[0]
+        self.assertIn("scripts/build_site_changelog.py", step)
+        self.assertIn("--json tagName,publishedAt", step)
+        self.assertIn('|| echo "[]"', step, "a failed lookup still builds the page, without dates")
+        self.assertLess(self.text.index("Put Hoard's website in front"), self.text.index("Build the What's new page"))
 
     def test_the_listing_keeps_its_addresses(self):
         """The deploy step, run on a copy of the listing's files: the site takes the root, the listing's page moves

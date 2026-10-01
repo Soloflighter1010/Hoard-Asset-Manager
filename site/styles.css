@@ -116,6 +116,49 @@ h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); margin: 0 0 .8em; }
 .trust ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; grid-template-columns: repeat(2, 1fr); }
 .trust li { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 18px 20px; }
 
+/* Pages other than the front: a heading, and the page's own content */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bar nav a[aria-current="page"] { opacity: 1; text-decoration: underline; text-decoration-color: var(--gold);
+                                  text-decoration-thickness: 2px; }
+.page-head { text-align: center; padding: 40px 0 32px; border-top: 0; }
+.page-head h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 .3em; }
+.page-foot { text-align: center; color: var(--dust); }
+.page-head ~ section { border-top: 0; padding-top: 8px; }
+
+/* Testers: each name in a store's colour, as the app marks stores */
+.testers { list-style: none; margin: 0 auto; padding: 0; max-width: 900px; display: flex; flex-wrap: wrap;
+           justify-content: center; gap: 12px; }
+.tester { display: inline-flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 999px;
+          background: var(--ledge); border: 1px solid var(--seam); font-weight: 700; font-size: 1.05rem;
+          overflow-wrap: anywhere; }
+.tester::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none;
+                  box-shadow: 0 0 10px var(--c); }
+
+/* What's new: the releases down a line, newest first */
+.timeline { list-style: none; margin: 0 auto; padding: 0 0 24px; max-width: 860px; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 11px; top: 8px; bottom: 0; width: 2px; background: var(--seam); }
+.release { position: relative; padding-left: 44px; margin-bottom: 22px; }
+.release::before { content: ""; position: absolute; left: 4px; top: 22px; width: 16px; height: 16px; border-radius: 50%;
+                   background: var(--cave); border: 3px solid var(--c, var(--gold)); }
+.release:first-child::before { background: var(--gold); box-shadow: 0 0 14px var(--gold); }
+.release:nth-child(5n+1) { --c: var(--booth); } .release:nth-child(5n+2) { --c: var(--gumroad); }
+.release:nth-child(5n+3) { --c: var(--jinxxy); } .release:nth-child(5n+4) { --c: var(--payhip); }
+.release:nth-child(5n) { --c: var(--itch); }
+.release article { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 20px 24px; }
+.release header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.release h2 { font-size: 1.6rem; margin: 0; }
+.release h2 a { color: var(--bone); text-decoration: none; }
+.release h2 a:hover { text-decoration: underline; }
+.release time { color: var(--dust); font-size: .95rem; }
+.latest-badge { font: 700 .8rem var(--body); padding: 2px 10px; border-radius: 999px; background: var(--gold); color: var(--gold-ink); }
+.release h4 { margin: 1.2em 0 .4em; }
+.release p { margin: .6em 0; }
+.release ul { margin: .4em 0; padding-left: 1.3em; list-style: disc; }
+.release ul ul { list-style: circle; }
+.release li { margin: .35em 0; }
+.release article > .small { display: inline-block; margin-top: 8px; }
+.release code { overflow-wrap: anywhere; }
+
 .foot { max-width: 1160px; margin: 0 auto; padding: 32px 24px 48px; border-top: 1px solid var(--seam); text-align: center; }
 .foot p { margin: 6px 0; }
 .foot img { vertical-align: -4px; }
@@ -130,4 +173,8 @@ h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); margin: 0 0 .8em; }
   .bar { padding: 14px 16px; }
   main { padding: 0 16px; }
   section { padding: 40px 0; }
+  .release { padding-left: 32px; }
+  .timeline::before { left: 7px; }
+  .release::before { left: 0; }
+  .release article { padding: 16px 18px; }
 }
