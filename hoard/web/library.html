@@ -513,9 +513,12 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
   font-size: 11px; line-height: 18px; text-align: center; }
 
 /* the shelf: a folder tab per store, raised when it's the one shown, with the view's tools beside them */
-.shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; align-items: flex-end; gap: 14px; padding: 6px 24px 0;
+/* When the tabs and the tools don't fit side by side (a smaller window, larger text), the tools go up a row of their
+   own (wrap-reverse puts the second row on top), and the tabs keep the whole width, touching the line below */
+.shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; flex-wrap: wrap-reverse; align-items: flex-start;
+  gap: 6px 14px; padding: 6px 24px 0;
   background: var(--cave); border-bottom: 1px solid var(--seam); }
-.shelf .seg { position: static; flex: 1 1 auto; min-width: 0; height: 46px; display: flex; align-items: flex-end; gap: 4px; padding: 0;
+.shelf .seg { position: static; flex: 1 1 max-content; min-width: 0; height: 46px; display: flex; align-items: flex-end; gap: 4px; padding: 0;
   background: none; border: 0; overflow-x: auto; overflow-y: hidden; margin-bottom: -1px; }
 .seg button { height: 38px; padding: 0 16px; margin-top: 8px; border-radius: 12px 12px 0 0; color: var(--dust);
   background: var(--ledge); box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam), inset 0 -1px 0 var(--seam);
@@ -527,8 +530,14 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
   box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam); }
 .seg button[aria-checked="true"]::after { top: 0; bottom: auto; left: 0; right: 0; height: 3px; border-radius: 12px 12px 0 0;
   background: var(--c, var(--gold)); }
-.shelf-tools { display: flex; align-items: center; gap: 10px; flex: none; padding-bottom: 7px; font-size: 13px; color: var(--dust); }
+.shelf-tools { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; align-self: flex-end; padding-bottom: 7px; font-size: 13px; color: var(--dust); }
 .shelf-tools label { display: flex; align-items: center; gap: 8px; }
+.seg.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
+.seg.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); }
+.seg.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
 .shelf-tools select { height: 34px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; appearance: none; -webkit-appearance: none;
   color: var(--bone); background-color: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
@@ -628,7 +637,7 @@ details.task summary::-webkit-details-marker { display: none; }
 details.task .when { grid-column: 2; font-size: 12px; color: var(--dust); }
 details.task summary b { overflow-wrap: anywhere; }
 .outcome { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; background: rgb(76 195 138 / .18); color: #4CC38A; }
-.done-failed .outcome { background: rgb(255 159 107 / .18); color: var(--warn); }
+.done-failed .outcome, .done-partial .outcome { background: rgb(255 159 107 / .18); color: var(--warn); }
 .done-stopped .outcome { background: var(--ledge); color: var(--dust); }
 .task pre, .task details pre { max-height: 260px; overflow: auto; margin: 8px 0 0; padding: 8px; border-radius: 8px; background: var(--cave);
   font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1736,6 +1745,17 @@ document.addEventListener("keydown", e => {
 });
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h", e.target.offsetHeight + "px")).observe($(".bar"));
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-h", e.target.offsetHeight + "px")).observe($(".shelf"));
+{   // tabs out of sight (a very narrow window) fade at the edge they're beyond, so it shows there are more
+  const seg = $(".shelf .seg");
+  const edges = () => {
+    seg.classList.toggle("more-left", seg.scrollLeft > 2);
+    seg.classList.toggle("more-right", seg.scrollLeft + seg.clientWidth < seg.scrollWidth - 2);
+  };
+  seg.addEventListener("scroll", edges, { passive: true });
+  new ResizeObserver(edges).observe(seg);
+  new MutationObserver(edges).observe(seg, { childList: true });
+  seg.addEventListener("focusin", e => e.target.scrollIntoView({ block: "nearest", inline: "nearest" }));
+}
 /* ---------- how the tag code below finds its way around this page */
 const T = {
   slotKey: "key",
@@ -2131,7 +2151,7 @@ function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
   $("#dlTitle").textContent = job.running ? (job.sync && job.task !== "download" ? "Syncing: reading your stores" : job.sync ? "Syncing: downloading" : "Downloading")
-    : stopped ? "Stopped" : "Finished";
+    : stopped ? "Stopped" : job.error ? "Couldn't finish" : job.partial ? "Finished, with problems" : "Finished";
   const xfer = job.running ? job.transfer : null;   // a file downloading: its bar says it all
   $("#dlMessage").textContent = xfer ? "" : job.message || "";
   $("#dlMessage").hidden = !!xfer;
@@ -2281,10 +2301,44 @@ function applyUi(ui) {   // once, when the page first has its data
   if (tile && typeof setZoom === "function") setZoom(tile);
 }
 function winOpened(el) {   // one panel at a time: the others close as this one opens
+  const from = document.activeElement;
   for (const other of document.querySelectorAll(".win:not([hidden])")) if (other !== el) WINDOWS[other.id]();
   winShade();
   el.scrollTop = 0;
+  // The keyboard goes with it: into the panel now, and back to what opened it when it closes
+  if (from && from !== document.body && !el.contains(from)) el._opener = from.closest(".win") ? from.closest(".win")._opener : from;
+  requestAnimationFrame(() => {
+    if (el.hidden || el.contains(document.activeElement) || document.querySelector("dialog[open]")) return;
+    const first = winFocusables(el).find(n => !n.classList.contains("win-x")) || el.querySelector(".win-x");
+    if (first) first.focus({ preventScroll: true });
+  });
 }
+function winClosed(el) {
+  winShade();
+  const back = el._opener;
+  el._opener = null;
+  const lost = !document.activeElement || document.activeElement === document.body || el.contains(document.activeElement);
+  if (lost && back && back.isConnected && !back.closest(".win[hidden]") && !document.querySelector(".win:not([hidden])"))
+    back.focus({ preventScroll: true });
+}
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), " +
+                  "textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
+function winFocusables(el) {
+  return [...el.querySelectorAll(FOCUSABLE)].filter(n => n.getClientRects().length && !n.closest("[hidden], [inert]"));
+}
+// Tab stays in the open panel, as it would in a window of its own (the page behind is dimmed, not in use)
+document.addEventListener("keydown", e => {
+  if (e.key !== "Tab" || document.querySelector("dialog[open]")) return;
+  const el = document.querySelector(".win:not([hidden])");
+  if (!el) return;
+  const all = winFocusables(el);
+  if (!all.length) return;
+  const at = all.indexOf(document.activeElement);
+  if (at === -1 || (e.shiftKey && at === 0) || (!e.shiftKey && at === all.length - 1)) {
+    e.preventDefault();
+    (e.shiftKey ? all[all.length - 1] : all[0]).focus();
+  }
+});
 function winShade() {   // the page behind an open panel is dimmed, and a click on it closes the panel
   let shade = document.getElementById("winShade");
   const open = !!document.querySelector(".win:not([hidden])");
@@ -2312,8 +2366,10 @@ function makeWindow(el) {
   bar.append(extra, x);
   el.append(bar, body);
   el.setAttribute("role", "dialog");
+  el.setAttribute("aria-modal", "true");
+  if (title) { title.id = title.id || el.id + "Title"; el.setAttribute("aria-labelledby", title.id); }
   x.addEventListener("click", () => WINDOWS[el.id]());
-  new MutationObserver(() => { if (!el.hidden) winOpened(el); else winShade(); })
+  new MutationObserver(() => { if (!el.hidden) winOpened(el); else winClosed(el); })
     .observe(el, { attributes: true, attributeFilter: ["hidden"] });
   if (!el.hidden) winOpened(el);
 }
@@ -2487,7 +2543,7 @@ async function loadTasks() {
   } catch (e) { /* Hoard stopped: the page says so elsewhere */ }
   tasksTimer = setTimeout(loadTasks, 1500);
 }
-const OUTCOMES = { done: "Done", failed: "Failed", stopped: "Stopped" };
+const OUTCOMES = { done: "Done", partial: "Partly done", failed: "Failed", stopped: "Stopped" };
 const STOPPABLE = ["download", "check-updates", "sync"];
 function whenDone(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
 function tookTime(a, b) {

@@ -124,7 +124,10 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             # offers it again (issue #24). Its record is kept, so downloading it again works as before.
             gone += 1
             continue
-        thumb = None if linked else _thumbnail(folder, e.get("files", []))   # (pictures are only served from the downloads)
+        # Pictures are only served from the downloads folder: an item listed where it is has a copy of one there
+        # (Local/_linked/..., see local.keep_picture), never one from its own folder
+        own = safe_join(root, e["folder"]) if linked else None
+        thumb = (_thumbnail(own, []) if own is not None else None) if linked else _thumbnail(folder, e.get("files", []))
         assets.append({
             "id": i,
             "store": e["store"],

@@ -6,6 +6,7 @@ it into its own Local folder (inside the downloads folder) or lists it where it 
 - A copy is Hoard's, like a download: the routine checks cover it, and an editable copy can be made of it.
 - An item listed where it is stays yours: Hoard reads it but never writes, moves or deletes anything there, and the
   routine checks leave it alone, since it's your working folder. Rescan picks up files you've added or removed.
+  For its tile, a copy of one of its pictures is kept in Hoard's own Local folder (see keep_picture).
   Only a manifest Hoard sealed on this computer can name such a folder (see clean_manifest).
 
 Either way it's in Downloads (the Local tab), tagged and searched like the rest, and in catalog.json, so Hoard for
@@ -21,10 +22,12 @@ from pathlib import Path
 
 from .common import log
 from .downloader import Manifest, STORE_DIRS, build_catalog, record_folder, valid_location
-from .safety import UnsafePath, _is_link, clean_text, open_under, rel_to_path
+from .downloads import IMAGE_EXT, PREVIEW_HINT
+from .safety import UnsafePath, _is_link, clean_text, open_under, rel_to_path, write_file_safely
 
 LOCAL = STORE_DIRS["local"]
 MAX_FILES = 20000
+MAX_PICTURE = 20 * 1024 * 1024   # bytes: a bigger image isn't copied for the picture
 SKIP = {".ds_store", "thumbs.db", "desktop.ini", "_manifest.json", "asset.json"}   # system clutter, and Hoard's own
 
 
@@ -118,6 +121,7 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     else:
         rec["folder"], rec["location"] = f"_linked/{key}", str(source)
         rec["files"] = _listing(source, files)
+        keep_picture(sdir, rec, source)
     if not rec["files"]:
         manifest.assets.pop(key, None)
         raise ValueError("None of those files could be read.")
@@ -125,6 +129,51 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     build_catalog(cfg, root)
     log(f"Local: added {name} ({len(rec['files'])} files, {'copied in' if copy else 'listed where it is'})")
     return rec
+
+
+def keep_picture(sdir: Path, rec: dict, source: Path) -> None:
+    """An item listed where it is: a copy of one of its pictures in Hoard's Local folder, as _thumbnail.<ext>, for its
+    tile. Pictures are only shown from inside the downloads folder, so the folder itself (yours, anywhere on this
+    computer) is never served. A picture named like a preview comes first, then any. Nothing in your folder is
+    written; a picture that can't be read is skipped."""
+    try:
+        dest = rel_to_path(sdir, rec["folder"])
+    except UnsafePath:
+        return
+    images = [f["path"] for f in rec.get("files", {}).values() if Path(f["path"]).suffix.lower() in IMAGE_EXT
+              and (f.get("size") or 0) <= MAX_PICTURE]
+    images.sort(key=lambda rel: (not PREVIEW_HINT.search(Path(rel).stem), rel.count("/"), rel.lower()))
+    for old in dest.glob("_thumbnail.*") if dest.is_dir() else []:
+        old.unlink(missing_ok=True)
+    for rel in images[:5]:
+        try:
+            with open_under(source, rel) as fh:   # never through a link out of your folder
+                data = fh.read(MAX_PICTURE + 1)
+        except (UnsafePath, OSError):
+            continue
+        if not data or len(data) > MAX_PICTURE:
+            continue
+        dest.mkdir(parents=True, exist_ok=True)
+        write_file_safely(dest / ("_thumbnail" + Path(rel).suffix.lower()), data)
+        return
+
+
+def _forget_picture(sdir: Path, rec: dict) -> None:
+    """Remove the copy keep_picture made (with the asset.json Hoard keeps beside it), and its folder
+    (Local/_linked/...) once that's empty."""
+    try:
+        dest = rel_to_path(sdir, rec["folder"])
+    except UnsafePath:
+        return
+    for old in [*dest.glob("_thumbnail.*"), dest / "asset.json"] if dest.is_dir() and not dest.is_symlink() else []:
+        if old.is_file() and not old.is_symlink():
+            old.unlink(missing_ok=True)
+    for d in (dest, dest.parent):
+        if d != sdir and sdir in d.parents:
+            try:
+                d.rmdir()   # only when empty
+            except OSError:
+                pass
 
 
 def _listing(folder: Path, files: list[str]) -> dict:
@@ -157,6 +206,7 @@ def rescan(cfg: dict, root: Path, key: str) -> dict:
     if not folder.is_dir():
         raise ValueError(f"Its folder isn't there any more: {folder}")
     rec["files"] = _listing(folder, walk(folder))
+    keep_picture(local_dir(root), rec, folder)
     manifest.save()
     build_catalog(cfg, root)
     return rec
@@ -196,6 +246,8 @@ def remove(cfg: dict, root: Path, key: str) -> dict:
                     d.rmdir()   # only when empty
                 except OSError:
                     pass
+    else:
+        _forget_picture(sdir, rec)
     manifest.assets.pop(key)
     manifest.save()
     build_catalog(cfg, root)

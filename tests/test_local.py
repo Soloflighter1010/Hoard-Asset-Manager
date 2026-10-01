@@ -79,7 +79,10 @@ class LocalItems(unittest.TestCase):
         downloader.build_catalog(self.cfg, self.root)
         index = downloads.build_index(self.root, self.catalog())
         [a] = index["assets"]
-        self.assertEqual((a["linked"], a["missing"], len(a["files"]), a["thumb"]), (True, 0, 2, None))
+        self.assertEqual((a["linked"], a["missing"], len(a["files"])), (True, 0, 2))
+        # its picture: a copy in Hoard's own folder, since only pictures in the downloads folder are shown
+        self.assertEqual(a["thumb"], a["folder"] + "/_thumbnail.png")
+        self.assertEqual((self.root / a["thumb"]).read_bytes(), b"png!")
         self.assertEqual(server.open_target(self.cfg, a["folder"]), self.src)
         self.assertEqual(server.open_target(self.cfg, a["folder"] + "/Skins/skin.png"), self.src / "Skins" / "skin.png")
         self.assertEqual(downloader.check_integrity(self.root)["files"], 0, "the routine checks leave it alone")
@@ -91,7 +94,18 @@ class LocalItems(unittest.TestCase):
         self.assertEqual(len(local.rescan(self.cfg, self.root, key)["files"]), 3)
         self.assertEqual(local.remove(self.cfg, self.root, key), {"deleted": 0, "listed": True})
         self.assertEqual(sorted(tree(self.src)), sorted(before) + ["new.txt"])
+        self.assertFalse((self.root / "Local" / "_linked").exists(), "its picture goes with it")
         self.assertEqual(self.catalog(), [])
+
+    def test_a_preview_picture_comes_first_and_a_rescan_follows_it(self):
+        (self.src / "Preview.jpg").write_bytes(b"jpg!")
+        local.add(self.cfg, self.root, str(self.src), copy=False)
+        key = next(iter(downloader.Manifest(self.root / "Local").assets))
+        own = self.root / "Local" / "_linked" / key
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.jpg"])
+        (self.src / "Preview.jpg").unlink()
+        local.rescan(self.cfg, self.root, key)
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.png"], "the picture it had is gone, so another")
 
     def test_only_a_manifest_hoard_sealed_names_a_folder(self):
         local.add(self.cfg, self.root, str(self.src), copy=False)
@@ -239,6 +253,23 @@ class Browse(unittest.TestCase):
             page.click("#settingsBtn")
             page.locator("#setRootBrowse").wait_for()
             self.assertTrue(page.locator("#setRootBrowse").is_visible())
+            browser.close()
+
+    def test_local_is_a_place_of_its_own(self):
+        """Local, in the bar, opened Downloads with Downloads still highlighted. Now the bar, the heading and the
+        window's title say Local, and go back to Downloads with it."""
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1300, "height": 860})
+            page.goto(self.srv.entry_url())
+            page.goto(self.srv.url + "downloads")
+            page.click('.apptabs a[href="/downloads#store=Local"]')
+            page.wait_for_function("() => document.title === 'Hoard: Local'")
+            self.assertEqual(page.get_attribute('.apptabs a[href="/downloads#store=Local"]', "aria-current"), "page")
+            self.assertIsNone(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"))
+            page.click('#stores [data-store=""]')
+            page.wait_for_function("() => document.title === 'Hoard: Downloads'")
+            self.assertEqual(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"), "page")
             browser.close()
 
     def test_no_picker_says_so(self):

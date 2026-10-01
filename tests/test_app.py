@@ -395,6 +395,52 @@ class RealJobs(unittest.TestCase):
         self.assertEqual(done["outcome"], "done", done["message"])
         self.assertIn("Added", done["message"])
 
+    def sync_with(self, fetchers, online=True):
+        """A Sync of Booth and Gumroad through the real runner, each store read by fetchers[store]. Returns the
+        finished job and whether downloading was tried."""
+        import contextlib
+        import types
+        from unittest import mock
+        from hoard.common import NotLoggedIn
+
+        def not_signed_in(ctx, cfg, say):
+            raise NotLoggedIn("not signed in")
+        window = types.SimpleNamespace(close=lambda: None)
+        tried = []
+        with mock.patch.object(jobs, "reachable", lambda store: online), \
+                mock.patch.object(jobs, "_playwright", lambda: (lambda: contextlib.nullcontext(None))), \
+                mock.patch.object(jobs, "launch", lambda *a: window), \
+                mock.patch.dict(jobs.FETCHERS, {s: fetchers.get(s, not_signed_in) for s in ("booth", "gumroad")}), \
+                mock.patch.object(self.jobs, "_download", lambda *a, **k: tried.append(a) or self.jobs._set(message="Done: 0 new, 0 updated.")):
+            self.assertEqual(self.jobs.start("sync", ["booth", "gumroad"]), "started")
+            for _ in range(200):
+                if not self.jobs.state["running"]:
+                    break
+                time.sleep(0.05)
+        return self.jobs.history[-1], bool(tried)
+
+    def test_a_sync_that_read_no_store_failed(self):
+        """A Sync where every store failed said Done, in green. Now it fails, says which stores, and doesn't try to
+        download from them."""
+        done, downloaded = self.sync_with({})
+        self.assertEqual(done["outcome"], "failed")
+        self.assertIn("Couldn't read Booth and Gumroad", done["message"])
+        self.assertFalse(downloaded)
+
+    def test_a_sync_that_read_some_stores_is_partly_done(self):
+        item = {"key": "booth:1", "store": "booth", "name": "Hat", "creator": "Someone", "url": "https://booth.pm/en/items/1"}
+        done, downloaded = self.sync_with({"booth": lambda ctx, cfg, say: [item]})
+        self.assertTrue(downloaded, "what could be read is still downloaded")
+        self.assertEqual(done["outcome"], "partial")
+        self.assertIn("Couldn't read Gumroad", done["message"])
+        self.assertNotIn("Booth", done["message"].split("Couldn't read")[1])
+
+    def test_a_sync_offline_failed(self):
+        done, downloaded = self.sync_with({}, online=False)
+        self.assertEqual(done["outcome"], "failed")
+        self.assertIn("offline", done["message"])
+        self.assertFalse(downloaded)
+
     def test_a_job_that_cant_start_lets_the_runner_go(self):
         from unittest import mock
         with mock.patch.object(self.jobs, "_start", side_effect=RuntimeError("broken")):
@@ -2622,7 +2668,7 @@ class AutomaticSync(unittest.TestCase):
         from unittest import mock
         runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
         checked = threading.Event()   # the job waits here, so it can be looked at while it runs
-        with mock.patch.object(runner, "_refresh", lambda *a, **k: checked.wait(10)), \
+        with mock.patch.object(runner, "_refresh", lambda *a, **k: checked.wait(10) and []), \
                 mock.patch.object(runner, "_download"):
             self.assertTrue(runner.start("sync", ["booth"], scheduled=True))
             self.assertTrue(runner.state["scheduled"])

@@ -883,6 +883,45 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertGreater(page.locator("#stores").bounding_box()["width"], 800, "the panel uses the room it has")
             page.close()
 
+    def test_the_keyboard_goes_into_the_panel(self):
+        """Opening a panel left the keyboard on the button behind it, so Tab wandered through the dimmed page. Now
+        the panel takes it, Tab goes round inside it, and closing it hands the keyboard back."""
+        page = self.open()
+        inside = "id => document.getElementById(id).contains(document.activeElement)"
+        for button, win in (("#settingsBtn", "settingsPanel"), ("#storesBtn", "stores")):
+            with self.subTest(win):
+                page.focus(button)
+                page.keyboard.press("Enter")
+                page.wait_for_function(inside, arg=win)
+                for _ in range(60):   # more than the panel has: round and round, never out
+                    page.keyboard.press("Tab")
+                    self.assertTrue(page.evaluate(inside, win), "Tab left the panel")
+                page.keyboard.press("Shift+Tab")
+                self.assertTrue(page.evaluate(inside, win))
+                self.assertEqual(page.get_attribute(f"#{win}", "aria-modal"), "true")
+                page.keyboard.press("Escape")
+                page.wait_for_function(f"() => document.activeElement === document.querySelector('{button}')")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_store_tabs_stay_in_sight(self):
+        """In a window about 900px wide, or at the largest text size, the store tabs slid under Sort and the tile
+        size, with nothing to say more were there. Now the tools go up a row and every tab can be seen."""
+        page = self.open()
+        tabs_fit = """() => { const seg = document.querySelector('.shelf .seg'), box = seg.getBoundingClientRect();
+          return [...seg.children].every(t => t.getBoundingClientRect().right <= box.right + 1); }"""
+        for width, zoom in ((900, 1), (1200, 1.5)):
+            with self.subTest(width=width, zoom=zoom):
+                page.set_viewport_size({"width": width, "height": 800})
+                page.evaluate(f"document.documentElement.style.zoom = '{zoom}'")
+                page.wait_for_timeout(100)
+                self.assertTrue(page.evaluate(tabs_fit))
+                self.assertTrue(page.locator("#sort").is_visible())
+        page.set_viewport_size({"width": 330, "height": 800})   # a phone: they scroll, and a fade shows there are more
+        page.evaluate("document.documentElement.style.zoom = '1.5'")
+        page.wait_for_function("() => document.querySelector('.shelf .seg').classList.contains('more-right')")
+        page.close()
+
     def test_settings_save_as_they_change(self):
         from unittest import mock
         self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))
