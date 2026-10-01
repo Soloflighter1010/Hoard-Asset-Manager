@@ -8,7 +8,8 @@ PRODUCTS_FOLDER holds each product's picture (PNG, JPEG, WebP or GIF) and produc
       "url": "https://jinxxy.com/...", "tags": ["ears", "accessory"]}, ...]
 
 "store" is booth, gumroad, jinxxy, payhip or itch; "url" and "tags" are optional. Without products.json, every
-picture in the folder is a product named after its file, from Jinxxy.
+picture in the folder is a product named after its file, from Jinxxy. A product whose picture isn't there is
+skipped. scripts/export_screenshot_products.py makes this folder from your own Hoard library.
 
 Hoard runs on a made-up data folder of its own (never yours): those products are your library, most of them
 downloaded, with a Local item, a Unity project using some of them, a finished check and a few tasks. Then each part
@@ -51,7 +52,10 @@ def products(folder: Path) -> list[dict]:
     out = []
     for n, p in enumerate(found):
         pic = folder / p["image"]
-        if not pic.is_file() or pic.suffix.lower() not in PICTURES:
+        if not pic.is_file():
+            print(f"Skipping {p['name']}: its picture isn't in {folder} (deleted while reviewing?)")
+            continue
+        if pic.suffix.lower() not in PICTURES:
             sys.exit(f"{p['image']}: not a picture in {folder}")
         store = p.get("store", "jinxxy")
         if store not in STORES:
