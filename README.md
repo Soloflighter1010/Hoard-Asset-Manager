@@ -60,8 +60,8 @@ Guides for everything, from installing to fixing a problem, are in the
 
 1. Download **`Hoard-Setup-<version>.exe`** from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
    and run it. It installs for you only, with no administrator prompt, and adds Hoard to the Start menu.
-2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (a certificate costs
-   money every year). Choose **More info**, then **Run anyway**. To check the download really came from
+2. Windows may say **"Windows protected your PC"**, because Hoard isn't code-signed yet (signing through
+   SignPath Foundation is under way: see [CODE_SIGNING.md](CODE_SIGNING.md)). Choose **More info**, then **Run anyway**. To check the download really came from
    this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
 3. Open **Hoard** from the Start menu. It opens in its own window. A short
    setup assistant walks you through the rest: which stores you use, signing in to each one, your Payhip
@@ -336,6 +336,7 @@ it, raise `version` in its `package.json` and add a section to its `CHANGELOG.md
 - [PRIVACY.md](PRIVACY.md): privacy policy
 - [COPYRIGHT.md](COPYRIGHT.md): copyright, the name and logo, third-party software and credits
 - [SECURITY.md](SECURITY.md): reporting security problems
+- [CODE_SIGNING.md](CODE_SIGNING.md): code signing policy
 
 The logo files are in `brand/`. The wordmark is outlined from Dela Gothic One, so the files need no fonts
 installed.
