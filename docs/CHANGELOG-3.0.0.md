@@ -105,6 +105,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   different shop is credited to the shop it's from.
 - While your hidden library is locked, hidden products' names stay out of job progress and the Tasks list, and
   locking it closes any hidden product's details you had open.
+- **Remove a download completely** (issue #81). Removing something you've downloaded asks whether to delete its
+  downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is also in Removed, in
+  the Library and in Downloads. Only the files Hoard downloaded go; anything of your own in the folder stays.
 
 ### Downloads you can leave running
 

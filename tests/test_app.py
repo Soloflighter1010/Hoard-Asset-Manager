@@ -117,6 +117,93 @@ class EmptyLibrary(unittest.TestCase):
         self.assertEqual(list(root.iterdir()), [])
 
 
+class DeletingRemovedDownloads(unittest.TestCase):
+    """Issue #81: removing something from the Library left its download in Downloads. Its downloaded files can now be
+    deleted too, after you confirm: only a removed product's, only the files Hoard downloaded, never through a link."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        folder = self.root / "Booth" / "Kitsu Studio" / "Rusk"
+        (folder / "Textures").mkdir(parents=True)
+        (folder / "rusk.unitypackage").write_bytes(b"pkg")
+        (folder / "Textures" / "body.png").write_bytes(b"png!")
+        (folder / "_thumbnail.png").write_bytes(b"t")
+        man = downloader.Manifest(self.root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "Textures/body.png", "size": 4}}
+        other = man.record("222", "Kitsu Studio", "Anko")
+        (self.root / "Booth" / "Kitsu Studio" / "Anko").mkdir()
+        (self.root / "Booth" / "Kitsu Studio" / "Anko" / "anko.zip").write_bytes(b"zip")
+        other["files"] = {"f1": {"path": "anko.zip", "size": 3}}
+        man.save()
+        self.folder = folder
+        from hoard import tags
+        self.key = tags.tag_key("Booth", "Rusk")
+
+    def test_only_its_downloaded_files_go(self):
+        mine = self.folder / "Textures" / "body-edited.png"   # something of your own, in the same folder
+        mine.write_bytes(b"mine")
+        done = downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
+        self.assertEqual((done["products"], done["files"], done["bytes"]), (1, 3, 8))
+        self.assertTrue(mine.exists(), "your own files stay")
+        self.assertFalse((self.folder / "rusk.unitypackage").exists())
+        self.assertEqual(done["kept"], ["Booth/Kitsu Studio/Rusk"])
+        self.assertTrue((self.root / "Booth" / "Kitsu Studio" / "Anko" / "anko.zip").exists(), "other products stay")
+        records = downloader.Manifest(self.root / "Booth").assets
+        self.assertEqual(records["111"]["files"], {}, "the record no longer lists them")
+        self.assertEqual(records["111"]["folder"], "Kitsu Studio/Rusk")
+        catalog = json.loads((self.root / "catalog.json").read_text("utf-8"))
+        self.assertEqual([a["name"] for a in catalog["assets"]], ["Anko"])
+
+    def test_an_emptied_folder_goes(self):
+        downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
+        self.assertFalse(self.folder.exists())
+        self.assertTrue((self.root / "Booth" / "Kitsu Studio").is_dir(), "the creator's folder still has Anko")
+
+    @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
+    def test_never_through_a_link(self):
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside, True)
+        (outside / "precious.txt").write_bytes(b"keep")
+        (self.folder / "rusk.unitypackage").unlink()
+        os.symlink(outside / "precious.txt", self.folder / "rusk.unitypackage")
+        shutil.rmtree(self.folder / "Textures")
+        os.symlink(outside, self.folder / "Textures")
+        (outside / "body.png").write_bytes(b"also")
+        downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
+        self.assertEqual(sorted(p.name for p in outside.iterdir()), ["body.png", "precious.txt"])
+
+    def test_the_server_only_deletes_removed_products(self):
+        from hoard import marks
+        cfg = {**config.load_config(), "root": str(self.root)}
+        srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(marks.MarkStore().path.unlink, missing_ok=True)
+        try:
+            def call(body):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                c.request("POST", "/api/delete-files", body=json.dumps(body),
+                          headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return r.status, data
+            self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 400, "not removed: nothing is deleted")
+            self.assertTrue((self.folder / "rusk.unitypackage").exists())
+            marks.MarkStore().change("removed", {self.key}, True)
+            self.assertEqual(call({"keys": [self.key]})[0], 400, "not confirmed")
+            self.assertTrue(srv.jobs.busy.acquire(timeout=5))
+            try:
+                self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 409, "not while a job runs")
+            finally:
+                srv.jobs.busy.release()
+            status, done = call({"keys": [self.key], "confirm": True})
+            self.assertEqual((status, done["files"]), (200, 3))
+            self.assertFalse(self.folder.exists())
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
 class ManifestSaves(unittest.TestCase):
     """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
     after every file and every product; each sync still ends by saving everything, however it ends."""

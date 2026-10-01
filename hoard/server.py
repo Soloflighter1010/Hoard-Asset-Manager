@@ -23,7 +23,7 @@ from . import __version__, diagnostics, itch, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import catalog_seal, collect_catalog, download_retries, reseal_catalog
+from .downloader import catalog_seal, collect_catalog, delete_downloaded_files, download_retries, reseal_catalog
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
 from .net import is_network_error
@@ -45,7 +45,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/app/close", "/api/open-logs",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
-           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear")
+           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -587,6 +587,30 @@ class Handler(BaseHTTPRequestHandler):
         srv.forget_index()
         return self._json({"ok": True})
 
+    def _delete_files(self, body: dict):
+        """Delete the downloaded files of products you removed from your library. Only removed ones (so nothing in
+        your library loses its files by a slip), only when confirmed, and not while a job could be writing them."""
+        srv = self.server
+        if body.get("confirm") is not True:
+            return self._json({"error": "Confirm first."}, 400)
+        raw = body.get("keys")
+        keys = {k for k in raw[:5000] if isinstance(k, str)} if isinstance(raw, list) else set()
+        marks = MarkStore().load()
+        keys &= marks["removed"]
+        if keys & marks["hidden"] and not self._unlocked():
+            return self._json({"error": "Unlock your hidden library first."}, 403)
+        if not keys:
+            return self._json({"error": "Only the files of products you've removed from your library can be deleted."}, 400)
+        if not srv.jobs.busy.acquire(blocking=False):
+            return self._json({"error": "Wait for the current task to finish, then delete the files."}, 409)
+        try:
+            done = delete_downloaded_files(srv.cfg, root_dir(srv.cfg), keys)
+        finally:
+            srv.jobs.busy.release()
+            srv.jobs.kick()
+        srv.forget_index()
+        return self._json({"ok": True, **done})
+
     def _import(self, body: dict):
         """Import library pages saved from your own browser: any number, sent a batch at a time. Each page gets its
         own result, so one bad page doesn't stop the rest. A page from a Payhip shop you haven't added comes back
@@ -768,6 +792,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
+            return self._delete_files(body)
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
                     "/api/pin/recover", "/api/pin/phrase"):
             return self._privacy_action(path, body)

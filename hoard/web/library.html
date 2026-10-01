@@ -970,6 +970,7 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <button class="ghost sm" data-needs data-mark>Hide</button>
   <button class="ghost sm" data-needs data-mark>Remove</button>
   <button class="ghost sm" data-needs id="bulkPurge" hidden>Delete for good</button>
+  <button class="ghost sm" data-needs id="bulkDeleteFiles" hidden>Delete downloaded files</button>
   <button class="ghost sm" id="bulkDone">Done</button>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -1675,6 +1676,7 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "download") { startDownload([a.store], a.name, a.key); return; }
   if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
+  if (b.dataset.act === "delete-files") { deleteFiles([a]); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
@@ -2765,7 +2767,7 @@ function renderViews() {
   const bar = $("#viewBar");
   bar.hidden = state.view === "library";
   bar.innerHTML = state.view === "archive" ? `<p>Your archive: older products set aside, out of your main library but still yours. Gumroad's archived purchases start here too.</p>`
-    : state.view === "removed" ? `<p>Removed items stay out of your library, even after a refresh. Restore them, or delete them from Hoard for good (downloaded files stay on disk).</p>`
+    : state.view === "removed" ? `<p>Removed items stay out of your library, even after a refresh. Restore them, or delete them from Hoard for good. Their downloaded files stay on disk unless you choose <b>Delete downloaded files</b>.</p>`
     : state.view === "hidden" ? `<p>Hidden items only show here, and only in this browser while it's unlocked. It's a privacy screen for Hoard, not encryption.</p>
         <button class="ghost sm" data-privacy="lock">Lock now</button><button class="ghost sm" data-privacy="change">Change PIN</button>
         <button class="ghost sm" data-privacy="phrase">${(DATA.privacy || {}).recovery_set ? "New recovery phrase" : "Create a recovery phrase"}</button>` : "";
@@ -2773,7 +2775,8 @@ function renderViews() {
 }
 function markButtons(a) {
   const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
-  if (a.mark === "removed") return b("removed", false, "Restore") + `<button class="ghost sm" data-act="purge">Delete for good</button>`;
+  if (a.mark === "removed") return b("removed", false, "Restore") + `<button class="ghost sm" data-act="purge">Delete for good</button>` +
+    (onDisk(a) ? `<button class="ghost sm" data-act="delete-files">Delete downloaded files</button>` : "");
   if (a.mark === "hidden") return b("hidden", false, "Unhide") + b("removed", true, "Remove");
   return (a.mark === "archived" ? b("unarchived", true, "Unarchive") : b("archived", true, "Archive")) +
     b("hidden", true, "Hide") + b("removed", true, "Remove");
@@ -2788,6 +2791,7 @@ function updateBulkButtons() {
   else { set(one, v === "archive" ? "unarchived" : "archived", true, v === "archive" ? "Unarchive" : "Archive");
          set(two, "hidden", true, "Hide"); set(three, "removed", true, "Remove"); }
   $("#bulkPurge").hidden = v !== "removed";
+  $("#bulkDeleteFiles").hidden = v !== "removed";
 }
 const MARK_DONE = {
   "archived true": n => `Archived ${n}. It's in Archive.`, "unarchived true": n => `Moved ${n} back to your library.`,
@@ -2802,6 +2806,24 @@ async function markItems(list, kind, on) {
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   sel.ids.clear(); T.closeDetail(); await load();
   toast(MARK_DONE[`${kind} ${on}`](keys.length === 1 ? "1 item" : `${keys.length} items`));
+  // issue #81: removing something you downloaded offers to delete its files too, so Downloads doesn't keep it
+  if (kind === "removed" && on) {
+    const downloaded = list.filter(a => a && onDisk(a));
+    if (downloaded.length) await deleteFiles(downloaded, true);
+  }
+}
+async function deleteFiles(list, justRemoved = false) {
+  const keys = [...new Set(list.filter(a => a && onDisk(a)).map(a => a.tag_key))];
+  if (!keys.length) { toast("None of those are downloaded."); return; }
+  const what = keys.length === 1 ? (justRemoved ? "It's" : "This item is") + " downloaded." : `${keys.length} of them are downloaded.`;
+  if (!confirm(`${what} Delete ${keys.length === 1 ? "its" : "their"} downloaded files too?\n\n` +
+               "Only the files Hoard downloaded are deleted; anything of your own in the same folder stays. " +
+               "This can't be undone. Choose Cancel to keep the files (they stay under Removed in Downloads).")) return;
+  const r = await apiPost("/api/delete-files", { keys, confirm: true });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  sel.ids.clear(); T.closeDetail(); await load();
+  toast(`Deleted ${r.data.files} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).` +
+        (r.data.kept.length ? ` ${r.data.kept.length === 1 ? "A folder still has" : r.data.kept.length + " folders still have"} other files, so ${r.data.kept.length === 1 ? "it was" : "they were"} kept.` : ""));
 }
 async function purgeItems(list) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
@@ -2945,6 +2967,7 @@ function wirePrivacy() {
     b.addEventListener("click", () => markItems([...sel.ids].map(T.byId), b.dataset.kind, b.dataset.on === "true"));
   }
   $("#bulkPurge").addEventListener("click", () => purgeItems([...sel.ids].map(T.byId)));
+  $("#bulkDeleteFiles").addEventListener("click", () => deleteFiles([...sel.ids].map(T.byId)));
   $("#storeRows").addEventListener("click", async e => {
     if (!e.target.closest("[data-review-shops]")) return;
     const found = (DATA.stores.payhip || {}).found_shops || [];

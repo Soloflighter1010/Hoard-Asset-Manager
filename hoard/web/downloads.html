@@ -1052,7 +1052,7 @@ function renderViews() {
   bar.hidden = state.view === "downloads";
   bar.innerHTML = state.view === "updates" ? updatesBar(n("updates"))
     : state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
-    : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them.</p>`
+    : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them: open one and choose <b>Delete downloaded files</b>.</p>`
     : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Lock it again in the Library.</p>` : "";
 }
 /* ---------- updates (issue #26): a check reads your stores without downloading anything, and lists what each
@@ -1242,7 +1242,8 @@ function showDetail(a, focus = true) {
     a.also_in.map(o => `<p class="also">You also have this from ${o.store}. ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View that copy</button></p>`).join("") +
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
-      `<button class="ghost" data-act="copy">Copy path</button></div>` +
+      `<button class="ghost" data-act="copy">Copy path</button>` +
+      (a.mark === "removed" ? `<button class="ghost" data-act="delete-files">Delete downloaded files</button>` : "") + `</div>` +
     updateSection(a) +
     tagSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
@@ -1350,6 +1351,17 @@ grid.addEventListener("error", e => {  // thumbnail missing or unreadable: fall 
   const a = byId.get(+e.target.closest(".slot").dataset.id);
   e.target.outerHTML = placeholder(a);
 }, true);
+// issue #81: a download of something removed from the Library can be deleted from disk, after you confirm
+async function deleteFiles(a) {
+  if (!a || a.mark !== "removed") return;
+  if (!confirm(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
+               "This can't be undone.")) return;
+  const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  closeDetail(); await load();
+  toast(`Deleted ${r.data.files} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).` +
+        (r.data.kept.length ? " Its folder still has other files, so it was kept." : ""));
+}
 detail.addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const act = b.dataset.act;
@@ -1360,6 +1372,7 @@ detail.addEventListener("click", e => {
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
   else if (act === "update-one") updateItems([byId.get(openId)]);
   else if (act === "check-one") checkUpdates([byId.get(openId)]);
+  else if (act === "delete-files") deleteFiles(byId.get(openId));
   else if (act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
 });
 $("#scrim").addEventListener("click", closeDetail);

@@ -1810,6 +1810,82 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     return catalog, dict(sorted(index.items(), key=lambda kv: (-len(kv[1]), kv[0])))
 
 
+def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
+    """Delete the files Hoard downloaded for these products (tag keys) (issue #81). The caller makes sure they're
+    products you removed from your library, and that nothing is downloading.
+
+    Only the files Hoard's records list are deleted, with the picture and asset.json Hoard saved beside them; anything
+    else in the folder (files of your own) stays, and a folder is removed only when that leaves it empty. Nothing is
+    followed through a link: a path that leads outside the store's folder, or is a link, is left alone. The deleted
+    files leave the product's record (so the catalog, Downloads and Hoard for Unity stop listing them, and a product
+    you restore is downloaded again); the record itself keeps its folder name. Returns what was deleted and kept."""
+    import stat as _stat
+    from .safety import _is_link
+    done = {"products": 0, "files": 0, "bytes": 0, "kept": []}
+    for store in STORE_DIRS.values():
+        sdir = root / store
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        manifest = Manifest(sdir)
+        for rec in manifest.assets.values():
+            if tag_key(store, rec.get("name") or "") not in keys:
+                continue
+            try:
+                folder = rel_to_path(sdir, rec["folder"])
+            except UnsafePath:
+                continue
+            paths = [f.get("path") for f in rec.get("files", {}).values()]
+            gone = set()
+            try:
+                paths += [p.name for p in folder.glob("_thumbnail.*")] + ["asset.json"]
+            except OSError:
+                pass
+            dirs, count = set(), 0
+            for rel in paths:
+                try:
+                    target = rel_to_path(folder, rel)
+                    st = os.stat(target, follow_symlinks=False)
+                except (UnsafePath, OSError):
+                    continue
+                if _is_link(st) or not _stat.S_ISREG(st.st_mode):
+                    continue
+                try:
+                    os.unlink(target)
+                except OSError as e:
+                    log(f"Couldn't delete {store}/{rec['folder']}/{rel}: {e.strerror or e}")
+                    continue
+                gone.add(rel)
+                count, done["files"], done["bytes"] = count + 1, done["files"] + 1, done["bytes"] + st.st_size
+                for parent in Path(rel).parents:
+                    if str(parent) != ".":
+                        dirs.add(folder / parent)
+            for d in sorted(dirs, key=lambda d: len(d.parts), reverse=True) + [folder, folder.parent]:
+                if d != sdir and sdir in d.parents:
+                    try:
+                        d.rmdir()   # only when empty
+                    except OSError:
+                        pass
+            # a recorded file that's gone now (deleted here, or before) leaves the record
+            rec["files"] = {k: f for k, f in rec.get("files", {}).items()
+                            if f.get("path") not in gone and _still_there(folder, f.get("path"))}
+            if count:
+                done["products"] += 1
+            if folder.is_dir():
+                done["kept"].append(f"{store}/{rec['folder']}")
+        manifest.save_changes()
+    if done["files"] or done["products"]:
+        log(f"Deleted {done['files']} downloaded files of {done['products']} removed products.")
+        build_catalog(cfg, root)
+    return done
+
+
+def _still_there(folder: Path, rel) -> bool:
+    try:
+        return os.path.lexists(rel_to_path(folder, rel))
+    except UnsafePath:
+        return False
+
+
 # What catalog.json, tags.json and asset.json promise (docs/DATA-FORMATS.md describes them in full).
 CATALOG_FORMAT = {"catalog": {"format": "hoard-catalog", "version": 3},
                   "asset": {"format": "hoard-asset", "version": 3},
