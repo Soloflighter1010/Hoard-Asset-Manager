@@ -27,7 +27,11 @@ Hoard does one job at a time, but you don't have to wait for it: start a sync, a
 while something is running, and it's **queued**, and starts when its turn comes. The same job isn't queued twice.
 
 **Tasks** (next to Library and Downloads) shows what's running, with its progress, what's waiting, and what
-finished, newest first, each with how it went, how long it took, any problems and its full progress. Take a
+finished, newest first, each with how it went (**Done**, **Partly done** when a store couldn't be read or a file
+couldn't be downloaded, **Failed** or **Stopped**), how long it took, any problems and its full progress. A sync
+that can't read any of your stores (offline, say, or signed out of them all) fails and says which, without trying
+to download. The download panel closes by itself a few seconds after a job that went well; one with problems
+stays until you close it. Take a
 waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync within a few
 seconds. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are

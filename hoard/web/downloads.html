@@ -16,7 +16,7 @@
 :root { --zoom: 1; --vh: calc(100vh / var(--zoom)); --vw: calc(100vw / var(--zoom)); }
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
-  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --warn: #FF9F6B;
+  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --gold-text: #F0B429; --warn: #FF9F6B;
   --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A; --local: #E8C26A;
   --ph-l: 30%; --ph-s: 28%;
   --slot-size: 172px; --bar-h: 72px;
@@ -27,7 +27,7 @@
 @media (prefers-color-scheme: light) {
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
-    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --warn: #B4531B;
+    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --gold-text: #7A5100;   /* gold as text: 4.5:1 or more on every light background */ --warn: #B4531B;
     --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35; --local: #8A6410;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
@@ -39,20 +39,20 @@ body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bon
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .5; }
-a { color: var(--gold); text-underline-offset: 3px; }
+a { color: var(--gold-text); text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 [hidden] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
 /* top bar */
 .bar {
-  position: sticky; top: 0; z-index: 10; min-height: var(--bar-h);
+  position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
   display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 24px; background: var(--cave);
 }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
-.search { position: relative; flex: 1 1 280px; max-width: 620px; display: block; }
+.search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
   width: 100%; height: 44px; padding: 0 44px; border-radius: 12px; border: 0;
@@ -64,7 +64,9 @@ a { color: var(--gold); text-underline-offset: 3px; }
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font: 700 12px var(--body); color: var(--dust); background: var(--stone); border-radius: 6px; padding: 1px 7px;
 }
-.tools { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* The same room on both pages (Downloads has two more buttons), so the bar is laid out alike and doesn't jump, or
+   go to two rows on one page and not the other, when you switch */
+.tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; min-width: min(460px, 100%); }
 .tools label { display: flex; align-items: center; gap: 8px; color: var(--dust); font-size: 13px; }
 .tools select {
   height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
@@ -141,10 +143,10 @@ a { color: var(--gold); text-underline-offset: 3px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
-.chip:hover { color: var(--gold); }
+.chip:hover { color: var(--gold-text); }
 .chip[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); padding: 2px 8px; }
 .chip[aria-pressed="true"]::before, .chip[aria-pressed="true"] .n { color: inherit; opacity: .7; }
-.linkish { background: none; border: 0; padding: 0; color: var(--gold); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
+.linkish { background: none; border: 0; padding: 0; color: var(--gold-text); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
 .side .linkish { font-size: 13px; margin-top: 10px; }
 .find { width: 100%; height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); margin-bottom: 6px; }
 .find:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
@@ -174,6 +176,7 @@ a { color: var(--gold); text-underline-offset: 3px; }
 
 /* the collection */
 main { padding: 22px 24px 64px 8px; min-width: 0; }
+body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* the last tiles can scroll clear of the download panel */
 .count { font: 400 clamp(22px, 2.4vw, 30px)/1.15 var(--display); margin: 0; letter-spacing: .005em; }
 .count .of { color: var(--dust); }
 .status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; font-size: 14px; color: var(--dust); }
@@ -249,7 +252,7 @@ a.ghost { height: 42px; }
   .bar { padding: 12px 16px; gap: 10px; position: static; }
   .search { order: 5; flex-basis: 100%; max-width: none; }
   .search kbd, .tools .zoom { display: none; }
-  .tools { margin-left: 0; flex-wrap: wrap; }
+  .tools { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
   .seg { position: static; padding: 0 12px; }
   .only-narrow { display: inline-flex; }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -260,7 +263,7 @@ a.ghost { height: 42px; }
 }
 /* the item whose details are open */
 .slot[aria-current="true"] .art { outline: 3px solid var(--gold); outline-offset: 3px; }
-.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold); }
+.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold-text); }
 /* something you own on more than one store: its spine stripes their colours */
 .notch.dup { height: 7px; background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px); }
 /* Pause animated pictures: a still of the first frame */
@@ -300,7 +303,7 @@ body.less-motion .slot:hover .art { transform: none; }
 .foot-brand svg { width: 22px; height: 22px; }
 .foot-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .foot-links a { color: var(--dust); text-decoration: none; }
-.foot-links a:hover { color: var(--gold); text-decoration: underline; }
+.foot-links a:hover { color: var(--gold-text); text-decoration: underline; }
 .foot-note { flex-basis: 100%; margin: 0; }
 
 /* offline notice */
@@ -312,10 +315,10 @@ body.less-motion .slot:hover .art { transform: none; }
 .sidehead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .sidehead .linkish { font: 700 12px var(--body); margin: 0; }
 .chip.sugg { color: var(--dust); font-weight: 500; }
-.chip.sugg:hover { color: var(--gold); }
+.chip.sugg:hover { color: var(--gold-text); }
 .chip.add { color: var(--dust); font-weight: 500; border: 1px dashed var(--seam); padding: 1px 8px; }
 .chip.add::before { content: "+ #"; }
-.chip.add:hover { color: var(--gold); border-color: var(--gold); }
+.chip.add:hover { color: var(--gold-text); border-color: var(--gold); }
 .tagpill { display: inline-flex; align-items: center; gap: 1px; }
 .untag { border: 0; background: none; color: var(--dust); width: 20px; height: 20px; border-radius: 5px; font-size: 15px; line-height: 1; padding: 0; }
 .untag:hover { background: var(--stone); color: var(--bone); }
@@ -381,7 +384,7 @@ body.selecting .toast { bottom: 96px; }
   color: var(--dust); font: 500 11.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .support-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
 .support-actions .spacer { flex: 1; }
-.support-link { color: var(--gold); text-decoration: none; font-size: 13px; align-self: center; }
+.support-link { color: var(--gold-text); text-decoration: none; font-size: 13px; align-self: center; }
 .support-link:hover { text-decoration: underline; }
 @media (max-width: 650px) { .support-cols { grid-template-columns: 1fr; } .support-dialog { padding: 22px 20px; } }
 
@@ -607,6 +610,13 @@ details.task summary b { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { #glow.flow .glow-in { animation: none; } }
 body.less-motion #glow.flow .glow-in { animation: none; }
 .seg button[aria-checked="true"]::after { display: none; }
+dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
+  border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
+dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
+dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+dialog.ask p:first-child { font-weight: 700; }
+.ask-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 </style>
 </head>
 <body>
@@ -1054,6 +1064,40 @@ function freeze(img) {
 document.addEventListener("load", e => { if (e.target.tagName === "IMG") freeze(e.target); }, true);
 
 let toastTimer;
+/* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
+   out of place). Resolves true for the main button, false for Cancel, Escape or a click outside it. */
+function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
+  return new Promise(resolve => {
+    let d = document.getElementById("askDialog");
+    if (!d) {
+      d = document.createElement("dialog");
+      d.id = "askDialog"; d.className = "ask";
+      d.setAttribute("aria-labelledby", "askText");
+      d.innerHTML = '<div id="askText"></div><div class="ask-row"><button class="ghost" value="no"></button>' +
+                    '<button class="primary" value="yes"></button></div>';
+      d.addEventListener("click", e => {
+        const b = e.target.closest("button");
+        if (b) d.close(b.value);
+        else if (e.target === d) d.close("no");   // the dimmed page around it
+      });
+      document.body.appendChild(d);
+    }
+    const body = d.querySelector("#askText");
+    body.replaceChildren(...String(text).split(/\n\n+/).map(par => {
+      const p = document.createElement("p");
+      p.append(...par.split("\n").flatMap((line, i) => i ? [document.createElement("br"), line] : [line]));
+      return p;
+    }));
+    const [no, yes] = d.querySelectorAll("button");
+    no.textContent = cancel; yes.textContent = ok;
+    yes.classList.toggle("danger", !!danger);
+    d.returnValue = "no";
+    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
+    d.showModal();
+    (danger ? no : yes).focus();   // Enter doesn't delete anything by accident
+  });
+}
+
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
@@ -1475,9 +1519,9 @@ function localSection(a) {
 }
 async function localAction(act, a) {
   if (!a) return;
-  if (act === "local-remove" && !confirm(a.linked
+  if (act === "local-remove" && !await ask(a.linked
       ? `Take ${a.name} out of Local? Nothing in its folder is touched.`
-      : `Take ${a.name} out of Local, and delete Hoard's copy of it? Your original isn't touched.`)) return;
+      : `Take ${a.name} out of Local, and delete Hoard's copy of it? Your original isn't touched.`, "Take it out")) return;
   const r = await apiPost(act === "local-rescan" ? "/api/local/rescan" : "/api/local/remove",
                           { folder: a.folder, confirm: act === "local-remove" });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
@@ -1539,10 +1583,10 @@ addEventListener("hashchange", () => { readHash(); render(); });   // the Local 
 // issue #82: a copy of a download for you to change, in a folder of its own that Hoard never checks or replaces
 async function editableCopy(a, button) {
   if (!a) return;
-  if (!confirm(`Copy ${a.name} into a folder of its own for you to change?\n\n` +
+  if (!await ask(`Copy ${a.name} into a folder of its own for you to change?\n\n` +
                "Hoard never checks, updates or replaces that copy. Only files that still match what Hoard downloaded " +
                "are copied. Anything you add to the copy later hasn't been checked by Hoard, so be as careful with it as " +
-               "with any download.")) return;
+               "with any download.", "Make the copy")) return;
   button.disabled = true;
   const r = await apiPost("/api/edit-copy", { key: a.tag_key, open: true });
   button.disabled = false;
@@ -1554,8 +1598,8 @@ async function editableCopy(a, button) {
 // issue #81: a download of something removed from the Library can be deleted from disk, after you confirm
 async function deleteFiles(a) {
   if (!a || a.mark !== "removed") return;
-  if (!confirm(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
-               "This can't be undone.")) return;
+  if (!await ask(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
+               "This can't be undone.", "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   closeDetail(); await load();
@@ -1741,7 +1785,7 @@ async function tagPanelAction(b) {
   if (act === "unhide") return changeTags({ action: "unhide", name: t });
   if (act === "delete") {
     const n = +b.dataset.count;
-    if (!confirm(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""))) return;
+    if (!await ask(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""), "Delete", true)) return;
     state.tags.delete(t);
     return changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
   }
@@ -1963,8 +2007,8 @@ async function checkUpdate() {
 }
 async function installUpdate() {
   if (!UPDATE || !UPDATE.available) return;
-  if (!confirm(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
-               "Your library, settings, sign-ins and downloads stay as they are.")) return;
+  if (!await ask(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
+               "Your library, settings, sign-ins and downloads stay as they are.", "Update")) return;
   const r = await apiPost("/api/update/install");
   if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
@@ -1993,6 +2037,7 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+let dlFade;
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
@@ -2009,6 +2054,13 @@ function showDownload(job) {
   const problems = (!job.running && job.report && job.report.problems) || [];
   $("#dlProblems").hidden = !problems.length;
   $("#dlProblems").innerHTML = problems.map(p => `<li>${esc(p)}</li>`).join("");
+  // Finished, and all went well: it steps out of the way after a moment (Tasks keeps it), unless you're using it
+  clearTimeout(dlFade);
+  if (!job.running && !stopped && !job.error && !job.partial && !problems.length)
+    dlFade = setTimeout(function fade() {
+      const p = $("#dlPanel");
+      if (p.matches(":hover, :focus-within")) dlFade = setTimeout(fade, 2000); else p.hidden = true;
+    }, 8000);
   if ($("#dlReport")) { $("#dlReport").hidden = !!job.running || !(job.error || problems.length); }
 }
 
@@ -2436,7 +2488,7 @@ function wireProjects() {
       catch (err) { box.querySelector("textarea").select(); document.execCommand("copy"); }
       toast("Copied the credits.");
     } else if (b.dataset.proj === "forget") {
-      if (!confirm(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`)) return;
+      if (!await ask(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`, "Forget")) return;
       await apiPost("/api/projects/forget", { id: p.id });
       loadProjects();
     }
@@ -2451,7 +2503,7 @@ function wireTasks() {
     if (act === "stop") { const r = await apiPost("/api/cancel"); if (!r.data.ok) toast("That job can't be stopped part-way."); }
     else if (act === "remove") await apiPost("/api/queue/remove", { id: b.dataset.id });
     else if (act === "clear-queue") await apiPost("/api/queue/clear");
-    else if (act === "clear-history") { if (!confirm("Clear the list of finished tasks?")) return; await apiPost("/api/tasks/clear"); }
+    else if (act === "clear-history") { if (!await ask("Clear the list of finished tasks?", "Clear")) return; await apiPost("/api/tasks/clear"); }
     tasksShown = ""; loadTasks();
   });
   const pill = $("#job");

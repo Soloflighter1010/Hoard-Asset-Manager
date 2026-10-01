@@ -17,7 +17,7 @@
 :root { --zoom: 1; --vh: calc(100vh / var(--zoom)); --vw: calc(100vw / var(--zoom)); }
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
-  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --warn: #FF9F6B;
+  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --gold-text: #F0B429; --warn: #FF9F6B;
   --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A;
   --ph-l: 30%; --ph-s: 28%;
   --slot-size: 172px; --bar-h: 72px;
@@ -28,7 +28,7 @@
 @media (prefers-color-scheme: light) {
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
-    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --warn: #B4531B;
+    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --gold-text: #7A5100;   /* gold as text: 4.5:1 or more on every light background */ --warn: #B4531B;
     --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
@@ -40,20 +40,20 @@ body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bon
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .5; }
-a { color: var(--gold); text-underline-offset: 3px; }
+a { color: var(--gold-text); text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 [hidden] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
 /* top bar */
 .bar {
-  position: sticky; top: 0; z-index: 10; min-height: var(--bar-h);
+  position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
   display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 24px; background: var(--cave);
 }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
-.search { position: relative; flex: 1 1 280px; max-width: 620px; display: block; }
+.search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
   width: 100%; height: 44px; padding: 0 44px; border-radius: 12px; border: 0;
@@ -65,7 +65,9 @@ a { color: var(--gold); text-underline-offset: 3px; }
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font: 700 12px var(--body); color: var(--dust); background: var(--stone); border-radius: 6px; padding: 1px 7px;
 }
-.tools { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* The same room on both pages (Downloads has two more buttons), so the bar is laid out alike and doesn't jump, or
+   go to two rows on one page and not the other, when you switch */
+.tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; min-width: min(460px, 100%); }
 .tools label { display: flex; align-items: center; gap: 8px; color: var(--dust); font-size: 13px; }
 .tools select {
   height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
@@ -148,10 +150,10 @@ a { color: var(--gold); text-underline-offset: 3px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
-.chip:hover { color: var(--gold); }
+.chip:hover { color: var(--gold-text); }
 .chip[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); padding: 2px 8px; }
 .chip[aria-pressed="true"]::before, .chip[aria-pressed="true"] .n { color: inherit; opacity: .7; }
-.linkish { background: none; border: 0; padding: 0; color: var(--gold); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
+.linkish { background: none; border: 0; padding: 0; color: var(--gold-text); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
 .side .linkish { font-size: 13px; margin-top: 10px; }
 .find { width: 100%; height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); margin-bottom: 6px; }
 .find:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
@@ -170,6 +172,7 @@ a { color: var(--gold); text-underline-offset: 3px; }
 
 /* the collection */
 main { padding: 22px 24px 64px 8px; min-width: 0; }
+body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* the last tiles can scroll clear of the download panel */
 .count { font: 400 clamp(22px, 2.4vw, 30px)/1.15 var(--display); margin: 0; letter-spacing: .005em; }
 .count .of { color: var(--dust); }
 .status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; font-size: 14px; color: var(--dust); }
@@ -248,7 +251,7 @@ a.ghost { height: 42px; }
   .bar { padding: 12px 16px; gap: 10px; position: static; }
   .search { order: 5; flex-basis: 100%; max-width: none; }
   .search kbd, .tools .zoom { display: none; }
-  .tools { margin-left: 0; flex-wrap: wrap; }
+  .tools { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
   .seg { position: static; padding: 0 12px; }
   .only-narrow { display: inline-flex; }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -259,7 +262,7 @@ a.ghost { height: 42px; }
 }
 /* the item whose details are open */
 .slot[aria-current="true"] .art { outline: 3px solid var(--gold); outline-offset: 3px; }
-.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold); }
+.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold-text); }
 /* something you own on more than one store: its spine stripes their colours */
 .notch.dup { height: 7px; background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px); }
 /* Pause animated pictures: a still of the first frame */
@@ -280,7 +283,7 @@ body.less-motion .slot:hover .art { transform: none; }
 .foot-brand svg { width: 22px; height: 22px; }
 .foot-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .foot-links a { color: var(--dust); text-decoration: none; }
-.foot-links a:hover { color: var(--gold); text-decoration: underline; }
+.foot-links a:hover { color: var(--gold-text); text-decoration: underline; }
 .foot-note { flex-basis: 100%; margin: 0; }
 
 /* offline notice */
@@ -292,10 +295,10 @@ body.less-motion .slot:hover .art { transform: none; }
 .sidehead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .sidehead .linkish { font: 700 12px var(--body); margin: 0; }
 .chip.sugg { color: var(--dust); font-weight: 500; }
-.chip.sugg:hover { color: var(--gold); }
+.chip.sugg:hover { color: var(--gold-text); }
 .chip.add { color: var(--dust); font-weight: 500; border: 1px dashed var(--seam); padding: 1px 8px; }
 .chip.add::before { content: "+ #"; }
-.chip.add:hover { color: var(--gold); border-color: var(--gold); }
+.chip.add:hover { color: var(--gold-text); border-color: var(--gold); }
 .tagpill { display: inline-flex; align-items: center; gap: 1px; }
 .untag { border: 0; background: none; color: var(--dust); width: 20px; height: 20px; border-radius: 5px; font-size: 15px; line-height: 1; padding: 0; }
 .untag:hover { background: var(--stone); color: var(--bone); }
@@ -362,7 +365,7 @@ body.selecting .toast { bottom: 96px; }
   color: var(--dust); font: 500 11.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .support-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
 .support-actions .spacer { flex: 1; }
-.support-link { color: var(--gold); text-decoration: none; font-size: 13px; align-self: center; }
+.support-link { color: var(--gold-text); text-decoration: none; font-size: 13px; align-self: center; }
 .support-link:hover { text-decoration: underline; }
 @media (max-width: 650px) { .support-cols { grid-template-columns: 1fr; } .support-dialog { padding: 22px 20px; } }
 
@@ -662,6 +665,13 @@ details.task summary b { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { #glow.flow .glow-in { animation: none; } }
 body.less-motion #glow.flow .glow-in { animation: none; }
 .seg button[aria-checked="true"]::after { display: none; }
+dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
+  border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
+dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
+dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+dialog.ask p:first-child { font-weight: 700; }
+.ask-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 </style>
 </head>
 <body>
@@ -1156,6 +1166,40 @@ function freeze(img) {
 document.addEventListener("load", e => { if (e.target.tagName === "IMG") freeze(e.target); }, true);
 
 let toastTimer;
+/* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
+   out of place). Resolves true for the main button, false for Cancel, Escape or a click outside it. */
+function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
+  return new Promise(resolve => {
+    let d = document.getElementById("askDialog");
+    if (!d) {
+      d = document.createElement("dialog");
+      d.id = "askDialog"; d.className = "ask";
+      d.setAttribute("aria-labelledby", "askText");
+      d.innerHTML = '<div id="askText"></div><div class="ask-row"><button class="ghost" value="no"></button>' +
+                    '<button class="primary" value="yes"></button></div>';
+      d.addEventListener("click", e => {
+        const b = e.target.closest("button");
+        if (b) d.close(b.value);
+        else if (e.target === d) d.close("no");   // the dimmed page around it
+      });
+      document.body.appendChild(d);
+    }
+    const body = d.querySelector("#askText");
+    body.replaceChildren(...String(text).split(/\n\n+/).map(par => {
+      const p = document.createElement("p");
+      p.append(...par.split("\n").flatMap((line, i) => i ? [document.createElement("br"), line] : [line]));
+      return p;
+    }));
+    const [no, yes] = d.querySelectorAll("button");
+    no.textContent = cancel; yes.textContent = ok;
+    yes.classList.toggle("danger", !!danger);
+    d.returnValue = "no";
+    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
+    d.showModal();
+    (danger ? no : yes).focus();   // Enter doesn't delete anything by accident
+  });
+}
+
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
@@ -1486,8 +1530,8 @@ $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags;
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
 $("#downloadAll").addEventListener("click", () => startDownload(usedStores().filter(downloadable)));
-$("#signOutAll").addEventListener("click", () => {
-  if (confirm("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.")) runJob("/api/logout", ["all"]);
+$("#signOutAll").addEventListener("click", async () => {
+  if (await ask("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.", "Sign out of all", true)) runJob("/api/logout", ["all"]);
 });
 $("#storeRows").addEventListener("click", e => {
   const l = e.target.closest("[data-login]"), r = e.target.closest("[data-refresh]"), i = e.target.closest("[data-import]");
@@ -1552,9 +1596,9 @@ async function importPages(files, store) {
       // Pages from Payhip shops that aren't in your list: a shop is only added when you say so, all of them at once
       const shops = [...done.shops.keys()], again = [...done.shops.values()].flat(), n = shops.length;
       done.shops = new Map();
-      if (confirm(`${plural(again.length, "page is", "pages are")} from ${n === 1 ? "a Payhip shop that isn't" : `${n} Payhip shops that aren't`} in your list:\n\n` +
+      if (await ask(`${plural(again.length, "page is", "pages are")} from ${n === 1 ? "a Payhip shop that isn't" : `${n} Payhip shops that aren't`} in your list:\n\n` +
           shops.map(s => "   " + shopName(s)).join("\n") + `\n\nAdd ${n === 1 ? "it" : "them"} to your Payhip shops, and import ${again.length === 1 ? "that page" : "those pages"}? ` +
-          "Only add shops you bought from.")) {
+          "Only add shops you bought from.", "Add and import")) {
         await sendPages(again, store, shops, done);
       } else {
         done.problems.push(`${listed(again.map(f => f.name))}: from ${listed(shops.map(shopName))}, which you didn't add to your Payhip shops, so not imported.`);
@@ -1893,7 +1937,7 @@ async function tagPanelAction(b) {
   if (act === "unhide") return changeTags({ action: "unhide", name: t });
   if (act === "delete") {
     const n = +b.dataset.count;
-    if (!confirm(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""))) return;
+    if (!await ask(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""), "Delete", true)) return;
     state.tags.delete(t);
     return changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
   }
@@ -2117,8 +2161,8 @@ async function checkUpdate() {
 }
 async function installUpdate() {
   if (!UPDATE || !UPDATE.available) return;
-  if (!confirm(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
-               "Your library, settings, sign-ins and downloads stay as they are.")) return;
+  if (!await ask(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
+               "Your library, settings, sign-ins and downloads stay as they are.", "Update")) return;
   const r = await apiPost("/api/update/install");
   if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
@@ -2147,6 +2191,7 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+let dlFade;
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
@@ -2162,6 +2207,13 @@ function showDownload(job) {
   const problems = (!job.running && job.report && job.report.problems) || [];
   $("#dlProblems").hidden = !problems.length;
   $("#dlProblems").innerHTML = problems.map(p => `<li>${esc(p)}</li>`).join("");
+  // Finished, and all went well: it steps out of the way after a moment (Tasks keeps it), unless you're using it
+  clearTimeout(dlFade);
+  if (!job.running && !stopped && !job.error && !job.partial && !problems.length)
+    dlFade = setTimeout(function fade() {
+      const p = $("#dlPanel");
+      if (p.matches(":hover, :focus-within")) dlFade = setTimeout(fade, 2000); else p.hidden = true;
+    }, 8000);
   if ($("#dlReport")) { $("#dlReport").hidden = !!job.running || !(job.error || problems.length); }
 }
 
@@ -2646,7 +2698,7 @@ function wireProjects() {
       catch (err) { box.querySelector("textarea").select(); document.execCommand("copy"); }
       toast("Copied the credits.");
     } else if (b.dataset.proj === "forget") {
-      if (!confirm(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`)) return;
+      if (!await ask(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`, "Forget")) return;
       await apiPost("/api/projects/forget", { id: p.id });
       loadProjects();
     }
@@ -2661,7 +2713,7 @@ function wireTasks() {
     if (act === "stop") { const r = await apiPost("/api/cancel"); if (!r.data.ok) toast("That job can't be stopped part-way."); }
     else if (act === "remove") await apiPost("/api/queue/remove", { id: b.dataset.id });
     else if (act === "clear-queue") await apiPost("/api/queue/clear");
-    else if (act === "clear-history") { if (!confirm("Clear the list of finished tasks?")) return; await apiPost("/api/tasks/clear"); }
+    else if (act === "clear-history") { if (!await ask("Clear the list of finished tasks?", "Clear")) return; await apiPost("/api/tasks/clear"); }
     tasksShown = ""; loadTasks();
   });
   const pill = $("#job");
@@ -2734,7 +2786,13 @@ function queuedToast(r) {   // a job started while another runs waits its turn
 }
 
 /* ---------- the setup assistant: on first start, and from Settings (Set up Hoard) */
-const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false, firstRun: false };
+const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false, firstRun: false, picked: false };
+// Which stores the stores step ticks. The first time, only the ones you already have items from (all of them used to
+// be ticked, so someone who'd never used Payhip was asked for Payhip shops); after that, the ones you chose.
+function setupPicked(st, s) {
+  if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
+  return !!((DATA.stores || {})[s] || {}).count;
+}
 const setupSteps = () => ["welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
 async function setupStatus() {
@@ -2744,7 +2802,7 @@ async function setupStatus() {
 async function openSetup() {
   try { await setupStatus(); } catch (e) { toast("Hoard isn't running. Open it again."); return; }
   closeSettings(); openStores(false); openTagPanel(false);
-  SETUP.step = 0;
+  SETUP.step = 0; SETUP.picked = false;
   SETUP.firstRun = !SETUP.st.done;   // the first time, it's gone through to the end (issue #21); from Settings, it can be left
   $("#setup").hidden = false;
   renderSetup();
@@ -2781,7 +2839,7 @@ const SETUP_VIEWS = {
     ${st.browser.note ? `<p class="muted">${esc(st.browser.note)}</p>` : ""}`,
   stores: st => `<h2 id="setupTitle">Which stores have you bought from?</h2>
     <p>Hoard only shows and reads the stores you pick. You can change this later in Settings.</p>
-    <div class="storepick">${STORE_ORDER.map(s => `<label><input type="checkbox" data-pick="${s}"${st.stores[s].enabled ? " checked" : ""}>
+    <div class="storepick">${STORE_ORDER.map(s => `<label><input type="checkbox" data-pick="${s}"${setupPicked(st, s) ? " checked" : ""}>
       <span class="dot ${s}"></span>${esc(st.stores[s].label)}</label>`).join("")}</div>
     <p class="muted">Hoard lists what you own on each of them, and keeps copies from all but Payhip: for Payhip, it lists
       what you bought and where to download it, and you download it from Payhip yourself.</p>`,
@@ -2884,6 +2942,7 @@ async function setupSave(name) {   // what leaving a step saves; false keeps you
   if (name === "stores") {
     body = { stores: {} };
     for (const c of document.querySelectorAll("#setupBody [data-pick]")) body.stores[c.dataset.pick] = { enabled: c.checked };
+    SETUP.picked = true;
   } else if (name === "payhip") {
     body = { payhip_shops: $("#setupShops").value.split("\n").map(x => x.trim()).filter(Boolean) };
   } else if (name === "folder") {
@@ -2918,7 +2977,7 @@ function wireSetup() {
       const list = setupSteps(), name = list[SETUP.step];
       const missing = SETUP.firstRun && setupNotDone(name);
       if (missing && missing.stop) { toast(missing.stop); return; }
-      if (missing && missing.ask && !confirm(missing.ask)) return;
+      if (missing && missing.ask && !await ask(missing.ask, "Go on anyway")) return;
       if (!(await setupSave(name))) return;
       if (name === "done") {
         await apiPost("/api/setup/done", { done: true });
@@ -2933,7 +2992,7 @@ function wireSetup() {
     } finally { SETUP.busy = false; }
   });
   $("#setupBack").addEventListener("click", () => { SETUP.step = Math.max(0, SETUP.step - 1); renderSetup(); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#setup").hidden && !SETUP.firstRun) closeSetup(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#setup").hidden && !SETUP.firstRun && !document.querySelector("dialog[open]")) closeSetup(); });
   $("#setupSkip").addEventListener("click", async () => {
     await apiPost("/api/setup/done", { done: true });
     closeSetup();
@@ -3005,9 +3064,9 @@ async function deleteFiles(list, justRemoved = false) {
   const keys = [...new Set(list.filter(a => a && onDisk(a)).map(a => a.tag_key))];
   if (!keys.length) { toast("None of those are downloaded."); return; }
   const what = keys.length === 1 ? (justRemoved ? "It's" : "This item is") + " downloaded." : `${keys.length} of them are downloaded.`;
-  if (!confirm(`${what} Delete ${keys.length === 1 ? "its" : "their"} downloaded files too?\n\n` +
+  if (!await ask(`${what} Delete ${keys.length === 1 ? "its" : "their"} downloaded files too?\n\n` +
                "Only the files Hoard downloaded are deleted; anything of your own in the same folder stays. " +
-               "This can't be undone. Choose Cancel to keep the files (they stay under Removed in Downloads).")) return;
+               "This can't be undone. If you keep them, they stay under Removed in Downloads.", "Delete files", true, "Keep the files")) return;
   const r = await apiPost("/api/delete-files", { keys, confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   sel.ids.clear(); T.closeDetail(); await load();
@@ -3017,7 +3076,7 @@ async function deleteFiles(list, justRemoved = false) {
 async function purgeItems(list) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
   if (!keys.length) return;
-  if (!confirm(`Delete ${keys.length === 1 ? "this item" : keys.length + " items"} from Hoard for good? They stay out of your library even if a store lists them again. Downloaded files stay on disk.`)) return;
+  if (!await ask(`Delete ${keys.length === 1 ? "this item" : keys.length + " items"} from Hoard for good? They stay out of your library even if a store lists them again. Downloaded files stay on disk.`, "Delete for good", true)) return;
   const r = await apiPost("/api/purge", { keys });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   sel.ids.clear(); T.closeDetail(); await load();
@@ -3130,7 +3189,7 @@ function wirePrivacy() {
       await apiPost("/api/lock"); state.view = "library"; await load(); toast("Hidden items locked.");
     }
     else if (b.dataset.privacy === "phrase") {
-      if ((DATA.privacy || {}).recovery_set && !confirm("Make a new recovery phrase? The old words will stop working.")) return;
+      if ((DATA.privacy || {}).recovery_set && !await ask("Make a new recovery phrase? The old words will stop working.", "Make a new phrase", true)) return;
       await newPhrase(); await load();
     }
     else pinDialog("change");
@@ -3146,7 +3205,7 @@ function wirePrivacy() {
     $("#recoverWords").focus();
   });
   $("#pinLost").addEventListener("click", async () => {
-    if (!confirm("Forgot your PIN? Hoard can't show hidden items without it. Instead, it will delete them from its library and remove the PIN, so you can start again. They won't be shown. Downloaded files stay on disk.")) return;
+    if (!await ask("Forgot your PIN? Hoard can't show hidden items without it. Instead, it will delete them from its library and remove the PIN, so you can start again. They won't be shown. Downloaded files stay on disk.", "Delete them and start again", true)) return;
     const r = await apiPost("/api/hidden/forget", { confirm: true });
     pinDone(false);
     state.view = "library"; await load();
@@ -3162,7 +3221,7 @@ function wirePrivacy() {
     const found = (DATA.stores.payhip || {}).found_shops || [];
     if (!found.length) return;
     const list = found.map(s => s.replace(/^https:\/\//, "")).join("\n");
-    if (!confirm(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then read your purchases there. Only add shops you bought from.`)) return;
+    if (!await ask(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then read your purchases there. Only add shops you bought from.`, "Add them")) return;
     const current = (await (await api("/api/settings", { cache: "no-store" })).json()).payhip_shops || [];
     const r = await apiPost("/api/settings", { payhip_shops: [...current, ...found] });
     toast(r.ok ? "Added. Refresh Payhip to read them." : (r.data.error || "They weren't added."));

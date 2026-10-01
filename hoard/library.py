@@ -788,7 +788,7 @@ def _read_import(browser, cfg: dict, prep: dict) -> list[dict]:
             if ctype not in IMAGE_TYPES:
                 continue
             THUMB_DIR.mkdir(parents=True, exist_ok=True)
-            write_file_safely(THUMB_DIR / f"{hashlib.sha1(i['thumbnail'].encode()).hexdigest()}.{IMAGE_TYPES[ctype]}", data)
+            write_file_safely(THUMB_DIR / f"{hashlib.sha1(i['thumbnail'].encode(), usedforsecurity=False).hexdigest()}.{IMAGE_TYPES[ctype]}", data)
     return items
 
 
@@ -977,7 +977,7 @@ class Library:
             self.save()
         for i in gone:
             if i.get("thumbnail"):
-                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode()).hexdigest() + ".*"):
+                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode(), usedforsecurity=False).hexdigest() + ".*"):
                     cached.unlink(missing_ok=True)
         return len(gone)
 
@@ -991,7 +991,7 @@ class Library:
             self.save()
         for i in gone:
             if i.get("thumbnail"):
-                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode()).hexdigest() + ".*"):
+                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode(), usedforsecurity=False).hexdigest() + ".*"):
                     cached.unlink(missing_ok=True)
         return len(gone)
 
@@ -1076,10 +1076,14 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
         out.append(e)
         groups.setdefault(e["match_key"], []).append(e)
     for g in groups.values():
-        if len({e["store"] for e in g}) > 1:
+        by_store: dict[str, set] = {}
+        for e in g:
+            by_store.setdefault(e["store"], set()).add(e["tag_key"])
+        if len(by_store) > 1:   # (worked out once per store, not once per item: a common name can be on hundreds)
+            others = {s: (sorted(o for o in by_store if o != s), sorted(k for o, ks in by_store.items() if o != s for k in ks))
+                      for s in by_store}
             for e in g:
-                e["also_in"] = sorted({o["store"] for o in g if o["store"] != e["store"]})
-                e["copy_keys"] = sorted({o["tag_key"] for o in g if o["store"] != e["store"]})
+                e["also_in"], e["copy_keys"] = (list(v) for v in others[e["store"]])
     return out
 
 
@@ -1093,7 +1097,7 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     if not found:
         return None
     url, referer = found
-    h = hashlib.sha1(url.encode()).hexdigest()
+    h = hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()
     for p in THUMB_DIR.glob(h + ".*"):
         ctype = next((t for t, e in IMAGE_TYPES.items() if e == p.suffix.lstrip(".")), None)
         if ctype:

@@ -311,6 +311,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.show_window = None
         self.hide_window = None   # the window only: Hoard carries on in the background
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
+        self.picking = threading.Lock()   # a system picker is open (see /api/pick)
         self.quit_app = None
         self.show_token = None
         self.last_seen = time.time()
@@ -903,12 +904,16 @@ class Handler(BaseHTTPRequestHandler):
             if not srv.pick_path:
                 return self._json({"error": "Choosing a folder needs Hoard's own window. Type the path instead."}, 409)
             kind = "file" if body.get("kind") == "file" else "folder"
+            if not srv.picking.acquire(blocking=False):   # one picker at a time, over the window
+                return self._json({"error": "A picker is already open."}, 409)
             # It opens in the downloads folder, Hoard's own setting: never a path the request names
             start = root_dir(srv.cfg)
             try:
                 chosen = srv.pick_path(kind, str(start) if start.is_dir() else str(Path.home()))
             except Exception as e:   # the window went away, or the system has no picker
                 return self._json({"error": f"The picker couldn't open ({type(e).__name__}). Type the path instead."}, 500)
+            finally:
+                srv.picking.release()
             return self._json({"ok": True, "path": chosen})
         if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})

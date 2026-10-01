@@ -154,7 +154,7 @@ def keep_picture(sdir: Path, rec: dict, source: Path) -> None:
         if not data or len(data) > MAX_PICTURE:
             continue
         dest.mkdir(parents=True, exist_ok=True)
-        write_file_safely(dest / ("_thumbnail" + Path(rel).suffix.lower()), data)
+        write_file_safely(dest / ("_thumbnail" + Path(rel).suffix.lower()), data, root=sdir)
         return
 
 

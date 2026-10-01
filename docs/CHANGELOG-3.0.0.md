@@ -71,6 +71,16 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   **Browse** button that opens your system's own folder or file picker, instead of typing a full path.
 - **Stores offers Sign in or Sign out, whichever applies,** instead of both for every store, and the panels use more
   of the window's width.
+- **Panels work from the keyboard.** A panel takes the keyboard when it opens, Tab goes round inside it instead of
+  wandering through the dimmed page, and closing it hands the keyboard back to the button you opened it with.
+- **Questions in Hoard's own dialog.** "Delete its downloaded files too?" and the like ask in a dialog that matches
+  the rest of Hoard, with buttons that say what they do, instead of the browser's plain pop-up.
+- **Store tabs stay in sight.** In a smaller window, or at a larger text size, Sort and the tile size go up a row
+  of their own instead of covering the later store tabs. In a very narrow window the tabs scroll, and fade at the
+  edge where there are more.
+- **Local is a place of its own** in the top bar: choosing it highlights Local, not Downloads.
+- **Easier to read in the light theme:** gold links and buttons are a darker gold, at least 4.5:1 against the
+  background.
 - **The download panel sits beside an asset's details** (issue #85) instead of over them, so you can keep using
   them while it shows. In a narrow window the details end above it.
 - **Settings save as you change them.** There's no **Save** button any more: a box or a list is saved straight
@@ -205,6 +215,20 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 ### Fixed
 
 - Downloads' tiles no longer crowd the heading above them, which they cut into when no filter was chosen.
+- **A sync that read none of your stores said Done,** in green. It now fails and says which stores it couldn't read
+  (each store's row in Stores says why), and doesn't try to download. A sync that read only some is **Partly done**,
+  and so is a download where some files failed.
+- The download panel could cover the last tiles. The page now has room to scroll them clear of it, and after a job
+  that went well it closes by itself a few seconds later (Tasks keeps the result).
+- The top bar could stay two rows tall after the window was made wider again, and differed between Library and
+  Downloads. It now fits its contents, and is laid out the same on both pages.
+- The setup assistant ticked every store, so someone who'd never used Payhip was asked for Payhip shops. The first
+  time, only the stores you already have items from are ticked.
+- A library with many products of the same name (on different stores or by different creators) was slow to open:
+  finding each product's copies on other stores took time that grew with the square of how many shared the name.
+  It's now worked out once per store.
+- Your own folders listed where they are now have a picture: a copy of one of their images, kept in Hoard's
+  `Local` folder (made again on **Rescan**).
 - Sign-ins kept on another drive (`advanced_signin_location`) that wasn't plugged in when Hoard started made every
   store's list vanish, as if you'd signed out. Hoard now leaves the lists alone when that whole folder is missing.
 - "Hoard is busy" just after starting: checking the catalog's seal no longer holds up the first thing you choose.

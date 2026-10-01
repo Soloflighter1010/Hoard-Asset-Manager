@@ -337,7 +337,7 @@ class ImportingFromTheLibrary(unittest.TestCase):
         self.addCleanup(browser.close)
         page = browser.new_page()
         asked = []
-        page.on("dialog", lambda d: (asked.append(d.message), d.accept()))
+        page.on("dialog", lambda d: (asked.append(d.message), d.accept()))   # (there should be none: Hoard asks itself)
         page.goto(srv.entry_url())
         page.locator("#storesBtn").click()
         page.locator("#importPages").wait_for()
@@ -350,6 +350,9 @@ class ImportingFromTheLibrary(unittest.TestCase):
             {"name": "notes.html", "mimeType": "text/html", "buffer": b"<html><body>notes</body></html>"},
             {"name": "readme.txt", "mimeType": "text/plain", "buffer": b"not a page"},
         ])
+        page.locator("#askDialog[open]").wait_for(timeout=90000)
+        asked.append(page.locator("#askText").inner_text())
+        page.click("#askDialog button[value=yes]")
         page.locator("#impClose").wait_for(state="visible", timeout=90000)
         said, problems = page.locator("#impMessage").inner_text(), page.locator("#impProblems").inner_text()
         self.assertEqual(len(asked), 1, "one question for the new shop, for both its pages")
@@ -725,12 +728,7 @@ class SetupAssistant(unittest.TestCase):
                 mock.patch.object(server, "save_config"), mock.patch.object(setup, "signed_in", lambda cfg, s: False):
             browser = p.chromium.launch()
             page = browser.new_page()
-            asked = []
-
-            def answer(d):
-                asked.append(d.message)
-                d.accept() if len(asked) > 1 else d.dismiss()
-            page.on("dialog", answer)
+            page.on("dialog", lambda d: self.fail(f"the browser's own dialog: {d.message}"))
             page.goto(srv.entry_url())
             page.locator("#setup:not([hidden])").wait_for()
             self.assertTrue(page.locator("#setupSkip").is_hidden(), "no Skip the first time")
@@ -747,19 +745,24 @@ class SetupAssistant(unittest.TestCase):
             page.locator("#setupTitle", has_text="Used Hoard before?").wait_for()
             page.click("#setupNext")
             page.locator("#setupTitle", has_text="Which stores").wait_for()
-            for box in page.locator("#setupBody [data-pick]").all():
+            boxes = page.locator("#setupBody [data-pick]").all()
+            self.assertFalse(any(b.is_checked() for b in boxes), "the first time, nothing you haven't used is ticked")
+            page.check('#setupBody [data-pick="payhip"]')   # a choice made, then changed
+            for box in boxes:
                 box.uncheck()
             page.click("#setupNext")
             page.get_by_text("Pick at least one store").wait_for()
             page.check('#setupBody [data-pick="gumroad"]')
             page.click("#setupNext")
             page.locator("#setupTitle", has_text="Sign in to your stores").wait_for()
-            page.click("#setupNext")   # nobody signed in: asked, and "no" stays
+            page.click("#setupNext")   # nobody signed in: asked, in Hoard's own dialog, and "no" stays
+            page.locator("#askDialog[open]").wait_for()
+            self.assertIn("haven't signed in to any store", page.locator("#askText").inner_text())
+            page.keyboard.press("Escape")
             page.wait_for_timeout(300)
-            self.assertEqual(len(asked), 1)
-            self.assertIn("haven't signed in to any store", asked[0])
             self.assertIn("Sign in to your stores", page.locator("#setupTitle").inner_text())
-            page.click("#setupNext")   # "yes" goes on
+            page.click("#setupNext")
+            page.click("#askDialog[open] button[value=yes]")   # "yes" goes on
             page.locator("#setupTitle", has_text="Where should downloads go?").wait_for()
             browser.close()
 
@@ -920,6 +923,64 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.set_viewport_size({"width": 330, "height": 800})   # a phone: they scroll, and a fade shows there are more
         page.evaluate("document.documentElement.style.zoom = '1.5'")
         page.wait_for_function("() => document.querySelector('.shelf .seg').classList.contains('more-right')")
+        page.close()
+
+    def test_the_top_bar_shrinks_back(self):
+        """The bar's least height was the height measured from the bar itself, so once it had gone to two rows (a
+        narrow window, a moment while loading) it stayed that tall, and Library and Downloads differed."""
+        page = self.open()
+        height = "() => document.querySelector('.bar').offsetHeight"
+        page.set_viewport_size({"width": 1600, "height": 800})
+        page.wait_for_timeout(100)
+        one_row = page.evaluate(height)
+        page.set_viewport_size({"width": 1000, "height": 800})
+        page.wait_for_timeout(100)
+        self.assertGreater(page.evaluate(height), one_row, "two rows")
+        page.set_viewport_size({"width": 1600, "height": 800})
+        page.wait_for_function(f"() => document.querySelector('.bar').offsetHeight === {one_row}")
+        page.goto(self.srv.url + "downloads")
+        page.wait_for_timeout(500)
+        self.assertEqual(page.evaluate(height), one_row, "the same on Downloads")
+        page.close()
+
+    def test_gold_text_is_readable_in_the_light_theme(self):
+        """Gold links and buttons were about 3.2:1 against the light theme's background; small text needs 4.5:1."""
+        ctx = self.browser.new_context(color_scheme="light", viewport={"width": 1400, "height": 860})
+        page = self.open(ctx)
+        ratio = page.evaluate("""() => {
+          const lum = c => { const [r, g, b] = c.match(/[\\d.]+/g).slice(0, 3).map(v => { v /= 255;
+            return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
+          const probe = document.createElement("a"); probe.href = "#"; probe.textContent = "x";
+          document.body.appendChild(probe);
+          const css = getComputedStyle(document.documentElement);
+          return ["--cave", "--ledge", "--stone"].map(v => { const bg = document.createElement("div");
+            bg.style.color = css.getPropertyValue(v); document.body.appendChild(bg);
+            const [a, b] = [lum(getComputedStyle(probe).color), lum(getComputedStyle(bg).color)];
+            return (Math.max(a, b) + .05) / (Math.min(a, b) + .05); });
+        }""")
+        self.assertEqual(len(ratio), 3)
+        for r in ratio:
+            self.assertGreaterEqual(r, 4.5)
+        ctx.close()
+
+    def test_the_finished_panel_keeps_out_of_the_way(self):
+        """The download panel, once finished, sat over the last tiles. Now the page has room to scroll them clear of
+        it, and a job that went well lets it go after a moment; one with problems keeps it until you close it."""
+        page = self.browser.new_page(viewport={"width": 1100, "height": 700})
+        page.clock.install()
+        page.goto(self.srv.entry_url())
+        page.locator(".slot", has_text="Mochi").wait_for()
+        pad = "() => parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom)"
+        before = page.evaluate(pad)
+        page.evaluate("showDownload({ running: false, message: 'Done: 1 new, 0 updated.', log: [] })")
+        page.wait_for_function(f"() => parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom) > {before}")
+        self.assertGreater(page.evaluate(pad), page.locator("#dlPanel").bounding_box()["height"])
+        page.clock.run_for(9000)
+        page.locator("#dlPanel").wait_for(state="hidden")
+        page.evaluate("showDownload({ running: false, partial: true, message: 'Done. Couldn\\'t read Gumroad: see Stores.', log: [] })")
+        page.clock.run_for(20000)
+        self.assertTrue(page.locator("#dlPanel").is_visible(), "something went wrong: it stays")
+        self.assertEqual(page.locator("#dlTitle").inner_text(), "Finished, with problems")
         page.close()
 
     def test_settings_save_as_they_change(self):

@@ -203,8 +203,8 @@ class LocalPage(unittest.TestCase):
             page.locator("#grid .slot", has_text="Commission Kit").click()
             page.get_by_text("Listed where it is").wait_for()
             page.get_by_text("For A commission.").wait_for()
-            page.once("dialog", lambda d: d.accept())
             page.locator("[data-act='local-remove']").click()
+            page.click("#askDialog[open] button[value=yes]")   # Hoard's own question, not the browser's
             page.get_by_text("Took Commission Kit out of Local").wait_for()
             self.assertTrue((src / "Kit.unitypackage").exists())
             self.assertEqual(errors, [])
