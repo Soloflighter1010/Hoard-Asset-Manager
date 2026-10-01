@@ -254,9 +254,10 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      # The scanner from this workflow's own commit, not the tag's: it's release tooling, not part of the release,
+      # so a re-run for an earlier tag still gets its fixes. (What it scans is the draft's files, downloaded below.)
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Get the draft's files

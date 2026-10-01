@@ -238,6 +238,11 @@ class TheWorkflow(unittest.TestCase):
         self.assertNotIn("VT_API_KEY", step)
         self.assertLess(job.index("Scan them with VirusTotal"), job.index("Keep any flagged files"))
 
+    def test_the_scanner_is_this_workflows_own(self):
+        """A run for an earlier tag uses the current scanner, not the one the tag was made with."""
+        checkout = self.jobs["virustotal"].split("uses: actions/checkout@", 1)[1].split("- name:", 1)[0]
+        self.assertNotIn("ref:", checkout)
+
     def test_publish_anyway_is_only_by_hand(self):
         self.assertRegex(self.text, r"allow_detections:\n\s+description: .+\n\s+type: boolean\n\s+default: false")
         self.assertIn("VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}", self.text)
