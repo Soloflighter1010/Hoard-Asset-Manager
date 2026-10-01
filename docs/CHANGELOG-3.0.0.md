@@ -140,6 +140,10 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   only some files missing stays, marked.
 - Removing a browser store's sign-in folder while Hoard is closed clears that store's list from the Library at the
   next start, without touching your downloads or imported pages.
+- **Make an editable copy** (issue #82). Want to change a texture? Open a download and make an editable copy: its
+  files go to a folder of their own (**Hoard Edits**, beside your downloads), which Hoard never checks or replaces,
+  so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
+  the copy says what it is.
 
 ### Working in the background, and closing safely
 

@@ -1243,7 +1243,10 @@ function showDetail(a, focus = true) {
       `<button class="linkish" data-act="goto" data-id="${o.id}">View that copy</button></p>`).join("") +
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button>` +
+      `<button class="ghost" data-act="edit-copy">Make an editable copy</button>` +
       (a.mark === "removed" ? `<button class="ghost" data-act="delete-files">Delete downloaded files</button>` : "") + `</div>` +
+      `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
+        here, and replaces one that was changed.</p>` +
     updateSection(a) +
     tagSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
@@ -1351,6 +1354,21 @@ grid.addEventListener("error", e => {  // thumbnail missing or unreadable: fall 
   const a = byId.get(+e.target.closest(".slot").dataset.id);
   e.target.outerHTML = placeholder(a);
 }, true);
+// issue #82: a copy of a download for you to change, in a folder of its own that Hoard never checks or replaces
+async function editableCopy(a, button) {
+  if (!a) return;
+  if (!confirm(`Copy ${a.name} into a folder of its own for you to change?\n\n` +
+               "Hoard never checks, updates or replaces that copy. Only files that still match what Hoard downloaded " +
+               "are copied. Anything you add to the copy later hasn't been checked by Hoard, so be as careful with it as " +
+               "with any download.")) return;
+  button.disabled = true;
+  const r = await apiPost("/api/edit-copy", { key: a.tag_key, open: true });
+  button.disabled = false;
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  const left = r.data.skipped.length;
+  toast(`Copied ${r.data.files} ${r.data.files === 1 ? "file" : "files"} to ${r.data.folder}.` +
+        (left ? ` Left out ${left} that ${left === 1 ? "has" : "have"} changed or gone since Hoard downloaded ${left === 1 ? "it" : "them"} (listed in the read-me there).` : ""));
+}
 // issue #81: a download of something removed from the Library can be deleted from disk, after you confirm
 async function deleteFiles(a) {
   if (!a || a.mark !== "removed") return;
@@ -1373,6 +1391,7 @@ detail.addEventListener("click", e => {
   else if (act === "update-one") updateItems([byId.get(openId)]);
   else if (act === "check-one") checkUpdates([byId.get(openId)]);
   else if (act === "delete-files") deleteFiles(byId.get(openId));
+  else if (act === "edit-copy") editableCopy(byId.get(openId), b);
   else if (act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
 });
 $("#scrim").addEventListener("click", closeDetail);

@@ -23,7 +23,7 @@ from . import __version__, diagnostics, itch, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import catalog_seal, collect_catalog, delete_downloaded_files, download_retries, reseal_catalog
+from .downloader import catalog_seal, collect_catalog, delete_downloaded_files, download_retries, make_editable_copy, reseal_catalog
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
 from .net import is_network_error
@@ -45,7 +45,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/app/close", "/api/open-logs",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
-           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files")
+           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -792,6 +792,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/edit-copy":   # a copy of a download to change, outside Hoard's care (issue #82)
+            key = str(body.get("key") or "")[:400]
+            if key in MarkStore().load()["hidden"] and not self._unlocked():
+                return self._json({"error": "Unlock your hidden library first."}, 403)
+            try:
+                done = make_editable_copy(srv.cfg, root_dir(srv.cfg), key)
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": f"Couldn't make the copy: {e.strerror or e}."}, 500)
+            opened = None
+            if body.get("open"):
+                try:
+                    opened = reveal(Path(done["folder"]))
+                except OSError:
+                    pass
+            return self._json({"ok": True, **done, "skipped": [{"path": p, "why": w} for p, w in done["skipped"]],
+                               "opened_in": opened})
         if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
             return self._delete_files(body)
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",

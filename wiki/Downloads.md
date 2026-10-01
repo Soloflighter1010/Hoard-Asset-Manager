@@ -132,6 +132,20 @@ again from the start.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
   say after you've tidied it yourself.
 
+### Changing a download: make an editable copy
+
+Hoard keeps the downloads folder as the stores sent it: a sync replaces a file there that was changed, so edits
+made there are lost. To change a texture or anything else, open the product and choose **Make an editable copy**.
+Hoard copies its files into a folder of their own, in **Hoard Edits** beside your downloads folder (or the folder
+`edits_root` names in `config.json`), and opens it. A read-me there says what it is.
+
+- Hoard never checks, updates or replaces the copy, and each copy is a new folder (`Rusk (2)` beside an earlier
+  one), so your edits stay yours.
+- Only files that still match what Hoard downloaded are copied. One that was changed or replaced since is left out,
+  and the read-me names it, so a file someone else changed isn't passed on as the store's.
+- What you add to the copy later (a texture from a website, a tool someone sent you) hasn't been checked by
+  Hoard. Be as careful with it as with any download.
+
 ## Payhip
 
 Hoard doesn't download from Payhip: its check for automated browsers made that unreliable. Your Payhip purchases

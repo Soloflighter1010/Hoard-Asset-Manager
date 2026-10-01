@@ -204,6 +204,85 @@ class DeletingRemovedDownloads(unittest.TestCase):
             srv.server_close()
 
 
+class EditableCopies(unittest.TestCase):
+    """Issue #82: files changed in the downloads folder are replaced by the next sync, and an edited file can't be
+    told from a tampered one. An editable copy goes to a folder of its own that Hoard never checks or replaces;
+    only files still as Hoard downloaded them are copied, so a changed one isn't passed on as the store's."""
+
+    def setUp(self):
+        from hoard import tags
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, True)
+        self.root = self.base / "Hoard"
+        folder = self.root / "Booth" / "Kitsu Studio" / "Rusk"
+        (folder / "Textures").mkdir(parents=True)
+        (folder / "rusk.unitypackage").write_bytes(b"pkg")
+        (folder / "Textures" / "body.png").write_bytes(b"png!")
+        man = downloader.Manifest(self.root / "Booth")
+        rec = man.record("111", "Kitsu Studio", "Rusk")
+        rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "Textures/body.png", "size": 4}}
+        man.save()
+        self.folder, self.key = folder, tags.tag_key("Booth", "Rusk")
+        self.cfg = {**config.load_config(), "root": str(self.root)}
+
+    def test_a_copy_beside_the_downloads(self):
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        copy = self.base / "Hoard Edits" / "Booth" / "Kitsu Studio" / "Rusk"
+        self.assertEqual((Path(done["folder"]), done["files"], done["bytes"], done["skipped"]), (copy, 2, 7, []))
+        self.assertEqual((copy / "Textures" / "body.png").read_bytes(), b"png!")
+        self.assertIn("never checks, updates or replaces", (copy / "_EDITABLE COPY - read me.txt").read_text("utf-8"))
+        (copy / "Textures" / "body.png").write_bytes(b"edited")   # yours to change; the original stays
+        self.assertEqual((self.folder / "Textures" / "body.png").read_bytes(), b"png!")
+        again = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        self.assertEqual(Path(again["folder"]).name, "Rusk (2)", "an earlier copy is never written over")
+        self.assertEqual((copy / "Textures" / "body.png").read_bytes(), b"edited")
+
+    def test_a_changed_file_is_left_out(self):
+        (self.folder / "Textures" / "body.png").write_bytes(b"something else")
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        self.assertEqual(done["skipped"], [("Textures/body.png", "changed since Hoard downloaded it")])
+        self.assertFalse((Path(done["folder"]) / "Textures" / "body.png").exists())
+        self.assertIn("Textures/body.png", (Path(done["folder"]) / "_EDITABLE COPY - read me.txt").read_text("utf-8"))
+
+    @unittest.skipIf(sys.platform == "win32", "symlinks need extra rights on Windows")
+    def test_never_through_a_link(self):
+        secret = self.base / "secret.txt"
+        secret.write_bytes(b"pkg")   # the same size as the file it stands in for
+        (self.folder / "rusk.unitypackage").unlink()
+        os.symlink(secret, self.folder / "rusk.unitypackage")
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)   # a record leading outside isn't read
+        self.assertFalse((Path(done["folder"]) / "rusk.unitypackage").exists())
+        inside = self.folder / "inside.bin"   # and a link to somewhere inside isn't followed either
+        inside.write_bytes(b"png!")
+        (self.folder / "Textures" / "body.png").unlink()
+        os.symlink(inside, self.folder / "Textures" / "body.png")
+        done = downloader.make_editable_copy(self.cfg, self.root, self.key)
+        self.assertEqual(done["skipped"], [("Textures/body.png", "missing, or not a plain file")])
+
+    def test_never_inside_the_downloads(self):
+        with self.assertRaises(ValueError):
+            downloader.make_editable_copy({**self.cfg, "edits_root": str(self.root / "Edits")}, self.root, self.key)
+        with self.assertRaises(ValueError):
+            downloader.make_editable_copy(self.cfg, self.root, "booth:nothing")
+        chosen = self.base / "Mine"
+        done = downloader.make_editable_copy({**self.cfg, "edits_root": str(chosen)}, self.root, self.key)
+        self.assertEqual(Path(done["folder"]), chosen / "Booth" / "Kitsu Studio" / "Rusk")
+
+    def test_the_server_makes_one(self):
+        srv = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", "/api/edit-copy", body=json.dumps({"key": self.key}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse(); data = json.loads(r.read()); c.close()
+            self.assertEqual((r.status, data["files"], data["skipped"]), (200, 2, []))
+            self.assertTrue(Path(data["folder"]).is_dir())
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+
 class ManifestSaves(unittest.TestCase):
     """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
     after every file and every product; each sync still ends by saving everything, however it ends."""

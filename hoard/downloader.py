@@ -23,7 +23,7 @@ from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, vault
-from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
+from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, open_under, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagMatcher, TagStore, clean_tag, tag_key
 
 try:
@@ -1877,6 +1877,80 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
         log(f"Deleted {done['files']} downloaded files of {done['products']} removed products.")
         build_catalog(cfg, root)
     return done
+
+
+EDIT_NOTE = """This is an editable copy of a download, made by Hoard on {when}.
+
+    {name} by {creator} ({store})
+    The original: {original}
+
+Change anything here. Hoard never checks, updates or replaces this folder, and doesn't import from it: it's yours.
+
+The original stays as the store sent it. Hoard checks that one, and replaces a file there that was changed, so
+edit here instead. Only files that still matched what Hoard downloaded were copied. Anything you add to this
+folder (a texture from a website, a tool someone sent you) hasn't been checked by Hoard, so be as careful with it
+as with any download.
+"""
+
+
+def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
+    """Copy a product's downloaded files into a folder of their own under edits_dir (issue #82), for you to change.
+
+    Hoard checks and re-downloads files in the downloads folder, so edits there are lost, and an edited file can't
+    be told from one that something else changed. The copy is outside Hoard's care altogether. Only the files Hoard
+    recorded are copied, and only while they're still the size they were downloaded at; one that isn't is left out
+    and named, so a file changed behind Hoard's back isn't passed on as the store's. Nothing is read through a
+    link. The copy goes in a new folder each time ("Name (2)" beside an earlier copy), and a note in it says what
+    it is. Returns {"folder", "files", "bytes", "skipped": [(path, why)]}. Raises ValueError when there's nothing to copy."""
+    from .config import edits_dir
+    dest_root = edits_dir(cfg)
+    rroot, rdest = root.resolve(), dest_root.resolve()
+    if rdest == rroot or rroot in rdest.parents:
+        raise ValueError("The folder for editable copies can't be inside the downloads folder. Choose another in "
+                         "config.json (edits_root).")
+    for store in STORE_DIRS.values():
+        sdir = root / store
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        for rec in Manifest(sdir).assets.values():
+            if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
+                continue
+            try:
+                rel_to_path(sdir, rec["folder"])
+            except UnsafePath:
+                continue
+            base = dest_root / store / rec["folder"]
+            dest, n = base, 2
+            while os.path.lexists(dest):
+                dest, n = base.with_name(f"{base.name} ({n})"), n + 1
+            dest.mkdir(parents=True)
+            copied, size, skipped = 0, 0, []
+            for f in sorted(rec["files"].values(), key=lambda f: f.get("path") or ""):
+                rel = f.get("path")
+                try:
+                    src = open_under(root, f"{store}/{rec['folder']}/{rel}")
+                except UnsafePath:
+                    skipped.append((rel, "missing, or not a plain file"))
+                    continue
+                with src:
+                    got = os.fstat(src.fileno()).st_size
+                    if f.get("size") is not None and got != f["size"]:
+                        skipped.append((rel, "changed since Hoard downloaded it"))
+                        continue
+                    target = rel_to_path(dest, rel)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with open(target, "xb") as out:
+                        shutil.copyfileobj(src, out, 1024 * 1024)
+                copied, size = copied + 1, size + got
+            note = EDIT_NOTE.format(when=now_iso()[:10], name=rec.get("name"), creator=rec.get("creator"), store=store,
+                                    original=root / store / rec["folder"])
+            if skipped:
+                note += "\nLeft out:\n" + "".join(f"    {rel}: {why}\n" for rel, why in skipped)
+            (dest / "_EDITABLE COPY - read me.txt").write_text(note, "utf-8")
+            log(f"Made an editable copy of {store}/{rec['folder']} in {dest}: {copied} files"
+                + (f", {len(skipped)} left out" if skipped else ""))
+            return {"folder": str(dest), "files": copied, "bytes": size, "skipped": skipped}
+    raise ValueError("That download isn't on disk any more.")
 
 
 def _still_there(folder: Path, rel) -> bool:
