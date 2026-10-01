@@ -14,7 +14,8 @@ store, or without a Payhip shop, asks first. Run again from Settings, it can be 
    Edge). If that isn't installed yet, **Install Hoard's browser** downloads it (about 150 MB, once).
 3. **Used Hoard before?** If you used Hoard 1.x, **Bring it over** copies your library list and downloads
    folder. New to Hoard? Skip it.
-4. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Hoard only shows and
+4. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Tick the ones you use
+   (the first time, only stores you already have items from are ticked). Hoard only shows and
    reads the stores you pick. You can change this later in [Settings](Settings). Hoard keeps copies of your
    files from all of them but Payhip, which it lists: you download from Payhip yourself.
 5. **Your Payhip shops** (only if you picked Payhip). Payhip keeps your purchases in each shop you bought

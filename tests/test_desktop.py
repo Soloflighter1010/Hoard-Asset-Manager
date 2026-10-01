@@ -39,7 +39,7 @@ class FakeEvent:
 class FakeWindow:
     def __init__(self, title, url, **kw):
         self.title, self.url, self.kw = title, url, kw
-        self.shown, self.hidden, self.closed = 0, 0, threading.Event()
+        self.shown, self.hidden, self.minimized, self.closed = 0, 0, 0, threading.Event()
         self.on_top = False
         self.scripts = []
         self.events = types.SimpleNamespace(**{e: FakeEvent() for e in ("resized", "moved", "maximized", "minimized",
@@ -48,7 +48,12 @@ class FakeWindow:
     def restore(self): pass
     def show(self): self.shown += 1
     def hide(self): self.hidden += 1
+    def minimize(self): self.minimized += 1
     def evaluate_js(self, script): self.scripts.append(script)
+
+    def create_file_dialog(self, dialog_type, directory="", allow_multiple=False):
+        self.dialogs = getattr(self, "dialogs", []) + [(dialog_type, directory, allow_multiple)]
+        return ("/home/you/Hoard Downloads",) if dialog_type != "cancel-me" else None
 
     def close_button(self):
         """The window's own close button (and destroy(), as pywebview's does): closing handlers can say no."""
@@ -73,6 +78,7 @@ def fake_webview(fail=False):
         mod.start_kw = kw
         mod.windows[-1].closed.wait(30)
     mod.create_window, mod.start = create_window, start
+    mod.FileDialog = types.SimpleNamespace(OPEN=10, SAVE=30, FOLDER=20)   # as pywebview 5 and 6 name them
     mod.screens = [types.SimpleNamespace(x=0, y=0, width=1920, height=1080)]
     return mod
 
@@ -149,6 +155,32 @@ class DesktopApp(_Harness):
         lock = app.InstanceLock(app.data_dir() / "running.lock")
         self.assertTrue(lock.acquire(), "the next start isn't blocked")
         lock.release()
+
+    def test_browse_opens_the_systems_picker(self):
+        """Typing a full path was the hardest part of setting Hoard up: in its window, Browse asks the system's own
+        folder (or file) picker, over the window."""
+        sys.modules["webview"] = wv = fake_webview()
+        t, result, info = self.start()
+        window = wv.windows[0]
+        key = enter(window.url)
+
+        def pick(body):
+            host, port = info["url"].split("//")[1].strip("/").split(":")
+            c = http.client.HTTPConnection(host, int(port), timeout=10)
+            c.request("POST", "/api/pick", body=json.dumps(body), headers={"Content-Type": "application/json", ACCESS_HEADER: key})
+            r = c.getresponse()
+            data = json.loads(r.read() or b"{}")
+            c.close()
+            return r.status, data
+        self.assertEqual(pick({"kind": "folder", "start": "/nowhere/at/all"}), (200, {"ok": True, "path": "/home/you/Hoard Downloads"}))
+        kind, start, many = window.dialogs[-1]
+        self.assertEqual((kind, many), (20, False), "one folder")
+        self.assertTrue(Path(start).is_dir(), "started in the downloads folder (home until it's there)")
+        self.assertNotIn("nowhere", start, "never in a path the page names")
+        pick({"kind": "file"})
+        self.assertEqual(window.dialogs[-1][0], 10, "or a file picker")
+        self.assertEqual(post(info["url"], "/api/quit", {}, key), 200)
+        t.join(15)
 
     def test_the_window_opens_where_it_was(self):
         """Issue #16: the window's size and place are kept when it closes, and it opens there next time, maximized
@@ -312,16 +344,20 @@ class DesktopApp(_Harness):
 
 class ClosingTheWindow(_Harness):
     """What closing Hoard's window does: quit when nothing's running; while something is, ask (stop it first, carry
-    on in the background, or close at once); and with Keep Hoard running, hide the window and carry on."""
+    on in the background, or close at once); and, unless that's turned off in Settings, minimize the window to the
+    taskbar and carry on."""
 
     def test_decisions(self):
         srv = types.SimpleNamespace(cfg={}, jobs=types.SimpleNamespace(state={"running": False, "queue": []}))
+        self.assertEqual(app.close_decision(srv), "background", "to the taskbar, unless you choose otherwise")
+        self.assertEqual(app.close_decision(types.SimpleNamespace(cfg=config.load_config(), jobs=srv.jobs)), "background")
+        srv.cfg["close_to_taskbar"] = False
         self.assertEqual(app.close_decision(srv), "quit")
         srv.jobs.state["running"] = True
         self.assertEqual(app.close_decision(srv), "ask")
         srv.jobs.state.update(running=False, queue=[{"id": "q1"}])
         self.assertEqual(app.close_decision(srv), "ask", "something waiting its turn counts too")
-        srv.cfg["close_to_background"] = True
+        srv.cfg["close_to_taskbar"] = True
         self.assertEqual(app.close_decision(srv), "background")
 
     def test_close_button(self):
@@ -342,7 +378,7 @@ class ClosingTheWindow(_Harness):
         window.close_button()
         time.sleep(0.3)
         self.assertFalse(window.closed.is_set())
-        self.assertEqual(window.hidden, 1, "hidden: Hoard carries on")
+        self.assertEqual((window.minimized, window.hidden), (1, 0), "to the taskbar, not hidden: Hoard carries on")
         self.assertEqual(app.run_app(config.load_config(), None), 0, "opening Hoard again...")
         self.assertEqual(window.shown, 1, "...brings the window back")
         decided.append("background")
@@ -381,7 +417,7 @@ class ClosingTheWindow(_Harness):
             self.assertEqual(post(info["url"], "/api/quit", {}, key), 409, "busy: the page asks what to do")
             self.assertEqual(post(info["url"], "/api/app/close", {"how": "background"}, key), 200)
             time.sleep(0.5)
-            self.assertEqual(window.hidden, 1)
+            self.assertEqual(window.minimized, 1)
             self.assertFalse(window.closed.is_set())
             self.assertEqual(post(info["url"], "/api/app/close", {"how": "sideways"}, key), 400)
             self.assertEqual(post(info["url"], "/api/app/close", {"how": "wait"}, key), 200)

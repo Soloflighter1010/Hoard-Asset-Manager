@@ -34,7 +34,7 @@ from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, c
                      header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
-from .setup import browser_problem, migrate_from, setup_status
+from .setup import browser_problem, migrate_from, setup_status, signed_in
 from .tags import TagStore, tag_key, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
@@ -47,7 +47,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
-           "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget")
+           "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
+           "/api/pick")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -178,7 +179,7 @@ def public_settings(cfg: dict) -> dict:
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
-        "close_to_background": bool(cfg.get("close_to_background")),
+        "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -217,8 +218,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["offline_images"] = bool(body["offline_images"])
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
-    if "close_to_background" in body:
-        change["close_to_background"] = bool(body["close_to_background"])
+    if "close_to_taskbar" in body:
+        change["close_to_taskbar"] = bool(body["close_to_taskbar"])
     if "auto_sync_hours" in body:
         if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
             raise ValueError("Choose how often to sync from the list.")
@@ -308,7 +309,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
-        self.hide_window = None   # the window only: Hoard carries on in the background
+        self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
+        self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
+        self.picking = threading.Lock()   # a system picker is open (see /api/pick)
         self.quit_app = None
         self.show_token = None
         self.last_seen = time.time()
@@ -519,10 +522,12 @@ class Handler(BaseHTTPRequestHandler):
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": public_job(srv.jobs.state, self._hidden_names()),
                                "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
                                "itch_key": vault.load_key(srv.cfg, "itch") is not None,
+                               # which stores Hoard holds a sign-in for, so Stores offers Sign in or Sign out, not both
+                               "signed_in": {s: signed_in(srv.cfg, s) for s in STORES if srv.cfg[s].get("enabled", True)},
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None,
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
             tasks, hidden = srv.jobs.tasks(), self._hidden_names()
@@ -553,7 +558,7 @@ class Handler(BaseHTTPRequestHandler):
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
@@ -895,6 +900,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/pick":   # Browse: the system's own picker, in Hoard's window (never in a web browser)
+            if not srv.pick_path:
+                return self._json({"error": "Choosing a folder needs Hoard's own window. Type the path instead."}, 409)
+            kind = "file" if body.get("kind") == "file" else "folder"
+            if not srv.picking.acquire(blocking=False):   # one picker at a time, over the window
+                return self._json({"error": "A picker is already open."}, 409)
+            # It opens in the downloads folder, Hoard's own setting: never a path the request names
+            start = root_dir(srv.cfg)
+            try:
+                chosen = srv.pick_path(kind, str(start) if start.is_dir() else str(Path.home()))
+            except Exception as e:   # the window went away, or the system has no picker
+                return self._json({"error": f"The picker couldn't open ({type(e).__name__}). Type the path instead."}, 500)
+            finally:
+                srv.picking.release()
+            return self._json({"ok": True, "path": chosen})
         if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)

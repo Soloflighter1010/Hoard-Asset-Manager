@@ -79,7 +79,10 @@ class LocalItems(unittest.TestCase):
         downloader.build_catalog(self.cfg, self.root)
         index = downloads.build_index(self.root, self.catalog())
         [a] = index["assets"]
-        self.assertEqual((a["linked"], a["missing"], len(a["files"]), a["thumb"]), (True, 0, 2, None))
+        self.assertEqual((a["linked"], a["missing"], len(a["files"])), (True, 0, 2))
+        # its picture: a copy in Hoard's own folder, since only pictures in the downloads folder are shown
+        self.assertEqual(a["thumb"], a["folder"] + "/_thumbnail.png")
+        self.assertEqual((self.root / a["thumb"]).read_bytes(), b"png!")
         self.assertEqual(server.open_target(self.cfg, a["folder"]), self.src)
         self.assertEqual(server.open_target(self.cfg, a["folder"] + "/Skins/skin.png"), self.src / "Skins" / "skin.png")
         self.assertEqual(downloader.check_integrity(self.root)["files"], 0, "the routine checks leave it alone")
@@ -91,7 +94,18 @@ class LocalItems(unittest.TestCase):
         self.assertEqual(len(local.rescan(self.cfg, self.root, key)["files"]), 3)
         self.assertEqual(local.remove(self.cfg, self.root, key), {"deleted": 0, "listed": True})
         self.assertEqual(sorted(tree(self.src)), sorted(before) + ["new.txt"])
+        self.assertFalse((self.root / "Local" / "_linked").exists(), "its picture goes with it")
         self.assertEqual(self.catalog(), [])
+
+    def test_a_preview_picture_comes_first_and_a_rescan_follows_it(self):
+        (self.src / "Preview.jpg").write_bytes(b"jpg!")
+        local.add(self.cfg, self.root, str(self.src), copy=False)
+        key = next(iter(downloader.Manifest(self.root / "Local").assets))
+        own = self.root / "Local" / "_linked" / key
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.jpg"])
+        (self.src / "Preview.jpg").unlink()
+        local.rescan(self.cfg, self.root, key)
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.png"], "the picture it had is gone, so another")
 
     def test_only_a_manifest_hoard_sealed_names_a_folder(self):
         local.add(self.cfg, self.root, str(self.src), copy=False)
@@ -189,13 +203,83 @@ class LocalPage(unittest.TestCase):
             page.locator("#grid .slot", has_text="Commission Kit").click()
             page.get_by_text("Listed where it is").wait_for()
             page.get_by_text("For A commission.").wait_for()
-            page.once("dialog", lambda d: d.accept())
             page.locator("[data-act='local-remove']").click()
+            page.click("#askDialog[open] button[value=yes]")   # Hoard's own question, not the browser's
             page.get_by_text("Took Commission Kit out of Local").wait_for()
             self.assertTrue((src / "Kit.unitypackage").exists())
             self.assertEqual(errors, [])
             browser.close()
 
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class Browse(unittest.TestCase):
+    """Typing a full path to a folder was the hardest part of setting Hoard up. In Hoard's own window, Browse opens
+    the system's folder (or file) picker; in a web browser, where there's no way to ask for one, it isn't shown."""
+
+    def setUp(self):
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, base, True)
+        (base / "Hoard").mkdir()
+        self.src = base / "Commission Kit"
+        self.src.mkdir()
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(base / "Hoard"), "setup_done": True},
+                                    lan=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def test_browse(self):
+        asked = []
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1300, "height": 860})
+            page.goto(self.srv.entry_url())
+            page.goto(self.srv.url + "downloads")
+            page.click("#localAdd")
+            page.locator("#localPanel.win:not([hidden])").wait_for()
+            self.assertTrue(page.locator("#localBrowseFolder").is_hidden(), "a web browser has no picker to offer")
+            self.srv.pick_path = lambda kind, start: asked.append(kind) or str(self.src)   # as Hoard's window does
+            page.reload()
+            page.click("#localAdd")
+            page.click("#localBrowseFolder")
+            page.wait_for_function("() => document.querySelector('#localPath').value !== ''")
+            self.assertEqual(page.locator("#localPath").input_value(), str(self.src))
+            page.check("#localLink")
+            page.click("#localBrowseFile")
+            page.wait_for_timeout(300)
+            self.assertTrue(page.locator("#localCopy").is_checked(), "a single file is copied in")
+            self.assertEqual(asked, ["folder", "file"])
+            page.keyboard.press("Escape")
+            page.click("#settingsBtn")
+            page.locator("#setRootBrowse").wait_for()
+            self.assertTrue(page.locator("#setRootBrowse").is_visible())
+            browser.close()
+
+    def test_local_is_a_place_of_its_own(self):
+        """Local, in the bar, opened Downloads with Downloads still highlighted. Now the bar, the heading and the
+        window's title say Local, and go back to Downloads with it."""
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1300, "height": 860})
+            page.goto(self.srv.entry_url())
+            page.goto(self.srv.url + "downloads")
+            page.click('.apptabs a[href="/downloads#store=Local"]')
+            page.wait_for_function("() => document.title === 'Hoard: Local'")
+            self.assertEqual(page.get_attribute('.apptabs a[href="/downloads#store=Local"]', "aria-current"), "page")
+            self.assertIsNone(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"))
+            page.click('#stores [data-store=""]')
+            page.wait_for_function("() => document.title === 'Hoard: Downloads'")
+            self.assertEqual(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"), "page")
+            browser.close()
+
+    def test_no_picker_says_so(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request("POST", "/api/pick", body=json.dumps({"kind": "folder"}),
+                  headers={"Content-Type": "application/json", ACCESS_HEADER: self.srv.key})
+        r = c.getresponse()
+        self.assertEqual(r.status, 409)
+        self.assertIn("Type the path", json.loads(r.read())["error"])
+        c.close()
 
 if __name__ == "__main__":
     unittest.main()

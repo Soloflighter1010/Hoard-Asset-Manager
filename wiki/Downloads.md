@@ -27,7 +27,11 @@ Hoard does one job at a time, but you don't have to wait for it: start a sync, a
 while something is running, and it's **queued**, and starts when its turn comes. The same job isn't queued twice.
 
 **Tasks** (next to Library and Downloads) shows what's running, with its progress, what's waiting, and what
-finished, newest first, each with how it went, how long it took, any problems and its full progress. Take a
+finished, newest first, each with how it went (**Done**, **Partly done** when a store couldn't be read or a file
+couldn't be downloaded, **Failed** or **Stopped**), how long it took, any problems and its full progress. A sync
+that can't read any of your stores (offline, say, or signed out of them all) fails and says which, without trying
+to download. The download panel closes by itself a few seconds after a job that went well; one with problems
+stays until you close it. Take a
 waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync within a few
 seconds. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
@@ -47,14 +51,16 @@ that store for next time, with one message saying so, rather than a failure for 
 
 ### Closing Hoard while it's working
 
-Closing Hoard's window (or **Quit Hoard** in Settings) while something is running, or waiting its turn, asks
-what to do:
+In Hoard's own window, closing it minimizes Hoard to the taskbar (the Dock on a Mac), and Hoard carries on with
+whatever it's doing; click it there to bring the window back. **Quit Hoard** in Settings quits. To have the close
+button quit instead, turn off **Closing the window minimizes Hoard to the taskbar** in [Settings](Settings).
+
+With that off, closing Hoard's window (or **Quit Hoard** in Settings) while something is running, or waiting its
+turn, asks what to do:
 
 - **Stop it, then close:** what's waiting is taken off the queue, what's running is stopped as **Stop** does,
   and Hoard closes as soon as it has.
-- **Keep working in the background** (in Hoard's own window): the window hides and Hoard carries on. Open Hoard
-  again to bring the window back. To always do this when the window closes, turn on **Keep Hoard running when
-  its window is closed** in [Settings](Settings).
+- **Minimize, and keep working** (in Hoard's own window): the window goes to the taskbar and Hoard carries on.
 - **Close now:** Hoard closes at once, ending any store browser it has open. Use it if stopping takes too long.
 
 While a file downloads, the download panel and Tasks show a progress bar with how much has come in, how fast,

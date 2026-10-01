@@ -59,7 +59,7 @@ class TheSite(unittest.TestCase):
 
     def test_everything_it_uses_is_here(self):
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html"):
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html"):
             page = Refs()
             page.feed((site / name).read_text("utf-8"))
             for tag, key, value in page.refs:
@@ -138,7 +138,7 @@ class TheOtherPages(unittest.TestCase):
 
     def test_every_page_has_the_same_header_and_the_glow(self):
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html"):
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html"):
             page = (site / name).read_text("utf-8")
             self.assertIn('<div class="glow" aria-hidden="true">', page, name)
             self.assertIn('href="changelog.html"', page, name)

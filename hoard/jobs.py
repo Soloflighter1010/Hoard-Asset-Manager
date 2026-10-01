@@ -167,6 +167,17 @@ STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts a
 WATCHED = ("download", "check-updates", "sync", "refresh", "verify")   # jobs that never wait on you (sign-ins do)
 
 
+# How a finished job went, in the Tasks tab. Partly done: it finished, but a store couldn't be read or a file
+# couldn't be downloaded.
+OUTCOMES = ("done", "partial", "failed", "stopped")
+
+
+def _names(stores: list[str]) -> str:
+    """Store names for a message: "Booth", "Booth and Gumroad", "Booth, Gumroad and Payhip"."""
+    labels = [STORES[s]["label"] for s in stores if s in STORES]
+    return " and ".join(labels) if len(labels) < 3 else ", ".join(labels[:-1]) + " and " + labels[-1]
+
+
 def tasks_file():
     return data_dir() / "tasks.json"
 
@@ -197,7 +208,7 @@ class Jobs:
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
         self.state = {"running": False, "task": None, "store": None, "message": "", "error": None,
                       "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None,
-                      "queue": [], "job_id": None, "transfer": None}
+                      "queue": [], "job_id": None, "transfer": None, "partial": None}
         self._queue: list[dict] = []        # jobs waiting their turn, oldest first
         self._qlock = threading.Lock()      # the queue, and taking the runner from it
         self._current: dict | None = None
@@ -270,7 +281,18 @@ class Jobs:
                                for q in self._queue]
 
     def _launch(self, spec: dict) -> None:
-        """Run spec now (the runner is already taken)."""
+        """Run spec now (the runner is already taken). If it can't even start, the runner is let go again, so one job
+        that fails to start never leaves every later one waiting behind it."""
+        try:
+            self._start(spec)
+        except BaseException:
+            self._current = None
+            self.state.update(running=False, task=None, job_id=None)
+            self.busy.release()
+            raise
+
+    def _start(self, spec: dict) -> None:
+        """Start spec's job on a thread of its own (see _launch)."""
         task, stores, only, keys = spec["task"], spec["stores"], spec.get("only"), spec.get("keys")
         items = spec.get("items")
         skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
@@ -279,7 +301,8 @@ class Jobs:
                          "label": describe_job(task, stores, only, keys, scheduled), "started": now_iso()}
         self._trail = []
         self.stop.clear()
-        self.state.update(error=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="", transfer=None,
+        self.state.update(error=None, partial=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="",
+                          transfer=None,
                           job_id=self._current["id"], job_label=self._current["label"])
         if task == "download":
             target = lambda s: self._download(s, only, keys, items=items)  # noqa: E731
@@ -338,7 +361,8 @@ class Jobs:
         self._current = None
         st = self.state
         message = str(st.get("message") or "")
-        outcome = "failed" if st.get("error") else "stopped" if message.startswith("Stopped") else "done"
+        outcome = ("failed" if st.get("error") else "stopped" if message.startswith("Stopped")
+                   else "partial" if st.get("partial") else "done")
         trail = self._trail + [line for line in (st.get("log") or []) if line not in self._trail]
         report = st.get("report") if isinstance(st.get("report"), dict) else None
         self.history.append({**job, "ended": now_iso(), "outcome": outcome, "message": message[:600],
@@ -361,7 +385,7 @@ class Jobs:
             out.append({"id": str(h.get("id") or "")[:20], "task": h["task"], "label": str(h.get("label") or "")[:300],
                         "stores": [s for s in (h.get("stores") or []) if s in STORES or s == "all"] if isinstance(h.get("stores"), list) else [],
                         "started": str(h.get("started") or "")[:40], "ended": str(h.get("ended") or "")[:40],
-                        "outcome": h.get("outcome") if h.get("outcome") in ("done", "failed", "stopped") else "done",
+                        "outcome": h.get("outcome") if h.get("outcome") in OUTCOMES else "done",
                         "message": str(h.get("message") or "")[:600],
                         "report": h.get("report") if isinstance(h.get("report"), dict) else None,
                         "log": [str(x)[:500] for x in h.get("log") or [] if isinstance(x, str)][-MAX_TRAIL:]
@@ -435,7 +459,7 @@ class Jobs:
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
 
-
+    def _verify(self, stores: list[str]) -> None:
         """Check the downloads are as Hoard downloaded them (issue #83), naming any file that isn't."""
         from .config import root_dir
         from .downloader import check_integrity, integrity_summary
@@ -455,11 +479,16 @@ class Jobs:
         self.state["sync"] = True
         _record_sync()
         try:
-            self._refresh(stores, skip_imported=True)
+            unread = self._refresh(stores, skip_imported=True)
             if self.stop.is_set():
                 self._set(message="Stopped. Anything half-downloaded resumes next time.")
                 return
+            if self.state.get("error"):   # no store could be read: downloading would only fail the same way
+                return
             self._download(stores, None)
+            if unread and not self.state.get("error"):
+                self._set(message=f"{self.state.get('message') or ''} Couldn't read {_names(unread)}: see Stores.".strip(),
+                          partial=True)
         finally:
             self.state["sync"] = False
 
@@ -561,6 +590,7 @@ class Jobs:
             AssetUpdates().after_download(report.got, report.failed)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
+                      partial=bool(summary["failed"]) or None,
                       message=(f"Done: {summary['new_assets']} new, {summary['updated']} updated"
                                + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
         except Cancelled:
@@ -591,8 +621,10 @@ class Jobs:
         else:
             self._set(message="Signed out. " + done.split(": ", 1)[-1])
 
-    def _refresh(self, stores: list[str], skip_imported: bool = False) -> None:
-        """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty."""
+    def _refresh(self, stores: list[str], skip_imported: bool = False) -> list[str]:
+        """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty.
+        Returns the stores that couldn't be read. When none could, the job has failed: it says which, and why is on
+        each store's row in Stores (a Sync used to say Done here)."""
         if skip_imported:
             stores = [s for s in stores if self.lib.data["stores"].get(s, {}).get("source") != "import"]
         self._set(task="refresh", message="Checking your connection")
@@ -600,10 +632,11 @@ class Jobs:
         for store in stores:
             if store not in online:
                 self.lib.set_error(store, unreachable_message(store))
-        if not online:
-            self._set(message="You're offline. Your saved library still works.")
-            return
-        refreshed = []
+        if stores and not online:
+            self._set(message="You're offline. Your saved library still works.",
+                      error="You're offline. Your saved library still works.")
+            return list(stores)
+        refreshed, unread = [], [s for s in stores if s not in online]
         with _playwright()() as p:
             for store in online:
                 label = STORES[store]["label"]
@@ -650,11 +683,19 @@ class Jobs:
                 finally:
                     if ctx:
                         ctx.close()
+        unread += [s for s in online if s not in refreshed and not (s == "payhip" and not payhip_shops(self.cfg))]
         if refreshed and self.cfg.get("offline_images", True):
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
             cache_images(self.lib, keys, lambda m: self._set(message=m))
-        self._set(message="Library updated")
+        if unread and not refreshed:
+            why = f"Couldn't read {_names(unread)}. Each store's row in Stores says why."
+            self._set(message=why, error=why)
+        elif unread:
+            self._set(message=f"Library updated, except {_names(unread)}: see Stores.", partial=True)
+        else:
+            self._set(message="Library updated")
+        return unread
 
     def _login_then_refresh(self, stores: list[str]) -> None:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""

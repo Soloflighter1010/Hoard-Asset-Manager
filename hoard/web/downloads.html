@@ -16,7 +16,7 @@
 :root { --zoom: 1; --vh: calc(100vh / var(--zoom)); --vw: calc(100vw / var(--zoom)); }
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
-  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --warn: #FF9F6B;
+  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --gold-text: #F0B429; --warn: #FF9F6B;
   --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A; --local: #E8C26A;
   --ph-l: 30%; --ph-s: 28%;
   --slot-size: 172px; --bar-h: 72px;
@@ -27,7 +27,7 @@
 @media (prefers-color-scheme: light) {
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
-    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --warn: #B4531B;
+    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --gold-text: #7A5100;   /* gold as text: 4.5:1 or more on every light background */ --warn: #B4531B;
     --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35; --local: #8A6410;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
@@ -39,20 +39,20 @@ body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bon
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: .5; }
-a { color: var(--gold); text-underline-offset: 3px; }
+a { color: var(--gold-text); text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 [hidden] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
 /* top bar */
 .bar {
-  position: sticky; top: 0; z-index: 10; min-height: var(--bar-h);
+  position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
   display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 24px; background: var(--cave);
 }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
-.search { position: relative; flex: 1 1 280px; max-width: 620px; display: block; }
+.search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
   width: 100%; height: 44px; padding: 0 44px; border-radius: 12px; border: 0;
@@ -64,7 +64,9 @@ a { color: var(--gold); text-underline-offset: 3px; }
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font: 700 12px var(--body); color: var(--dust); background: var(--stone); border-radius: 6px; padding: 1px 7px;
 }
-.tools { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* The same room on both pages (Downloads has two more buttons), so the bar is laid out alike and doesn't jump, or
+   go to two rows on one page and not the other, when you switch */
+.tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; min-width: min(460px, 100%); }
 .tools label { display: flex; align-items: center; gap: 8px; color: var(--dust); font-size: 13px; }
 .tools select {
   height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
@@ -141,10 +143,10 @@ a { color: var(--gold); text-underline-offset: 3px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
-.chip:hover { color: var(--gold); }
+.chip:hover { color: var(--gold-text); }
 .chip[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); padding: 2px 8px; }
 .chip[aria-pressed="true"]::before, .chip[aria-pressed="true"] .n { color: inherit; opacity: .7; }
-.linkish { background: none; border: 0; padding: 0; color: var(--gold); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
+.linkish { background: none; border: 0; padding: 0; color: var(--gold-text); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
 .side .linkish { font-size: 13px; margin-top: 10px; }
 .find { width: 100%; height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); margin-bottom: 6px; }
 .find:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
@@ -174,11 +176,15 @@ a { color: var(--gold); text-underline-offset: 3px; }
 
 /* the collection */
 main { padding: 22px 24px 64px 8px; min-width: 0; }
+body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* the last tiles can scroll clear of the download panel */
 .count { font: 400 clamp(22px, 2.4vw, 30px)/1.15 var(--display); margin: 0; letter-spacing: .005em; }
 .count .of { color: var(--dust); }
 .status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; font-size: 14px; color: var(--dust); }
 .status:empty { display: none; }
-.status + .grid, .count + .status:empty + .grid { margin-top: 22px; }
+/* space between the heading (and any filters) and the tiles: the view bar (hidden in Downloads) sits between them,
+   so the grid is found as any later sibling of the heading row */
+.headrow ~ .grid { margin-top: 22px; }
+.viewbar:not([hidden]) + .grid { margin-top: 0; }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; padding: 3px 5px 3px 11px; border-radius: 8px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); border: 0; }
 .pill b { font-weight: 500; color: var(--dust); }
 .pill span[aria-hidden] { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; }
@@ -246,7 +252,7 @@ a.ghost { height: 42px; }
   .bar { padding: 12px 16px; gap: 10px; position: static; }
   .search { order: 5; flex-basis: 100%; max-width: none; }
   .search kbd, .tools .zoom { display: none; }
-  .tools { margin-left: 0; flex-wrap: wrap; }
+  .tools { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
   .seg { position: static; padding: 0 12px; }
   .only-narrow { display: inline-flex; }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -257,7 +263,7 @@ a.ghost { height: 42px; }
 }
 /* the item whose details are open */
 .slot[aria-current="true"] .art { outline: 3px solid var(--gold); outline-offset: 3px; }
-.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold); }
+.slot[aria-current="true"] .nm-t, .slot[aria-current="true"] .nm { color: var(--gold-text); }
 /* something you own on more than one store: its spine stripes their colours */
 .notch.dup { height: 7px; background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px); }
 /* Pause animated pictures: a still of the first frame */
@@ -297,7 +303,7 @@ body.less-motion .slot:hover .art { transform: none; }
 .foot-brand svg { width: 22px; height: 22px; }
 .foot-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .foot-links a { color: var(--dust); text-decoration: none; }
-.foot-links a:hover { color: var(--gold); text-decoration: underline; }
+.foot-links a:hover { color: var(--gold-text); text-decoration: underline; }
 .foot-note { flex-basis: 100%; margin: 0; }
 
 /* offline notice */
@@ -309,10 +315,10 @@ body.less-motion .slot:hover .art { transform: none; }
 .sidehead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .sidehead .linkish { font: 700 12px var(--body); margin: 0; }
 .chip.sugg { color: var(--dust); font-weight: 500; }
-.chip.sugg:hover { color: var(--gold); }
+.chip.sugg:hover { color: var(--gold-text); }
 .chip.add { color: var(--dust); font-weight: 500; border: 1px dashed var(--seam); padding: 1px 8px; }
 .chip.add::before { content: "+ #"; }
-.chip.add:hover { color: var(--gold); border-color: var(--gold); }
+.chip.add:hover { color: var(--gold-text); border-color: var(--gold); }
 .tagpill { display: inline-flex; align-items: center; gap: 1px; }
 .untag { border: 0; background: none; color: var(--dust); width: 20px; height: 20px; border-radius: 5px; font-size: 15px; line-height: 1; padding: 0; }
 .untag:hover { background: var(--stone); color: var(--bone); }
@@ -378,7 +384,7 @@ body.selecting .toast { bottom: 96px; }
   color: var(--dust); font: 500 11.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .support-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 20px; }
 .support-actions .spacer { flex: 1; }
-.support-link { color: var(--gold); text-decoration: none; font-size: 13px; align-self: center; }
+.support-link { color: var(--gold-text); text-decoration: none; font-size: 13px; align-self: center; }
 .support-link:hover { text-decoration: underline; }
 @media (max-width: 650px) { .support-cols { grid-template-columns: 1fr; } .support-dialog { padding: 22px 20px; } }
 
@@ -455,9 +461,12 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
   font-size: 11px; line-height: 18px; text-align: center; }
 
 /* the shelf: a folder tab per store, raised when it's the one shown, with the view's tools beside them */
-.shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; align-items: flex-end; gap: 14px; padding: 6px 24px 0;
+/* When the tabs and the tools don't fit side by side (a smaller window, larger text), the tools go up a row of their
+   own (wrap-reverse puts the second row on top), and the tabs keep the whole width, touching the line below */
+.shelf { position: sticky; top: var(--bar-h); z-index: 9; display: flex; flex-wrap: wrap-reverse; align-items: flex-start;
+  gap: 6px 14px; padding: 6px 24px 0;
   background: var(--cave); border-bottom: 1px solid var(--seam); }
-.shelf .seg { position: static; flex: 1 1 auto; min-width: 0; height: 46px; display: flex; align-items: flex-end; gap: 4px; padding: 0;
+.shelf .seg { position: static; flex: 1 1 max-content; min-width: 0; height: 46px; display: flex; align-items: flex-end; gap: 4px; padding: 0;
   background: none; border: 0; overflow-x: auto; overflow-y: hidden; margin-bottom: -1px; }
 .seg button { height: 38px; padding: 0 16px; margin-top: 8px; border-radius: 12px 12px 0 0; color: var(--dust);
   background: var(--ledge); box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam), inset 0 -1px 0 var(--seam);
@@ -469,8 +478,14 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
   box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam); }
 .seg button[aria-checked="true"]::after { top: 0; bottom: auto; left: 0; right: 0; height: 3px; border-radius: 12px 12px 0 0;
   background: var(--c, var(--gold)); }
-.shelf-tools { display: flex; align-items: center; gap: 10px; flex: none; padding-bottom: 7px; font-size: 13px; color: var(--dust); }
+.shelf-tools { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; align-self: flex-end; padding-bottom: 7px; font-size: 13px; color: var(--dust); }
 .shelf-tools label { display: flex; align-items: center; gap: 8px; }
+.seg.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
+.seg.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); }
+.seg.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
 .shelf-tools select { height: 34px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; appearance: none; -webkit-appearance: none;
   color: var(--bone); background-color: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
@@ -510,7 +525,7 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* the panel (issue #84): over the page, below the title bar, one at a time. The page below the bar is dimmed;
    the bar stays in reach, so its buttons swap one panel for another. */
 .win { position: fixed; left: 50%; right: auto; bottom: auto; top: calc(var(--bar-h) + 12px); transform: translateX(-50%); z-index: 60; display: flex;
-  flex-direction: column; padding: 0; width: min(620px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
+  flex-direction: column; padding: 0; width: min(880px, calc(var(--vw) - 48px)); max-height: calc(var(--vh) - var(--bar-h) - 28px);
   overflow: hidden; border-radius: 16px; background: var(--ledge);
   box-shadow: 0 0 0 1px var(--seam), 0 20px 50px rgb(0 0 0 / .45); }
 .win[hidden] { display: none !important; }
@@ -525,10 +540,10 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .win-x:hover { background: var(--seam); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
-.tasks.win { width: min(680px, calc(var(--vw) - 32px)); }
+.tasks.win { width: min(880px, calc(var(--vw) - 48px)); }
 
 /* Projects (issue #86): the Unity projects that use your assets, and their credits */
-.projects.win { width: min(760px, calc(var(--vw) - 32px)); }
+.projects.win { width: min(960px, calc(var(--vw) - 48px)); }
 .proj { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .proj summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; cursor: pointer; list-style: none; }
 .proj summary::-webkit-details-marker { display: none; }
@@ -570,7 +585,7 @@ details.task summary::-webkit-details-marker { display: none; }
 details.task .when { grid-column: 2; font-size: 12px; color: var(--dust); }
 details.task summary b { overflow-wrap: anywhere; }
 .outcome { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; background: rgb(76 195 138 / .18); color: #4CC38A; }
-.done-failed .outcome { background: rgb(255 159 107 / .18); color: var(--warn); }
+.done-failed .outcome, .done-partial .outcome { background: rgb(255 159 107 / .18); color: var(--warn); }
 .done-stopped .outcome { background: var(--ledge); color: var(--dust); }
 .task pre, .task details pre { max-height: 260px; overflow: auto; margin: 8px 0 0; padding: 8px; border-radius: 8px; background: var(--cave);
   font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -595,6 +610,13 @@ details.task summary b { overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { #glow.flow .glow-in { animation: none; } }
 body.less-motion #glow.flow .glow-in { animation: none; }
 .seg button[aria-checked="true"]::after { display: none; }
+dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
+  border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
+dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
+dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+dialog.ask p:first-child { font-weight: 700; }
+.ask-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 </style>
 </head>
 <body>
@@ -724,7 +746,9 @@ body.less-motion #glow.flow .glow-in { animation: none; }
     into Unity like the rest. They're under <strong>Local</strong>.</p>
   <h3>Folder or file on this computer</h3>
   <div class="field"><input id="localPath" spellcheck="false" autocomplete="off" placeholder="D:\Packages\My Textures"
-    aria-label="Folder or file to add"></div>
+    aria-label="Folder or file to add">
+    <button class="ghost sm" id="localBrowseFolder" data-browse hidden>Folder…</button>
+    <button class="ghost sm" id="localBrowseFile" data-browse hidden>File…</button></div>
   <h3>Name</h3>
   <div class="field"><input id="localName" maxlength="300" placeholder="The folder's name" aria-label="Name"></div>
   <h3>Made by</h3>
@@ -746,6 +770,7 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <p class="hint">Changes are saved as you make them.</p>
   <h3>Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
+    <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
   <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
   <h3>Stores</h3>
@@ -818,7 +843,7 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
   <div id="backgroundRow" hidden>
     <h3>Closing Hoard</h3>
-    <label class="check"><input type="checkbox" id="setBackground"> Keep Hoard running when its window is closed</label>
+    <label class="check"><input type="checkbox" id="setBackground"> Closing the window minimizes Hoard to the taskbar (the Dock on a Mac), and it keeps working</label>
     <p class="hint">Downloads, syncs and automatic syncs carry on with the window closed. Open Hoard again (from the
       Start menu) to bring the window back, and quit it here, with <strong>Quit Hoard</strong>.</p>
   </div>
@@ -860,7 +885,7 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <p id="closeWhat"></p>
   <div class="close-choices" id="closeChoices">
     <button class="primary" data-close="wait">Stop it, then close</button>
-    <button class="ghost" data-close="background">Keep working in the background</button>
+    <button class="ghost" data-close="background">Minimize, and keep working</button>
     <button class="ghost" data-close="now">Close now</button>
     <button class="linkish" data-close="cancel">Cancel</button>
   </div>
@@ -1039,6 +1064,40 @@ function freeze(img) {
 document.addEventListener("load", e => { if (e.target.tagName === "IMG") freeze(e.target); }, true);
 
 let toastTimer;
+/* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
+   out of place). Resolves true for the main button, false for Cancel, Escape or a click outside it. */
+function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
+  return new Promise(resolve => {
+    let d = document.getElementById("askDialog");
+    if (!d) {
+      d = document.createElement("dialog");
+      d.id = "askDialog"; d.className = "ask";
+      d.setAttribute("aria-labelledby", "askText");
+      d.innerHTML = '<div id="askText"></div><div class="ask-row"><button class="ghost" value="no"></button>' +
+                    '<button class="primary" value="yes"></button></div>';
+      d.addEventListener("click", e => {
+        const b = e.target.closest("button");
+        if (b) d.close(b.value);
+        else if (e.target === d) d.close("no");   // the dimmed page around it
+      });
+      document.body.appendChild(d);
+    }
+    const body = d.querySelector("#askText");
+    body.replaceChildren(...String(text).split(/\n\n+/).map(par => {
+      const p = document.createElement("p");
+      p.append(...par.split("\n").flatMap((line, i) => i ? [document.createElement("br"), line] : [line]));
+      return p;
+    }));
+    const [no, yes] = d.querySelectorAll("button");
+    no.textContent = cancel; yes.textContent = ok;
+    yes.classList.toggle("danger", !!danger);
+    d.returnValue = "no";
+    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
+    d.showModal();
+    (danger ? no : yes).focus();   // Enter doesn't delete anything by accident
+  });
+}
+
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
@@ -1296,8 +1355,15 @@ function renderStatus(list) {
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
+  // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
+  const local = state.store === "Local";
+  for (const [a, here] of [[$('.apptabs a[href="/downloads"]'), !local], [$('.apptabs a[href="/downloads#store=Local"]'), local]])
+    if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
+  document.title = local ? "Hoard: Local" : "Hoard: Downloads";
   $("#count").hidden = !total;
-  $("#count").innerHTML = filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
+  $("#count").innerHTML = local && pills.length === 1 && state.view === "downloads"
+    ? `${list.length} ${list.length === 1 ? "package" : "packages"} of your own`
+    : filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
     : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}`;
   $("#status").innerHTML =
     pills.map(([k, v, label, text]) =>
@@ -1453,9 +1519,9 @@ function localSection(a) {
 }
 async function localAction(act, a) {
   if (!a) return;
-  if (act === "local-remove" && !confirm(a.linked
+  if (act === "local-remove" && !await ask(a.linked
       ? `Take ${a.name} out of Local? Nothing in its folder is touched.`
-      : `Take ${a.name} out of Local, and delete Hoard's copy of it? Your original isn't touched.`)) return;
+      : `Take ${a.name} out of Local, and delete Hoard's copy of it? Your original isn't touched.`, "Take it out")) return;
   const r = await apiPost(act === "local-rescan" ? "/api/local/rescan" : "/api/local/remove",
                           { folder: a.folder, confirm: act === "local-remove" });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
@@ -1472,6 +1538,7 @@ function openLocal(open) {
     const copy = !SETTINGS || SETTINGS.local_copy !== false;
     $(copy ? "#localCopy" : "#localLink").checked = true;
     $("#localMsg").textContent = "";
+    syncBrowse();
   }
   panel.hidden = !show;
   $("#localAdd").setAttribute("aria-expanded", String(show));
@@ -1504,6 +1571,10 @@ function wireLocal() {
   makeWindow($("#localPanel"));
   WINDOWS.localPanel = () => openLocal(false);
   $("#localAdd").addEventListener("click", () => openLocal());
+  $("#localBrowseFolder").addEventListener("click", () => browseInto($("#localPath"), "folder"));
+  $("#localBrowseFile").addEventListener("click", async () => {
+    if (await browseInto($("#localPath"), "file")) $("#localCopy").checked = true;   // a single file can only be copied in
+  });
   $("#localGo").addEventListener("click", addLocal);
   $("#localPath").addEventListener("keydown", e => { if (e.key === "Enter") addLocal(); });
 }
@@ -1512,10 +1583,10 @@ addEventListener("hashchange", () => { readHash(); render(); });   // the Local 
 // issue #82: a copy of a download for you to change, in a folder of its own that Hoard never checks or replaces
 async function editableCopy(a, button) {
   if (!a) return;
-  if (!confirm(`Copy ${a.name} into a folder of its own for you to change?\n\n` +
+  if (!await ask(`Copy ${a.name} into a folder of its own for you to change?\n\n` +
                "Hoard never checks, updates or replaces that copy. Only files that still match what Hoard downloaded " +
                "are copied. Anything you add to the copy later hasn't been checked by Hoard, so be as careful with it as " +
-               "with any download.")) return;
+               "with any download.", "Make the copy")) return;
   button.disabled = true;
   const r = await apiPost("/api/edit-copy", { key: a.tag_key, open: true });
   button.disabled = false;
@@ -1527,8 +1598,8 @@ async function editableCopy(a, button) {
 // issue #81: a download of something removed from the Library can be deleted from disk, after you confirm
 async function deleteFiles(a) {
   if (!a || a.mark !== "removed") return;
-  if (!confirm(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
-               "This can't be undone.")) return;
+  if (!await ask(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
+               "This can't be undone.", "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   closeDetail(); await load();
@@ -1566,6 +1637,17 @@ document.addEventListener("keydown", e => {
 
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h", e.target.offsetHeight + "px")).observe($(".bar"));
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-h", e.target.offsetHeight + "px")).observe($(".shelf"));
+{   // tabs out of sight (a very narrow window) fade at the edge they're beyond, so it shows there are more
+  const seg = $(".shelf .seg");
+  const edges = () => {
+    seg.classList.toggle("more-left", seg.scrollLeft > 2);
+    seg.classList.toggle("more-right", seg.scrollLeft + seg.clientWidth < seg.scrollWidth - 2);
+  };
+  seg.addEventListener("scroll", edges, { passive: true });
+  new ResizeObserver(edges).observe(seg);
+  new MutationObserver(edges).observe(seg, { childList: true });
+  seg.addEventListener("focusin", e => e.target.scrollIntoView({ block: "nearest", inline: "nearest" }));
+}
 /* ---------- how the tag code below finds its way around this page */
 const T = {
   slotKey: "id",
@@ -1703,7 +1785,7 @@ async function tagPanelAction(b) {
   if (act === "unhide") return changeTags({ action: "unhide", name: t });
   if (act === "delete") {
     const n = +b.dataset.count;
-    if (!confirm(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""))) return;
+    if (!await ask(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""), "Delete", true)) return;
     state.tags.delete(t);
     return changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
   }
@@ -1840,13 +1922,25 @@ async function openSettings(open) {
   winNote("settingsPanel", "");
   fillSettings();
 }
+/* ---------- Browse: the system's own folder (or file) picker, in Hoard's window (not in a web browser, where
+   there's no way to ask for one; the path is typed there) */
+const canPick = () => !!(typeof DATA === "object" && DATA && DATA.can_pick);
+function syncBrowse() { for (const b of document.querySelectorAll("[data-browse]")) b.hidden = !canPick(); }
+async function browseInto(input, kind = "folder") {
+  const r = await apiPost("/api/pick", { kind });
+  if (!r.ok) { toast(r.data.error || "The picker didn't open. Type the path instead."); return false; }
+  if (!r.data.path) return false;   // cancelled
+  input.value = r.data.path;
+  return true;
+}
 function fillSettings() {   // the controls, as the settings are now
+  syncBrowse();
   $("#setRoot").value = SETTINGS.root;
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setUpdates").checked = SETTINGS.check_for_updates;
-  $("#setBackground").checked = !!SETTINGS.close_to_background;
+  $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
   $("#backgroundRow").hidden = !DATA.can_background;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
@@ -1913,8 +2007,8 @@ async function checkUpdate() {
 }
 async function installUpdate() {
   if (!UPDATE || !UPDATE.available) return;
-  if (!confirm(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
-               "Your library, settings, sign-ins and downloads stay as they are.")) return;
+  if (!await ask(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
+               "Your library, settings, sign-ins and downloads stay as they are.", "Update")) return;
   const r = await apiPost("/api/update/install");
   if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
@@ -1943,12 +2037,13 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+let dlFade;
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
   $("#dlTitle").textContent = job.running ? (job.task === "check-updates" ? "Checking for updates"
       : job.sync && job.task !== "download" ? "Syncing: reading your stores" : job.sync ? "Syncing: downloading" : "Downloading")
-    : stopped ? "Stopped" : "Finished";
+    : stopped ? "Stopped" : job.error ? "Couldn't finish" : job.partial ? "Finished, with problems" : "Finished";
   const xfer = job.running ? job.transfer : null;   // a file downloading: its bar says it all
   $("#dlMessage").textContent = xfer ? "" : job.message || "";
   $("#dlMessage").hidden = !!xfer;
@@ -1959,6 +2054,13 @@ function showDownload(job) {
   const problems = (!job.running && job.report && job.report.problems) || [];
   $("#dlProblems").hidden = !problems.length;
   $("#dlProblems").innerHTML = problems.map(p => `<li>${esc(p)}</li>`).join("");
+  // Finished, and all went well: it steps out of the way after a moment (Tasks keeps it), unless you're using it
+  clearTimeout(dlFade);
+  if (!job.running && !stopped && !job.error && !job.partial && !problems.length)
+    dlFade = setTimeout(function fade() {
+      const p = $("#dlPanel");
+      if (p.matches(":hover, :focus-within")) dlFade = setTimeout(fade, 2000); else p.hidden = true;
+    }, 8000);
   if ($("#dlReport")) { $("#dlReport").hidden = !!job.running || !(job.error || problems.length); }
 }
 
@@ -2041,10 +2143,44 @@ function applyUi(ui) {   // once, when the page first has its data
   if (tile && typeof setZoom === "function") setZoom(tile);
 }
 function winOpened(el) {   // one panel at a time: the others close as this one opens
+  const from = document.activeElement;
   for (const other of document.querySelectorAll(".win:not([hidden])")) if (other !== el) WINDOWS[other.id]();
   winShade();
   el.scrollTop = 0;
+  // The keyboard goes with it: into the panel now, and back to what opened it when it closes
+  if (from && from !== document.body && !el.contains(from)) el._opener = from.closest(".win") ? from.closest(".win")._opener : from;
+  requestAnimationFrame(() => {
+    if (el.hidden || el.contains(document.activeElement) || document.querySelector("dialog[open]")) return;
+    const first = winFocusables(el).find(n => !n.classList.contains("win-x")) || el.querySelector(".win-x");
+    if (first) first.focus({ preventScroll: true });
+  });
 }
+function winClosed(el) {
+  winShade();
+  const back = el._opener;
+  el._opener = null;
+  const lost = !document.activeElement || document.activeElement === document.body || el.contains(document.activeElement);
+  if (lost && back && back.isConnected && !back.closest(".win[hidden]") && !document.querySelector(".win:not([hidden])"))
+    back.focus({ preventScroll: true });
+}
+const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), " +
+                  "textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])";
+function winFocusables(el) {
+  return [...el.querySelectorAll(FOCUSABLE)].filter(n => n.getClientRects().length && !n.closest("[hidden], [inert]"));
+}
+// Tab stays in the open panel, as it would in a window of its own (the page behind is dimmed, not in use)
+document.addEventListener("keydown", e => {
+  if (e.key !== "Tab" || document.querySelector("dialog[open]")) return;
+  const el = document.querySelector(".win:not([hidden])");
+  if (!el) return;
+  const all = winFocusables(el);
+  if (!all.length) return;
+  const at = all.indexOf(document.activeElement);
+  if (at === -1 || (e.shiftKey && at === 0) || (!e.shiftKey && at === all.length - 1)) {
+    e.preventDefault();
+    (e.shiftKey ? all[all.length - 1] : all[0]).focus();
+  }
+});
 function winShade() {   // the page behind an open panel is dimmed, and a click on it closes the panel
   let shade = document.getElementById("winShade");
   const open = !!document.querySelector(".win:not([hidden])");
@@ -2072,8 +2208,10 @@ function makeWindow(el) {
   bar.append(extra, x);
   el.append(bar, body);
   el.setAttribute("role", "dialog");
+  el.setAttribute("aria-modal", "true");
+  if (title) { title.id = title.id || el.id + "Title"; el.setAttribute("aria-labelledby", title.id); }
   x.addEventListener("click", () => WINDOWS[el.id]());
-  new MutationObserver(() => { if (!el.hidden) winOpened(el); else winShade(); })
+  new MutationObserver(() => { if (!el.hidden) winOpened(el); else winClosed(el); })
     .observe(el, { attributes: true, attributeFilter: ["hidden"] });
   if (!el.hidden) winOpened(el);
 }
@@ -2142,7 +2280,7 @@ function settingsPart(el) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
     case "setUpdates": return { check_for_updates: el.checked };
-    case "setBackground": return { close_to_background: el.checked };
+    case "setBackground": return { close_to_taskbar: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setAutoSync": return { auto_sync_hours: Number(el.value) };
     case "setCheckDays": return { integrity_check_days: Number(el.value) };
@@ -2180,6 +2318,9 @@ function autosave(el) {
 function wireAutosave() {
   $("#setBrowser").addEventListener("change", showBrowserInUse);   // at once, before it's saved
   $("#settingsPanel").addEventListener("change", e => { if (e.target.matches("input, select, textarea")) autosave(e.target); });
+  $("#setRootBrowse").addEventListener("click", async () => {
+    if (SETTINGS && await browseInto($("#setRoot"))) autosave($("#setRoot"));
+  });
   $("#setRootDefault").addEventListener("click", () => {
     if (!SETTINGS) return;
     $("#setRoot").value = SETTINGS.default_root;
@@ -2244,7 +2385,7 @@ async function loadTasks() {
   } catch (e) { /* Hoard stopped: the page says so elsewhere */ }
   tasksTimer = setTimeout(loadTasks, 1500);
 }
-const OUTCOMES = { done: "Done", failed: "Failed", stopped: "Stopped" };
+const OUTCOMES = { done: "Done", partial: "Partly done", failed: "Failed", stopped: "Stopped" };
 const STOPPABLE = ["download", "check-updates", "sync"];
 function whenDone(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
 function tookTime(a, b) {
@@ -2347,7 +2488,7 @@ function wireProjects() {
       catch (err) { box.querySelector("textarea").select(); document.execCommand("copy"); }
       toast("Copied the credits.");
     } else if (b.dataset.proj === "forget") {
-      if (!confirm(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`)) return;
+      if (!await ask(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`, "Forget")) return;
       await apiPost("/api/projects/forget", { id: p.id });
       loadProjects();
     }
@@ -2362,7 +2503,7 @@ function wireTasks() {
     if (act === "stop") { const r = await apiPost("/api/cancel"); if (!r.data.ok) toast("That job can't be stopped part-way."); }
     else if (act === "remove") await apiPost("/api/queue/remove", { id: b.dataset.id });
     else if (act === "clear-queue") await apiPost("/api/queue/clear");
-    else if (act === "clear-history") { if (!confirm("Clear the list of finished tasks?")) return; await apiPost("/api/tasks/clear"); }
+    else if (act === "clear-history") { if (!await ask("Clear the list of finished tasks?", "Clear")) return; await apiPost("/api/tasks/clear"); }
     tasksShown = ""; loadTasks();
   });
   const pill = $("#job");

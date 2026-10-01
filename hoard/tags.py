@@ -59,7 +59,7 @@ def tag_key(store: str, name: str) -> str:
     if len(key) < 4:
         key = re.sub(r"[\W_]+", "", s)
     if not key:  # a name made only of symbols
-        key = "x" + hashlib.sha1(s.encode()).hexdigest()[:16]
+        key = "x" + hashlib.sha1(s.encode(), usedforsecurity=False).hexdigest()[:16]
     return f"{store.lower()}:{key[:300]}"
 
 

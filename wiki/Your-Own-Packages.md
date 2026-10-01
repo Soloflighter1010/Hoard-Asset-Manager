@@ -6,7 +6,8 @@ Unity like your downloads.
 
 Open **Local** (in the bar at the top, or the **Local** tab in Downloads) and choose **Add your own**:
 
-1. Enter the folder or file on this computer, as a full path (for example `D:\Packages\My Textures`).
+1. Choose **Folder…** or **File…** to pick it, or type its full path (for example `D:\Packages\My Textures`). (In a
+   web browser rather than Hoard's own window, there's no picker: type the path.)
 2. Give it a name (the folder's name if you leave it empty), who made it (**You** unless you say), and, if you
    like, who or what it's for: a commission, a project, a friend.
 3. Choose how Hoard keeps it. Hoard offers what you chose last time.
@@ -18,7 +19,8 @@ Open **Local** (in the bar at the top, or the **Local** tab in Downloads) and ch
 | Routine checks ([Checking your downloads](Downloads#checking-your-downloads)) | Checked like a download | Left alone: it's your working folder |
 | What Hoard writes there | Its copy, and `asset.json` beside it | Nothing, ever |
 | **Remove from Local** | Deletes Hoard's copy (only the files it copied) | Only forgets it; nothing in the folder is touched |
-| Disk space | Takes as much again | None |
+| Its picture | One of its images (one named like a preview first) | A copy of one of its images in `Local`, made again on **Rescan** |
+| Disk space | Takes as much again | Only that picture |
 
 A single file can only be copied in; to list something where it is, choose its folder. Links (shortcuts) inside
 a folder are left out, and a folder that is itself a link can't be listed.
