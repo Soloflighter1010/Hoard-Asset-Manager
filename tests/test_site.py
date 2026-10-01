@@ -68,6 +68,19 @@ class TheSite(unittest.TestCase):
                          "only asks GitHub which files the latest release has")
         self.assertNotIn("innerHTML", js, "nothing from GitHub's answer becomes page markup")
 
+    def test_the_glow_is_the_apps(self):
+        """The app's glow behind the page: every store's colour, as the app has them, decorative, and still for
+        anyone who asks their system for less motion."""
+        css = (SITE / "styles.css").read_text("utf-8")
+        app = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
+        for store in ("booth", "gumroad", "jinxxy", "payhip", "itch"):
+            for colour in re.findall(rf"--{store}: (#[0-9A-F]{{6}})", app):
+                self.assertIn(f"--{store}: {colour}", css, f"{store}'s colour matches the app's")
+            self.assertIn(f"var(--{store}) var(--glow)", css)
+        self.assertIn('<div class="glow" aria-hidden="true">', self.html)
+        self.assertRegex(css, r"@media \(prefers-reduced-motion: reduce\) \{ \.glow-in \{ animation: none; \} \}")
+        self.assertRegex(css, r"\.glow \{[^}]*pointer-events: none")
+
     def test_downloads_work_without_its_script(self):
         buttons = re.findall(r'<a class="button[^"]*" data-file="([^"]+)" href="([^"]+)"', self.html)
         self.assertEqual({f for f, _ in buttons}, {"Hoard-Setup-", "-macos-apple-silicon.pkg", "-macos-intel.pkg", "-linux-x86_64.flatpak"})

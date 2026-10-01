@@ -6,6 +6,8 @@
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
   --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00;
+  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A;
+  --glow: 48%;
   --display: "Dela Gothic One", "Segoe UI Black", system-ui, sans-serif;
   --body: "Zen Maru Gothic", "Segoe UI", system-ui, sans-serif;
   --radius: 14px;
@@ -15,6 +17,8 @@
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
     --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF;
+    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35;
+    --glow: 32%;
     color-scheme: light;
   }
 }
@@ -35,6 +39,32 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .small { font-size: .9rem; color: var(--dust); }
 .skip { position: absolute; left: -999px; }
 .skip:focus { left: 16px; top: 12px; background: var(--ledge); padding: 8px 12px; z-index: 2; }
+
+/* The glow, as in the app's library when it shows every store: each store's colour rising from the bottom of the
+   window, in turn along twice its width, drifting left and around again (hoard/web/library.html, setGlow). */
+.glow { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.glow-in {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 200%; animation: glow-flow 48s linear infinite;
+  background-image: radial-gradient(ellipse 120% 95% at 25% 115%, rgb(240 180 41 / .22) 0%, transparent 75%);
+  background-image:
+    radial-gradient(ellipse 22% 95% at 5% 115%, color-mix(in srgb, var(--booth) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 15% 115%, color-mix(in srgb, var(--gumroad) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 25% 115%, color-mix(in srgb, var(--jinxxy) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 35% 115%, color-mix(in srgb, var(--payhip) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 45% 115%, color-mix(in srgb, var(--itch) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 55% 115%, color-mix(in srgb, var(--booth) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 65% 115%, color-mix(in srgb, var(--gumroad) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 75% 115%, color-mix(in srgb, var(--jinxxy) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 85% 115%, color-mix(in srgb, var(--payhip) var(--glow), transparent) 0%, transparent 75%),
+    radial-gradient(ellipse 22% 95% at 95% 115%, color-mix(in srgb, var(--itch) var(--glow), transparent) 0%, transparent 75%);
+}
+@keyframes glow-flow { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .glow-in { animation: none; } }
+
+/* each store in its colour, as the app marks them */
+.store { font-weight: 700; color: var(--c); }
+.booth { --c: var(--booth); } .gumroad { --c: var(--gumroad); } .jinxxy { --c: var(--jinxxy); }
+.payhip { --c: var(--payhip); } .itch { --c: var(--itch); }
 
 .bar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
