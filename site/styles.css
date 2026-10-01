@@ -87,6 +87,13 @@ section:first-child { border-top: 0; }
 .shot img { width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--seam);
             box-shadow: 0 24px 60px rgb(0 0 0 / .35); }
 .caption { margin-top: 10px; }
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin: 24px 0; }
+.gallery figure { margin: 0; }
+.gallery img { width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--seam);
+               box-shadow: 0 16px 40px rgb(0 0 0 / .3); }
+.gallery figcaption { margin-top: 10px; color: var(--dust); }
+.gallery figcaption strong { color: var(--bone); }
+@media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } }
 
 .button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px;

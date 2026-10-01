@@ -35,6 +35,7 @@ sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, jobs, library, projects, server  # noqa: E402
 from hoard.paths import THUMB_DIR  # noqa: E402
+from hoard.safety import safe_name  # noqa: E402
 from hoard.tags import TagStore, tag_key  # noqa: E402
 
 STORES = ("booth", "gumroad", "jinxxy", "payhip", "itch")
@@ -90,17 +91,18 @@ def build(items: list[dict]) -> tuple[Path, dict]:
         folder = store_dir / rec["folder"]
         folder.mkdir(parents=True, exist_ok=True)
         shutil.copy(p["picture"], folder / f"_thumbnail{p['picture'].suffix.lower()}")
-        for k, (fname, size) in enumerate(((f"{p['name']}.unitypackage", 48_000_000 + n * 3_100_000),
+        for k, (fname, size) in enumerate(((f"{safe_name(p['name'])}.unitypackage", 48_000_000 + n * 3_100_000),
                                            ("Textures.zip", 12_000_000 + n * 700_000))):
             with open(folder / fname, "wb") as fh:
                 fh.truncate(size)   # sparse: the size shows, nothing is written
             rec["files"][f"f{k}"] = {"path": fname, "size": size}
         man.save()
     cfg = {**config.load_config(), "root": str(root), "setup_done": True}
-    for p in items[:2]:   # your own: a texture set, copied into Local
-        own = WORK / "My Texture Set"
-        own.mkdir(exist_ok=True)
-        shutil.copy(p["picture"], own / f"preview-{p['id']}{p['picture'].suffix.lower()}")
+    own = WORK / "My Texture Set"   # your own: a texture set, copied into Local (no one else's picture)
+    (own / "Textures").mkdir(parents=True)
+    with open(own / "My Texture Set.unitypackage", "wb") as fh:
+        fh.truncate(18_500_000)
+    (own / "Textures" / "README.txt").write_text("Fabric and metal textures, 2048px.", "utf-8")
     from hoard import local
     local.add(cfg, root, str(WORK / "My Texture Set"), note="A commission", copy=True)
     downloader.build_catalog(cfg, root)
@@ -120,6 +122,10 @@ def build(items: list[dict]) -> tuple[Path, dict]:
 def shoot(items: list[dict], out: Path) -> None:
     from playwright.sync_api import sync_playwright
     root, made = build(items)
+    # what a usual computer says (this one may have no keyring, and its folders are made up for the pictures)
+    server.signin_protection = lambda cfg: "encrypted by your Windows account"
+    from pathlib import PureWindowsPath
+    server.signins_root = lambda cfg: PureWindowsPath(r"C:\Users\you\AppData\Local\Hoard\sign-ins")
     srv = server.AppServer(("127.0.0.1", 0), made["cfg"], lan=False)
     now = made["now"]
     with srv.lib.lock:   # in memory only
@@ -149,6 +155,9 @@ def shoot(items: list[dict], out: Path) -> None:
             page.wait_for_timeout(1200)   # pictures and the glow
 
             def snap(name, settle=500):
+                page.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
+                page.evaluate("v => { const r = document.querySelector('#setRoot'); if (r) r.value = v; }",
+                              "C:\\Users\\you\\Documents\\Hoard")   # shown, never saved
                 page.wait_for_timeout(settle)
                 path = out / f"{name}-{theme}.png"
                 page.screenshot(path=str(path))

@@ -26,6 +26,32 @@ files? Hoard answers those without opening four tabs.
   creators update their files. (Payhip is listed, not downloaded: see below.)
 - One app, one set of sign-ins, one set of tags, and it works offline.
 
+<p align="center">
+<picture>
+  <source srcset="site/img/library-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/library-dark.webp" width="49%" alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, tags and creators.">
+</picture>
+<picture>
+  <source srcset="site/img/downloads-details-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoard's Downloads page, with a product's details open beside the tiles: its store, the Unity project that uses it, and buttons to open its folder or make an editable copy.">
+</picture>
+<picture>
+  <source srcset="site/img/projects-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/projects-dark.webp" width="49%" alt="Hoard's Projects panel: a Unity project's assets, each marked in the project or partly in it, and its credits list.">
+</picture>
+<picture>
+  <source srcset="site/img/local-add-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/local-add-dark.webp" width="49%" alt="The Add to Local panel: a folder or file, its name, who made it and who it's for, and a choice to copy it into Hoard or list it where it is.">
+</picture>
+<picture>
+  <source srcset="site/img/stores-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/stores-dark.webp" width="49%" alt="Hoard's Stores panel: Booth, Gumroad, Jinxxy, Payhip and itch.io, each with sign in, refresh and download.">
+</picture>
+</p>
+
+<sub>Library, Downloads, Projects, your own packages and Stores, with real products from the maintainer's own library
+by 3Rr0r_418, Electro's Assets for VRChat, Hecka.Space, Mofcosmos, Morghus, nyakomake, PACIFIA Virtual Shop, Perfecto, Pointless Creations, Shep Shep, SherbDrgn, SOShop, tofumarket, udon-cat-works, Violentpainter, wispywoo, Wmup, Zekk, ろじらぼ and 雪械重工. Thank you for making them.</sub>
+
 Guides for everything, from installing to fixing a problem, are in the
 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**.
 

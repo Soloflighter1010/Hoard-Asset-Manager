@@ -200,6 +200,7 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 
 ### Fixed
 
+- Downloads' tiles no longer crowd the heading above them, which they cut into when no filter was chosen.
 - Sign-ins kept on another drive (`advanced_signin_location`) that wasn't plugged in when Hoard started made every
   store's list vanish, as if you'd signed out. Hoard now leaves the lists alone when that whole folder is missing.
 - "Hoard is busy" just after starting: checking the catalog's seal no longer holds up the first thing you choose.
