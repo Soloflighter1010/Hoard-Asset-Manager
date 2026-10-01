@@ -16,6 +16,7 @@ DEFAULT_CONFIG = {
     "setup_done": False,           # set once the onboarding assistant has been completed (or skipped)
     "root": "",                    # where downloads go; "" = a Hoard folder in Documents
     "edits_root": "",              # where editable copies go (issue #82); "" = "Hoard Edits" beside the downloads
+    "local_copy": True,            # Local (issue #80): copy what you add into Hoard (False: list it where it is); your last choice
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
     "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "chromium", "msedge" or "chrome"
     "profile_dir": "",             # "" = Hoard's private sign-in folder (one profile per store)

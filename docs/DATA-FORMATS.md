@@ -62,7 +62,7 @@ An `<asset>`:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `store` | string | `Booth`, `Gumroad`, `Jinxxy`, `Payhip` or `Itch` (itch.io). Skip an entry with a store you don't know: later versions may add stores |
+| `store` | string | `Booth`, `Gumroad`, `Jinxxy`, `Payhip`, `Itch` (itch.io) or `Local` (your own packages, from 3.0). Skip an entry with a store you don't know: later versions may add stores |
 | `name` | string | Product name |
 | `creator` | string | Creator or shop name |
 | `folder` | string | The product's folder, e.g. `Booth/Kitsu Studio/Rusk Avatar Base` |
@@ -72,6 +72,8 @@ An `<asset>`:
 | `files` | list of strings | Downloaded files, relative to `folder` |
 | `tags` | list of strings | Your tags |
 | `suggested_tags` | list of strings | Words shared by several asset names |
+| `location` | string, only on some `Local` entries | A Local item listed where it is: its own folder, as a full path written as the system writes it. `files` are relative to it, and `folder` (`Local/_linked/<id>`) is only a name. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
+| `note` | string, only on `Local` entries | Who or what it's for, as you wrote it |
 
 ## `asset.json` (in each product's folder)
 
@@ -114,6 +116,9 @@ account, Hoard check every entry when they read it, and a damaged copy is kept a
 `tags.damaged-<date>.json` rather than overwritten.
 
 ## Version history
+
+- **3**, still, in 3.0: `Local` entries, with `location` and `note`. Readers that skip stores they don't know
+  carry on as before.
 
 - **3**, still, in 2.5.0: a new store, `Itch` (itch.io). Nothing else changed, so the version didn't; readers
   that skip stores they don't know carry on as before.

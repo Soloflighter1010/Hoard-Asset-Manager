@@ -2124,8 +2124,10 @@ class StoreTables(unittest.TestCase):
         for name, table in (("browser.STORE_SITES", browser.STORE_SITES), ("browser.STORE_ORIGINS", browser.STORE_ORIGINS),
                             ("browser.STORE_ACCOUNT_PAGES", browser.STORE_ACCOUNT_PAGES), ("net.STORE_HOSTS", net.STORE_HOSTS),
                             ("safety.STORE_LINK_SITES", safety.STORE_LINK_SITES), ("library.FETCHERS", library.FETCHERS),
-                            ("downloader.STORE_DIRS", downloader.STORE_DIRS)):
+                            ("downloader.STORE_DIRS", {s: d for s, d in downloader.STORE_DIRS.items() if s != "local"})):
             self.assertEqual(set(table), stores, name)
+        self.assertEqual(downloader.STORE_DIRS["local"], "Local", "your own packages (issue #80): a folder, not a store")
+        self.assertTrue(tags.TAG_KEY_RX.match("local:thing"), "and tagged like the rest")
         for s in stores:
             self.assertIn(s, config.DEFAULT_CONFIG)
             self.assertTrue(tags.TAG_KEY_RX.match(f"{s}:thing"), s)
@@ -2154,7 +2156,7 @@ class StoreTables(unittest.TestCase):
                          {downloader.STORE_DIRS[s]: safety.STORE_LINK_SITES[s][0] for s in stores})
         window = (unity / "HoardWindow.cs").read_text("utf-8")
         self.assertEqual(re.findall(r'"(\w+)"', re.search(r"StoreNames = \{(.*?)\};", window).group(1)),
-                         [downloader.STORE_DIRS[s] for s in library.STORES])
+                         [downloader.STORE_DIRS[s] for s in library.STORES] + ["Local"])   # your own (issue #80)
 
 
 class CommandLine(unittest.TestCase):

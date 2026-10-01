@@ -158,7 +158,7 @@ class Schedule:
 
 TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
-              "verify": "Check downloads"}
+              "verify": "Check downloads", "add-local": "Add to Local"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -221,13 +221,14 @@ class Jobs:
 
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
-              items: list[str] | None = None) -> str | None:
+              items: list[str] | None = None, local: dict | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
         download is for, when it's for chosen ones, so it can go straight to them."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
-                "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None}
+                "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
+                "local": dict(local) if local else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -290,6 +291,8 @@ class Jobs:
             target = self._install_browser
         elif task == "verify":
             target = self._verify
+        elif task == "add-local":
+            target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
         elif task == "login":
             target = self._login_then_refresh
         elif task == "logout":
@@ -417,7 +420,22 @@ class Jobs:
         self._moved = time.monotonic()
         self.state["message"] = line
 
-    def _verify(self, stores: list[str]) -> None:
+    def _add_local(self, what: dict) -> None:
+        """Add a folder or file of your own to Local (issue #80): copied in, or listed where it is."""
+        from .config import root_dir
+        from . import local
+        self._set(task="add-local", message="Adding to Local")
+        try:
+            rec = local.add(self.cfg, root_dir(self.cfg), what.get("path", ""), what.get("name", ""), what.get("creator", ""),
+                            what.get("note", ""), bool(what.get("copy", True)), progress=self._quietly)
+        except ValueError as e:
+            self._set(message=str(e), error=str(e))
+            return
+        self._set(message=f"Added {rec['name']} to Local: {len(rec['files']):,} files"
+                          + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
+        self.on_download_done()
+
+
         """Check the downloads are as Hoard downloaded them (issue #83), naming any file that isn't."""
         from .config import root_dir
         from .downloader import check_integrity, integrity_summary

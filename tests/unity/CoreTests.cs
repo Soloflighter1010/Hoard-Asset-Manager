@@ -223,10 +223,15 @@ public static class CoreTests
         var linked = cat.Assets.Find(a => a.Name == "Linked Away");
         Check("never through a planted link", linked != null && cat.FilePath(linked, "secret.txt") == null && cat.FolderPath(linked) == null);
         Check("missing file is null", good != null && cat.FilePath(good, "nope.zip") == null);
+        var mine = cat.Assets.Find(a => a.Name == "My Textures");
+        Check("a Local item listed where it is", mine != null && mine.Store == "Local" && mine.Note == "A commission"
+              && cat.FilePath(mine, "Mine.unitypackage") != null && cat.FolderPath(mine) == Path.GetFullPath(Path.Combine(dir, "mine"))
+              && mine.PackagePaths.Count == 1 && mine.ThumbPath != null, mine == null ? "missing" : mine.Location ?? "no place");
 
         var edited = HoardCatalog.Load(Path.Combine(dir, "root_edited"), key);
         Check("edited catalog: seal says so", edited.SealStatus == SealState.Changed, edited.SealStatus.ToString());
         Check("edited catalog: no links trusted", edited.Assets.TrueForAll(a => a.Url == null));
+        Check("edited catalog: no Local folder outside trusted", !edited.Assets.Exists(a => a.Location != null));
 
         // path, link and text rules
         foreach (string p in new[] { "../x", "/abs", "a//b", "a/./b", "C:/x", "a\\b", "a:b", "a/b?", "a\u202eb" })

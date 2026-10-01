@@ -11,7 +11,7 @@ releasing" notes in this file; delete this file. It uses only the Markdown the w
 
 Before releasing, check:
 - Code signing: keep "Signed for Windows" only if the release's Windows job signed (Azure Artifact Signing set up).
-- Hoard for Unity 0.3.1: keep it in its section only if 0.3.1 is out on VCC by then (Build Release, tag unity-v0.3.1).
+- Hoard for Unity: keep each version in its section only if it's out on VCC by then (Build Release, tags unity-v0.3.1, unity-v0.4.0).
 - Add anything merged after this draft was written.
 -->
 
@@ -108,6 +108,10 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **Remove a download completely** (issue #81). Removing something you've downloaded asks whether to delete its
   downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is also in Removed, in
   the Library and in Downloads. Only the files Hoard downloaded go; anything of your own in the folder stays.
+- **Local: your own packages** (issue #80). Packages you make, to move textures and materials between projects or
+  to hand to commissioners, live beside what you bought: **Add your own** takes a folder or file on this computer,
+  with who it's for. You choose each time whether Hoard copies it in (checked like a download) or lists it where
+  it is (never written to; **Rescan** picks up changes). Tagged, searched and imported into Unity like the rest.
 
 ### Downloads you can leave running
 
@@ -199,7 +203,7 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - The pages' scripts run in strict mode again.
 - A PIN test could fail when its digits happened to appear inside a random hash.
 
-### Hoard for Unity 0.3.0 and 0.3.1
+### Hoard for Unity 0.3.0 to 0.4.0
 
 Released alongside, through VCC (Hoard's listing:
 https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
@@ -211,6 +215,7 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 - **Animated pictures play** in the list and the details. Unity can't read GIFs, so the window decodes them itself.
 - **A picture for more products:** when a product's saved picture is a kind Unity can't show (WebP or AVIF), the
   window uses one of the product's own images instead.
+- **Your own packages** from Hoard's Local are listed and imported, with who they're for (0.4.0).
 
 ### A website, and thanks
 

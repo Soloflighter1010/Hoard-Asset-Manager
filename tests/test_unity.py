@@ -74,10 +74,19 @@ def build_material(d: Path) -> None:
     good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"]),
             asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
             asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"]),
-            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch")]
+            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch"),
+            # your own, listed where it is (issue #80): a folder outside the downloads, named by the sealed catalog
+            asset("My Textures", "Local/_linked/local-1", None, ["Mine.unitypackage", "sub/skin.png"], store="Local",
+                  location=os.path.normpath(str(d / "mine")), note="A commission")]
+    mine = d / "mine"
+    (mine / "sub").mkdir(parents=True)
+    (mine / "Mine.unitypackage").write_bytes(b"x")
+    (mine / "sub" / "skin.png").write_bytes(b"\x89PNG")
     bad = [asset("Escaping", "../outside", None, []), asset("Absolute", "/etc", None, []),
            asset("Hidden \u202e name", "Booth/x", None, []), {**asset("Wrong Store", "Booth/y", None, []), "store": "Steam"},
-           asset("", "Booth/z", None, []), "not an object"]
+           asset("", "Booth/z", None, []), "not an object",
+           asset("Relative Place", "Local/_linked/local-2", None, [], store="Local", location="mine"),
+           asset("Placed Store Item", "Booth/w", None, [], location=os.path.normpath(str(d / "mine")))]
     catalog = {"format": "hoard-catalog", "version": 3, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
     (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
     (d / "good_names.txt").write_text("|".join(a["name"] for a in good))

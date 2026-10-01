@@ -46,7 +46,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/app/close", "/api/open-logs",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
-           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify")
+           "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
+           "/api/local/add", "/api/local/rescan", "/api/local/remove")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -134,6 +135,25 @@ def ui_settings(cfg: dict) -> dict:
     return out
 
 
+def open_target(cfg: dict, rel: str) -> Path | None:
+    """What Open folder or Show in folder means: a path inside the downloads folder, or inside a Local item listed
+    where it is (issue #80), named by its place in the catalog ("Local/_linked/<key>/...")."""
+    root = root_dir(cfg)
+    parts = rel.replace("\\", "/").split("/")
+    if len(parts) >= 3 and parts[0] == "Local" and parts[1] == "_linked":
+        from . import local
+        found = local.by_folder(root, "/".join(parts[:3]))
+        if not found or not found[1].get("location"):
+            return None
+        from .downloader import record_folder
+        try:
+            folder = record_folder(local.local_dir(root), found[1])
+        except UnsafePath:
+            return None
+        return safe_join(folder, "/".join(parts[3:])) if len(parts) > 3 else folder
+    return safe_join(root, rel)
+
+
 def integrity_view(cfg: dict) -> dict:
     """The last check of the downloads (issue #83), for the Downloads page: when, and how many files were fine,
     changed or missing. Counts only: which files is in the check's log in Tasks, where hidden names are masked."""
@@ -163,6 +183,7 @@ def public_settings(cfg: dict) -> dict:
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
         "integrity_check_days": check_days(cfg),
+        "local_copy": cfg.get("local_copy", True) is not False,
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
@@ -610,6 +631,47 @@ class Handler(BaseHTTPRequestHandler):
         srv.forget_index()
         return self._json({"ok": True})
 
+    def _local(self, path: str, body: dict):
+        """Local: add a folder or file of your own (a task, since copying can take a while), rescan one listed where
+        it is, or take one out."""
+        from . import local
+        srv = self.server
+        if path == "/api/local/add":
+            copy = body.get("copy") is not False
+            what = {"path": str(body.get("path") or "")[:1000], "name": str(body.get("name") or "")[:300],
+                    "creator": str(body.get("creator") or "")[:200], "note": str(body.get("note") or "")[:300], "copy": copy}
+            try:
+                local.check_source(root_dir(srv.cfg), what["path"], copy)   # said straight away, not in Tasks
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            if srv.cfg.get("local_copy", True) != copy:   # the choice you made last time is offered next time
+                srv.cfg["local_copy"] = copy
+                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            started = srv.jobs.start("add-local", [], local=what)
+            if not started:
+                return self._json({"error": "That's already waiting its turn."}, 409)
+            return self._json({"ok": True, "queued": started == "queued"})
+        found = local.by_folder(root_dir(srv.cfg), str(body.get("folder") or "")[:1000])
+        if not found:
+            return self._json({"error": "That isn't in Local any more."}, 404)
+        if path == "/api/local/remove" and body.get("confirm") is not True:
+            return self._json({"error": "Confirm first."}, 400)
+        if not srv.jobs.busy.acquire(blocking=False):
+            return self._json({"error": "Wait for the current task to finish, then try again."}, 409)
+        try:
+            if path == "/api/local/rescan":
+                rec = local.rescan(srv.cfg, root_dir(srv.cfg), found[0])
+                done = {"files": len(rec["files"])}
+            else:
+                done = local.remove(srv.cfg, root_dir(srv.cfg), found[0])
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        finally:
+            srv.jobs.busy.release()
+            srv.jobs.kick()
+        srv.forget_index()
+        return self._json({"ok": True, **done})
+
     def _delete_files(self, body: dict):
         """Delete the downloaded files of products you removed from your library. Only removed ones (so nothing in
         your library loses its files by a slip), only when confirmed, and not while a job could be writing them."""
@@ -773,7 +835,7 @@ class Handler(BaseHTTPRequestHandler):
                 result["opened_in"] = None
             return self._json(result)
         if path == "/api/open":
-            target = safe_join(root_dir(srv.cfg), str(body.get("path", "")))
+            target = open_target(srv.cfg, str(body.get("path", "")))
             if not target or not target.exists():
                 return self._json({"error": "That file or folder isn't on disk anymore."}, 404)
             try:
@@ -815,6 +877,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path.startswith("/api/local/"):   # your own packages (issue #80)
+            return self._local(path, body)
         if path == "/api/verify":   # check the downloads now (issue #83), after anything already running
             started = srv.jobs.start("verify", [])
             if not started:

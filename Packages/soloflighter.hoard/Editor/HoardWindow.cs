@@ -11,7 +11,7 @@ namespace SoloFlighter.Hoard.Editor
     public sealed class HoardWindow : EditorWindow
     {
         const string RootPref = "SoloFlighter.Hoard.DownloadsFolder";
-        static readonly string[] StoreNames = { "All stores", "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch" };
+        static readonly string[] StoreNames = { "All stores", "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local" };
         static readonly string[] StoreLabels = Array.ConvertAll(StoreNames, s => HoardCatalog.StoreLabel(s));
 
         const float RowHeight = 52;
@@ -336,6 +336,7 @@ namespace SoloFlighter.Hoard.Editor
             }
             GUILayout.Label(a.Name, EditorStyles.largeLabel);
             GUILayout.Label("by " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store) + (a.Variants != null ? "  ·  " + a.Variants : ""), EditorStyles.label);
+            if (a.Note != null) GUILayout.Label("For " + a.Note, EditorStyles.miniLabel);
             if (a.Tags.Count > 0) GUILayout.Label("Tags: " + string.Join(", ", a.Tags), EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.Space();
 
