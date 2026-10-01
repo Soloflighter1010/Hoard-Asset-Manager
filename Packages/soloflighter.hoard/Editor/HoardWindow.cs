@@ -36,6 +36,9 @@ namespace SoloFlighter.Hoard.Editor
         Vector2 listScroll, detailScroll;
         string importing;           // the file being imported, until Unity says it's done
         HoardAsset importingAsset;
+        bool reportDue;             // what this project uses has changed: tell Hoard's Projects view (issue #86)
+        double reportAfter;
+        string lastReport;
 
         [MenuItem("Window/Hoard")]
         public static void Open()
@@ -112,6 +115,7 @@ namespace SoloFlighter.Hoard.Editor
                 packages.Want(all);
                 Filter();
                 Repaint();
+                ReportSoon();
             }
             fresh.Clear();
             if (packages != null && packages.TakeChanges(fresh))
@@ -123,7 +127,11 @@ namespace SoloFlighter.Hoard.Editor
                 }
                 if (inProjectOnly) Filter();
                 Repaint();
+                ReportSoon();
             }
+            if (reportDue && catalog != null && packages != null && packages.Waiting == 0
+                && EditorApplication.timeSinceStartup >= reportAfter)
+                Report();
             if (thumbs.Pump()) Repaint();
             else if (thumbs.Animating && EditorApplication.timeSinceStartup - animatedAt > 1.0 / 30)
             {
@@ -134,7 +142,49 @@ namespace SoloFlighter.Hoard.Editor
 
         double animatedAt;
 
-        void OnProjectChanged() { packages.ProjectChanged(); statusOf.Clear(); if (inProjectOnly) Filter(); Repaint(); }
+        void OnProjectChanged() { packages.ProjectChanged(); statusOf.Clear(); if (inProjectOnly) Filter(); Repaint(); ReportSoon(); }
+
+        /// <summary>Tell Hoard what this project uses, a moment after the last change (once its packages are read).</summary>
+        public void ReportSoon()
+        {
+            reportDue = true;
+            reportAfter = EditorApplication.timeSinceStartup + 3;
+        }
+
+        /// <summary>Hoard's Projects view (issue #86): every product in this project, and how much of it, with the credits
+        /// settings, written to projects/ in Hoard's own folder. Written when it first settles in a session (so Hoard
+        /// knows when you last had the project open), and after that only when something in it changed.</summary>
+        void Report()
+        {
+            reportDue = false;
+            if (catalog.Problem != null) return;   // no Hoard library here (yet): nothing to tell it
+            log = ImportLog.Read();
+            statusOf.Clear();
+            var used = new List<ProjectAsset>();
+            foreach (var a in catalog.Assets)
+            {
+                var s = ProjectStatus(a);
+                bool logged = s == InProject.Partly && !a.PackagePaths.Exists(p => packages.Status(p) == InProject.Partly);
+                if (s >= InProject.Partly)
+                    used.Add(new ProjectAsset { Store = a.Store, Name = a.Name, Creator = a.Creator, Folder = a.Folder, Url = a.Url,
+                                                Status = s == InProject.Yes ? "yes" : logged ? "imported" : "partly" });
+            }
+            string project = Directory.GetCurrentDirectory();
+            string name = string.IsNullOrWhiteSpace(PlayerSettings.productName) ? Path.GetFileName(project) : PlayerSettings.productName;
+            var credits = CreditsFile.Load(CreditsWindow.SettingsFile);
+            string body = System.Text.Encoding.UTF8.GetString(ProjectReport.Build(project, name, Application.unityVersion, "", used, credits));
+            if (body == lastReport) return;
+            try
+            {
+                ProjectReport.Write(ProjectReport.FileFor(HoardLocation.DataDir(), project),
+                                    ProjectReport.Build(project, name, Application.unityVersion, DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'+00:00'", System.Globalization.CultureInfo.InvariantCulture), used, credits));
+                lastReport = body;
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                Debug.LogWarning("Hoard: couldn't tell Hoard what this project uses: " + e.Message);
+            }
+        }
 
         void OnImportDone(string packageName)
         {
@@ -154,6 +204,7 @@ namespace SoloFlighter.Hoard.Editor
             statusOf.Clear();
             Filter();
             Repaint();
+            ReportSoon();
         }
 
         void OnImportFailed(string packageName, string error)

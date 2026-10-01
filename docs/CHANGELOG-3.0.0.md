@@ -112,6 +112,10 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   to hand to commissioners, live beside what you bought: **Add your own** takes a folder or file on this computer,
   with who it's for. You choose each time whether Hoard copies it in (checked like a download) or lists it where
   it is (never written to; **Rescan** picks up changes). Tagged, searched and imported into Unity like the rest.
+- **Projects** (issue #86). Every Unity project you open Hoard's window in (Hoard for Unity 0.4.0) shows up under
+  **Projects**: each product it uses, all of it or part, which have updates waiting, and its credits list (the
+  same one the Unity window makes, with your changes there), ready to copy in any style. Downloads says which
+  projects use each product.
 
 ### Downloads you can leave running
 
@@ -216,6 +220,7 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 - **A picture for more products:** when a product's saved picture is a kind Unity can't show (WebP or AVIF), the
   window uses one of the product's own images instead.
 - **Your own packages** from Hoard's Local are listed and imported, with who they're for (0.4.0).
+- **Projects in Hoard** (issue #86): the window tells Hoard what each project uses (0.4.0).
 
 ### A website, and thanks
 

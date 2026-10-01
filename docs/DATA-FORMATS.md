@@ -115,6 +115,24 @@ This one belongs to Hoard. Don't write to it; use the Tags panel. It's private t
 account, Hoard check every entry when they read it, and a damaged copy is kept as
 `tags.damaged-<date>.json` rather than overwritten.
 
+## `projects/<id>.json` (in Hoard's app-data folder)
+
+Written by Hoard for Unity (0.4.0 and newer), one per Unity project, for Hoard's **Projects** (issue #86). `<id>` is
+the first 16 hex digits of the SHA-256 of the project's full path. Hoard reads every field as untrusted: it checks
+each one as it checks `catalog.json` entries, and leaves out what doesn't pass.
+
+```json
+{"format": "hoard-project", "version": 1, "name": "My Avatar", "path": "C:\\Unity\\My Avatar", "unity": "2022.3.22f1",
+ "updated": "2026-10-01T12:00:00+00:00",
+ "assets": [{"store": "Booth", "name": "...", "creator": "...", "folder": "Booth/...", "url": "https://booth.pm/...",
+             "status": "yes"}],
+ "credits": {"title": "Assets used", "style": "List", "left_out": ["Booth/<name>"],
+             "added": [{"name": "...", "creator": "...", "url": "https://..."}]}}
+```
+
+`status` is `yes` (a package of it is all in the project), `partly`, or `imported` (only the project's import log
+says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the product's `folder` in `catalog.json`.
+
 ## Version history
 
 - **3**, still, in 3.0: `Local` entries, with `location` and `note`. Readers that skip stores they don't know

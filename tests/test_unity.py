@@ -194,6 +194,14 @@ class UnityCore(unittest.TestCase):
         failed = [line for line in run.stdout.splitlines() if line.startswith("FAIL")]
         self.assertEqual(failed, [], run.stdout[-3000:])
         self.assertIn("ALL PASSED", run.stdout, run.stdout + run.stderr)
+        # issue #86: Hoard reads the report the window wrote, and makes the very credits list the window makes
+        from hoard import projects
+        report = projects.read_project(Path((d / "project_report_path.txt").read_text("utf-8")))
+        self.assertIsNotNone(report)
+        self.assertEqual((report["name"], report["unity"], report["updated"]), ("My Avatar", "2022.3.22f1", "2026-10-01T12:00:00+00:00"))
+        self.assertEqual([a["status"] for a in report["assets"]], ["yes", "yes", "yes", "partly", "imported"])
+        for style in projects.STYLES:
+            self.assertEqual(projects.credits_text(report, style), (d / f"project_credits_{style}.txt").read_text("utf-8"), style)
 
     def test_core_has_no_unity_references(self):
         """The core must compile without Unity, so it can be tested here; Unity-only code lives in Editor/."""

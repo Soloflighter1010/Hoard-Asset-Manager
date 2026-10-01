@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, updater, vault
+from . import __version__, diagnostics, itch, projects, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
@@ -47,7 +47,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
-           "/api/local/add", "/api/local/rescan", "/api/local/remove")
+           "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -541,18 +541,25 @@ class Handler(BaseHTTPRequestHandler):
             marks, unlocked = MarkStore().load(), self._unlocked()
             by_store = {tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
             updates = AssetUpdates().load()   # what the last check for updates found (issue #26)
+            used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
             assets = []
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if mark != "hidden" or unlocked:
-                    assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", [])})
+                    assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                                   "used_in": used.get(a.get("folder"), [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg)}, compress=True)
+        if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
+            found = self._visible_projects()
+            updates = AssetUpdates().load()["items"]
+            return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
+                               "hidden_left_out": not self._unlocked() and bool(MarkStore().load()["hidden"])}, compress=True)
         if path == "/api/settings":
             return self._json(public_settings(srv.cfg))
         if path == "/api/update":
@@ -630,6 +637,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 400)
         srv.forget_index()
         return self._json({"ok": True})
+
+    def _visible_projects(self) -> list[dict]:
+        """Projects' reports, without hidden products while the hidden library is locked (their names never leave
+        the server then, here as everywhere)."""
+        found = projects.read_all()
+        if self._unlocked():
+            return found
+        hidden = MarkStore().load()["hidden"]
+        if not hidden:
+            return found
+        return [{**p, "assets": [a for a in p["assets"] if tag_key(a["store"], a["name"]) not in hidden]} for p in found]
 
     def _local(self, path: str, body: dict):
         """Local: add a folder or file of your own (a task, since copying can take a while), rescan one listed where
@@ -877,6 +895,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
+            return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)
             return self._local(path, body)
         if path == "/api/verify":   # check the downloads now (issue #83), after anything already running

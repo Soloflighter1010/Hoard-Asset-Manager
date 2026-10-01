@@ -173,6 +173,40 @@ public static class CoreTests
         if (!ok) failures++;
     }
 
+    // Hoard's Projects view (issue #86): the report the window writes, which Hoard's test then reads back, checking
+    // it makes the very credits list this code makes.
+    static void ProjectChecks(string dir)
+    {
+        string project = Path.Combine(dir, "My Avatar");
+        string file = ProjectReport.FileFor(Path.Combine(dir, "data"), project);
+        Check("project report: one file per project", file == ProjectReport.FileFor(Path.Combine(dir, "data"), project + Path.DirectorySeparatorChar)
+              && Path.GetFileName(file).Length == 21 && Path.GetDirectoryName(file) == Path.Combine(dir, "data", "projects"), file);
+        var assets = new List<ProjectAsset>
+        {
+            new ProjectAsset { Store = "Booth", Name = "Rusk Avatar Base", Creator = "Kitsu Studio", Folder = "Booth/Kitsu Studio/Rusk Avatar Base",
+                               Url = "https://booth.pm/ja/items/1", Status = "yes" },
+            new ProjectAsset { Store = "Itch", Name = "Paw Suit", Creator = "Kitsu Studio", Folder = "Itch/Kitsu Studio/Paw Suit",
+                               Url = "https://kitsu.itch.io/paw-suit", Status = "yes" },
+            new ProjectAsset { Store = "Gumroad", Name = "Tail Glow", Creator = "Mochi Works", Folder = "Gumroad/Mochi Works/Tail Glow", Status = "yes" },
+            new ProjectAsset { Store = "Jinxxy", Name = "Half There", Creator = "Anko", Folder = "Jinxxy/Anko/Half There", Status = "partly" },
+            new ProjectAsset { Store = "Booth", Name = "Gone Now", Creator = "Anko", Folder = "Booth/Anko/Gone Now", Status = "imported" },
+        };
+        var credits = new CreditsFile { Title = "Made with [love]", Format = CreditFormat.Markdown };
+        credits.Added.Add(new CreditEntry { Store = "", Name = "Hair_Pack", Creator = "Mia", Url = "https://example.com/hair", Added = true });
+        credits.LeftOut.Add("Gumroad/Tail Glow");
+        var report = ProjectReport.Build(project, "My Avatar", "2022.3.22f1", "2026-10-01T12:00:00+00:00", assets, credits);
+        Check("project report: written", ProjectReport.Write(file, report));
+        Check("project report: not written again when nothing changed", !ProjectReport.Write(file, report));
+        // the list the window would make: what's all in the project, and what you added, less what you left out
+        var found = new List<CreditEntry>();
+        foreach (var a in assets) if (a.Status == "yes") found.Add(new CreditEntry { Store = a.Store, Name = a.Name, Creator = a.Creator, Url = a.Url });
+        found.AddRange(credits.Added);
+        var list = Credits.Build(found, credits.LeftOut);
+        foreach (CreditFormat style in Enum.GetValues(typeof(CreditFormat)))
+            File.WriteAllText(Path.Combine(dir, "project_credits_" + style + ".txt"), Credits.Format(list, style, credits.Title), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(dir, "project_report_path.txt"), file);
+    }
+
     public static int Main(string[] args)
     {
         string dir = args[0];
@@ -324,6 +358,7 @@ public static class CoreTests
         CreditsChecks();
         GifChecks(Path.Combine(dir, "gifs"));
         PictureChecks(Path.Combine(dir, "gifs"));
+        ProjectChecks(dir);
 
         Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
         return failures == 0 ? 0 : 1;
