@@ -172,7 +172,10 @@ class DesktopApp(_Harness):
             c.close()
             return r.status, data
         self.assertEqual(pick({"kind": "folder", "start": "/nowhere/at/all"}), (200, {"ok": True, "path": "/home/you/Hoard Downloads"}))
-        self.assertEqual(window.dialogs[-1], (20, "", False), "a folder picker, not started in a folder that isn't there")
+        kind, start, many = window.dialogs[-1]
+        self.assertEqual((kind, many), (20, False), "one folder")
+        self.assertTrue(Path(start).is_dir(), "started in the downloads folder (home until it's there)")
+        self.assertNotIn("nowhere", start, "never in a path the page names")
         pick({"kind": "file"})
         self.assertEqual(window.dialogs[-1][0], 10, "or a file picker")
         self.assertEqual(post(info["url"], "/api/quit", {}, key), 200)

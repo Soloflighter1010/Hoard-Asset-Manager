@@ -2024,7 +2024,7 @@ async function openSettings(open) {
 const canPick = () => !!(typeof DATA === "object" && DATA && DATA.can_pick);
 function syncBrowse() { for (const b of document.querySelectorAll("[data-browse]")) b.hidden = !canPick(); }
 async function browseInto(input, kind = "folder") {
-  const r = await apiPost("/api/pick", { kind, start: input.value.trim() });
+  const r = await apiPost("/api/pick", { kind });
   if (!r.ok) { toast(r.data.error || "The picker didn't open. Type the path instead."); return false; }
   if (!r.data.path) return false;   // cancelled
   input.value = r.data.path;

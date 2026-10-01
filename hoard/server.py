@@ -903,9 +903,10 @@ class Handler(BaseHTTPRequestHandler):
             if not srv.pick_path:
                 return self._json({"error": "Choosing a folder needs Hoard's own window. Type the path instead."}, 409)
             kind = "file" if body.get("kind") == "file" else "folder"
-            start = str(body.get("start") or "").strip()[:1000]
+            # It opens in the downloads folder, Hoard's own setting: never a path the request names
+            start = root_dir(srv.cfg)
             try:
-                chosen = srv.pick_path(kind, start if start and Path(start).expanduser().is_dir() else "")
+                chosen = srv.pick_path(kind, str(start) if start.is_dir() else str(Path.home()))
             except Exception as e:   # the window went away, or the system has no picker
                 return self._json({"error": f"The picker couldn't open ({type(e).__name__}). Type the path instead."}, 500)
             return self._json({"ok": True, "path": chosen})
