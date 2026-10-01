@@ -174,11 +174,11 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 
 ### Working in the background, and closing safely
 
-- **Keep Hoard running when its window is closed** (a new setting): closing the window hides it, and downloads,
-  syncs and automatic syncs carry on. Open Hoard again to bring the window back; **Quit Hoard** in Settings stops
-  it.
-- **Closing Hoard while it's working asks first:** **Stop it, then close** (Hoard closes once what's running has
-  stopped), **Keep working in the background**, or **Close now**, which ends everything at once. Before, closing
+- **Closing the window minimizes Hoard to the taskbar** (the Dock on a Mac), and downloads, syncs and automatic
+  syncs carry on; click it there to bring the window back. **Quit Hoard** in Settings stops it. It's on unless you
+  turn it off in Settings, and then the close button quits.
+- **Quitting while Hoard is working asks first:** **Stop it, then close** (Hoard closes once what's running has
+  stopped), **Minimize, and keep working**, or **Close now**, which ends everything at once. Before, closing
   gave a download 5 seconds to stop.
 
 ### Logs and support reports

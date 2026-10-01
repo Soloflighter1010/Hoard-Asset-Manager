@@ -39,7 +39,7 @@ class FakeEvent:
 class FakeWindow:
     def __init__(self, title, url, **kw):
         self.title, self.url, self.kw = title, url, kw
-        self.shown, self.hidden, self.closed = 0, 0, threading.Event()
+        self.shown, self.hidden, self.minimized, self.closed = 0, 0, 0, threading.Event()
         self.on_top = False
         self.scripts = []
         self.events = types.SimpleNamespace(**{e: FakeEvent() for e in ("resized", "moved", "maximized", "minimized",
@@ -48,6 +48,7 @@ class FakeWindow:
     def restore(self): pass
     def show(self): self.shown += 1
     def hide(self): self.hidden += 1
+    def minimize(self): self.minimized += 1
     def evaluate_js(self, script): self.scripts.append(script)
 
     def create_file_dialog(self, dialog_type, directory="", allow_multiple=False):
@@ -343,16 +344,20 @@ class DesktopApp(_Harness):
 
 class ClosingTheWindow(_Harness):
     """What closing Hoard's window does: quit when nothing's running; while something is, ask (stop it first, carry
-    on in the background, or close at once); and with Keep Hoard running, hide the window and carry on."""
+    on in the background, or close at once); and, unless that's turned off in Settings, minimize the window to the
+    taskbar and carry on."""
 
     def test_decisions(self):
         srv = types.SimpleNamespace(cfg={}, jobs=types.SimpleNamespace(state={"running": False, "queue": []}))
+        self.assertEqual(app.close_decision(srv), "background", "to the taskbar, unless you choose otherwise")
+        self.assertEqual(app.close_decision(types.SimpleNamespace(cfg=config.load_config(), jobs=srv.jobs)), "background")
+        srv.cfg["close_to_taskbar"] = False
         self.assertEqual(app.close_decision(srv), "quit")
         srv.jobs.state["running"] = True
         self.assertEqual(app.close_decision(srv), "ask")
         srv.jobs.state.update(running=False, queue=[{"id": "q1"}])
         self.assertEqual(app.close_decision(srv), "ask", "something waiting its turn counts too")
-        srv.cfg["close_to_background"] = True
+        srv.cfg["close_to_taskbar"] = True
         self.assertEqual(app.close_decision(srv), "background")
 
     def test_close_button(self):
@@ -373,7 +378,7 @@ class ClosingTheWindow(_Harness):
         window.close_button()
         time.sleep(0.3)
         self.assertFalse(window.closed.is_set())
-        self.assertEqual(window.hidden, 1, "hidden: Hoard carries on")
+        self.assertEqual((window.minimized, window.hidden), (1, 0), "to the taskbar, not hidden: Hoard carries on")
         self.assertEqual(app.run_app(config.load_config(), None), 0, "opening Hoard again...")
         self.assertEqual(window.shown, 1, "...brings the window back")
         decided.append("background")
@@ -412,7 +417,7 @@ class ClosingTheWindow(_Harness):
             self.assertEqual(post(info["url"], "/api/quit", {}, key), 409, "busy: the page asks what to do")
             self.assertEqual(post(info["url"], "/api/app/close", {"how": "background"}, key), 200)
             time.sleep(0.5)
-            self.assertEqual(window.hidden, 1)
+            self.assertEqual(window.minimized, 1)
             self.assertFalse(window.closed.is_set())
             self.assertEqual(post(info["url"], "/api/app/close", {"how": "sideways"}, key), 400)
             self.assertEqual(post(info["url"], "/api/app/close", {"how": "wait"}, key), 200)

@@ -182,7 +182,8 @@ from when that shop isn't in the user's list (it's only added when the user conf
   waiting for ever. `Jobs.cancel` does that when Stop hasn't taken effect after `FORCE_AFTER` seconds, and
   `Jobs._watch` notes in the launch's log where a job is after `STUCK_AFTER` seconds without progress. A store tab or
   browser that closes by itself is opened again (`downloader.reopen_tab`), up to `REOPENS` times a sync.
-- Closing the desktop window: `app.close_decision` quits, hides the window (`close_to_background`), or asks the
+- Closing the desktop window: `app.close_decision` minimizes the window to the taskbar (`close_to_taskbar`, on by
+  default), quits, or asks the
   page (the `hoard-close` event), which answers at `POST /api/app/close` (`wait`: `app.quit_when_done`,
   `background`, or `now`: `app.quit_now`). `POST /api/quit` answers 409 `busy` while something runs, and the
   page asks the same.

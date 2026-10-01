@@ -179,7 +179,7 @@ def public_settings(cfg: dict) -> dict:
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
-        "close_to_background": bool(cfg.get("close_to_background")),
+        "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -218,8 +218,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["offline_images"] = bool(body["offline_images"])
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
-    if "close_to_background" in body:
-        change["close_to_background"] = bool(body["close_to_background"])
+    if "close_to_taskbar" in body:
+        change["close_to_taskbar"] = bool(body["close_to_taskbar"])
     if "auto_sync_hours" in body:
         if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
             raise ValueError("Choose how often to sync from the list.")
@@ -309,7 +309,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
-        self.hide_window = None   # the window only: Hoard carries on in the background
+        self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.picking = threading.Lock()   # a system picker is open (see /api/pick)
         self.quit_app = None

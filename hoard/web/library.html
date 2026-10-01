@@ -886,7 +886,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
   <div id="backgroundRow" hidden>
     <h3>Closing Hoard</h3>
-    <label class="check"><input type="checkbox" id="setBackground"> Keep Hoard running when its window is closed</label>
+    <label class="check"><input type="checkbox" id="setBackground"> Closing the window minimizes Hoard to the taskbar (the Dock on a Mac), and it keeps working</label>
     <p class="hint">Downloads, syncs and automatic syncs carry on with the window closed. Open Hoard again (from the
       Start menu) to bring the window back, and quit it here, with <strong>Quit Hoard</strong>.</p>
   </div>
@@ -946,7 +946,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <p id="closeWhat"></p>
   <div class="close-choices" id="closeChoices">
     <button class="primary" data-close="wait">Stop it, then close</button>
-    <button class="ghost" data-close="background">Keep working in the background</button>
+    <button class="ghost" data-close="background">Minimize, and keep working</button>
     <button class="ghost" data-close="now">Close now</button>
     <button class="linkish" data-close="cancel">Cancel</button>
   </div>
@@ -2101,7 +2101,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setUpdates").checked = SETTINGS.check_for_updates;
-  $("#setBackground").checked = !!SETTINGS.close_to_background;
+  $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
   $("#backgroundRow").hidden = !DATA.can_background;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
@@ -2490,7 +2490,7 @@ function settingsPart(el) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
     case "setUpdates": return { check_for_updates: el.checked };
-    case "setBackground": return { close_to_background: el.checked };
+    case "setBackground": return { close_to_taskbar: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setAutoSync": return { auto_sync_hours: Number(el.value) };
     case "setCheckDays": return { integrity_check_days: Number(el.value) };

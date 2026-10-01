@@ -52,8 +52,10 @@ job has finished. Everything else changes straight away.
 Also here:
 
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
-- **Keep Hoard running when its window is closed** (in Hoard's own window): closing the window hides it, and
-  downloads, syncs and automatic syncs carry on. Open Hoard again (from the Start menu) to bring the window back.
+- **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
+  close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and automatic syncs
+  carry on. Click it there, or open Hoard again, to bring the window back. Turn it off and the close button quits
+  (asking first while something's running).
 - **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
   window does: see [Closing Hoard while it's working](Downloads#closing-hoard-while-its-working).
 
@@ -71,7 +73,7 @@ and keep it valid JSON.
 | `auto_sync_hours` | `0` | Hours between automatic syncs while Hoard is open: `0` (off), `6`, `12`, `24` or `168` (**Sync automatically** in Settings) |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
-| `close_to_background` | `false` | Closing Hoard's window keeps Hoard running in the background (**Keep Hoard running when its window is closed** in Settings) |
+| `close_to_taskbar` | `true` | Closing Hoard's window minimizes it to the taskbar, and Hoard carries on (**Closing the window minimizes Hoard to the taskbar** in Settings) |
 | `local_copy` | `true` | Whether **Add your own** offers to copy into Hoard (`true`) or to list where it is (`false`). Set by your last choice |
 | `edits_root` | `""` | Where **Make an editable copy** puts copies; empty means **Hoard Edits** beside your downloads folder. Never inside the downloads folder. See [Changing a download](Downloads#changing-a-download-make-an-editable-copy) |
 | `integrity_check_days` | `7` | Days between checks of your downloads while Hoard is open: `0` (only when you choose **Check now**), `1`, `7` or `30` (**Check your downloads** in Settings) |

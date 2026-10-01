@@ -51,14 +51,16 @@ that store for next time, with one message saying so, rather than a failure for 
 
 ### Closing Hoard while it's working
 
-Closing Hoard's window (or **Quit Hoard** in Settings) while something is running, or waiting its turn, asks
-what to do:
+In Hoard's own window, closing it minimizes Hoard to the taskbar (the Dock on a Mac), and Hoard carries on with
+whatever it's doing; click it there to bring the window back. **Quit Hoard** in Settings quits. To have the close
+button quit instead, turn off **Closing the window minimizes Hoard to the taskbar** in [Settings](Settings).
+
+With that off, closing Hoard's window (or **Quit Hoard** in Settings) while something is running, or waiting its
+turn, asks what to do:
 
 - **Stop it, then close:** what's waiting is taken off the queue, what's running is stopped as **Stop** does,
   and Hoard closes as soon as it has.
-- **Keep working in the background** (in Hoard's own window): the window hides and Hoard carries on. Open Hoard
-  again to bring the window back. To always do this when the window closes, turn on **Keep Hoard running when
-  its window is closed** in [Settings](Settings).
+- **Minimize, and keep working** (in Hoard's own window): the window goes to the taskbar and Hoard carries on.
 - **Close now:** Hoard closes at once, ending any store browser it has open. Use it if stopping takes too long.
 
 While a file downloads, the download panel and Tasks show a progress bar with how much has come in, how fast,

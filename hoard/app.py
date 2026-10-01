@@ -363,7 +363,7 @@ def open_window(srv) -> None:
             leaving.set()
             return True
         if decision == "background":
-            threading.Thread(target=window.hide, daemon=True).start()
+            threading.Thread(target=window.minimize, daemon=True).start()
         else:   # something's running: the page asks what to do (stop it first, the background, or now)
             threading.Thread(target=window.evaluate_js, args=("window.dispatchEvent(new Event('hoard-close'))",),
                              daemon=True).start()
@@ -382,7 +382,7 @@ def open_window(srv) -> None:
         return str(chosen[0] if isinstance(chosen, (list, tuple)) else chosen)
 
     srv.show_window = show
-    srv.hide_window = window.hide
+    srv.hide_window = window.minimize   # to the taskbar (the Dock), where one click brings it back
     srv.quit_app = quit_app
     srv.pick_path = pick_path
     window.events.closing += closing
@@ -408,10 +408,10 @@ def run_in_browser(srv) -> None:
 
 
 def close_decision(srv) -> str:
-    """What closing Hoard's window does: "background" (it's hidden, and Hoard carries on: you chose that in
-    Settings), "ask" (something is running or waiting its turn: the page asks whether to stop it first, carry on in
+    """What closing Hoard's window does: "background" (it's minimized to the taskbar, or the Dock, and Hoard
+    carries on: unless you turned that off in Settings), "ask" (something is running or waiting its turn: the page asks whether to stop it first, carry on in
     the background, or close at once), or "quit"."""
-    if srv.cfg.get("close_to_background"):
+    if srv.cfg.get("close_to_taskbar", True):
         return "background"
     if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
         return "ask"

@@ -1162,7 +1162,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         hidden, closed = [], []
         self.addCleanup(setattr, self.srv, "hide_window", None)
         self.addCleanup(setattr, self.srv, "quit_app", None)
-        self.addCleanup(self.srv.cfg.update, close_to_background=bool(self.srv.cfg.get("close_to_background")))
+        self.addCleanup(self.srv.cfg.update, close_to_taskbar=self.srv.cfg.get("close_to_taskbar", True))
         self.srv.hide_window, self.srv.quit_app = (lambda: hidden.append(1)), (lambda: closed.append(1))
         with mock.patch.object(self.srv.jobs, "_download", lambda *a, **k: gate.wait(20)), \
                 mock.patch.object(server, "save_config"):
@@ -1181,17 +1181,18 @@ class WindowsTabsAndTasks(unittest.TestCase):
                 if hidden:
                     break
                 page.wait_for_timeout(100)
-            self.assertEqual(hidden, [1], "the window hid; Hoard carries on")
+            self.assertEqual(hidden, [1], "the window went to the taskbar; Hoard carries on")
             self.assertEqual(closed, [])
             # Quit Hoard in Settings asks the same, while it's working
             page.click("#settingsBtn")
             page.locator("#backgroundRow").wait_for(state="visible")   # the setting, in Hoard's own window
-            page.check("#setBackground")
+            self.assertTrue(page.is_checked("#setBackground"), "on unless you turn it off")
+            page.uncheck("#setBackground")
             for _ in range(40):
-                if self.srv.cfg.get("close_to_background"):
+                if self.srv.cfg.get("close_to_taskbar") is False:
                     break
                 page.wait_for_timeout(100)
-            self.assertTrue(self.srv.cfg.get("close_to_background"), "saved as it changed")
+            self.assertIs(self.srv.cfg.get("close_to_taskbar"), False, "saved as it changed")
             page.click("#quitHoard")
             dialog.wait_for()
             self.srv.jobs.clear_queue()
