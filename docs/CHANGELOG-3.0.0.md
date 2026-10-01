@@ -67,6 +67,8 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **One panel for Tags, Stores, Settings and Tasks** (issue #84). Each opens in a panel over the middle of the
   page, one at a time: choosing another swaps it in, and the buttons along the top stay in reach. **×**, Escape or
   a click on the page around it closes it.
+- **Browse for folders.** Choosing the downloads folder (in setup and Settings) and adding your own packages have a
+  **Browse** button that opens your system's own folder or file picker, instead of typing a full path.
 - **Stores offers Sign in or Sign out, whichever applies,** instead of both for every store, and the panels use more
   of the window's width.
 - **The download panel sits beside an asset's details** (issue #85) instead of over them, so you can keep using

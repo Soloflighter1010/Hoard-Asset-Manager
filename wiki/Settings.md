@@ -8,7 +8,8 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
 
 
 - **Downloads folder:** where downloaded files are saved. A `Hoard` folder in your Documents unless you choose
-  another; **Default** puts it back. Changing it doesn't move files you've already downloaded, so move those
+  another: **Browse…** opens your system's folder picker (in Hoard's own window), or type the path. **Default**
+  puts it back. Changing it doesn't move files you've already downloaded, so move those
   yourself if you want them in the new place.
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.

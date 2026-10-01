@@ -794,6 +794,7 @@ body.less-motion #glow.flow .glow-in { animation: none; }
   <p class="hint">Changes are saved as you make them.</p>
   <h3>Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
+    <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
   <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
   <h3>Stores</h3>
@@ -2018,7 +2019,19 @@ async function openSettings(open) {
   winNote("settingsPanel", "");
   fillSettings();
 }
+/* ---------- Browse: the system's own folder (or file) picker, in Hoard's window (not in a web browser, where
+   there's no way to ask for one; the path is typed there) */
+const canPick = () => !!(typeof DATA === "object" && DATA && DATA.can_pick);
+function syncBrowse() { for (const b of document.querySelectorAll("[data-browse]")) b.hidden = !canPick(); }
+async function browseInto(input, kind = "folder") {
+  const r = await apiPost("/api/pick", { kind, start: input.value.trim() });
+  if (!r.ok) { toast(r.data.error || "The picker didn't open. Type the path instead."); return false; }
+  if (!r.data.path) return false;   // cancelled
+  input.value = r.data.path;
+  return true;
+}
 function fillSettings() {   // the controls, as the settings are now
+  syncBrowse();
   $("#setRoot").value = SETTINGS.root;
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
@@ -2407,6 +2420,9 @@ function autosave(el) {
 function wireAutosave() {
   $("#setBrowser").addEventListener("change", showBrowserInUse);   // at once, before it's saved
   $("#settingsPanel").addEventListener("change", e => { if (e.target.matches("input, select, textarea")) autosave(e.target); });
+  $("#setRootBrowse").addEventListener("click", async () => {
+    if (SETTINGS && await browseInto($("#setRoot"))) autosave($("#setRoot"));
+  });
   $("#setRootDefault").addEventListener("click", () => {
     if (!SETTINGS) return;
     $("#setRoot").value = SETTINGS.default_root;
@@ -2731,7 +2747,7 @@ const SETUP_VIEWS = {
     ${PASSWORD_HELP}`,
   folder: st => `<h2 id="setupTitle">Where should downloads go?</h2>
     <p>Hoard keeps local copies of what you own, in folders by store, creator and product.</p>
-    <div class="field"><input id="setupRoot" spellcheck="false" aria-label="Downloads folder" value="${esc(st.root)}"><button class="ghost sm" id="setupRootDefault">Default</button></div>
+    <div class="field"><input id="setupRoot" spellcheck="false" aria-label="Downloads folder" value="${esc(st.root)}"><button class="ghost sm" id="setupRootBrowse" data-browse ${canPick() ? "" : "hidden"}>Browse…</button><button class="ghost sm" id="setupRootDefault">Default</button></div>
     <p class="muted">Pick a drive with room to spare; VRChat assets add up. You can change this later in Settings.</p>`,
   older: () => `<h2 id="setupTitle">Used Hoard before?</h2>
     <p>If you used Hoard 1.x, bring over your library list and downloads folder. Your sign-ins and tags carry over by themselves.</p>
@@ -2785,7 +2801,10 @@ const SETUP_WIRES = {
       if (r.ok) $("#signinLink").value = "";
     });
   },
-  folder: st => { $("#setupRootDefault").addEventListener("click", () => { $("#setupRoot").value = st.default_root; }); },
+  folder: st => {
+    $("#setupRootDefault").addEventListener("click", () => { $("#setupRoot").value = st.default_root; });
+    $("#setupRootBrowse").addEventListener("click", () => browseInto($("#setupRoot")));
+  },
   older: () => {
     $("#bringOver").addEventListener("click", async () => {
       const r = await apiPost("/api/setup/migrate", { folder: $("#oldFolder").value.trim() });

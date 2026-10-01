@@ -197,5 +197,58 @@ class LocalPage(unittest.TestCase):
             browser.close()
 
 
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class Browse(unittest.TestCase):
+    """Typing a full path to a folder was the hardest part of setting Hoard up. In Hoard's own window, Browse opens
+    the system's folder (or file) picker; in a web browser, where there's no way to ask for one, it isn't shown."""
+
+    def setUp(self):
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, base, True)
+        (base / "Hoard").mkdir()
+        self.src = base / "Commission Kit"
+        self.src.mkdir()
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(base / "Hoard"), "setup_done": True},
+                                    lan=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def test_browse(self):
+        asked = []
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1300, "height": 860})
+            page.goto(self.srv.entry_url())
+            page.goto(self.srv.url + "downloads")
+            page.click("#localAdd")
+            page.locator("#localPanel.win:not([hidden])").wait_for()
+            self.assertTrue(page.locator("#localBrowseFolder").is_hidden(), "a web browser has no picker to offer")
+            self.srv.pick_path = lambda kind, start: asked.append(kind) or str(self.src)   # as Hoard's window does
+            page.reload()
+            page.click("#localAdd")
+            page.click("#localBrowseFolder")
+            page.wait_for_function("() => document.querySelector('#localPath').value !== ''")
+            self.assertEqual(page.locator("#localPath").input_value(), str(self.src))
+            page.check("#localLink")
+            page.click("#localBrowseFile")
+            page.wait_for_timeout(300)
+            self.assertTrue(page.locator("#localCopy").is_checked(), "a single file is copied in")
+            self.assertEqual(asked, ["folder", "file"])
+            page.keyboard.press("Escape")
+            page.click("#settingsBtn")
+            page.locator("#setRootBrowse").wait_for()
+            self.assertTrue(page.locator("#setRootBrowse").is_visible())
+            browser.close()
+
+    def test_no_picker_says_so(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request("POST", "/api/pick", body=json.dumps({"kind": "folder"}),
+                  headers={"Content-Type": "application/json", ACCESS_HEADER: self.srv.key})
+        r = c.getresponse()
+        self.assertEqual(r.status, 409)
+        self.assertIn("Type the path", json.loads(r.read())["error"])
+        c.close()
+
 if __name__ == "__main__":
     unittest.main()

@@ -369,9 +369,22 @@ def open_window(srv) -> None:
                              daemon=True).start()
         return False
 
+    def pick_path(kind: str, start: str = "") -> str | None:
+        """The system's own folder (or file) picker, over Hoard's window: the chosen path, or None if cancelled."""
+        dialogs = getattr(webview, "FileDialog", None)   # pywebview 5; older ones name the constants on webview
+        if kind == "file":
+            dialog = dialogs.OPEN if dialogs else webview.OPEN_DIALOG
+        else:
+            dialog = dialogs.FOLDER if dialogs else webview.FOLDER_DIALOG
+        chosen = window.create_file_dialog(dialog, directory=start or "", allow_multiple=False)
+        if not chosen:
+            return None
+        return str(chosen[0] if isinstance(chosen, (list, tuple)) else chosen)
+
     srv.show_window = show
     srv.hide_window = window.hide
     srv.quit_app = quit_app
+    srv.pick_path = pick_path
     window.events.closing += closing
     storage = data_dir() / "window"
     storage.mkdir(parents=True, exist_ok=True)

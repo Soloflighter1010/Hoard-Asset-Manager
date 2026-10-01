@@ -47,7 +47,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
-           "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget")
+           "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
+           "/api/pick")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -309,6 +310,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
         self.hide_window = None   # the window only: Hoard carries on in the background
+        self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.quit_app = None
         self.show_token = None
         self.last_seen = time.time()
@@ -524,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None,
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
             tasks, hidden = srv.jobs.tasks(), self._hidden_names()
@@ -555,7 +557,7 @@ class Handler(BaseHTTPRequestHandler):
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg)}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
@@ -897,6 +899,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
             why = srv.updates.start_install(srv.quit_app)
             return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
+        if path == "/api/pick":   # Browse: the system's own picker, in Hoard's window (never in a web browser)
+            if not srv.pick_path:
+                return self._json({"error": "Choosing a folder needs Hoard's own window. Type the path instead."}, 409)
+            kind = "file" if body.get("kind") == "file" else "folder"
+            start = str(body.get("start") or "").strip()[:1000]
+            try:
+                chosen = srv.pick_path(kind, start if start and Path(start).expanduser().is_dir() else "")
+            except Exception as e:   # the window went away, or the system has no picker
+                return self._json({"error": f"The picker couldn't open ({type(e).__name__}). Type the path instead."}, 500)
+            return self._json({"ok": True, "path": chosen})
         if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)

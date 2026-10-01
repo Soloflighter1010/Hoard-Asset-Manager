@@ -6,7 +6,8 @@ Unity like your downloads.
 
 Open **Local** (in the bar at the top, or the **Local** tab in Downloads) and choose **Add your own**:
 
-1. Enter the folder or file on this computer, as a full path (for example `D:\Packages\My Textures`).
+1. Choose **Folder…** or **File…** to pick it, or type its full path (for example `D:\Packages\My Textures`). (In a
+   web browser rather than Hoard's own window, there's no picker: type the path.)
 2. Give it a name (the folder's name if you leave it empty), who made it (**You** unless you say), and, if you
    like, who or what it's for: a commission, a project, a friend.
 3. Choose how Hoard keeps it. Hoard offers what you chose last time.

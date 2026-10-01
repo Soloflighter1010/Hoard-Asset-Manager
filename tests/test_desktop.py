@@ -50,6 +50,10 @@ class FakeWindow:
     def hide(self): self.hidden += 1
     def evaluate_js(self, script): self.scripts.append(script)
 
+    def create_file_dialog(self, dialog_type, directory="", allow_multiple=False):
+        self.dialogs = getattr(self, "dialogs", []) + [(dialog_type, directory, allow_multiple)]
+        return ("/home/you/Hoard Downloads",) if dialog_type != "cancel-me" else None
+
     def close_button(self):
         """The window's own close button (and destroy(), as pywebview's does): closing handlers can say no."""
         if not self.events.closing.set():
@@ -73,6 +77,7 @@ def fake_webview(fail=False):
         mod.start_kw = kw
         mod.windows[-1].closed.wait(30)
     mod.create_window, mod.start = create_window, start
+    mod.FileDialog = types.SimpleNamespace(OPEN=10, SAVE=30, FOLDER=20)   # as pywebview 5 and 6 name them
     mod.screens = [types.SimpleNamespace(x=0, y=0, width=1920, height=1080)]
     return mod
 
@@ -149,6 +154,29 @@ class DesktopApp(_Harness):
         lock = app.InstanceLock(app.data_dir() / "running.lock")
         self.assertTrue(lock.acquire(), "the next start isn't blocked")
         lock.release()
+
+    def test_browse_opens_the_systems_picker(self):
+        """Typing a full path was the hardest part of setting Hoard up: in its window, Browse asks the system's own
+        folder (or file) picker, over the window."""
+        sys.modules["webview"] = wv = fake_webview()
+        t, result, info = self.start()
+        window = wv.windows[0]
+        key = enter(window.url)
+
+        def pick(body):
+            host, port = info["url"].split("//")[1].strip("/").split(":")
+            c = http.client.HTTPConnection(host, int(port), timeout=10)
+            c.request("POST", "/api/pick", body=json.dumps(body), headers={"Content-Type": "application/json", ACCESS_HEADER: key})
+            r = c.getresponse()
+            data = json.loads(r.read() or b"{}")
+            c.close()
+            return r.status, data
+        self.assertEqual(pick({"kind": "folder", "start": "/nowhere/at/all"}), (200, {"ok": True, "path": "/home/you/Hoard Downloads"}))
+        self.assertEqual(window.dialogs[-1], (20, "", False), "a folder picker, not started in a folder that isn't there")
+        pick({"kind": "file"})
+        self.assertEqual(window.dialogs[-1][0], 10, "or a file picker")
+        self.assertEqual(post(info["url"], "/api/quit", {}, key), 200)
+        t.join(15)
 
     def test_the_window_opens_where_it_was(self):
         """Issue #16: the window's size and place are kept when it closes, and it opens there next time, maximized
