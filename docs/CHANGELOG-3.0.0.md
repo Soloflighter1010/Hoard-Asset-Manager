@@ -48,6 +48,11 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   Hoard reads the store as before. Your sign-in is saved and protected exactly as it was. A link from a sign-in
   email still opens in that window when you paste it into Hoard. If you need the old window,
   `"automated_sign_in": true` in `config.json` brings it back.
+- **Save a whole Payhip shop in one go.** Importing Payhip meant saving every page of every shop's library by
+  hand. The **Save for Hoard** bookmark (in Stores, under Import saved pages: drag it to your browser's bookmarks
+  bar) reads every page of a shop's library in your usual browser, as you, and saves them as one file to import.
+  It reads only that shop's own library pages, and sends nothing anywhere. Run it on each shop, then import the
+  files together.
 - **Sign-ins on a Mac work in the background too.** Store reads now use the same full Chromium as the sign-in
   window, so they can read sign-ins that the Keychain protects.
 - **Setup is sturdier.** On Windows, a browser holding its sign-ins open no longer makes the setup assistant's

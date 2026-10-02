@@ -135,6 +135,11 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .stores h3 { font: 700 14px var(--body); margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--seam); }
 .stores h3 + .hint { margin-top: 6px; }
 .importbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.saver { margin-top: 14px; padding: 10px 14px; border-radius: 12px; background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); }
+.saver .hint { margin: 0; }
+.bookmarklet { display: inline-block; padding: 1px 10px; border-radius: 999px; background: var(--gold); color: var(--gold-ink);
+  font-weight: 700; text-decoration: none; cursor: grab; white-space: nowrap; }
+.bookmarklet:active { cursor: grabbing; }
 .drop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgb(20 16 12 / .7);
   font: 400 26px var(--display); color: #F4EDE3; pointer-events: none; }
 
@@ -752,10 +757,17 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     <button class="linkish" id="signOutAll">Sign out of every store</button></p>
   <h3>Import saved pages</h3>
   <p class="hint">Instead of signing in, or when a store blocks the refresh: open your library in your usual browser,
-    scroll to the bottom, press Ctrl+S and save it as "Webpage, Single File". Save each page of it (for Payhip, each
-    shop's library page), then import them all together, or drop them, or their folder, on this window.</p>
+    scroll to the bottom, press Ctrl+S and save it as "Webpage, Single File". Save each page of it (for Payhip, the
+    bookmark below saves a whole shop at once), then import them all together, or drop them, or their folder, on this window.</p>
   <div class="importbtns"><button class="ghost sm" id="importPages">Import pages</button>
     <button class="ghost sm" id="importFolder">Import a folder</button></div>
+  <div class="saver">
+    <p class="hint"><strong>Payhip: every page of a shop in one go.</strong> Add this bookmark to your usual browser:
+      drag <a id="payhipSaver" class="bookmarklet" href="#" draggable="true">Save for Hoard</a> to its bookmarks bar, or
+      <button class="linkish" id="payhipSaverCopy">copy it</button> and make a bookmark with it as the address. Then open
+      a shop's library page (its address followed by <code>/b-account</code>) and choose the bookmark: it saves all
+      that shop's pages as one file. Do the same on each shop, and import the files together.</p>
+  </div>
   <input id="importFile" type="file" accept=".mhtml,.mht,.html,.htm" multiple hidden>
   <input id="importDir" type="file" webkitdirectory multiple hidden>
 </section>
@@ -1567,6 +1579,81 @@ $("#itchSave").addEventListener("click", saveItchKey);
 $("#itchKey").addEventListener("keydown", e => { if (e.key === "Enter") saveItchKey(); });
 $("#itchCancel").addEventListener("click", () => { $("#itchKey").value = ""; $("#itchDialog").close(); });
 $("#itchDialog").addEventListener("close", () => { $("#itchKey").value = ""; });
+
+/* ---------- the Save for Hoard bookmark (Payhip): run on a shop's library page in your usual browser, it reads every
+   page of that shop's library, as you, from that shop only, and saves them as one file to import, instead of saving
+   each page by hand. It sends nothing anywhere: the file goes to your downloads. (No backticks or "${" in it: it's
+   kept in a String.raw template.) */
+const PAYHIP_SAVER = String.raw`(async () => {
+  const say = m => { note.textContent = m; };
+  const note = document.createElement("div");
+  note.style.cssText = "position:fixed;z-index:2147483647;left:50%;top:16px;transform:translateX(-50%);max-width:90vw;" +
+    "padding:10px 16px;border-radius:10px;background:#211C18;color:#F4EDE3;font:600 14px/1.4 system-ui,sans-serif;" +
+    "box-shadow:0 8px 30px rgba(0,0,0,.45)";
+  if (!/\/b-account(\/|$)/.test(location.pathname)) {
+    alert("Save for Hoard: open your library on this shop first (the shop's address followed by /b-account), then choose this bookmark again.");
+    return;
+  }
+  document.body.appendChild(note);
+  const start = location.href.split(/[?#]/)[0].split("/b-account")[0] + "/b-account";
+  const text = e => ((e && e.textContent) || "").replace(/\s+/g, " ").trim();
+  const isProduct = h => /\/b-account\/(digital|products?|downloads?)\/[^/?#]+\/?$/i.test(h);
+  const parts = [], seen = new Set(), products = new Set();
+  let url = start, first = null;
+  try {
+    while (url && !seen.has(url) && seen.size < 200) {
+      seen.add(url);
+      say("Save for Hoard: reading page " + seen.size + " of your library on this shop...");
+      const r = await fetch(url, { credentials: "include" });
+      if (!r.ok) throw new Error("page " + seen.size + " answered " + r.status);
+      const doc = new DOMParser().parseFromString(await r.text(), "text/html");
+      for (const a of doc.querySelectorAll("a[href]")) {
+        try { a.setAttribute("href", new URL(a.getAttribute("href"), url).href); } catch (e) { a.removeAttribute("href"); }
+        if (isProduct(a.getAttribute("href") || "")) products.add(a.getAttribute("href").split(/[?#]/)[0].replace(/\/$/, ""));
+      }
+      for (const img of doc.querySelectorAll("img")) {
+        const real = img.getAttribute("data-src") || img.getAttribute("data-lazy-src") || img.getAttribute("src");
+        try { if (real) img.setAttribute("src", new URL(real, url).href); } catch (e) { img.removeAttribute("src"); }
+        img.removeAttribute("srcset"); img.removeAttribute("loading");
+      }
+      const main = doc.querySelector("main, [role=main]") || doc.body;
+      parts.push(main.innerHTML);
+      if (!first) first = doc;
+      const next = [...doc.querySelectorAll("a[rel=next], .pagination a, a.next")]
+        .find(x => /next|\u203a|\u00bb/i.test(text(x) + " " + (x.getAttribute("rel") || "")));
+      url = null;
+      if (next) {
+        const n = new URL(next.getAttribute("href"));
+        if (n.origin === location.origin && n.pathname.includes("/b-account")) url = n.href;
+      }
+    }
+    for (const x of first.querySelectorAll("script, noscript, iframe, object, embed")) x.remove();
+    (first.querySelector("main, [role=main]") || first.body).innerHTML = parts.join(" ");
+    const html = "<!-- saved from url=(" + String(start.length).padStart(4, "0") + ")" + start + " -->\n<!DOCTYPE html>\n" +
+      first.documentElement.outerHTML;
+    const shop = start.replace(/^https?:\/\//, "").replace(/\/b-account$/, "").replace(/[\/:*?"<>|]+/g, " ").trim();
+    const name = "Payhip library - " + shop + ".html";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 10000);
+    say("Save for Hoard: saved " + products.size + " products from " + seen.size + (seen.size === 1 ? " page" : " pages") +
+        ' as "' + name + '". Import it in Hoard (Stores, Import pages).');
+  } catch (e) {
+    say("Save for Hoard couldn't read your library here: " + (e && e.message || e) + ". Try again, or save the page with Ctrl+S.");
+  }
+  setTimeout(() => note.remove(), 12000);
+})()`;
+const payhipSaverUrl = () => "javascript:void " + encodeURIComponent(PAYHIP_SAVER);
+$("#payhipSaver").href = payhipSaverUrl();
+// It runs in your usual browser, on a Payhip shop: here, clicking it only says how to keep it
+$("#payhipSaver").addEventListener("click", e => { e.preventDefault(); toast("Drag it to your usual browser's bookmarks bar, or choose copy it."); });
+$("#payhipSaverCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(payhipSaverUrl()); toast("Copied. Make a bookmark in your usual browser, and paste it as its address."); }
+  catch (e) { toast("Couldn't copy it here. Drag Save for Hoard to your browser's bookmarks bar instead."); }
+});
 
 /* ---------- importing saved pages: any number at once, from the file picker, a folder, or dropped on the window.
    They go to Hoard a batch at a time, and each page gets its own result, so one bad page doesn't stop the rest. */
@@ -2847,8 +2934,9 @@ const SETUP_VIEWS = {
     <p>Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address, one per line.
       It's in your purchase email: a shop's own address such as <code>myshop.store</code>, or <code>payhip.com/ShopName</code>.</p>
     <textarea id="setupShops" spellcheck="false" aria-label="Payhip shops" placeholder="myshop.store">${esc(st.payhip_shops.map(s => s.replace(/^https:\/\//, "")).join("\n"))}</textarea>
-    <p class="muted">Rather not sign in to Payhip? Save each shop's library page from your usual browser, and import them all
-      from the Stores panel. Importing a shop's page adds that shop for you too.</p>`,
+    <p class="muted">Rather not sign in to Payhip? Save each shop's library from your usual browser, and import them all
+      from the Stores panel: the Save for Hoard bookmark there saves every page of a shop in one go. Importing a shop's
+      page adds that shop for you too.</p>`,
   signin: st => `<h2 id="setupTitle">Sign in to your stores</h2>
     <p>Each store opens in Hoard's own window. Sign in there as usual, then close the window, and Hoard reads what you own.</p>
     ${STORE_ORDER.filter(s => st.stores[s].enabled).map(s => `<div class="signrow"><span class="who"><span class="dot ${s}"></span>${esc(st.stores[s].label)}</span>

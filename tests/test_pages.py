@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -314,6 +315,62 @@ ITCH_SAVED = ('<!-- saved from url=(0028)https://itch.io/my-purchases -->\n<html
               '<div class="game_cell" data-game_id="1001"><a class="title game_link" href="https://kitsu.itch.io/paw-suit">Paw Suit</a>'
               '<div class="game_author"><a href="https://kitsu.itch.io">Kitsu</a></div>'
               '<a class="button" href="https://kitsu.itch.io/paw-suit/download/AbCdEf1234567890">Download</a></div></div></body></html>')
+
+
+def payhip_saver() -> str:
+    """The Save for Hoard bookmark's script, as the Library page keeps it."""
+    return re.search(r"const PAYHIP_SAVER = String\.raw`(.*?)`;", (Path(__file__).resolve().parent.parent / "hoard" / "web" / "library.html").read_text("utf-8"), re.S).group(1)
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class SaveForHoard(unittest.TestCase):
+    """Saving a Payhip library page by page was tedious. The Save for Hoard bookmark, run on a shop's library page in
+    your usual browser, reads every page of it and saves them as one file, which Import pages reads like any other."""
+
+    def shop(self, route):
+        path = route.request.url.split("testshop.store", 1)[1]
+        if path == "/b-account":
+            body = shop_page("aB1", "cD2").replace("</div></body>",
+                                                   '</div><div class="pagination"><a href="/b-account?page=2">Next \u203a</a></div></body>')
+        elif path == "/b-account?page=2":   # the last page, with a picture that loads lazily
+            body = shop_page("eF3").replace('<img src="https://images.payhip.com/eF3.gif"',
+                                            '<img src="data:," data-src="https://images.payhip.com/eF3.gif"')
+        else:
+            body = "<html><body><h1>Test Shop</h1></body></html>"
+        self.asked.append(path)
+        route.fulfill(status=200, content_type="text/html", body=body)
+
+    def test_every_page_in_one_file(self):
+        self.asked = []
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(accept_downloads=True)
+            page.route("https://testshop.store/**", self.shop)
+            page.route("https://images.payhip.com/**", lambda r: r.fulfill(status=404, body=""))
+            alerts = []
+            page.on("dialog", lambda d: (alerts.append(d.message), d.dismiss()))
+            page.goto("https://testshop.store/")
+            page.evaluate(payhip_saver())
+            self.assertIn("/b-account", alerts[0], "anywhere else, it says where to run it")
+            page.goto("https://testshop.store/b-account?page=2")   # from any page of it: it starts at the first
+            with page.expect_download() as got:
+                page.evaluate(payhip_saver())
+            download = got.value
+            self.assertEqual(download.suggested_filename, "Payhip library - testshop.store.html")
+            text = Path(download.path()).read_text("utf-8")
+            self.assertIn("saved 3 products from 2 pages", page.locator("body").inner_text())
+            browser.close()
+        self.assertTrue(text.startswith("<!-- saved from url=(0032)https://testshop.store/b-account -->"), text[:80])
+        self.assertNotIn("<script", text.lower())
+        self.assertEqual([p for p in self.asked if p.startswith("/b-account")][-2:], ["/b-account", "/b-account?page=2"],
+                         "only that shop's library pages")
+        cfg = {**config.load_config(), "offline_images": False}
+        cfg["payhip"] = {**cfg["payhip"], "shops": []}
+        (result,) = library.import_saved_pages(cfg, [(download.suggested_filename, text)], trust_shops=["https://testshop.store"])
+        self.assertEqual(result.get("store"), "payhip", result)
+        items = {i["name"]: i for i in result["items"]}
+        self.assertEqual(sorted(items), ["Product aB1", "Product cD2", "Product eF3"])
+        self.assertEqual(items["Product eF3"]["thumbnail"], "https://images.payhip.com/eF3.gif", "the lazy picture's real address")
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -981,6 +1038,22 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.clock.run_for(20000)
         self.assertTrue(page.locator("#dlPanel").is_visible(), "something went wrong: it stays")
         self.assertEqual(page.locator("#dlTitle").inner_text(), "Finished, with problems")
+        page.close()
+
+    def test_the_save_for_hoard_bookmark_is_offered(self):
+        """Stores offers the bookmark to drag to your usual browser; clicking it in Hoard only says how."""
+        from urllib.parse import unquote
+        page = self.open()
+        page.click("#storesBtn")
+        link = page.locator("#payhipSaver")
+        link.wait_for()
+        href = link.get_attribute("href")
+        self.assertTrue(href.startswith("javascript:void "))
+        self.assertEqual(unquote(href[len("javascript:void "):]), payhip_saver())
+        link.click()
+        page.get_by_text("bookmarks bar").first.wait_for()
+        self.assertTrue(page.url.startswith(self.srv.url), "nothing ran in Hoard's page")
+        self.assertEqual(self.errors, [])
         page.close()
 
     def test_settings_save_as_they_change(self):
