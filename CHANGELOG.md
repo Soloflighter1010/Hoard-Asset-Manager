@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0-beta.3
+
+The third beta of Hoard 3.0 makes downloading from Jinxxy dependable: its files now come straight from Jinxxy,
+not through the browser. Everything in the betas before it is still here.
+
+### Fixed
+
+- **Jinxxy files download straight from Jinxxy,** with your sign-in, the way Booth's already do. In beta 2 the
+  download started, but the browser closed part way through bigger files (a .unitypackage, say), and the file
+  failed. Now a download that's interrupted picks up where it stopped next time, and progress shows its size and
+  speed. If Jinxxy ever turns that away, Hoard downloads through the browser as before, for the rest of that run.
+
 ## 3.0.0-beta.2
 
 The second beta of Hoard 3.0 fixes downloading from Jinxxy, and makes library folders on other drives easier to

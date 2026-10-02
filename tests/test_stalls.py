@@ -57,6 +57,20 @@ class _Store(http.server.BaseHTTPRequestHandler):
             return
         if self.path == "/late":   # a file the store takes a while to start sending
             self.release.wait(8)
+        if self.path.startswith("/jx/"):   # Jinxxy's file links: an address on the store that sends you to the file
+            _Store.seen.append((self.path, bool(self.headers.get("Sec-Fetch-Mode"))))
+            if self.path == "/jx/browser-only" and not self.headers.get("Sec-Fetch-Mode"):
+                self.send_response(403)   # a store that turns away anything but its own pages' links
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.send_response(302)
+            self.send_header("Location", "/good")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.path == "/good":
+            _Store.seen.append((self.path, bool(self.headers.get("Sec-Fetch-Mode"))))
         start = int(self.headers.get("Range", "bytes=0-")[6:].rstrip("-") or 0)
         self.send_response(206 if start else 200)
         self.send_header("Content-Type", "application/octet-stream")
@@ -83,6 +97,7 @@ class _Store(http.server.BaseHTTPRequestHandler):
 
 def _serve():
     _Store.release = threading.Event()
+    _Store.seen = []   # (path, whether the browser asked) for the file links
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Store)
     srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -240,6 +255,46 @@ class BrowserDownloads(unittest.TestCase):
         with common.capture_log(sink), self.assertRaises(common.Cancelled):
             downloader.click_download(self.ctx, self.page, button["idx"], 20)
         self.assertLess(time.monotonic() - began, 7.5, "Stop was heard before the store answered")
+
+    def by_clicking(self, link, direct):
+        """download_by_clicking on a product page with one file, a plain link to link."""
+        body = f'<!doctype html><title>item</title><div><span>file.bin</span><a href="{link}">Download</a></div>'
+        self.page.route(self.origin + "/item", lambda r: r.fulfill(body=body, content_type="text/html"))
+        self.page.goto(self.origin + "/item")
+        rec, report = {"files": {}}, downloader.Report()
+        args = mock.Mock(dry_run=False)
+        got = downloader.download_by_clicking(self.ctx, self.page, self.origin + "/item", rec, self.folder, "Jinxxy",
+                                              ["127\\.0\\.0\\.1"], 20, "Item", "Creator", mock.Mock(), args, report,
+                                              direct=direct)
+        return got, rec, report
+
+    def direct(self):
+        egress._TEST_ORIGINS.add(self.origin)
+        self.addCleanup(egress._TEST_ORIGINS.discard, self.origin)
+        return {"sess": egress.session(), "sites": ["127.0.0.1"], "on": True}
+
+    def test_a_file_link_is_downloaded_straight_from_the_store(self):
+        """Jinxxy's files are plain links: they come straight from the store with your sign-in, not through the
+        browser (which closed part way through big ones), named as the store names them."""
+        got, rec, report = self.by_clicking(self.origin + "/jx/file", self.direct())
+        self.assertTrue(got, report.failed)
+        self.assertEqual((self.folder / "file.bin").stat().st_size, SIZE)
+        self.assertEqual(list(rec["files"].values())[0]["path"], "file.bin")
+        self.assertNotIn(True, [browser for _path, browser in _Store.seen], "the browser downloaded nothing")
+
+    def test_a_store_that_turns_the_direct_route_away_gets_the_browser(self):
+        direct = self.direct()
+        got, rec, report = self.by_clicking(self.origin + "/jx/browser-only", direct)
+        self.assertTrue(got, report.failed)
+        self.assertFalse(direct["on"], "the rest of the run goes through the browser")
+        self.assertEqual((self.folder / "file.bin").stat().st_size, SIZE)
+        self.assertIn(("/good", True), _Store.seen, "the browser downloaded it")
+
+    def test_the_name_a_store_gives_its_file(self):
+        self.assertEqual(downloader.disposition_name('attachment; filename="Fox Base.zip"'), "Fox Base.zip")
+        self.assertEqual(downloader.disposition_name("attachment; filename*=UTF-8''N%C3%B6va.unitypackage; filename=x"),
+                         "Növa.unitypackage")
+        self.assertEqual(downloader.disposition_name("inline"), "")
 
 
 class StoppingAJob(unittest.TestCase):
