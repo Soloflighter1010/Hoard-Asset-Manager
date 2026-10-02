@@ -82,6 +82,8 @@ class Reports(unittest.TestCase):
     def test_forget(self):
         path = write("0123456789abcdef", report())
         self.assertFalse(projects.forget("../config"))
+        self.assertFalse(projects.forget("0123456789abcdef\n"), "a trailing newline isn't part of an id")
+        self.assertFalse(projects.forget("fedcba9876543210"), "no such report")
         self.assertTrue(projects.forget("0123456789abcdef"))
         self.assertFalse(path.exists())
 
