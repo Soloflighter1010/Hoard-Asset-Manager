@@ -191,14 +191,26 @@ class DeletingRemovedDownloads(unittest.TestCase):
             self.assertTrue((self.folder / "rusk.unitypackage").exists())
             marks.MarkStore().change("removed", {self.key}, True)
             self.assertEqual(call({"keys": [self.key]})[0], 400, "not confirmed")
-            self.assertTrue(srv.jobs.busy.acquire(timeout=5))
+            self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # a job is running...
             try:
-                self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 409, "not while a job runs")
+                status, done = call({"keys": [self.key], "confirm": True})
+                self.assertEqual((status, done.get("queued")), (200, True), "...so it waits its turn")
+                self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 409, "once")
+                self.assertTrue((self.folder / "rusk.unitypackage").exists(), "nothing deleted while that job runs")
             finally:
                 srv.jobs.busy.release()
-            status, done = call({"keys": [self.key], "confirm": True})
-            self.assertEqual((status, done["files"]), (200, 3))
+                srv.jobs.kick()
+            for _ in range(100):
+                if not srv.jobs.state["running"] and not srv.jobs.state["queue"]:
+                    break
+                time.sleep(0.05)
             self.assertFalse(self.folder.exists())
+            self.assertEqual((srv.jobs.history[-1]["task"], srv.jobs.history[-1]["outcome"]), ("delete-files", "done"))
+            self.assertIn("Deleted 3 files of Rusk", srv.jobs.history[-1]["message"])
+            (self.folder).mkdir(parents=True)
+            (self.folder / "rusk.unitypackage").write_bytes(b"pkg")
+            status, done = call({"keys": [self.key], "confirm": True})
+            self.assertEqual((status, done["files"]), (200, 0), "at once when nothing runs")
         finally:
             srv.shutdown()
             srv.server_close()

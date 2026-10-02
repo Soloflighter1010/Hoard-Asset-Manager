@@ -158,7 +158,9 @@ class Schedule:
 
 TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
-              "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder"}
+              "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
+              "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
+              "delete-files": "Delete downloaded files"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -232,14 +234,17 @@ class Jobs:
 
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
-              items: list[str] | None = None, local: dict | None = None, move: dict | None = None) -> str | None:
+              items: list[str] | None = None, local: dict | None = None, move: dict | None = None,
+              files: dict | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
-        download is for, when it's for chosen ones, so it can go straight to them."""
+        download is for, when it's for chosen ones, so it can go straight to them. files: what a rescan, a take-out
+        of Local or a deletion of downloaded files is for, when it waits its turn."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
                 "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
-                "local": dict(local) if local else None, "move": dict(move) if move else None}
+                "local": dict(local) if local else None, "move": dict(move) if move else None,
+                "files": dict(files) if files else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -318,6 +323,8 @@ class Jobs:
             target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
         elif task == "move":
             target = lambda s: self._move(spec.get("move") or {})  # noqa: E731
+        elif task in ("rescan-local", "remove-local", "delete-files"):
+            target = lambda s: self._files(task, spec.get("files") or {})  # noqa: E731
         elif task == "login":
             target = self._login_then_refresh
         elif task == "logout":
@@ -472,6 +479,36 @@ class Jobs:
         finally:
             self.on_download_done()
         self._set(message=f"Moved {done['name']}: {done['files']:,} files to {done['to']}.")
+
+    def _files(self, task: str, what: dict) -> None:
+        """A rescan or take-out of something in Local, or deleting a removed product's downloaded files, that was
+        asked for while another job ran, so it waited its turn (the server does them at once when nothing runs)."""
+        from .config import root_dir
+        from . import local
+        from .downloader import delete_downloaded_files
+        root, name = root_dir(self.cfg), what.get("name") or "it"
+        self._set(task=task, message=f"{TASK_NAMES[task]}: {name}")
+        try:
+            if task == "delete-files":
+                done = delete_downloaded_files(self.cfg, root, set(what.get("keys") or []))
+                message = (f"Deleted {done['files']:,} {'file' if done['files'] == 1 else 'files'} of {name}."
+                           + (" Its folder still has other files, so it was kept." if done["kept"] else ""))
+            else:
+                found = local.by_folder(root, str(what.get("folder") or ""))
+                if not found:
+                    raise ValueError(f"{name} isn't in Local any more.")
+                if task == "rescan-local":
+                    rec = local.rescan(self.cfg, root, found[0])
+                    message = f"Rescanned {name}: {len(rec['files']):,} files."
+                else:
+                    local.remove(self.cfg, root, found[0])
+                    message = f"Took {name} out of Local."
+        except (ValueError, OSError) as e:
+            self._set(message=str(e), error=str(e))
+            return
+        finally:
+            self.on_download_done()
+        self._set(message=message)
 
     def _add_local(self, what: dict) -> None:
         """Add a folder or file of your own to Local (issue #80): copied in, or listed where it is."""

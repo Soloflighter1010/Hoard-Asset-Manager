@@ -165,7 +165,30 @@ class LocalItems(unittest.TestCase):
         self.assertIs(srv.cfg["local_copy"], False, "the choice is offered next time")
         self.assertEqual(call("/api/local/remove", {"folder": entry["folder"]})[0], 400, "not without confirming")
         self.assertEqual(call("/api/local/remove", {"folder": "Booth/x", "confirm": True})[0], 404)
-        self.assertEqual(call("/api/local/remove", {"folder": entry["folder"], "confirm": True}), (200, {"ok": True, "deleted": 0, "listed": True}))
+        self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # a job is running: these wait their turn
+        try:
+            self.assertEqual(call("/api/local/rescan", {"folder": entry["folder"]}), (200, {"ok": True, "queued": True, "job": True}))
+            self.assertEqual(call("/api/local/remove", {"folder": entry["folder"], "confirm": True})[1].get("queued"), True)
+            self.assertEqual([q["task"] for q in srv.jobs.state["queue"]], ["rescan-local", "remove-local"])
+            self.assertTrue(self.catalog(), "still there while that job runs")
+        finally:
+            srv.jobs.busy.release()
+            srv.jobs.kick()
+        for _ in range(100):
+            if not srv.jobs.state["running"] and not srv.jobs.state["queue"]:
+                break
+            time.sleep(0.05)
+        self.assertEqual([(h["task"], h["outcome"]) for h in srv.jobs.history[-2:]], [("rescan-local", "done"), ("remove-local", "done")])
+        self.assertEqual(self.catalog(), [], "taken out of Local")
+        self.assertTrue(self.src.exists(), "your own folder isn't touched")
+        status, data = call("/api/local/add", {"path": str(self.src), "copy": False})
+        for _ in range(100):
+            if not srv.jobs.state["running"] and self.catalog():
+                break
+            time.sleep(0.1)
+        [entry] = self.catalog()
+        self.assertEqual(call("/api/local/remove", {"folder": entry["folder"], "confirm": True}), (200, {"ok": True, "deleted": 0, "listed": True}),
+                         "at once when nothing runs")
         self.assertTrue(self.src.exists())
 
 
@@ -203,9 +226,17 @@ class LocalPage(unittest.TestCase):
             page.locator("#grid .slot", has_text="Commission Kit").click()
             page.get_by_text("Listed where it is").wait_for()
             page.get_by_text("For A commission.").wait_for()
-            page.locator("[data-act='local-remove']").click()
-            page.click("#askDialog[open] button[value=yes]")   # Hoard's own question, not the browser's
-            page.get_by_text("Took Commission Kit out of Local").wait_for()
+            self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # something is running: taking it out waits its turn
+            try:
+                page.locator("[data-act='local-remove']").click()
+                page.click("#askDialog[open] button[value=yes]")   # Hoard's own question, not the browser's
+                page.get_by_text("Queued: it starts when what's running now is done").wait_for()
+                self.assertEqual([q["task"] for q in srv.jobs.state["queue"]], ["remove-local"])
+            finally:
+                srv.jobs.busy.release()
+                srv.jobs.kick()
+            page.get_by_text("Took Commission Kit out of Local").wait_for(timeout=20000)
+            page.locator("#grid .slot", has_text="Commission Kit").wait_for(state="detached")
             self.assertTrue((src / "Kit.unitypackage").exists())
             self.assertEqual(errors, [])
             browser.close()

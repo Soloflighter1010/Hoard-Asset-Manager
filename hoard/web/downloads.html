@@ -1544,6 +1544,7 @@ async function localAction(act, a) {
                           { folder: a.folder, confirm: act === "local-remove" });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   if (act === "local-remove") closeDetail();
+  if (r.data.job) return afterQueuedJob(r, act === "local-rescan" ? "rescan-local" : "remove-local", () => load(true));
   await load(true);
   if (act === "local-rescan") { const again = DATA.assets.find(x => x.folder === a.folder); if (again) showDetail(again, false); }
   toast(act === "local-rescan" ? `Rescanned: ${r.data.files} ${r.data.files === 1 ? "file" : "files"}.`
@@ -1686,6 +1687,7 @@ async function deleteFiles(a) {
                "This can't be undone.", "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  if (r.data.job) { closeDetail(); return afterQueuedJob(r, "delete-files", () => load(true)); }
   closeDetail(); await load();
   toast(`Deleted ${r.data.files} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).` +
         (r.data.kept.length ? " Its folder still has other files, so it was kept." : ""));
@@ -2603,7 +2605,7 @@ async function watchJobs() {
     const r = await api("/api/status", { cache: "no-store" });
     if (r.ok) {
       const j = (await r.json()).job || {};
-      if ((lastTask === "verify" || lastTask === "add-local" || lastTask === "move") && j.task !== lastTask && typeof renderIntegrity === "function") load(true);
+      if (["verify", "add-local", "move", "rescan-local", "remove-local", "delete-files"].includes(lastTask) && j.task !== lastTask && typeof renderIntegrity === "function") load(true);
       lastTask = j.running ? j.task : null;
       taskCount((j.running ? 1 : 0) + (j.queue || []).length);
       const pill = $("#job");   // what's running, on the shelf
@@ -2655,6 +2657,21 @@ function wireClose() {
     $("#closeWhat").textContent = "Closing Hoard.";
     $("#closeChoices").hidden = true;
   });
+}
+// Something asked for while a job ran (taking an item out of Local, deleting downloaded files...) waits its turn as a
+// job of its own: say so, and when it's done, show the page as it is then and say how it went.
+async function afterQueuedJob(r, task, reload) {
+  if (!queuedToast(r)) toast("Doing it now. Follow it in Tasks.");
+  for (let n = 0; n < 2400; n++) {
+    await new Promise(ok => setTimeout(ok, 1500));
+    let t = {};
+    try { t = await (await api("/api/tasks", { cache: "no-store" })).json(); } catch (e) { return; }
+    if ((t.current && t.current.task === task) || (t.queue || []).some(q => q.task === task)) continue;
+    await reload();
+    const done = (t.history || []).find(h => h.task === task);   // how it went (newest first)
+    if (done && done.message) toast(done.message);
+    return;
+  }
 }
 function queuedToast(r) {   // a job started while another runs waits its turn
   if (r && r.data && r.data.queued) { toast("Queued: it starts when what's running now is done. See Tasks."); return true; }
