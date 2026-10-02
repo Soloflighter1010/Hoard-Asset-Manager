@@ -252,12 +252,13 @@ class Server(unittest.TestCase):
         page.get_by_text("Rusk").first.wait_for()
         page.click("#settingsBtn")
         page.click("#libPick")
-        page.get_by_text("Added Drive E: nothing downloaded there yet. It has a tab in Downloads.").wait_for()
+        name = libraries.label(self.drive)   # "Drive E", or "Drive E (C:)" on Windows
+        page.get_by_text(f"Added {name}: nothing downloaded there yet. It has a tab in Downloads.").wait_for()
         page.locator("#setLibs .librow").get_by_text(str(self.drive)).wait_for()
         page.click("#settingsBtn")
         page.locator("#drives [data-lib='1']").wait_for()
         self.assertEqual([" ".join(t.split()) for t in page.locator("#drives [data-lib]").all_inner_texts()],
-                         ["Downloads folder 1", "Drive E 0"])
+                         ["Downloads folder 1", f"{name} 0"])
         page.click("#drives [data-lib='1']")
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 0")
         page.click("#drives [data-lib='1']")   # chosen again: every folder
@@ -292,7 +293,7 @@ class Server(unittest.TestCase):
         page.click("#settingsBtn")
         page.click("[data-lib-remove='1']")
         page.click("#askDialog button[value=yes]")
-        page.get_by_text("Drive E is no longer part of your library.").wait_for()
+        page.get_by_text(f"{name} is no longer part of your library.").wait_for()
         page.wait_for_function("() => document.querySelector('#drives').hidden")
         self.assertEqual(errors, [])
         page.close()
