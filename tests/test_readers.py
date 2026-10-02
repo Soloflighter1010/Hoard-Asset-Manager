@@ -181,6 +181,24 @@ class BoothAndPayhip(unittest.TestCase):
         cards = pg.evaluate(library.PAYHIP_SHOP_JS)["cards"]
         self.assertEqual({(c["creator"], c["creator_url"]) for c in cards}, {("Test Shop", "https://testshop.store")})
 
+    def test_a_shop_at_payhip_com_is_still_its_creators(self):
+        """Shops at payhip.com/<name> all share payhip.com. Signed in as a creator whose own shop is there too, every
+        payhip.com shop was taken for your own, and its products showed as Unknown creator."""
+        page = (PAYHIP_OWN_SHOP.replace("https://testshop.store/b-account/digital/", "https://payhip.com/Some%20Maker/b-account/digital/")
+                .replace('<a class="logo-link" href="https://testshop.store/b-account">Test Shop</a>',
+                         '<a class="logo-link" href="https://payhip.com/Some%20Maker/b-account">Some Maker</a>'))
+        pg = self.page_at("https://payhip.com/Some%20Maker/b-account", page)
+
+        def cards_with_own_shop(own):
+            pg.set_content(page.replace('href="https://testshop.store/b-account" class="account-type-switcher-link"',
+                                        f'href="{own}" class="account-type-switcher-link"'))
+            return pg.evaluate(library.PAYHIP_SHOP_JS)["cards"]
+        for own in ("https://payhip.com/My%20Shop/b-account", "https://payhip.com/b-account"):
+            self.assertEqual({(c["creator"], c["creator_url"]) for c in cards_with_own_shop(own)},
+                             {("Some Maker", "https://payhip.com/Some%20Maker")}, own)
+        # ...and your own shop at payhip.com is still yours
+        self.assertEqual({c["creator"] for c in cards_with_own_shop("https://payhip.com/Some%20Maker/b-account")}, {""})
+
     def test_a_payhip_card_from_another_shop_is_credited_to_that_shop(self):
         """A shop's library can list products from other shops, each linking into its own shop: those were credited
         to the shop whose page it was (issue #25)."""

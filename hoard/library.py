@@ -443,12 +443,14 @@ PAYHIP_SHOP_JS = r"""
     || (document.title.includes(' - ') ? document.title.split(' - ').slice(1).join(' - ').trim() : '');
   // A Payhip creator's own purchases, from every shop, are listed on their own shop's library page (its menu's
   // Creator/Customer switch leads there), with nothing on the cards saying who made each one. Those aren't this
-  // shop's products, so they're left without a creator rather than credited to you (issue #25).
+  // shop's products, so they're left without a creator rather than credited to you (issue #25). Shops are compared
+  // by their whole address: every shop at payhip.com/<name> shares payhip.com, so its hostname says nothing.
+  const baseOf = href => href.split(/[?#]/)[0].split('/b-account')[0].replace(/\/$/, '');
   const ownShops = new Set([...document.querySelectorAll('.account-type-switcher-wrapper a[href], a.account-type-switcher-link')]
-    .filter(a => pathOf(a) === '/b-account').map(a => new URL(a.href).hostname));
+    .filter(a => /\/b-account$/.test(pathOf(a))).map(a => baseOf(a.href)));
   // A card from another shop (its link is in that shop) is credited to that shop, not to the one whose page it is.
   const logo = document.querySelector('a.logo-link[href]');
-  const pageShop = logo ? logo.href.split(/[?#]/)[0].split('/b-account')[0] : '';
+  const pageShop = logo ? baseOf(logo.href) : '';
   const shopLabel = base => { const u = new URL(base); return u.hostname.replace(/^www\./, '') === 'payhip.com'
     ? decodeURIComponent(u.pathname.split('/').filter(Boolean)[0] || u.hostname) : u.hostname; };
   const cards = new Map();
@@ -465,8 +467,8 @@ PAYHIP_SHOP_JS = r"""
     }
     const heading = c.querySelector('.product-name, h1, h2, h3, h4, h5');
     const img = c.querySelector('img');
-    const url = a.href.split(/[?#]/)[0], host = new URL(url).hostname, mine = ownShops.has(host);
-    const base = url.split('/b-account')[0], elsewhere = pageShop && base !== pageShop;
+    const url = a.href.split(/[?#]/)[0], host = new URL(url).hostname, base = baseOf(url), mine = ownShops.has(base);
+    const elsewhere = pageShop && base !== pageShop;
     cards.set(key, { id: host + ':' + key.split('/').pop(), name: text(heading) || text(a) || (img && img.alt) || '',
                      creator: mine ? '' : elsewhere ? shopLabel(base) : shopName || host, creator_url: mine ? '' : base,
                      thumbnail: img ? (img.currentSrc || img.src || '') : '',
