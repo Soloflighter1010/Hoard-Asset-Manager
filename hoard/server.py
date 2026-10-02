@@ -719,8 +719,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "That isn't in Local any more."}, 404)
         if path == "/api/local/remove" and body.get("confirm") is not True:
             return self._json({"error": "Confirm first."}, 400)
-        if not srv.jobs.busy.acquire(blocking=False):
-            return self._json({"error": "Wait for the current task to finish, then try again."}, 409)
+        if not srv.jobs.busy.acquire(blocking=False):   # a job is running: this waits its turn after it
+            task = "rescan-local" if path == "/api/local/rescan" else "remove-local"
+            return self._queued(srv.jobs.start(task, [], files={"folder": str(body.get("folder"))[:1000],
+                                                                "name": found[1].get("name")}))
         try:
             if path == "/api/local/rescan":
                 rec = local.rescan(srv.cfg, root_dir(srv.cfg), found[0])
@@ -734,6 +736,12 @@ class Handler(BaseHTTPRequestHandler):
             srv.jobs.kick()
         srv.forget_index()
         return self._json({"ok": True, **done})
+
+    def _queued(self, started: str | None):
+        """The answer for something asked while a job ran: it waits its turn (or started, if that job just ended)."""
+        if not started:
+            return self._json({"error": "That's already waiting its turn."}, 409)
+        return self._json({"ok": True, "queued": started == "queued", "job": True})
 
     def _delete_files(self, body: dict):
         """Delete the downloaded files of products you removed from your library. Only removed ones (so nothing in
@@ -749,8 +757,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Unlock your hidden library first."}, 403)
         if not keys:
             return self._json({"error": "Only the files of products you've removed from your library can be deleted."}, 400)
-        if not srv.jobs.busy.acquire(blocking=False):
-            return self._json({"error": "Wait for the current task to finish, then delete the files."}, 409)
+        if not srv.jobs.busy.acquire(blocking=False):   # a job is running: this waits its turn after it
+            names = sorted({a["name"] for a in srv.index(stale_ok=True)["assets"] if a.get("tag_key") in keys})
+            name = names[0] if len(names) == 1 and len(keys) == 1 else f"{len(keys):,} {'product' if len(keys) == 1 else 'products'}"
+            return self._queued(srv.jobs.start("delete-files", [], files={"keys": sorted(keys), "name": name}))
         try:
             done = delete_downloaded_files(srv.cfg, root_dir(srv.cfg), keys)
         finally:

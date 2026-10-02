@@ -139,7 +139,8 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 ### Downloads you can leave running
 
 - **Jobs wait their turn** (issue #49). Start a sync, download, refresh or sign-in while something is running, and
-  it joins the queue instead of being refused with "Hoard is busy". Take one off the queue in Tasks.
+  it joins the queue instead of being refused with "Hoard is busy". So does taking something out of Local,
+  rescanning it, or deleting a removed product's downloaded files. Take one off the queue in Tasks.
 - **Failed downloads are tried again** (issue #19): twice, after a short wait, before they count as failed (change
   it in Settings, under **Failed downloads**). A store saying a file isn't there, or isn't yours, isn't retried.
 - **Progress, speed and time left.** While a file downloads, the download panel and Tasks show a progress bar, how
