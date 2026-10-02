@@ -178,10 +178,11 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
   the copy says what it is.
 - **Library folders on other drives.** When your downloads drive fills up, add a folder on another drive (an
-  external disk, say) in Settings, under **Other library folders**. Hoard reads it as part of your library:
+  external disk, say) in Settings, under **Library folders**: **Add a folder…** picks it and adds it. Hoard reads
+  it as part of your library, and Downloads gives each folder a tab of its own, with how many downloads it holds.
   Downloads, Hoard for Unity, the routine checks and syncing all cover it. New downloads still go to your downloads
   folder, and a product already in another folder is updated where it is. To move a product, open its details and
-  choose **Move here**: Hoard copies its files, checks every one, and only then deletes them where they were. When
+  choose **Move here** (or select several and move them together): Hoard copies its files, checks every one, and only then deletes them where they were. When
   a folder's drive isn't connected, its products are left alone, not downloaded again; removing a folder in
   Settings only stops Hoard reading it.
 - **Routine checks of your downloads** (issue #83). Once a week (or a day, a month, or only when you ask, in

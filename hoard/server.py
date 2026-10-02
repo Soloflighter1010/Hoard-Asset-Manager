@@ -143,6 +143,8 @@ def open_target(cfg: dict, rel: str) -> Path | None:
     rel = rel.replace("\\", "/")
     if rel.startswith("@"):
         found = libraries.resolve(cfg, rel)
+        if found and not found[1].strip("/"):   # "@1/": the library folder itself
+            return found[0] if libraries.available(found[0]) else None
         rest = contained_rel(found[0], found[1]) if found else None   # plain, and inside that library folder
         return safe_join(found[0], rest) if rest else None
     root = root_dir(cfg)
@@ -380,6 +382,20 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         with self._index_lock:
             self._wanted += 1
 
+    def library_view(self) -> list[dict]:
+        """The library folders (libraries.view), each with how many downloads it holds, for Settings and the tabs.
+        Hidden products aren't counted, so a count never gives them away while the hidden library is locked."""
+        counts: dict[int, int] = {}
+        try:
+            hidden = MarkStore().load()["hidden"]
+            for a in self.index(stale_ok=True)["assets"]:
+                if a.get("tag_key") in hidden:
+                    continue
+                counts[a.get("library") or 0] = counts.get(a.get("library") or 0, 0) + 1
+        except Exception:  # noqa: BLE001 - counts are a nicety; the folders still show
+            pass
+        return [{**f, "products": counts.get(f["n"], 0)} for f in libraries.view(self.cfg)]
+
     def index(self, rescan: bool = False, stale_ok: bool = False) -> dict:
         """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan.
 
@@ -566,7 +582,7 @@ class Handler(BaseHTTPRequestHandler):
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
-                     "libraries": libraries.view(srv.cfg),
+                     "libraries": srv.library_view(),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
@@ -577,7 +593,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
                                "hidden_left_out": not self._unlocked() and bool(MarkStore().load()["hidden"])}, compress=True)
         if path == "/api/settings":
-            return self._json(public_settings(srv.cfg))
+            return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
         if path == "/api/update":
             return self._json(srv.updates.view(srv.can_update()))
         if path == "/api/setup":
@@ -633,7 +649,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError as e:
             print(f"Couldn't rebuild the catalog: {e}", flush=True)
         srv.forget_index()
-        return self._json({"ok": True, "libraries": libraries.view(srv.cfg)})
+        return self._json({"ok": True, "libraries": srv.library_view()})
 
     def _privacy_action(self, path: str, body: dict):
         """Archive, hide, remove and the hidden library's PIN."""
@@ -890,7 +906,7 @@ class Handler(BaseHTTPRequestHandler):
             apply_store_sites(srv.cfg)   # added or removed Payhip shops count (or stop counting) straight away
             save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
             srv.forget_index()
-            return self._json({"ok": True, "settings": public_settings(srv.cfg)})
+            return self._json({"ok": True, "settings": {**public_settings(srv.cfg), "libraries": srv.library_view()}})
         if path == "/api/diagnostics/open-folder":
             try:
                 folder = diagnostics.support_report_dir()

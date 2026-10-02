@@ -102,12 +102,19 @@ explained in [Where Hoard keeps things](Where-Hoard-Keeps-Things).
 
 ### Library folders on other drives
 
-When your downloads drive fills up, add a folder on another drive in [Settings](Settings), under **Other library
-folders** (up to 10). Each is laid out like the downloads folder, a folder per store, and Hoard reads them all as
+When your downloads drive fills up, add a folder on another drive in [Settings](Settings), under **Library
+folders** (up to 10): in Hoard's window, **Add a folder…** opens your system's folder picker and adds the one you
+choose; or type its path. Each is laid out like the downloads folder, a folder per store, and Hoard reads them all as
 one library: Downloads, Hoard for Unity, the routine checks and syncing cover every one.
 
+- **A tab for each folder.** Once you've added one, Downloads has a tab for every library folder after the stores'
+  tabs, named for the folder and its drive ("Hoard (E:)"), with how many downloads it holds. Choose one to see only
+  what's in that folder; choose it again, or **Everything**, to see them all. A folder whose drive isn't connected
+  shows its tab dimmed.
+
 - **New downloads** go to the downloads folder. A product already in another folder is kept up to date there.
-- **Moving a product:** open it in Downloads and, under **Library folder**, choose where and **Move here**. Hoard
+- **Moving products:** open one in Downloads and, under **Library folder**, choose where and **Move here**; or
+  choose **Select**, pick several, and use **Move here** in the selection bar (each move is a task of its own). Hoard
   copies its files, checks each one by size and fingerprint, and only then deletes them where they were; if
   anything goes wrong, it stays where it was. Anything of your own in its folder isn't moved. Follow it in Tasks.
 - **A drive that isn't connected:** its products are left out of Downloads until it's back, and a sync skips them

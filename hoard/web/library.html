@@ -677,6 +677,18 @@ dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-
 dialog.ask p:first-child { font-weight: 700; }
 .ask-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
+/* library folders, in Settings (as on the Downloads page) */
+.libs { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.librow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--stone);
+  box-shadow: inset 0 0 0 1px var(--seam); font-size: 13px; }
+.librow.away { opacity: .65; }
+.librow svg { flex: none; width: 18px; height: 18px; color: var(--dust); }
+.librow .lp { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.librow .lp b { font-weight: 700; color: var(--bone); }
+.librow .lp small { color: var(--dust); overflow-wrap: anywhere; font-size: 12px; }
+.librow .muted { white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .librow { flex-wrap: wrap; } .librow .muted { white-space: normal; } }
+.settings .libadd #libPick { flex: none; }
 </style>
 </head>
 <body>
@@ -828,6 +840,18 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
   <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
+  <h3>Library folders</h3>
+  <p class="hint">Your downloads can live on more than one drive. Add a folder on another drive (an external disk,
+    say) and Hoard reads it as part of your library, with a tab of its own in Downloads.</p>
+  <div id="setLibs" class="libs"></div>
+  <div class="field libadd"><button class="primary sm" id="libPick" data-browse hidden>Add a folder…</button>
+    <input id="libPath" spellcheck="false" autocomplete="off" aria-label="A folder to add, as a full path"
+      placeholder="A folder on another drive, as a full path">
+    <button class="ghost sm" id="libAdd">Add</button></div>
+  <p class="hint">New downloads go to the downloads folder; a product already in another folder is kept up to date
+    there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops
+    Hoard reading it: its files stay where they are.</p>
+  <p class="hint" id="libMsg" role="status"></p>
   <h3>Stores</h3>
   <div id="setStores"></div>
   <h3>Payhip shops</h3>
@@ -2070,6 +2094,62 @@ function wireTags() {
 const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io" };
 let SETTINGS = null, dlActive = false, dlTimer = null;
 
+/* ---------- library folders, in Settings (as on the Downloads page, hoard/libraries.py) */
+const DRIVE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5" width="15" height="10" rx="2.5"/><circle cx="14" cy="10" r="1" fill="currentColor"/><path d="M5.5 10h5"/></svg>';
+const libCount = n => `${n.toLocaleString()} ${n === 1 ? "product" : "products"}`;
+function renderLibs(list) {   // every library folder, the downloads folder first (hoard/libraries.py)
+  $("#setLibs").innerHTML = (list || []).map(l => `<div class="librow${l.available ? "" : " away"}">${DRIVE_ICON}` +
+    `<span class="lp"><b>${esc(l.label || l.path)}</b><small>${esc(l.path)}${l.main ? " · new downloads go here" : ""}</small></span>` +
+    `<span class="muted">${l.available ? `${libCount(l.products || 0)}${l.free != null ? ` · ${sizeText(l.free)} free` : ""}`
+      : "Drive not connected"}</span>` +
+    (l.available ? `<button class="ghost sm" data-lib-open="${l.n}">Open</button>` : "") +
+    (l.main ? "" : `<button class="ghost sm" data-lib-remove="${l.n}">Remove</button>`) + `</div>`).join("");
+}
+async function libraryChange(path, body) {
+  $("#libMsg").textContent = "";
+  const r = await apiPost(path, body);
+  if (!r.ok) { $("#libMsg").textContent = r.data.error || "That didn't work."; return null; }
+  SETTINGS.libraries = r.data.libraries;
+  if (typeof DATA === "object" && DATA) DATA.libraries = r.data.libraries;
+  renderLibs(r.data.libraries);
+  await T.reload();
+  return r.data.libraries;
+}
+async function addLibrary(path) {
+  const before = new Set((SETTINGS.libraries || []).map(l => l.path));
+  const libs = await libraryChange("/api/libraries/add", { path });
+  if (!libs) return false;
+  const added = libs.find(l => !before.has(l.path));
+  if (added) toast(`Added ${added.label}: ${added.products ? `${libCount(added.products)} found there` : "nothing downloaded there yet"}. ` +
+                   "It has a tab in Downloads.");
+  return true;
+}
+function wireLibs() {
+  $("#libPick").addEventListener("click", async () => {   // in Hoard's window: choose it, and it's added
+    const r = await apiPost("/api/pick", { kind: "folder" });
+    if (!r.ok) { $("#libMsg").textContent = r.data.error || "The picker didn't open. Type the path instead."; return; }
+    if (r.data.path) await addLibrary(r.data.path);
+  });
+  const add = async () => {
+    const path = $("#libPath").value.trim();
+    if (path && await addLibrary(path)) $("#libPath").value = "";
+  };
+  $("#libAdd").addEventListener("click", add);
+  $("#libPath").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+  $("#setLibs").addEventListener("click", async e => {
+    const open = e.target.closest("[data-lib-open]");
+    if (open) {
+      const lib = (SETTINGS.libraries || []).find(l => l.n === +open.dataset.libOpen);
+      if (lib) { const r = await apiPost("/api/open", { path: lib.main ? "" : `@${lib.n}/` }); toast(r.ok ? `Opened in ${r.data.opened_in}` : r.data.error); }
+      return;
+    }
+    const b = e.target.closest("[data-lib-remove]"); if (!b) return;
+    const lib = (SETTINGS.libraries || []).find(l => l.n === +b.dataset.libRemove);
+    if (!lib || !await ask(`Stop reading ${lib.label} (${lib.path}) as part of your library?\n\nIts files stay where they are, ` +
+                           "and come back to your library if you add the folder again.", "Remove")) return;
+    if (await libraryChange("/api/libraries/remove", { n: lib.n })) toast(`${lib.label} is no longer part of your library.`);
+  });
+}
 async function apiPost(url, body) {
   try {
     const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -2187,6 +2267,7 @@ async function browseInto(input, kind = "folder") {
 function fillSettings() {   // the controls, as the settings are now
   syncBrowse();
   $("#setRoot").value = SETTINGS.root;
+  renderLibs(SETTINGS.libraries);
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setOffline").checked = SETTINGS.offline_images;
@@ -2343,6 +2424,7 @@ function wireApp() {
   wireSupportReport();
   for (const id of ["tagPanel", "stores", "settingsPanel"]) makeWindow($("#" + id));
   wireAutosave();
+  wireLibs();
   wireSidebar();
   wireDock();
   wireTasks();
