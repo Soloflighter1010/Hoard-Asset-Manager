@@ -353,12 +353,32 @@ class _PublicHTTPHandler(urllib.request.HTTPHandler):
         return self.do_open(_PublicHTTPConnection, req)
 
 
+_TLS: "ssl.SSLContext | None" = None
+
+
+def tls_context() -> ssl.SSLContext:
+    """Certificate checking for Hoard's own HTTPS requests: the system's trusted certificates where Python finds
+    them (Windows, most Linux), and always the certifi bundle that requests uses too. Hoard's Mac app is built with
+    a Python that looks for the system's certificates where they were on the computer that built it, so without
+    certifi every certificate failed there, and no store picture loaded."""
+    global _TLS
+    if _TLS is None:
+        context = ssl.create_default_context()
+        try:
+            import certifi
+            context.load_verify_locations(cafile=certifi.where())
+        except (ImportError, OSError, ssl.SSLError):
+            pass   # the system's certificates alone, as before
+        _TLS = context
+    return _TLS
+
+
 class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
     """urllib's https:// handler, using the public-only connection."""
 
     def https_open(self, req):
         """Open https:// addresses through the public-only connection, verifying certificates."""
-        return self.do_open(_PublicHTTPSConnection, req, context=ssl.create_default_context())
+        return self.do_open(_PublicHTTPSConnection, req, context=tls_context())
 
 
 class _PublicRedirects(urllib.request.HTTPRedirectHandler):
@@ -388,8 +408,25 @@ def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> 
             if len(data) > max_bytes:
                 return None
             return data, r.headers.get_content_type()
-    except Exception:
+    except urllib.error.HTTPError:
+        return None   # the store said no (a picture that's gone): nothing to note
+    except Exception as e:
+        _note_fetch_failure(e)
         return None
+
+
+_FETCH_FAILURES: set = set()
+
+
+def _note_fetch_failure(e: Exception) -> None:
+    """Say in Hoard's log, once for each kind of failure, why a store picture couldn't be fetched: pictures that
+    never load were otherwise silent (and every one failing the same way, as on 2.10's Mac app, looked like a slow
+    connection)."""
+    why = getattr(e, "reason", e)
+    kind = f"{type(why).__name__}: {why}"[:300]
+    if kind not in _FETCH_FAILURES and len(_FETCH_FAILURES) < 20:
+        _FETCH_FAILURES.add(kind)
+        print(f"Couldn't fetch a store picture ({kind})", flush=True)
 
 
 def network_tls(host: str, tls_cert: str | None, tls_key: str | None, plain_http: bool) -> "ssl.SSLContext | None":

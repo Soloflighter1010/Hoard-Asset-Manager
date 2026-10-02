@@ -61,6 +61,10 @@ class FakeWindow:
             self.closed.set()
     destroy = close_button
 
+    def applicationShouldTerminate_(self):
+        """Command-Q on a Mac: pywebview's app delegate asks the same closing handlers, from this method."""
+        self.close_button()
+
 
 def fake_webview(fail=False):
     mod = types.ModuleType("webview")
@@ -360,11 +364,37 @@ class ClosingTheWindow(_Harness):
         srv.cfg["close_to_taskbar"] = True
         self.assertEqual(app.close_decision(srv), "background")
 
+    def test_command_q_quits(self):
+        """On a Mac, Command-Q (or Quit in the menu or Dock) went through the same closing event as the close
+        button, so with the window going to the taskbar on close, Hoard couldn't be quit that way. A quit quits;
+        the close button still minimizes."""
+        sys.modules["webview"] = wv = fake_webview()
+        t, result, info = self.start()
+        window = wv.windows[0]
+        window.close_button()
+        time.sleep(0.3)
+        self.assertEqual(window.minimized, 1, "the close button: to the Dock")
+        self.assertFalse(window.closed.is_set())
+        window.applicationShouldTerminate_()
+        t.join(15)
+        self.assertTrue(window.closed.is_set(), "Command-Q: quit")
+        self.assertEqual(result.get("code"), 0)
+
+    def test_app_quitting_is_told_apart(self):
+        def applicationShouldTerminate_():
+            return app.app_quitting()
+        self.assertTrue(applicationShouldTerminate_())
+        self.assertFalse(app.app_quitting())
+        srv = types.SimpleNamespace(cfg={}, jobs=types.SimpleNamespace(state={"running": False, "queue": []}))
+        self.assertEqual(app.close_decision(srv, quitting=True), "quit")
+        srv.jobs.state["running"] = True
+        self.assertEqual(app.close_decision(srv, quitting=True), "ask", "asks first while working, as Quit Hoard does")
+
     def test_close_button(self):
         decided = []
         sys.modules["webview"] = wv = fake_webview()
         saved = app.close_decision
-        app.close_decision = lambda srv: decided[-1]
+        app.close_decision = lambda srv, quitting=False: decided[-1]
         self.addCleanup(setattr, app, "close_decision", saved)
         t, result, info = self.start()
         window = wv.windows[0]

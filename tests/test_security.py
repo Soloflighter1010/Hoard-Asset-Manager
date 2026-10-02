@@ -12,6 +12,7 @@ import json
 import os
 import re
 import socket
+import ssl
 import sqlite3
 import stat
 import sys
@@ -141,6 +142,31 @@ class PublicOnlyFetching(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_certificates_are_checked_even_without_the_systems(self):
+        """2.10's Mac app loaded no store pictures: its Python looked for the system's certificates where they were
+        on the computer that built it, so every certificate failed (silently). Hoard now always trusts the certifi
+        bundle too, and still checks every certificate and host name."""
+        import ssl
+        bare = lambda *a, **k: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)   # a Python that finds no certificates
+        self.assertEqual(bare().cert_store_stats()["x509_ca"], 0)
+        with mock.patch.object(safety, "_TLS", None), mock.patch.object(safety.ssl, "create_default_context", bare):
+            context = safety.tls_context()
+        self.assertGreater(context.cert_store_stats()["x509_ca"], 50, "the usual authorities, from certifi")
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+        self.assertTrue(context.check_hostname)
+
+    def test_a_picture_that_cant_be_fetched_says_why_once(self):
+        import contextlib
+        import io
+        out = io.StringIO()
+        failing = mock.Mock(side_effect=urllib.error.URLError(ssl.SSLCertVerificationError("certificate verify failed")))
+        with mock.patch.object(safety, "_FETCH_FAILURES", set()), contextlib.redirect_stdout(out), \
+                mock.patch.object(safety.urllib.request.OpenerDirector, "open", failing):
+            for _ in range(3):
+                self.assertIsNone(safety.fetch_public("https://images.example/a.png", {}, 1000))
+        self.assertEqual(out.getvalue().count("Couldn't fetch a store picture"), 1)
+        self.assertIn("certificate verify failed", out.getvalue())
 
     def test_redirects_to_other_schemes_are_refused(self):
         for m in WEB_SAFETY:

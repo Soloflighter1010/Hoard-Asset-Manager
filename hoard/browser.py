@@ -249,10 +249,24 @@ def _dbus_names() -> set[str]:
     return names
 
 
+_KEYRING_SECONDS = 60.0   # how long linux_keyring's answer is kept
+_keyring_seen: tuple[float, str | None] | None = None
+
+
 def linux_keyring() -> str | None:
-    """The keyring Chromium can use on this Linux desktop ("gnome-libsecret" or "kwallet5/6"), or None."""
+    """The keyring Chromium can use on this Linux desktop ("gnome-libsecret" or "kwallet5/6"), or None. Asking the
+    session bus starts gdbus (or dbus-send) twice, and the Library page asks on every load, so the answer is kept
+    for a minute: a keyring rarely comes or goes while Hoard runs."""
+    global _keyring_seen
     if not sys.platform.startswith("linux"):
         return None
+    now = time.monotonic()
+    if _keyring_seen is None or now - _keyring_seen[0] > _KEYRING_SECONDS:
+        _keyring_seen = (now, _find_keyring())
+    return _keyring_seen[1]
+
+
+def _find_keyring() -> str | None:
     names = _dbus_names()
     if "org.freedesktop.secrets" in names:        # GNOME Keyring, KeePassXC and other Secret Service keyrings
         return "gnome-libsecret"

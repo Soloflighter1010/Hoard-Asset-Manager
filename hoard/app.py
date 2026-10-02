@@ -358,7 +358,7 @@ def open_window(srv) -> None:
         the window (hiding it, asking the page) happens on another thread, or it would wait for itself."""
         if leaving.is_set():
             return True
-        decision = close_decision(srv)
+        decision = close_decision(srv, quitting=app_quitting())
         if decision == "quit":
             leaving.set()
             return True
@@ -407,11 +407,24 @@ def run_in_browser(srv) -> None:
             break
 
 
-def close_decision(srv) -> str:
+def app_quitting() -> bool:
+    """On a Mac, is this Hoard being quit (Command-Q, or Quit in its menu or the Dock), rather than its window's close
+    button? pywebview sends both as the window closing; a quit comes through its app delegate's
+    applicationShouldTerminate_, which is on the stack then (the closing handlers run in that same call)."""
+    f = sys._getframe(1)
+    while f is not None:
+        if f.f_code.co_name == "applicationShouldTerminate_":
+            return True
+        f = f.f_back
+    return False
+
+
+def close_decision(srv, quitting: bool = False) -> str:
     """What closing Hoard's window does: "background" (it's minimized to the taskbar, or the Dock, and Hoard
     carries on: unless you turned that off in Settings), "ask" (something is running or waiting its turn: the page asks whether to stop it first, carry on in
-    the background, or close at once), or "quit"."""
-    if srv.cfg.get("close_to_taskbar", True):
+    the background, or close at once), or "quit". Quitting the app (quitting: Command-Q on a Mac) quits, as Quit
+    Hoard does, asking first only while something is running."""
+    if srv.cfg.get("close_to_taskbar", True) and not quitting:
         return "background"
     if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
         return "ask"
@@ -485,7 +498,26 @@ def self_test() -> int:
         check("Playwright's driver", Path(node).is_file() and Path(cli).is_file(), f"{node}, {cli}")
     except Exception as e:
         check("Playwright's driver", False, repr(e))
-    check("window support (pywebview)", window_available() or sys.platform != "win32")
+    check("window support (pywebview)", window_available() or sys.platform not in ("win32", "darwin"))
+    if sys.platform == "darwin":   # pywebview's Mac window needs its Cocoa part and PyObjC's AppKit and WebKit (found
+        import importlib.util       # without importing them, which would start an app in the Dock)
+        missing = [m for m in ("webview.platforms.cocoa", "AppKit", "WebKit", "Foundation")
+                   if importlib.util.find_spec(m) is None]
+        check("the Mac window's parts", not missing, ", ".join(missing))
+    # Store pictures are fetched with Hoard's own HTTPS (2.10's Mac app trusted no certificate at all: issue #93),
+    # and downloads with requests: both need certificate authorities to trust
+    if sys.platform.startswith("linux"):   # what's here for keeping sign-ins and keys, for the build's log (the
+        import shutil                      # computer it runs on decides whether there's a keyring, so not a check)
+        for tool, use in (("gdbus", "finding the keyring"), ("dbus-send", "finding the keyring"),
+                          ("secret-tool", "keeping the itch.io key")):
+            print(f"note    {tool} ({use}): {'here' if shutil.which(tool) else 'not here'}")
+    from .safety import tls_context
+    check("trusted certificates", tls_context().cert_store_stats()["x509_ca"] > 0)
+    try:
+        import requests.certs
+        check("requests' certificates", Path(requests.certs.where()).is_file(), requests.certs.where())
+    except Exception as e:
+        check("requests' certificates", False, repr(e))
     os.environ.setdefault("HOARD_DATA_DIR", tempfile.mkdtemp(prefix="hoard-self-test-"))
     from .config import load_config
     from .server import AppServer
