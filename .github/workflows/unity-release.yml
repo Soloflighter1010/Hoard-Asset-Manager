@@ -59,6 +59,7 @@ jobs:
           version=$(jq -r .version "Packages/$PACKAGE_NAME/package.json")
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "TAG=unity-v$version" >> "$GITHUB_ENV"
+          python3 scripts/release_info.py --github-env "unity-v$version" >> "$GITHUB_ENV"   # its title; a beta or not
           if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "unity-v$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json's version $version."
             exit 1
@@ -89,6 +90,8 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" $files --repo "$GITHUB_REPOSITORY" --clobber
           else
+            # Never Latest: that stays on the app, whose files the website's download buttons offer. A beta
+            # (package.json 0.6.0-beta.1) is a pre-release. (scripts/release_info.py)
             gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Hoard for Unity $VERSION" --notes-file dist/vpm/RELEASE_NOTES.md
+              --title "$TITLE" --prerelease="$PRERELEASE" --latest=false --notes-file dist/vpm/RELEASE_NOTES.md
           fi

@@ -119,7 +119,7 @@ class Versions(unittest.TestCase):
         self.assertTrue(updater.newer("v3.0.0", "2.99.99"))
         self.assertFalse(updater.newer("2.6.0", "2.6.0"))
         self.assertFalse(updater.newer("2.5.9", "2.6.0"))
-        for bad in ("", "latest", "2.6", "2.6.0-beta", "unity-v9.0.0", "v2.6.0.1", None):
+        for bad in ("", "latest", "2.6", "2.6.0-beta", "2.6.0-rc.1", "unity-v9.0.0", "v2.6.0.1", None):
             self.assertFalse(updater.newer(bad, "0.0.1"), bad)
         self.assertTrue(updater.newer(NEXT))
 
@@ -132,6 +132,33 @@ class Versions(unittest.TestCase):
         self.assertEqual(picked["tag_name"], "v2.10.0")
         self.assertIsNone(updater.pick_latest([release("unity-v3.0.0")]))
         self.assertIsNone(updater.pick_latest({"message": "Not Found"}))
+
+    def test_betas(self):
+        """A beta (v3.1.0-beta.2, a pre-release) comes before its release, after the one before; it's only picked
+        when beta updates are on, and then the finished release still wins over its betas."""
+        self.assertTrue(updater.newer("3.1.0-beta.1", "3.0.0"))
+        self.assertTrue(updater.newer("3.1.0-beta.2", "3.1.0-beta.1"))
+        self.assertTrue(updater.newer("3.1.0", "3.1.0-beta.9"), "the release is offered to a tester on its beta")
+        self.assertFalse(updater.newer("3.1.0-beta.1", "3.1.0"))
+        for bad in ("3.1.0-beta", "3.1.0-rc.1", "3.1.0-beta.1.2", "3.1.0-BETA.1"):
+            self.assertIsNone(updater.version_of(bad), bad)
+        listed = [release("v3.0.0"), release("v3.1.0-beta.1", prerelease=True), release("v3.1.0-beta.2", prerelease=True),
+                  release("v3.1.0-beta.3"), release("unity-v9.0.0-beta.1", prerelease=True)]
+        self.assertEqual(updater.pick_latest(listed)["tag_name"], "v3.0.0", "a beta tag is skipped even if not marked")
+        self.assertEqual(updater.pick_latest(listed, betas=True)["tag_name"], "v3.1.0-beta.3")
+        self.assertEqual(updater.pick_latest(listed + [release("v3.1.0")], betas=True)["tag_name"], "v3.1.0")
+        shown = updater.describe(release("v3.1.0-beta.2", prerelease=True))
+        self.assertEqual(shown["version"], "3.1.0-beta.2")
+
+    def test_turning_betas_off_hides_one_found_earlier(self):
+        cfg = {"beta_updates": True}
+        u = updater.Updates(cfg)
+        u.state["latest"] = updater.describe(release("v99.1.0-beta.1", prerelease=True))
+        self.assertTrue(u.view(False)["available"])
+        self.assertTrue(u.view(False)["beta"])
+        cfg["beta_updates"] = False
+        self.assertFalse(u.view(False)["available"])
+        self.assertIsNone(u.view(False)["latest"])
 
     def test_what_the_page_is_shown(self):
         r = release("v3.1.0", html_url="https://evil.example/", body="x" * 10000)
@@ -295,7 +322,7 @@ class WhenHoardAsks(unittest.TestCase):
         self.assertFalse(server.public_settings(cfg)["check_for_updates"])
 
     def test_the_last_check_is_remembered(self):
-        with mock.patch.object(updater, "fetch_latest", lambda: release(f"v{NEXT}")):
+        with mock.patch.object(updater, "fetch_latest", lambda betas=False: release(f"v{NEXT}")):
             updater.Updates(config.load_config()).check()
         again = updater.Updates(config.load_config())
         self.assertEqual(again.state["latest"]["version"], NEXT)

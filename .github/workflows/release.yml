@@ -66,6 +66,10 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
+      # v3.1.0 is a release, and Latest; v3.1.0-beta.1 a beta: a pre-release, never Latest (scripts/release_info.py)
+      - name: What this release is
+        run: python3 scripts/release_info.py --github-env "$TAG" >> "$GITHUB_ENV"
+
       - name: Build the zips
         run: python3 scripts/build_release.py --tag "$TAG"
 
@@ -84,10 +88,11 @@ jobs:
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$TAG" --notes-file dist/RELEASE_NOTES.md --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title "$TITLE" --prerelease="$PRERELEASE" --notes-file dist/RELEASE_NOTES.md \
+              --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" \
-              --title "Hoard $TAG" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
+              --title "$TITLE" --prerelease="$PRERELEASE" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
           fi
 
   # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer and a portable zip,
@@ -168,7 +173,8 @@ jobs:
           $version = python -c "import hoard; print(hoard.__version__)"
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup --version 6.4.3 -y --no-progress }
-          & $iscc "/DAppVersion=$version" packaging\hoard.iss
+          $numbers = python -c "import re, hoard; print('.'.join(re.findall(r'\d+', hoard.__version__)[:3]))"
+          & $iscc "/DAppVersion=$version" "/DFileVersion=$numbers" packaging\hoard.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Sign the installer
@@ -388,7 +394,10 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      # A release becomes Latest (what the website's download buttons offer); a beta never does.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+        run: |
+          case "$TAG" in *-beta.*) latest=false ;; *) latest=true ;; esac
+          gh release edit "$TAG" --draft=false --latest="$latest" --repo "$GITHUB_REPOSITORY"

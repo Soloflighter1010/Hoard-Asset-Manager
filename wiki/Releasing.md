@@ -30,10 +30,49 @@ Every file has signed build provenance (`gh attestation verify`). The Windows pr
 code-signed (see **Code signing (Windows)** below); the Mac packages aren't signed or notarized by Apple: see
 [Installing Hoard](Installing-Hoard) for what users see.
 
+### Betas
+
+A beta is a release of the next version before it's finished, for testers, from this same repository. Tag it
+`v<version>-beta.<n>`: `v3.1.0-beta.1`, then `v3.1.0-beta.2`, and `v3.1.0` when it's done.
+
+1. Set `__version__ = "3.1.0-beta.1"`, and add a `## 3.1.0-beta.1` section to `CHANGELOG.md` (the beta's notes on
+   GitHub; the website's What's new page leaves beta sections out). In the Flatpak's metainfo, list it as
+   `<release version="3.1.0-beta.1" date="..." type="development">`.
+2. Run **Release** with the tag `v3.1.0-beta.1`, as above. The release is titled **Hoard 3.1.0 beta 1** and published
+   as a **pre-release**, which never becomes Latest, so the website's download buttons, and everyone else's update
+   checks, stay on the last release.
+3. Testers turn on **Get beta updates** (Settings, under Updates). Hoard then offers each newer beta, and the
+   finished `3.1.0` when it's out. The Windows app installs a beta itself, as it does a release.
+
+When `3.1.0` is ready, fold the beta sections of `CHANGELOG.md` into one `## 3.1.0` and release it as usual.
+
+The Windows and Mac builds take numbers-only versions for the parts of the system that need them (a beta
+`3.1.0-beta.1` is `3.1.0` there); the file names and Hoard itself say the whole version.
+
+### Kinds of release, and Latest
+
+Every kind of release shares this repository's **Releases** page, told apart by its tag and title
+(`scripts/release_info.py`):
+
+| Tag | Title | Status |
+|---|---|---|
+| `v3.1.0` | Hoard 3.1.0 | a release, and **Latest** |
+| `v3.1.0-beta.2` | Hoard 3.1.0 beta 2 | a pre-release |
+| `unity-v0.6.0` | Hoard for Unity 0.6.0 | a release, never Latest |
+| `unity-v0.6.0-beta.1` | Hoard for Unity 0.6.0 beta 1 | a pre-release |
+
+Latest always stays on the newest release of the app: the website's download buttons and the README's badge
+follow it. The release workflows set all of this themselves. To bring older releases in line (titles, pre-release
+status, Latest), run **Actions › Tidy releases › Run workflow**: unticked, it only lists what it would change in
+the run's log; ticked, it changes it. It never touches a release's files, notes or tag. (It's
+`scripts/tidy_releases.py`: on your own computer, run it as it is to see the changes, and with `--apply` and
+`GH_TOKEN` set, from `gh auth token`, to make them.)
+
 ### Releases are immutable
 
-This repository has immutable releases turned on: once a release is published, nothing can be added to or
-changed in it, and its tag can never be used for another release, even after deleting the release. That's why
+This repository has immutable releases turned on: once a release is published, no file can be added to it or
+changed, and its tag can never be used for another release, even after deleting the release. (Its title, notes and
+pre-release status can still be edited.) That's why
 the release stays a draft until every file is attached.
 
 - **A run failed partway?** It leaves a draft. Fix the problem, then run the workflow again with the same tag: it

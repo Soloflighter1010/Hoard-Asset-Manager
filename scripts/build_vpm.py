@@ -55,6 +55,9 @@ def meta_text(path: Path) -> str:
     return f"fileFormatVersion: 2\nguid: {meta_guid(path)}\n{body}"
 
 
+PACKAGE_VERSION = re.compile(r"\d+\.\d+\.\d+(-beta\.\d+)?")   # 0.6.0, or a beta of it: 0.6.0-beta.1
+
+
 def contents() -> list[Path]:
     """Every file and folder in the package except .meta files, in a fixed order."""
     return sorted(p for p in PACKAGE.rglob("*") if p.suffix != ".meta")
@@ -66,8 +69,8 @@ def check(write_metas: bool) -> dict:
     manifest = json.loads((PACKAGE / "package.json").read_text("utf-8"))
     if manifest.get("name") != PACKAGE.name:
         problems.append(f"package.json name should be {PACKAGE.name}")
-    if not re.fullmatch(r"\d+\.\d+\.\d+", str(manifest.get("version", ""))):
-        problems.append("package.json version should be like 1.2.3")
+    if not PACKAGE_VERSION.fullmatch(str(manifest.get("version", ""))):
+        problems.append("package.json version should be like 1.2.3 (or 1.2.3-beta.1 for a beta)")
     for field in ("displayName", "unity", "description", "author"):
         if not manifest.get(field):
             problems.append(f"package.json needs {field}")

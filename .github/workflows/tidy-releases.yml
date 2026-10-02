@@ -1,0 +1,43 @@
+name: Tidy releases
+
+# Gives every release the title and status its tag calls for, and keeps Latest on the newest release of the app
+# (scripts/tidy_releases.py): Hoard 3.1.0 (Latest), Hoard 3.1.0 beta 2 (a pre-release), Hoard for Unity 0.6.0.
+# Run it from Actions > Tidy releases > Run workflow. Untick "Make the changes" to only see what it would change, in
+# the run's log. It never changes a release's files, notes or tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Make the changes (untick to only list them)"
+        type: boolean
+        default: false
+      early_before:
+        description: 'Optional: add "(early)" to the titles of app releases older than this version, for example 2.5.0'
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: tidy-releases
+
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # edit the releases' titles and status
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tidy the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY: ${{ inputs.apply }}
+          EARLY_BEFORE: ${{ inputs.early_before }}
+        run: |
+          args=()
+          [ "$APPLY" = "true" ] && args+=(--apply)
+          [ -n "$EARLY_BEFORE" ] && args+=(--early-before "$EARLY_BEFORE")
+          python3 scripts/tidy_releases.py "${args[@]}"

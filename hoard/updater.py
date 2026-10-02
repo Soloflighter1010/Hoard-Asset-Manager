@@ -34,7 +34,8 @@ from .safety import DataFileError, read_json_file, write_file_safely
 REPO = "Soloflighter1010/Hoard-Asset-Manager"
 API = "https://api.github.com"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases"
-TAG = re.compile(r"v(\d{1,4})\.(\d{1,4})\.(\d{1,4})")    # Hoard's own releases (not unity-v..., not anything else)
+# Hoard's own releases (not unity-v..., not anything else): v3.1.0, and its betas, v3.1.0-beta.1
+TAG = re.compile(r"v(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-beta\.(\d{1,3}))?")
 SETUP_NAME = "Hoard-Setup-{}.exe"
 SUMS_NAME = "SHA256SUMS-windows.txt"
 MAX_SETUP = 400 * 1024 * 1024
@@ -47,11 +48,19 @@ class UpdateRefused(Exception):
     """A download that isn't the file the release says it is, or a release Hoard can't use."""
 
 
-def version_of(text) -> tuple[int, int, int] | None:
-    """"2.6.0" or "v2.6.0" as numbers, or None when it isn't a Hoard version."""
+def version_of(text) -> tuple[int, int, int, int, int] | None:
+    """"2.6.0", "v2.6.0" or "3.1.0-beta.2" as numbers that sort as the versions do (a beta comes before its
+    release), or None when it isn't a Hoard version."""
     text = str(text or "")
     m = TAG.fullmatch(text if text.startswith("v") else "v" + text)
-    return (int(m[1]), int(m[2]), int(m[3])) if m else None
+    if not m:
+        return None
+    return (int(m[1]), int(m[2]), int(m[3])) + ((0, int(m[4])) if m[4] else (1, 0))
+
+
+def is_beta(text) -> bool:
+    v = version_of(text)
+    return bool(v and v[3] == 0)
 
 
 def newer(candidate: str, than: str = __version__) -> bool:
@@ -95,13 +104,17 @@ def _session():
     return s
 
 
-def pick_latest(releases) -> dict | None:
-    """The newest published Hoard release in GitHub's list: not a draft, not a pre-release, tagged vX.Y.Z."""
+def pick_latest(releases, betas: bool = False) -> dict | None:
+    """The newest published Hoard release in GitHub's list: not a draft, tagged vX.Y.Z, and not a pre-release
+    unless betas (Settings: Get beta updates), when a beta, tagged vX.Y.Z-beta.N, counts too."""
     best = None
     for r in releases if isinstance(releases, list) else []:
-        if not isinstance(r, dict) or r.get("draft") or r.get("prerelease"):
+        if not isinstance(r, dict) or r.get("draft"):
             continue
-        v = version_of(r.get("tag_name")) if str(r.get("tag_name") or "").startswith("v") else None
+        tag = str(r.get("tag_name") or "")
+        if not betas and (r.get("prerelease") or is_beta(tag)):
+            continue
+        v = version_of(tag) if tag.startswith("v") else None
         if v and (best is None or v > best[0]):
             best = (v, r)
     return best[1] if best else None
@@ -113,7 +126,7 @@ def _asset(release: dict, name: str) -> dict | None:
 
 def describe(release: dict) -> dict:
     """What the page shows about a release."""
-    version = ".".join(map(str, version_of(release["tag_name"])))
+    version = str(release["tag_name"])[1:]   # (pick_latest only gives releases tagged as a Hoard version)
     url = str(release.get("html_url") or "")
     return {"version": version, "notes": str(release.get("body") or "")[:4000],
             "url": url if url.startswith(f"https://github.com/{REPO}/") else RELEASES_PAGE,
@@ -121,7 +134,7 @@ def describe(release: dict) -> dict:
             "has_installer": bool(_asset(release, SETUP_NAME.format(version)) and _asset(release, SUMS_NAME))}
 
 
-def fetch_latest() -> dict | None:
+def fetch_latest(betas: bool = False) -> dict | None:
     """Ask GitHub for Hoard's releases (one request) and return the newest, or None when there's none."""
     r = egress.get(_session(), f"{API}/repos/{REPO}/releases", [urlparse(API).hostname], params={"per_page": 30},
                    timeout=20)
@@ -129,7 +142,7 @@ def fetch_latest() -> dict | None:
         raise RuntimeError("GitHub asked Hoard to slow down. Try again in an hour.")
     r.raise_for_status()
     try:
-        return pick_latest(r.json())
+        return pick_latest(r.json(), betas)
     except ValueError:
         raise RuntimeError("GitHub's answer wasn't the list of releases Hoard asked for") from None
 
@@ -263,10 +276,13 @@ class Updates:
 
     def view(self, can_install: bool) -> dict:
         latest = self.state["latest"]
+        if latest and is_beta(latest.get("version")) and not self.cfg.get("beta_updates"):
+            latest = None   # found while beta updates were on, and they've been turned off since
         available = bool(latest and newer(latest.get("version", "")))
-        return {**self.state, "available": available, "can_install": bool(can_install and available
+        return {**self.state, "latest": latest, "available": available, "can_install": bool(can_install and available
                 and latest.get("has_installer")), "auto": bool(self.cfg.get("check_for_updates")),
-                "releases_page": RELEASES_PAGE, "how": how_to_update(latest["version"]) if available else ""}
+                "releases_page": RELEASES_PAGE, "how": how_to_update(latest["version"]) if available else "",
+                "betas": bool(self.cfg.get("beta_updates")), "beta": bool(available and is_beta(latest["version"]))}
 
     def _save(self) -> None:
         try:
@@ -276,7 +292,7 @@ class Updates:
 
     def check(self) -> dict:
         """Ask GitHub now. Raises when it can't be reached or answers strangely; the last answer is kept."""
-        release = fetch_latest()
+        release = fetch_latest(bool(self.cfg.get("beta_updates")))
         with self._lock:
             self.state.update(checked=time.time(), latest=describe(release) if release else None, error="")
             self._save()
@@ -307,7 +323,7 @@ class Updates:
 
         def run():
             try:
-                release = fetch_latest()
+                release = fetch_latest(bool(self.cfg.get("beta_updates")))
                 if not release or not newer(describe(release)["version"]):
                     raise UpdateRefused("Hoard is up to date.")
                 self.state["latest"] = describe(release)

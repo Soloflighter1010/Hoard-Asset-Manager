@@ -6,6 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 version=$(python3 -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('hoard/__init__.py').read()).group(1))")
+numbers=$(python3 -c "import re, sys; print('.'.join(re.findall(r'\d+', sys.argv[1])[:3]))" "$version")   # a beta's 3.1.0
 case "$(uname -m)" in
   arm64) chip=apple-silicon ;;
   x86_64) chip=intel ;;
@@ -27,7 +28,7 @@ done
 [ "$i" -gt 0 ] || { echo "pkgbuild found no bundles in $root" >&2; exit 1; }
 pkg="Hoard-$version-macos-$chip.pkg"
 pkgbuild --root "$root" --component-plist "$root.plist" --install-location / \
-  --identifier io.github.soloflighter1010.Hoard --version "$version" "dist/$pkg"
+  --identifier io.github.soloflighter1010.Hoard --version "$numbers" "dist/$pkg"
 rm -rf "$root" "$root.plist"
 # Check it: the package's own record lists no bundle Installer may relocate.
 pkgutil --expand "dist/$pkg" "$root.check"
