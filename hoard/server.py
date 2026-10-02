@@ -747,19 +747,19 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({"ok": True, "queued": started == "queued", "job": True})
 
     def _delete_files(self, body: dict):
-        """Delete the downloaded files of products you removed from your library. Only removed ones (so nothing in
-        your library loses its files by a slip), only when confirmed, and not while a job could be writing them."""
+        """Delete the downloaded files of these products, only when confirmed (the pages ask first), and not while a
+        job could be writing them (it waits its turn). A product still in your library stays there, as not downloaded,
+        to download again whenever you like; a removed one leaves Downloads."""
         srv = self.server
         if body.get("confirm") is not True:
             return self._json({"error": "Confirm first."}, 400)
         raw = body.get("keys")
         keys = {k for k in raw[:5000] if isinstance(k, str)} if isinstance(raw, list) else set()
         marks = MarkStore().load()
-        keys &= marks["removed"]
         if keys & marks["hidden"] and not self._unlocked():
             return self._json({"error": "Unlock your hidden library first."}, 403)
         if not keys:
-            return self._json({"error": "Only the files of products you've removed from your library can be deleted."}, 400)
+            return self._json({"error": "Choose the downloads to delete."}, 400)
         if not srv.jobs.busy.acquire(blocking=False):   # a job is running: this waits its turn after it
             names = sorted({a["name"] for a in srv.index(stale_ok=True)["assets"] if a.get("tag_key") in keys})
             name = names[0] if len(names) == 1 and len(keys) == 1 else f"{len(keys):,} {'product' if len(keys) == 1 else 'products'}"

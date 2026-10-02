@@ -174,7 +174,10 @@ class DeletingRemovedDownloads(unittest.TestCase):
         downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
         self.assertEqual(sorted(p.name for p in outside.iterdir()), ["body.png", "precious.txt"])
 
-    def test_the_server_only_deletes_removed_products(self):
+    def test_the_server_deletes_only_when_confirmed(self):
+        """Any download's files can be deleted, removed from your library or not (it stays in your library, to
+        download again), but only when confirmed, never a hidden one while the hidden library is locked, and not
+        while a job runs (it waits its turn)."""
         from hoard import marks
         cfg = {**config.load_config(), "root": str(self.root)}
         srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
@@ -187,10 +190,13 @@ class DeletingRemovedDownloads(unittest.TestCase):
                           headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
                 r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
                 return r.status, data
-            self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 400, "not removed: nothing is deleted")
-            self.assertTrue((self.folder / "rusk.unitypackage").exists())
-            marks.MarkStore().change("removed", {self.key}, True)
             self.assertEqual(call({"keys": [self.key]})[0], 400, "not confirmed")
+            self.assertEqual(call({"keys": [], "confirm": True})[0], 400, "nothing chosen")
+            marks.MarkStore().set_pin("4821")
+            marks.MarkStore().change("hidden", {self.key}, True)
+            self.assertEqual(call({"keys": [self.key], "confirm": True})[0], 403, "hidden, while it's locked")
+            marks.MarkStore().change("hidden", {self.key}, False)
+            self.assertTrue((self.folder / "rusk.unitypackage").exists(), "nothing deleted so far")
             self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # a job is running...
             try:
                 status, done = call({"keys": [self.key], "confirm": True})
@@ -206,6 +212,7 @@ class DeletingRemovedDownloads(unittest.TestCase):
                 time.sleep(0.05)
             self.assertFalse(self.folder.exists())
             self.assertEqual((srv.jobs.history[-1]["task"], srv.jobs.history[-1]["outcome"]), ("delete-files", "done"))
+            self.assertNotIn(self.key, MarkStore_removed(), "it's still in your library, not removed")
             self.assertIn("Deleted 3 files of Rusk", srv.jobs.history[-1]["message"])
             (self.folder).mkdir(parents=True)
             (self.folder / "rusk.unitypackage").write_bytes(b"pkg")
@@ -214,6 +221,11 @@ class DeletingRemovedDownloads(unittest.TestCase):
         finally:
             srv.shutdown()
             srv.server_close()
+
+
+def MarkStore_removed():
+    from hoard import marks
+    return marks.MarkStore().load()["removed"]
 
 
 class EditableCopies(unittest.TestCase):

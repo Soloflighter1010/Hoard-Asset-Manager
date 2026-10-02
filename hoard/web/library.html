@@ -3135,9 +3135,10 @@ function markButtons(a) {
   const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
   if (a.mark === "removed") return b("removed", false, "Restore") + `<button class="ghost sm" data-act="purge">Delete for good</button>` +
     (onDisk(a) ? `<button class="ghost sm" data-act="delete-files">Delete downloaded files</button>` : "");
-  if (a.mark === "hidden") return b("hidden", false, "Unhide") + b("removed", true, "Remove");
+  const del = onDisk(a) ? `<button class="ghost sm" data-act="delete-files">Delete downloaded files</button>` : "";
+  if (a.mark === "hidden") return b("hidden", false, "Unhide") + b("removed", true, "Remove") + del;
   return (a.mark === "archived" ? b("unarchived", true, "Unarchive") : b("archived", true, "Archive")) +
-    b("hidden", true, "Hide") + b("removed", true, "Remove");
+    b("hidden", true, "Hide") + b("removed", true, "Remove") + del;
 }
 function updateBulkButtons() {
   const set = (el, kind, on, text, show = true) => { el.hidden = !show; el.dataset.kind = kind; el.dataset.on = on; el.textContent = text; };
@@ -3149,7 +3150,7 @@ function updateBulkButtons() {
   else { set(one, v === "archive" ? "unarchived" : "archived", true, v === "archive" ? "Unarchive" : "Archive");
          set(two, "hidden", true, "Hide"); set(three, "removed", true, "Remove"); }
   $("#bulkPurge").hidden = v !== "removed";
-  $("#bulkDeleteFiles").hidden = v !== "removed";
+  $("#bulkDeleteFiles").hidden = false;   // in every view: a product kept in your library can be downloaded again
 }
 const MARK_DONE = {
   "archived true": n => `Archived ${n}. It's in Archive.`, "unarchived true": n => `Moved ${n} back to your library.`,
@@ -3173,10 +3174,13 @@ async function markItems(list, kind, on) {
 async function deleteFiles(list, justRemoved = false) {
   const keys = [...new Set(list.filter(a => a && onDisk(a)).map(a => a.tag_key))];
   if (!keys.length) { toast("None of those are downloaded."); return; }
+  const kept = list.some(a => a && onDisk(a) && a.mark !== "removed");   // still in your library: downloadable again
   const what = keys.length === 1 ? (justRemoved ? "It's" : "This item is") + " downloaded." : `${keys.length} of them are downloaded.`;
-  if (!await ask(`${what} Delete ${keys.length === 1 ? "its" : "their"} downloaded files too?\n\n` +
+  if (!await ask(`${what} Delete ${keys.length === 1 ? "its" : "their"} downloaded files${justRemoved ? " too" : ""}?\n\n` +
                "Only the files Hoard downloaded are deleted; anything of your own in the same folder stays. " +
-               "This can't be undone. If you keep them, they stay under Removed in Downloads.", "Delete files", true, "Keep the files")) return;
+               "This can't be undone." + (justRemoved ? " If you keep them, they stay under Removed in Downloads."
+               : kept ? ` ${keys.length === 1 ? "It stays" : "They stay"} in your library, so you can download ${keys.length === 1 ? "it" : "them"} again.` : ""),
+               "Delete files", true, "Keep the files")) return;
   const r = await apiPost("/api/delete-files", { keys, confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   if (r.data.job) { sel.ids.clear(); T.closeDetail(); return afterQueuedJob(r, "delete-files", load); }

@@ -1418,7 +1418,7 @@ function showDetail(a, focus = true) {
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button>` +
       `<button class="ghost" data-act="edit-copy">Make an editable copy</button>` +
-      (a.mark === "removed" ? `<button class="ghost" data-act="delete-files">Delete downloaded files</button>` : "") + `</div>` +
+      (isLocal(a) ? "" : `<button class="ghost" data-act="delete-files">Delete downloaded files</button>`) + `</div>` +
       (isLocal(a) ? localSection(a)
         : `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
         here, and replaces one that was changed.</p>`) +
@@ -1683,11 +1683,12 @@ function wireLibs() {
     libraryChange("/api/libraries/remove", { n: lib.n });
   });
 }
-// issue #81: a download of something removed from the Library can be deleted from disk, after you confirm
-async function deleteFiles(a) {
-  if (!a || a.mark !== "removed") return;
+// issue #81: a download can be deleted from disk, after you confirm
+async function deleteFiles(a) {   // issue #81; and since 3.0, for anything downloaded, whether or not it's removed
+  if (!a || isLocal(a)) return;   // (your own packages: Take out of Local)
   if (!await ask(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
-               "This can't be undone.", "Delete files", true)) return;
+               "This can't be undone." + (a.mark === "removed" ? "" : " It stays in your library, so you can download it again."),
+               "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   if (r.data.job) { closeDetail(); return afterQueuedJob(r, "delete-files", () => load(true)); }
