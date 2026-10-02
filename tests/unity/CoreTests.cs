@@ -262,10 +262,16 @@ public static class CoreTests
               && cat.FilePath(mine, "Mine.unitypackage") != null && cat.FolderPath(mine) == Path.GetFullPath(Path.Combine(dir, "mine"))
               && mine.PackagePaths.Count == 1 && mine.ThumbPath != null, mine == null ? "missing" : mine.Location ?? "no place");
 
+        var anko = cat.Assets.Find(a => a.Name == "Anko");
+        Check("a product in another library folder", anko != null && anko.Library != null && anko.PackagePaths.Count == 1
+              && cat.FolderPath(anko) == Path.GetFullPath(Path.Combine(dir, "drive", "Booth", "Kitsu Studio", "Anko")),
+              anko == null ? "missing" : anko.Library ?? "no library");
+
         var edited = HoardCatalog.Load(Path.Combine(dir, "root_edited"), key);
         Check("edited catalog: seal says so", edited.SealStatus == SealState.Changed, edited.SealStatus.ToString());
         Check("edited catalog: no links trusted", edited.Assets.TrueForAll(a => a.Url == null));
         Check("edited catalog: no Local folder outside trusted", !edited.Assets.Exists(a => a.Location != null));
+        Check("edited catalog: no other library folder trusted", !edited.Assets.Exists(a => a.Library != null));
 
         // path, link and text rules
         foreach (string p in new[] { "../x", "/abs", "a//b", "a/./b", "C:/x", "a\\b", "a:b", "a/b?", "a\u202eb" })

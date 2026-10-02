@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- **Library folders on other drives.** Hoard 3.0 can keep your downloads in more than one folder: its downloads
+  folder, and folders you add on other drives. Products in those folders are listed and imported like any other.
+  As with your own packages listed where they are, the window only uses another folder when Hoard sealed the
+  catalog on this computer, and never through a link. Needed for a catalog from Hoard 3.0 that has products in
+  another folder (version 4); a library all in one folder still works with 0.4.0.
+
 ## 0.4.0
 
 - **Your own packages** (Hoard's issue #80). Hoard 3.0 keeps packages you make under **Local**, copied into its

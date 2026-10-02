@@ -11,6 +11,10 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   another: **Browse…** opens your system's folder picker (in Hoard's own window), or type the path. **Default**
   puts it back. Changing it doesn't move files you've already downloaded, so move those
   yourself if you want them in the new place.
+- **Other library folders:** folders on other drives (an external disk, say) that Hoard reads as part of your
+  library. Type the path or choose **Browse…**, then **Add**; each shows the space free on its drive, or that its
+  drive isn't connected. **Remove** only stops Hoard reading a folder: its files stay. See
+  [Downloads](Downloads#library-folders-on-other-drives).
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.
   - Gumroad: **Include archived purchases**.

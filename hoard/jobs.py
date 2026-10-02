@@ -158,7 +158,7 @@ class Schedule:
 
 TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
-              "verify": "Check downloads", "add-local": "Add to Local"}
+              "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -232,14 +232,14 @@ class Jobs:
 
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
-              items: list[str] | None = None, local: dict | None = None) -> str | None:
+              items: list[str] | None = None, local: dict | None = None, move: dict | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
         download is for, when it's for chosen ones, so it can go straight to them."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
                 "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
-                "local": dict(local) if local else None}
+                "local": dict(local) if local else None, "move": dict(move) if move else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -316,6 +316,8 @@ class Jobs:
             target = self._verify
         elif task == "add-local":
             target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
+        elif task == "move":
+            target = lambda s: self._move(spec.get("move") or {})  # noqa: E731
         elif task == "login":
             target = self._login_then_refresh
         elif task == "logout":
@@ -444,6 +446,33 @@ class Jobs:
         self._moved = time.monotonic()
         self.state["message"] = line
 
+    def _move(self, what: dict) -> None:
+        """Move a downloaded product to another library folder (hoard/libraries.py). Stop stops it part way, leaving
+        it where it was."""
+        from .config import root_dir
+        from .downloader import move_product
+
+        def sink(msg):
+            self._moved = time.monotonic()
+            self.state["message"] = str(msg)
+            if self.stop.is_set() and threading.get_ident() == self._job_thread:
+                self.stop.clear()
+                raise Cancelled()
+        self._set(task="move", message=f"Moving {what.get('name') or 'it'}")
+        try:
+            with capture_log(sink):
+                done = move_product(self.cfg, root_dir(self.cfg), str(what.get("key") or ""), what.get("to"))
+        except Cancelled:
+            self._set(message="Stopped. Nothing was moved: it's where it was.")
+            return
+        except (ValueError, OSError) as e:
+            why = str(e) if isinstance(e, ValueError) else f"Couldn't move it ({e}). Nothing was moved: it's where it was."
+            self._set(message=why, error=why)
+            return
+        finally:
+            self.on_download_done()
+        self._set(message=f"Moved {done['name']}: {done['files']:,} files to {done['to']}.")
+
     def _add_local(self, what: dict) -> None:
         """Add a folder or file of your own to Local (issue #80): copied in, or listed where it is."""
         from .config import root_dir
@@ -464,9 +493,12 @@ class Jobs:
         from .config import root_dir
         from .downloader import check_integrity, integrity_summary
         self._set(task="verify", message="Checking your downloads")
-        result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly)
+        from .libraries import other_folders
+        result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly,
+                                 others=other_folders(self.cfg))
         lines = ([f"Changed: {p}" for p in result["changed"][:100]] + [f"Missing: {p}" for p in result["missing"][:100]]
-                 + [f"Changed outside Hoard: {p}" for p in result["data_changed"]])
+                 + [f"Changed outside Hoard: {p}" for p in result["data_changed"]]
+                 + [f"Not checked, as its drive isn't connected: {p}" for p in result.get("away", [])])
         summary = integrity_summary(result)
         if not result["complete"]:
             summary = "Stopped. " + summary
@@ -495,7 +527,7 @@ class Jobs:
     def cancel(self) -> bool:
         """Stop the running download (or sync) within a few seconds; a file it was part way through resumes next time
         where it can. False when neither is running."""
-        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify") or self.state.get("sync")):
+        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify", "move") or self.state.get("sync")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
             threading.Thread(target=self._force_stop, args=(self.state.get("job_id"),), daemon=True).start()

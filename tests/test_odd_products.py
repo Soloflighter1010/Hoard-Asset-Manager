@@ -102,8 +102,9 @@ class GumroadPictures(unittest.TestCase):
         store = SimpleNamespace(sess=None, page=lambda url, params=None: page, file_url=lambda *a: "https://app.gumroad.com/f1")
         with mock.patch.object(downloader.egress, "download", lambda sess, url, dest, *a, **k: dest.parent.mkdir(parents=True, exist_ok=True) or dest.write_bytes(b"abc") or 3), \
                 mock.patch.object(downloader, "_gumroad_page_images") as pictures:
-            downloader._sync_gumroad_purchases(config.load_config(), store, Path(tempfile.mkdtemp()),
-                                               downloader.Manifest(Path(tempfile.mkdtemp())),
+            root = Path(tempfile.mkdtemp())
+            downloader._sync_gumroad_purchases(config.load_config(), store, root / "Gumroad",
+                                               downloader.StoreRecords(config.load_config(), root, "Gumroad"),
                                                SimpleNamespace(dry_run=False, only=None, keys=None, targets={"gumroad": [
                                                    {"name": "Hoodie", "creator": "Mochi", "id": "1",
                                                     "download_url": "https://app.gumroad.com/d/x"}]}),

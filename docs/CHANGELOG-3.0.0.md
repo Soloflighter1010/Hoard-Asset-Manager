@@ -11,7 +11,7 @@ releasing" notes in this file; delete this file. It uses only the Markdown the w
 
 Before releasing, check:
 - Code signing: keep "Signed for Windows" only if the release's Windows job signed (Azure Artifact Signing set up).
-- Hoard for Unity: keep each version in its section only if it's out on VCC by then (Build Release, tags unity-v0.3.1, unity-v0.4.0).
+- Hoard for Unity: keep each version in its section only if it's out on VCC by then (Build Release, tags unity-v0.3.1, unity-v0.4.0, unity-v0.5.0).
 - Add anything merged after this draft was written.
 -->
 
@@ -171,6 +171,13 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   files go to a folder of their own (**Hoard Edits**, beside your downloads), which Hoard never checks or replaces,
   so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
   the copy says what it is.
+- **Library folders on other drives.** When your downloads drive fills up, add a folder on another drive (an
+  external disk, say) in Settings, under **Other library folders**. Hoard reads it as part of your library:
+  Downloads, Hoard for Unity, the routine checks and syncing all cover it. New downloads still go to your downloads
+  folder, and a product already in another folder is updated where it is. To move a product, open its details and
+  choose **Move here**: Hoard copies its files, checks every one, and only then deletes them where they were. When
+  a folder's drive isn't connected, its products are left alone, not downloaded again; removing a folder in
+  Settings only stops Hoard reading it.
 - **Routine checks of your downloads** (issue #83). Once a week (or a day, a month, or only when you ask, in
   Settings), Hoard checks every downloaded file is there and unchanged since it was downloaded, by size and
   SHA-256 fingerprint; after the first check, only files whose size or time changed are read again, so it's quick.
@@ -253,7 +260,7 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - The pages' scripts run in strict mode again.
 - A PIN test could fail when its digits happened to appear inside a random hash.
 
-### Hoard for Unity 0.3.0 to 0.4.0
+### Hoard for Unity 0.3.0 to 0.5.0
 
 Released alongside, through VCC (Hoard's listing:
 https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
@@ -267,6 +274,8 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
   window uses one of the product's own images instead.
 - **Your own packages** from Hoard's Local are listed and imported, with who they're for (0.4.0).
 - **Projects in Hoard** (issue #86): the window tells Hoard what each project uses (0.4.0).
+- **Library folders on other drives**: products kept in another of Hoard's library folders are listed and
+  imported like any other (0.5.0).
 
 ### A website, and thanks
 
@@ -274,8 +283,8 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
   computer, Hoard for Unity, and a **What's new** page that follows this changelog. VCC's listing address hasn't
   changed.
 - **Thank you to the testers** who tried every beta of 3.0 on their own libraries and told us what broke:
-  puzzlella, dx_nacca, kyrmeso, xionite02, vixendavali, djfin, loafevr, doctorlucymoth, surfur, hallowokin and
-  cheapthrill.
+  puzzlella, dx_nacca, kyrmeso, xionite02, vixendavali, djfin, loafevr, doctorlucymoth, surfur, hallowokin,
+  cheapthrill and petra.synth.
 
 ### Upgrading from 2.8
 

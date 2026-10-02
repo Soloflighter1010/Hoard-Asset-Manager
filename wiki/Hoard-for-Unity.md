@@ -56,6 +56,8 @@ open its window again.
 - For assets from itch.io, which Hoard downloads from 2.5.0: the package's 0.1.3 or newer. Earlier ones leave
   them out, since they only show stores they know.
 - For your own packages (Hoard's **Local**, from 3.0) and **Projects** in Hoard: 0.4.0 or newer, with Hoard 3.0.
+- For products in Hoard's other library folders (on other drives, from 3.0): 0.5.0 or newer. Older versions say
+  the catalog is from a newer Hoard while any product is in another folder.
 - For animated pictures and the credits list: 0.3.0 or newer. Pictures Hoard saved as WebP or AVIF can't be
   shown in Unity; the window uses one of the product's own images instead when there is one.
 
@@ -84,7 +86,8 @@ the window's toolbar.
   links are hidden until Hoard rebuilds it: choose **Sync** in Hoard, or run `hoard-cli verify`.
 - **Checks every entry** against Hoard's documented rules: plain paths inside your downloads folder only, never
   through a link or junction, and store links only to the product's own store. The one exception is a Local item
-  you listed where it is, whose own folder is used only when Hoard sealed the catalog on this computer.
+  you listed where it is, and a product in another of Hoard's library folders, whose folder is used only when
+  Hoard sealed the catalog on this computer.
 - **Checks every package it reads.** A `.unitypackage` whose headers claim impossible sizes is treated as not a
   package, before anything is read into memory for it (0.1.2).
 - **Editor only.** Nothing from this package is included in avatar or world uploads, and it contacts nobody.

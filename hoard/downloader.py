@@ -421,6 +421,54 @@ class Manifest:
         return rec
 
 
+class StoreRecords:
+    """One store's records in every library folder (hoard/libraries.py), for a sync. A product already in one of
+    them is kept up to date where it is; a new one goes to the downloads folder. A product last seen in a library
+    folder whose drive isn't connected is left alone (away), never downloaded again into the downloads folder.
+    Used like a Manifest: record(), checkpoint(), save_changes(); and folder_of(rec) says where a record's files go."""
+
+    def __init__(self, cfg: dict, root: Path, store_name: str):
+        from . import libraries
+        self.main = Manifest(root / store_name)
+        self.store_dir = self.main.store_dir
+        self.others = [Manifest(lib / store_name) for lib in libraries.other_folders(cfg)
+                       if libraries.available(lib) and (lib / store_name / "_manifest.json").is_file()]
+        self._away = libraries.away(cfg, store_name)
+        self._owner: dict[int, Manifest] = {}
+
+    def away(self, key, what: str, report: "Report") -> bool:
+        """Is this product in a library folder whose drive isn't connected? Then it's noted as skipped."""
+        folder = self._away.get(str(key))
+        if folder is None or (key in self.main.assets and self.main.assets[key].get("files")):
+            return False
+        report.skipped.append(f"{what} - it's in {folder}, whose drive isn't connected")
+        return True
+
+    def record(self, key: str, creator: str, name: str) -> dict:
+        """The product's record where it is (the downloads folder first), or a new one in the downloads folder."""
+        if not (key in self.main.assets and self.main.assets[key].get("files")):
+            for m in self.others:
+                rec = m.assets.get(key)
+                if rec and rec.get("files"):
+                    self._owner[id(rec)] = m
+                    return rec
+        rec = self.main.record(key, creator, name)
+        self._owner[id(rec)] = self.main
+        return rec
+
+    def folder_of(self, rec: dict) -> Path:
+        """Where a record's files are, in the library folder it's in."""
+        return rel_to_path(self._owner.get(id(rec), self.main).store_dir, rec["folder"])
+
+    def checkpoint(self) -> None:
+        for m in (self.main, *self.others):
+            m.checkpoint()
+
+    def save_changes(self) -> None:
+        for m in (self.main, *self.others):
+            m.save_changes()
+
+
 def valid_location(value) -> bool:
     """A Local item's own folder, as it's kept: a plain absolute path, written as the system writes it."""
     return (isinstance(value, str) and 0 < len(value) <= 1000 and "\x00" not in value and os.path.isabs(value)
@@ -704,7 +752,7 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
 def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your Gumroad library."""
     store_dir = root / "Gumroad"
-    man = Manifest(store_dir)
+    man = StoreRecords(cfg, root, "Gumroad")
     gr = Gumroad(cfg, gumroad_session(cfg))
 
     try:
@@ -715,7 +763,7 @@ def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
         man.save_changes()   # every finished file recorded, however the sync ended
 
 
-def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Manifest", args, report: Report) -> None:
+def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: StoreRecords, args, report: Report) -> None:
     """Download everything new or changed, one purchase at a time (see sync_gumroad)."""
     chosen = (getattr(args, "targets", None) or {}).get("gumroad")
     if chosen:   # straight to the chosen purchases' download pages
@@ -761,13 +809,13 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: "Man
         seen.add(key)
 
         variants = (pur.get("variants") or "").strip()
-        if removed_product("gumroad", name, report):
+        if removed_product("gumroad", name, report) or man.away(key, f"Gumroad: {name}", report):
             continue
         rec = man.record(key, creator, f"{name} - {variants}" if variants else name)
         is_new_asset = not rec["files"]
         rec.update(name=name, creator=creator, variants=variants or None, url=p.get("product_long_url"),
                    last_synced=now_iso())
-        folder = rel_to_path(store_dir, rec["folder"])
+        folder = man.folder_of(rec)
         token = props.get("token")
         log(f"\n[Gumroad] {creator} / {name}{f' ({variants})' if variants else ''}")
 
@@ -1050,7 +1098,7 @@ def label_key(label: str) -> str:
 
 
 def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: str, hosts: list[str], timeout_s: int,
-                         name: str, creator: str, man: "Manifest", args, report: "Report") -> bool:
+                         name: str, creator: str, man: StoreRecords, args, report: "Report") -> bool:
     """Click every file's download button on the open page and save what each one downloads."""
     find = lambda allow_all: page.evaluate(DOWNLOAD_BUTTONS_JS, {"allowAll": allow_all, "hosts": hosts})  # noqa: E731
     buttons = find(False)
@@ -1142,7 +1190,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your Jinxxy inventory."""
     jcfg = cfg["jinxxy"]
     store_dir = root / "Jinxxy"
-    man = Manifest(store_dir)
+    man = StoreRecords(cfg, root, "Jinxxy")
     if store_dir.is_dir() and not args.dry_run:
         banners = forget_repeated_thumbnails(store_dir)
         if banners:
@@ -1237,12 +1285,12 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: boo
     creator = (info.get("creator") or "Unknown Creator").strip()
     if not chosen and skip_product(args, "jinxxy", name, creator):   # (a chosen item was picked by its page, not its name)
         return
-    if removed_product("jinxxy", name, report):
+    if removed_product("jinxxy", name, report) or man.away(key, f"Jinxxy: {name}", report):
         return
     rec = man.record(key, creator, name)
     is_new_asset = not rec["files"]
     rec.update(name=name, creator=creator, url=url, last_synced=now_iso())
-    folder = rel_to_path(store_dir, rec["folder"])
+    folder = man.folder_of(rec)
     log(f"\n[Jinxxy] {creator} / {name}")
 
     got_any = download_by_clicking(ctx, page, url, rec, folder, "Jinxxy", JX_HOSTS,
@@ -1479,8 +1527,7 @@ def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeou
 def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
     """Download everything new or changed in your Booth library and gifts."""
     bcfg = cfg["booth"]
-    store_dir = root / "Booth"
-    man = Manifest(store_dir)
+    man = StoreRecords(cfg, root, "Booth")
     delay = float(cfg.get("request_delay", 1.0))
     timeout_s = float(bcfg.get("download_start_timeout", 90))
     route = {"direct": True}
@@ -1498,12 +1545,12 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     creator = (b["creator"] or "Unknown Creator").strip()
                     if skip_product(args, "booth", name, creator):
                         continue
-                    if removed_product("booth", name, report):
+                    if removed_product("booth", name, report) or man.away(b["id"], f"Booth: {name}", report):
                         continue
                     rec = man.record(b["id"], creator, name)
                     is_new_asset, had_files = not rec["files"], bool(rec["files"])
                     rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
-                    folder = rel_to_path(store_dir, rec["folder"])
+                    folder = man.folder_of(rec)
                     log(f"\n[Booth] {creator} / {name}")
                     if not b["files"] and store_url(b.get("url"), ["booth.pm"]):   # free items: on the item's page
                         try:
@@ -1593,7 +1640,7 @@ def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
     if not key:
         raise NotLoggedIn("no itch.io API key yet")
     store_dir = root / STORE_DIRS["itch"]
-    man = Manifest(store_dir)
+    man = StoreRecords(cfg, root, STORE_DIRS["itch"])
     delay = float(cfg.get("request_delay", 1.0))
     sess = itch.session(key)
     try:
@@ -1605,7 +1652,7 @@ def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
             creator = clean_text(g["creator"], 200) or "Unknown Creator"
             if not g["id"] or skip_product(args, "itch", name, creator):
                 continue
-            if removed_product("itch", name, report):
+            if removed_product("itch", name, report) or man.away(str(g["id"]), f"itch.io: {name}", report):
                 continue
             time.sleep(delay)
             try:
@@ -1620,7 +1667,7 @@ def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
         man.save_changes()   # every finished file recorded, however the sync ended
 
 
-def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifest", store_dir: Path, icfg: dict, args,
+def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRecords, store_dir: Path, icfg: dict, args,
                   report: Report) -> None:
     """Download each of one project's files that isn't here yet, or has changed."""
     files = itch.uploads(sess, g["id"], k["id"])
@@ -1630,7 +1677,7 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: "Manifes
     rec = man.record(str(g["id"]), creator, name)
     is_new_asset = not rec["files"]
     rec.update(name=name, creator=creator, url=store_link("itch", g["url"]), last_synced=now_iso())
-    folder = rel_to_path(store_dir, rec["folder"])
+    folder = man.folder_of(rec)
     log(f"\n[itch.io] {creator} / {name}")
     offered = {str(u["id"]) for u in files}
     got_any = False
@@ -1793,13 +1840,45 @@ def read_manifests(root: Path) -> list[dict]:
     return assets
 
 
+def library_store_dirs(cfg: dict, root: Path):
+    """(library folder, store, its folder) for each store folder with records, in every connected library folder:
+    the downloads folder (root) first (hoard/libraries.py)."""
+    from . import libraries
+    for base in [root, *(lib for lib in libraries.other_folders(cfg) if libraries.available(lib))]:
+        for store in STORE_DIRS.values():
+            if (base / store / "_manifest.json").is_file():
+                yield base, store, base / store
+
+
+def read_library(cfg: dict, root: Path) -> list[dict]:
+    """Every downloaded asset in every library folder (hoard/libraries.py): the downloads folder (root) first, then
+    the others that are connected, each asset from another folder tagged with it ("library", its full path). A
+    product in two of them counts once, where it's found first. What each other folder holds is noted, so a sync
+    leaves its products alone while its drive is away."""
+    from . import libraries
+    assets = read_manifests(root)
+    seen = {(a["store"], a.get("key") or a.get("folder")) for a in assets}
+    for lib in libraries.other_folders(cfg):
+        if not libraries.available(lib):
+            continue
+        found = read_manifests(lib)
+        for store in STORE_DIRS.values():
+            if (lib / store / "_manifest.json").is_file():
+                libraries.remember(lib, store, [a.get("key") for a in found if a["store"] == store])
+        for a in found:
+            if (a["store"], a.get("key") or a.get("folder")) not in seen and not a.get("location"):   # (Local items listed where they
+                seen.add((a["store"], a.get("key") or a.get("folder")))            # are belong to the downloads folder)
+                assets.append({**a, "library": str(lib)})
+    return assets
+
+
 def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
-    """Catalog entries + tag index, computed from the manifests on disk. Writes nothing."""
+    """Catalog entries + tag index, computed from the manifests on disk, in every library folder. Writes nothing."""
     tcfg = cfg["tags"]
     stop = STOPWORDS | {w.lower() for w in tcfg.get("extra_stopwords", [])}
     tagdata = TagStore().load()
     block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
-    assets = read_manifests(root)
+    assets = read_library(cfg, root)
     if not assets:
         return [], {}
 
@@ -1827,6 +1906,7 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
                         "files": sorted(f["path"] for f in a["files"].values()),
                         "tags": mine, "suggested_tags": a_tags,
                         **({"location": a["location"]} if a.get("location") else {}),
+                        **({"library": a["library"]} if a.get("library") else {}),
                         **({"note": a["note"]} if a.get("note") else {})})
         for t in a_tags:
             index.setdefault(t, []).append(folder)
@@ -1846,10 +1926,7 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
     import stat as _stat
     from .safety import _is_link
     done = {"products": 0, "files": 0, "bytes": 0, "kept": []}
-    for store in STORE_DIRS.values():
-        sdir = root / store
-        if not (sdir / "_manifest.json").is_file():
-            continue
+    for _base, store, sdir in library_store_dirs(cfg, root):
         manifest = Manifest(sdir)
         for rec in manifest.assets.values():
             if tag_key(store, rec.get("name") or "") not in keys or rec.get("location"):
@@ -1903,6 +1980,120 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
     return done
 
 
+def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dict:
+    """Move a downloaded product's files to another library folder (to: its number, 0 for the downloads folder; see
+    hoard/libraries.py), and its record with them, so it's kept up to date there.
+
+    Every file Hoard recorded is copied, and checked against its fingerprint (or its size, before the first check)
+    as it arrives; only when all have arrived is the record moved and the originals deleted (Hoard's picture and
+    asset.json with them, and the folder when that leaves it empty; anything else of yours in it stays). If anything
+    goes wrong part way, what was copied is deleted and the original is left as it was. Nothing is read or written
+    through a link. A Local item stays in the downloads folder. Returns {"name", "files", "bytes", "to"}; raises
+    ValueError saying what's wrong."""
+    import stat as _stat
+    from . import libraries
+    from .safety import _is_link
+    say = progress or (lambda line: None)
+    folders = libraries.roots(cfg, root)
+    if not isinstance(to, int) or isinstance(to, bool) or not 0 <= to < len(folders):
+        raise ValueError("Choose one of your library folders.")
+    dest_base = folders[to]
+    if not libraries.available(dest_base):
+        raise ValueError(f"{dest_base} isn't there: connect its drive, then try again.")
+    found = None
+    for base, store, sdir in library_store_dirs(cfg, root):
+        manifest = Manifest(sdir)
+        for k, rec in manifest.assets.items():
+            if tag_key(store, rec.get("name") or "") == key and rec.get("files"):
+                found = (base, store, sdir, manifest, k, rec)
+                break
+        if found:
+            break
+    if not found:
+        raise ValueError("That isn't downloaded any more.")
+    base, store, sdir, manifest, k, rec = found
+    if store == STORE_DIRS["local"]:
+        raise ValueError("Your own packages stay in the downloads folder's Local.")
+    if base == dest_base:
+        raise ValueError("It's already there.")
+    src = rel_to_path(sdir, rec["folder"])
+    total = sum(int(f.get("size") or 0) for f in rec["files"].values())
+    free = libraries.free_space(dest_base)
+    if free is not None and free < total + 64 * 1024 * 1024:
+        raise ValueError(f"There isn't room on that drive: it needs {amount(total)}, and has {amount(free)} free.")
+    dest_dir = dest_base / store
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_man = Manifest(dest_dir)
+    if k in dest_man.assets and dest_man.assets[k].get("files"):
+        raise ValueError("That folder already has its own copy of it.")
+    dest_man.assets.pop(k, None)
+    folder_name = dest_man.record(k, rec.get("creator") or "", rec.get("name") or "")["folder"]
+    dest_man.assets.pop(k)
+    dest = rel_to_path(dest_dir, folder_name)
+    if dest.is_symlink() or (os.path.lexists(dest) and not dest.is_dir()):
+        raise ValueError(f"{dest} is already there and isn't a folder. Move or rename it first.")
+    extras = [p.name for p in src.glob("_thumbnail.*") if p.is_file() and not p.is_symlink()] if src.is_dir() else []
+    made: list[Path] = []
+    try:
+        entries = [(f.get("path"), f) for f in rec["files"].values()] + [(name, None) for name in extras]
+        for n, (rel, f) in enumerate(entries, 1):
+            line = f"Moving {rec.get('name')}: {n:,} of {len(entries):,}: {rel}"
+            say(line)
+            target = rel_to_path(dest, rel)
+            if f is None and os.path.lexists(target):
+                continue   # a picture already there is kept
+            target.parent.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.sha256()
+            with open_under(src, rel) as fh, open(target, "xb") as out:
+                made.append(target)
+                for block in iter(lambda: fh.read(1024 * 1024), b""):
+                    tick(line)   # (Stop is noticed between blocks)
+                    digest.update(block)
+                    out.write(block)
+            if f is None:
+                continue
+            got = os.stat(target, follow_symlinks=False)
+            if (f.get("size") is not None and got.st_size != f["size"]) or (f.get("sha256") and f["sha256"] != digest.hexdigest()):
+                raise ValueError(f"{rel} didn't arrive as it was: it may have been changed. Check your downloads first.")
+            f.update(sha256=digest.hexdigest(), mtime_ns=got.st_mtime_ns)
+    except BaseException:
+        for t in reversed(made):
+            t.unlink(missing_ok=True)
+        for d in sorted({p for t in made for p in t.parents if dest in (p, *p.parents) and p != dest_dir},
+                        key=lambda d: len(d.parts), reverse=True):
+            try:
+                d.rmdir()
+            except OSError:
+                pass
+        raise
+    dest_man.assets[k] = {**rec, "folder": folder_name}
+    dest_man.save()
+    manifest.assets.pop(k)
+    manifest.save()
+    dirs = set()
+    for rel in [f.get("path") for f in rec["files"].values()] + extras + ["asset.json"]:
+        try:
+            target = rel_to_path(src, rel)
+            st = os.stat(target, follow_symlinks=False)
+        except (UnsafePath, OSError):
+            continue
+        if _is_link(st) or not _stat.S_ISREG(st.st_mode):
+            continue
+        try:
+            os.unlink(target)
+        except OSError:
+            continue
+        dirs.update(p for p in target.parents if p != sdir and sdir in p.parents)
+    for d in sorted(dirs, key=lambda d: len(d.parts), reverse=True):
+        try:
+            d.rmdir()   # only when empty
+        except OSError:
+            pass
+    build_catalog(cfg, root)
+    log(f"Moved {rec.get('name')} ({store}) to {dest}: {len(rec['files']):,} files, {amount(total)}")
+    return {"name": rec.get("name"), "files": len(rec["files"]), "bytes": total, "to": str(dest)}
+
+
 EDIT_NOTE = """This is an editable copy of a download, made by Hoard on {when}.
 
     {name} by {creator} ({store})
@@ -1928,14 +2119,14 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
     it is. Returns {"folder", "files", "bytes", "skipped": [(path, why)]}. Raises ValueError when there's nothing to copy."""
     from .config import edits_dir
     dest_root = edits_dir(cfg)
-    rroot, rdest = root.resolve(), dest_root.resolve()
-    if rdest == rroot or rroot in rdest.parents:
-        raise ValueError("The folder for editable copies can't be inside the downloads folder. Choose another in "
-                         "config.json (edits_root).")
-    for store in STORE_DIRS.values():
-        sdir = root / store
-        if not (sdir / "_manifest.json").is_file():
-            continue
+    from . import libraries
+    rdest = dest_root.resolve()
+    for lib in libraries.roots(cfg, root):
+        rroot = lib.resolve()
+        if rdest == rroot or rroot in rdest.parents:
+            raise ValueError("The folder for editable copies can't be inside a library folder. Choose another in "
+                             "config.json (edits_root).")
+    for _base, store, sdir in library_store_dirs(cfg, root):
         for rec in Manifest(sdir).assets.values():
             if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
                 continue
@@ -1997,29 +2188,36 @@ def last_integrity() -> dict | None:
             "complete": raw.get("complete") is not False}
 
 
-def check_integrity(root: Path, stop=None, progress=None) -> dict:
+def check_integrity(root: Path, stop=None, progress=None, others=()) -> dict:
     """Check the downloads are as Hoard downloaded them (issue #83): every data file's seal, and every recorded file's
     size and SHA-256. A file's fingerprint is taken the first time it's checked and kept in its record; after that it's
     read again only when its size or modified time changed, so a routine check is quick. Nothing is changed but the
     records' fingerprints, and nothing is followed through a link. The result is kept in integrity.json (the
     Downloads page shows it) and returned: products and files checked, which files changed or are missing, and which
-    data files were changed outside Hoard. stop: a threading.Event that ends the check early (it says so)."""
+    data files were changed outside Hoard. stop: a threading.Event that ends the check early (it says so). others: the
+    other library folders (hoard/libraries.py), checked the same way when their drive is connected, and named in
+    "away" when it isn't."""
     import stat as _stat
     from .safety import _is_link
     say = progress or (lambda line: None)
     result = {"checked": now_iso(), "products": 0, "files": 0, "fine": 0, "changed": [], "missing": [],
-              "data_changed": [], "complete": True}
-    data_files = [root / d / "_manifest.json" for d in STORE_DIRS.values()] + [root / "catalog.json", root / "tags.json"]
-    for path in data_files:
-        if path.is_file():
-            try:
-                status = check_seal(read_json_file(path), path if path.name == "_manifest.json" else None)
-            except DataFileError:
-                status = "changed"
-            if status == "changed":
-                result["data_changed"].append(str(path.relative_to(root)).replace(os.sep, "/"))
-    for store in STORE_DIRS.values():
-        sdir = root / store
+              "data_changed": [], "complete": True, "away": []}
+    bases = [root]
+    for lib in others:
+        (bases.append(lib) if lib.is_dir() and not lib.is_symlink() else result["away"].append(str(lib)))
+    for base in bases:
+        data_files = [base / d / "_manifest.json" for d in STORE_DIRS.values()]
+        data_files += [root / "catalog.json", root / "tags.json"] if base == root else []
+        for path in data_files:
+            if path.is_file():
+                try:
+                    status = check_seal(read_json_file(path), path if path.name == "_manifest.json" else None)
+                except DataFileError:
+                    status = "changed"
+                if status == "changed":
+                    name = str(path.relative_to(root)).replace(os.sep, "/") if base == root else str(path)
+                    result["data_changed"].append(name)
+    for base, store, sdir in ((b, st, b / st) for b in bases for st in STORE_DIRS.values()):
         if not (sdir / "_manifest.json").is_file():
             continue
         manifest = Manifest(sdir)
@@ -2053,7 +2251,7 @@ def check_integrity(root: Path, stop=None, progress=None) -> dict:
                     result["fine"] += 1
                     continue
                 try:
-                    with open_under(root, where) as fh:
+                    with open_under(base, where) as fh:
                         digest = hashlib.sha256()
                         for block in iter(lambda: fh.read(1024 * 1024), b""):
                             digest.update(block)
@@ -2087,9 +2285,12 @@ def integrity_summary(r: dict) -> str:
         problems.append(f"{len(r['missing'])} missing")
     if r["data_changed"]:
         problems.append(f"{len(r['data_changed'])} of Hoard's own records changed outside Hoard")
+    away = r.get("away") or []
+    later = (f" {len(away)} library {'folder wasn' if len(away) == 1 else 'folders weren'}'t checked, as "
+             f"{'its drive isn' if len(away) == 1 else 'their drives aren'}'t connected." if away else "")
     if not problems:
-        return f"All {r['files']:,} files of {r['products']:,} downloads are as Hoard downloaded them."
-    return f"Checked {r['files']:,} files: " + ", ".join(problems) + "."
+        return f"All {r['files']:,} files of {r['products']:,} downloads are as Hoard downloaded them." + later
+    return f"Checked {r['files']:,} files: " + ", ".join(problems) + "." + later
 
 
 def _still_there(folder: Path, rel) -> bool:
@@ -2123,6 +2324,8 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: a file path isn't a plain relative path")
     if "location" in entry and (entry.get("store") != "Local" or not valid_location(entry["location"])):
         problems.append(f"{label}: location is only for Local items, as a plain absolute path")
+    if "library" in entry and (not valid_location(entry["library"]) or "location" in entry):
+        problems.append(f"{label}: library is another library folder, as a plain absolute path")
     if entry.get("note") is not None and entry["note"] != clean_text(entry["note"], 300):
         problems.append(f"{label}: note isn't clean text")
     if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
@@ -2152,13 +2355,14 @@ def build_catalog(cfg: dict, root: Path) -> None:
             f"for example: {left_out[0]}")
     catalog = [entry for entry, problems in checked if not problems]
     for entry in catalog:
+        base = Path(entry["library"]) if entry.get("library") else root
         try:
-            adir = rel_to_path(root, entry["folder"])
+            adir = rel_to_path(base, entry["folder"])
         except UnsafePath:
             continue
         if adir.is_dir():
             write_file_safely(adir / "asset.json", json.dumps(seal({**CATALOG_FORMAT["asset"], **entry}), indent=2,
-                                                              ensure_ascii=False), root)
+                                                              ensure_ascii=False), base)
     write_catalog_files(root, catalog, ordered)
     top = ", ".join(f"{t} ({len(v)})" for t, v in list(ordered.items())[:25])
     log(f"\nTagged {len(catalog)} assets with {len(ordered)} suggested tags. Top: {top or '-'}")
@@ -2167,7 +2371,10 @@ def build_catalog(cfg: dict, root: Path) -> None:
 
 def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     """catalog.json (every product) and tags.json (every tag, and the suggested ones, with their products)."""
-    write_file_safely(root / "catalog.json", json.dumps(seal({**CATALOG_FORMAT["catalog"], "generated_at": now_iso(),
+    # Version 4 says some products are in other library folders ("library"): older Hoard for Unity, which would look
+    # for them in the downloads folder, asks to be updated instead (docs/DATA-FORMATS.md)
+    form = {**CATALOG_FORMAT["catalog"], **({"version": 4} if any(e.get("library") for e in catalog) else {})}
+    write_file_safely(root / "catalog.json", json.dumps(seal({**form, "generated_at": now_iso(),
                                                               "assets": catalog}), indent=2, ensure_ascii=False), root)
     yours: dict[str, list] = {}
     for entry in catalog:

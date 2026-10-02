@@ -2541,7 +2541,7 @@ class DownloadsIndex(unittest.TestCase):
         self.builds, self.started, self.release = 0, threading.Event(), threading.Event()
         self.release.set()
 
-        def slow_build(root, catalog):
+        def slow_build(root, catalog, libraries=None):
             self.builds += 1
             self.started.set()
             self.release.wait(10)

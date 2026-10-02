@@ -160,9 +160,10 @@ class TheOtherPages(unittest.TestCase):
     def test_every_tester_is_thanked(self):
         page = (SITE / "testers.html").read_text("utf-8")
         names = re.findall(r'<li class="tester (\w+)">([^<]+)</li>', page)
-        self.assertEqual(len(names), 11)
+        self.assertEqual(len(names), 12)
         self.assertIn(("booth", "puzzlella"), names)
         self.assertIn("cheapthrill", [n for _, n in names])
+        self.assertIn(("gumroad", "petra.synth"), names)
         self.assertTrue({c for c, _ in names} <= {"booth", "gumroad", "jinxxy", "payhip", "itch"})
 
     def test_every_page_has_the_same_header_and_the_glow(self):

@@ -74,6 +74,10 @@ An `<asset>`:
 | `suggested_tags` | list of strings | Words shared by several asset names |
 | `location` | string, only on some `Local` entries | A Local item listed where it is: its own folder, as a full path written as the system writes it. `files` are relative to it, and `folder` (`Local/_linked/<id>`) is only a name. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
 | `note` | string, only on `Local` entries | Who or what it's for, as you wrote it |
+| `library` | string, only on some entries (version 4) | A product in another of your library folders (another drive, say): that folder, as a full path written as the system writes it. `folder` and `files` are relative to it instead of the download folder. Never on an entry with `location`. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
+
+`version` is 4 when any entry has `library`, and 3 otherwise, so a reader that doesn't know `library` (Hoard for
+Unity before 0.5.0) still reads a library that's all in one folder.
 
 ## `asset.json` (in each product's folder)
 
@@ -135,6 +139,8 @@ says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the pro
 
 ## Version history
 
+- **4** (3.0): `library`, for products in another library folder. Only written when there are some; otherwise
+  the catalog is still version 3.
 - **3**, still, in 3.0: `Local` entries, with `location` and `note`. Readers that skip stores they don't know
   carry on as before.
 

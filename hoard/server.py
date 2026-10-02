@@ -19,11 +19,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, projects, updater, vault
+from . import __version__, diagnostics, itch, libraries, projects, updater, vault
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
-from .downloader import (catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
+from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
                          last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import CHECK_CHOICES, SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
@@ -48,7 +48,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
-           "/api/pick")
+           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -56,7 +56,7 @@ UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one brows
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 TEXT_SIZES = (100, 115, 130, 150)   # percent
-JOB_SETTINGS = ("root", "browser_channel", "stores", "payhip_shops")   # read by a running job: not changed during one
+JOB_SETTINGS = ("root", "browser_channel", "stores", "payhip_shops", "library_folders")   # read by a running job: not changed during one
 NEW_DAYS = (0, 1, 3, 7, 14, 30)     # how long something new in the library is marked New (0: never)
 
 
@@ -137,10 +137,16 @@ def ui_settings(cfg: dict) -> dict:
 
 
 def open_target(cfg: dict, rel: str) -> Path | None:
-    """What Open folder or Show in folder means: a path inside the downloads folder, or inside a Local item listed
-    where it is (issue #80), named by its place in the catalog ("Local/_linked/<key>/...")."""
+    """What Open folder or Show in folder means: a path inside the downloads folder, inside another library folder
+    ("@1/Booth/...", hoard/libraries.py), or inside a Local item listed where it is (issue #80), named by its place in
+    the catalog ("Local/_linked/<key>/...")."""
+    rel = rel.replace("\\", "/")
+    if rel.startswith("@"):
+        found = libraries.resolve(cfg, rel)
+        rest = contained_rel(found[0], found[1]) if found else None   # plain, and inside that library folder
+        return safe_join(found[0], rest) if rest else None
     root = root_dir(cfg)
-    parts = rel.replace("\\", "/").split("/")
+    parts = rel.split("/")
     if len(parts) >= 3 and parts[0] == "Local" and parts[1] == "_linked":
         from . import local
         found = local.by_folder(root, "/".join(parts[:3]))
@@ -175,7 +181,7 @@ def check_days(cfg: dict) -> int:
 def public_settings(cfg: dict) -> dict:
     """The settings the page can show and change, with the downloads folder spelled out."""
     return {
-        "root": str(root_dir(cfg)), "default_root": str(default_downloads()),
+        "root": str(root_dir(cfg)), "default_root": str(default_downloads()), "libraries": libraries.view(cfg),
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
@@ -397,7 +403,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             fresh = None
             try:
                 try:
-                    fresh = build_index(Path(root), collect_catalog(self.cfg, Path(root))[0])
+                    fresh = build_index(Path(root), collect_catalog(self.cfg, Path(root))[0],
+                                        libraries.roots(self.cfg, Path(root)))
                 except Exception as e:  # show the problem in the page instead of a blank grid
                     fresh = {"root": root, "assets": [], "status": library_status(Path(root)),
                              "error": f"Couldn't read the downloads: {e}"}
@@ -554,8 +561,9 @@ class Handler(BaseHTTPRequestHandler):
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if mark != "hidden" or unlocked:
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
-                                   "used_in": used.get(a.get("folder"), [])})
+                                   "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
+                     "libraries": libraries.view(srv.cfg),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
@@ -577,8 +585,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
         if path.startswith("/files/"):
-            root = root_dir(srv.cfg)
-            rel = contained_rel(root, unquote(path[len("/files/"):]))   # plain, and inside the downloads folder
+            # a picture in the downloads folder, or in another library folder ("@1/Booth/...": hoard/libraries.py),
+            # whose number names one of Hoard's own folders, never a path from the request
+            found = libraries.resolve(srv.cfg, unquote(path[len("/files/"):]))
+            if not found:
+                return self._send(404, b"Not found", "text/plain")
+            root = found[0]
+            rel = contained_rel(root, found[1])   # plain, and inside that library folder
             ctype = SERVED_IMAGE_TYPES.get(Path(rel).suffix.lower()) if rel else None
             if not rel or not ctype or not safe_join(root, rel):   # safe_join: no link out of the folder either
                 return self._send(404, b"Not found", "text/plain")
@@ -591,6 +604,33 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, data, ctype, {"Cache-Control": "max-age=3600"})
         self._send(404, b"Not found", "text/plain")
+
+    def _library_folders(self, path: str, body: dict):
+        """Add a library folder (one that's there, checked by libraries.check_new_folder), or forget one: its files
+        stay where they are, and leave Hoard's library until it's added again. Not while a job runs, which may be
+        using it."""
+        srv = self.server
+        if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+            return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
+        folders = [str(f) for f in libraries.other_folders(srv.cfg)]
+        try:
+            if path == "/api/libraries/add":
+                folders.append(str(libraries.check_new_folder(srv.cfg, str(body.get("path") or "")[:1000])))
+            else:
+                n = body.get("n")
+                if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= len(folders):
+                    raise ValueError("That isn't one of your library folders.")
+                folders.pop(n - 1)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        srv.cfg["library_folders"] = folders
+        save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+        try:
+            build_catalog(srv.cfg, root_dir(srv.cfg))   # catalog.json (and Hoard for Unity) follow straight away
+        except OSError as e:
+            print(f"Couldn't rebuild the catalog: {e}", flush=True)
+        srv.forget_index()
+        return self._json({"ok": True, "libraries": libraries.view(srv.cfg)})
 
     def _privacy_action(self, path: str, body: dict):
         """Archive, hide, remove and the hidden library's PIN."""
@@ -915,6 +955,21 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 srv.picking.release()
             return self._json({"ok": True, "path": chosen})
+        if path == "/api/move":   # a download to another library folder (hoard/libraries.py), as a job
+            key, to = str(body.get("key") or "")[:400], body.get("to")
+            if not isinstance(to, int) or isinstance(to, bool):
+                return self._json({"error": "Choose one of your library folders."}, 400)
+            asset = next((a for a in srv.index(stale_ok=True)["assets"] if a.get("tag_key") == key), None)
+            if asset is None:
+                return self._json({"error": "That isn't downloaded any more."}, 404)
+            if key in MarkStore().load()["hidden"] and not self._unlocked():
+                return self._json({"error": "Unlock your hidden library first."}, 403)
+            started = srv.jobs.start("move", [], move={"key": key, "to": to, "name": asset.get("name")})
+            if not started:
+                return self._json({"error": "That's already waiting its turn."}, 409)
+            return self._json({"ok": True, "queued": started == "queued"})
+        if path in ("/api/libraries/add", "/api/libraries/remove"):   # the other library folders, from Settings
+            return self._library_folders(path, body)
         if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)
