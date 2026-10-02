@@ -219,6 +219,10 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 
 ### Fixed
 
+- **Store pictures didn't load in the Mac app** (2.10): every tile showed its initials. The app's Python looked
+  for the system's trusted certificates where they were on the computer that built it, so every picture's secure
+  connection failed, without a word. Hoard now always trusts the same certificate bundle its downloads use, still
+  checking every certificate, and notes in its log, once, why a picture couldn't be fetched.
 - Downloads' tiles no longer crowd the heading above them, which they cut into when no filter was chosen.
 - **A sync that read none of your stores said Done,** in green. It now fails and says which stores it couldn't read
   (each store's row in Stores says why), and doesn't try to download. A sync that read only some is **Partly done**,
