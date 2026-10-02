@@ -166,6 +166,29 @@ def release_info_version():
     return re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py").read_text("utf-8")).group(1)
 
 
+class UnityNotes(unittest.TestCase):
+    """Hoard for Unity 0.5.0 followed 0.3.0: 0.3.1 and 0.4.0 were never released on their own, and 0.5.0's notes
+    left out what they brought (your own packages, Projects, the credits fix)."""
+
+    def test_the_notes_cover_every_version_since_the_last_release(self):
+        import build_vpm
+        notes = build_vpm.release_notes("0.5.0", "0.3.0")
+        self.assertEqual([line for line in notes.splitlines() if line.startswith("### ")], ["### 0.5.0", "### 0.4.0", "### 0.3.1"])
+        self.assertNotIn("### 0.3.0", notes)
+        single = build_vpm.release_notes("0.5.0", "0.4.0")
+        self.assertNotIn("### ", single, "one version's notes need no headings")
+        self.assertNotIn("0.4.0", build_vpm.release_notes("0.5.0"), "no version that was never released is named")
+        self.assertLess(build_vpm._order("0.6.0-beta.1"), build_vpm._order("0.6.0"))
+
+    def test_the_workflow_passes_what_was_released_and_only_updates_a_published_release_notes(self):
+        wf = (REPO / ".github/workflows/unity-release.yml").read_text("utf-8")
+        self.assertIn('python3 scripts/build_vpm.py --tag "$TAG" --released "$released"', wf)
+        publish = wf[wf.index("- name: Publish the release"):]
+        self.assertIn('if [ "$draft" = "false" ]', publish)
+        self.assertIn("gh release edit", publish.split('elif [ "$draft" = "true" ]')[0], "a published release: notes only")
+        self.assertNotIn("upload", publish.split('elif [ "$draft" = "true" ]')[0])
+
+
 class Notes(unittest.TestCase):
 
     def test_whats_new_leaves_betas_out(self):
