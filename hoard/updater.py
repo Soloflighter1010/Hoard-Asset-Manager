@@ -247,7 +247,7 @@ def tidy() -> None:
     if not folder.is_dir():
         return
     for f in folder.iterdir():
-        m = re.fullmatch(r"Hoard-Setup-(\d+\.\d+\.\d+)\.exe(\.sha256|\.part)?", f.name)
+        m = re.fullmatch(r"Hoard-Setup-(\d+\.\d+\.\d+(?:-beta\.\d+)?)\.exe(\.sha256|\.part)?", f.name)
         if m and not newer(m[1]):
             try:
                 f.unlink()

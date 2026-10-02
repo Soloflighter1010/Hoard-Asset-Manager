@@ -3,9 +3,9 @@ For maintainers. Every release is built by GitHub Actions from this repository.
 ## Hoard
 
 1. Raise `__version__` in `hoard/__init__.py`, and add a `## <version>` section at the top of `CHANGELOG.md`. That
-   section becomes the release's notes, and the build refuses a version without one. Add the version to the
-   top of `<releases>` in `packaging/flatpak/io.github.soloflighter1010.Hoard.metainfo.xml` too (software
-   centres show it; a test checks it's there).
+   section becomes the release's notes, and the build refuses a version without one. The Flatpak's metainfo
+   lists the version by itself: its build adds it to the top of `<releases>` (`scripts/flatpak_metainfo.py`,
+   with the section's first sentence as its summary), so there's no need to edit that file.
 2. Merge to `main`, and wait for **Check** to pass.
 3. In **Actions**, open **Release**, choose **Run workflow** on `main`, and enter the tag, with its `v`
    (`v2.8.0`). If the tag doesn't exist yet, the workflow makes it on `main`'s latest commit, after checking it
@@ -36,8 +36,8 @@ A beta is a release of the next version before it's finished, for testers, from 
 `v<version>-beta.<n>`: `v3.1.0-beta.1`, then `v3.1.0-beta.2`, and `v3.1.0` when it's done.
 
 1. Set `__version__ = "3.1.0-beta.1"`, and add a `## 3.1.0-beta.1` section to `CHANGELOG.md` (the beta's notes on
-   GitHub; the website's What's new page leaves beta sections out). In the Flatpak's metainfo, list it as
-   `<release version="3.1.0-beta.1" date="..." type="development">`.
+   GitHub; the website's What's new page leaves beta sections out). The Flatpak's build lists it in the metainfo
+   as a development release by itself.
 2. Run **Release** with the tag `v3.1.0-beta.1`, as above. The release is titled **Hoard 3.1.0 beta 1** and published
    as a **pre-release**, which never becomes Latest, so the website's download buttons, and everyone else's update
    checks, stay on the last release.
@@ -75,8 +75,11 @@ changed, and its tag can never be used for another release, even after deleting 
 pre-release status can still be edited.) That's why
 the release stays a draft until every file is attached.
 
-- **A run failed partway?** It leaves a draft. Fix the problem, then run the workflow again with the same tag: it
-  fills in the draft and publishes it.
+- **A build failed?** The run cleans up after itself: it deletes the draft (never published), and the tag too
+  when the run made it. Fix the problem on `main`, then run the workflow again with the same tag. (A tag you pushed
+  yourself is left for you to delete, under **Code › Tags**, or release the next version.) To re-run only the
+  failed jobs instead, tick **If a build fails, keep its draft and tag** when you start the run. The workflow
+  also checks the Flatpak's metainfo before building anything, so a broken one stops it at once.
 - **VirusTotal flagged a file?** The release stays a draft, and its notes list each file's result with a link to
   VirusTotal's report. Unsigned apps built with PyInstaller are sometimes flagged by one or two engines by
   mistake. Open the report: if it's a false positive (a generic or heuristic name, from an engine or two), run the

@@ -9,11 +9,13 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 
 import build_site_changelog as changelog  # noqa: E402
+import flatpak_metainfo  # noqa: E402
 import release_info  # noqa: E402
 import tidy_releases  # noqa: E402
 
@@ -117,6 +119,51 @@ class Tidying(unittest.TestCase):
         self.assertEqual(len(Fake.calls), 5)
         self.assertEqual(Fake.calls[-1], ("PATCH", "/releases/1", {"make_latest": "true"}), "Latest goes back to the app, last")
         self.assertTrue(all(c[2].get("make_latest") == "false" for c in Fake.calls[:-1]))
+
+
+class FlatpakMetainfo(unittest.TestCase):
+    """Each Flatpak build lists its own version in the metainfo, so a release needs no edit there by hand; a broken
+    file stops the release before anything is built (v3.0.0-beta.1's run failed at the Flatpak, on a stray <releases>)."""
+
+    GOOD = ('<?xml version="1.0"?>\n<component type="desktop-application">\n  <id>x</id>\n  <releases>\n'
+            '    <release version="2.11.1" date="2026-10-02">\n      <description><p>Old.</p></description>\n'
+            '    </release>\n  </releases>\n</component>\n')
+
+    def test_this_version_is_listed_first(self):
+        out = flatpak_metainfo.with_release(self.GOOD, "3.0.0-beta.1", "2026-10-03")
+        first = ET.fromstring(out).find("releases/release")
+        self.assertEqual((first.get("version"), first.get("date"), first.get("type")),
+                         ("3.0.0-beta.1", "2026-10-03", "development"), "a beta is a development release")
+        self.assertIn("2.11.1", out)
+        self.assertEqual(flatpak_metainfo.with_release(out, "3.0.0-beta.1", "2026-10-04"), out, "listed once")
+        final = ET.fromstring(flatpak_metainfo.with_release(self.GOOD, "3.0.0", "2026-10-04")).find("releases/release")
+        self.assertIsNone(final.get("type"))
+
+    def test_a_broken_file_is_named(self):
+        stray = self.GOOD.replace("  <releases>\n", "  <releases>\n    <release version=\"3.0.0\" date=\"2026-10-02\">"
+                                  "<description><p>x</p></description></release>\n  <releases>\n", 1)
+        for bad in (stray, self.GOOD.replace("</releases>", "</releases>\n  <releases></releases>"),
+                    self.GOOD.replace('date="2026-10-02"', 'date="soon"')):
+            with self.assertRaises(flatpak_metainfo.Broken):
+                flatpak_metainfo.with_release(bad, "3.0.0", "2026-10-03")
+
+    def test_the_summary_is_the_changelogs_first_sentence(self):
+        text = flatpak_metainfo.summary(release_info_version())
+        self.assertTrue(text and "**" not in text and len(text) <= 300, text)
+
+    def test_the_release_checks_it_first_and_cleans_up_a_failed_build(self):
+        wf = (REPO / ".github/workflows/release.yml").read_text("utf-8")
+        self.assertLess(wf.index("scripts/flatpak_metainfo.py --check"), wf.index("scripts/build_release.py"))
+        job = wf[wf.index("  clean-up:"):wf.index("  virustotal:")]
+        self.assertIn("needs: [release, windows, macos, flatpak, flatpak-release]", job, "not VirusTotal's draft")
+        self.assertIn("failure() && !inputs.keep_draft", job)
+        self.assertIn('if [ "$draft" = "false" ]', job, "a published release is never touched")
+        self.assertIn('if [ "$MADE_TAG" = "true" ]', job, "only a tag this run made is deleted")
+
+
+def release_info_version():
+    import re
+    return re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py").read_text("utf-8")).group(1)
 
 
 class Notes(unittest.TestCase):
