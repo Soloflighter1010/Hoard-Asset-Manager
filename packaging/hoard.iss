@@ -9,6 +9,10 @@
 #ifndef AppVersion
   #error Pass the version: iscc /DAppVersion=2.8.0 packaging\hoard.iss
 #endif
+; Windows' file version is numbers only, so a beta (3.1.0-beta.1) passes /DFileVersion=3.1.0 as well
+#ifndef FileVersion
+  #define FileVersion AppVersion
+#endif
 
 [Setup]
 ; Fixed for every version, so a newer setup updates Hoard rather than installing it twice.
@@ -20,7 +24,7 @@ AppPublisher=SoloFlighter
 AppPublisherURL=https://github.com/Soloflighter1010/Hoard-Asset-Manager
 AppSupportURL=https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues
 AppUpdatesURL=https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#FileVersion}
 VersionInfoDescription=Hoard setup
 PrivilegesRequired=lowest
 DefaultDirName={autopf}\Hoard

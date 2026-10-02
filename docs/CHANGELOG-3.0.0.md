@@ -35,6 +35,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   `~/.local/share/Hoard` as Hoard run from source, so your library carries over and Hoard for Unity finds it.
 - **Updates say which file to get.** On the Mac and in the Flatpak, **Settings › Updates** names the new version's
   package for your computer. The Windows app still updates itself.
+- **Betas, for testers.** Betas of the next version now come out here, as pre-releases ("Hoard 3.1.0 beta 1").
+  Turn on **Get beta updates** in **Settings › Updates** to be offered each one, and the finished version when
+  it's out. Everyone else only ever sees releases.
 - **Hoard always installs into `%LOCALAPPDATA%\Programs\Hoard` on Windows** (issue #21): a folder only your account
   can change, which Hoard's sign-in protection counts on. A Hoard installed somewhere else by an older setup moves
   there when it updates; you can delete the old folder afterwards.

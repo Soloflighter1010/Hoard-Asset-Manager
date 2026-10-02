@@ -127,7 +127,8 @@ def when(stamp: str | None) -> tuple[str, str] | None:
 
 def page(markdown: str, dates: dict[str, str]) -> str:
     cards = []
-    for n, (version, lines) in enumerate(releases(markdown)):
+    # A beta's notes (## 3.1.0-beta.1) are for testers, on its GitHub release: What's new shows releases only
+    for n, (version, lines) in enumerate([r for r in releases(markdown) if "-beta." not in r[0]]):
         plain = VERSION.fullmatch(version)
         anchor = "v" + re.sub(r"[^0-9A-Za-z]+", "-", version).strip("-")
         dated = when(dates.get(f"v{version}")) if plain else None

@@ -11,6 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 REPO = Path(SPECPATH).parent
 WINDOWS, MAC = sys.platform == "win32", sys.platform == "darwin"
 VERSION = re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py").read_text("utf-8")).group(1)
+NUMBERS = ".".join(re.findall(r"\d+", VERSION)[:3])   # macOS wants numbers only: a beta, 3.1.0-beta.1, is 3.1.0
 APP_ID = "io.github.soloflighter1010.Hoard"   # the same as the Flatpak's (packaging/flatpak)
 version_file = REPO / "build" / "version_info.txt"
 
@@ -43,7 +44,7 @@ if MAC:
     BUNDLE(coll, name="Hoard.app", icon=str(REPO / "packaging" / "hoard.icns"), bundle_identifier=APP_ID,
            version=VERSION, info_plist={
                "CFBundleName": "Hoard", "CFBundleDisplayName": "Hoard",
-               "CFBundleShortVersionString": VERSION, "CFBundleVersion": VERSION,
+               "CFBundleShortVersionString": NUMBERS, "CFBundleVersion": NUMBERS,
                "LSMinimumSystemVersion": "11.0", "NSHighResolutionCapable": True,
                "LSApplicationCategoryType": "public.app-category.utilities",
                "NSHumanReadableCopyright": "MIT licensed. Not affiliated with VRChat or any store.",

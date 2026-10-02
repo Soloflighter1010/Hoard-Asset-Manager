@@ -906,6 +906,9 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
   <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
     version. GitHub sees your IP address, as with any website; nothing else is sent.</p>
+  <label class="check"><input type="checkbox" id="setBetas"> Get beta updates</label>
+  <p class="hint">Betas are the next version before it's finished, for testers: they may have problems. With this on,
+    a beta counts as an update too, and you're offered the finished version when it's out.</p>
   <p class="hint" id="updStatus" aria-live="polite"></p>
   <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
     <button class="primary sm" id="updInstall" hidden></button>
@@ -2188,6 +2191,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setUpdates").checked = SETTINGS.check_for_updates;
+  $("#setBetas").checked = !!SETTINGS.beta_updates;
   $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
   $("#backgroundRow").hidden = !DATA.can_background;
   showUpdate();
@@ -2210,13 +2214,14 @@ function fillSettings() {   // the controls, as the settings are now
 /* ---------- updates: checked with GitHub when you ask (or daily, if you turned that on); installed by Hoard itself
    only in the app Hoard-Setup installed on Windows */
 let UPDATE = null, updTimer = null;
+const verText = v => String(v || "").replace(/-beta\.(\d+)$/, " beta $1");   // "3.1.0-beta.2" as "3.1.0 beta 2"
 function describeUpdate(u) {
   if (u.error) return u.error;
   if (u.busy) return u.message || "Getting the update";
-  if (u.available) return `Hoard ${u.latest.version} is available (you have ${u.current}).` +
+  if (u.available) return `Hoard ${verText(u.latest.version)} is available (you have ${verText(u.current)}).` +
     (u.can_install ? "" : " " + (u.how || "Download it from the releases page, and install it over this one."));
-  if (u.checked) return `Hoard ${u.current} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
-  return `You have Hoard ${u.current}.`;
+  if (u.checked) return `Hoard ${verText(u.current)} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
+  return `You have Hoard ${verText(u.current)}.`;
 }
 async function showUpdate(u) {
   if (!u) {
@@ -2229,12 +2234,12 @@ async function showUpdate(u) {
   UPDATE = u;
   $("#updStatus").textContent = describeUpdate(u);
   $("#updInstall").hidden = !u.can_install || u.busy;
-  $("#updInstall").textContent = u.available ? `Update to ${u.latest.version}` : "";
+  $("#updInstall").textContent = u.available ? `Update to ${verText(u.latest.version)}` : "";
   $("#updCheck").disabled = !!u.busy;
   $("#updLink").hidden = !u.available;
   $("#updLink").href = u.available ? u.latest.url : u.releases_page;
   const note = $("#updateNote");   // the header's "Update to ..." link, on the Library page
-  if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${u.latest.version}` : ""; }
+  if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : ""; }
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
 }
@@ -2248,7 +2253,7 @@ async function checkUpdate() {
 }
 async function installUpdate() {
   if (!UPDATE || !UPDATE.available) return;
-  if (!await ask(`Update to Hoard ${UPDATE.latest.version}? Hoard downloads it, closes, installs it and opens again. ` +
+  if (!await ask(`Update to Hoard ${verText(UPDATE.latest.version)}? Hoard downloads it, closes, installs it and opens again. ` +
                "Your library, settings, sign-ins and downloads stay as they are.", "Update")) return;
   const r = await apiPost("/api/update/install");
   if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
@@ -2577,6 +2582,7 @@ function settingsPart(el) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
     case "setUpdates": return { check_for_updates: el.checked };
+    case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setAutoSync": return { auto_sync_hours: Number(el.value) };
@@ -2608,6 +2614,7 @@ function autosave(el) {
     applyDisplay(SETTINGS.display);
     if ("display" in part) refitWindows();
     if ("browser_channel" in part) showBrowserInUse();
+    if ("beta_updates" in part) showUpdate();   // a beta found earlier shows, or stops showing, as an update
     winNote("settingsPanel", "Saved", true);
     if (Object.keys(part).some(k => RELOAD_AFTER.includes(k))) T.reload();
   });

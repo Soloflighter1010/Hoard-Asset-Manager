@@ -45,6 +45,8 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
 - **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
   it asks GitHub whether there's a newer version. **Check now** asks straight away, and **Update to** installs
   it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating).
+  **Get beta updates** (off unless you turn it on) is for testers: betas of the next version count as updates
+  too, and you're offered the finished version when it's out. Betas may have problems.
 - **Browser for store sign-ins:** **Automatic** (Microsoft Edge on Windows, Hoard's own browser elsewhere),
   **Microsoft Edge**, **Google Chrome** or **Hoard's own browser**. After changing it, you may need to sign in to
   your stores again.
@@ -77,6 +79,7 @@ and keep it valid JSON.
 | `auto_sync_hours` | `0` | Hours between automatic syncs while Hoard is open: `0` (off), `6`, `12`, `24` or `168` (**Sync automatically** in Settings) |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
+| `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |
 | `close_to_taskbar` | `true` | Closing Hoard's window minimizes it to the taskbar, and Hoard carries on (**Closing the window minimizes Hoard to the taskbar** in Settings) |
 | `local_copy` | `true` | Whether **Add your own** offers to copy into Hoard (`true`) or to list where it is (`false`). Set by your last choice |
 | `edits_root` | `""` | Where **Make an editable copy** puts copies; empty means **Hoard Edits** beside your downloads folder. Never inside the downloads folder. See [Changing a download](Downloads#changing-a-download-make-an-editable-copy) |

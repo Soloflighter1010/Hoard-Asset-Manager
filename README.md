@@ -188,7 +188,8 @@ nothing reaches your uploads.
 Add it in the VRChat Creator Companion: open [Hoard's website](https://soloflighter1010.github.io/Hoard-Asset-Manager/#unity)
 and choose **Add to VCC**, or go to **Settings › Packages › Add Repository** and paste
 `https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json`. Then add **Hoard** to a project. Without
-VCC, import the `.unitypackage` from the package's [releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases).
+VCC, import the `.unitypackage` from one of its releases ("Hoard for Unity ...", tagged `unity-v...`) on the
+[Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases?q=unity-v&expanded=true) page.
 More in [Packages/soloflighter.hoard/README.md](Packages/soloflighter.hoard/README.md).
 
 Everything also works from the command line, for scripts and computers without a desktop:

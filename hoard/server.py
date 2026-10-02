@@ -185,6 +185,7 @@ def public_settings(cfg: dict) -> dict:
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
+        "beta_updates": bool(cfg.get("beta_updates")),
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
@@ -224,6 +225,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["offline_images"] = bool(body["offline_images"])
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
+    if "beta_updates" in body:
+        change["beta_updates"] = bool(body["beta_updates"])
     if "close_to_taskbar" in body:
         change["close_to_taskbar"] = bool(body["close_to_taskbar"])
     if "auto_sync_hours" in body:
