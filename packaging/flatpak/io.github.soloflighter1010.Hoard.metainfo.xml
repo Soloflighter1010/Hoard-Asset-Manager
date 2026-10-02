@@ -51,12 +51,11 @@
     <internet>always</internet>
   </requires>
   <releases>
-    <release version="3.0.0-beta.1" date="2026-10-02">
+    <release version="3.0.0-beta.1" date="2026-10-02" type="development">
       <description>
         <p>3.0.0 Testing.</p>
       </description>
-    </release>
-  <releases>
+    </release> 
     <release version="2.11.1" date="2026-10-02">
       <description>
         <p>Payhip products you bought from other creators are no longer credited to your own shop.</p>
