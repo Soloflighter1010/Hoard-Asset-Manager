@@ -129,8 +129,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - While your hidden library is locked, hidden products' names stay out of job progress and the Tasks list, and
   locking it closes any hidden product's details you had open.
 - **Remove a download completely** (issue #81). Removing something you've downloaded asks whether to delete its
-  downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is also in Removed, in
-  the Library and in Downloads. Only the files Hoard downloaded go; anything of your own in the folder stays.
+  downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is in every download's
+  details, in the Library and in Downloads, and for a selection: a product still in your library stays there, to
+  download again. Only the files Hoard downloaded go; anything of your own in the folder stays.
 - **Local: your own packages** (issue #80). Packages you make, to move textures and materials between projects or
   to hand to commissioners, live beside what you bought: **Add your own** takes a folder or file on this computer,
   with who it's for. You choose each time whether Hoard copies it in (checked like a download) or lists it where
@@ -177,10 +178,11 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
   the copy says what it is.
 - **Library folders on other drives.** When your downloads drive fills up, add a folder on another drive (an
-  external disk, say) in Settings, under **Other library folders**. Hoard reads it as part of your library:
+  external disk, say) in Settings, under **Library folders**: **Add a folder…** picks it and adds it. Hoard reads
+  it as part of your library, and Downloads gives each folder a tab of its own, with how many downloads it holds.
   Downloads, Hoard for Unity, the routine checks and syncing all cover it. New downloads still go to your downloads
   folder, and a product already in another folder is updated where it is. To move a product, open its details and
-  choose **Move here**: Hoard copies its files, checks every one, and only then deletes them where they were. When
+  choose **Move here** (or select several and move them together): Hoard copies its files, checks every one, and only then deletes them where they were. When
   a folder's drive isn't connected, its products are left alone, not downloaded again; removing a folder in
   Settings only stops Hoard reading it.
 - **Routine checks of your downloads** (issue #83). Once a week (or a day, a month, or only when you ask, in

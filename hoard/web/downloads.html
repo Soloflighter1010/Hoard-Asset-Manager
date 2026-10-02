@@ -395,8 +395,28 @@ body.selecting .toast { bottom: 96px; }
 .apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
 .settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }
 .settings .field { display: flex; gap: 6px; }
-.librow { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; }
-.librow .lp { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+/* a tab for each library folder (hoard/libraries.py), after the stores' tabs, once there's more than one folder */
+.drives { display: contents; }
+.drives .tabsep { flex: none; align-self: center; width: 1px; height: 22px; margin: 8px 6px 0; background: var(--seam); }
+.seg .drives button { display: inline-flex; align-items: center; gap: 6px; }
+.seg .drives button svg { width: 15px; height: 15px; }
+.seg .drives button .n { margin-left: 2px; }
+.seg .drives button.away { opacity: .55; }
+.bulkmove { display: inline-flex; gap: 6px; align-items: center; }
+.bulkmove[hidden] { display: none; }
+.bulkmove select { height: 30px; max-width: 220px; padding: 0 8px; border-radius: 8px; border: 0; background: var(--stone);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.libs { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.librow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--stone);
+  box-shadow: inset 0 0 0 1px var(--seam); font-size: 13px; }
+.librow.away { opacity: .65; }
+.librow svg { flex: none; width: 18px; height: 18px; color: var(--dust); }
+.librow .lp { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.librow .lp b { font-weight: 700; color: var(--bone); }
+.librow .lp small { color: var(--dust); overflow-wrap: anywhere; font-size: 12px; }
+.librow .muted { white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .librow { flex-wrap: wrap; } .librow .muted { white-space: normal; } }
+.settings .libadd #libPick { flex: none; }
 .movefield { display: flex; gap: 6px; margin: 0 0 10px; }
 .movefield select { flex: 1; min-width: 0; height: 32px; padding: 0 8px; border-radius: 8px; border: 0;
   background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
@@ -670,6 +690,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip</button>
     <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io</button>
     <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local</button>
+    <span id="drives" class="drives" role="radiogroup" aria-label="Library folder" hidden></span>
   </div>
   <div class="shelf-tools">
     <button id="job" class="job" aria-live="polite" title="See it in Tasks" hidden></button>
@@ -779,16 +800,17 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
   <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
-  <h3>Other library folders</h3>
-  <div id="setLibs"></div>
-  <div class="field"><input id="libPath" spellcheck="false" autocomplete="off" aria-label="Add a library folder"
-    placeholder="A folder on another drive">
-    <button class="ghost sm" id="libBrowse" data-browse hidden>Browse…</button>
+  <h3>Library folders</h3>
+  <p class="hint">Your downloads can live on more than one drive. Add a folder on another drive (an external disk,
+    say) and Hoard reads it as part of your library, with a tab of its own in Downloads.</p>
+  <div id="setLibs" class="libs"></div>
+  <div class="field libadd"><button class="primary sm" id="libPick" data-browse hidden>Add a folder…</button>
+    <input id="libPath" spellcheck="false" autocomplete="off" aria-label="A folder to add, as a full path"
+      placeholder="A folder on another drive, as a full path">
     <button class="ghost sm" id="libAdd">Add</button></div>
-  <p class="hint">Folders on other drives that Hoard reads as part of your library, such as an external drive. New
-    downloads go to the downloads folder; a product already in one of these is kept up to date where it is. To move a
-    product to another of your folders, open its details. Removing a folder here only stops Hoard reading it: its files
-    stay where they are.</p>
+  <p class="hint">New downloads go to the downloads folder; a product already in another folder is kept up to date
+    there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops
+    Hoard reading it: its files stay where they are.</p>
   <p class="hint" id="libMsg" role="status"></p>
   <h3>Stores</h3>
   <div id="setStores"></div>
@@ -950,6 +972,8 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
   <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
+  <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
+    <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
   <button class="ghost sm" id="bulkDone">Done</button>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -1006,7 +1030,7 @@ async function api(url, opts = {}) {
 const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
 const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
 const grid = $("#grid"), detail = $("#detail");
-const state = { view: "downloads", q: "", store: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
+const state = { view: "downloads", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 // Only plain web addresses become links; anything else from a store page (javascript:, file:, ...) is dropped.
@@ -1152,6 +1176,7 @@ async function load(rescan = false) {
 function matches(a, skip) {
   if (!inView(a)) return false;   // Downloads, Archive, Removed or Hidden, as in the Library
   if (state.store && a.store !== state.store) return false;
+  if (state.lib !== "" && String(a.library || 0) !== state.lib) return false;   // a library folder's tab
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const t of state.types) if (!a.types.includes(t)) return false;
@@ -1169,7 +1194,7 @@ const countBy = (list, key) => {
   for (const a of list) for (const v of a[key]) m.set(v, (m.get(v) || 0) + 1);
   return m;
 };
-const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.types.size;
+const filtersActive = () => state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size;
 
 /* ---------- rendering */
 function render() {
@@ -1371,6 +1396,7 @@ function renderStatus(list) {
   const pills = [];
   if (state.q) pills.push(["q", "", `Search`, state.q]);
   if (state.store) pills.push(["store", "", "Store", storeName(state.store)]);
+  if (state.lib !== "") pills.push(["lib", "", "Folder", libName(state.lib)]);
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
@@ -1394,7 +1420,10 @@ function renderStatus(list) {
 
 function syncControls() {
   const q = $("#q"); if (q.value !== state.q) q.value = state.q;
-  for (const b of $("#stores").children) b.setAttribute("aria-checked", String(b.dataset.store === state.store));
+  renderDrives();
+  for (const b of $("#stores").querySelectorAll("[data-store]"))   // Everything: every store, on every drive
+    b.setAttribute("aria-checked", String(b.dataset.store === state.store && (b.dataset.store !== "" || state.lib === "")));
+  for (const b of $("#drives").querySelectorAll("[data-lib]")) b.setAttribute("aria-checked", String(b.dataset.lib === state.lib));
   // the stores you have downloads from, for Everything's glow
   setGlow(state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));
   $("#sort").value = state.sort;
@@ -1418,7 +1447,7 @@ function showDetail(a, focus = true) {
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button>` +
       `<button class="ghost" data-act="edit-copy">Make an editable copy</button>` +
-      (a.mark === "removed" ? `<button class="ghost" data-act="delete-files">Delete downloaded files</button>` : "") + `</div>` +
+      (isLocal(a) ? "" : `<button class="ghost" data-act="delete-files">Delete downloaded files</button>`) + `</div>` +
       (isLocal(a) ? localSection(a)
         : `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
         here, and replaces one that was changed.</p>`) +
@@ -1466,6 +1495,7 @@ function saveHash() {
   const p = new URLSearchParams();
   if (state.q) p.set("q", state.q);
   if (state.store) p.set("store", state.store);
+  if (state.lib !== "") p.set("lib", state.lib);
   if (state.creator) p.set("creator", state.creator);
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.types.size) p.set("types", [...state.types].join(","));
@@ -1477,6 +1507,7 @@ function saveHash() {
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
+  state.lib = /^\d+$/.test(p.get("lib") || "") ? p.get("lib") : "";
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
@@ -1487,7 +1518,58 @@ function readHash() {
 /* ---------- events */
 let qTimer;
 $("#q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = e.target.value; render(); }, 90); });
-$("#stores").addEventListener("click", e => { const b = e.target.closest("[data-store]"); if (b) { state.store = b.dataset.store; render(); } });
+$("#stores").addEventListener("click", e => {
+  const d = e.target.closest("[data-lib]");   // a library folder's tab: chosen again, it goes back to every folder
+  if (d) { state.lib = state.lib === d.dataset.lib ? "" : d.dataset.lib; render(); return; }
+  const b = e.target.closest("[data-store]");
+  if (b) { state.store = b.dataset.store; if (!b.dataset.store) state.lib = ""; render(); }
+});
+/* ---------- moving the selected downloads to another library folder, each as a job of its own (Tasks) */
+function fillBulkMove() {
+  const libs = (DATA.libraries || []).filter(l => l.available);
+  $("#bulkMoveWrap").hidden = (DATA.libraries || []).length < 2 || !libs.length;
+  $("#bulkMoveTo").innerHTML = libs.map(l => `<option value="${l.n}">${esc(l.label)}${l.free != null ? `, ${sizeText(l.free)} free` : ""}</option>`).join("");
+}
+async function bulkMove() {
+  const to = +$("#bulkMoveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
+  const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked && (a.library || 0) !== to);
+  if (!lib) return;
+  if (!chosen.length) { toast(`Those are already in ${lib.label}, or are your own packages (which stay in Local).`); return; }
+  if (!await ask(`Move ${chosen.length === 1 ? chosen[0].name : `${chosen.length} products`} to ${lib.label} (${lib.path})?\n\n` +
+                 "Hoard copies the files there, checks every one, then deletes them where they were. Anything of your own " +
+                 "in their folders stays. Each move is a task of its own: follow them in Tasks.", "Move them")) return;
+  let started = 0, refused = 0;
+  for (const a of chosen) {
+    const r = await apiPost("/api/move", { key: a.tag_key, to });
+    if (r.ok) started++; else refused++;
+  }
+  setSelecting(false);
+  toast(`Moving ${started} ${started === 1 ? "product" : "products"} to ${lib.label}. Follow it in Tasks.` +
+        (refused ? ` ${refused} couldn't start (the queue may be full): try those again when it's done.` : ""));
+  for (let n = 0; started && n < 4000; n++) {   // when they're done, show where they are now (quick ones too)
+    await new Promise(ok => setTimeout(ok, n < 20 ? 300 : 1500));
+    let t = {};
+    try { t = await (await api("/api/tasks", { cache: "no-store" })).json(); } catch (e) { return; }
+    if ((t.current && t.current.task === "move") || (t.queue || []).some(q => q.task === "move")) continue;
+    await load(true);
+    return;
+  }
+}
+/* ---------- a tab for each library folder (hoard/libraries.py): shown once there's more than the downloads folder */
+const libName = n => ((DATA.libraries || []).find(l => String(l.n) === String(n)) || {}).label || "Another folder";
+let drivesShown = "";
+function renderDrives() {
+  const libs = DATA.libraries || [];
+  if (state.lib !== "" && !libs.some(l => String(l.n) === state.lib)) state.lib = "";   // a folder taken out
+  const counts = {};
+  for (const a of DATA.assets) if (inView(a)) counts[a.library || 0] = (counts[a.library || 0] || 0) + 1;
+  const html = libs.length < 2 ? "" : '<span class="tabsep" aria-hidden="true"></span>' + libs.map(l =>
+    `<button role="radio" data-lib="${l.n}" aria-checked="false" class="${l.available ? "" : "away"}" ` +
+    `title="${esc(l.path)}${l.available ? "" : " (its drive isn't connected)"}">${DRIVE_ICON}${esc(l.label)}` +
+    `<span class="n">${(counts[l.n] || 0).toLocaleString()}</span></button>`).join("");
+  if (html !== drivesShown) { $("#drives").innerHTML = html; drivesShown = html; }
+  $("#drives").hidden = !html;
+}
 $("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
@@ -1515,8 +1597,8 @@ $("#filters").addEventListener("click", e => {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.types.clear(); }
-  else if (k === "q") state.q = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
+  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); }
+  else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v); else if (k === "type") state.types.delete(v);
   render();
 });
@@ -1618,7 +1700,7 @@ async function editableCopy(a, button) {
         (left ? ` Left out ${left} that ${left === 1 ? "has" : "have"} changed or gone since Hoard downloaded ${left === 1 ? "it" : "them"} (listed in the read-me there).` : ""));
 }
 // Library folders (Settings): a product kept in one of them can be moved to another
-const libLabel = l => l.main ? `${l.path} (the downloads folder)` : l.path;
+const libLabel = l => `${l.label || l.path} (${l.path})`;
 function librarySection(a) {
   const libs = DATA.libraries || [];
   if (isLocal(a) || a.linked || libs.length < 2) return "";
@@ -1651,43 +1733,67 @@ async function moveProduct(a, button) {
     return;
   }
 }
-function renderLibs(list) {
-  const others = (list || []).filter(l => !l.main);
-  $("#setLibs").innerHTML = others.length ? others.map(l => `<div class="librow"><span class="lp">${esc(l.path)}</span>` +
-    `<span class="muted">${l.available ? (l.free != null ? `${sizeText(l.free)} free` : "") : "Drive not connected"}</span>` +
-    `<button class="ghost sm" data-lib-remove="${l.n}">Remove</button></div>`).join("")
-    : `<p class="hint">None yet.</p>`;
+const DRIVE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5" width="15" height="10" rx="2.5"/><circle cx="14" cy="10" r="1" fill="currentColor"/><path d="M5.5 10h5"/></svg>';
+const libCount = n => `${n.toLocaleString()} ${n === 1 ? "product" : "products"}`;
+function renderLibs(list) {   // every library folder, the downloads folder first (hoard/libraries.py)
+  $("#setLibs").innerHTML = (list || []).map(l => `<div class="librow${l.available ? "" : " away"}">${DRIVE_ICON}` +
+    `<span class="lp"><b>${esc(l.label || l.path)}</b><small>${esc(l.path)}${l.main ? " · new downloads go here" : ""}</small></span>` +
+    `<span class="muted">${l.available ? `${libCount(l.products || 0)}${l.free != null ? ` · ${sizeText(l.free)} free` : ""}`
+      : "Drive not connected"}</span>` +
+    (l.available ? `<button class="ghost sm" data-lib-open="${l.n}">Open</button>` : "") +
+    (l.main ? "" : `<button class="ghost sm" data-lib-remove="${l.n}">Remove</button>`) + `</div>`).join("");
 }
 async function libraryChange(path, body) {
   $("#libMsg").textContent = "";
   const r = await apiPost(path, body);
-  if (!r.ok) { $("#libMsg").textContent = r.data.error || "That didn't work."; return false; }
-  SETTINGS.libraries = DATA.libraries = r.data.libraries;
+  if (!r.ok) { $("#libMsg").textContent = r.data.error || "That didn't work."; return null; }
+  SETTINGS.libraries = r.data.libraries;
+  if (typeof DATA === "object" && DATA) DATA.libraries = r.data.libraries;
   renderLibs(r.data.libraries);
-  T.reload();
+  await T.reload();
+  return r.data.libraries;
+}
+async function addLibrary(path) {
+  const before = new Set((SETTINGS.libraries || []).map(l => l.path));
+  const libs = await libraryChange("/api/libraries/add", { path });
+  if (!libs) return false;
+  const added = libs.find(l => !before.has(l.path));
+  if (added) toast(`Added ${added.label}: ${added.products ? `${libCount(added.products)} found there` : "nothing downloaded there yet"}. ` +
+                   "It has a tab in Downloads.");
   return true;
 }
 function wireLibs() {
-  $("#libBrowse").addEventListener("click", () => browseInto($("#libPath")));
+  $("#libPick").addEventListener("click", async () => {   // in Hoard's window: choose it, and it's added
+    const r = await apiPost("/api/pick", { kind: "folder" });
+    if (!r.ok) { $("#libMsg").textContent = r.data.error || "The picker didn't open. Type the path instead."; return; }
+    if (r.data.path) await addLibrary(r.data.path);
+  });
   const add = async () => {
     const path = $("#libPath").value.trim();
-    if (path && await libraryChange("/api/libraries/add", { path })) $("#libPath").value = "";
+    if (path && await addLibrary(path)) $("#libPath").value = "";
   };
   $("#libAdd").addEventListener("click", add);
   $("#libPath").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
   $("#setLibs").addEventListener("click", async e => {
+    const open = e.target.closest("[data-lib-open]");
+    if (open) {
+      const lib = (SETTINGS.libraries || []).find(l => l.n === +open.dataset.libOpen);
+      if (lib) { const r = await apiPost("/api/open", { path: lib.main ? "" : `@${lib.n}/` }); toast(r.ok ? `Opened in ${r.data.opened_in}` : r.data.error); }
+      return;
+    }
     const b = e.target.closest("[data-lib-remove]"); if (!b) return;
     const lib = (SETTINGS.libraries || []).find(l => l.n === +b.dataset.libRemove);
-    if (!lib || !await ask(`Stop reading ${lib.path} as part of your library?\n\nIts files stay where they are, and ` +
-                           "come back to your library if you add the folder again.", "Remove")) return;
-    libraryChange("/api/libraries/remove", { n: lib.n });
+    if (!lib || !await ask(`Stop reading ${lib.label} (${lib.path}) as part of your library?\n\nIts files stay where they are, ` +
+                           "and come back to your library if you add the folder again.", "Remove")) return;
+    if (await libraryChange("/api/libraries/remove", { n: lib.n })) toast(`${lib.label} is no longer part of your library.`);
   });
 }
-// issue #81: a download of something removed from the Library can be deleted from disk, after you confirm
-async function deleteFiles(a) {
-  if (!a || a.mark !== "removed") return;
+// issue #81: a download can be deleted from disk, after you confirm
+async function deleteFiles(a) {   // issue #81; and since 3.0, for anything downloaded, whether or not it's removed
+  if (!a || isLocal(a)) return;   // (your own packages: Take out of Local)
   if (!await ask(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
-               "This can't be undone.", "Delete files", true)) return;
+               "This can't be undone." + (a.mark === "removed" ? "" : " It stays in your library, so you can download it again."),
+               "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   if (r.data.job) { closeDetail(); return afterQueuedJob(r, "delete-files", () => load(true)); }
@@ -1819,6 +1925,7 @@ function setSelecting(on) {
   $("#selectBtn").setAttribute("aria-pressed", String(on));
   $("#bulk").hidden = !on;
   if (on) T.closeDetail();
+  if (typeof fillBulkMove === "function") fillBulkMove();
   render();
 }
 function markSelected() {
@@ -1908,6 +2015,7 @@ function wireTags() {
   $("#bulkNone").addEventListener("click", () => { sel.ids.clear(); markSelected(); });
   $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
   $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
+  if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
   $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }

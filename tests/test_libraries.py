@@ -224,7 +224,8 @@ class Server(unittest.TestCase):
         self.assertEqual(assets["assets"], [], "and leave the library until it's added again")
 
     def test_the_pages(self):
-        """Settings adds and removes a library folder; a product's details say where it's kept and move it."""
+        """Settings adds a library folder in one step and lists every folder; each gets a tab in Downloads, with its
+        count; a product's details say where it's kept and move it, and so does the selection bar for several."""
         try:
             from playwright.sync_api import sync_playwright
             pw = sync_playwright().start()
@@ -233,36 +234,69 @@ class Server(unittest.TestCase):
             self.skipTest("needs Playwright's Chromium (python -m playwright install chromium)")
         self.addCleanup(pw.stop)
         self.addCleanup(browser.close)
-        page = browser.new_page()
+        page = browser.new_page(viewport={"width": 1300, "height": 900})
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(f"{self.srv.url}downloads#key={self.srv.key}")
         page.get_by_text("Rusk").first.wait_for()
+        self.assertTrue(page.locator("#drives").is_hidden(), "no folder tabs with only the downloads folder")
         page.click("#settingsBtn")
-        page.get_by_text("None yet.").wait_for()
+        page.locator("#setLibs .librow").get_by_text("Downloads folder").wait_for()
+        self.assertEqual(page.locator("#setLibs .librow").count(), 1)
+        self.assertIn("1 product", page.locator("#setLibs .librow").inner_text())
         page.fill("#libPath", str(self.root / "Booth"))
         page.click("#libAdd")
         page.get_by_text("inside it, or around it").wait_for()
-        page.fill("#libPath", str(self.drive))
-        page.click("#libAdd")
+        self.srv.pick_path = lambda kind, start: str(self.drive)   # as Hoard's window does: one step
+        page.reload()
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("#settingsBtn")
+        page.click("#libPick")
+        name = libraries.label(self.drive)   # "Drive E", or "Drive E (C:)" on Windows
+        page.get_by_text(f"Added {name}: nothing downloaded there yet. It has a tab in Downloads.").wait_for()
         page.locator("#setLibs .librow").get_by_text(str(self.drive)).wait_for()
         page.click("#settingsBtn")
+        page.locator("#drives [data-lib='1']").wait_for()
+        self.assertEqual([" ".join(t.split()) for t in page.locator("#drives [data-lib]").all_inner_texts()],
+                         ["Downloads folder 1", f"{name} 0"])
+        page.click("#drives [data-lib='1']")
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 0")
+        page.click("#drives [data-lib='1']")   # chosen again: every folder
         page.locator(".slot").first.click()
-        page.get_by_text("(the downloads folder)").first.wait_for()
+        page.get_by_text("Kept in Downloads folder").first.wait_for()
         page.click("[data-act=move]")
         page.click("#askDialog button[value=yes]")
+        moved = self.drive / "Booth" / "Kitsu Studio" / "Rusk" / "rusk.unitypackage"
         for _ in range(100):
-            if (self.drive / "Booth" / "Kitsu Studio" / "Rusk" / "rusk.unitypackage").is_file():
+            if moved.is_file():
                 break
             time.sleep(0.1)
-        self.assertTrue((self.drive / "Booth" / "Kitsu Studio" / "Rusk" / "rusk.unitypackage").is_file())
+        self.assertTrue(moved.is_file())
         page.wait_for_function("() => DATA.assets.length === 1 && DATA.assets[0].library === 1")
+        page.click("#drives [data-lib='1']")
+        page.locator(".slot").first.wait_for()
+        page.click("#drives [data-lib='1']")
+        # several at once, from the selection bar: back to the downloads folder
+        page.click("#selectBtn")
+        page.locator("#bulkMoveWrap").wait_for()
         page.locator(".slot").first.click()
-        page.get_by_text(f"Kept in {self.drive}.").wait_for()
+        page.select_option("#bulkMoveTo", "0")
+        page.click("#bulkMove")
+        page.click("#askDialog button[value=yes]")
+        back = self.root / "Booth" / "Kitsu Studio" / "Rusk" / "rusk.unitypackage"
+        for _ in range(100):
+            if back.is_file() and not moved.exists():
+                break
+            time.sleep(0.1)
+        self.assertTrue(back.is_file() and not moved.exists())
+        page.wait_for_function("() => DATA.assets.length === 1 && DATA.assets[0].library === 0", timeout=20000)
         page.click("#settingsBtn")
         page.click("[data-lib-remove='1']")
         page.click("#askDialog button[value=yes]")
-        page.get_by_text("None yet.").wait_for()
+        page.get_by_text(f"{name} is no longer part of your library.").wait_for()
+        page.wait_for_function("() => document.querySelector('#drives').hidden")
+        self.assertEqual(errors, [])
         page.close()
-
 
 if __name__ == "__main__":
     unittest.main()

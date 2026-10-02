@@ -176,12 +176,35 @@ def away(cfg: dict, store_dir: str) -> dict[str, Path]:
     return out
 
 
+def label(folder: Path, main: bool = False) -> str:
+    """A library folder's short name, for its tab: "Downloads folder", or the folder's name with its drive ("Hoard
+    (E:)" on Windows), or on a Mac or Linux the drive's name it's on ("Hoard (Backup)" for /Volumes/Backup/Hoard)."""
+    if main:
+        return "Downloads folder"
+    name = folder.name or str(folder)
+    if folder.drive:
+        return f"{name} ({folder.drive})"
+    parts = folder.parts
+    for mount in ("Volumes", "media", "mnt", "run"):   # /Volumes/<drive>, /media/<you>/<drive>, /run/media/<you>/<drive>
+        if mount in parts[:3]:
+            rest = parts[parts.index(mount) + 1:]
+            rest = rest[1:] if mount in ("media", "run") and len(rest) > 2 else rest
+            rest = rest[1:] if mount == "run" and rest and rest[0] == "media" else rest
+            if len(rest) > 1:
+                return f"{name} ({rest[0]})"
+    return name
+
+
 def view(cfg: dict) -> list[dict]:
-    """The library folders, for the pages: each one's number, path, whether its drive is connected, and the space
-    free on it. The downloads folder is number 0."""
+    """The library folders, for the pages: each one's number, path, short name (label), whether its drive is
+    connected, and the space free on it. The downloads folder is number 0."""
     out = []
     for n, folder in enumerate(roots(cfg)):
         there = available(folder)
-        out.append({"n": n, "path": str(folder), "main": n == 0, "available": there,
+        out.append({"n": n, "path": str(folder), "label": label(folder, n == 0), "main": n == 0, "available": there,
                     "free": free_space(folder) if there else None})
+    names = [f["label"] for f in out]
+    for f in out:   # two folders with the same name: their paths tell them apart
+        if names.count(f["label"]) > 1 and not f["main"]:
+            f["label"] = " / ".join(Path(f["path"]).parts[-2:])
     return out

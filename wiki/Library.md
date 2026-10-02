@@ -53,6 +53,8 @@ The views on the left keep things out of your way:
   downloaded, Hoard asks whether to delete its downloaded files too; say no and they stay (Downloads lists them
   under Removed), and you can choose **Delete downloaded files** later, in either view. Only the files Hoard
   downloaded are deleted: anything of your own in the same folder stays, and so does the folder.
+  **Delete downloaded files** works on anything you've downloaded, too, from its details or for a selection: a
+  product still in your library stays there, as not downloaded, so you can download it again later.
 - **Hidden** puts products behind a PIN. See the next section.
 
 These choices apply in the Library and in Downloads alike.
