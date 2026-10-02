@@ -898,7 +898,9 @@ DOWNLOAD_BUTTONS_JS = r"""
       row = p;
     }
     const label = row.innerText || text(e);
-    return { idx: i, label: label.replace(/\s+/g, ' ').trim().slice(0, 300) };
+    // a plain link to the file (Jinxxy's are), which can be downloaded without the browser
+    const href = e.tagName === 'A' && !e.hasAttribute('download') && /^https?:/i.test(e.href) ? e.href : '';
+    return { idx: i, label: label.replace(/\s+/g, ' ').trim().slice(0, 300), href };
   });
 }
 """
@@ -1099,9 +1101,41 @@ def label_key(label: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"\bdownload\b|ダウンロード", "", label, flags=re.I)).strip()
 
 
+def disposition_name(header: str) -> str:
+    """The file name a Content-Disposition header gives (filename*= preferred), or ""."""
+    m = re.search(r"filename\*\s*=\s*([\w-]+)'[^']*'([^;]+)", header or "", re.I)
+    if m:
+        try:
+            return unquote(m[2].strip().strip('"'), encoding=m[1], errors="replace")
+        except LookupError:
+            return unquote(m[2].strip().strip('"'))
+    m = re.search(r'filename\s*=\s*("([^"]*)"|[^;]+)', header or "", re.I)
+    return (m[2] if m and m[2] is not None else (m[1] if m else "")).strip()
+
+
+def file_link_name(sess: requests.Session, href: str, sites: list[str]) -> str:
+    """What a store's file link downloads as, asked of the store with your sign-in, without downloading it.
+    Raises when the store turns the request away (a web page, or an error), or the link isn't the store's."""
+    u = urlparse(href)
+    if not egress._test_origin(href) and not (u.scheme == "https" and _on_sites(u.hostname or "", sites)):
+        raise egress.UnsafeRequest(f"{u.hostname} isn't one of the store's sites")
+    r = egress.get(sess, href, sites, stay_on_sites=False, stream=True, timeout=60,
+                   headers={"Accept-Encoding": "identity"})
+    with r:
+        if not r.ok:
+            raise RuntimeError(f"it answered HTTP {r.status_code}")
+        if r.headers.get("Content-Type", "").startswith("text/html"):
+            raise RuntimeError("it sent a web page instead of the file")
+        return disposition_name(r.headers.get("Content-Disposition", "")) or unquote(Path(urlparse(r.url).path).name)
+
+
 def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: str, hosts: list[str], timeout_s: int,
-                         name: str, creator: str, man: StoreRecords, args, report: "Report") -> bool:
-    """Click every file's download button on the open page and save what each one downloads."""
+                         name: str, creator: str, man: StoreRecords, args, report: "Report", direct=None) -> bool:
+    """Click every file's download button on the open page and save what each one downloads.
+
+    direct, when given, is {"sess": a session with the store's cookies, "sites": its sites, "on": True}: a button
+    that's a plain link to the file is then downloaded straight from the store (resuming where it stopped), without
+    the browser. If the store turns that away, direct["on"] goes False and the rest go through the browser."""
     find = lambda allow_all: page.evaluate(DOWNLOAD_BUTTONS_JS, {"allowAll": allow_all, "hosts": hosts})  # noqa: E731
     buttons = find(False)
     allow_all = not buttons
@@ -1127,23 +1161,39 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
             continue
+        def named(raw: str, k=k):
+            """The file's name in the product's folder, the file it replaces (if any), and whether it's an update."""
+            fname = distinct_name(safe_name(raw or k, 150), k, rec, {key for _label, key in wanted})
+            # the same filename under a different label means the creator updated that file
+            prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
+            is_update = prev is not None or (folder / fname).exists()
+            log(f"    downloading: {fname}")
+            return fname, prev, is_update
+
         def attempt(label=label, k=k, pos=pos):
             """Click the file's button and save what it downloads (tried again by with_retries)."""
             current = find(allow_all)  # re-tag; the page may have re-rendered
             match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
             if not match:
                 raise RuntimeError("button disappeared")
+            if direct and direct["on"] and match.get("href"):
+                try:
+                    raw = file_link_name(direct["sess"], match["href"], direct["sites"])
+                except (RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
+                    direct["on"] = False
+                    log(f"    {store} turned the direct download away ({e}), so Hoard downloads through the browser instead.")
+                else:
+                    fname, prev, is_update = named(raw)
+                    egress.download(direct["sess"], match["href"], folder / fname, direct["sites"], desc=fname,
+                                    progress=downloading(fname))
+                    return fname, prev, is_update
             dl = click_download(ctx, page, match["idx"], timeout_s)
             if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
                 page.goto(url, wait_until="domcontentloaded")
                 settle(page)
             if not dl:
                 raise RuntimeError("clicking download didn't start a download")
-            fname = distinct_name(safe_name(dl.suggested_filename or k, 150), k, rec, {key for _label, key in wanted})
-            # the same filename under a different label means the creator updated that file
-            prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
-            is_update = prev is not None or (folder / fname).exists()
-            log(f"    downloading: {fname}")
+            fname, prev, is_update = named(dl.suggested_filename)
             try:
                 wait_for_browser_download(dl, fname)
                 save_browser_download(dl, folder, fname)
@@ -1202,9 +1252,13 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
 
     with _playwright()() as p:
         browser = {"ctx": launch_context(p, cfg, not args.headed, "jinxxy")}
+        direct = None
         try:
             ctx = browser["ctx"]
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            # files come straight from Jinxxy with your sign-in, not through the browser (unless Jinxxy turns that away)
+            direct = {"sess": session_from_context(ctx, "jinxxy.com"), "sites": STORE_SITES["jinxxy"],
+                      "on": bool(jcfg.get("direct_downloads", True))}
             chosen = (getattr(args, "targets", None) or {}).get("jinxxy")
             if chosen:   # straight to the chosen items' pages (each checks the sign-in as it opens)
                 links = [i["url"] for i in chosen if jinxxy_link(urlparse(i["url"]))]
@@ -1231,7 +1285,8 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                         reopened += 1
                         page = reopen_tab(p, cfg, args, "jinxxy", browser)
                     try:
-                        _jinxxy_item(browser["ctx"], page, url, man, store_dir, jcfg, args, report, chosen=bool(chosen))
+                        _jinxxy_item(browser["ctx"], page, url, man, store_dir, jcfg, args, report, chosen=bool(chosen),
+                                     direct=direct)
                     except NotLoggedIn:
                         raise
                     except Exception as e:
@@ -1247,6 +1302,8 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                     break
         finally:
             man.save_changes()   # every finished file recorded, however the sync ended
+            if direct:
+                direct["sess"].cookies.clear()   # the copied sign-in only lives for this sync
             try:
                 browser["ctx"].close()
             except Exception:
@@ -1276,7 +1333,7 @@ def reopen_tab(p, cfg: dict, args, store: str, browser: dict):
     return browser["ctx"].pages[0] if browser["ctx"].pages else browser["ctx"].new_page()
 
 
-def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False) -> None:
+def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None) -> None:
     """Open one Jinxxy item and download the files its page offers."""
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
@@ -1296,7 +1353,8 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: boo
     log(f"\n[Jinxxy] {creator} / {name}")
 
     got_any = download_by_clicking(ctx, page, url, rec, folder, "Jinxxy", JX_HOSTS,
-                                   int(jcfg.get("download_start_timeout", 90)), name, creator, man, args, report)
+                                   int(jcfg.get("download_start_timeout", 90)), name, creator, man, args, report,
+                                   direct=direct)
 
     if got_any and is_new_asset:
         report.new_assets.append(f"Jinxxy: {creator} / {name}")
@@ -1412,7 +1470,7 @@ def session_from_context(ctx, domain: str) -> requests.Session:
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
     s = egress.session(page.evaluate("navigator.userAgent").replace("HeadlessChrome", "Chrome"))
     for c in ctx.cookies():
-        if c["domain"].lstrip(".").endswith(domain):
+        if _on_sites(c["domain"], [domain]):
             s.cookies.set(c["name"], c["value"], domain=c["domain"], path=c.get("path", "/"))
     return s
 

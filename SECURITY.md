@@ -86,8 +86,10 @@ It can't fully protect against:
 - Download files are created exclusively and opened without following links. The finished file is
   moved into place only if it is still the very file that was written; anything swapped in meanwhile is
   refused. Downloads the store window makes are saved into a new private folder first.
-- Jinxxy files are downloaded by clicking each file's own button in its signed-in window, as you would. Payhip
-  is only read: Hoard never downloads from it.
+- Jinxxy files are found by reading each item's page in its signed-in window, and downloaded from the link each
+  file's own button leads to, with the same cookies and the rules above (only a link on Jinxxy's own sites is
+  followed, and its cookies go nowhere else). If Jinxxy turns that away, the button is clicked in the window, as
+  you would. Payhip is only read: Hoard never downloads from it.
 - itch.io is reached through its API with an API key you create on itch.io, never your password. The key is
   kept with the operating system's protection (`hoard/vault.py`): encrypted for your Windows account (DPAPI), in
   your macOS Keychain, or in your Linux keyring through `secret-tool`; without a keyring it isn't kept, unless

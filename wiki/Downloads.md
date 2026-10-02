@@ -38,8 +38,8 @@ kept between runs (the last 60), in `tasks.json`. While your hidden library is l
 left out of it.
 
 **Stop** pauses safely within a few seconds, even part way through a big file. A file Hoard downloads itself
-(Gumroad, itch.io, and Booth unless it turns Hoard away) resumes where it stopped next time; one the browser
-downloads (Jinxxy, and Booth when it does) starts again. Everything that finished is recorded. If the store's
+(Gumroad, itch.io, and Booth and Jinxxy unless they turn Hoard away) resumes where it stopped next time; one the
+browser downloads (Booth or Jinxxy when they do) starts again. Everything that finished is recorded. If the store's
 browser has stopped answering, so the job can't notice Stop, Hoard closes that browser after 20 seconds and the
 job ends; Hoard's log notes where it was waiting. A job that goes 5 minutes without any progress says so, and
 the log notes where it is (**Open logs folder** in [Settings](Settings); see
