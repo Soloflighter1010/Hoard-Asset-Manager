@@ -94,6 +94,8 @@ def _where(cfg: dict) -> str:
 
 def save_key(cfg: dict, name: str, key: str) -> None:
     """Keep an API key (see the module's notes on where)."""
+    if clean_key(key) != key:   # only letters, digits, - and _: nothing that could end the Keychain command's quotes
+        raise ValueError("that isn't an API key")
     where = _where(cfg)
     if where == "windows":
         write_file_safely(_file(name, "dpapi"), _dpapi(key.encode(), True))

@@ -1844,6 +1844,28 @@ class ItchKeys(unittest.TestCase):
                 vault.save_key(config.load_config(), "itch", "GoodKey1234567890abcdef")
             self.assertIsNone(vault.load_key(config.load_config(), "itch"))
 
+    def test_the_keychain_gets_only_a_key(self):
+        """On a Mac the key goes to the Keychain as a line of `security -i`'s commands, inside quotes: so nothing but
+        a key's own characters ever reaches it (a quote could end the command and start another)."""
+        import types
+        from unittest import mock
+        from hoard import vault
+        calls = []
+
+        def run(cmd, stdin=""):
+            calls.append((cmd, stdin))
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        with mock.patch.object(vault.sys, "platform", "darwin"), mock.patch.object(vault, "_run", run):
+            for bad in ('GoodKey1234567890"\ndelete-keychain', "GoodKey1234567890 abc", "short"):
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    vault.save_key(config.load_config(), "itch", bad)
+            self.assertEqual(calls, [], "nothing was run")
+            vault.save_key(config.load_config(), "itch", "GoodKey1234567890abcdef")
+        (cmd, stdin), = calls
+        self.assertEqual(cmd, ["security", "-i"])
+        self.assertIn('-w "GoodKey1234567890abcdef"', stdin)
+        self.assertNotIn("GoodKey", " ".join(cmd), "never on a command line")
+
     @unittest.skipUnless(sys.platform.startswith("linux"), "the Linux keyring")
     def test_the_keyring_gets_it_on_stdin(self):
         """Through secret-tool, with the key on stdin: never on a command line, which other accounts can read."""
