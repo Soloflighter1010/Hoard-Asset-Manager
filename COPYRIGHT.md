@@ -56,6 +56,41 @@ the Unity project for working on the package, not part of Hoard for Unity itself
 `Website/vendor/fluent-web-components-2.6.1.min.js` is Microsoft's Fluent UI web components, MIT licensed (its
 notice is beside it), bundled so the listing page loads nothing from other sites.
 
+## Pictures in the screenshots
+
+The screenshots in this README and on the website (`site/img/`) show real products from the maintainer's own library,
+with their creators' own pictures (also in `site/img/credits/`). Every picture belongs to its creator, is shown only as
+it appears in Hoard, and isn't covered by Hoard's MIT license. Thank you to these creators:
+
+| Product | Creator | Where to get it |
+|---|---|---|
+| Substance Painter Files for the Nepterran (VRChat Furry Avatar) | 3Rr0r_418 | [The creator's shop](https://3rr0r418.store) |
+| EDJ - Virtual DJ Equipment | Electro's Assets for VRChat | [Get it on Booth](https://booth.pm/en/items/3552518) |
+| The Vixine - Flatcap | Hecka.Space | [Get it on Jinxxy](https://jinxxy.com/Hecka/Flatcap) |
+| VRChatWorld用 ClockCounter | Mofcosmos | [Get it on Booth](https://booth.pm/en/items/4874440) |
+| Aster Dragon Wings (VRChat Asset) | Morghus | [Get it on Gumroad](https://morghus.gumroad.com/l/asterwings) |
+| \[VRChat想定\]ワードクロック(Word clock) | nyakomake | [Get it on Booth](https://booth.pm/en/items/2990166) |
+| AVIA X2 Headphones 【PACIFIA WARES】 (Raver Pack \[2 Colors\]) | PACIFIA 🞮 Virtual Shop | [Get it on Booth](https://booth.pm/en/items/4962763) |
+| PIXON400 Camera 【PACIFIA WARES】\[For VRCLens\] (FULL PACK \[All 6 Colors\]) | PACIFIA 🞮 Virtual Shop | [Get it on Booth](https://booth.pm/en/items/4928549) |
+| FREE Plumbob With Moods and Audiolink \| VRChat Accessory | Perfecto | [Get it on Gumroad](https://perfectodoart.gumroad.com/l/FreePlumbob) |
+| Mobile Studio \[VRChat\] | Pointless Creations | [Get it on Gumroad](https://pointlesscreations.gumroad.com/l/MobileStudio) |
+| Round Glasses - Fat Pack Compatibility Update | Shep Shep | [Get it on Gumroad](https://shepshep.gumroad.com/l/rglass) |
+| Spiri'vali Headphones | Shep Shep | [Get it on Gumroad](https://shepshep.gumroad.com/l/tdxvv) |
+| VRChat Studio Lights | SherbDrgn | [Get it on Gumroad](https://sherbertdragon.gumroad.com/l/StudioLights) |
+| The cat condo | SOShop | [Get it on Booth](https://booth.pm/en/items/4142963) |
+| 【VRChat】撮影スタジオ / Photography Studio | tofumarket | [Get it on Booth](https://booth.pm/en/items/3856844) |
+| 【VRchat対応ワールド】Moonlit Perch | udon-cat-works | [Get it on Booth](https://booth.pm/en/items/6340105) |
+| VioTech Plasma Cannon w/ Remote Fireworks | Violentpainter | [Get it on Gumroad](https://violentpainter.gumroad.com/l/viotech-plasma-cannon) |
+| The Deep Dusk (VRCWorld) | wispywoo | [Get it on Booth](https://booth.pm/en/items/4189273) |
+| アズキドチェス(Ahzkwid Chess) | Wmup | [Get it on Booth](https://booth.pm/en/items/1707240) |
+| Hologram Projector (VRChat) | Zekk | [Get it on Gumroad](https://zekk.gumroad.com/l/HologramProjector) |
+| VirtualLens2 | ろじらぼ | [Get it on Booth](https://booth.pm/en/items/2280136) |
+| 結晶化 光の輪 Ring V09 (\[TypeA\]) | 雪械重工 | [Get it on Booth](https://booth.pm/en/items/3138614) |
+
+The same list, with each picture, is on the website's
+[Picture credits](https://soloflighter1010.github.io/Hoard-Asset-Manager/credits.html) page. Made one of these and
+want it changed or taken out? [Open an issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues).
+
 ## Store names
 
 Booth and pixiv, Gumroad, Jinxxy, Payhip and VRChat are trademarks of their owners. They appear only to
