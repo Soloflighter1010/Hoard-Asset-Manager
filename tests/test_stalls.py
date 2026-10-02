@@ -47,6 +47,16 @@ class _Store(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if self.path == "/files":   # a product page as Jinxxy's are now: each file a plain link
+            body = b'<!doctype html><title>item</title><div><span>file.bin</span><a href="/late">Download</a></div>'
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/late":   # a file the store takes a while to start sending
+            self.release.wait(8)
         start = int(self.headers.get("Range", "bytes=0-")[6:].rstrip("-") or 0)
         self.send_response(206 if start else 200)
         self.send_header("Content-Type", "application/octet-stream")
@@ -215,6 +225,21 @@ class BrowserDownloads(unittest.TestCase):
         downloader.wait_for_browser_download(dl, "file.bin", stall_s=30)   # ends at once, not after the stall
         with self.assertRaisesRegex(Exception, "cancel"):
             safety.save_browser_download(dl, self.folder, "file.bin")
+
+    def test_stop_reaches_a_file_link_that_is_slow_to_start(self):
+        """Clicking a file's link used to wait for the page to finish navigating, which a link that turns into a
+        download may never do (Jinxxy's, since its new item pages): the job sat there, and Stop couldn't reach it.
+        Now the click returns at once, and the wait for the download says how long it's been, which Stop hears."""
+        self.page.goto(self.origin + "/files")
+        [button] = self.page.evaluate(downloader.DOWNLOAD_BUTTONS_JS, {"allowAll": False, "hosts": ["127\\.0\\.0\\.1"]})
+
+        def sink(msg):
+            if "waiting for the download to start" in msg:
+                raise common.Cancelled()
+        began = time.monotonic()
+        with common.capture_log(sink), self.assertRaises(common.Cancelled):
+            downloader.click_download(self.ctx, self.page, button["idx"], 20)
+        self.assertLess(time.monotonic() - began, 7.5, "Stop was heard before the store answered")
 
 
 class StoppingAJob(unittest.TestCase):

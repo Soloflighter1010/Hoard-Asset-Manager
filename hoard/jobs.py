@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
                       check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
@@ -194,6 +195,30 @@ def describe_job(task: str, stores: list[str], only: str | None = None, keys: li
     extra += ["automatic"] if scheduled else []
     return (TASK_NAMES.get(task, task) + (f": {names}" if names else "")
             + (f" ({', '.join(extra)})" if extra else ""))
+
+
+def _paused_in_hoard() -> str:
+    """Where Hoard's own code is paused, waiting on a store's browser. Playwright runs its side in a greenlet, so a job
+    waiting on the browser shows only Playwright's event loop as the thread's stack; the call that's waiting is in
+    the greenlet the job's code is paused in. Empty when there's none."""
+    try:
+        import gc
+        import greenlet
+    except ImportError:
+        return ""
+    here = str(Path(__file__).resolve().parent)
+    out = []
+    for g in gc.get_objects():
+        try:
+            frame = g.gr_frame if isinstance(g, greenlet.greenlet) else None
+        except Exception:
+            continue
+        if frame is None:
+            continue
+        stack = traceback.extract_stack(frame)
+        if any(str(Path(f.filename).resolve().parent) == here for f in stack):
+            out.append("".join(traceback.format_list(stack)))
+    return "".join(f"Waiting in:\n{s}" for s in out)
 
 
 class Jobs:
@@ -579,7 +604,7 @@ class Jobs:
     def where(self) -> str:
         """Where the running job is, as a Python stack (Hoard's own code only: no names or addresses)."""
         frame = sys._current_frames().get(self._job_thread or -1)
-        return "".join(traceback.format_stack(frame)) if frame else "(not running)"
+        return "".join(traceback.format_stack(frame)) + _paused_in_hoard() if frame else "(not running)"
 
     def _force_stop(self, job_id, wait: float | None = None) -> None:
         """After Stop: a job still running FORCE_AFTER seconds later is waiting on a store browser that stopped
