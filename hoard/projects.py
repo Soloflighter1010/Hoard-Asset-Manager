@@ -22,7 +22,7 @@ MAX_ASSETS = 5000
 MAX_ADDED = 500
 STATUSES = ("yes", "partly", "imported")
 STYLES = ("List", "Markdown", "ByCreator")
-ID = re.compile(r"^[0-9a-f]{16}$")
+ID = re.compile(r"[0-9a-f]{16}")   # (always fullmatch: "$" would let a trailing newline through)
 STORE_LABELS = {"Itch": "itch.io"}
 
 
@@ -48,7 +48,7 @@ def _link(url, store: str | None = None) -> str | None:
 
 def read_project(path: Path) -> dict | None:
     """One report, checked, or None when it isn't one."""
-    if not ID.match(path.stem):
+    if not ID.fullmatch(path.stem):
         return None
     try:
         raw = read_json_file(path, 4 * 1024 * 1024)
@@ -96,10 +96,13 @@ def read_all() -> list[dict]:
 
 def forget(project_id: str) -> bool:
     """Take a project out of Projects (its report is deleted; opening the project in Unity again brings it back)."""
-    if not isinstance(project_id, str) or not ID.match(project_id):
+    if not isinstance(project_id, str) or not ID.fullmatch(project_id):
         return False
-    try:
-        (projects_dir() / f"{project_id}.json").unlink()
+    try:   # the report among those in the folder, so the name deleted is always one Hoard wrote there
+        report = next((f for f in projects_dir().glob("*.json") if f.stem == project_id), None)
+        if report is None:
+            return False
+        report.unlink()
         return True
     except OSError:
         return False
