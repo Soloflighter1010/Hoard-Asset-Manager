@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.0.0-beta.2
+
+The second beta of Hoard 3.0 fixes downloading from Jinxxy, and makes library folders on other drives easier to
+use. Everything in beta 1 is still here.
+
+### Fixed
+
+- **Jinxxy downloads work with its new item pages.** Each file there is now a plain link, and clicking one left
+  Hoard waiting for the page to finish loading, which it never did: the download sat at the product's name until
+  Stop closed the browser. Hoard no longer waits for that.
+- **A stuck job's note in the log says where in Hoard it's waiting,** not only that it's waiting on the store's
+  browser, so a support report shows what held it up.
+
+### Library folders
+
+- **A tab for each library folder in Downloads,** after the stores' tabs, once you have more than your downloads
+  folder. Each is named for the folder and its drive ("Hoard (E:)"), says how many downloads it holds, and is
+  dimmed while its drive isn't connected. Choose one to see what's in that folder; choose it again for everything.
+- **Adding a folder is one step.** Settings now has a **Library folders** section: **Add a folder…** picks the folder
+  and adds it, or type its path. Each folder is listed with its drive, how many downloads it holds and how much
+  space is free, with **Open** and **Remove**.
+- **Move several products at once.** Select them in Downloads, choose a folder in the selection bar, then **Move
+  here**. Each is copied, checked, and only then deleted where it was, as when moving one.
+
+### Downloads
+
+- **Delete downloaded files is on every download,** in its details and for a selection, not only in Removed. A
+  product still in your library stays there, to download again; only the files Hoard downloaded are deleted.
+
 ## 3.0.0-beta.1
 
 Hoard 3.0 is the biggest update since Hoard began. It's an app on **Windows, macOS and Linux** now, with a new look
@@ -154,9 +183,6 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   downloads from its buttons.
 - **Gumroad products that are only pictures download.** Some download pages have no files, just pictures in the
   page (a set of PNG textures, say). Hoard saves those into a **Page images** folder, in page order.
-- **Jinxxy downloads work with its new item pages.** Each file there is now a plain link, and clicking one left
-  Hoard waiting for the page to finish loading, which it never did: the download sat at the product's name until
-  Stop closed the browser. Hoard no longer waits for that.
 - **Jinxxy downloads into OneDrive work:** OneDrive's cloud files are no longer mistaken for shortcuts.
 - **A download you delete completely leaves Downloads** on the next rescan and can be downloaded again. One with
   only some files missing stays, marked.
@@ -193,8 +219,6 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **A log for each time Hoard starts,** kept for 30 days (and the newest 10 however old), instead of one log that
   grew for ever. **Open logs folder**, in Settings under Troubleshooting, shows them, and a support report
   includes this run's log and the one before.
-- **A stuck job's note in the log says where in Hoard it's waiting,** not only that it's waiting on the store's
-  browser.
 - **Support reports give away even less.** Product and creator names in the summary at the end of a sync are now
   hidden like the rest; Windows paths written with doubled separators and downloaded file names in progress lines
   are replaced too, with the same placeholder everywhere in the report. A name with "secret" or "token" in it is
