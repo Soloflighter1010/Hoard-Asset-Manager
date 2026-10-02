@@ -1052,7 +1052,9 @@ def click_download(ctx, page, idx: int, timeout_s: int):
     try:
         button = page.locator(f'[data-adl-idx="{idx}"]').first
         if button.is_visible():
-            button.click(timeout=30000)   # a real click, waiting for overlays and animations to clear
+            # a real click, waiting for overlays and animations to clear; but not for a navigation it starts: a link
+            # that turns into a download (Jinxxy's) can leave that navigation unfinished, and the job waiting on it
+            button.click(timeout=30000, no_wait_after=True)
         else:   # a button that isn't showing: click it through the page's own code
             button.evaluate("e => e.click()")
         started = time.time()

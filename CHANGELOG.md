@@ -154,6 +154,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   downloads from its buttons.
 - **Gumroad products that are only pictures download.** Some download pages have no files, just pictures in the
   page (a set of PNG textures, say). Hoard saves those into a **Page images** folder, in page order.
+- **Jinxxy downloads work with its new item pages.** Each file there is now a plain link, and clicking one left
+  Hoard waiting for the page to finish loading, which it never did: the download sat at the product's name until
+  Stop closed the browser. Hoard no longer waits for that.
 - **Jinxxy downloads into OneDrive work:** OneDrive's cloud files are no longer mistaken for shortcuts.
 - **A download you delete completely leaves Downloads** on the next rescan and can be downloaded again. One with
   only some files missing stays, marked.
@@ -190,6 +193,8 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **A log for each time Hoard starts,** kept for 30 days (and the newest 10 however old), instead of one log that
   grew for ever. **Open logs folder**, in Settings under Troubleshooting, shows them, and a support report
   includes this run's log and the one before.
+- **A stuck job's note in the log says where in Hoard it's waiting,** not only that it's waiting on the store's
+  browser.
 - **Support reports give away even less.** Product and creator names in the summary at the end of a sync are now
   hidden like the rest; Windows paths written with doubled separators and downloaded file names in progress lines
   are replaced too, with the same placeholder everywhere in the report. A name with "secret" or "token" in it is
