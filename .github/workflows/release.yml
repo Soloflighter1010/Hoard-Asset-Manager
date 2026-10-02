@@ -27,6 +27,10 @@ on:
         description: "Publish even if VirusTotal flags a file (only after checking its report: a false positive)"
         type: boolean
         default: false
+      keep_draft:
+        description: "If a build fails, keep its draft and tag (to re-run only the failed jobs) instead of removing them"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -42,8 +46,11 @@ jobs:
       attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      made_tag: ${{ steps.tag.outputs.made }}   # for clean-up: a tag this run made goes again if the build fails
     steps:
       - name: Make the tag, if Run workflow was given a new one
+        id: tag
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,6 +65,7 @@ jobs:
               echo "::error::$GITHUB_REF_NAME is version $version, so it can't be released as $TAG."; exit 1
             fi
             gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+            echo "made=true" >> "$GITHUB_OUTPUT"
             echo "Made $TAG on $GITHUB_REF_NAME ($GITHUB_SHA)."
           fi
 
@@ -65,6 +73,10 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
+
+      # The Flatpak's metainfo, checked before anything is built (the Flatpak's build lists this version in it)
+      - name: Check the Flatpak's metainfo
+        run: python3 scripts/flatpak_metainfo.py --check
 
       # v3.1.0 is a release, and Latest; v3.1.0-beta.1 a beta: a pre-release, never Latest (scripts/release_info.py)
       - name: What this release is
@@ -325,6 +337,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/Hoard-*-linux-x86_64.flatpak dist/SHA256SUMS-linux.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+  # A build that fails leaves nothing behind: its draft (never published) is deleted, and its tag too when this run
+  # made it, so the fix can be released with the same tag by running the workflow again. Not when VirusTotal is what
+  # stopped it (that draft waits for a person to check the report, below), nor with "keep its draft" ticked.
+  clean-up:
+    needs: [release, windows, macos, flatpak, flatpak-release]
+    if: ${{ failure() && !inputs.keep_draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # delete the unpublished draft, and the tag this run made
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      MADE_TAG: ${{ needs.release.outputs.made_tag }}
+    steps:
+      - name: Remove the draft, and the tag this run made
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          if [ "$draft" = "false" ]; then
+            echo "::warning::$TAG is already published, so it's left as it is."; exit 0
+          fi
+          if [ "$draft" = "true" ]; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+            echo "Deleted the draft release $TAG."
+          fi
+          if [ "$MADE_TAG" = "true" ]; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"
+            echo "::notice::The build failed, so the draft and the tag $TAG are gone. Fix the problem, then run Release again with $TAG."
+          else
+            echo "::notice::The build failed, so the draft is gone. $TAG was pushed by hand: delete it (Code > Tags) before releasing the fix with it, or use the next version."
+          fi
 
   # Every file people download is checked by VirusTotal (scripts/scan_release_virustotal.py) once all are
   # attached, and the results are added to the release notes. If any engine flags one, this fails and the release

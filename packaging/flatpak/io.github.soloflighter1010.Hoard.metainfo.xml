@@ -50,12 +50,7 @@
   <requires>
     <internet>always</internet>
   </requires>
-  <releases>
-    <release version="3.0.0-beta.1" date="2026-10-02">
-      <description>
-        <p>3.0.0 Testing.</p>
-      </description>
-    </release>
+  <!-- Each build lists its own version first (scripts/flatpak_metainfo.py): no need to add it here. -->
   <releases>
     <release version="2.11.1" date="2026-10-02">
       <description>

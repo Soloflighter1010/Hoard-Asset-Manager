@@ -145,8 +145,13 @@ class TheFlatpak(unittest.TestCase):
         self.assertEqual(info.findtext("project_license"), "MIT")
         self.assertEqual(info.findtext("metadata_license"), "CC0-1.0")
         self.assertIsNotNone(info.find("content_rating"))
-        self.assertEqual(info.find("releases/release").get("version"), hoard.__version__,
-                         "the newest release listed is this version")
+        sys.path.insert(0, str(REPO / "scripts"))
+        import flatpak_metainfo
+        built = ET.fromstring(flatpak_metainfo.with_release((FLATPAK / f"{APP_ID}.metainfo.xml").read_text("utf-8"),
+                                                            hoard.__version__, "2026-10-03"))
+        self.assertEqual(built.find("releases/release").get("version"), hoard.__version__,
+                         "the build lists this version first (scripts/flatpak_metainfo.py)")
+        self.assertIn("python3 scripts/flatpak_metainfo.py --out ${FLATPAK_DEST}/share/metainfo/", self.manifest)
         for size in (128, 256, 512):
             self.assertIn(f"hoard-{size}.png ${{FLATPAK_DEST}}/share/icons/hicolor/{size}x{size}/apps/{APP_ID}.png", self.manifest)
 

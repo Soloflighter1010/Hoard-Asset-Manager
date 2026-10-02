@@ -177,7 +177,7 @@ class TheOtherPages(unittest.TestCase):
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")
-        versions = re.findall(r"^## (.+)$", md, re.M)
+        versions = [v for v in re.findall(r"^## (.+)$", md, re.M) if "-beta." not in v]   # betas: on GitHub only
         page = changelog.page(md, {})
         self.assertEqual(re.findall(r'<h2><a href="#[^"]+">([^<]+)</a></h2>', page), versions)
         self.assertEqual(page.count('class="latest-badge"'), 1)

@@ -339,6 +339,8 @@ class WhenHoardAsks(unittest.TestCase):
                                     folder / SETUP, folder / "notes.txt")
         for f in (old, current, new, other):
             f.write_text("x")
+        beta = folder / "Hoard-Setup-0.9.0-beta.2.exe"   # a beta's installer, older than this version
+        beta.write_text("x")
         updater.tidy()
         self.assertEqual(sorted(f.name for f in folder.iterdir()), sorted([new.name, other.name]))
         new.unlink()

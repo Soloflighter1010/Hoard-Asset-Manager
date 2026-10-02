@@ -286,7 +286,7 @@ class DesktopApp(_Harness):
         self.assertNotEqual(first, second, "each launch its own, even within the same second")
         self.assertNotIn("next launch", first.read_text("utf-8"))
         self.assertEqual(paths.log_files()[0], second, "newest first")
-        self.assertTrue(re.search(r"--- Hoard [\d.]+, started", second.read_text("utf-8")))
+        self.assertTrue(re.search(r"--- Hoard [\w.-]+, started", second.read_text("utf-8")))
 
     def test_a_very_long_run_goes_on_in_a_new_file(self):
         saved = app.LOG_LIMIT
