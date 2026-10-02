@@ -283,8 +283,8 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
   computer, Hoard for Unity, and a **What's new** page that follows this changelog. VCC's listing address hasn't
   changed.
 - **Thank you to the testers** who tried every beta of 3.0 on their own libraries and told us what broke:
-  puzzlella, dx_nacca, kyrmeso, xionite02, vixendavali, djfin, loafevr, doctorlucymoth, surfur, hallowokin and
-  cheapthrill.
+  puzzlella, dx_nacca, kyrmeso, xionite02, vixendavali, djfin, loafevr, doctorlucymoth, surfur, hallowokin,
+  cheapthrill and petra.synth.
 
 ### Upgrading from 2.8
 
