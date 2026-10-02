@@ -97,13 +97,23 @@ def _linked_folder(location: str) -> Path | None:
     return Path(location)
 
 
-def build_index(root: Path, catalog: list[dict]) -> dict:
-
-    """The data behind the page: every downloaded asset with its files, sizes, image and matches."""
+def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = None) -> dict:
+    """The data behind the page: every downloaded asset with its files, sizes, image and matches. libraries: every
+    library folder, the downloads folder (root) first (hoard/libraries.py); an asset in another one is named by its
+    number there ("@1/Booth/...") wherever the page names a place, and one in a folder that isn't among them isn't
+    shown."""
+    libraries = libraries or [root]
     assets, gone = [], 0
     for i, e in enumerate(catalog):
         linked = e.get("location")   # a Local item listed where it is (issue #80)
-        folder = _linked_folder(linked) if linked else safe_join(root, e["folder"])
+        lib = 0
+        if e.get("library"):
+            lib = next((n for n, r in enumerate(libraries) if n and str(r) == e["library"]), None)
+            if lib is None:
+                continue
+        base = libraries[lib]
+        place = f"@{lib}/{e['folder']}" if lib else e["folder"]   # how the page names it
+        folder = _linked_folder(linked) if linked else safe_join(base, e["folder"])
         if folder is None:  # a folder that would lead outside the downloads isn't shown
             continue
         files, total, missing, newest = [], 0, 0, 0.0
@@ -126,7 +136,7 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             continue
         # Pictures are only served from the downloads folder: an item listed where it is has a copy of one there
         # (Local/_linked/..., see local.keep_picture), never one from its own folder
-        own = safe_join(root, e["folder"]) if linked else None
+        own = safe_join(base, e["folder"]) if linked else None
         thumb = (_thumbnail(own, []) if own is not None else None) if linked else _thumbnail(folder, e.get("files", []))
         assets.append({
             "id": i,
@@ -135,7 +145,9 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             "creator": e["creator"],
             "variants": e.get("variants"),
             "url": store_link(e["store"], e.get("url")),
-            "folder": e["folder"],
+            "folder": place,
+            "catalog_folder": e["folder"],   # as catalog.json (and Hoard for Unity's project reports) name it
+            "library": lib,
             "abs_folder": str(folder),
             "linked": bool(linked),
             "note": e.get("note"),
@@ -148,7 +160,7 @@ def build_index(root: Path, catalog: list[dict]) -> dict:
             "missing": missing,
             "added": e.get("added"),
             "modified": newest or None,
-            "thumb": f"{e['folder']}/{thumb}" if thumb else None,
+            "thumb": f"{place}/{thumb}" if thumb else None,
             "also_in": [],
         })
 

@@ -15,6 +15,7 @@ from .safety import DataFileError, read_json_file, set_extra_sites, write_file_s
 DEFAULT_CONFIG = {
     "setup_done": False,           # set once the onboarding assistant has been completed (or skipped)
     "root": "",                    # where downloads go; "" = a Hoard folder in Documents
+    "library_folders": [],         # other library folders, besides root, read as one library (hoard/libraries.py)
     "edits_root": "",              # where editable copies go (issue #82); "" = "Hoard Edits" beside the downloads
     "local_copy": True,            # Local (issue #80): copy what you add into Hoard (False: list it where it is); your last choice
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite

@@ -78,6 +78,11 @@ def build_material(d: Path) -> None:
             # your own, listed where it is (issue #80): a folder outside the downloads, named by the sealed catalog
             asset("My Textures", "Local/_linked/local-1", None, ["Mine.unitypackage", "sub/skin.png"], store="Local",
                   location=os.path.normpath(str(d / "mine")), note="A commission")]
+    # a product in another library folder, on another drive (version 4)
+    drive = d / "drive"
+    (drive / "Booth" / "Kitsu Studio" / "Anko").mkdir(parents=True)
+    (drive / "Booth" / "Kitsu Studio" / "Anko" / "Anko.unitypackage").write_bytes(b"x")
+    good.append(asset("Anko", "Booth/Kitsu Studio/Anko", None, ["Anko.unitypackage"], library=os.path.normpath(str(drive))))
     mine = d / "mine"
     (mine / "sub").mkdir(parents=True)
     (mine / "Mine.unitypackage").write_bytes(b"x")
@@ -86,8 +91,11 @@ def build_material(d: Path) -> None:
            asset("Hidden \u202e name", "Booth/x", None, []), {**asset("Wrong Store", "Booth/y", None, []), "store": "Steam"},
            asset("", "Booth/z", None, []), "not an object",
            asset("Relative Place", "Local/_linked/local-2", None, [], store="Local", location="mine"),
-           asset("Placed Store Item", "Booth/w", None, [], location=os.path.normpath(str(d / "mine")))]
-    catalog = {"format": "hoard-catalog", "version": 3, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
+           asset("Placed Store Item", "Booth/w", None, [], location=os.path.normpath(str(d / "mine"))),
+           asset("Relative Library", "Booth/v", None, [], library="drive"),
+           asset("Library And Place", "Local/_linked/local-3", None, [], store="Local", library=os.path.normpath(str(drive)),
+                 location=os.path.normpath(str(d / "mine")))]
+    catalog = {"format": "hoard-catalog", "version": 4, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
     (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
     (d / "good_names.txt").write_text("|".join(a["name"] for a in good))
 

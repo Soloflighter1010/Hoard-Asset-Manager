@@ -100,6 +100,22 @@ Hoard/
 The files Hoard writes there (`catalog.json`, `tags.json`, `asset.json` and each store's `_manifest.json`) are
 explained in [Where Hoard keeps things](Where-Hoard-Keeps-Things).
 
+### Library folders on other drives
+
+When your downloads drive fills up, add a folder on another drive in [Settings](Settings), under **Other library
+folders** (up to 10). Each is laid out like the downloads folder, a folder per store, and Hoard reads them all as
+one library: Downloads, Hoard for Unity, the routine checks and syncing cover every one.
+
+- **New downloads** go to the downloads folder. A product already in another folder is kept up to date there.
+- **Moving a product:** open it in Downloads and, under **Library folder**, choose where and **Move here**. Hoard
+  copies its files, checks each one by size and fingerprint, and only then deletes them where they were; if
+  anything goes wrong, it stays where it was. Anything of your own in its folder isn't moved. Follow it in Tasks.
+- **A drive that isn't connected:** its products are left out of Downloads until it's back, and a sync skips them
+  rather than downloading them again. The routine check says which folders it couldn't check.
+- **Removing a folder** in Settings only stops Hoard reading it; its files stay, and come back when you add it again.
+- A library folder can't be inside the downloads folder or another library folder, or around one, and can't be
+  Hoard's own folder or **Hoard Edits**.
+
 ## Updates from creators
 
 A file counts as **updated** when the store offers a new version of it: a different size or file link on

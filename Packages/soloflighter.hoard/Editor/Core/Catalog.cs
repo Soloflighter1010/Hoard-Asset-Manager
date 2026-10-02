@@ -13,6 +13,7 @@ namespace SoloFlighter.Hoard
         public string Store, Name, Creator, Folder, Url, Variants, Added;
         public string Location;   // a Local item listed where it is (Hoard's issue #80): its own folder; else null
         public string Note;       // a Local item: who or what it's for
+        public string Library;    // a product in another of Hoard's library folders (on another drive): that folder; else null
         public List<string> Files = new List<string>();
         public List<string> Tags = new List<string>();
         public List<string> SuggestedTags = new List<string>();
@@ -28,7 +29,7 @@ namespace SoloFlighter.Hoard
 
     public sealed class HoardCatalog
     {
-        public const int NewestVersion = 3;
+        public const int NewestVersion = 4;
         const long MaxBytes = 64L * 1024 * 1024;
         static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local" };
         static readonly Dictionary<string, string> StoreSites = new Dictionary<string, string>
@@ -88,8 +89,8 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>One catalog entry, or null when it breaks a promise. trustPlaces: the catalog was sealed by Hoard on
-        /// this computer, so a Local item's own folder (outside the downloads folder) can be believed; otherwise
-        /// such an item is left out, as it can't be found.</summary>
+        /// this computer, so a Local item's own folder, or another library folder (both outside the downloads
+        /// folder), can be believed; otherwise such an item is left out, as it can't be found.</summary>
         static HoardAsset Read(JsonValue e, bool trustLinks, bool trustPlaces)
         {
             if (e == null || e.Kind != JsonKind.Object) return null;
@@ -111,6 +112,12 @@ namespace SoloFlighter.Hoard
             {
                 if (a.Store != "Local" || !trustPlaces || !PlainLocation(location)) return null;
                 a.Location = location;
+            }
+            string library = e.Str("library");   // version 4: a product in another library folder
+            if (library != null)
+            {
+                if (location != null || !trustPlaces || !PlainLocation(library)) return null;
+                a.Library = library;
             }
             string note = e.Str("note");
             a.Note = a.Store == "Local" && note != null && CleanText(note, 300) ? note : null;
@@ -184,8 +191,9 @@ namespace SoloFlighter.Hoard
             return PlainPath(file) ? Under(a, file, false) : null;
         }
 
-        /// <summary>A file (or with file null, the folder) of an asset: inside the downloads folder, or for a Local item
-        /// listed where it is, inside its own folder. Never through a link or junction.</summary>
+        /// <summary>A file (or with file null, the folder) of an asset: inside the downloads folder (or the other library
+        /// folder it's in), or for a Local item listed where it is, inside its own folder. Never through a link or
+        /// junction.</summary>
         string Under(HoardAsset a, string file, bool folder)
         {
             if (a.Location != null)
@@ -194,7 +202,9 @@ namespace SoloFlighter.Hoard
                 return file == null ? Path.GetFullPath(a.Location) : Inside(a.Location, file, folder);
             }
             if (!PlainPath(a.Folder)) return null;
-            return file == null ? Inside(Root, a.Folder, true) : Inside(Root, a.Folder + "/" + file, folder);
+            string top = a.Library ?? Root;   // the library folder it's in: the downloads folder, or one on another drive
+            if (a.Library != null && !RealFolder(a.Library)) return null;
+            return file == null ? Inside(top, a.Folder, true) : Inside(top, a.Folder + "/" + file, folder);
         }
 
         /// <summary>Pictures the window can show: PNG and JPEG (Unity's own), and GIF, animated ones included
