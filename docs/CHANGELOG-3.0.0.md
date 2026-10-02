@@ -124,7 +124,8 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **Payhip products are credited to the right creator** (issue #25). If you sell on Payhip too, your own shop's
   library page lists everything you've bought anywhere on Payhip, without saying who made each one, and Hoard
   credited them all to you. Now they show as **Unknown creator**, and a product a shop's page lists from a
-  different shop is credited to the shop it's from.
+  different shop is credited to the shop it's from. Products from shops at `payhip.com/<name>` keep their creator and link even when your own
+  shop is at payhip.com too (issue #97).
 - While your hidden library is locked, hidden products' names stay out of job progress and the Tasks list, and
   locking it closes any hidden product's details you had open.
 - **Remove a download completely** (issue #81). Removing something you've downloaded asks whether to delete its
