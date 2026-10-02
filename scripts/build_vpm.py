@@ -140,6 +140,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", help="the git tag being released (unity-vX.Y.Z); must match package.json")
     ap.add_argument("--write-metas", action="store_true")
+    ap.add_argument("--released", default="", help="the versions already released, separated by spaces: the notes "
+                    "cover every version after the newest of them before this one")
     args = ap.parse_args()
     manifest = check(args.write_metas)
     version = manifest["version"]
@@ -149,17 +151,33 @@ def main() -> None:
     date = build_date(p for p in PACKAGE.rglob("*") if p.is_file())
     built = [build_zip(version, date), build_unitypackage(version, date)]
     (DIST / "package.json").write_bytes((PACKAGE / "package.json").read_bytes())
-    (DIST / "RELEASE_NOTES.md").write_text(release_notes(version), "utf-8")
+    before = [v for v in args.released.split() if _order(v) < _order(version)]
+    (DIST / "RELEASE_NOTES.md").write_text(release_notes(version, max(before, key=_order) if before else None), "utf-8")
     for f in built:
         print(f"{f.relative_to(REPO)}  ({f.stat().st_size // 1024} KB)  sha256 {hashlib.sha256(f.read_bytes()).hexdigest()[:16]}...")
 
 
-def release_notes(version: str) -> str:
-    text = (PACKAGE / "CHANGELOG.md").read_text("utf-8")
-    m = re.search(rf"^## {re.escape(version)}\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+def _order(version: str) -> tuple:
+    """A package version as numbers that sort as the versions do (a beta before its release)."""
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+))?", version.strip())
     if not m:
+        return (-1,)
+    return tuple(int(x) for x in m.groups()[:3]) + ((0, int(m[4])) if m[4] else (1, 0))
+
+
+def release_notes(version: str, since: str | None = None) -> str:
+    """The CHANGELOG.md section for version; with since (the last version released), every section after it too,
+    newest first, so updating from that release shows everything that changed (0.3.1 and 0.4.0 were never released
+    on their own: their changes reached people in 0.5.0)."""
+    text = (PACKAGE / "CHANGELOG.md").read_text("utf-8")
+    sections = re.findall(r"^## (\S+)\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    found = dict((v, body.strip()) for v, body in sections)
+    if version not in found:
         sys.exit(f"Packages/soloflighter.hoard/CHANGELOG.md has no '## {version}' section")
-    return (m.group(1).strip() + f"\n\n**Add it to VCC:** {LISTING_URL} (or use the Add to VCC button on "
+    floor = _order(since) if since else _order(version)
+    shown = [(v, body) for v, body in sections if _order(version) >= _order(v) > floor or v == version]
+    notes = shown[0][1].strip() if len(shown) == 1 else "\n\n".join(f"### {v}\n\n{body.strip()}" for v, body in shown)
+    return (notes + f"\n\n**Add it to VCC:** {LISTING_URL} (or use the Add to VCC button on "
             f"{LISTING_URL.rsplit('/', 1)[0]}/).\nWithout VCC: import the .unitypackage below into your project.\n")
 
 

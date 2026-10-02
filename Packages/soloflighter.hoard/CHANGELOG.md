@@ -6,7 +6,7 @@
   folder, and folders you add on other drives. Products in those folders are listed and imported like any other.
   As with your own packages listed where they are, the window only uses another folder when Hoard sealed the
   catalog on this computer, and never through a link. Needed for a catalog from Hoard 3.0 that has products in
-  another folder (version 4); a library all in one folder still works with 0.4.0.
+  another folder (version 4); a library all in one folder still works with earlier versions.
 
 ## 0.4.0
 

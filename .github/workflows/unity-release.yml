@@ -71,8 +71,14 @@ jobs:
           sudo apt-get install -y -qq mono-mcs mono-runtime
           python3 -m unittest tests.test_unity -v
 
+      # The notes cover every version since the last one released (0.3.1 and 0.4.0 were never released on their own)
       - name: Build the .zip and .unitypackage
-        run: python3 scripts/build_vpm.py --tag "$TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          released=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --exclude-drafts --json tagName \
+            --jq '.[].tagName | select(startswith("unity-v")) | ltrimstr("unity-v")' | tr '\n' ' ')
+          python3 scripts/build_vpm.py --tag "$TAG" --released "$released"
 
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
@@ -87,7 +93,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           files="dist/vpm/$PACKAGE_NAME-$VERSION.zip dist/vpm/$PACKAGE_NAME-$VERSION.unitypackage dist/vpm/package.json"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          if [ "$draft" = "false" ]; then
+            # Published, so its files can't change (releases here are immutable): only its notes are brought up to date
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file dist/vpm/RELEASE_NOTES.md
+            echo "::notice::$TAG is already published: its notes were updated; its files stay as they were."
+          elif [ "$draft" = "true" ]; then
             gh release upload "$TAG" $files --repo "$GITHUB_REPOSITORY" --clobber
           else
             # Never Latest: that stays on the app, whose files the website's download buttons offer. A beta
