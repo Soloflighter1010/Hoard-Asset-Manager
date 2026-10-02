@@ -92,6 +92,19 @@ def _where(cfg: dict) -> str:
         "computer without a desktop you can instead set \"allow_unprotected_signins\": true in config.json.")
 
 
+# Whether a key is kept, by name: the Library page asks on every load, and reading the Keychain or keyring each time
+# started a program (security, secret-tool) every time, and could ask you to unlock it again and again. Known once
+# it's been read, and kept up to date by save_key and forget_key.
+_held: dict[str, bool] = {}
+
+
+def has_key(cfg: dict, name: str) -> bool:
+    """Is an API key kept under name? Read once, then remembered (see _held)."""
+    if name not in _held:
+        _held[name] = load_key(cfg, name) is not None
+    return _held[name]
+
+
 def save_key(cfg: dict, name: str, key: str) -> None:
     """Keep an API key (see the module's notes on where)."""
     if clean_key(key) != key:   # only letters, digits, - and _: nothing that could end the Keychain command's quotes
@@ -114,6 +127,7 @@ def save_key(cfg: dict, name: str, key: str) -> None:
         os.chmod(path.parent, 0o700)
         write_file_safely(path, key)
         os.chmod(path, 0o600)
+    _held[name] = True
 
 
 def load_key(cfg: dict, name: str) -> str | None:
@@ -141,6 +155,7 @@ def load_key(cfg: dict, name: str) -> str | None:
 def forget_key(cfg: dict, name: str) -> bool:
     """Delete the API key kept under name, wherever it is. True when there was one."""
     had = load_key(cfg, name) is not None
+    _held[name] = False
     for suffix in ("dpapi", "key"):
         _file(name, suffix).unlink(missing_ok=True)
     try:

@@ -90,8 +90,8 @@ def signed_in(cfg: dict, store: str) -> bool:
     cookies be read, so the last answer stands until the browser closes. (In 2.8.4 the question failed then,
     and the setup assistant and anything else asking it went without an answer.)"""
     if store == "itch":   # an API key, not a browser sign-in
-        from .vault import load_key
-        return load_key(cfg, "itch") is not None
+        from .vault import has_key
+        return has_key(cfg, "itch")
     profile = profile_dir(cfg, store)
     try:
         answer = profile.exists() and any(_on_sites(h, STORE_SITES[store]) for h in _cookie_hosts(profile))

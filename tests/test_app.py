@@ -1844,6 +1844,30 @@ class ItchKeys(unittest.TestCase):
                 vault.save_key(config.load_config(), "itch", "GoodKey1234567890abcdef")
             self.assertIsNone(vault.load_key(config.load_config(), "itch"))
 
+    def test_the_library_page_doesnt_ask_the_keyring_every_time(self):
+        """The Library page asks whether there's an itch.io key, and how sign-ins are protected, on every load. That
+        started secret-tool (or security on a Mac) and gdbus each time, and a locked keyring could ask to be
+        unlocked again and again. The answers are remembered, and saving or forgetting the key updates them."""
+        from unittest import mock
+        from hoard import browser, vault
+        reads = []
+        with mock.patch.object(vault, "_held", {}), \
+                mock.patch.object(vault, "load_key", lambda cfg, name: reads.append(name) or None):
+            for _ in range(5):
+                self.assertFalse(vault.has_key({}, "itch"))
+            self.assertEqual(reads, ["itch"], "read once")
+            vault._held["itch"] = True   # (what save_key sets)
+            self.assertTrue(vault.has_key({}, "itch"))
+        asked = []
+        with mock.patch.object(browser.sys, "platform", "linux"), mock.patch.object(browser, "_keyring_seen", None), \
+                mock.patch.object(browser, "_dbus_names", lambda: asked.append(1) or {"org.freedesktop.secrets"}):
+            for _ in range(5):
+                self.assertEqual(browser.linux_keyring(), "gnome-libsecret")
+            self.assertEqual(len(asked), 1, "the session bus asked once")
+            with mock.patch.object(browser.time, "monotonic", lambda: browser._keyring_seen[0] + 61):
+                browser.linux_keyring()
+            self.assertEqual(len(asked), 2, "and again after a minute")
+
     def test_the_keychain_gets_only_a_key(self):
         """On a Mac the key goes to the Keychain as a line of `security -i`'s commands, inside quotes: so nothing but
         a key's own characters ever reaches it (a quote could end the command and start another)."""

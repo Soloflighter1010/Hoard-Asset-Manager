@@ -224,6 +224,10 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   connection failed, without a word. Hoard now always trusts the same certificate bundle its downloads use, still
   checking every certificate, and notes in its log, once, why a picture couldn't be fetched. The build's own check
   of each app now makes sure it has certificates to trust, and on a Mac that its window's parts are there.
+- **The Library no longer asks your keyring on every load.** Whether there's an itch.io key, and how sign-ins are
+  protected, were looked up each time the page loaded: on Linux that started gdbus and secret-tool every time,
+  on a Mac the Keychain's security tool, and a locked keyring could ask to be unlocked again and again. Hoard now
+  remembers the answers, and updates them when you add or remove the key.
 - **Command-Q quits Hoard on a Mac** (and Quit in its menu or the Dock), asking first only while something is
   running. It went through the same step as the window's close button, so with the window going to the Dock on
   close, Hoard couldn't be quit that way.

@@ -506,6 +506,11 @@ def self_test() -> int:
         check("the Mac window's parts", not missing, ", ".join(missing))
     # Store pictures are fetched with Hoard's own HTTPS (2.10's Mac app trusted no certificate at all: issue #93),
     # and downloads with requests: both need certificate authorities to trust
+    if sys.platform.startswith("linux"):   # what's here for keeping sign-ins and keys, for the build's log (the
+        import shutil                      # computer it runs on decides whether there's a keyring, so not a check)
+        for tool, use in (("gdbus", "finding the keyring"), ("dbus-send", "finding the keyring"),
+                          ("secret-tool", "keeping the itch.io key")):
+            print(f"note    {tool} ({use}): {'here' if shutil.which(tool) else 'not here'}")
     from .safety import tls_context
     check("trusted certificates", tls_context().cert_store_stats()["x509_ca"] > 0)
     try:
