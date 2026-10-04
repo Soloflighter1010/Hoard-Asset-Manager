@@ -284,8 +284,19 @@ namespace SoloFlighter.Hoard.Editor
             EditorGUILayout.EndHorizontal();
         }
 
+        static float ToolbarWidth(params string[] labels)
+        {
+            float w = 0;
+            foreach (var l in labels) w += EditorStyles.toolbarButton.CalcSize(new GUIContent(l)).x;
+            return w;
+        }
+
         void DrawToolbar()
         {
+            // the buttons on the right go on a row of their own when the window is too narrow for one row, rather
+            // than off its edge
+            bool twoRows = position.width < 160 + 100 + ToolbarWidth("Unity packages only", "In this project",
+                                                                     "Create Credits List", "Reload", "Folder...") + 24;
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
             search = GUILayout.TextField(search, EditorStyles.toolbarSearchField, GUILayout.MinWidth(160));
@@ -293,6 +304,11 @@ namespace SoloFlighter.Hoard.Editor
             packagesOnly = GUILayout.Toggle(packagesOnly, "Unity packages only", EditorStyles.toolbarButton);
             inProjectOnly = GUILayout.Toggle(inProjectOnly, "In this project", EditorStyles.toolbarButton);
             if (EditorGUI.EndChangeCheck()) Filter();
+            if (twoRows)
+            {
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            }
             GUILayout.FlexibleSpace();
             if (packages.Waiting > 0) GUILayout.Label("Checking packages: " + packages.Waiting + " to go", EditorStyles.miniLabel);
             if (loading && catalog != null) GUILayout.Label("Loading...", EditorStyles.miniLabel);
@@ -348,11 +364,12 @@ namespace SoloFlighter.Hoard.Editor
                 var pic = new Rect(row.x + 4, row.y + 4, 44, 44);
                 if (t != null) GUI.DrawTexture(pic, t, ScaleMode.ScaleAndCrop);
                 else EditorGUI.DrawRect(pic, new Color(0.3f, 0.3f, 0.3f, 0.5f));
-                GUI.Label(new Rect(row.x + 56, row.y + 6, row.width - 150, 18), a.Name, EditorStyles.boldLabel);
-                GUI.Label(new Rect(row.x + 56, row.y + 26, row.width - 150, 18), a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.miniLabel);
                 var s = ProjectStatus(a);
+                float textWidth = row.width - 60 - (s >= InProject.Partly ? 100 : 6);   // room for the status only when it shows
+                FittedLabel(new Rect(row.x + 56, row.y + 6, textWidth, 18), a.Name, EditorStyles.boldLabel);
+                FittedLabel(new Rect(row.x + 56, row.y + 26, textWidth, 18), a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.miniLabel);
                 if (s >= InProject.Partly)
-                    GUI.Label(new Rect(row.xMax - 92, row.y + 16, 88, 18), s == InProject.Yes ? "In this project" : "Partly in project", EditorStyles.miniBoldLabel);
+                    GUI.Label(new Rect(row.xMax - 96, row.y + 16, 92, 18), s == InProject.Yes ? "In this project" : "Partly in project", EditorStyles.miniBoldLabel);
                 if (Event.current.type == EventType.MouseDown && row.Contains(Event.current.mousePosition))
                 {
                     selected = a;
@@ -385,8 +402,9 @@ namespace SoloFlighter.Hoard.Editor
                 filesFor = a;
                 files = a.Files.ConvertAll(f => new KeyValuePair<string, string>(f, catalog.FilePath(a, f)));
             }
-            GUILayout.Label(a.Name, EditorStyles.largeLabel);
-            GUILayout.Label("by " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store) + (a.Variants != null ? "  ·  " + a.Variants : ""), EditorStyles.label);
+            if (wrappedLarge == null) wrappedLarge = new GUIStyle(EditorStyles.largeLabel) { wordWrap = true };
+            GUILayout.Label(a.Name, wrappedLarge);
+            GUILayout.Label("by " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store) + (a.Variants != null ? "  ·  " + a.Variants : ""), EditorStyles.wordWrappedLabel);
             if (a.Note != null) GUILayout.Label("For " + a.Note, EditorStyles.miniLabel);
             if (a.Tags.Count > 0) GUILayout.Label("Tags: " + string.Join(", ", a.Tags), EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.Space();
@@ -396,7 +414,10 @@ namespace SoloFlighter.Hoard.Editor
             {
                 string file = entry.Key, path = entry.Value;
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-                GUILayout.Label(file, EditorStyles.wordWrappedLabel);
+                // the name takes the room the buttons leave, cut in the middle if it must be ("CyclopsBe….unitypackage"),
+                // never wrapped part way through a word; the whole name is its tooltip
+                FittedLabel(GUILayoutUtility.GetRect(GUIContent.none, EditorStyles.label, GUILayout.MinWidth(60), GUILayout.ExpandWidth(true)),
+                            file, EditorStyles.label, true);
                 if (path == null) { GUILayout.Label("missing", EditorStyles.miniLabel, GUILayout.Width(60)); EditorGUILayout.EndHorizontal(); continue; }
                 bool unityPackage = file.EndsWith(".unitypackage", StringComparison.OrdinalIgnoreCase);
                 if (unityPackage)
@@ -422,6 +443,15 @@ namespace SoloFlighter.Hoard.Editor
             EditorGUILayout.EndVertical();
         }
 
+        static GUIStyle wrappedLarge;
+
+        /// <summary>A label cut with "…" to fit its rectangle (TextFit), with the whole text as its tooltip when it's cut.</summary>
+        static void FittedLabel(Rect r, string text, GUIStyle style, bool middle = false)
+        {
+            string shown = TextFit.Fit(text, r.width, t => style.CalcSize(new GUIContent(t)).x, middle);
+            GUI.Label(r, new GUIContent(shown, shown == text ? null : text), style);
+        }
+
         void Import(HoardAsset a, string path)
         {
             importing = path;
@@ -435,7 +465,7 @@ namespace SoloFlighter.Hoard.Editor
             foreach (string g in packages.Guids(packagePath))
             {
                 string p = AssetDatabase.GUIDToAssetPath(g);
-                if (string.IsNullOrEmpty(p)) continue;
+                if (!ProjectShare.InAssets(p)) continue;   // another package's copy under Packages/ isn't this product's
                 var o = AssetDatabase.LoadMainAssetAtPath(p);
                 if (o != null && !AssetDatabase.IsValidFolder(p)) found.Add(o);
             }

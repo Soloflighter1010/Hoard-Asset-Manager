@@ -82,7 +82,7 @@ person to sign in on this computer never sees what you bought. Your downloaded f
 ## Payhip
 
 Hoard **lists** what you bought on Payhip, and doesn't download it: Payhip's check for automated browsers made
-downloading unreliable. Open a product in your library and choose **Open download page** to get its files from
+downloading unreliable. Open a product in your library and choose **Open on Payhip** to get its files from
 Payhip. (Files earlier versions of Hoard downloaded from Payhip stay where they are, in [Downloads](Downloads).)
 
 Payhip has no single library: your purchases live in each shop you bought from, on that shop's own library page

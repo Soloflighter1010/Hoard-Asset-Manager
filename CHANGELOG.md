@@ -1,5 +1,68 @@
 # Changelog
 
+## 3.0.0-beta.4
+
+The fourth beta of Hoard 3.0 lets you choose what downloads, runs one routine check that asks before downloading
+anything, puts your own tasks first, stacks copies of the same product, adds a folder of folders to Local in one
+go, and lets you turn off the glow and change the store colours. Everything in the betas before it is still here.
+
+### The routine check
+
+- **One routine check, which asks before downloading** (issue #113). **Sync automatically** and **Check your
+  downloads** are now one setting, **Routine check**: every 6 or 12 hours, once a day, once a week or once a
+  month, or off. While Hoard is open it reads your stores (not Payhip), checks your downloads and checks for
+  updates, then, when it found something, asks: **Choose what to download** shows the list **Download new** does,
+  to untick from, or **Not now**. It never downloads by itself. Since it reads your stores, it's off until you
+  choose how often, unless you'd turned on **Sync automatically**: then it keeps that timing. Your downloads are
+  still checked whenever you choose **Check now** in Downloads.
+- **Files new since the last check aren't read again yet** (issue #113): they were checked as they downloaded,
+  and the next check takes their fingerprint.
+- **Your tasks go first** (issue #110). Start something while the routine check runs and it stops safely to make
+  way (Tasks says so), then carries on after yours. Anything you start waits ahead of automatic jobs in Tasks.
+
+### Downloading
+
+- **Choose what downloads** (issue #107). **Download new**, **Download everything new**, a store's **Download** and
+  **Update all** first list what they'd get: what's in your library with nothing on disk yet, and the updates the
+  last check found. Untick anything you don't want this time; left all ticked, it downloads as before.
+- **Always skip** (issue #107) leaves a product out of every download and sync, automatic ones included, until you
+  choose **Stop skipping** (under **Always skipped** in the same list). Choosing it by name still downloads it.
+- **Download several at once** (issue #106): select products in the Library and choose **Download**. They download
+  as one job, across stores.
+
+### Your library
+
+- **Add a folder of folders to Local** (issue #109). In **Add your own**, **Folders inside it** makes each folder
+  one, two or three levels down a package of its own, named for its folder; from two levels down, the folder above
+  is who made it. Hoard lists what it would add first. Handy for what you already keep one folder per creator.
+
+- **Clearer buttons in an item's details** (issue #108). There's one thing to do, in gold: **Download** when you
+  don't have a copy yet, **Show in Downloads** when you do (with **See the update** when there's one), or **Open on
+  Payhip** for Payhip's. The store's own pages, which open in your browser, are named for the store (**Open on
+  Gumroad**, **Store page**), and **Archive**, **Hide** and **Remove** sit under **Organise**.
+- **Copies stack** (issue #111). Copies of the same product on one store (bought more than once, or in several
+  versions) show as one tile marked ×3, say. Hoard knows them by their picture: the same image, byte for byte, not
+  the same name, so "Hair Pack 1" and "Hair Pack 2" stay apart. A picture several creators share (a store's default
+  banner) stacks nothing, and neither does one Hoard hasn't saved yet. Choose a stack to see every copy. Untick
+  **Stack copies**, beside **Sort**, to show each on its own.
+
+### Accessibility
+
+- **Store colours you can tell apart** (issue #112). Settings, under **Accessibility**, has **Store colours**:
+  **Standard**, **Easier to tell apart (colour blindness)**, a set chosen to stay distinct with the common kinds of
+  colour blindness and clear on light and dark backgrounds, or **My own**, a colour you pick for each store.
+- **The glow can be turned off** (issue #112): untick **Coloured glow behind the page** for a plain background.
+
+### Hoard for Unity 0.5.1
+
+- **Only what's in Assets counts as in your project** (issue #114). Many packages carry their own copy of
+  something VCC installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK), so products you hadn't imported
+  showed as **In this project** and landed in the credits list. Now only files under `Assets/` count.
+- **Nothing is cut off in a narrow window.** Long names end in "…" instead of being cut through a letter, with the
+  whole name when you point at one; a file's name keeps its end ("CyclopsBe….unitypackage") rather than wrapping
+  part way through a word; and when the window is too narrow for one row of buttons, Create Credits List, Reload
+  and Folder... move to a second row instead of off its edge.
+
 ## 3.0.0-beta.3
 
 The third beta of Hoard 3.0 makes downloading from Jinxxy dependable: its files now come straight from Jinxxy,

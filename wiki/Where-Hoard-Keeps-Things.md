@@ -30,7 +30,8 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `window/` | The window's own storage |
 | `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again. Delete it to open at the usual size, centred |
 | `tasks.json` | The Tasks window's list of finished jobs (the last 60): what each did, how it went, and its progress. Delete it, or **Clear** in Tasks, to empty the list |
-| `sync.json` | When the last sync started, so **Sync automatically** knows when the next is due |
+| `sync.json` | When the last sync started |
+| `routine.json` | When the routine check last ran, so it knows when the next is due, and how much it found that you haven't looked at yet |
 | `update.json` | When Hoard last checked for updates, and the newest version it found |
 | `updates/` | A new version's installer, downloaded and checked, while Hoard updates. Deleted once the update is installed |
 | `debug/` | Troubleshooting files, only when you run `debug` or `probe` |

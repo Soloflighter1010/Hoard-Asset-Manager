@@ -124,11 +124,13 @@ class Report:
 
 def skip_product(args, store: str, name: str, creator: str) -> bool:
     """Is this product outside what was asked for: --only (a name or creator), or keys (products chosen on the
-    Downloads page, by tag_key)?"""
+    Downloads page, by tag_key)? Or one you chose to always skip (issue #107), unless it's chosen by name now?"""
     if args.only and args.only.lower() not in f"{name} {creator}".lower():
         return True
     keys = getattr(args, "keys", None)
-    return bool(keys) and tag_key(store, name) not in keys
+    if keys:
+        return tag_key(store, name) not in keys
+    return tag_key(store, name) in (getattr(args, "skip", None) or ())
 
 
 DIRECT_STORES = ("jinxxy", "gumroad")   # stores whose products can be opened one by one, from the library
@@ -2248,7 +2250,7 @@ def last_integrity() -> dict | None:
             "complete": raw.get("complete") is not False}
 
 
-def check_integrity(root: Path, stop=None, progress=None, others=()) -> dict:
+def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since: str | None = None) -> dict:
     """Check the downloads are as Hoard downloaded them (issue #83): every data file's seal, and every recorded file's
     size and SHA-256. A file's fingerprint is taken the first time it's checked and kept in its record; after that it's
     read again only when its size or modified time changed, so a routine check is quick. Nothing is changed but the
@@ -2256,7 +2258,8 @@ def check_integrity(root: Path, stop=None, progress=None, others=()) -> dict:
     Downloads page shows it) and returned: products and files checked, which files changed or are missing, and which
     data files were changed outside Hoard. stop: a threading.Event that ends the check early (it says so). others: the
     other library folders (hoard/libraries.py), checked the same way when their drive is connected, and named in
-    "away" when it isn't."""
+    "away" when it isn't. fresh_since: a file downloaded after this time and not fingerprinted yet counts as fine
+    without being read (issue #113: it was checked as it came in); the next check takes its fingerprint."""
     import stat as _stat
     from .safety import _is_link
     say = progress or (lambda line: None)
@@ -2309,6 +2312,9 @@ def check_integrity(root: Path, stop=None, progress=None, others=()) -> dict:
                     continue
                 if f.get("sha256") and f.get("mtime_ns") == st.st_mtime_ns:
                     result["fine"] += 1
+                    continue
+                if fresh_since and not f.get("sha256") and str(f.get("downloaded_at") or "") > fresh_since:
+                    result["fine"] += 1   # new since the last check: read next time, not now
                     continue
                 try:
                     with open_under(base, where) as fh:

@@ -34,6 +34,12 @@
     color-scheme: light;
   }
 }
+/* Store colours that stay apart with colour blindness (issue #112): Okabe and Ito's palette, 3:1 or more on every
+   background. Your own colours are set on the page itself (applyDisplay). */
+:root[data-colours="colourblind"] { --booth: #E69F00; --gumroad: #CC79A7; --jinxxy: #56B4E9; --payhip: #F0E442; --itch: #2BB58C; --local: #D8D8D8; }
+@media (prefers-color-scheme: light) {
+  :root[data-colours="colourblind"] { --booth: #A86A00; --gumroad: #A84D86; --jinxxy: #1F72AE; --payhip: #7D7300; --itch: #00775A; --local: #5E5E5E; }
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -43,6 +49,7 @@ button:disabled { cursor: default; opacity: .5; }
 a { color: var(--gold-text); text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 [hidden] { display: none !important; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
 /* top bar */
@@ -233,6 +240,8 @@ body.selecting .ondisk-mark { display: none; }   /* the selection tick goes ther
 .d-store { display: flex; align-items: center; gap: 9px; margin: 10px 0 0; font-weight: 700; }
 .note { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 4px; }
+.actions.links { margin: 10px 0 0; }
+.actions.links a.ghost { height: 36px; font-size: 13.5px; }
 a.ghost { height: 42px; }
 .detail h3 { font: 700 13px var(--body); color: var(--dust); margin: 26px 0 10px; }
 .detail .chips { gap: 4px 12px; }
@@ -350,6 +359,22 @@ body.selecting .toast { bottom: 96px; }
 .support-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 26px 28px; border: 0;
   border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
 .support-dialog::backdrop { background: rgb(10 8 6 / .76); }
+/* issue #113: what the routine check found, asking you what to download */
+.routine-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 24px 12px; padding: 10px 14px;
+  border-radius: 12px; background: var(--stone); border: 1px solid var(--gold); font-size: 14px; }
+.routine-note span { flex: 1; min-width: 220px; }
+/* issue #107: what a download would get, to untick, and products always skipped */
+.pick-dialog { width: min(620px, calc(var(--vw) - 32px)); }
+.pick-tools { display: flex; gap: 14px; margin: 10px 0 6px; }
+.pick-list { list-style: none; margin: 0; padding: 0; max-height: min(46vh, 420px); overflow: auto; }
+.pick-list li { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-top: 1px solid var(--seam); }
+.pick-list label { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; }
+.pick-list .pk-nm { font-weight: 700; overflow-wrap: anywhere; }
+.pick-list .muted { font-size: 12.5px; color: var(--dust); }
+.pick-list .linkish { flex: none; font-size: 12.5px; }
+.pick-skipped { margin-top: 12px; }
+.pick-skipped summary { cursor: pointer; color: var(--dust); font-size: 13px; }
+.pick-go { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .close-dialog { width: min(520px, calc(var(--vw) - 32px)); }
 .close-choices { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 16px 0 6px; }
 .close-choices .linkish { align-self: center; }
@@ -562,6 +587,11 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 .badges { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .badges .badge { position: static; }
 .badge.new { background: var(--gold); color: var(--gold-ink); }
+/* issue #111: copies of one product (several purchases, or its versions) as one tile, a stack of cards behind it */
+.slot.stacked .art { overflow: visible; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
+.slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
+.badge.count { background: var(--bone); color: var(--cave); }
+.stack-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dust); cursor: pointer; }
 
 /* the sidebar: folds away to a strip, and each of its sections folds on its own */
 .side-fold { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 8px; padding: 6px 8px; border: 0; border-radius: 8px;
@@ -669,6 +699,9 @@ details.task summary b { overflow-wrap: anywhere; }
 @keyframes glow-flow { to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) { #glow.flow .glow-in { animation: none; } }
 body.less-motion #glow.flow .glow-in { animation: none; }
+body.no-glow #glow { display: none; }
+.custom-colours { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; }
+.custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
 dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
   border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
@@ -726,6 +759,11 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
 </header>
+<div id="routineNote" class="routine-note" role="status" hidden>
+  <span id="routineText"></span>
+  <button class="primary sm" id="routineChoose">Choose what to download</button>
+  <button class="ghost sm" id="routineLater">Not now</button>
+</div>
 <div class="shelf">
   <div class="seg" role="radiogroup" aria-label="Store" id="storeSeg"></div>
   <div class="shelf-tools">
@@ -738,6 +776,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
         <option value="added">Recently added</option>
       </select>
     </label>
+    <label class="stack-toggle" title="Show copies of the same product, from the same store and creator, as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -882,26 +921,18 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
-  <h3>Check your downloads</h3>
-  <select id="setCheckDays" aria-label="Check your downloads">
-    <option value="0">Only when I choose Check now</option>
-    <option value="1">Once a day</option>
-    <option value="7">Once a week</option>
-    <option value="30">Once a month</option>
-  </select>
-  <p class="hint">While Hoard is open, it checks this often that your downloads are as it downloaded them: none
-    missing, and none changed since. A file is read in full only the first time, or after it changed. Downloads
-    shows when it last checked; Tasks says which files, if any.</p>
-  <h3>Sync automatically</h3>
-  <select id="setAutoSync" aria-label="Sync automatically">
-    <option value="0">Off: only when I choose Sync</option>
+  <h3>Routine check</h3>
+  <select id="setRoutine" aria-label="Routine check">
+    <option value="0">Off: only when I ask (the default)</option>
     <option value="6">Every 6 hours</option>
     <option value="12">Every 12 hours</option>
     <option value="24">Once a day</option>
     <option value="168">Once a week</option>
+    <option value="720">Once a month</option>
   </select>
-  <p class="hint">While Hoard is open, it syncs by itself this often: it reads your stores and downloads anything
-    new or updated, counting from your last sync. Payhip is left out, since it needs you there for its bot check.</p>
+  <p class="hint">While Hoard is open, it does this often: reads your stores (not Payhip, which needs you there for
+    its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
+    of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -910,6 +941,14 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     </select></label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
+  <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
+  <label class="check">Store colours
+    <select id="setColours" aria-label="Store colours">
+      <option value="standard">Standard</option>
+      <option value="colourblind">Easier to tell apart (colour blindness)</option>
+      <option value="custom">My own</option>
+    </select></label>
+  <div id="customColours" class="custom-colours" role="group" aria-label="Your store colours" hidden></div>
   <p class="hint">Motion is also reduced when your computer's settings ask for less of it.</p>
   <h3>Browser for store sign-ins</h3>
   <select id="setBrowser" aria-label="Browser for store sign-ins">
@@ -992,6 +1031,18 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <p class="muted" id="closeHow">Stopping keeps what's finished, and a half-downloaded file resumes next time where the
     store allows. <strong>Close now</strong> doesn't wait: use it if stopping takes too long.</p>
 </dialog>
+<dialog id="pickDialog" class="support-dialog pick-dialog" aria-labelledby="pickTitle">
+  <h2 id="pickTitle">Download</h2>
+  <p class="muted">Untick anything you don't want this time. <strong>Always skip</strong> leaves a product out of every
+    download and sync until you stop skipping it; choosing it by name still downloads it.</p>
+  <div class="pick-tools"><button class="linkish" data-pick-all="on">Tick all</button>
+    <button class="linkish" data-pick-all="off">Untick all</button></div>
+  <ul id="pickList" class="pick-list"></ul>
+  <details id="pickSkipped" class="pick-skipped"><summary>Always skipped (<span id="pickSkipN">0</span>)</summary>
+    <ul class="pick-list"></ul></details>
+  <div class="pick-go"><button class="ghost" data-pick-go="cancel">Cancel</button>
+    <button class="primary" data-pick-go="go" id="pickGo">Download</button></div>
+</dialog>
 <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportTitle">
   <h2 id="supportTitle">Create a support report</h2>
   <p id="supportStatus" class="muted">The report is built locally and sanitized before it is saved.</p>
@@ -1065,6 +1116,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <button class="ghost sm" data-needs data-mark>Hide</button>
   <button class="ghost sm" data-needs data-mark>Remove</button>
   <button class="ghost sm" data-needs id="bulkPurge" hidden>Delete for good</button>
+  <button class="primary sm" data-needs id="bulkDownload">Download</button>
   <button class="ghost sm" data-needs id="bulkDeleteFiles" hidden>Delete downloaded files</button>
   <button class="ghost sm" id="bulkDone">Done</button>
 </div>
@@ -1176,6 +1228,19 @@ function markCurrent(selector) {
 }
 // Text size, Reduce motion and Pause animated pictures, from Settings.
 let PAUSE = false;
+const COLOURED = ["booth", "gumroad", "jinxxy", "payhip", "itch", "local"];
+const COLOUR_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io", local: "Local" };
+// Your own colours: one picker a store, starting from the colour it shows now
+function fillColours() {
+  const d = SETTINGS.display, box = $("#customColours");
+  box.hidden = d.colours !== "custom";
+  if (box.hidden) return;
+  const now = getComputedStyle(document.documentElement);
+  box.innerHTML = COLOURED.map(c => {
+    const v = (d.custom_colours || {})[c] || now.getPropertyValue("--" + c).trim() || "#888888";
+    return `<label class="check"><input type="color" data-colour="${c}" value="${/^#[0-9a-f]{6}$/i.test(v) ? v : "#888888"}"> ${COLOUR_NAMES[c]}</label>`;
+  }).join("");
+}
 function applyDisplay(d) {
   if (!d) return;
   document.documentElement.style.zoom = d.text_size && d.text_size !== 100 ? String(d.text_size / 100) : "";
@@ -1183,6 +1248,13 @@ function applyDisplay(d) {
   // what's sized to the window still fits it at a larger text size (issue #48)
   document.documentElement.style.setProperty("--zoom", String((d.text_size || 100) / 100));
   document.body.classList.toggle("less-motion", !!d.reduce_motion);
+  document.body.classList.toggle("no-glow", d.glow === false);
+  const root = document.documentElement;
+  if (d.colours === "standard" || !d.colours) delete root.dataset.colours; else root.dataset.colours = d.colours;
+  for (const c of COLOURED) {   // your own colours (issue #112), only while you've chosen them
+    const mine = d.colours === "custom" && (d.custom_colours || {})[c];
+    if (mine) root.style.setProperty("--" + c, mine); else root.style.removeProperty("--" + c);
+  }
   if (!!d.pause_animations === PAUSE) return;
   PAUSE = !!d.pause_animations;
   if (PAUSE) document.querySelectorAll(".art img, .d-art img").forEach(freeze);
@@ -1276,7 +1348,7 @@ async function load() {
 /* ---------- filtering */
 function matches(a, skip) {
   if (!inView(a)) return false;
-  if (state.copies && a.match_key !== state.copies.key) return false;
+  if (state.copies && a[state.copies.field] !== state.copies.key) return false;
   if (skip !== "disk" && state.disk && (state.disk === "yes") !== onDisk(a)) return false;
   if (skip !== "fresh" && state.fresh && !a.new) return false;
   if (state.store && a.store !== state.store) return false;
@@ -1296,9 +1368,25 @@ const SORTS = {
 const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
+// issue #111: copies of the same product on one store (bought more than once, or in several versions), known by the
+// same picture, byte for byte, show as one tile. Choosing it shows them all, as "Copies of". Not while selecting, so each can be chosen.
+let STACK = true, stackSize = new Map();   // the first copy's key -> how many copies its tile stands for
+const stackKey = a => a.stack_key ? `${a.store}|${a.stack_key}` : null;   // the same picture, byte for byte (enrich)
+function stacked(list) {
+  stackSize = new Map();
+  if (!STACK || sel.on || state.copies) return list;
+  const first = new Map(), out = [];
+  for (const a of list) {
+    const k = stackKey(a), f = k && first.get(k);
+    if (f) { stackSize.set(f.key, (stackSize.get(f.key) || 1) + 1); continue; }
+    first.set(k, a); out.push(a);
+  }
+  return out;
+}
+function showCopies(a, field = "match_key") { state.copies = { field, key: a[field], name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
 function render() {
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
-  renderViews(); renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
 function renderStoreSeg() {
   const counts = {};
@@ -1371,14 +1459,17 @@ function lazyCards(box, batch = 120) {
   };
 }
 let cards = null;
-const slotHTML = a =>
-    `<button class="slot" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
+const slotHTML = a => {
+    const n = stackSize.get(a.key) || 0;
+    return `<button class="slot${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
+      `${n > 1 ? `, ${n} copies: choose to see them all` : ""}` +
       `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}${onDisk(a) ? ", downloaded" : ""}${a.new ? ", new" : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
-        `<span class="badges">${a.new ? '<span class="badge new">New</span>' : ""}` +
+        `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span></span>` +
       `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`;
+};
 function renderGrid(list) {
   (cards = cards || lazyCards($("#grid"))).show(list, slotHTML);
   const empty = $("#empty");
@@ -1501,7 +1592,17 @@ function showDetail(a, focus = true) {
   const by = storeUrl(a.store, a.creator_url) ? `<a href="${esc(storeUrl(a.store, a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
   const extra = [a.variants && esc(a.variants), a.gift && "gift", a.archived && "archived on Gumroad"].filter(Boolean).join(", ");
   const store = label(a.store);
-  const pageLink = storeUrl(a.store, a.url) && a.url !== a.download_url ? `<a class="ghost" href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer">Open store page</a>` : "";
+  // issue #108: one thing to do, in gold (download it, or see it in Downloads); the store's own pages, which open in
+  // your browser, beside it and named for the store; archiving and the like under their own heading
+  const outside = (raw, text) => `<a class="ghost" href="${esc(storeUrl(a.store, raw))}" target="_blank" rel="noopener noreferrer">${text}<span class="visually-hidden"> (opens in your browser)</span></a>`;
+  const dlPage = storeUrl(a.store, a.download_url), page = storeUrl(a.store, a.url);
+  const main = onDisk(a)
+    ? `<a class="primary" href="/downloads#open=${a.on_disk}">Show in Downloads</a>` +
+      (a.update ? `<a class="ghost" href="/downloads#view=updates&amp;open=${a.on_disk}">See the update</a>` : "")
+    : downloadable(a.store) ? `<button class="primary" data-act="download">Download</button>`
+    : dlPage ? `<a class="primary" href="${esc(storeUrl(a.store, a.download_url))}" target="_blank" rel="noopener noreferrer">Open on ${store}<span class="visually-hidden"> (opens in your browser)</span></a>` : "";
+  const links = [downloadable(a.store) && dlPage && outside(a.download_url, `Open on ${store}`),
+                 page && a.url !== a.download_url && outside(a.url, "Store page")].filter(Boolean).join("");
   $("#detail").innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
     `<div class="d-art">${a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="">` : placeholder(a)}</div>` +
@@ -1510,15 +1611,12 @@ function showDetail(a, focus = true) {
     `<p class="d-store"><span class="dot ${a.store}"></span>${store}</p>` +
     (a.also_in.length ? `<p class="note">You also own this on ${a.also_in.map(label).join(" and ")}. ` +
       `<button class="linkish" data-act="others">Show all copies</button></p>` : "") +
-    `<div class="actions">` +
-      (storeUrl(a.store, a.download_url) ? `<a class="primary" href="${esc(storeUrl(a.store, a.download_url))}" target="_blank" rel="noopener noreferrer">Open download page</a>` : "") +
-      pageLink + `</div>` +
-    `<p class="copy">${a.on_disk != null
-      ? `<a class="ondisk" href="/downloads#open=${a.on_disk}">On disk. Show it in Downloads</a>` +
-        (a.update ? ` <a class="ondisk" href="/downloads#view=updates&amp;open=${a.on_disk}">Update available</a>` : "")
-      : downloadable(a.store) ? `<button class="ghost sm" data-act="download">Download a copy</button>`
-      : `<span class="muted">Hoard doesn't download from ${store}. Open its download page to get the files.</span>`}</p>` +
-    `<div class="marks">${markButtons(a)}</div>` +
+    `<div class="actions">${main}</div>` +
+    `<p class="copy">${onDisk(a) ? `<span class="ondisk">On disk${a.update ? ", with an update" : ""}</span>`
+      : downloadable(a.store) ? `<span class="muted">Not downloaded yet. Hoard keeps the copy in your downloads folder.</span>`
+      : `<span class="muted">Hoard lists what you own on ${store}, and doesn't download it: get the files on ${store}.</span>`}</p>` +
+    (links ? `<div class="actions links">${links}</div>` : "") +
+    `<h3>Organise</h3><div class="marks">${markButtons(a)}</div>` +
     tagSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
@@ -1568,7 +1666,16 @@ $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
-$("#downloadAll").addEventListener("click", () => startDownload(usedStores().filter(downloadable)));
+const storesOf = keys => [...new Set(keys.map(k => k.split(":")[0]))];
+const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
+$("#downloadAll").addEventListener("click", () => downloadNew(usedStores().filter(downloadable)));
+// issue #106: download what's selected, from every store it's on, as one job
+$("#bulkDownload").addEventListener("click", () => {
+  const chosen = [...sel.ids].map(k => byKey.get(k)).filter(a => a && downloadable(a.store));
+  if (!chosen.length) { toast("Hoard can't download those: Payhip's are listed, and you download them on Payhip."); return; }
+  const keys = [...new Set(chosen.map(a => a.tag_key))];
+  startDownload(storesOf(keys), null, null, keys);
+});
 $("#signOutAll").addEventListener("click", async () => {
   if (await ask("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.", "Sign out of all", true)) runJob("/api/logout", ["all"]);
 });
@@ -1576,7 +1683,7 @@ $("#storeRows").addEventListener("click", e => {
   const l = e.target.closest("[data-login]"), r = e.target.closest("[data-refresh]"), i = e.target.closest("[data-import]");
   const o = e.target.closest("[data-logout]");
   const d = e.target.closest("[data-download]");
-  if (d) startDownload([d.dataset.download]);
+  if (d) downloadNew([d.dataset.download]);
   else if (o) runJob("/api/logout", [o.dataset.logout]);
   else if (l && l.dataset.login === "itch") openItchKey();
   else if (l) runJob("/api/login", [l.dataset.login]);
@@ -1841,6 +1948,8 @@ function setZoom(v) { document.documentElement.style.setProperty("--slot-size", 
 zoom.addEventListener("input", () => { setZoom(zoom.value); try { localStorage.setItem("hoard-tile-size", zoom.value); } catch (e) {} });
 zoom.addEventListener("change", () => uiSave({ tile_size: Number(zoom.value) }));   // kept with the other layout choices
 try { const z = localStorage.getItem("hoard-tile-size"); if (z) setZoom(z); } catch (e) {}
+function applyStack(on) { STACK = on !== false; $("#stackCopies").checked = STACK; }
+$("#stackCopies").addEventListener("change", e => { applyStack(e.target.checked); uiSave({ stack: STACK }); render(); });
 
 const toggle = (set, v) => set.has(v) ? set.delete(v) : set.add(v);
 $("#filters").addEventListener("click", e => {
@@ -1868,6 +1977,7 @@ document.addEventListener("click", e => {
 $("#grid").addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
   if (sel.on) { toggleSelected(s.dataset.key); return; }
+  if ((stackSize.get(s.dataset.key) || 0) > 1) { showCopies(byKey.get(s.dataset.key), "stack_key"); return; }   // a stack: every copy
   lastFocus = s; showDetail(byKey.get(s.dataset.key));
 });
 $("#grid").addEventListener("error", e => {
@@ -1887,7 +1997,7 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "delete-files") { deleteFiles([a]); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
-  else if (b.dataset.act === "others") { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
+  else if (b.dataset.act === "others") showCopies(a);
 });
 $("#scrim").addEventListener("click", closeDetail);
 document.addEventListener("keydown", e => {
@@ -2150,6 +2260,103 @@ function wireLibs() {
     if (await libraryChange("/api/libraries/remove", { n: lib.n })) toast(`${lib.label} is no longer part of your library.`);
   });
 }
+/* ---------- issue #107: before downloading new things, or updating, the list of what that gets: untick what you
+   don't want this time, or Always skip it (left out of every download and sync until you stop skipping it). Left
+   all ticked, the download runs as it always has; otherwise it gets just what's ticked. */
+const PICK = { items: [], skipped: [], off: new Set(), go: null, verb: "Download" };
+async function downloadChoices() {
+  try { const r = await api("/api/download-choices", { cache: "no-store" }); if (r.ok) return await r.json(); } catch (e) {}
+  return { new: [], updates: [], skipped: [] };
+}
+// Download new (or everything new on some stores): what's in your library with nothing on disk, and the updates the
+// last check found. start(keys): null when everything's left ticked.
+async function pickNew(stores, start) {
+  const c = await downloadChoices(), want = new Set(stores), seen = new Set();
+  const items = [...c.new, ...c.updates].filter(e => want.has(e.store) && !seen.has(e.key) && seen.add(e.key));
+  pickDownloads("Download new", "Download", items, start, c);
+}
+async function pickDownloads(title, verb, items, go, choices) {
+  choices = choices || await downloadChoices();
+  const skip = new Set((choices.skipped || []).map(e => e.key));
+  Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb });
+  if (!PICK.items.length && !PICK.skipped.length) { go(null); return; }   // nothing to choose from: as before
+  $("#pickTitle").textContent = title;
+  drawPick();
+  $("#pickDialog").showModal();
+}
+function drawPick() {
+  const files = n => n ? `, ${n} ${n === 1 ? "file" : "files"}` : "";
+  const row = (e, skipped) => `<li>` + (skipped
+    ? `<span class="dot ${esc(e.store)}"></span><span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}</span>` +
+      `<button class="linkish" data-unskip="${esc(e.key)}">Stop skipping</button>`
+    : `<label><input type="checkbox" data-pick="${esc(e.key)}"${PICK.off.has(e.key) ? "" : " checked"}> <span class="dot ${esc(e.store)}"></span>` +
+      `<span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}${files(e.files)}</span></label>` +
+      `<button class="linkish" data-skip="${esc(e.key)}">Always skip</button>`) + `</li>`;
+  $("#pickList").innerHTML = PICK.items.map(e => row(e, false)).join("") ||
+    `<li class="muted">Nothing here to download, apart from what you always skip.</li>`;
+  $("#pickSkipped").hidden = !PICK.skipped.length;
+  $("#pickSkipN").textContent = PICK.skipped.length;
+  $("#pickSkipped ul").innerHTML = PICK.skipped.map(e => row(e, true)).join("");
+  const n = PICK.items.length - PICK.off.size;
+  $("#pickGo").textContent = !PICK.off.size ? `${PICK.verb} all` : `${PICK.verb} ${n}`;
+  $("#pickGo").disabled = PICK.items.length > 0 && n === 0;
+}
+async function pickSkip(key, on) {
+  const r = await apiPost("/api/download-skip", { keys: [key], skip: on });
+  if (!r.ok) { toast(r.data.error || "That wasn't saved."); return; }
+  if (on) {
+    const e = PICK.items.find(x => x.key === key);
+    PICK.items = PICK.items.filter(x => x.key !== key); PICK.off.delete(key);
+    if (e) PICK.skipped.push(e);
+  } else {
+    const e = PICK.skipped.find(x => x.key === key);
+    PICK.skipped = PICK.skipped.filter(x => x.key !== key);
+    if (e) PICK.items.push(e);
+  }
+  drawPick();
+}
+$("#pickDialog").addEventListener("change", e => {
+  const k = e.target.dataset.pick; if (k == null) return;
+  if (e.target.checked) PICK.off.delete(k); else PICK.off.add(k);
+  drawPick();
+});
+$("#pickDialog").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.skip != null) pickSkip(b.dataset.skip, true);
+  else if (b.dataset.unskip != null) pickSkip(b.dataset.unskip, false);
+  else if (b.dataset.pickAll) { PICK.off = b.dataset.pickAll === "on" ? new Set() : new Set(PICK.items.map(x => x.key)); drawPick(); }
+  else if (b.dataset.pickGo) {
+    $("#pickDialog").close();
+    if (b.dataset.pickGo === "go") PICK.go(PICK.off.size ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
+  }
+});
+
+/* ---------- issue #113: what the routine check found. It downloads nothing itself: you choose, from the same list
+   Download new shows, or put it off (Not now) until the next check finds something. */
+let routineShown = null;
+function showRoutine(found) {
+  const note = $("#routineNote");
+  if (!note) return;
+  const key = found ? `${found.at}|${found.new}|${found.updates}` : null;
+  if (key === routineShown) return;
+  routineShown = key;
+  note.hidden = !found;
+  if (!found) return;
+  const n = (k, one, many) => `${found[k]} ${found[k] === 1 ? one : many}`;
+  $("#routineText").textContent = "The routine check found " + [found.new && n("new", "new product", "new products"),
+    found.updates && n("updates", "update", "updates")].filter(Boolean).join(" and ") + " to download.";
+}
+async function routineSeen() {
+  $("#routineNote").hidden = true;
+  await apiPost("/api/routine/seen", {});
+}
+$("#routineLater").addEventListener("click", routineSeen);
+$("#routineChoose").addEventListener("click", () => {
+  const stores = (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).slice();
+  routineSeen();
+  downloadNew(stores);
+});
+
 async function apiPost(url, body) {
   try {
     const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -2278,11 +2485,13 @@ function fillSettings() {   // the controls, as the settings are now
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
-  $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
-  $("#setCheckDays").value = String(SETTINGS.integrity_check_days ?? 7);
+  $("#setRoutine").value = String(SETTINGS.routine_hours ?? 0);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
+  $("#setGlowOn").checked = SETTINGS.display.glow;
+  $("#setColours").value = SETTINGS.display.colours;
+  fillColours();
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
     `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
@@ -2341,9 +2550,9 @@ async function installUpdate() {
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
 }
 
-async function startDownload(stores, only, item) {   // item: the library item, so the download goes straight to it
+async function startDownload(stores, only, item, keys) {   // item: the library item, so the download goes straight to it
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
-  const r = await apiPost("/api/download", item ? { stores, only, item } : { stores, only });
+  const r = await apiPost("/api/download", keys ? { stores, keys } : item ? { stores, only, item } : { stores, only });
   if (!r.ok) { toast(r.data.error || "Downloading didn't start."); return; }
   if (queuedToast(r)) return;
   dlActive = true;
@@ -2443,7 +2652,7 @@ function wireApp() {
   $("#dlClose").addEventListener("click", () => { $("#dlPanel").hidden = true; });
   pollDownload();  // a download started from the other view, or before this page opened
   // Every open page checks in once a minute: when Hoard runs in the browser, it stops once none has for a while.
-  // It also brings up a sync Hoard started by itself (Settings, Sync automatically).
+  // It also brings up a sync another page started.
   setInterval(async () => {
     try {
       const job = (await (await api("/api/status", { cache: "no-store" })).json()).job || {};
@@ -2525,6 +2734,7 @@ function applyUi(ui) {   // once, when the page first has its data
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
+  if (typeof applyStack === "function") applyStack(UI.stack);   // the Library draws itself next
 }
 function winOpened(el) {   // one panel at a time: the others close as this one opens
   const from = document.activeElement;
@@ -2659,6 +2869,11 @@ function wireSidebar() {
 /* ---------- Settings save as you change them: a box or list straight away, a folder or the Payhip shops when you
    leave the field. Only what changed is sent, so a setting a running job needs doesn't hold up the others. */
 function settingsPart(el) {
+  if (el.dataset.colour) {   // all of them, so what's saved is what you see
+    const mine = {};
+    for (const i of document.querySelectorAll("#customColours input[data-colour]")) mine[i.dataset.colour] = i.value;
+    return { display: { colours: "custom", custom_colours: mine } };
+  }
   if (el.dataset.setStore) return { stores: { [el.dataset.setStore]: { [el.dataset.opt]: el.checked } } };
   switch (el.id) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
@@ -2667,10 +2882,11 @@ function settingsPart(el) {
     case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
     case "setBrowser": return { browser_channel: el.value };
-    case "setAutoSync": return { auto_sync_hours: Number(el.value) };
-    case "setCheckDays": return { integrity_check_days: Number(el.value) };
+    case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
+    case "setGlowOn": return { display: { glow: el.checked } };
+    case "setColours": return { display: { colours: el.value } };
     case "setTextSize": case "setPause": case "setMotion":
       return { display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
                           reduce_motion: $("#setMotion").checked } };
@@ -2695,6 +2911,7 @@ function autosave(el) {
     SETTINGS = r.data.settings;
     applyDisplay(SETTINGS.display);
     if ("display" in part) refitWindows();
+    if (part.display && "colours" in part.display) fillColours();
     if ("browser_channel" in part) showBrowserInUse();
     if ("beta_updates" in part) showUpdate();   // a beta found earlier shows, or stops showing, as an update
     winNote("settingsPanel", "Saved", true);
@@ -2902,7 +3119,8 @@ async function watchJobs() {
   try {
     const r = await api("/api/status", { cache: "no-store" });
     if (r.ok) {
-      const j = (await r.json()).job || {};
+      const st = await r.json(), j = st.job || {};
+      showRoutine(st.routine);
       if ((lastTask === "verify" || lastTask === "add-local") && j.task !== lastTask && typeof renderIntegrity === "function") load(true);
       lastTask = j.running ? j.task : null;
       taskCount((j.running ? 1 : 0) + (j.queue || []).length);

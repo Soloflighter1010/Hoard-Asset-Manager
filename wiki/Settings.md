@@ -31,16 +31,21 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
 - **Failed downloads:** a file download that fails (a dropped connection, a busy server) is tried again after a
   short wait: twice unless you choose otherwise, once, 3 times, or not at all. A store saying the file isn't
   there, or isn't yours, isn't tried again.
-- **Sync automatically:** **Off** (only when you choose **Sync**), or every 6 hours, every 12 hours, once a day or
-  once a week, while Hoard is open. Payhip is left out. See [Downloads](Downloads#downloading).
-- **Check your downloads:** once a week unless you choose once a day, once a month, or only when you choose
-  **Check now**. See [Checking your downloads](Downloads#checking-your-downloads).
+- **Routine check:** **Off** (only when you ask) unless you choose every 6 hours, every 12 hours, once a day, once a
+  week or once a month, while Hoard is open. It reads your stores (not Payhip), checks your downloads and checks
+  for updates, then asks which of what it found to download. It replaces **Sync automatically** and **Check your
+  downloads**: a sync you'd turned on keeps its timing. See [Downloads](Downloads#downloading).
 - **Accessibility:**
   - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
     frame. Turn it off and they move again.
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
     computer's own settings ask for less motion.
+  - **Coloured glow behind the page:** the stores' colours rising from the bottom of the window. Turn it off for a
+    plain background.
+  - **Store colours:** **Standard**; **Easier to tell apart (colour blindness)**, a set of colours chosen to stay
+    distinct with the common kinds of colour blindness, clear on light and dark backgrounds; or **My own**, a colour
+    for each store (and Local) that you pick. Choose **Standard** again to go back.
 
   These apply to both views straight away.
 - **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
@@ -60,7 +65,7 @@ Also here:
 
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
-  close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and automatic syncs
+  close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and the routine check
   carry on. Click it there, or open Hoard again, to bring the window back. Turn it off and the close button quits
   (asking first while something's running). On a Mac, **Command-Q** always quits, as **Quit Hoard** does.
 - **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
@@ -77,14 +82,18 @@ and keep it valid JSON.
 | `allow_unprotected_signins` | `false` | Linux without a keyring only: keep sign-ins protected by folder permissions alone |
 | `automated_sign_in` | `false` | Sign in to stores in a window Hoard drives, as before 2.11, instead of the browser's own window. Google, Discord and X refuse to sign in there, so only use it if the browser's own window gives you trouble |
 | `profile_dir` with `advanced_signin_location` | `""`, `false` | Keep sign-ins somewhere other than Hoard's private folder. Used only when `advanced_signin_location` is `true`, never on a network share; how well they're protected then depends on that drive |
-| `auto_sync_hours` | `0` | Hours between automatic syncs while Hoard is open: `0` (off), `6`, `12`, `24` or `168` (**Sync automatically** in Settings) |
+| `routine_hours` | `null` | Hours between routine checks while Hoard is open: `0` (off), `6`, `12`, `24`, `168` or `720` (**Routine check** in Settings). `null` until you choose: then it's `auto_sync_hours` if you'd turned that on, else `0` (off) |
+| `auto_sync_hours`, `integrity_check_days` | | Before 3.0.0-beta.4: how often to sync by itself, and to check your downloads. `auto_sync_hours` is read only to set the routine check's first timing |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
+| `download_skip` | `[]` | Products to always skip when downloading, by tag key (**Always skip** in the list **Download new** shows; see [Downloads](Downloads)) |
+| `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
+| `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
+| `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |
 | `close_to_taskbar` | `true` | Closing Hoard's window minimizes it to the taskbar, and Hoard carries on (**Closing the window minimizes Hoard to the taskbar** in Settings) |
 | `local_copy` | `true` | Whether **Add your own** offers to copy into Hoard (`true`) or to list where it is (`false`). Set by your last choice |
 | `edits_root` | `""` | Where **Make an editable copy** puts copies; empty means **Hoard Edits** beside your downloads folder. Never inside the downloads folder. See [Changing a download](Downloads#changing-a-download-make-an-editable-copy) |
-| `integrity_check_days` | `7` | Days between checks of your downloads while Hoard is open: `0` (only when you choose **Check now**), `1`, `7` or `30` (**Check your downloads** in Settings) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `new_days` | `7` | Days something new in your library is marked **New**: `0` (never), `1`, `3`, `7`, `14` or `30` (**New in your library** in Settings) |
 | `download_retries` | `2` | How many more times a failed file download is tried: `0` to `3` in Settings (**Failed downloads**), up to `5` here |

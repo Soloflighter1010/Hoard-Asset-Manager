@@ -27,6 +27,16 @@ a folder are left out, and a folder that is itself a link can't be listed.
 
 Copying a large folder takes a while: it runs as a task, so Tasks shows how far it's got.
 
+### A folder of folders
+
+Already keep your things in folders, say one per creator with a folder per product inside? Under **Folders inside
+it**, choose **Each folder inside it is a package**, or two or three levels down. Each folder that far down becomes
+a package of its own, named for its folder; from two levels down, the folder above it is who made it (type a name
+under **Made by** to use it for all of them instead). Hoard lists what it would add before you choose **Add**.
+Files in the folders above are left out (the list says how many), Hoard's own downloads folder is never one of
+them, and up to 500 can be added at once. They're copied or listed together, as you choose, and **For** applies
+to them all.
+
 ## Using it
 
 - Local items are in Downloads under **Local**, with your tags, search and **Make an editable copy**.

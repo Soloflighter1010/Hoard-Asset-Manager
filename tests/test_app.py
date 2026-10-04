@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import cli, common, config, downloader, jobs, library, paths, server  # noqa: E402
+from hoard import cli, common, config, downloader, jobs, library, paths, server, tags  # noqa: E402
 downloader.RETRY_WAITS = (0.0, 0.0, 0.0)   # failed downloads are still tried again, without the wait
 from hoard.safety import ACCESS_HEADER, header_safe  # noqa: E402
 
@@ -353,30 +353,28 @@ class RoutineChecks(unittest.TestCase):
         self.assertFalse(r["complete"])
         self.assertTrue(downloader.integrity_summary(r).startswith("Stopped"))
 
-    def test_it_runs_on_a_schedule(self):
-        cfg = {**config.load_config(), "root": str(self.root), "setup_done": True, "auto_sync_hours": 0}
-        state = {"running": False}
-        started = []
-        fake = type("J", (), {"state": state, "start": lambda self, task, stores, **kw: started.append((task, kw)) or "started"})()
-        sched = jobs.Schedule(cfg, fake)
-        now = time.time() + 3600
-        self.assertTrue(sched.tick(now), "never checked: due")
-        self.assertEqual(started, [("verify", {"scheduled": True, "queue": False})])
-        downloader.check_integrity(self.root)
-        self.assertFalse(sched.check_due(now), "checked just now")
-        self.assertTrue(sched.check_due(now + 8 * 86400), "a week later")
-        self.assertFalse(jobs.Schedule({**cfg, "integrity_check_days": 0}, fake).check_due(now + 99 * 86400), "off")
-        state["running"] = True
-        self.assertFalse(sched.check_due(now + 8 * 86400), "not while something runs")
+    def test_a_new_file_waits_for_the_next_check(self):
+        """Issue #113: a file downloaded since the last check counts as fine without being read; the next check
+        takes its fingerprint."""
+        from unittest import mock
+        man = downloader.Manifest(self.root / "Booth")
+        for f in man.assets["111"]["files"].values():
+            f["downloaded_at"] = "2026-10-04T12:00:00+00:00"
+        man.save()
+        with mock.patch.object(downloader, "open_under", side_effect=AssertionError("read")):
+            r = downloader.check_integrity(self.root, fresh_since="2026-10-01T00:00:00+00:00")
+        self.assertEqual(r["fine"], 2, "both files there were downloaded since then")
+        r = downloader.check_integrity(self.root)   # and the next one reads them
+        self.assertEqual(r["fine"], 2)
 
     def test_the_setting_and_the_page(self):
         cfg = {**config.load_config(), "root": str(self.root)}
-        self.assertEqual(server.public_settings(cfg)["integrity_check_days"], 7)
-        self.assertEqual(server.apply_settings(cfg, {"integrity_check_days": 30}), {"integrity_check_days": 30})
-        for bad in (2, True, "7"):
+        self.assertEqual(server.public_settings(cfg)["routine_hours"], 0, "off until you choose: it reads your stores")
+        self.assertEqual(server.apply_settings(cfg, {"routine_hours": 720}), {"routine_hours": 720})
+        for bad in (2, True, "24", 30):
             with self.assertRaises(ValueError):
-                server.apply_settings(cfg, {"integrity_check_days": bad})
-        self.assertEqual(server.integrity_view(cfg), {"every_days": 7, "checked": None})
+                server.apply_settings(cfg, {"routine_hours": bad})
+        self.assertEqual(server.integrity_view(cfg), {"every_hours": 0, "checked": None})
         downloader.check_integrity(self.root)
         view = server.integrity_view(cfg)
         self.assertEqual((view["files"], view["fine"], view["missing"], view["changed"]), (3, 2, 1, 0))
@@ -1689,8 +1687,13 @@ class SetupAssistant(unittest.TestCase):
         self.assertIsNone(setup.browser_problem(RuntimeError("net::ERR_TIMED_OUT")))
 
     def test_status(self):
+        from unittest import mock
         from hoard import browser, setup
         cfg = {**config.load_config(), "profile_dir": tempfile.mkdtemp()}
+        signins = Path(tempfile.mkdtemp()) / "sign-ins"   # its own, not one another test signed in to
+        patch = mock.patch.object(browser, "signins_root", lambda cfg: signins)
+        patch.start()
+        self.addCleanup(patch.stop)
         st = setup.setup_status(cfg)
         self.assertEqual(set(st), {"done", "browser", "stores", "payhip_shops", "root", "default_root"})
         self.assertFalse(st["stores"]["booth"]["signed_in"])
@@ -2310,8 +2313,12 @@ class StoreTables(unittest.TestCase):
             for const in ("STORE_SITES", "STORE_NAMES"):
                 keys = set(re.findall(r"(\w+):", re.search(rf"const {const} = \{{(.*?)\}};", html).group(1)))
                 self.assertEqual(keys, stores, f"{page}: {const}")
+            # the standard colours, in the page's :root (dark) and its light theme; the colour-blind set (issue #112) too
+            standard = "\n".join(re.findall(r"^\s*:root \{.*?\n\s*\}", html, re.M | re.S))
+            colourblind = "\n".join(re.findall(r':root\[data-colours="colourblind"\] \{[^}]*\}', html))
             for s in stores:
-                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", html)), 2, f"{page}: {s}'s colour, in both themes")
+                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", standard)), 2, f"{page}: {s}'s colour, in both themes")
+                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", colourblind)), 2, f"{page}: {s}'s colour-blind colour, in both themes")
                 self.assertIn(f".{s} {{ --c: var(--{s}); }}", html, page)
         order = re.search(r"const STORE_ORDER = \[(.*?)\];", (web / "library.html").read_text("utf-8")).group(1)
         self.assertEqual(re.findall(r'"(\w+)"', order), list(library.STORES))
@@ -2445,6 +2452,31 @@ class CatalogSeal(unittest.TestCase):
                 self.assertFalse(paths.store_python())
         with mock.patch.object(paths.sys, "platform", "linux"), mock.patch.object(paths.sys, "executable", store):
             self.assertFalse(paths.store_python())
+
+
+class CopiesStack(unittest.TestCase):
+    """Issue #111: copies of one product stack by their picture's hash, byte for byte, not by name: in beta 4's first
+    build, "Hair Pack 1" and "Hair Pack 2" by one creator stacked into one tile."""
+
+    def test_the_same_picture_stacks(self):
+        import hashlib
+        from unittest import mock
+        def pic(n):
+            return f"https://booth.pximg.net/p{n}.png"
+        pictures = {0: b"rusk", 1: b"rusk", 2: b"hair 1", 3: b"hair 2", 4: b"banner", 5: b"banner"}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(library, "THUMB_DIR", Path(tmp)):
+            for n, data in pictures.items():
+                (Path(tmp) / (hashlib.sha1(pic(n).encode()).hexdigest() + ".png")).write_bytes(data)
+            items = [library.item("booth", str(n), name=name, creator=creator, thumbnail=pic(n)) for n, (name, creator) in
+                     enumerate([("Rusk v1", "Kitsu"), ("Rusk v2", "Kitsu"), ("Hair Pack 1", "Kitsu"), ("Hair Pack 2", "Kitsu"),
+                                ("Fox", "Kitsu"), ("Wolf", "Someone Else"), ("Unsaved", "Kitsu")])]
+            keys = [e["stack_key"] for e in library.enrich(items, {})]
+            self.assertTrue(keys[0] and keys[0] == keys[1], "two copies, one picture")
+            self.assertNotEqual(keys[2], keys[3], "two products, two pictures, however alike their names")
+            self.assertEqual(keys[4:], ["", "", ""], "a picture two creators share is a stand-in; an unsaved one stacks nothing")
+            (Path(tmp) / (hashlib.sha1(pic(1).encode()).hexdigest() + ".png")).write_bytes(b"rusk, updated")
+            keys = [e["stack_key"] for e in library.enrich(items, {})]
+            self.assertNotEqual(keys[0], keys[1], "a picture that changes is read again")
 
 
 class TagMatching(unittest.TestCase):
@@ -2683,46 +2715,53 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class AutomaticSync(unittest.TestCase):
-    """Settings, Sync automatically: when a sync starts by itself, and what it leaves alone."""
+class RoutineCheck(unittest.TestCase):
+    """Issue #113: one routine check, on a schedule, that reads your stores, checks your downloads and checks for
+    updates, then asks which of what it found to download. Issue #110: anything you start goes first."""
 
     def setUp(self):
         from unittest import mock
-        self.cfg = {**config.load_config(), "setup_done": True, "auto_sync_hours": 24}
+        self.cfg = {**config.load_config(), "setup_done": True, "routine_hours": 24}
         self.started = []
         self.fake = mock.Mock(state={"running": False})
         self.fake.start = lambda task, stores, **kw: self.started.append((task, stores, kw)) or "started"
         self.schedule = jobs.Schedule(self.cfg, self.fake)
         self.schedule.not_before = 0
-        jobs._sync_file().unlink(missing_ok=True)
+        jobs._routine_file().unlink(missing_ok=True)
+        self.addCleanup(jobs._routine_file().unlink, missing_ok=True)
         patch = mock.patch.object(jobs, "reachable", lambda store: True)
         patch.start()
         self.addCleanup(patch.stop)
 
-    def test_due_after_the_interval_from_the_last_sync(self):
+    def test_due_after_the_interval_from_the_last_one(self):
         now = time.time()
         self.assertTrue(self.schedule.tick(now))
         (task, stores, kw), = self.started
-        self.assertEqual((task, kw), ("sync", {"skip_imported": False, "scheduled": True, "queue": False}))
+        self.assertEqual((task, kw), ("routine", {"scheduled": True, "queue": False}))
         self.assertNotIn("payhip", stores, "Payhip needs you there for its bot check")
         self.assertIn("booth", stores)
-        jobs._record_sync()   # what the sync itself does as it starts
+        jobs.save_routine(last=time.time())   # what the check itself does as it starts
         self.assertFalse(self.schedule.due(now + 23 * 3600))
         self.assertTrue(self.schedule.due(time.time() + 24 * 3600 + 1))
 
     def test_when_it_waits(self):
         now = time.time()
-        for change, why in (({"auto_sync_hours": 0}, "off"), ({"auto_sync_hours": 5}, "not a choice"),
-                            ({"setup_done": False}, "before setup is done")):
+        for change, why in (({"routine_hours": 0}, "off"), ({"setup_done": False}, "before setup is done")):
             with self.subTest(why):
-                cfg = {**self.cfg, **change}
-                self.assertFalse(jobs.Schedule(cfg, self.fake).due(now + 3600), why)
+                self.assertFalse(jobs.Schedule({**self.cfg, **change}, self.fake).due(now + 3600), why)
         self.fake.state["running"] = True
         self.assertFalse(self.schedule.due(now), "another job is running")
         self.fake.state["running"] = False
         self.assertFalse(jobs.Schedule(self.cfg, self.fake).due(now), "not straight after Hoard starts")
-        only_payhip = {**self.cfg, **{s: {**self.cfg[s], "enabled": s == "payhip"} for s in library.STORES}}
-        self.assertFalse(jobs.Schedule(only_payhip, self.fake).due(now), "nothing it can sync unattended")
+
+    def test_the_two_old_settings_become_one(self):
+        old = {k: v for k, v in self.cfg.items() if k != "routine_hours"}
+        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 12}), 12, "a sync you turned on keeps its hours")
+        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 0, "integrity_check_days": 30}), 0,
+                         "off until you choose: it reads your stores, which the check of your downloads never did")
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": None}), 0)
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": 5}), 0, "not a choice")
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": 168}), 168, "your choice")
 
     def test_offline_it_tries_again_later(self):
         from unittest import mock
@@ -2731,7 +2770,84 @@ class AutomaticSync(unittest.TestCase):
             self.assertFalse(self.schedule.tick(now))
         self.assertEqual(self.started, [])
         self.assertEqual(self.schedule.not_before, now + jobs.OFFLINE_RETRY)
-        self.assertEqual(jobs.last_sync(), 0, "a sync that never started isn't counted")
+        self.assertEqual(jobs.routine_record()["last"], 0, "a check that never started isn't counted")
+
+    def wait_idle(self, runner):
+        for _ in range(200):
+            if not runner.state["running"] and runner.busy.acquire(blocking=False):
+                runner.busy.release()
+                return
+            time.sleep(0.02)
+
+    def test_it_reads_checks_and_asks(self):
+        """It reads the stores, checks the downloads (new files not read yet), checks for updates, downloads nothing,
+        and keeps how much it found for the pages to ask about."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        runner.find_choices = lambda: {"new": 2, "updates": 1}
+        steps = []
+        with mock.patch.object(runner, "_refresh", lambda stores, **k: steps.append(("refresh", stores)) or []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: steps.append(("verify", fresh)) or "All 3 files are fine."), \
+                mock.patch.object(runner, "_download", lambda stores, only, keys=None, check=False, **k: steps.append(("download", check))):
+            self.assertEqual(runner.start("routine", ["booth", "gumroad"], scheduled=True), "started")
+            self.wait_idle(runner)
+        self.assertEqual(steps, [("refresh", ["booth", "gumroad"]), ("verify", True), ("download", True)],
+                         "checking for updates only: nothing is downloaded")
+        found = jobs.routine_record()["found"]
+        self.assertEqual((found["new"], found["updates"]), (2, 1))
+        self.assertIn("choose what to download", runner.history[-1]["message"])
+        self.assertAlmostEqual(jobs.routine_record()["last"], time.time(), delta=5)
+        jobs.save_routine(found=None)   # you looked
+        self.assertIsNone(jobs.routine_record()["found"])
+
+    def test_yours_go_first(self):
+        """Issue #110: an automatic job running makes way for one you start, and carries on after it."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        runner.history = []
+        order, release = [], threading.Event()
+
+        def refresh(stores, **_k):
+            order.append("routine")
+            for _ in range(200):   # an automatic check, reading the stores; Stop is noticed between steps
+                if runner.stop.is_set() or release.is_set():
+                    return []
+                time.sleep(0.02)
+            return []
+        with mock.patch.object(runner, "_refresh", refresh), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "fine"), \
+                mock.patch.object(runner, "_download", lambda stores, only, keys=None, check=False, **k: order.append(("download", check))):
+            self.assertEqual(runner.start("routine", ["booth"], scheduled=True), "started")
+            for _ in range(100):
+                if order:
+                    break
+                time.sleep(0.02)
+            self.assertEqual(runner.start("download", ["gumroad"], only="Mochi"), "queued")
+            release.set()
+            for _ in range(300):
+                if len(order) >= 4 and not runner.state["running"]:
+                    break
+                time.sleep(0.02)
+        self.assertEqual(order[:2], ["routine", ("download", False)], "yours, straight after it made way")
+        self.assertEqual(order[2:], ["routine", ("download", True)], "then the automatic check, again")
+        made_way = runner.history[0]
+        self.assertEqual(made_way["outcome"], "stopped")
+        self.assertTrue(made_way["message"].startswith("Made way for your task"), made_way["message"])
+
+    def test_yours_wait_ahead_of_automatic_ones(self):
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        with mock.patch.object(runner, "_download", lambda *a, **k: gate.wait(5)), \
+                mock.patch.object(runner, "_refresh", lambda stores, **k: []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "fine"):   # never the real stores
+            runner.start("download", ["booth"], only="A")
+            runner._queue.append({"task": "routine", "stores": ["booth"], "scheduled": True, "id": "q99", "label": "x", "queued": ""})
+            runner.start("download", ["gumroad"], only="B")
+            self.assertEqual([q["task"] for q in runner._queue], ["download", "routine"])
+            gate.set()
+            self.wait_idle(runner)
 
     def test_any_sync_counts(self):
         """A sync you start resets the clock too, and the job says whether it started by itself."""
@@ -2753,18 +2869,103 @@ class AutomaticSync(unittest.TestCase):
 
     def test_settings(self):
         cfg = config.load_config()
-        self.assertEqual(config.DEFAULT_CONFIG["auto_sync_hours"], 0, "off unless you turn it on")
-        self.assertEqual(server.apply_settings(cfg, {"auto_sync_hours": 12}), {"auto_sync_hours": 12})
-        for bad in (5, "24", True, None):
-            with self.assertRaises(ValueError):
-                server.apply_settings(cfg, {"auto_sync_hours": bad})
         change = server.apply_settings(cfg, {"display": {"text_size": 130, "pause_animations": 1, "reduce_motion": 0}})
         self.assertEqual(change, {"display": {"text_size": 130, "pause_animations": True, "reduce_motion": False}})
         for bad in (99, "130", True):
             with self.assertRaises(ValueError):
                 server.apply_settings(cfg, {"display": {"text_size": bad}})
-        shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
-        self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")
+        # issue #112: the glow, and store colours you can tell apart, or choose
+        change = server.apply_settings(cfg, {"display": {"glow": 0, "colours": "custom",
+                                                         "custom_colours": {"booth": "#AABBCC", "itch": "#00ff00"}}})
+        self.assertEqual(change, {"display": {"glow": False, "colours": "custom",
+                                              "custom_colours": {"booth": "#aabbcc", "itch": "#00ff00"}}})
+        for bad in ({"colours": "rainbow"}, {"custom_colours": {"booth": "red"}}, {"custom_colours": {"steam": "#000000"}},
+                    {"custom_colours": {"booth": "#000000;x"}}, {"custom_colours": ["#000000"]}):
+            with self.assertRaises(ValueError, msg=bad):
+                server.apply_settings(cfg, {"display": bad})
+        self.assertEqual({k: v for k, v in server.display_settings({}).items() if k in ("glow", "colours", "custom_colours")},
+                         {"glow": True, "colours": "standard", "custom_colours": {}}, "the glow is on, standard colours")
+        odd = server.display_settings({"display": {"glow": "no", "colours": 3, "custom_colours": {"booth": "url(x)", "gumroad": "#123456"}}})
+        self.assertEqual((odd["glow"], odd["colours"], odd["custom_colours"]), (True, "standard", {"gumroad": "#123456"}))
+        shown = server.public_settings({**cfg, "display": {"text_size": 7}, "routine_hours": 3})
+        self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 0), "damaged values read as defaults")
+
+
+class DownloadChoices(unittest.TestCase):
+    """Issue #107: what Download new and Update all would get, to untick first; products always skipped, left out
+    of every download and sync, unless chosen by name. Issue #106: several products chosen at once, as one job."""
+
+    def setUp(self):
+        from unittest import mock
+        from hoard.asset_updates import AssetUpdates
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "download_skip": []}, lan=False)
+        with self.srv.lib.lock:   # in memory only
+            self.srv.lib.data["items"] = [
+                library.item("booth", "1", name="Rusk", creator="Kitsu Studio"),
+                library.item("gumroad", "2", name="Mochi", creator="Kitsu Studio"),
+                library.item("gumroad", "3", name="Mochi", creator="Kitsu Studio"),   # a second copy: listed once
+                library.item("gumroad", "4", name="Fox Base", creator="Someone"),
+                library.item("payhip", "5", name="Paw Pack", creator="Someone")]   # listed, never downloaded
+        on_disk = [{"tag_key": tags.tag_key("gumroad", "Fox Base"), "id": 1}]
+        for patch in (mock.patch.object(self.srv, "index", lambda **_kw: {"assets": on_disk}),
+                      mock.patch.object(server, "save_config")):
+            patch.start()
+            self.addCleanup(patch.stop)
+        where = Path(tempfile.mkdtemp()) / "updates.json"
+        AssetUpdates(where).save({"checked": {}, "items": {tags.tag_key("gumroad", "Fox Base"): {
+            "store": "gumroad", "name": "Fox Base", "creator": "Someone", "files": [{"file": "Fox 1.1.zip", "kind": "changed"}]}}})
+        real = server.AssetUpdates
+        patch = mock.patch.object(server, "AssetUpdates", lambda: real(where))
+        patch.start()
+        self.addCleanup(patch.stop)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def call(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: self.srv.key})
+        r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+        return r.status, data
+
+    def test_what_would_download(self):
+        status, c = self.call("GET", "/api/download-choices")
+        self.assertEqual(status, 200)
+        self.assertEqual([(e["store"], e["name"]) for e in c["new"]], [("booth", "Rusk"), ("gumroad", "Mochi")],
+                         "nothing on disk yet, each product once; Payhip left out")
+        self.assertEqual([(e["name"], e["files"]) for e in c["updates"]], [("Fox Base", 1)])
+        self.assertEqual(c["skipped"], [])
+
+    def test_always_skip(self):
+        mochi = tags.tag_key("gumroad", "Mochi")
+        self.assertEqual(self.call("POST", "/api/download-skip", {"keys": [mochi]}), (200, {"ok": True, "skipped": 1}))
+        self.assertEqual(self.srv.cfg["download_skip"], [mochi])
+        c = self.call("GET", "/api/download-choices")[1]
+        self.assertEqual([e["name"] for e in c["new"]], ["Rusk"])
+        self.assertEqual([(e["name"], e["creator"]) for e in c["skipped"]], [("Mochi", "Kitsu Studio")])
+        self.assertEqual(jobs.download_skip(self.srv.cfg), {mochi})
+        self.assertEqual(self.call("POST", "/api/download-skip", {"keys": [mochi], "skip": False})[1]["skipped"], 0)
+        self.assertEqual(self.call("POST", "/api/download-skip", {"keys": ["no store"]})[0], 400)
+        self.assertEqual(jobs.download_skip({"download_skip": ["booth:a", 7, "", "x" * 500]}), {"booth:a"})
+
+    def test_skipping_in_a_download(self):
+        from types import SimpleNamespace
+        skip = {tags.tag_key("gumroad", "Mochi")}
+        args = SimpleNamespace(only=None, keys=None, skip=skip)
+        self.assertTrue(downloader.skip_product(args, "gumroad", "Mochi", "Kitsu Studio"))
+        self.assertFalse(downloader.skip_product(args, "gumroad", "Fox Base", "Someone"))
+        chosen = SimpleNamespace(only=None, keys=skip, skip=skip)   # chosen by name: downloaded all the same
+        self.assertFalse(downloader.skip_product(chosen, "gumroad", "Mochi", "Kitsu Studio"))
+        from unittest import mock
+        seen = []
+        self.srv.cfg["download_skip"] = sorted(skip)
+        with mock.patch.object(downloader, "cmd_sync", lambda cfg, a: seen.append(a) or downloader.Report()):
+            self.srv.jobs._download(["gumroad"], None)
+            self.srv.jobs._download(["gumroad", "booth"], None, keys=["booth:rusk", "gumroad:mochi"])
+        self.assertEqual(seen[0].skip, skip, "a download of everything new leaves it out")
+        self.assertIsNone(seen[1].skip, "products chosen now are downloaded")
+        self.assertEqual(seen[1].keys, {"booth:rusk", "gumroad:mochi"}, "several stores' products, as one job (#106)")
 
 
 class TasksAPI(unittest.TestCase):

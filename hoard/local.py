@@ -80,8 +80,48 @@ def check_source(root: Path, path: str, copy: bool) -> Path:
     return source
 
 
+MAX_SPLIT = 500   # packages one folder of folders can add at once (issue #109)
+DEPTHS = (1, 2, 3)
+
+
+def split(root: Path, path: str, depth: int, copy: bool) -> dict:
+    """Issue #109: the packages in a folder of folders. Each folder depth levels down is one package, named for
+    itself; from two levels down, the folder above it is who made it (a Creator/Product layout). Files in the
+    folders above are left out, and counted in "loose". Links are never followed. Raises ValueError."""
+    if depth not in DEPTHS or isinstance(depth, bool):
+        raise ValueError("Choose how many levels down each package is.")
+    source = check_source(root, path, copy)
+    if not source.is_dir():
+        raise ValueError("To add each folder inside as its own package, choose a folder.")
+    level, loose, inside = [source], 0, root.resolve()
+    for _ in range(depth):
+        below = []
+        for folder in level:
+            try:
+                entries = sorted(os.scandir(folder), key=lambda e: e.name.lower())
+            except OSError:
+                continue
+            for e in entries:
+                if e.is_symlink():
+                    continue
+                if e.is_dir(follow_symlinks=False):
+                    here = Path(e.path).resolve()
+                    if here != inside and here not in inside.parents:   # never Hoard's own downloads folder
+                        below.append(Path(e.path))
+                elif e.is_file(follow_symlinks=False) and e.name.lower() not in SKIP:
+                    loose += 1
+        level = below
+        if len(level) > MAX_SPLIT:
+            raise ValueError(f"That's more than {MAX_SPLIT} packages. Add the folders inside it one at a time.")
+    if not level:
+        raise ValueError(f"There are no folders {'inside it' if depth == 1 else f'{depth} levels down'}.")
+    return {"packages": [{"path": str(f), "rel": f.relative_to(source).as_posix(), "name": clean_text(f.name, 300) or "Untitled",
+                          "creator": clean_text(f.parent.name, 200) if depth >= 2 else ""} for f in level],
+            "loose": loose}
+
+
 def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", note: str = "", copy: bool = True,
-        progress=None) -> dict:
+        progress=None, catalog: bool = True) -> dict:
     """Add a folder or file to Local: copied into Hoard's Local folder, or listed where it is. Returns the record.
     Raises ValueError with a plain explanation."""
     say = progress or (lambda line: None)
@@ -126,7 +166,8 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
         manifest.assets.pop(key, None)
         raise ValueError("None of those files could be read.")
     manifest.save()
-    build_catalog(cfg, root)
+    if catalog:   # (several added together build it once, at the end)
+        build_catalog(cfg, root)
     log(f"Local: added {name} ({len(rec['files'])} files, {'copied in' if copy else 'listed where it is'})")
     return rec
 

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI disclosure</title>
+  <meta name="description" content="How Hoard is built with the help of AI, who decides what goes in, how it's checked, and what Hoard itself does and doesn't do with AI.">
+  <meta property="og:site_name" content="Hoard">
+  <meta property="og:title" content="AI disclosure">
+  <meta property="og:description" content="How Hoard is built with the help of AI, who decides what goes in, how it's checked, and what Hoard itself does and doesn't do with AI.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/ai.html">
+  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Hoard's library: VRChat assets from Booth, Gumroad and Payhip as tiles, with tags and creators beside them">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#211C18">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
+  <a class="skip" href="#main">Skip to the page</a>
+  <header class="bar">
+    <a class="brand" href="./"><img src="img/mark.svg" alt="" width="32" height="32"><span>hoard</span></a>
+    <nav aria-label="Site">
+      <a href="./#features">What it does</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="trust.html">Trust</a>
+      <a href="./#download">Download</a>
+      <a href="changelog.html">What's new</a>
+      <a href="testers.html">Testers</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <h1>AI disclosure</h1>
+      <p class="lede">Hoard is built with the help of AI. Here's how, what that means for you, and what Hoard itself
+        does and doesn't do with AI.</p>
+    </section>
+
+    <section class="trust" aria-labelledby="aiCards">
+      <h2 id="aiCards" class="visually-hidden">How AI is used</h2>
+      <ul>
+        <li>
+          <h3>How Hoard is made</h3>
+          <p>Hoard's maintainer builds it with Claude, an AI model made by Anthropic, used through Claude Code. Claude writes much of Hoard's code, its tests, its documentation, its release notes and this website, working from the maintainer's requests, the issues people open and what testers report.</p>
+          <p class="sources"><a href="https://www.anthropic.com/claude-code">Claude Code</a> · <a href="https://www.anthropic.com/">Anthropic</a></p>
+        </li>
+        <li>
+          <h3>Who decides</h3>
+          <p>The maintainer decides what Hoard does and how, and chooses what's merged and when it's released. Each version goes to human testers as a beta before it's released to everyone.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/pulls?q=is%3Apr">Pull requests</a> · <a href="testers.html">Our testers</a></p>
+        </li>
+        <li>
+          <h3>How it's checked</h3>
+          <p>Every change, whoever wrote it, runs Hoard's tests (security tests included) on Windows and Linux and is scanned by CodeQL, and each release is built and scanned in the open.</p>
+          <p class="sources"><a href="trust.html">How you can trust Hoard</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/.github/workflows/check.yml">The tests that run</a></p>
+        </li>
+        <li>
+          <h3>It's in the open</h3>
+          <p>Changes Claude wrote are marked in Hoard's history: they're credited to Claude, or carry a <code>Co-Authored-By: Claude</code> line. So you can see which parts of Hoard it wrote, alongside what the maintainer wrote.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/commits/main">Every change</a></p>
+        </li>
+        <li>
+          <h3>Hoard has no AI in it</h3>
+          <p>The app you download doesn't use AI. It never sends your library, your files, your sign-ins or anything about you to an AI service, or to anyone else. The tags it suggests come from words that turn up in several of your products' names, not from AI.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md">Privacy policy</a> · <a href="how-it-works.html">How it works</a></p>
+        </li>
+        <li>
+          <h3>Pictures on this site</h3>
+          <p>The screenshots show Hoard itself, with real products from the maintainer's own library, credited to their creators.</p>
+          <p class="sources"><a href="credits.html">Picture credits</a></p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="page-foot">
+      <p>Questions about how Hoard is made? Ask in <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/discussions">Discussions</a>.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
+    <p>
+      <a href="./">Home</a> ·
+      <a href="how-it-works.html">How it works</a> ·
+      <a href="changelog.html">What's new</a> ·
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a> ·
+      <a href="trust.html">How you can trust Hoard</a> ·
+      <a href="ai.html">AI disclosure</a>
+    </p>
+  </footer>
+</body>
+</html>
