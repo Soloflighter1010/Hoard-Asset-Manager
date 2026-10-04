@@ -1487,7 +1487,7 @@ class SetupAssistant(unittest.TestCase):
                 self.assertIn(f"Signing in to Gumroad with {name}", out.getvalue())
                 self.assertEqual("isn't installed" in out.getvalue(), used != choice)
 
-    def plain_sign_in(self, store="gumroad", cfg_extra=None, after_exit_in_use=0, link=None):
+    def plain_sign_in(self, store="gumroad", cfg_extra=None, after_exit_in_use=0, link=None, installed=True, installs=None):
         """Sign in with the browser's own window (issue #21), against a stand-in for starting programs. Returns what
         was started, the messages, and whether the store was refreshed."""
         import contextlib
@@ -1530,6 +1530,8 @@ class SetupAssistant(unittest.TestCase):
                 mock.patch.object(browser, "profile_dir", lambda cfg, store: tmp / "sign-ins" / store), \
                 mock.patch.object(browser, "_migrate_old_signins", lambda p, cfg: None), \
                 mock.patch.object(jobs, "check_saved_signin", lambda cfg, store: None), \
+                mock.patch.object(jobs, "own_browser_installed", lambda: installed), \
+                mock.patch.object(job, "_install_browser", installs or (lambda stores: None)), \
                 mock.patch.object(jobs.time, "sleep", lambda s: None), \
                 mock.patch.object(job, "_refresh", lambda stores: refreshed.append(stores)), \
                 mock.patch.object(job, "_set", lambda **kw: said.append(kw.get("message", ""))), \
@@ -1556,6 +1558,28 @@ class SetupAssistant(unittest.TestCase):
         lock = ProfileLock(profile)
         lock.acquire()   # (raises ProfileBusy if the sign-in was never let go)
         lock.release()
+
+    def test_hoards_browser_is_installed_on_the_way(self):
+        """A tester's report: signing in with Hoard's own browser before it was downloaded failed twice ("Open
+        Settings, choose Set up Hoard again"). Now the sign-in downloads it first, then carries on."""
+        installed = []
+        started, said, refreshed, profile, program = self.plain_sign_in(
+            installed=False, installs=lambda stores: installed.append(stores))
+        self.assertEqual(installed, [["gumroad"]])
+        self.assertTrue(started, "then the sign-in window opens")
+        self.assertEqual(refreshed, [["gumroad"]])
+        installed.clear()
+        self.plain_sign_in(installs=lambda stores: installed.append(stores))
+        self.assertEqual(installed, [], "not when it's there already")
+
+    def test_payhip_without_shops_says_what_next_rather_than_failing(self):
+        """A tester's report, "Payhip wouldn't login": the sign-in worked, but reading Payhip straight after, with no
+        shops added, failed with "add your shops", so it looked like the sign-in had failed."""
+        started, said, refreshed, profile, program = self.plain_sign_in(
+            "payhip", {"payhip": {**config.load_config()["payhip"], "shops": []}})
+        self.assertEqual(refreshed, [], "nothing to read yet")
+        self.assertIn(library.PAYHIP_SIGNED_IN_NO_SHOPS, said)
+        self.assertTrue(library.PAYHIP_SIGNED_IN_NO_SHOPS.startswith("Signed in to Payhip."))
 
     def test_waiting_while_the_browser_still_has_the_profile(self):
         """The program Hoard started can end while the window stays open: another window already had the profile and

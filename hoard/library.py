@@ -383,6 +383,9 @@ def jinxxy_item(c: dict) -> dict:
 PAYHIP_NO_SHOPS = ("Payhip keeps your purchases in each shop you bought from, not in one library. Import each "
                    "shop's saved library pages (Import pages, in Stores), or add your shops in Settings to refresh "
                    "them (a shop's address is in your purchase email).")
+PAYHIP_SIGNED_IN_NO_SHOPS = ("Signed in to Payhip. Payhip keeps your purchases in each shop you bought from, so add "
+                             "those shops in Settings (a shop's address is in your purchase email), then choose Refresh "
+                             "on Payhip's row. Or import each shop's saved library pages (Import pages, in Stores).")
 
 
 PAYHIP_CARDS_JS = r"""

@@ -11,11 +11,11 @@ from pathlib import Path
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
                       check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
-from .setup import BROWSER_NAMES, browser_problem, install_browser
+from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed
 from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
 from .config import payhip_shops
-from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, sign_in_urls, unreachable_message
+from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, sign_in_urls, unreachable_message
 from .net import is_network_error, reachable
 from .paths import data_dir
 from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
@@ -948,6 +948,12 @@ class Jobs:
             return
         channel, chosen = use_channel(self.cfg), chosen_channel(self.cfg)
         name = BROWSER_NAMES[channel]
+        if channel == "chromium" and not own_browser_installed():
+            # Hoard's own browser isn't downloaded yet: download it here, as part of signing in, rather than failing
+            # and sending you to Set up Hoard (a tester tried twice before finding it)
+            self._install_browser(stores)
+            if self.state.get("error"):
+                return
         # which browser, in the log and on screen: a chosen browser that isn't installed is stood in for by Hoard's
         # own, and that used to happen without a word (issue #20)
         print(f"Signing in to {label} with {name}" + (f" ({BROWSER_NAMES[chosen]} was chosen, and isn't installed)"
@@ -961,6 +967,11 @@ class Jobs:
         except SigninsUnprotected as e:
             self.lib.set_error(store, str(e))
             raise
+        if store == "payhip" and not payhip_shops(self.cfg):
+            # nothing to read until you've added the shops you bought from: reading Payhip straight after would only
+            # fail with "add your shops", which read as the sign-in failing (a tester's report)
+            self._set(task="login", store=store, message=PAYHIP_SIGNED_IN_NO_SHOPS)
+            return
         self._refresh([store])
 
     def _sign_in_plainly(self, store: str, label: str, name: str) -> None:
