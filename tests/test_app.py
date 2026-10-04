@@ -2449,6 +2449,18 @@ class CatalogSeal(unittest.TestCase):
             self.assertFalse(paths.store_python())
 
 
+class CopiesStack(unittest.TestCase):
+    """Issue #111: copies of one product stack into one tile. A version is the same product; a number in its name
+    isn't (in beta 4's first build, "Item 0001" to "Item 0999" by one creator all stacked into one tile)."""
+
+    def test_which_names_are_copies(self):
+        items = [library.item("booth", str(n), name=name, creator="Kitsu") for n, name in enumerate(
+            ["Rusk v1.2", "Rusk 1.0.3", "Rusk (Quest)", "【3D】Rusk", "Hair Pack 1", "Hair Pack 2", "Item 0001"])]
+        keys = [e["stack_key"] for e in library.enrich(items, {})]
+        self.assertEqual(len(set(keys[:4])), 1, keys)
+        self.assertEqual(len(set(keys[4:])), 3, keys)
+
+
 class TagMatching(unittest.TestCase):
     """Matching tags go through a word index (review finding P-04), with exactly name_has_word's answers."""
 

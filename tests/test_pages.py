@@ -577,10 +577,10 @@ class CopiesAndActions(unittest.TestCase):
             page.click("#selectBtn")   # selecting: each copy can be chosen
             self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
             page.click("#selectBtn")
-            page.locator("#stackCopies").uncheck()   # turned off, and kept
+            with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
+                page.locator("#stackCopies").uncheck()   # turned off, and kept (saved here, not a later test's config)
             page.wait_for_function("() => document.querySelectorAll('.slot.stacked').length === 0")
             self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
-            page.wait_for_function("() => true")
             page.close()
         self.assertFalse(self.srv.cfg.get("ui", {}).get("stack", True), "kept with the other layout choices")
         self.srv.cfg.setdefault("ui", {})["stack"] = True

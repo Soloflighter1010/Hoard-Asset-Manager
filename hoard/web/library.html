@@ -1348,7 +1348,7 @@ async function load() {
 /* ---------- filtering */
 function matches(a, skip) {
   if (!inView(a)) return false;
-  if (state.copies && a.match_key !== state.copies.key) return false;
+  if (state.copies && a[state.copies.field] !== state.copies.key) return false;
   if (skip !== "disk" && state.disk && (state.disk === "yes") !== onDisk(a)) return false;
   if (skip !== "fresh" && state.fresh && !a.new) return false;
   if (state.store && a.store !== state.store) return false;
@@ -1371,7 +1371,7 @@ const filtersActive = () => state.q || state.store || state.creator || state.tag
 // issue #111: copies of the same product, from the same store and creator (bought more than once, or in several
 // versions), show as one tile. Choosing it shows them all, as "Copies of". Not while selecting, so each can be chosen.
 let STACK = true, stackSize = new Map();   // the first copy's key -> how many copies its tile stands for
-const stackKey = a => `${a.store}|${a.match_key}|${String(a.creator || "").toLowerCase()}`;
+const stackKey = a => `${a.store}|${a.stack_key}|${String(a.creator || "").toLowerCase()}`;
 function stacked(list) {
   stackSize = new Map();
   if (!STACK || sel.on || state.copies) return list;
@@ -1383,7 +1383,7 @@ function stacked(list) {
   }
   return out;
 }
-function showCopies(a) { state.copies = { key: a.match_key, name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
+function showCopies(a, field = "match_key") { state.copies = { field, key: a[field], name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
 function render() {
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
@@ -1977,7 +1977,7 @@ document.addEventListener("click", e => {
 $("#grid").addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
   if (sel.on) { toggleSelected(s.dataset.key); return; }
-  if ((stackSize.get(s.dataset.key) || 0) > 1) { showCopies(byKey.get(s.dataset.key)); return; }   // a stack: every copy
+  if ((stackSize.get(s.dataset.key) || 0) > 1) { showCopies(byKey.get(s.dataset.key), "stack_key"); return; }   // a stack: every copy
   lastFocus = s; showDetail(byKey.get(s.dataset.key));
 });
 $("#grid").addEventListener("error", e => {

@@ -1046,6 +1046,15 @@ def _norm(s: str) -> str:
     return key if len(key) >= 4 else re.sub(r"[\W_]+", "", s)
 
 
+def _copy_norm(s: str) -> str:
+    """Name key for copies of one product (issue #111): like _norm, but only versions (v2, 1.0.3) are dropped, not
+    every number, so "Hair Pack 1" and "Hair Pack 2" stay two products."""
+    s = unicodedata.normalize("NFKC", s or "").lower()
+    core = re.sub(r"【[^】]*】|\[[^\]]*\]|\([^)]*\)", " ", s)
+    key = re.sub(r"[\W_]+", "", re.sub(r"\bv\d+(?:\.\d+)*\b|\b\d+(?:\.\d+)+\b", " ", core))
+    return key or re.sub(r"[\W_]+", "", s)
+
+
 def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
     """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
     tagdata = tagdata or TagStore.empty()
@@ -1070,7 +1079,8 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
         key = tag_key(i["store"], i["name"])
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted((ts & keep) - set(mine)),
-             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"])}
+             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]),
+             "stack_key": _copy_norm(i["name"])}
         for k in ("creator_url", "url", "download_url"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))
