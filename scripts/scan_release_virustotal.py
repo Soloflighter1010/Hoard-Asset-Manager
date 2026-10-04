@@ -1,6 +1,8 @@
-"""Scan a release's files with VirusTotal before the release is published (.github/workflows/release.yml).
+"""Scan a release's files with VirusTotal before the release is published (.github/workflows/release.yml, and
+unity-release.yml for Hoard for Unity).
 
-Every file people download from the release (the zips, the Windows installer, the Mac packages, the Flatpak) is
+Every file people download from the release (the zips, the Windows installer, the Mac packages, the Flatpak, and
+Hoard for Unity's .zip and .unitypackage) is
 looked up on VirusTotal by its SHA-256, and uploaded when VirusTotal hasn't seen it. Once every new file is sent,
 their scans are waited for together (VirusTotal runs them side by side), up to VT_WAIT_MINUTES (40), saying how
 they're getting on as it goes. A scan still unfinished then fails the job; run it again later and the files already
@@ -29,7 +31,7 @@ import uuid
 from pathlib import Path
 
 BASE = "https://www.virustotal.com/api/v3"
-SCANNED = (".zip", ".exe", ".pkg", ".flatpak")   # what people download; not the checksum lists
+SCANNED = (".zip", ".exe", ".pkg", ".flatpak", ".unitypackage")   # what people download; not checksums or package.json
 SPACING = 16                                     # seconds between requests: the public API allows 4 a minute
 MAX_UPLOAD = 650 * 1024 * 1024                   # VirusTotal's limit
 DIRECT_UPLOAD = 32 * 1024 * 1024                 # bigger files go to an upload address VirusTotal gives out
@@ -193,8 +195,8 @@ def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.envir
             summary.write(text)
     if flagged and not allowed:
         print("::error::VirusTotal flagged a release file, so the release stays a draft. Check each report; if they're "
-              "false positives, run the Release workflow again for this tag with \"Publish even if VirusTotal flags a "
-              "file\" ticked.", flush=True)
+              "false positives, run the workflow again for this tag with \"Publish even if VirusTotal flags a "
+              "file\" ticked (Release for the app, Build Release for Hoard for Unity).", flush=True)
         return 1
     return 0
 

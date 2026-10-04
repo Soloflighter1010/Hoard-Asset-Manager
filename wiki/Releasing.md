@@ -161,8 +161,12 @@ the release's tag and commit.
 1. Raise `version` in `Packages/soloflighter.hoard/package.json`, and add a `## <version>` section to
    `Packages/soloflighter.hoard/CHANGELOG.md`.
 2. Merge to `main`.
-3. In **Actions**, open **Build Release** and choose **Run workflow**. It tags `unity-v<version>` itself, tests the
-   package's core, and publishes the `.zip`, `.unitypackage` and `package.json`.
+3. In **Actions**, open **Build Release** and choose **Run workflow**. It tests the package's core, builds the
+   `.zip`, `.unitypackage` and `package.json` and makes the release **as a draft**, has VirusTotal scan the `.zip`
+   and `.unitypackage` (adding each result to the notes, as for the app), then publishes it, tagging
+   `unity-v<version>`. If VirusTotal flags a file, the release stays a draft: check the reports as for the app (see
+   **VirusTotal flagged a file?** above), then run **Build Release** again with **Publish even if VirusTotal flags
+   a file** ticked.
 4. **Build Repo Listing** runs after it, rebuilding the VCC listing from every release and publishing it to GitHub
    Pages (https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json).
 
