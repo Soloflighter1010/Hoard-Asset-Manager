@@ -59,7 +59,7 @@ class TheSite(unittest.TestCase):
 
     def test_everything_it_uses_is_here(self):
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html"):
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
             page = Refs()
             page.feed((site / name).read_text("utf-8"))
             for tag, key, value in page.refs:
@@ -138,7 +138,7 @@ class TheSite(unittest.TestCase):
             return None
         base = "https://soloflighter1010.github.io/Hoard-Asset-Manager/"
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html"):
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
             html = (site / name).read_text("utf-8")
             image = re.search(r'<meta property="og:image" content="([^"]+)">', html)
             self.assertIsNotNone(image, f"{name}: no og:image")
@@ -169,12 +169,14 @@ class TheOtherPages(unittest.TestCase):
 
     def test_every_page_has_the_same_header_and_the_glow(self):
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html"):
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
             page = (site / name).read_text("utf-8")
             self.assertIn('<div class="glow" aria-hidden="true">', page, name)
             self.assertIn('href="changelog.html"', page, name)
             self.assertIn('href="testers.html"', page, name)
             self.assertIn('href="how-it-works.html"', page, name)
+            self.assertIn('href="trust.html"', page, name)
+            self.assertIn('href="ai.html"', page, f"{name}: the AI disclosure, from every page")
             self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', page, name)
 
     def test_how_it_works_covers_every_store_and_step(self):
@@ -184,6 +186,18 @@ class TheOtherPages(unittest.TestCase):
         steps = re.findall(r"<li>\s*<h3>([^<]+)</h3>", page)
         self.assertEqual(len(steps), 6, steps)
         self.assertIn('aria-current="page"', page)
+
+    def test_trust_and_the_ai_disclosure_link_their_sources(self):
+        """Each point on How you can trust Hoard, and on the AI disclosure, says where to check it."""
+        for name, points in (("trust.html", 8), ("ai.html", 6)):
+            page = (SITE / name).read_text("utf-8")
+            cards = re.findall(r"<li>\s*<h3>.*?</li>", page, re.S)
+            self.assertEqual(len(cards), points, name)
+            for c in cards:
+                self.assertIn('class="sources"><a href="', c, f"{name}: every point links where to check it")
+        trust = (SITE / "trust.html").read_text("utf-8")
+        for doc in ("SECURITY.md", "PRIVACY.md", "release.yml", "check.yml", "LICENSE", "ai.html"):
+            self.assertIn(doc, trust)
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")

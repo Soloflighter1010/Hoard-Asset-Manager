@@ -177,6 +177,7 @@ TEMPLATE = """<!doctype html>
     <nav aria-label="Site">
       <a href="./#features">What it does</a>
       <a href="how-it-works.html">How it works</a>
+      <a href="trust.html">Trust</a>
       <a href="./#download">Download</a>
       <a href="changelog.html" aria-current="page">What's new</a>
       <a href="testers.html">Testers</a>
@@ -199,6 +200,7 @@ TEMPLATE = """<!doctype html>
   <footer class="foot">
     <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
     <p class="small">Built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+    <p><a href="./">Home</a> · <a href="trust.html">How you can trust Hoard</a> · <a href="ai.html">AI disclosure</a></p>
   </footer>
 </body>
 </html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How you can trust Hoard</title>
+  <meta name="description" content="Why you can trust Hoard with your store sign-ins, and where to check each point for yourself: its code, its builds, its privacy policy and its security policy.">
+  <meta property="og:site_name" content="Hoard">
+  <meta property="og:title" content="How you can trust Hoard">
+  <meta property="og:description" content="Why you can trust Hoard with your store sign-ins, and where to check each point for yourself: its code, its builds, its privacy policy and its security policy.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/trust.html">
+  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Hoard's library: VRChat assets from Booth, Gumroad and Payhip as tiles, with tags and creators beside them">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#211C18">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
+  <a class="skip" href="#main">Skip to the page</a>
+  <header class="bar">
+    <a class="brand" href="./"><img src="img/mark.svg" alt="" width="32" height="32"><span>hoard</span></a>
+    <nav aria-label="Site">
+      <a href="./#features">What it does</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="trust.html" aria-current="page">Trust</a>
+      <a href="./#download">Download</a>
+      <a href="changelog.html">What's new</a>
+      <a href="testers.html">Testers</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <h1>How you can trust Hoard</h1>
+      <p class="lede">Hoard signs in to the stores you buy from, so it's fair to ask why you should let it. You don't have
+        to take our word for anything here: each point links to where you can check it yourself.</p>
+    </section>
+
+    <section class="trust" aria-labelledby="trustCards">
+      <h2 id="trustCards" class="visually-hidden">What you can check</h2>
+      <ul>
+        <li>
+          <h3>Every line is public</h3>
+          <p>Hoard is open source under the MIT license. All of its code, its tests and the way each release is built are on GitHub, along with the history of every change, so anyone can read exactly what it does.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">The code</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE">MIT license</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/commits/main">Every change</a></p>
+        </li>
+        <li>
+          <h3>Your passwords never reach it</h3>
+          <p>You sign in on each store's own page, in a browser window of its own. Hoard keeps only the "stay signed in" pass the store hands out, encrypted by your Windows account, your Mac's Keychain or your Linux keyring, and each store's is kept apart.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md#how-hoard-protects-you">How Hoard protects you</a> · <a href="how-it-works.html">How it works</a></p>
+        </li>
+        <li>
+          <h3>Nothing is sent to us</h3>
+          <p>There's no Hoard account and no Hoard server: no tracking, no analytics, no ads. Hoard talks only to the stores you use, the hosts their files and pictures come from, and GitHub when you check for updates. Support reports are made on your computer, with your details taken out, and only shared if you share them.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md">Privacy policy</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md#who-hoard-talks-to">Who Hoard talks to</a></p>
+        </li>
+        <li>
+          <h3>Downloads you can check</h3>
+          <p>Each release is built by GitHub from the public code, by a workflow anyone can read, with a signed record of how (build provenance) and a checksum for every file. Every file is scanned by VirusTotal before the release is published, with the report linked in its notes. The Windows programs are code-signed.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/.github/workflows/release.yml">The release workflow</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard">Checking a download</a> · <a href="https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds">About build provenance</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CODE_SIGNING.md">Code signing</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases">Releases</a></p>
+        </li>
+        <li>
+          <h3>Checked on every change</h3>
+          <p>Every change runs Hoard's tests on Windows and Linux, its security tests included, and builds the apps, in the open on GitHub. GitHub's CodeQL scans each change for security problems. Hoard's dependencies are pinned to exact versions and checked against recorded fingerprints when they're installed.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/.github/workflows/check.yml">The tests that run</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/actions">Recent runs</a> · <a href="https://codeql.github.com/">About CodeQL</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/requirements.txt">Pinned dependencies</a></p>
+        </li>
+        <li>
+          <h3>Tested by people, too</h3>
+          <p>Each version goes to testers first, as a beta, who try it on their own libraries and report what breaks. You can join them, or follow along: every bug report and request is public.</p>
+          <p class="sources"><a href="testers.html">Our testers</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues">Issues</a> · <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/discussions">Discussions</a></p>
+        </li>
+        <li>
+          <h3>Made with AI help, in the open</h3>
+          <p>Much of Hoard is written with Claude, an AI model, under the maintainer's direction. Hoard itself has no AI in it, and never sends your library to an AI service. The disclosure says exactly how it's used.</p>
+          <p class="sources"><a href="ai.html">AI disclosure</a></p>
+        </li>
+        <li>
+          <h3>What no app can promise</h3>
+          <p>Hoard can't protect you from malware already on your computer, from someone with administrator access to it, or from problems on the stores' own sites. The macOS packages aren't signed by Apple yet, and the hidden library is a privacy screen, not encryption. The security policy lists these limits in full.</p>
+          <p class="sources"><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md#what-hoard-protects-against-and-what-it-cant">What Hoard can't protect against</a></p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="page-foot">
+      <p>Found a security problem? Please report it privately, from the repository's <strong>Security</strong> tab
+        (<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md#reporting-a-problem">how</a>), so it can be fixed before it's public.
+        Anything else, <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues">open an issue</a>.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
+    <p>
+      <a href="./">Home</a> ·
+      <a href="how-it-works.html">How it works</a> ·
+      <a href="changelog.html">What's new</a> ·
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a> ·
+      <a href="trust.html">How you can trust Hoard</a> ·
+      <a href="ai.html">AI disclosure</a>
+    </p>
+  </footer>
+</body>
+</html>
