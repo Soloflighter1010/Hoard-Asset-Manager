@@ -12,8 +12,11 @@ The **Library** shows everything you own on the stores you use, whether or not y
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
 - **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs.
-- **Stack copies:** copies of the same product, from the same store and creator (bought more than once, or in
-  several versions), show as one tile with a count on it (×3). Choose it to see every copy. Untick **Stack copies**,
+- **Stack copies:** copies of the same product on one store (bought more than once, or in several versions) show
+  as one tile with a count on it (×3). Hoard knows copies by their picture, the same image byte for byte, not by
+  their names, so "Hair Pack 1" and "Hair Pack 2" stay apart. A picture more than one creator uses (a store's
+  default banner) stacks nothing, and neither does a product whose picture Hoard hasn't saved yet (see
+  [Offline](#offline)). Choose a stack to see every copy. Untick **Stack copies**,
   beside **Sort**, to show each on its own; Hoard remembers. While you're choosing several, each copy shows.
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
   library** in Settings). What was already there when Hoard first read a store isn't new.

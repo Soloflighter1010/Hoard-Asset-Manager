@@ -534,11 +534,16 @@ class CopiesAndActions(unittest.TestCase):
         cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
                                    lan=False)
         ghost = dict(name="Ghost Follower [VRChat]", creator="Pointless Creations")
+        library.THUMB_DIR.mkdir(parents=True, exist_ok=True)   # the copies' picture, saved from three addresses
+        pics = [f"https://public-files.gumroad.com/ghost{n}.png" for n in range(4)]
+        for n, url in enumerate(pics):
+            (library.THUMB_DIR / (hashlib.sha1(url.encode()).hexdigest() + ".png")).write_bytes(
+                png() + (b"another picture" if n == 3 else b""))
         with cls.srv.lib.lock:   # in memory only
             cls.srv.lib.data["items"] = [
-                library.item("gumroad", f"g{n}", **ghost, url=f"https://pointless.gumroad.com/l/ghost{n}",
+                library.item("gumroad", f"g{n}", **ghost, url=f"https://pointless.gumroad.com/l/ghost{n}", thumbnail=pics[n],
                              download_url=f"https://app.gumroad.com/d/{n}abc") for n in range(3)] + [
-                library.item("gumroad", "other", name="Ghost Follower [VRChat]", creator="Someone Else"),
+                library.item("gumroad", "other", name="Ghost Follower [VRChat]", creator="Someone Else", thumbnail=pics[3]),
                 library.item("payhip", "p1", name="Mochi", creator="Kitsu Studio",
                              download_url="https://payhip.com/d/xyz")]
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
@@ -569,8 +574,8 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(stack.count(), 1)
             self.assertIn("×3", stack.inner_text())
             self.assertIn("3 copies", stack.get_attribute("aria-label"))
-            stack.click()   # every copy, as Copies of
-            page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+            stack.click()   # every copy, as Copies of: the other creator's has its own picture
+            page.wait_for_function("() => document.querySelectorAll('.slot').length === 3")
             self.assertEqual(page.locator(".slot.stacked").count(), 0)
             page.locator("[data-clear='copies']").first.click()
             page.wait_for_function("() => document.querySelectorAll('.slot.stacked').length === 1")

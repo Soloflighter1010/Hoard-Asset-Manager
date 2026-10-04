@@ -5,6 +5,7 @@ import email
 import hashlib
 import html
 import json
+import os
 import re
 import threading
 import time
@@ -1046,15 +1047,6 @@ def _norm(s: str) -> str:
     return key if len(key) >= 4 else re.sub(r"[\W_]+", "", s)
 
 
-def _copy_norm(s: str) -> str:
-    """Name key for copies of one product (issue #111): like _norm, but only versions (v2, 1.0.3) are dropped, not
-    every number, so "Hair Pack 1" and "Hair Pack 2" stay two products."""
-    s = unicodedata.normalize("NFKC", s or "").lower()
-    core = re.sub(r"【[^】]*】|\[[^\]]*\]|\([^)]*\)", " ", s)
-    key = re.sub(r"[\W_]+", "", re.sub(r"\bv\d+(?:\.\d+)*\b|\b\d+(?:\.\d+)+\b", " ", core))
-    return key or re.sub(r"[\W_]+", "", s)
-
-
 def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
     """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
     tagdata = tagdata or TagStore.empty()
@@ -1079,14 +1071,14 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
         key = tag_key(i["store"], i["name"])
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted((ts & keep) - set(mine)),
-             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]),
-             "stack_key": _copy_norm(i["name"])}
+             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": ""}
         for k in ("creator_url", "url", "download_url"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))
         e["files"] = [f for f in e.get("files", []) if store_link(e["store"], f.get("url"))]
         out.append(e)
         groups.setdefault(e["match_key"], []).append(e)
+    stack_by_picture(out)
     for g in groups.values():
         by_store: dict[str, set] = {}
         for e in g:
@@ -1126,6 +1118,56 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
     write_file_safely(THUMB_DIR / f"{h}.{ext}", data)
     return data, ctype
+
+
+_PICTURE_HASHES: dict[str, tuple[int, int, str]] = {}   # saved picture's file name -> (size, modified, SHA-256)
+_PICTURE_LOCK = threading.Lock()
+
+
+def picture_hashes(urls) -> dict[str, str]:
+    """The SHA-256 of each saved picture's bytes, by its address, for the pictures Hoard has saved (issue #111). Each
+    file is read once, and again only if its size or modified time changes."""
+    try:
+        saved = {e.name.split(".", 1)[0]: e for e in os.scandir(THUMB_DIR) if e.is_file(follow_symlinks=False)}
+    except OSError:
+        return {}
+    out = {}
+    for url in set(urls):
+        e = saved.get(hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest())
+        if not e or e.name.rsplit(".", 1)[-1] not in IMAGE_TYPES.values():
+            continue
+        try:
+            st = e.stat(follow_symlinks=False)
+            with _PICTURE_LOCK:
+                known = _PICTURE_HASHES.get(e.name)
+            if known and known[:2] == (st.st_size, st.st_mtime_ns):
+                out[url] = known[2]
+                continue
+            if st.st_size > 15 * 1024 * 1024:   # larger than Hoard saves
+                continue
+            digest = hashlib.sha256(Path(e.path).read_bytes()).hexdigest()
+        except OSError:
+            continue
+        with _PICTURE_LOCK:
+            _PICTURE_HASHES[e.name] = (st.st_size, st.st_mtime_ns, digest)
+        out[url] = digest
+    return out
+
+
+def stack_by_picture(items: list[dict]) -> None:
+    """Give each item a stack_key: copies of one product (bought more than once, or in several versions) have the
+    same picture, byte for byte, so they stack into one tile (issue #111). Names aren't used: "Hair Pack 1" and
+    "Hair Pack 2" are different products. A picture shared by more than one creator is a store's stand-in (a default
+    banner, say), not a product's own, so it stacks nothing; nor does an item whose picture isn't saved yet."""
+    hashes = picture_hashes(i["thumbnail"] for i in items if i.get("thumbnail"))
+    creators: dict[str, set] = {}
+    for i in items:
+        h = hashes.get(i.get("thumbnail") or "")
+        if h:
+            creators.setdefault(h, set()).add(str(i.get("creator") or "").lower())
+    for i in items:
+        h = hashes.get(i.get("thumbnail") or "")
+        i["stack_key"] = h if h and len(creators[h]) == 1 else ""
 
 
 def unreachable_message(store: str, what: str = "refreshed") -> str:

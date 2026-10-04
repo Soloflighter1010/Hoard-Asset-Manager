@@ -40,9 +40,11 @@ go, and lets you turn off the glow and change the store colours. Everything in t
   don't have a copy yet, **Show in Downloads** when you do (with **See the update** when there's one), or **Open on
   Payhip** for Payhip's. The store's own pages, which open in your browser, are named for the store (**Open on
   Gumroad**, **Store page**), and **Archive**, **Hide** and **Remove** sit under **Organise**.
-- **Copies stack** (issue #111). Copies of the same product from the same store and creator (bought more than
-  once, or in several versions) show as one tile marked ×3, say. Choose it to see every copy. Untick **Stack
-  copies**, beside **Sort**, to show each on its own.
+- **Copies stack** (issue #111). Copies of the same product on one store (bought more than once, or in several
+  versions) show as one tile marked ×3, say. Hoard knows them by their picture: the same image, byte for byte, not
+  the same name, so "Hair Pack 1" and "Hair Pack 2" stay apart. A picture several creators share (a store's default
+  banner) stacks nothing, and neither does one Hoard hasn't saved yet. Choose a stack to see every copy. Untick
+  **Stack copies**, beside **Sort**, to show each on its own.
 
 ### Accessibility
 

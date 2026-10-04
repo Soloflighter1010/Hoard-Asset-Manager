@@ -1368,16 +1368,16 @@ const SORTS = {
 const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
-// issue #111: copies of the same product, from the same store and creator (bought more than once, or in several
-// versions), show as one tile. Choosing it shows them all, as "Copies of". Not while selecting, so each can be chosen.
+// issue #111: copies of the same product on one store (bought more than once, or in several versions), known by the
+// same picture, byte for byte, show as one tile. Choosing it shows them all, as "Copies of". Not while selecting, so each can be chosen.
 let STACK = true, stackSize = new Map();   // the first copy's key -> how many copies its tile stands for
-const stackKey = a => `${a.store}|${a.stack_key}|${String(a.creator || "").toLowerCase()}`;
+const stackKey = a => a.stack_key ? `${a.store}|${a.stack_key}` : null;   // the same picture, byte for byte (enrich)
 function stacked(list) {
   stackSize = new Map();
   if (!STACK || sel.on || state.copies) return list;
   const first = new Map(), out = [];
   for (const a of list) {
-    const k = stackKey(a), f = first.get(k);
+    const k = stackKey(a), f = k && first.get(k);
     if (f) { stackSize.set(f.key, (stackSize.get(f.key) || 1) + 1); continue; }
     first.set(k, a); out.push(a);
   }

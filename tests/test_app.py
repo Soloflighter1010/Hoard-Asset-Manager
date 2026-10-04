@@ -2450,15 +2450,28 @@ class CatalogSeal(unittest.TestCase):
 
 
 class CopiesStack(unittest.TestCase):
-    """Issue #111: copies of one product stack into one tile. A version is the same product; a number in its name
-    isn't (in beta 4's first build, "Item 0001" to "Item 0999" by one creator all stacked into one tile)."""
+    """Issue #111: copies of one product stack by their picture's hash, byte for byte, not by name: in beta 4's first
+    build, "Hair Pack 1" and "Hair Pack 2" by one creator stacked into one tile."""
 
-    def test_which_names_are_copies(self):
-        items = [library.item("booth", str(n), name=name, creator="Kitsu") for n, name in enumerate(
-            ["Rusk v1.2", "Rusk 1.0.3", "Rusk (Quest)", "【3D】Rusk", "Hair Pack 1", "Hair Pack 2", "Item 0001"])]
-        keys = [e["stack_key"] for e in library.enrich(items, {})]
-        self.assertEqual(len(set(keys[:4])), 1, keys)
-        self.assertEqual(len(set(keys[4:])), 3, keys)
+    def test_the_same_picture_stacks(self):
+        import hashlib
+        from unittest import mock
+        def pic(n):
+            return f"https://booth.pximg.net/p{n}.png"
+        pictures = {0: b"rusk", 1: b"rusk", 2: b"hair 1", 3: b"hair 2", 4: b"banner", 5: b"banner"}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(library, "THUMB_DIR", Path(tmp)):
+            for n, data in pictures.items():
+                (Path(tmp) / (hashlib.sha1(pic(n).encode()).hexdigest() + ".png")).write_bytes(data)
+            items = [library.item("booth", str(n), name=name, creator=creator, thumbnail=pic(n)) for n, (name, creator) in
+                     enumerate([("Rusk v1", "Kitsu"), ("Rusk v2", "Kitsu"), ("Hair Pack 1", "Kitsu"), ("Hair Pack 2", "Kitsu"),
+                                ("Fox", "Kitsu"), ("Wolf", "Someone Else"), ("Unsaved", "Kitsu")])]
+            keys = [e["stack_key"] for e in library.enrich(items, {})]
+            self.assertTrue(keys[0] and keys[0] == keys[1], "two copies, one picture")
+            self.assertNotEqual(keys[2], keys[3], "two products, two pictures, however alike their names")
+            self.assertEqual(keys[4:], ["", "", ""], "a picture two creators share is a stand-in; an unsaved one stacks nothing")
+            (Path(tmp) / (hashlib.sha1(pic(1).encode()).hexdigest() + ".png")).write_bytes(b"rusk, updated")
+            keys = [e["stack_key"] for e in library.enrich(items, {})]
+            self.assertNotEqual(keys[0], keys[1], "a picture that changes is read again")
 
 
 class TagMatching(unittest.TestCase):
