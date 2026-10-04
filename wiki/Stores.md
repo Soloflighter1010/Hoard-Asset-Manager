@@ -103,7 +103,8 @@ Payhip has no single library: your purchases live in each shop you bought from, 
   added when you confirm it: Hoard asks once for all of them, showing each address.
 - **Sign in and refresh.** Add your shops in **Settings** under **Payhip shops**, one per line: a shop's
   address is either its own domain (`myshop.store`) or `payhip.com/ShopName`. **Sign in** then opens a tab for
-  each shop. Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
+  each shop. (Signed in before adding any shops? That's fine: Hoard says so, and reads Payhip once you've added
+  them and choose **Refresh**.) Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
   appears, complete it there and Hoard carries on. It waits up to 3 minutes.
 
 If you sell on Payhip too, your own shop's library page lists everything you've bought on Payhip, from every shop,

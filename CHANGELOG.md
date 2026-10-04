@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.0-beta.5
+
+The fifth beta of Hoard 3.0 makes signing in smoother. Everything in the betas before it is still here.
+
+- **Signing in installs Hoard's browser if it needs to.** Signing in with Hoard's own browser before it was
+  downloaded failed with "Open Settings, choose Set up Hoard again". Now the sign-in downloads it first, showing
+  its progress, then opens the sign-in window.
+- **Signing in to Payhip before adding your shops no longer looks like it failed.** Payhip keeps your purchases in
+  each shop you bought from, so with no shops added there's nothing to read yet; reading it straight after signing
+  in failed with "add your shops". Now the sign-in says it's done, and to add your shops in Settings (a shop's
+  address is in your purchase email) and then choose Refresh, or to import each shop's saved library pages.
+
 ## 3.0.0-beta.4
 
 The fourth beta of Hoard 3.0 lets you choose what downloads, runs one routine check that asks before downloading
