@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Hoard works</title>
+  <meta name="description" content="What Hoard does on your computer, from signing in to your stores to bringing your assets into Unity, and what it never does.">
+  <meta property="og:site_name" content="Hoard">
+  <meta property="og:title" content="How Hoard works">
+  <meta property="og:description" content="What Hoard does on your computer, from signing in to your stores to bringing your assets into Unity, and what it never does.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/how-it-works.html">
+  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Hoard's library: VRChat assets from Booth, Gumroad and Payhip as tiles, with tags and creators beside them">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#211C18">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
+  <a class="skip" href="#main">Skip to the page</a>
+  <header class="bar">
+    <a class="brand" href="./"><img src="img/mark.svg" alt="" width="32" height="32"><span>hoard</span></a>
+    <nav aria-label="Site">
+      <a href="./#features">What it does</a>
+      <a href="how-it-works.html" aria-current="page">How it works</a>
+      <a href="./#download">Download</a>
+      <a href="changelog.html">What's new</a>
+      <a href="testers.html">Testers</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <h1>How Hoard works</h1>
+      <p class="lede">Hoard is an app on your computer. It signs in to your stores the way you would, reads what
+        you've bought, downloads it into a folder of yours, and keeps it up to date. There's no Hoard account and
+        no Hoard server: everything happens between your computer and your stores.</p>
+    </section>
+
+    <section aria-labelledby="flowTitle">
+      <h2 id="flowTitle" class="visually-hidden">The journey of an asset</h2>
+      <ol class="flow">
+        <li class="flow-step">
+          <h3>Your stores</h3>
+          <ul class="flow-stores">
+            <li class="store booth">Booth</li>
+            <li class="store gumroad">Gumroad</li>
+            <li class="store jinxxy">Jinxxy</li>
+            <li class="store payhip">Payhip</li>
+            <li class="store itch">itch.io</li>
+          </ul>
+        </li>
+        <li class="flow-step here">
+          <h3>Hoard, on your computer</h3>
+          <p>Your library, your downloads, your tags</p>
+        </li>
+        <li class="flow-step">
+          <h3>Your downloads folder</h3>
+          <p>Ordinary files, one folder per product</p>
+        </li>
+        <li class="flow-step">
+          <h3>Unity</h3>
+          <p>Hoard for Unity imports them into your project</p>
+        </li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="stepsTitle">
+      <h2 id="stepsTitle" class="visually-hidden">Step by step</h2>
+      <ol class="steps">
+        <li>
+          <h3>It runs on your computer</h3>
+          <p>Hoard's window shows pages that Hoard itself serves, to your computer only. Other websites can't reach
+            them, and your other devices only can if you switch that on. Your library, settings and sign-ins are
+            kept in Hoard's own folder on your computer, and your downloads in a folder you choose.</p>
+        </li>
+        <li>
+          <h3>You sign in on each store's own page</h3>
+          <p>Each store opens in a browser window of its own, and you sign in there, with your password, Google,
+            Discord or X, just as you would anywhere. Hoard never sees your password. It keeps only the "stay
+            signed in" pass the store hands out, locked by your Windows account, your Mac's Keychain or your
+            Linux keyring, and each store's pass is kept apart from the others. itch.io uses an API key instead,
+            which you make on itch.io, as its own app does.</p>
+        </li>
+        <li>
+          <h3>It reads what you own</h3>
+          <p><strong>Refresh</strong> reads each store's library the way you'd see it: Booth, Gumroad, Jinxxy and
+            Payhip in their signed-in windows, itch.io through its API. Rather not sign in somewhere? Save that
+            store's library pages from your usual browser and import them instead. Everything goes into one
+            library, where Hoard suggests tags from the products' names and notices the same product bought on
+            two stores.</p>
+        </li>
+        <li>
+          <h3>It downloads, and finishes</h3>
+          <p><strong>Sync</strong> downloads anything you don't have yet, straight from the store over secure
+            connections, with progress, speed and time left. A file that's cut off carries on from where it was
+            next time, and <strong>Stop</strong> is always safe. Your sign-in is only ever sent to that store,
+            never to the servers that host its files. Jobs wait their turn in <strong>Tasks</strong>, and Hoard
+            can carry on in the background while its window is closed. Payhip is the exception: Hoard lists what
+            you bought there, and you download it from Payhip.</p>
+        </li>
+        <li>
+          <h3>It keeps things up to date</h3>
+          <p>When a creator adds or changes a file, the next sync, or <strong>Check for updates</strong>, notices,
+            and fetches only what's new. Once a week (or when you choose), Hoard checks that the files on your
+            disk are still the ones it downloaded, and says if any went missing or changed. A full drive? Add a
+            library folder on another one, and Hoard reads it as part of your library.</p>
+        </li>
+        <li>
+          <h3>It brings them into Unity</h3>
+          <p>Hoard writes a catalog of everything it's downloaded, and seals it so changes made by anything else
+            are noticed. <a href="./#unity">Hoard for Unity</a> reads that catalog in the editor: search your
+            assets with their pictures, see which are already in the open project, and import one through Unity's
+            own import dialog, without downloading it again.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="trust" aria-labelledby="neverTitle">
+      <h2 id="neverTitle">What stays with you</h2>
+      <ul>
+        <li><strong>Nothing is sent to us.</strong> No accounts, no tracking, no analytics, no ads. Hoard talks
+          only to the stores you use, and to GitHub if you turn on update checks.</li>
+        <li><strong>Your files are ordinary files.</strong> One folder per store, creator and product, readable
+          without Hoard. Updating or uninstalling Hoard never touches them.</li>
+        <li><strong>Support reports are made on your computer.</strong> Passwords, cookies, keys and names are
+          taken out, and Hoard never sends a report anywhere: you choose whether to share it.</li>
+        <li><strong>It works offline</strong> for everything except signing in, refreshing and downloading.</li>
+      </ul>
+    </section>
+
+    <section class="page-foot">
+      <p>Want the details? The <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">help pages</a>
+        go through every part of Hoard,
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md">SECURITY.md</a>
+        says exactly how it keeps you safe, and
+        <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/ARCHITECTURE.md">ARCHITECTURE.md</a>
+        explains how it's built.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
+    <p>
+      <a href="./">Home</a> ·
+      <a href="how-it-works.html">How it works</a> ·
+      <a href="changelog.html">What's new</a> ·
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a>
+    </p>
+  </footer>
+</body>
+</html>
