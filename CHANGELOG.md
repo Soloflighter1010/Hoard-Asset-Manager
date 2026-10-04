@@ -3,8 +3,8 @@
 ## 3.0.0-beta.4
 
 The fourth beta of Hoard 3.0 lets you choose what downloads, runs one routine check that asks before downloading
-anything, puts your own tasks first, stacks copies of the same product, and lets you turn off the glow and change
-the store colours. Everything in the betas before it is still here.
+anything, puts your own tasks first, stacks copies of the same product, adds a folder of folders to Local in one
+go, and lets you turn off the glow and change the store colours. Everything in the betas before it is still here.
 
 ### The routine check
 
@@ -31,6 +31,10 @@ the store colours. Everything in the betas before it is still here.
   as one job, across stores.
 
 ### Your library
+
+- **Add a folder of folders to Local** (issue #109). In **Add your own**, **Folders inside it** makes each folder
+  one, two or three levels down a package of its own, named for its folder; from two levels down, the folder above
+  is who made it. Hoard lists what it would add first. Handy for what you already keep one folder per creator.
 
 - **Clearer buttons in an item's details** (issue #108). There's one thing to do, in gold: **Download** when you
   don't have a copy yet, **Show in Downloads** when you do (with **See the update** when there's one), or **Open on

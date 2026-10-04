@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import config, downloader, downloads, local, server  # noqa: E402
+from hoard import config, downloader, downloads, jobs, library, local, server  # noqa: E402
 from hoard.safety import ACCESS_HEADER  # noqa: E402
 
 try:
@@ -193,6 +193,59 @@ class LocalItems(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class FolderOfFolders(unittest.TestCase):
+    """Issue #109: what you already keep in folders (one per creator, a folder per product inside) added to Local
+    in one go, each folder some levels down a package of its own."""
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.base, True)
+        self.root = self.base / "Hoard"
+        self.root.mkdir()
+        self.src = self.base / "My Stuff"
+        for creator, product in (("Kitsu Studio", "Rusk"), ("Kitsu Studio", "Mochi"), ("Someone", "Fox Base")):
+            (self.src / creator / product).mkdir(parents=True)
+            (self.src / creator / product / f"{product}.unitypackage").write_bytes(b"pkg")
+        (self.src / "readme.txt").write_bytes(b"loose")
+        (self.src / "Someone" / "notes.txt").write_bytes(b"loose")
+        self.cfg = {**config.load_config(), "root": str(self.root)}
+        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+
+    def test_split(self):
+        two = local.split(self.root, str(self.src), 2, True)
+        self.assertEqual([(p["name"], p["creator"], p["rel"]) for p in two["packages"]],
+                         [("Mochi", "Kitsu Studio", "Kitsu Studio/Mochi"), ("Rusk", "Kitsu Studio", "Kitsu Studio/Rusk"),
+                          ("Fox Base", "Someone", "Someone/Fox Base")])
+        self.assertEqual(two["loose"], 2, "files in the folders above are left out, and counted")
+        one = local.split(self.root, str(self.src), 1, True)
+        self.assertEqual([(p["name"], p["creator"]) for p in one["packages"]], [("Kitsu Studio", ""), ("Someone", "")])
+        for depth, path, why in ((3, self.src, "nothing three levels down"), (4, self.src, "not a choice"),
+                                 (1, self.src / "readme.txt", "a file"), (1, self.base / "nowhere", "not there")):
+            with self.subTest(why), self.assertRaises(ValueError):
+                local.split(self.root, str(path), depth, True)
+
+    def test_a_link_is_never_followed(self):
+        try:
+            os.symlink(self.base, self.src / "Someone" / "Loop", target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("this system can't make links")
+        self.assertNotIn("Loop", [p["name"] for p in local.split(self.root, str(self.src), 2, True)["packages"]])
+
+    def test_each_added_as_its_own(self):
+        runner = jobs.Jobs(self.cfg, library.Library(self.base / "library.json"))
+        runner.start("add-local", [], local={"path": str(self.src), "depth": 2, "copy": True, "creator": "", "note": "Old stuff"})
+        for _ in range(200):
+            if not runner.state["running"] and runner.busy.acquire(blocking=False):
+                runner.busy.release()
+                break
+            time.sleep(0.02)
+        self.assertIn("Added 3 packages to Local", runner.history[-1]["message"])
+        entries = sorted((e["name"], e["creator"], e["note"]) for e in downloader.collect_catalog(self.cfg, self.root)[0])
+        self.assertEqual(entries, [("Fox Base", "Someone", "Old stuff"), ("Mochi", "Kitsu Studio", "Old stuff"),
+                                   ("Rusk", "Kitsu Studio", "Old stuff")])
+        self.assertTrue((self.root / "Local" / "Kitsu Studio" / "Rusk" / "Rusk.unitypackage").is_file())
+
+
 class LocalPage(unittest.TestCase):
 
     def test_add_your_own(self):
@@ -218,6 +271,13 @@ class LocalPage(unittest.TestCase):
             page.click("#localAdd")
             page.locator("#localPanel.win:not([hidden])").wait_for()
             self.assertTrue(page.locator("#localCopy").is_checked(), "copying is offered first")
+            page.fill("#localPath", str(base))   # issue #109: each folder inside it, as a package of its own
+            page.select_option("#localDepth", "1")
+            page.locator("#localPreview li", has_text="Commission Kit").wait_for()
+            self.assertIn("1 package", page.locator("#localPreview").inner_text())
+            self.assertTrue(page.locator("#localName").is_hidden(), "each is named for its folder")
+            page.select_option("#localDepth", "0")
+            self.assertTrue(page.locator("#localPreview").is_hidden())
             page.fill("#localPath", str(src))
             page.fill("#localNote", "A commission")
             page.check("#localLink")

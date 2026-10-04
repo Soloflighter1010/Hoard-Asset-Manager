@@ -374,6 +374,10 @@ body.selecting .toast { bottom: 96px; }
 .routine-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 24px 12px; padding: 10px 14px;
   border-radius: 12px; background: var(--stone); border: 1px solid var(--gold); font-size: 14px; }
 .routine-note span { flex: 1; min-width: 220px; }
+/* issue #109: the packages a folder of folders would add */
+.local-preview { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; font-size: 13px; }
+.local-preview li { padding: 4px 0; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.local-preview li.muted { color: var(--dust); }
 /* issue #107: what a download would get, to untick, and products always skipped */
 .pick-dialog { width: min(620px, calc(var(--vw) - 32px)); }
 .pick-tools { display: flex; gap: 14px; margin: 10px 0 6px; }
@@ -806,8 +810,18 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     aria-label="Folder or file to add">
     <button class="ghost sm" id="localBrowseFolder" data-browse hidden>Folder…</button>
     <button class="ghost sm" id="localBrowseFile" data-browse hidden>File…</button></div>
-  <h3>Name</h3>
-  <div class="field"><input id="localName" maxlength="300" placeholder="The folder's name" aria-label="Name"></div>
+  <h3>Folders inside it</h3>
+  <select id="localDepth" aria-label="Folders inside it">
+    <option value="0">Add it as one package</option>
+    <option value="1">Each folder inside it is a package</option>
+    <option value="2">Each folder two levels down is a package, made by the folder above it</option>
+    <option value="3">Each folder three levels down is a package, made by the folder above it</option>
+  </select>
+  <p class="hint sub" id="localSplitHint" hidden>Handy for what you already keep in folders, such as one per creator
+    with a folder per product inside. Each package is named for its folder.</p>
+  <ul id="localPreview" class="local-preview" hidden></ul>
+  <div id="localNameRow"><h3>Name</h3>
+  <div class="field"><input id="localName" maxlength="300" placeholder="The folder's name" aria-label="Name"></div></div>
   <h3>Made by</h3>
   <div class="field"><input id="localCreator" maxlength="200" placeholder="You" aria-label="Made by"></div>
   <h3>For (optional)</h3>
@@ -1716,18 +1730,41 @@ function openLocal(open) {
   $("#localAdd").setAttribute("aria-expanded", String(show));
   if (show) $("#localPath").focus();
 }
+// issue #109: each folder some levels down as its own package: what that would add, before adding it
+let previewFor = "";
+async function previewLocal() {
+  const depth = Number($("#localDepth").value), path = $("#localPath").value.trim(), list = $("#localPreview");
+  $("#localNameRow").hidden = depth > 0;
+  $("#localSplitHint").hidden = !depth;
+  $("#localCreator").placeholder = depth >= 2 ? "The folder above each, or type one for all" : "You";
+  const key = `${depth}|${path}|${$("#localCopy").checked}`;
+  if (!depth || !path) { list.hidden = true; previewFor = ""; return; }
+  if (key === previewFor) return;
+  previewFor = key;
+  const r = await apiPost("/api/local/preview", { path, depth, copy: $("#localCopy").checked });
+  if (previewFor !== key) return;   // changed meanwhile
+  list.hidden = false;
+  if (!r.ok) { list.innerHTML = `<li class="muted">${esc(r.data.error || "That folder can't be split.")}</li>`; return; }
+  const n = r.data.packages.length;
+  list.innerHTML = `<li class="muted">${n} ${n === 1 ? "package" : "packages"}` +
+    (r.data.loose ? `; ${r.data.loose} ${r.data.loose === 1 ? "file" : "files"} in the folders above ${r.data.loose === 1 ? "is" : "are"} left out` : "") + `:</li>` +
+    r.data.packages.slice(0, 200).map(p => `<li><strong>${esc(p.name)}</strong>${p.creator ? ` <span class="muted">by ${esc(p.creator)}</span>` : ""}</li>`).join("") +
+    (n > 200 ? `<li class="muted">and ${n - 200} more</li>` : "");
+}
 async function addLocal() {
-  const body = { path: $("#localPath").value, name: $("#localName").value, creator: $("#localCreator").value,
-                 note: $("#localNote").value, copy: $("#localCopy").checked };
+  const depth = Number($("#localDepth").value);
+  const body = { path: $("#localPath").value, name: depth ? "" : $("#localName").value, creator: $("#localCreator").value,
+                 note: $("#localNote").value, copy: $("#localCopy").checked, depth };
   $("#localGo").disabled = true;
   const r = await apiPost("/api/local/add", body);
   $("#localGo").disabled = false;
   if (!r.ok) { $("#localMsg").textContent = r.data.error || "That didn't work."; return; }
   if (SETTINGS) SETTINGS.local_copy = body.copy;
   for (const id of ["#localPath", "#localName", "#localNote"]) $(id).value = "";
+  $("#localDepth").value = "0"; previewLocal();
   openLocal(false);
   if (queuedToast(r)) return;
-  toast(body.copy ? "Copying it into Hoard. Follow it in Tasks." : "Adding it to Local.");
+  toast(depth ? "Adding each folder to Local. Follow it in Tasks." : body.copy ? "Copying it into Hoard. Follow it in Tasks." : "Adding it to Local.");
   // when it's done, show it (a quick one can finish before the tasks poll sees it)
   for (let n = 0; n < 2000; n++) {
     await new Promise(ok => setTimeout(ok, n < 20 ? 300 : 1500));
@@ -1743,11 +1780,14 @@ function wireLocal() {
   makeWindow($("#localPanel"));
   WINDOWS.localPanel = () => openLocal(false);
   $("#localAdd").addEventListener("click", () => openLocal());
-  $("#localBrowseFolder").addEventListener("click", () => browseInto($("#localPath"), "folder"));
+  $("#localBrowseFolder").addEventListener("click", async () => { if (await browseInto($("#localPath"), "folder")) previewLocal(); });
   $("#localBrowseFile").addEventListener("click", async () => {
     if (await browseInto($("#localPath"), "file")) $("#localCopy").checked = true;   // a single file can only be copied in
   });
   $("#localGo").addEventListener("click", addLocal);
+  $("#localDepth").addEventListener("change", previewLocal);
+  $("#localPath").addEventListener("change", previewLocal);
+  for (const r of document.querySelectorAll("input[name=localKeep]")) r.addEventListener("change", previewLocal);
   $("#localPath").addEventListener("keydown", e => { if (e.key === "Enter") addLocal(); });
 }
 addEventListener("hashchange", () => { readHash(); render(); });   // the Local tab, from the bar or the Library

@@ -50,7 +50,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
-           "/api/routine/seen")
+           "/api/routine/seen", "/api/local/preview")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -770,12 +770,25 @@ class Handler(BaseHTTPRequestHandler):
         it is, or take one out."""
         from . import local
         srv = self.server
+        if path == "/api/local/preview":   # issue #109: the packages a folder of folders would add
+            try:
+                plan = local.split(root_dir(srv.cfg), str(body.get("path") or "")[:1000], body.get("depth"),
+                                   body.get("copy") is not False)
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json({"packages": [{k: p[k] for k in ("rel", "name", "creator")} for p in plan["packages"]],
+                               "loose": plan["loose"]})
         if path == "/api/local/add":
             copy = body.get("copy") is not False
+            depth = body.get("depth") if body.get("depth") in local.DEPTHS and not isinstance(body.get("depth"), bool) else 0
             what = {"path": str(body.get("path") or "")[:1000], "name": str(body.get("name") or "")[:300],
-                    "creator": str(body.get("creator") or "")[:200], "note": str(body.get("note") or "")[:300], "copy": copy}
-            try:
-                local.check_source(root_dir(srv.cfg), what["path"], copy)   # said straight away, not in Tasks
+                    "creator": str(body.get("creator") or "")[:200], "note": str(body.get("note") or "")[:300], "copy": copy,
+                    "depth": depth}
+            try:   # said straight away, not in Tasks
+                if depth:
+                    local.split(root_dir(srv.cfg), what["path"], depth, copy)
+                else:
+                    local.check_source(root_dir(srv.cfg), what["path"], copy)
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
             if srv.cfg.get("local_copy", True) != copy:   # the choice you made last time is offered next time

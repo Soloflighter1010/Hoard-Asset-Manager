@@ -621,6 +621,8 @@ class Jobs:
         from .config import root_dir
         from . import local
         self._set(task="add-local", message="Adding to Local")
+        if what.get("depth"):
+            return self._add_local_folders(what)
         try:
             rec = local.add(self.cfg, root_dir(self.cfg), what.get("path", ""), what.get("name", ""), what.get("creator", ""),
                             what.get("note", ""), bool(what.get("copy", True)), progress=self._quietly)
@@ -629,6 +631,38 @@ class Jobs:
             return
         self._set(message=f"Added {rec['name']} to Local: {len(rec['files']):,} files"
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
+        self.on_download_done()
+
+    def _add_local_folders(self, what: dict) -> None:
+        """Issue #109: each folder some levels down in a folder of folders, added to Local as a package of its own."""
+        from .config import root_dir
+        from .downloader import build_catalog
+        from . import local
+        root = root_dir(self.cfg)
+        try:
+            plan = local.split(root, what.get("path", ""), what.get("depth"), bool(what.get("copy", True)))
+        except ValueError as e:
+            self._set(message=str(e), error=str(e))
+            return
+        added, left = 0, []
+        try:
+            for n, pkg in enumerate(plan["packages"], 1):
+                if self.stop.is_set():
+                    break
+                self._set(message=f"Adding {n} of {len(plan['packages'])} to Local: {pkg['name']}")
+                try:
+                    local.add(self.cfg, root, pkg["path"], pkg["name"], what.get("creator") or pkg["creator"],
+                              what.get("note", ""), bool(what.get("copy", True)), progress=self._quietly, catalog=False)
+                    added += 1
+                except ValueError as e:
+                    left.append(f"{pkg['rel']}: {e}")
+        finally:
+            if added:
+                build_catalog(self.cfg, root)
+        said = f"Added {plural(added, 'package')} to Local" + (" (stopped part way)" if self.stop.is_set() else "") + "."
+        if left:
+            said += f" Left out {len(left)}: " + "; ".join(left[:5]) + ("…" if len(left) > 5 else "")
+        self._set(message=said, log=[f"Left out {x}" for x in left][-200:], partial=bool(left))
         self.on_download_done()
 
     def _verify(self, stores: list[str], fresh: bool = False) -> str:
