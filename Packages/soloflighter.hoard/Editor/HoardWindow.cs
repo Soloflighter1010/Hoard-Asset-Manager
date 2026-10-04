@@ -435,7 +435,7 @@ namespace SoloFlighter.Hoard.Editor
             foreach (string g in packages.Guids(packagePath))
             {
                 string p = AssetDatabase.GUIDToAssetPath(g);
-                if (string.IsNullOrEmpty(p)) continue;
+                if (!ProjectShare.InAssets(p)) continue;   // another package's copy under Packages/ isn't this product's
                 var o = AssetDatabase.LoadMainAssetAtPath(p);
                 if (o != null && !AssetDatabase.IsValidFolder(p)) found.Add(o);
             }

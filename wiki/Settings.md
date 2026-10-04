@@ -41,6 +41,11 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
     frame. Turn it off and they move again.
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
     computer's own settings ask for less motion.
+  - **Coloured glow behind the page:** the stores' colours rising from the bottom of the window. Turn it off for a
+    plain background.
+  - **Store colours:** **Standard**; **Easier to tell apart (colour blindness)**, a set of colours chosen to stay
+    distinct with the common kinds of colour blindness, clear on light and dark backgrounds; or **My own**, a colour
+    for each store (and Local) that you pick. Choose **Standard** again to go back.
 
   These apply to both views straight away.
 - **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
@@ -79,6 +84,9 @@ and keep it valid JSON.
 | `profile_dir` with `advanced_signin_location` | `""`, `false` | Keep sign-ins somewhere other than Hoard's private folder. Used only when `advanced_signin_location` is `true`, never on a network share; how well they're protected then depends on that drive |
 | `auto_sync_hours` | `0` | Hours between automatic syncs while Hoard is open: `0` (off), `6`, `12`, `24` or `168` (**Sync automatically** in Settings) |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
+| `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
+| `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
+| `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |
 | `close_to_taskbar` | `true` | Closing Hoard's window minimizes it to the taskbar, and Hoard carries on (**Closing the window minimizes Hoard to the taskbar** in Settings) |

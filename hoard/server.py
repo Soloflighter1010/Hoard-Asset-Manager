@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import secrets
 import sys
 import threading
@@ -80,11 +81,25 @@ def font_path(name: str) -> Path | None:
     return None
 
 
+COLOUR_SCHEMES = ("standard", "colourblind", "custom")   # store colours (issue #112)
+COLOURED = ("booth", "gumroad", "jinxxy", "payhip", "itch", "local")   # what has a colour of its own
+HEX_COLOUR = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def custom_colours(given) -> dict:
+    """Your own store colours, as #rrggbb, for the stores that have one; anything else is left out."""
+    given = given if isinstance(given, dict) else {}
+    return {k: given[k].lower() for k in COLOURED if isinstance(given.get(k), str) and HEX_COLOUR.fullmatch(given[k])}
+
+
 def display_settings(cfg: dict) -> dict:
-    """Text size and motion, as the pages apply them."""
+    """Text size, motion, the glow and the store colours, as the pages apply them."""
     d = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
     return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
-            "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion"))}
+            "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion")),
+            "glow": d.get("glow") is not False,
+            "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
+            "custom_colours": custom_colours(d.get("custom_colours"))}
 
 
 def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
@@ -257,7 +272,16 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion") if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow") if k in given})
+        if "colours" in given:
+            if given["colours"] not in COLOUR_SCHEMES:
+                raise ValueError("Choose store colours from the list.")
+            display["colours"] = given["colours"]
+        if "custom_colours" in given:
+            colours = custom_colours(given["custom_colours"])
+            if not isinstance(given["custom_colours"], dict) or len(colours) != len(given["custom_colours"]):
+                raise ValueError("Each store's colour needs to be a colour such as #FF6259.")
+            display["custom_colours"] = colours
         change["display"] = display
     if "request_delay" in body:
         try:

@@ -592,6 +592,8 @@ def _settings_summary(cfg: dict) -> dict:
         "display_text_size": display.get("text_size", 100),
         "reduce_motion": bool(display.get("reduce_motion")),
         "pause_animations": bool(display.get("pause_animations")),
+        "glow": display.get("glow") is not False,
+        "store_colours": display.get("colours") if display.get("colours") in ("standard", "colourblind", "custom") else "standard",
         "payhip_shop_count": len((cfg.get("payhip") or {}).get("shops") or []) if isinstance(cfg.get("payhip"), dict) else 0,
         "jinxxy_pattern_customized": ((cfg.get("jinxxy") or {}).get("item_link_pattern") !=
                                       "^/my/(inventory|purchases|library)/[^/]+/?$"),

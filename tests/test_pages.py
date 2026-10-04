@@ -671,6 +671,34 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.close()
 
 
+    def test_glow_and_store_colours(self):
+        """Issue #112: the glow can be turned off, and store colours changed for colour blindness or to your own."""
+        from unittest import mock
+        from playwright.sync_api import expect
+        colour = "() => getComputedStyle(document.documentElement).getPropertyValue('--booth').trim().toLowerCase()"
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            standard = page.evaluate(colour)
+            page.click("#settingsBtn")
+            expect(page.locator("#setGlowOn")).to_be_checked()
+            page.locator("#setGlowOn").uncheck()
+            page.wait_for_function("() => document.body.classList.contains('no-glow')")
+            self.assertFalse(page.locator("#glow").is_visible())
+            page.select_option("#setColours", "colourblind")
+            page.wait_for_function(f"() => ({colour})() !== '{standard}'")
+            self.assertIn(page.evaluate(colour), ("#e69f00", "#a86a00"))
+            page.select_option("#setColours", "custom")
+            expect(page.locator("#customColours input[data-colour='booth']")).to_be_visible()
+            page.locator("#customColours input[data-colour='booth']").fill("#123456")
+            page.wait_for_function(f"() => ({colour})() === '#123456'")
+            self.assertEqual(self.srv.cfg["display"]["custom_colours"]["booth"], "#123456")
+            self.assertEqual(len(self.srv.cfg["display"]["custom_colours"]), 6, "every store's colour, as shown")
+            page.select_option("#setColours", "standard")
+            page.wait_for_function(f"() => ({colour})() === '{standard}'")
+            self.assertTrue(page.locator("#customColours").is_hidden())
+            self.assertFalse(self.srv.cfg["display"]["glow"])
+            page.close()
+
     def test_the_largest_text_still_fits_the_window(self):
         """Issue #48: at the Largest text size, Settings (and everything else sized to the window) grew taller and
         wider than the window, so you couldn't scroll to Save to make the text smaller again."""

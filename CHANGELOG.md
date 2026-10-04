@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.0.0-beta.4
+
+The fourth beta of Hoard 3.0 lets you turn off the glow and change the store colours, for colour blindness or
+eye strain. Everything in the betas before it is still here.
+
+### Accessibility
+
+- **Store colours you can tell apart** (issue #112). Settings, under **Accessibility**, has **Store colours**:
+  **Standard**, **Easier to tell apart (colour blindness)**, a set chosen to stay distinct with the common kinds of
+  colour blindness and clear on light and dark backgrounds, or **My own**, a colour you pick for each store.
+- **The glow can be turned off** (issue #112): untick **Coloured glow behind the page** for a plain background.
+
+### Hoard for Unity 0.5.1
+
+- **Only what's in Assets counts as in your project** (issue #114). Many packages carry their own copy of
+  something VCC installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK), so products you hadn't imported
+  showed as **In this project** and landed in the credits list. Now only files under `Assets/` count.
+
 ## 3.0.0-beta.3
 
 The third beta of Hoard 3.0 makes downloading from Jinxxy dependable: its files now come straight from Jinxxy,

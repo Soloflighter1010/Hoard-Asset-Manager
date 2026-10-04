@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- **Products only count as in your project for what's in Assets** (Hoard's issue #114). Many packages carry their
+  own copy of something VCC installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK), and Unity finds those
+  files there too. So a product you hadn't imported could show as **In this project**, and land in the credits
+  list. Now only files under `Assets/` count, and **Select** only selects those.
+
 ## 0.5.0
 
 - **Library folders on other drives.** Hoard 3.0 can keep your downloads in more than one folder: its downloads

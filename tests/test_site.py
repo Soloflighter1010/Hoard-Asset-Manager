@@ -94,7 +94,8 @@ class TheSite(unittest.TestCase):
         css = (SITE / "styles.css").read_text("utf-8")
         app = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
         for store in ("booth", "gumroad", "jinxxy", "payhip", "itch"):
-            for colour in re.findall(rf"--{store}: (#[0-9A-F]{{6}})", app):
+            standard = "\n".join(re.findall(r"^\s*:root \{.*?\n\s*\}", app, re.M | re.S))   # not the colour-blind set
+            for colour in re.findall(rf"--{store}: (#[0-9A-F]{{6}})", standard):
                 self.assertIn(f"--{store}: {colour}", css, f"{store}'s colour matches the app's")
             self.assertIn(f"var(--{store}) var(--glow)", css)
         self.assertIn('<div class="glow" aria-hidden="true">', self.html)

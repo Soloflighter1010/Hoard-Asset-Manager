@@ -102,8 +102,7 @@ namespace SoloFlighter.Hoard.Editor
             have = total = 0;
             string[] list;
             if (path == null || !File.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return InProject.Unknown;
-            total = list.Length;
-            foreach (string g in list) if (!string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(g))) have++;
+            ProjectShare.Count(list, AssetDatabase.GUIDToAssetPath, out have, out total);   // Assets/ only (issue #114)
             if (total == 0) return InProject.Unknown;
             return have == 0 ? InProject.No : have == total ? InProject.Yes : InProject.Partly;
         }

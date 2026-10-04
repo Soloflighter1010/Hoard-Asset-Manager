@@ -8,8 +8,9 @@ Open **Window › Hoard** to:
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails.
   Animated ones (GIFs) play, from 0.3.0.
 - **See what's already in this project.** It reads the asset GUIDs inside each `.unitypackage`, without extracting
-  anything, and marks products **In this project** or **Partly in project**. **Select** finds their assets in
-  your Project window.
+  anything, and marks products **In this project** or **Partly in project**. Only what's under `Assets/` counts:
+  a package's own copy of something VCC installs under `Packages/` (Poiyomi, say) doesn't, from 0.5.1. **Select**
+  finds their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 

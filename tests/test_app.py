@@ -2310,8 +2310,12 @@ class StoreTables(unittest.TestCase):
             for const in ("STORE_SITES", "STORE_NAMES"):
                 keys = set(re.findall(r"(\w+):", re.search(rf"const {const} = \{{(.*?)\}};", html).group(1)))
                 self.assertEqual(keys, stores, f"{page}: {const}")
+            # the standard colours, in the page's :root (dark) and its light theme; the colour-blind set (issue #112) too
+            standard = "\n".join(re.findall(r"^\s*:root \{.*?\n\s*\}", html, re.M | re.S))
+            colourblind = "\n".join(re.findall(r':root\[data-colours="colourblind"\] \{[^}]*\}', html))
             for s in stores:
-                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", html)), 2, f"{page}: {s}'s colour, in both themes")
+                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", standard)), 2, f"{page}: {s}'s colour, in both themes")
+                self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", colourblind)), 2, f"{page}: {s}'s colour-blind colour, in both themes")
                 self.assertIn(f".{s} {{ --c: var(--{s}); }}", html, page)
         order = re.search(r"const STORE_ORDER = \[(.*?)\];", (web / "library.html").read_text("utf-8")).group(1)
         self.assertEqual(re.findall(r'"(\w+)"', order), list(library.STORES))
@@ -2763,6 +2767,19 @@ class AutomaticSync(unittest.TestCase):
         for bad in (99, "130", True):
             with self.assertRaises(ValueError):
                 server.apply_settings(cfg, {"display": {"text_size": bad}})
+        # issue #112: the glow, and store colours you can tell apart, or choose
+        change = server.apply_settings(cfg, {"display": {"glow": 0, "colours": "custom",
+                                                         "custom_colours": {"booth": "#AABBCC", "itch": "#00ff00"}}})
+        self.assertEqual(change, {"display": {"glow": False, "colours": "custom",
+                                              "custom_colours": {"booth": "#aabbcc", "itch": "#00ff00"}}})
+        for bad in ({"colours": "rainbow"}, {"custom_colours": {"booth": "red"}}, {"custom_colours": {"steam": "#000000"}},
+                    {"custom_colours": {"booth": "#000000;x"}}, {"custom_colours": ["#000000"]}):
+            with self.assertRaises(ValueError, msg=bad):
+                server.apply_settings(cfg, {"display": bad})
+        self.assertEqual({k: v for k, v in server.display_settings({}).items() if k in ("glow", "colours", "custom_colours")},
+                         {"glow": True, "colours": "standard", "custom_colours": {}}, "the glow is on, standard colours")
+        odd = server.display_settings({"display": {"glow": "no", "colours": 3, "custom_colours": {"booth": "url(x)", "gumroad": "#123456"}}})
+        self.assertEqual((odd["glow"], odd["colours"], odd["custom_colours"]), (True, "standard", {"gumroad": "#123456"}))
         shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
         self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")
 

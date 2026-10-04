@@ -167,6 +167,27 @@ public static class CoreTests
         Directory.Delete(dir, true);
     }
 
+    // Hoard's issue #114: files the project has under Packages/ (a VPM package's copy) never count as a product's
+    static void ShareChecks()
+    {
+        var paths = new Dictionary<string, string>
+        {
+            { "a", "Assets/Fox/Fox.prefab" }, { "b", "Assets\\Fox\\Fox.mat" },
+            { "p", "Packages/com.poiyomi.toon/Shaders/Poiyomi.shader" }, { "q", "Packages/com.vrchat.base/x.cs" },
+        };
+        Func<string, string> pathOf = g => paths.ContainsKey(g) ? paths[g] : "";
+        int have, total;
+        ProjectShare.Count(new[] { "a", "b", "p" }, pathOf, out have, out total);
+        Check("share: all of it in Assets, its Poiyomi copy in Packages", have == 2 && total == 2, have + " of " + total);
+        ProjectShare.Count(new[] { "p", "q", "x", "y" }, pathOf, out have, out total);
+        Check("share: only Packages matches, not imported", have == 0 && total == 2, have + " of " + total);
+        ProjectShare.Count(new[] { "a", "x" }, pathOf, out have, out total);
+        Check("share: partly", have == 1 && total == 2, have + " of " + total);
+        ProjectShare.Count(new[] { "p", "q" }, pathOf, out have, out total);
+        Check("share: nothing of its own to tell by", have == 0 && total == 0, have + " of " + total);
+        Check("share: Assets is a folder, not a prefix", !ProjectShare.InAssets("AssetsBackup/x") && !ProjectShare.InAssets(null));
+    }
+
     static void Check(string name, bool ok, string detail = "")
     {
         Console.WriteLine((ok ? "PASS " : "FAIL ") + name + (ok ? "" : ": " + detail));
@@ -362,6 +383,7 @@ public static class CoreTests
         Check("big library: loaded in under 10 seconds", watch.ElapsedMilliseconds < 10000, watch.ElapsedMilliseconds + " ms");
 
         CreditsChecks();
+        ShareChecks();
         GifChecks(Path.Combine(dir, "gifs"));
         PictureChecks(Path.Combine(dir, "gifs"));
         ProjectChecks(dir);

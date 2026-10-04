@@ -33,6 +33,12 @@
     color-scheme: light;
   }
 }
+/* Store colours that stay apart with colour blindness (issue #112): Okabe and Ito's palette, 3:1 or more on every
+   background. Your own colours are set on the page itself (applyDisplay). */
+:root[data-colours="colourblind"] { --booth: #E69F00; --gumroad: #CC79A7; --jinxxy: #56B4E9; --payhip: #F0E442; --itch: #2BB58C; --local: #D8D8D8; }
+@media (prefers-color-scheme: light) {
+  :root[data-colours="colourblind"] { --booth: #A86A00; --gumroad: #A84D86; --jinxxy: #1F72AE; --payhip: #7D7300; --itch: #00775A; --local: #5E5E5E; }
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -635,6 +641,9 @@ details.task summary b { overflow-wrap: anywhere; }
 @keyframes glow-flow { to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) { #glow.flow .glow-in { animation: none; } }
 body.less-motion #glow.flow .glow-in { animation: none; }
+body.no-glow #glow { display: none; }
+.custom-colours { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; }
+.custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
 dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
   border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
@@ -870,6 +879,14 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     </select></label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
+  <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
+  <label class="check">Store colours
+    <select id="setColours" aria-label="Store colours">
+      <option value="standard">Standard</option>
+      <option value="colourblind">Easier to tell apart (colour blindness)</option>
+      <option value="custom">My own</option>
+    </select></label>
+  <div id="customColours" class="custom-colours" role="group" aria-label="Your store colours" hidden></div>
   <p class="hint">Motion is also reduced when your computer's settings ask for less of it.</p>
   <h3>Browser for store sign-ins</h3>
   <select id="setBrowser" aria-label="Browser for store sign-ins">
@@ -1079,6 +1096,19 @@ function markCurrent(selector) {
 }
 // Text size, Reduce motion and Pause animated pictures, from Settings.
 let PAUSE = false;
+const COLOURED = ["booth", "gumroad", "jinxxy", "payhip", "itch", "local"];
+const COLOUR_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io", local: "Local" };
+// Your own colours: one picker a store, starting from the colour it shows now
+function fillColours() {
+  const d = SETTINGS.display, box = $("#customColours");
+  box.hidden = d.colours !== "custom";
+  if (box.hidden) return;
+  const now = getComputedStyle(document.documentElement);
+  box.innerHTML = COLOURED.map(c => {
+    const v = (d.custom_colours || {})[c] || now.getPropertyValue("--" + c).trim() || "#888888";
+    return `<label class="check"><input type="color" data-colour="${c}" value="${/^#[0-9a-f]{6}$/i.test(v) ? v : "#888888"}"> ${COLOUR_NAMES[c]}</label>`;
+  }).join("");
+}
 function applyDisplay(d) {
   if (!d) return;
   document.documentElement.style.zoom = d.text_size && d.text_size !== 100 ? String(d.text_size / 100) : "";
@@ -1086,6 +1116,13 @@ function applyDisplay(d) {
   // what's sized to the window still fits it at a larger text size (issue #48)
   document.documentElement.style.setProperty("--zoom", String((d.text_size || 100) / 100));
   document.body.classList.toggle("less-motion", !!d.reduce_motion);
+  document.body.classList.toggle("no-glow", d.glow === false);
+  const root = document.documentElement;
+  if (d.colours === "standard" || !d.colours) delete root.dataset.colours; else root.dataset.colours = d.colours;
+  for (const c of COLOURED) {   // your own colours (issue #112), only while you've chosen them
+    const mine = d.colours === "custom" && (d.custom_colours || {})[c];
+    if (mine) root.style.setProperty("--" + c, mine); else root.style.removeProperty("--" + c);
+  }
   if (!!d.pause_animations === PAUSE) return;
   PAUSE = !!d.pause_animations;
   if (PAUSE) document.querySelectorAll(".art img, .d-art img").forEach(freeze);
@@ -2150,6 +2187,9 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
+  $("#setGlowOn").checked = SETTINGS.display.glow;
+  $("#setColours").value = SETTINGS.display.colours;
+  fillColours();
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
     `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
@@ -2476,6 +2516,11 @@ function wireSidebar() {
 /* ---------- Settings save as you change them: a box or list straight away, a folder or the Payhip shops when you
    leave the field. Only what changed is sent, so a setting a running job needs doesn't hold up the others. */
 function settingsPart(el) {
+  if (el.dataset.colour) {   // all of them, so what's saved is what you see
+    const mine = {};
+    for (const i of document.querySelectorAll("#customColours input[data-colour]")) mine[i.dataset.colour] = i.value;
+    return { display: { colours: "custom", custom_colours: mine } };
+  }
   if (el.dataset.setStore) return { stores: { [el.dataset.setStore]: { [el.dataset.opt]: el.checked } } };
   switch (el.id) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
@@ -2488,6 +2533,8 @@ function settingsPart(el) {
     case "setCheckDays": return { integrity_check_days: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
+    case "setGlowOn": return { display: { glow: el.checked } };
+    case "setColours": return { display: { colours: el.value } };
     case "setTextSize": case "setPause": case "setMotion":
       return { display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
                           reduce_motion: $("#setMotion").checked } };
@@ -2512,6 +2559,7 @@ function autosave(el) {
     SETTINGS = r.data.settings;
     applyDisplay(SETTINGS.display);
     if ("display" in part) refitWindows();
+    if (part.display && "colours" in part.display) fillColours();
     if ("browser_channel" in part) showBrowserInUse();
     if ("beta_updates" in part) showUpdate();   // a beta found earlier shows, or stops showing, as an update
     winNote("settingsPanel", "Saved", true);
