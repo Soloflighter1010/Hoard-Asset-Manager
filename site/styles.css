@@ -176,16 +176,38 @@ h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); margin: 0 0 .8em; }
 .release article > .small { display: inline-block; margin-top: 8px; }
 .release code { overflow-wrap: anywhere; }
 
+/* How it works: where an asset goes (left to right; top to bottom on a phone), then each step in turn */
+.flow { list-style: none; margin: 0 auto; padding: 0; max-width: 1000px; display: grid; gap: 40px;
+        grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.flow-step { position: relative; background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius);
+             padding: 18px; text-align: center; display: flex; flex-direction: column; justify-content: center; }
+.flow-step.here { border-color: var(--gold); box-shadow: 0 0 24px color-mix(in srgb, var(--gold) 25%, transparent); }
+.flow-step p { margin: 0; color: var(--dust); font-size: .95rem; }
+.flow-step + .flow-step::before { content: "→"; position: absolute; left: -32px; top: 50%; transform: translateY(-50%);
+                                  width: 24px; text-align: center; color: var(--gold); font-weight: 700; font-size: 1.3rem; }
+.flow-stores { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; }
+.steps { list-style: none; margin: 0 auto; padding: 0; max-width: 860px; counter-reset: step; display: grid; gap: 16px; }
+.steps li { counter-increment: step; position: relative; background: var(--ledge); border: 1px solid var(--seam);
+            border-radius: var(--radius); padding: 20px 24px 20px 76px; }
+.steps li::before { content: counter(step); position: absolute; left: 22px; top: 18px; width: 36px; height: 36px;
+                    border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: var(--gold-ink);
+                    font: 400 1.1rem var(--display); }
+.steps p { margin: 0; }
+
 .foot { max-width: 1160px; margin: 0 auto; padding: 32px 24px 48px; border-top: 1px solid var(--seam); text-align: center; }
 .foot p { margin: 6px 0; }
 .foot img { vertical-align: -4px; }
 
 @media (max-width: 980px) {
   .grid { grid-template-columns: repeat(2, 1fr); }
+  .flow { grid-template-columns: minmax(0, 520px); justify-content: center; gap: 36px; }
+  .flow-step + .flow-step::before { content: "↓"; left: 50%; top: -30px; transform: translateX(-50%); }
 }
 @media (max-width: 760px) {
   body { font-size: 16px; }
   .grid, .trust ul { grid-template-columns: 1fr; }
+  .steps li { padding: 64px 18px 18px; }
+  .steps li::before { left: 18px; top: 16px; }
   .unity { grid-template-columns: 1fr; }
   .bar { padding: 14px 16px; }
   main { padding: 0 16px; }

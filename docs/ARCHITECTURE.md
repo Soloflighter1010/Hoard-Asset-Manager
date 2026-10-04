@@ -87,7 +87,7 @@ all in `browser.py`):
 - `sign_out()` asks the store to end the session (Gumroad's `/logout`, or the store's own sign-out
   control via `SIGN_OUT_JS`), deletes the store's profile, checks no other profile holds its cookies,
   and returns a sentence saying what happened.
-- Only store cookies are ever copied out of the browser (Gumroad and Booth downloads use them for
+- Only store cookies are ever copied out of the browser (Gumroad, Booth and Jinxxy downloads use them for
   resumable HTTP), and those copies are cleared when the run ends.
 
 ## Reading stores

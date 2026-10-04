@@ -176,6 +176,7 @@ TEMPLATE = """<!doctype html>
     <a class="brand" href="./"><img src="img/mark.svg" alt="" width="32" height="32"><span>hoard</span></a>
     <nav aria-label="Site">
       <a href="./#features">What it does</a>
+      <a href="how-it-works.html">How it works</a>
       <a href="./#download">Download</a>
       <a href="changelog.html" aria-current="page">What's new</a>
       <a href="testers.html">Testers</a>
