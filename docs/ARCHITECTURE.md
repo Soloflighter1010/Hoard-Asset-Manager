@@ -21,7 +21,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   downloader.py        downloading, the records of what's on disk, the catalog files, verify
   downloads.py         the Downloads view's index of what's on disk
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
-                       browser; Schedule, the automatic syncs
+                       browser; Schedule, the routine check
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across
   marks.py             archive, hide and remove choices, and the hidden library's PIN
   server.py            the local server behind both views
@@ -331,14 +331,20 @@ to move it, the corner to resize it, the position kept in `localStorage`, Escape
 sidebar that folds (`wireSidebar`), and Settings saved as they change (`autosave`, sending only the changed
 setting; `JOB_SETTINGS` wait for a running job to end).
 
-### Automatic syncs
+### The routine check (issue #113)
 
 `jobs.Schedule` runs in the desktop app (`AppServer.start_schedule`, from `app.run_app`) and ticks once a minute.
-A sync is due when `auto_sync_hours` is one of `SYNC_CHOICES` (not 0), setup is done, no job is running, Hoard
-started over `FIRST_WAIT` ago, and `sync.json` (written as every sync starts, yours or automatic) is that old.
-It syncs the enabled stores except `UNATTENDED` (Payhip, which opens a visible window). When no store is
-reachable it waits `OFFLINE_RETRY` rather than recording errors on every store row. The job carries
-`scheduled: true`; open pages pick it up at their once-a-minute check-in.
+The check is due when `routine_hours(cfg)` isn't 0, setup is done, no job is running, Hoard started over
+`FIRST_WAIT` ago, and `routine.json` says it last ran that long ago. The `routine` job (`Jobs._routine`) refreshes
+the enabled stores except `UNATTENDED` (Payhip, which opens a visible window), checks the downloads
+(`check_integrity` with `fresh_since`, so files new since the last check aren't read yet), and checks the
+downloadable stores for updates (a dry run). It downloads nothing: it keeps how many new products and updates there
+are (`Jobs.find_choices`, which the server points at `AppServer.download_choices`) in `routine.json`, and the pages
+show them with **Choose what to download** (`POST /api/routine/seen` once you've looked). When no store is
+reachable it waits `OFFLINE_RETRY` rather than recording errors on every store row.
+
+Jobs you start go first (issue #110): `Jobs.start` queues them ahead of automatic ones, and when an automatic job
+is running, `make_way` stops it safely and queues it again after yours. Tasks shows it as having made way.
 
 ### Updating
 

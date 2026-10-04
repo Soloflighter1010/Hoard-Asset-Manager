@@ -2,9 +2,23 @@
 
 ## 3.0.0-beta.4
 
-The fourth beta of Hoard 3.0 lets you choose what downloads, download several products at once, stacks copies
-of the same product, and lets you turn off the glow and change the store colours. Everything in the betas before
-it is still here.
+The fourth beta of Hoard 3.0 lets you choose what downloads, runs one routine check that asks before downloading
+anything, puts your own tasks first, stacks copies of the same product, and lets you turn off the glow and change
+the store colours. Everything in the betas before it is still here.
+
+### The routine check
+
+- **One routine check, which asks before downloading** (issue #113). **Sync automatically** and **Check your
+  downloads** are now one setting, **Routine check**: once a week unless you choose every 6 or 12 hours, once a
+  day, once a month, or off. While Hoard is open it reads your stores (not Payhip), checks your downloads and
+  checks for updates, then, when it found something, asks: **Choose what to download** shows the list **Download
+  new** does, to untick from, or **Not now**. It never downloads by itself. A sync you'd turned on keeps its
+  timing; otherwise the check of your downloads keeps its. Unlike that check, the routine check reads your stores,
+  so turn it off in Settings if you'd rather Hoard only did that when you ask.
+- **Files new since the last check aren't read again yet** (issue #113): they were checked as they downloaded,
+  and the next check takes their fingerprint.
+- **Your tasks go first** (issue #110). Start something while the routine check runs and it stops safely to make
+  way (Tasks says so), then carries on after yours. Anything you start waits ahead of automatic jobs in Tasks.
 
 ### Downloading
 

@@ -63,6 +63,54 @@ UNATTENDED = ("payhip",)   # never synced automatically: Payhip needs a visible 
 OFFLINE_RETRY = 15 * 60    # an automatic sync that found no connection tries again this much later
 FIRST_WAIT = 2 * 60        # after Hoard starts, before an automatic sync that's due
 CHECK_CHOICES = (0, 1, 7, 30)   # days between routine checks of the downloads (issue #83); 0 = only when you ask
+# issue #113: one routine check instead of both: hours between them (0 = off). It reads your stores, checks your
+# downloads and checks for updates, then asks you which of what it found to download.
+ROUTINE_CHOICES = (0, 6, 12, 24, 168, 720)
+_DAYS_AS_HOURS = {0: 0, 1: 24, 7: 168, 30: 720}
+
+
+def routine_hours(cfg: dict) -> int:
+    """How often the routine check runs. Before beta 4 there were two settings: an automatic sync you turned on
+    keeps its hours, and otherwise the check of your downloads keeps its days (weekly unless you changed it)."""
+    hours = cfg.get("routine_hours")
+    if hours in ROUTINE_CHOICES and not isinstance(hours, bool):
+        return hours
+    sync = cfg.get("auto_sync_hours")
+    if sync in SYNC_CHOICES and sync and not isinstance(sync, bool):
+        return sync
+    days = cfg.get("integrity_check_days", 7)
+    return _DAYS_AS_HOURS[days] if days in CHECK_CHOICES and not isinstance(days, bool) else 168
+
+
+def _routine_file():
+    return data_dir() / "routine.json"
+
+
+def routine_record() -> dict:
+    """When the routine check last ran ("last", seconds), and what it found that you haven't looked at yet ("found":
+    when, and how many new products and updates), or None."""
+    try:
+        raw = read_json_file(_routine_file()) if _routine_file().is_file() else {}
+    except (DataFileError, OSError):
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+    last = raw.get("last") if isinstance(raw.get("last"), (int, float)) and not isinstance(raw.get("last"), bool) else 0.0
+    found = raw.get("found") if isinstance(raw.get("found"), dict) else None
+    if found:
+        count = lambda k: found[k] if isinstance(found.get(k), int) and not isinstance(found.get(k), bool) and found[k] >= 0 else 0  # noqa: E731
+        found = {"at": str(found.get("at") or "")[:40], "new": count("new"), "updates": count("updates")}
+        found = found if found["new"] or found["updates"] else None
+    return {"last": float(last), "found": found}
+
+
+def save_routine(**change) -> None:
+    """Change the routine check's record: last (when it ran) or found (None once you've looked)."""
+    rec = routine_record()
+    rec.update(change)
+    try:
+        write_file_safely(_routine_file(), json.dumps(rec))
+    except OSError as e:
+        print(f"Couldn't save the routine check's record: {e}", flush=True)
 
 
 def _sync_file():
@@ -96,9 +144,10 @@ def _record_sync() -> None:
 
 
 class Schedule:
-    """Automatic syncs, while Hoard is open: every auto_sync_hours after the last sync, whoever started it. Only
-    stores that can be read without you (Payhip is left out), only once setup is done, never while another job
-    runs, and not while offline (it tries again later, without marking your stores as unreachable)."""
+    """The routine check (issue #113), while Hoard is open: every routine_hours after the last one. It reads the
+    stores that can be read without you (Payhip is left out), checks your downloads and checks for updates, then
+    asks you which of what it found to download. Only once setup is done, never while another job runs, and not
+    while offline (it tries again later, without marking your stores as unreachable)."""
 
     def __init__(self, cfg: dict, jobs: "Jobs"):
         self.cfg, self.jobs = cfg, jobs
@@ -107,43 +156,30 @@ class Schedule:
     def stores(self) -> list[str]:
         return [s for s in STORES if self.cfg[s].get("enabled", True) and s not in UNATTENDED]
 
-    def due(self, now: float | None = None) -> bool:
-        now = time.time() if now is None else now
-        hours = self.cfg.get("auto_sync_hours") or 0
-        return bool(hours in SYNC_CHOICES and hours and self.cfg.get("setup_done") and now >= self.not_before
-                    and not self.jobs.state["running"] and now - last_sync() >= hours * 3600 and self.stores())
-
-    def check_due(self, now: float | None = None) -> bool:
-        """A routine check of the downloads (issue #83): every integrity_check_days after the last, once setup is done,
-        never while another job runs, and only when something is downloaded."""
+    def _downloaded(self) -> bool:
         from .config import root_dir
-        from .downloader import STORE_DIRS, last_integrity
-        now = time.time() if now is None else now
-        days = self.cfg.get("integrity_check_days", 7)
-        if days not in CHECK_CHOICES or not days or isinstance(days, bool) or not self.cfg.get("setup_done") \
-                or now < self.not_before or self.jobs.state["running"]:
-            return False
-        last = last_integrity()
-        when = _when(last["checked"]) if last else 0.0
-        if now - when < days * 86400:
-            return False
+        from .downloader import STORE_DIRS
         root = root_dir(self.cfg)
         return any((root / d / "_manifest.json").is_file() for d in STORE_DIRS.values())
 
+    def due(self, now: float | None = None) -> bool:
+        now = time.time() if now is None else now
+        hours = routine_hours(self.cfg)
+        return bool(hours and self.cfg.get("setup_done") and now >= self.not_before and not self.jobs.state["running"]
+                    and now - routine_record()["last"] >= hours * 3600 and (self.stores() or self._downloaded()))
+
     def tick(self, now: float | None = None) -> bool:
-        """Start a sync if one is due, else a check of the downloads if that's due. True when one started."""
+        """Start the routine check if it's due. True when it started."""
         now = time.time() if now is None else now
         if not self.due(now):
-            if self.check_due(now):
-                return self.jobs.start("verify", [], scheduled=True, queue=False) == "started"
             return False
         stores = self.stores()
-        if not any(reachable(s) for s in stores):
+        if stores and not any(reachable(s) for s in stores):
             self.not_before = now + OFFLINE_RETRY
             return False
-        started = self.jobs.start("sync", stores, skip_imported=False, scheduled=True, queue=False) == "started"
+        started = self.jobs.start("routine", stores, scheduled=True, queue=False) == "started"
         if started:
-            print(f"Syncing by itself ({', '.join(STORES[s]['label'] for s in stores)})", flush=True)
+            print(f"Routine check ({', '.join(STORES[s]['label'] for s in stores) or 'your downloads'})", flush=True)
         return started
 
     def run_forever(self, stop: threading.Event) -> None:
@@ -171,18 +207,22 @@ TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "che
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
-              "delete-files": "Delete downloaded files"}
+              "delete-files": "Delete downloaded files", "routine": "Routine check"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
 FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped answering is ended
 STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
-WATCHED = ("download", "check-updates", "sync", "refresh", "verify")   # jobs that never wait on you (sign-ins do)
+WATCHED = ("download", "check-updates", "sync", "refresh", "verify", "routine")   # jobs that never wait on you (sign-ins do)
 
 
 # How a finished job went, in the Tasks tab. Partly done: it finished, but a store couldn't be read or a file
 # couldn't be downloaded.
 OUTCOMES = ("done", "partial", "failed", "stopped")
+
+
+def plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
 
 def _names(stores: list[str]) -> str:
@@ -240,6 +280,9 @@ class Jobs:
         """No job is running at first. on_download_done is called after every download job."""
         self.cfg, self.lib = cfg, lib
         self.on_download_done = on_download_done or (lambda: None)
+        self.find_choices = None   # how many new products and updates there are to download (the server sets it)
+        self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
+        self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
         self.busy = threading.Lock()
         self.stop = threading.Event()
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
@@ -288,11 +331,32 @@ class Jobs:
             if not queue or same or len(self._queue) >= MAX_QUEUE:
                 return None
             self._ids += 1
-            self._queue.append({**spec, "id": f"q{self._ids}", "label": describe_job(task, stores, only, keys, scheduled),
-                                "queued": now_iso()})
+            entry = {**spec, "id": f"q{self._ids}", "label": describe_job(task, stores, only, keys, scheduled),
+                     "queued": now_iso()}
+            # issue #110: yours go ahead of automatic ones waiting, and an automatic one running makes way for it
+            ahead = next((n for n, q in enumerate(self._queue) if q.get("scheduled")), len(self._queue))
+            self._queue.insert(len(self._queue) if scheduled else ahead, entry)
+            make_way = not scheduled and self.state.get("scheduled") and self.state.get("running")
+            if make_way and self._spec and not any(q.get("scheduled") and q["task"] == self._spec["task"] for q in self._queue):
+                self._ids += 1   # it starts again after yours (what it had done is kept; a file part way resumes)
+                self._queue.append({**self._spec, "id": f"q{self._ids}", "queued": now_iso(),
+                                    "label": describe_job(self._spec["task"], self._spec["stores"], scheduled=True)})
             self._publish_queue()
+        if make_way:
+            self.make_way()
         self.kick()   # the running job may have finished meanwhile
         return "queued"
+
+    def make_way(self) -> None:
+        """Stop the automatic job that's running, safely, so the job you started goes first (issue #110). It says
+        so in Tasks, and waits its turn after yours."""
+        if not self.state.get("scheduled"):
+            return
+        self._made_way = True   # first: a quick job can be over as soon as it's stopped
+        if self.cancel():
+            self._set(message="Making way for your task: this carries on after it")
+        else:
+            self._made_way = False
 
     def kick(self) -> None:
         """Start the next waiting job, if nothing is running. (Called whenever the runner is let go.)"""
@@ -335,6 +399,7 @@ class Jobs:
         """Start spec's job on a thread of its own (see _launch)."""
         task, stores, only, keys = spec["task"], spec["stores"], spec.get("only"), spec.get("keys")
         items = spec.get("items")
+        self._spec = dict(spec)
         skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
         self._ids += 1
         self._current = {"id": f"j{self._ids}", "task": task, "stores": stores,
@@ -354,6 +419,8 @@ class Jobs:
             target = self._install_browser
         elif task == "verify":
             target = self._verify
+        elif task == "routine":
+            target = self._routine
         elif task == "add-local":
             target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
         elif task == "move":
@@ -405,7 +472,11 @@ class Jobs:
         self._current = None
         st = self.state
         message = str(st.get("message") or "")
-        outcome = ("failed" if st.get("error") else "stopped" if message.startswith("Stopped")
+        if self._made_way:   # not stopped by you: it made way for your task, and carries on after it
+            self._made_way = False
+            message = "Made way for your task: it carries on after it. " + message.removeprefix("Stopped.").strip()
+            st["error"] = None
+        outcome = ("failed" if st.get("error") else "stopped" if message.startswith(("Stopped", "Made way"))
                    else "partial" if st.get("partial") else "done")
         trail = self._trail + [line for line in (st.get("log") or []) if line not in self._trail]
         report = st.get("report") if isinstance(st.get("report"), dict) else None
@@ -560,14 +631,16 @@ class Jobs:
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
 
-    def _verify(self, stores: list[str]) -> None:
-        """Check the downloads are as Hoard downloaded them (issue #83), naming any file that isn't."""
+    def _verify(self, stores: list[str], fresh: bool = False) -> str:
+        """Check the downloads are as Hoard downloaded them (issue #83), naming any file that isn't. fresh: files
+        downloaded since the last check aren't read yet (issue #113): they were checked as they came in."""
         from .config import root_dir
-        from .downloader import check_integrity, integrity_summary
-        self._set(task="verify", message="Checking your downloads")
+        from .downloader import check_integrity, integrity_summary, last_integrity
+        self._set(task="verify" if not self.state.get("routine") else "routine", message="Checking your downloads")
         from .libraries import other_folders
+        since = (last_integrity() or {}).get("checked") if fresh else None
         result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly,
-                                 others=other_folders(self.cfg))
+                                 others=other_folders(self.cfg), fresh_since=since)
         lines = ([f"Changed: {p}" for p in result["changed"][:100]] + [f"Missing: {p}" for p in result["missing"][:100]]
                  + [f"Changed outside Hoard: {p}" for p in result["data_changed"]]
                  + [f"Not checked, as its drive isn't connected: {p}" for p in result.get("away", [])])
@@ -577,6 +650,37 @@ class Jobs:
         self._set(message=summary, log=lines[-200:])
         for line in [summary] + lines:
             print(f"Check downloads: {line}", flush=True)
+        return summary
+
+    def _routine(self, stores: list[str]) -> None:
+        """The routine check (issue #113), as one job: read your stores, check your downloads, check for updates,
+        and then, if anything's new or updated, keep how much for the pages, which ask which of it to download.
+        Nothing is downloaded here."""
+        save_routine(last=time.time())
+        self.state["routine"] = True
+        try:
+            unread = self._refresh(stores, skip_imported=True) if stores else []
+            self.state["error"] = None   # a store that couldn't be read doesn't stop the rest
+            if self.stop.is_set():
+                self._set(message="Stopped.")
+                return
+            checked = self._verify(stores, fresh=True)
+            if self.stop.is_set():
+                return
+            downloadable = [s for s in stores if s in DOWNLOADABLE and s not in unread]
+            if downloadable:
+                self._download(downloadable, None, check=True)
+                if self.stop.is_set():
+                    return
+            counts = self.find_choices() if self.find_choices else {"new": 0, "updates": 0}
+            found = {"at": now_iso(), **counts} if counts["new"] or counts["updates"] else None
+            save_routine(found=found)
+            said = (f"Found {plural(counts['new'], 'new product')} and {plural(counts['updates'], 'update')}: "
+                    "choose what to download." if found else "Nothing new to download.")
+            self._set(message=f"{checked} {said}" + (f" Couldn't read {_names(unread)}: see Stores." if unread else ""),
+                      partial=bool(unread), report={"routine": counts})
+        finally:
+            self.state["routine"] = False
 
     def _sync(self, stores: list[str]) -> None:
         """Sync: read what you own from each store, then download anything new, as one job."""
@@ -599,7 +703,8 @@ class Jobs:
     def cancel(self) -> bool:
         """Stop the running download (or sync) within a few seconds; a file it was part way through resumes next time
         where it can. False when neither is running."""
-        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify", "move") or self.state.get("sync")):
+        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify", "move", "routine")
+                                      or self.state.get("sync") or self.state.get("routine")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
             threading.Thread(target=self._force_stop, args=(self.state.get("job_id"),), daemon=True).start()

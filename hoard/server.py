@@ -27,7 +27,7 @@ from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_m
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
                          last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
-from .jobs import CHECK_CHOICES, MAX_SKIP, SYNC_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins
+from .jobs import MAX_SKIP, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
@@ -49,7 +49,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
-           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip")
+           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
+           "/api/routine/seen")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -183,17 +184,12 @@ def integrity_view(cfg: dict) -> dict:
     """The last check of the downloads (issue #83), for the Downloads page: when, and how many files were fine,
     changed or missing. Counts only: which files is in the check's log in Tasks, where hidden names are masked."""
     last = last_integrity()
-    view = {"every_days": check_days(cfg), "checked": None}
+    view = {"every_hours": routine_hours(cfg), "checked": None}   # (checked by the routine check: issue #113)
     if last:
         view.update(checked=last["checked"], files=last["files"], fine=last["fine"], changed=len(last["changed"]),
                     missing=len(last["missing"]), data_changed=len(last["data_changed"]), complete=last["complete"],
                     summary=integrity_summary(last))
     return view
-
-
-def check_days(cfg: dict) -> int:
-    days = cfg.get("integrity_check_days", 7)
-    return days if days in CHECK_CHOICES and not isinstance(days, bool) else 7
 
 
 def public_settings(cfg: dict) -> dict:
@@ -205,10 +201,9 @@ def public_settings(cfg: dict) -> dict:
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "beta_updates": bool(cfg.get("beta_updates")),
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
-        "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in SYNC_CHOICES else 0,
+        "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
-        "integrity_check_days": check_days(cfg),
         "local_copy": cfg.get("local_copy", True) is not False,
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
@@ -247,18 +242,14 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["beta_updates"] = bool(body["beta_updates"])
     if "close_to_taskbar" in body:
         change["close_to_taskbar"] = bool(body["close_to_taskbar"])
-    if "auto_sync_hours" in body:
-        if body["auto_sync_hours"] not in SYNC_CHOICES or isinstance(body["auto_sync_hours"], bool):
-            raise ValueError("Choose how often to sync from the list.")
-        change["auto_sync_hours"] = body["auto_sync_hours"]
+    if "routine_hours" in body:   # issue #113
+        if body["routine_hours"] not in ROUTINE_CHOICES or isinstance(body["routine_hours"], bool):
+            raise ValueError("Choose how often to run the routine check from the list.")
+        change["routine_hours"] = body["routine_hours"]
     if "download_retries" in body:
         if body["download_retries"] not in (0, 1, 2, 3) or isinstance(body["download_retries"], bool):
             raise ValueError("Choose how many times to try a failed download again from the list.")
         change["download_retries"] = body["download_retries"]
-    if "integrity_check_days" in body:
-        if body["integrity_check_days"] not in CHECK_CHOICES or isinstance(body["integrity_check_days"], bool):
-            raise ValueError("Choose how often to check your downloads from the list.")
-        change["integrity_check_days"] = body["integrity_check_days"]
     if "new_days" in body:
         if body["new_days"] not in NEW_DAYS or isinstance(body["new_days"], bool):
             raise ValueError("Choose how long things are marked New from the list.")
@@ -366,6 +357,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
         self.schedule = Schedule(cfg, self.jobs)
+        self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
 
     def start_schedule(self) -> threading.Event:
         """Automatic syncs, while this server runs (the desktop app starts it). Set the returned event to stop."""
@@ -407,6 +399,33 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         (downloads call this after every file)."""
         with self._index_lock:
             self._wanted += 1
+
+    def download_choices(self, unlocked: bool) -> dict:
+        """What Download new and Update all would get, for you to choose from (issue #107), each product once by its
+        tag key: new, things in your library on a store Hoard downloads from with nothing on disk yet; updates, what
+        the last check for updates found; and skipped, what you chose to always skip. Removed products are left
+        out, as downloading leaves them out, and hidden ones too while the hidden library is locked."""
+        srv = self
+        on_disk = {a["tag_key"] for a in srv.index(stale_ok=True)["assets"]}
+        marks = MarkStore().load()
+        updates, skip = AssetUpdates().load()["items"], download_skip(srv.cfg)
+        enabled = {s for s in DOWNLOADABLE if srv.cfg[s].get("enabled", True)}
+        out_of_view = lambda k: k in marks["removed"] or (k in marks["hidden"] and not unlocked)  # noqa: E731
+        known, new = {}, {}
+        for i in srv.lib.snapshot()[0]:
+            key = tag_key(i["store"], i["name"])
+            if i["store"] not in DOWNLOADABLE or out_of_view(key):
+                continue
+            known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or ""})
+            if i["store"] in enabled and key not in on_disk and key not in skip:
+                new.setdefault(key, known[key])
+        ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"])}
+               for k, e in updates.items() if k in on_disk and k not in skip and e["store"] in enabled and not out_of_view(k)]
+        skipped = [known.get(k) or {"key": k, "store": k.split(":", 1)[0], "name": k.split(":", 1)[-1], "creator": ""}
+                   for k in sorted(skip) if not out_of_view(k)]
+        order = lambda e: (e["store"], e["name"].lower())  # noqa: E731
+        return {"new": sorted(new.values(), key=order), "updates": sorted(ups, key=order),
+                "skipped": sorted(skipped, key=order)}
 
     def library_view(self) -> list[dict]:
         """The library folders (libraries.view), each with how many downloads it holds, for Settings and the tabs.
@@ -501,31 +520,7 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _download_choices(self) -> dict:
-        """What Download new and Update all would get, for you to choose from (issue #107), each product once by its
-        tag key: new, things in your library on a store Hoard downloads from with nothing on disk yet; updates, what
-        the last check for updates found; and skipped, what you chose to always skip. Removed products are left
-        out, as downloading leaves them out, and hidden ones too while the hidden library is locked."""
-        srv = self.server
-        on_disk = {a["tag_key"] for a in srv.index(stale_ok=True)["assets"]}
-        marks, unlocked = MarkStore().load(), self._unlocked()
-        updates, skip = AssetUpdates().load()["items"], download_skip(srv.cfg)
-        enabled = {s for s in DOWNLOADABLE if srv.cfg[s].get("enabled", True)}
-        out_of_view = lambda k: k in marks["removed"] or (k in marks["hidden"] and not unlocked)  # noqa: E731
-        known, new = {}, {}
-        for i in srv.lib.snapshot()[0]:
-            key = tag_key(i["store"], i["name"])
-            if i["store"] not in DOWNLOADABLE or out_of_view(key):
-                continue
-            known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or ""})
-            if i["store"] in enabled and key not in on_disk and key not in skip:
-                new.setdefault(key, known[key])
-        ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"])}
-               for k, e in updates.items() if k in on_disk and k not in skip and e["store"] in enabled and not out_of_view(k)]
-        skipped = [known.get(k) or {"key": k, "store": k.split(":", 1)[0], "name": k.split(":", 1)[-1], "creator": ""}
-                   for k in sorted(skip) if not out_of_view(k)]
-        order = lambda e: (e["store"], e["name"].lower())  # noqa: E731
-        return {"new": sorted(new.values(), key=order), "updates": sorted(ups, key=order),
-                "skipped": sorted(skipped, key=order)}
+        return self.server.download_choices(self._unlocked())
 
     def _hidden_names(self) -> list[str]:
         """The names of hidden products, longest first, while this browser hasn't unlocked the hidden library (so
@@ -607,7 +602,8 @@ class Handler(BaseHTTPRequestHandler):
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None,
-                               "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg)}, compress=True)
+                               "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg),
+                               "routine": routine_record()["found"]}, compress=True)
         if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
             return self._json(self._download_choices(), compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
@@ -619,7 +615,8 @@ class Handler(BaseHTTPRequestHandler):
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
         if path == "/api/status":
-            return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1]})
+            return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
+                               "routine": routine_record()["found"]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
             # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
@@ -641,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
-                               "ui": ui_settings(srv.cfg)}, compress=True)
+                               "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
             updates = AssetUpdates().load()["items"]
@@ -1081,6 +1078,9 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             return self._json({"ok": True, **done, "skipped": [{"path": p, "why": w} for p, w in done["skipped"]],
                                "opened_in": opened})
+        if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
+            save_routine(found=None)
+            return self._json({"ok": True})
         if path == "/api/download-skip":   # issue #107: always skip these products when downloading, or stop
             keys = body.get("keys") if isinstance(body.get("keys"), list) else []
             keys = {k for k in keys[:MAX_SKIP] if isinstance(k, str) and 0 < len(k) <= 400 and ":" in k}

@@ -353,30 +353,28 @@ class RoutineChecks(unittest.TestCase):
         self.assertFalse(r["complete"])
         self.assertTrue(downloader.integrity_summary(r).startswith("Stopped"))
 
-    def test_it_runs_on_a_schedule(self):
-        cfg = {**config.load_config(), "root": str(self.root), "setup_done": True, "auto_sync_hours": 0}
-        state = {"running": False}
-        started = []
-        fake = type("J", (), {"state": state, "start": lambda self, task, stores, **kw: started.append((task, kw)) or "started"})()
-        sched = jobs.Schedule(cfg, fake)
-        now = time.time() + 3600
-        self.assertTrue(sched.tick(now), "never checked: due")
-        self.assertEqual(started, [("verify", {"scheduled": True, "queue": False})])
-        downloader.check_integrity(self.root)
-        self.assertFalse(sched.check_due(now), "checked just now")
-        self.assertTrue(sched.check_due(now + 8 * 86400), "a week later")
-        self.assertFalse(jobs.Schedule({**cfg, "integrity_check_days": 0}, fake).check_due(now + 99 * 86400), "off")
-        state["running"] = True
-        self.assertFalse(sched.check_due(now + 8 * 86400), "not while something runs")
+    def test_a_new_file_waits_for_the_next_check(self):
+        """Issue #113: a file downloaded since the last check counts as fine without being read; the next check
+        takes its fingerprint."""
+        from unittest import mock
+        man = downloader.Manifest(self.root / "Booth")
+        for f in man.assets["111"]["files"].values():
+            f["downloaded_at"] = "2026-10-04T12:00:00+00:00"
+        man.save()
+        with mock.patch.object(downloader, "open_under", side_effect=AssertionError("read")):
+            r = downloader.check_integrity(self.root, fresh_since="2026-10-01T00:00:00+00:00")
+        self.assertEqual(r["fine"], 2, "both files there were downloaded since then")
+        r = downloader.check_integrity(self.root)   # and the next one reads them
+        self.assertEqual(r["fine"], 2)
 
     def test_the_setting_and_the_page(self):
         cfg = {**config.load_config(), "root": str(self.root)}
-        self.assertEqual(server.public_settings(cfg)["integrity_check_days"], 7)
-        self.assertEqual(server.apply_settings(cfg, {"integrity_check_days": 30}), {"integrity_check_days": 30})
-        for bad in (2, True, "7"):
+        self.assertEqual(server.public_settings(cfg)["routine_hours"], 168, "weekly, as the check of your downloads was")
+        self.assertEqual(server.apply_settings(cfg, {"routine_hours": 720}), {"routine_hours": 720})
+        for bad in (2, True, "24", 30):
             with self.assertRaises(ValueError):
-                server.apply_settings(cfg, {"integrity_check_days": bad})
-        self.assertEqual(server.integrity_view(cfg), {"every_days": 7, "checked": None})
+                server.apply_settings(cfg, {"routine_hours": bad})
+        self.assertEqual(server.integrity_view(cfg), {"every_hours": 168, "checked": None})
         downloader.check_integrity(self.root)
         view = server.integrity_view(cfg)
         self.assertEqual((view["files"], view["fine"], view["missing"], view["changed"]), (3, 2, 1, 0))
@@ -2687,46 +2685,52 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class AutomaticSync(unittest.TestCase):
-    """Settings, Sync automatically: when a sync starts by itself, and what it leaves alone."""
+class RoutineCheck(unittest.TestCase):
+    """Issue #113: one routine check, on a schedule, that reads your stores, checks your downloads and checks for
+    updates, then asks which of what it found to download. Issue #110: anything you start goes first."""
 
     def setUp(self):
         from unittest import mock
-        self.cfg = {**config.load_config(), "setup_done": True, "auto_sync_hours": 24}
+        self.cfg = {**config.load_config(), "setup_done": True, "routine_hours": 24}
         self.started = []
         self.fake = mock.Mock(state={"running": False})
         self.fake.start = lambda task, stores, **kw: self.started.append((task, stores, kw)) or "started"
         self.schedule = jobs.Schedule(self.cfg, self.fake)
         self.schedule.not_before = 0
-        jobs._sync_file().unlink(missing_ok=True)
+        jobs._routine_file().unlink(missing_ok=True)
+        self.addCleanup(jobs._routine_file().unlink, missing_ok=True)
         patch = mock.patch.object(jobs, "reachable", lambda store: True)
         patch.start()
         self.addCleanup(patch.stop)
 
-    def test_due_after_the_interval_from_the_last_sync(self):
+    def test_due_after_the_interval_from_the_last_one(self):
         now = time.time()
         self.assertTrue(self.schedule.tick(now))
         (task, stores, kw), = self.started
-        self.assertEqual((task, kw), ("sync", {"skip_imported": False, "scheduled": True, "queue": False}))
+        self.assertEqual((task, kw), ("routine", {"scheduled": True, "queue": False}))
         self.assertNotIn("payhip", stores, "Payhip needs you there for its bot check")
         self.assertIn("booth", stores)
-        jobs._record_sync()   # what the sync itself does as it starts
+        jobs.save_routine(last=time.time())   # what the check itself does as it starts
         self.assertFalse(self.schedule.due(now + 23 * 3600))
         self.assertTrue(self.schedule.due(time.time() + 24 * 3600 + 1))
 
     def test_when_it_waits(self):
         now = time.time()
-        for change, why in (({"auto_sync_hours": 0}, "off"), ({"auto_sync_hours": 5}, "not a choice"),
-                            ({"setup_done": False}, "before setup is done")):
+        for change, why in (({"routine_hours": 0}, "off"), ({"setup_done": False}, "before setup is done")):
             with self.subTest(why):
-                cfg = {**self.cfg, **change}
-                self.assertFalse(jobs.Schedule(cfg, self.fake).due(now + 3600), why)
+                self.assertFalse(jobs.Schedule({**self.cfg, **change}, self.fake).due(now + 3600), why)
         self.fake.state["running"] = True
         self.assertFalse(self.schedule.due(now), "another job is running")
         self.fake.state["running"] = False
         self.assertFalse(jobs.Schedule(self.cfg, self.fake).due(now), "not straight after Hoard starts")
-        only_payhip = {**self.cfg, **{s: {**self.cfg[s], "enabled": s == "payhip"} for s in library.STORES}}
-        self.assertFalse(jobs.Schedule(only_payhip, self.fake).due(now), "nothing it can sync unattended")
+
+    def test_the_two_old_settings_become_one(self):
+        old = {k: v for k, v in self.cfg.items() if k != "routine_hours"}
+        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 12}), 12, "a sync you turned on keeps its hours")
+        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 0, "integrity_check_days": 30}), 720)
+        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 0, "integrity_check_days": 0}), 0, "both off: off")
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": None}), 168, "weekly, as the check was")
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": 5}), 168, "not a choice")
 
     def test_offline_it_tries_again_later(self):
         from unittest import mock
@@ -2735,7 +2739,82 @@ class AutomaticSync(unittest.TestCase):
             self.assertFalse(self.schedule.tick(now))
         self.assertEqual(self.started, [])
         self.assertEqual(self.schedule.not_before, now + jobs.OFFLINE_RETRY)
-        self.assertEqual(jobs.last_sync(), 0, "a sync that never started isn't counted")
+        self.assertEqual(jobs.routine_record()["last"], 0, "a check that never started isn't counted")
+
+    def wait_idle(self, runner):
+        for _ in range(200):
+            if not runner.state["running"] and runner.busy.acquire(blocking=False):
+                runner.busy.release()
+                return
+            time.sleep(0.02)
+
+    def test_it_reads_checks_and_asks(self):
+        """It reads the stores, checks the downloads (new files not read yet), checks for updates, downloads nothing,
+        and keeps how much it found for the pages to ask about."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        runner.find_choices = lambda: {"new": 2, "updates": 1}
+        steps = []
+        with mock.patch.object(runner, "_refresh", lambda stores, **k: steps.append(("refresh", stores)) or []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: steps.append(("verify", fresh)) or "All 3 files are fine."), \
+                mock.patch.object(runner, "_download", lambda stores, only, keys=None, check=False, **k: steps.append(("download", check))):
+            self.assertEqual(runner.start("routine", ["booth", "gumroad"], scheduled=True), "started")
+            self.wait_idle(runner)
+        self.assertEqual(steps, [("refresh", ["booth", "gumroad"]), ("verify", True), ("download", True)],
+                         "checking for updates only: nothing is downloaded")
+        found = jobs.routine_record()["found"]
+        self.assertEqual((found["new"], found["updates"]), (2, 1))
+        self.assertIn("choose what to download", runner.history[-1]["message"])
+        self.assertAlmostEqual(jobs.routine_record()["last"], time.time(), delta=5)
+        jobs.save_routine(found=None)   # you looked
+        self.assertIsNone(jobs.routine_record()["found"])
+
+    def test_yours_go_first(self):
+        """Issue #110: an automatic job running makes way for one you start, and carries on after it."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        runner.history = []
+        order, release = [], threading.Event()
+
+        def refresh(stores, **_k):
+            order.append("routine")
+            for _ in range(200):   # an automatic check, reading the stores; Stop is noticed between steps
+                if runner.stop.is_set() or release.is_set():
+                    return []
+                time.sleep(0.02)
+            return []
+        with mock.patch.object(runner, "_refresh", refresh), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "fine"), \
+                mock.patch.object(runner, "_download", lambda stores, only, keys=None, check=False, **k: order.append(("download", check))):
+            self.assertEqual(runner.start("routine", ["booth"], scheduled=True), "started")
+            for _ in range(100):
+                if order:
+                    break
+                time.sleep(0.02)
+            self.assertEqual(runner.start("download", ["gumroad"], only="Mochi"), "queued")
+            release.set()
+            for _ in range(300):
+                if len(order) >= 4 and not runner.state["running"]:
+                    break
+                time.sleep(0.02)
+        self.assertEqual(order[:2], ["routine", ("download", False)], "yours, straight after it made way")
+        self.assertEqual(order[2:], ["routine", ("download", True)], "then the automatic check, again")
+        made_way = runner.history[0]
+        self.assertEqual(made_way["outcome"], "stopped")
+        self.assertTrue(made_way["message"].startswith("Made way for your task"), made_way["message"])
+
+    def test_yours_wait_ahead_of_automatic_ones(self):
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        with mock.patch.object(runner, "_download", lambda *a, **k: gate.wait(5)):
+            runner.start("download", ["booth"], only="A")
+            runner._queue.append({"task": "routine", "stores": ["booth"], "scheduled": True, "id": "q99", "label": "x", "queued": ""})
+            runner.start("download", ["gumroad"], only="B")
+            self.assertEqual([q["task"] for q in runner._queue], ["download", "routine"])
+            gate.set()
+            self.wait_idle(runner)
 
     def test_any_sync_counts(self):
         """A sync you start resets the clock too, and the job says whether it started by itself."""
@@ -2757,11 +2836,6 @@ class AutomaticSync(unittest.TestCase):
 
     def test_settings(self):
         cfg = config.load_config()
-        self.assertEqual(config.DEFAULT_CONFIG["auto_sync_hours"], 0, "off unless you turn it on")
-        self.assertEqual(server.apply_settings(cfg, {"auto_sync_hours": 12}), {"auto_sync_hours": 12})
-        for bad in (5, "24", True, None):
-            with self.assertRaises(ValueError):
-                server.apply_settings(cfg, {"auto_sync_hours": bad})
         change = server.apply_settings(cfg, {"display": {"text_size": 130, "pause_animations": 1, "reduce_motion": 0}})
         self.assertEqual(change, {"display": {"text_size": 130, "pause_animations": True, "reduce_motion": False}})
         for bad in (99, "130", True):
@@ -2780,8 +2854,8 @@ class AutomaticSync(unittest.TestCase):
                          {"glow": True, "colours": "standard", "custom_colours": {}}, "the glow is on, standard colours")
         odd = server.display_settings({"display": {"glow": "no", "colours": 3, "custom_colours": {"booth": "url(x)", "gumroad": "#123456"}}})
         self.assertEqual((odd["glow"], odd["colours"], odd["custom_colours"]), (True, "standard", {"gumroad": "#123456"}))
-        shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
-        self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")
+        shown = server.public_settings({**cfg, "display": {"text_size": 7}, "routine_hours": 3})
+        self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 168), "damaged values read as defaults")
 
 
 class DownloadChoices(unittest.TestCase):

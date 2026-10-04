@@ -42,8 +42,8 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   it only reads), as your own browser would, and each store handles those visits under its own privacy
   policy. For itch.io that's its API (`api.itch.io`), with the API key you gave Hoard, and the file hosts its
   downloads come from. Pages you import instead are read on your computer, and nothing is sent anywhere for them.
-  With **Sync automatically** turned on in **Settings** (it's off unless you do), Hoard does this by itself
-  while it's open, as often as you chose.
+  The **routine check** (in **Settings**; once a week unless you choose otherwise, or turn it off) does this by
+  itself while Hoard is open, to see what's new or updated. It downloads nothing without you.
 - **The image hosts those stores use,** to fetch product images.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a

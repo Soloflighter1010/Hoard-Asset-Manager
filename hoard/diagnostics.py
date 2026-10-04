@@ -579,6 +579,7 @@ def _browser_in_use(cfg: dict) -> str | None:
 
 
 def _settings_summary(cfg: dict) -> dict:
+    from .jobs import routine_hours   # (here: jobs uses this module)
     display = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
     return {
         "enabled_stores": [s for s in ("booth", "gumroad", "jinxxy", "payhip", "itch")
@@ -587,7 +588,7 @@ def _settings_summary(cfg: dict) -> dict:
         "browser_in_use": _browser_in_use(cfg),
         "offline_images": bool(cfg.get("offline_images", True)),
         "check_for_updates": bool(cfg.get("check_for_updates", False)),
-        "auto_sync_hours": cfg.get("auto_sync_hours") if cfg.get("auto_sync_hours") in (0, 6, 12, 24, 168) else 0,
+        "routine_hours": routine_hours(cfg),
         "request_delay": cfg.get("request_delay", 1.0),
         "display_text_size": display.get("text_size", 100),
         "reduce_motion": bool(display.get("reduce_motion")),

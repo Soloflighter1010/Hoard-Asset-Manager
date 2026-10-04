@@ -359,6 +359,10 @@ body.selecting .toast { bottom: 96px; }
 .support-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 26px 28px; border: 0;
   border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
 .support-dialog::backdrop { background: rgb(10 8 6 / .76); }
+/* issue #113: what the routine check found, asking you what to download */
+.routine-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 24px 12px; padding: 10px 14px;
+  border-radius: 12px; background: var(--stone); border: 1px solid var(--gold); font-size: 14px; }
+.routine-note span { flex: 1; min-width: 220px; }
 /* issue #107: what a download would get, to untick, and products always skipped */
 .pick-dialog { width: min(620px, calc(var(--vw) - 32px)); }
 .pick-tools { display: flex; gap: 14px; margin: 10px 0 6px; }
@@ -755,6 +759,11 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
 </header>
+<div id="routineNote" class="routine-note" role="status" hidden>
+  <span id="routineText"></span>
+  <button class="primary sm" id="routineChoose">Choose what to download</button>
+  <button class="ghost sm" id="routineLater">Not now</button>
+</div>
 <div class="shelf">
   <div class="seg" role="radiogroup" aria-label="Store" id="storeSeg"></div>
   <div class="shelf-tools">
@@ -912,26 +921,18 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
-  <h3>Check your downloads</h3>
-  <select id="setCheckDays" aria-label="Check your downloads">
-    <option value="0">Only when I choose Check now</option>
-    <option value="1">Once a day</option>
-    <option value="7">Once a week</option>
-    <option value="30">Once a month</option>
-  </select>
-  <p class="hint">While Hoard is open, it checks this often that your downloads are as it downloaded them: none
-    missing, and none changed since. A file is read in full only the first time, or after it changed. Downloads
-    shows when it last checked; Tasks says which files, if any.</p>
-  <h3>Sync automatically</h3>
-  <select id="setAutoSync" aria-label="Sync automatically">
-    <option value="0">Off: only when I choose Sync</option>
+  <h3>Routine check</h3>
+  <select id="setRoutine" aria-label="Routine check">
+    <option value="0">Off: only when I ask</option>
     <option value="6">Every 6 hours</option>
     <option value="12">Every 12 hours</option>
     <option value="24">Once a day</option>
     <option value="168">Once a week</option>
+    <option value="720">Once a month</option>
   </select>
-  <p class="hint">While Hoard is open, it syncs by itself this often: it reads your stores and downloads anything
-    new or updated, counting from your last sync. Payhip is left out, since it needs you there for its bot check.</p>
+  <p class="hint">While Hoard is open, it does this often: reads your stores (not Payhip, which needs you there for
+    its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
+    of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -2330,6 +2331,32 @@ $("#pickDialog").addEventListener("click", e => {
   }
 });
 
+/* ---------- issue #113: what the routine check found. It downloads nothing itself: you choose, from the same list
+   Download new shows, or put it off (Not now) until the next check finds something. */
+let routineShown = null;
+function showRoutine(found) {
+  const note = $("#routineNote");
+  if (!note) return;
+  const key = found ? `${found.at}|${found.new}|${found.updates}` : null;
+  if (key === routineShown) return;
+  routineShown = key;
+  note.hidden = !found;
+  if (!found) return;
+  const n = (k, one, many) => `${found[k]} ${found[k] === 1 ? one : many}`;
+  $("#routineText").textContent = "The routine check found " + [found.new && n("new", "new product", "new products"),
+    found.updates && n("updates", "update", "updates")].filter(Boolean).join(" and ") + " to download.";
+}
+async function routineSeen() {
+  $("#routineNote").hidden = true;
+  await apiPost("/api/routine/seen", {});
+}
+$("#routineLater").addEventListener("click", routineSeen);
+$("#routineChoose").addEventListener("click", () => {
+  const stores = (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).slice();
+  routineSeen();
+  downloadNew(stores);
+});
+
 async function apiPost(url, body) {
   try {
     const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -2458,8 +2485,7 @@ function fillSettings() {   // the controls, as the settings are now
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
-  $("#setAutoSync").value = String(SETTINGS.auto_sync_hours || 0);
-  $("#setCheckDays").value = String(SETTINGS.integrity_check_days ?? 7);
+  $("#setRoutine").value = String(SETTINGS.routine_hours ?? 168);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
@@ -2626,7 +2652,7 @@ function wireApp() {
   $("#dlClose").addEventListener("click", () => { $("#dlPanel").hidden = true; });
   pollDownload();  // a download started from the other view, or before this page opened
   // Every open page checks in once a minute: when Hoard runs in the browser, it stops once none has for a while.
-  // It also brings up a sync Hoard started by itself (Settings, Sync automatically).
+  // It also brings up a sync another page started.
   setInterval(async () => {
     try {
       const job = (await (await api("/api/status", { cache: "no-store" })).json()).job || {};
@@ -2856,8 +2882,7 @@ function settingsPart(el) {
     case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
     case "setBrowser": return { browser_channel: el.value };
-    case "setAutoSync": return { auto_sync_hours: Number(el.value) };
-    case "setCheckDays": return { integrity_check_days: Number(el.value) };
+    case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
     case "setGlowOn": return { display: { glow: el.checked } };
@@ -3094,7 +3119,8 @@ async function watchJobs() {
   try {
     const r = await api("/api/status", { cache: "no-store" });
     if (r.ok) {
-      const j = (await r.json()).job || {};
+      const st = await r.json(), j = st.job || {};
+      showRoutine(st.routine);
       if ((lastTask === "verify" || lastTask === "add-local") && j.task !== lastTask && typeof renderIntegrity === "function") load(true);
       lastTask = j.running ? j.task : null;
       taskCount((j.running ? 1 : 0) + (j.queue || []).length);

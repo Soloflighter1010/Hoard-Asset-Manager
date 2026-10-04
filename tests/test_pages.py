@@ -638,6 +638,27 @@ class CopiesAndActions(unittest.TestCase):
             self.assertIsNone(seen[-1][2].get("keys"))
             page.close()
 
+    def test_the_routine_check_asks(self):
+        """Issue #113: what the routine check found, and a way to choose what to download from it, or put it off."""
+        from hoard import jobs
+        jobs.save_routine(found={"at": "2026-10-04T12:00:00+00:00", "new": 1, "updates": 0})
+        self.addCleanup(jobs._routine_file().unlink, missing_ok=True)
+        page = self.open()
+        note = page.locator("#routineNote")
+        note.wait_for()
+        self.assertIn("found 1 new product to download", note.inner_text())
+        page.click("#routineChoose")
+        page.locator("#pickDialog").wait_for()
+        self.assertEqual(page.locator("#pickList input[type=checkbox]").count(), 1)
+        page.click("[data-pick-go='cancel']")
+        self.assertTrue(note.is_hidden())
+        for _ in range(50):
+            if jobs.routine_record()["found"] is None:
+                break
+            page.wait_for_timeout(100)
+        self.assertIsNone(jobs.routine_record()["found"], "you've looked: it doesn't ask again")
+        page.close()
+
     def test_download_several(self):
         """Issue #106: the selected products, downloaded as one job."""
         seen = self.started()
