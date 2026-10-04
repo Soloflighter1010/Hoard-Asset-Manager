@@ -12,6 +12,9 @@ The **Library** shows everything you own on the stores you use, whether or not y
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
 - **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs.
+- **Stack copies:** copies of the same product, from the same store and creator (bought more than once, or in
+  several versions), show as one tile with a count on it (×3). Choose it to see every copy. Untick **Stack copies**,
+  beside **Sort**, to show each on its own; Hoard remembers. While you're choosing several, each copy shows.
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
   library** in Settings). What was already there when Hoard first read a store isn't new.
 
@@ -27,10 +30,12 @@ colours (the tile's label says so too, for screen readers).
 
 In the details:
 
-- **Open store page** and **Open download page** open the product on its store, in your web browser. These
-  buttons only ever go to that item's own store.
-- **On disk. Show it in Downloads** appears when you already have a copy. Otherwise, **Download a copy** fetches
-  it now (Payhip products say to download from Payhip instead: Hoard lists them and doesn't download them).
+- **One thing to do, in gold:** **Download** when you don't have a copy yet (Hoard downloads it into your downloads
+  folder), or **Show in Downloads** when you do, with **See the update** when its store has newer files. Payhip
+  products have **Open on Payhip** instead: Hoard lists them and doesn't download them.
+- **Open on** the store (its download page) and **Store page** open the product on its store, in your web browser.
+  These buttons only ever go to that item's own store.
+- **Organise:** **Archive**, **Hide**, **Remove** and **Delete downloaded files**. See below.
 - **You also own this on ...**: Hoard spots the same product bought on more than one store. **Show all copies**
   lists them together.
 - **Tags:** add your own tags, or click a suggestion. See [Tags](Tags).
@@ -40,7 +45,8 @@ In the details:
 ## Choosing several at once
 
 Choose **Select**, then click items, or **Select all shown** after filtering (say, by a creator). Then tag them,
-or archive, remove or hide them all at once.
+**Download** them (one job, across stores; Payhip's are left out, as Hoard doesn't download from Payhip), or
+archive, remove or hide them all at once.
 
 ## Archive, Removed and Hidden
 

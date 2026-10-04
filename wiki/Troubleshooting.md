@@ -90,7 +90,7 @@ or add your shops in **Settings** under **Payhip shops** and refresh.
 ### "Hoard doesn't download from Payhip"
 
 That's right: Hoard lists what you bought on Payhip, and you download it from Payhip. Open the product in your
-library and choose **Open download page**. See [Stores](Stores#payhip).
+library and choose **Open on Payhip**. See [Stores](Stores#payhip).
 
 ### Some pages weren't imported
 

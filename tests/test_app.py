@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import cli, common, config, downloader, jobs, library, paths, server  # noqa: E402
+from hoard import cli, common, config, downloader, jobs, library, paths, server, tags  # noqa: E402
 downloader.RETRY_WAITS = (0.0, 0.0, 0.0)   # failed downloads are still tried again, without the wait
 from hoard.safety import ACCESS_HEADER, header_safe  # noqa: E402
 
@@ -2782,6 +2782,83 @@ class AutomaticSync(unittest.TestCase):
         self.assertEqual((odd["glow"], odd["colours"], odd["custom_colours"]), (True, "standard", {"gumroad": "#123456"}))
         shown = server.public_settings({**cfg, "display": {"text_size": 7}, "auto_sync_hours": 3})
         self.assertEqual((shown["display"]["text_size"], shown["auto_sync_hours"]), (100, 0), "damaged values read as defaults")
+
+
+class DownloadChoices(unittest.TestCase):
+    """Issue #107: what Download new and Update all would get, to untick first; products always skipped, left out
+    of every download and sync, unless chosen by name. Issue #106: several products chosen at once, as one job."""
+
+    def setUp(self):
+        from unittest import mock
+        from hoard.asset_updates import AssetUpdates
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "download_skip": []}, lan=False)
+        with self.srv.lib.lock:   # in memory only
+            self.srv.lib.data["items"] = [
+                library.item("booth", "1", name="Rusk", creator="Kitsu Studio"),
+                library.item("gumroad", "2", name="Mochi", creator="Kitsu Studio"),
+                library.item("gumroad", "3", name="Mochi", creator="Kitsu Studio"),   # a second copy: listed once
+                library.item("gumroad", "4", name="Fox Base", creator="Someone"),
+                library.item("payhip", "5", name="Paw Pack", creator="Someone")]   # listed, never downloaded
+        on_disk = [{"tag_key": tags.tag_key("gumroad", "Fox Base"), "id": 1}]
+        for patch in (mock.patch.object(self.srv, "index", lambda **_kw: {"assets": on_disk}),
+                      mock.patch.object(server, "save_config")):
+            patch.start()
+            self.addCleanup(patch.stop)
+        where = Path(tempfile.mkdtemp()) / "updates.json"
+        AssetUpdates(where).save({"checked": {}, "items": {tags.tag_key("gumroad", "Fox Base"): {
+            "store": "gumroad", "name": "Fox Base", "creator": "Someone", "files": [{"file": "Fox 1.1.zip", "kind": "changed"}]}}})
+        real = server.AssetUpdates
+        patch = mock.patch.object(server, "AssetUpdates", lambda: real(where))
+        patch.start()
+        self.addCleanup(patch.stop)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def call(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: self.srv.key})
+        r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+        return r.status, data
+
+    def test_what_would_download(self):
+        status, c = self.call("GET", "/api/download-choices")
+        self.assertEqual(status, 200)
+        self.assertEqual([(e["store"], e["name"]) for e in c["new"]], [("booth", "Rusk"), ("gumroad", "Mochi")],
+                         "nothing on disk yet, each product once; Payhip left out")
+        self.assertEqual([(e["name"], e["files"]) for e in c["updates"]], [("Fox Base", 1)])
+        self.assertEqual(c["skipped"], [])
+
+    def test_always_skip(self):
+        mochi = tags.tag_key("gumroad", "Mochi")
+        self.assertEqual(self.call("POST", "/api/download-skip", {"keys": [mochi]}), (200, {"ok": True, "skipped": 1}))
+        self.assertEqual(self.srv.cfg["download_skip"], [mochi])
+        c = self.call("GET", "/api/download-choices")[1]
+        self.assertEqual([e["name"] for e in c["new"]], ["Rusk"])
+        self.assertEqual([(e["name"], e["creator"]) for e in c["skipped"]], [("Mochi", "Kitsu Studio")])
+        self.assertEqual(jobs.download_skip(self.srv.cfg), {mochi})
+        self.assertEqual(self.call("POST", "/api/download-skip", {"keys": [mochi], "skip": False})[1]["skipped"], 0)
+        self.assertEqual(self.call("POST", "/api/download-skip", {"keys": ["no store"]})[0], 400)
+        self.assertEqual(jobs.download_skip({"download_skip": ["booth:a", 7, "", "x" * 500]}), {"booth:a"})
+
+    def test_skipping_in_a_download(self):
+        from types import SimpleNamespace
+        skip = {tags.tag_key("gumroad", "Mochi")}
+        args = SimpleNamespace(only=None, keys=None, skip=skip)
+        self.assertTrue(downloader.skip_product(args, "gumroad", "Mochi", "Kitsu Studio"))
+        self.assertFalse(downloader.skip_product(args, "gumroad", "Fox Base", "Someone"))
+        chosen = SimpleNamespace(only=None, keys=skip, skip=skip)   # chosen by name: downloaded all the same
+        self.assertFalse(downloader.skip_product(chosen, "gumroad", "Mochi", "Kitsu Studio"))
+        from unittest import mock
+        seen = []
+        self.srv.cfg["download_skip"] = sorted(skip)
+        with mock.patch.object(downloader, "cmd_sync", lambda cfg, a: seen.append(a) or downloader.Report()):
+            self.srv.jobs._download(["gumroad"], None)
+            self.srv.jobs._download(["gumroad", "booth"], None, keys=["booth:rusk", "gumroad:mochi"])
+        self.assertEqual(seen[0].skip, skip, "a download of everything new leaves it out")
+        self.assertIsNone(seen[1].skip, "products chosen now are downloaded")
+        self.assertEqual(seen[1].keys, {"booth:rusk", "gumroad:mochi"}, "several stores' products, as one job (#106)")
 
 
 class TasksAPI(unittest.TestCase):

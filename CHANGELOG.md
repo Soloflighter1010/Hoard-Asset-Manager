@@ -2,8 +2,29 @@
 
 ## 3.0.0-beta.4
 
-The fourth beta of Hoard 3.0 lets you turn off the glow and change the store colours, for colour blindness or
-eye strain. Everything in the betas before it is still here.
+The fourth beta of Hoard 3.0 lets you choose what downloads, download several products at once, stacks copies
+of the same product, and lets you turn off the glow and change the store colours. Everything in the betas before
+it is still here.
+
+### Downloading
+
+- **Choose what downloads** (issue #107). **Download new**, **Download everything new**, a store's **Download** and
+  **Update all** first list what they'd get: what's in your library with nothing on disk yet, and the updates the
+  last check found. Untick anything you don't want this time; left all ticked, it downloads as before.
+- **Always skip** (issue #107) leaves a product out of every download and sync, automatic ones included, until you
+  choose **Stop skipping** (under **Always skipped** in the same list). Choosing it by name still downloads it.
+- **Download several at once** (issue #106): select products in the Library and choose **Download**. They download
+  as one job, across stores.
+
+### Your library
+
+- **Clearer buttons in an item's details** (issue #108). There's one thing to do, in gold: **Download** when you
+  don't have a copy yet, **Show in Downloads** when you do (with **See the update** when there's one), or **Open on
+  Payhip** for Payhip's. The store's own pages, which open in your browser, are named for the store (**Open on
+  Gumroad**, **Store page**), and **Archive**, **Hide** and **Remove** sit under **Organise**.
+- **Copies stack** (issue #111). Copies of the same product from the same store and creator (bought more than
+  once, or in several versions) show as one tile marked ×3, say. Choose it to see every copy. Untick **Stack
+  copies**, beside **Sort**, to show each on its own.
 
 ### Accessibility
 

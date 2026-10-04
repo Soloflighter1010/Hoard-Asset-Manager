@@ -209,7 +209,7 @@ class AccessKey(unittest.TestCase):
         with mock.patch.object(self.srv.jobs, "start", side_effect=start):
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.click()
-            page.get_by_role("link", name="Update available").wait_for()
+            page.get_by_role("link", name="See the update").wait_for()   # issue #108: beside Show in Downloads
             page.goto(f"{self.srv.url}downloads")
             page.locator("#views [data-view='updates']").wait_for()
             self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Updates\n1")
@@ -521,6 +521,141 @@ class LargeLibrary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class CopiesAndActions(unittest.TestCase):
+    """Issue #111: copies of one product (bought three times, say) stack into one tile, which opens to show them all.
+    Issue #108: an item's details have one thing to do in gold, and the store's own pages named for the store."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
+                                   lan=False)
+        ghost = dict(name="Ghost Follower [VRChat]", creator="Pointless Creations")
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = [
+                library.item("gumroad", f"g{n}", **ghost, url=f"https://pointless.gumroad.com/l/ghost{n}",
+                             download_url=f"https://app.gumroad.com/d/{n}abc") for n in range(3)] + [
+                library.item("gumroad", "other", name="Ghost Follower [VRChat]", creator="Someone Else"),
+                library.item("payhip", "p1", name="Mochi", creator="Kitsu Studio",
+                             download_url="https://payhip.com/d/xyz")]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.tmp.cleanup()
+
+    def open(self):
+        page = self.browser.new_page()
+        page.goto(self.srv.entry_url())
+        page.get_by_text("Mochi").first.wait_for()
+        return page
+
+    def test_copies_stack_and_open(self):
+        from unittest import mock
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            ghosts = page.locator(".slot", has_text="Ghost Follower")
+            self.assertEqual(ghosts.count(), 2, "three copies by one creator as one tile; another creator's apart")
+            stack = page.locator(".slot.stacked")
+            self.assertEqual(stack.count(), 1)
+            self.assertIn("×3", stack.inner_text())
+            self.assertIn("3 copies", stack.get_attribute("aria-label"))
+            stack.click()   # every copy, as Copies of
+            page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+            self.assertEqual(page.locator(".slot.stacked").count(), 0)
+            page.locator("[data-clear='copies']").first.click()
+            page.wait_for_function("() => document.querySelectorAll('.slot.stacked').length === 1")
+            page.click("#selectBtn")   # selecting: each copy can be chosen
+            self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
+            page.click("#selectBtn")
+            page.locator("#stackCopies").uncheck()   # turned off, and kept
+            page.wait_for_function("() => document.querySelectorAll('.slot.stacked').length === 0")
+            self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
+            page.wait_for_function("() => true")
+            page.close()
+        self.assertFalse(self.srv.cfg.get("ui", {}).get("stack", True), "kept with the other layout choices")
+        self.srv.cfg.setdefault("ui", {})["stack"] = True
+
+    def test_one_thing_to_do_in_gold(self):
+        page = self.open()
+        page.locator(".slot", has_text="Someone Else").click()
+        actions = page.locator("#detail .actions").first
+        self.assertEqual(actions.locator(".primary").inner_text(), "Download", "Hoard downloads it")
+        self.assertIn("Not downloaded yet", page.locator("#detail .copy").inner_text())
+        self.assertEqual(page.locator("#detail h3", has_text="Organise").count(), 1)
+        page.click("#detail .x")
+        page.locator(".slot", has_text="Mochi").click()
+        primary = page.locator("#detail .actions .primary")
+        self.assertIn("Open on Payhip", primary.inner_text(), "Payhip: its own page, where you download it")
+        self.assertEqual(primary.get_attribute("href"), "https://payhip.com/d/xyz")
+        self.assertIn("doesn't download it", page.locator("#detail .copy").inner_text())
+        page.close()
+
+
+    def started(self):
+        """Jobs started from the page, kept instead of run."""
+        from unittest import mock
+        seen = []
+        patch = mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: seen.append((task, sorted(stores), kw)) or "started")
+        patch.start()
+        self.addCleanup(patch.stop)
+        return seen
+
+    def test_choose_what_downloads(self):
+        """Issue #107: Download everything new lists what it would get; unticked, it gets just what's ticked; Always
+        skip leaves a product out until you stop skipping it."""
+        from unittest import mock
+        seen = self.started()
+        with mock.patch.object(server, "save_config"):
+            self.srv.cfg["download_skip"] = []
+            page = self.open()
+            page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            self.assertEqual(dialog.locator("#pickList input[type=checkbox]").count(), 1, "Ghost Follower, once; Payhip isn't downloaded")
+            self.assertEqual(page.locator("#pickGo").inner_text(), "Download all")
+            dialog.get_by_role("button", name="Always skip").click()
+            page.wait_for_function("() => document.querySelector('#pickSkipN').textContent === '1'")
+            self.assertEqual(self.srv.cfg["download_skip"], ["gumroad:ghostfollower"])
+            dialog.locator("#pickSkipped summary").click()   # folded away until you look
+            dialog.get_by_role("button", name="Stop skipping").click()
+            page.wait_for_function("() => document.querySelectorAll('#pickList input').length === 1")
+            self.assertEqual(self.srv.cfg["download_skip"], [])
+            page.click("#pickGo")   # everything ticked: the download runs as it always has
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual(seen[-1][0], "download")
+            self.assertIn("gumroad", seen[-1][1], "every store you use, as always")
+            self.assertIsNone(seen[-1][2].get("keys"))
+            page.close()
+
+    def test_download_several(self):
+        """Issue #106: the selected products, downloaded as one job."""
+        seen = self.started()
+        page = self.open()
+        page.locator("#stackCopies").uncheck() if page.locator("#stackCopies").is_checked() else None
+        page.click("#selectBtn")
+        page.locator(".slot", has_text="Someone Else").click()
+        page.locator(".slot", has_text="Mochi").click()   # Payhip's: listed, not downloaded
+        page.click("#bulkDownload")
+        page.wait_for_function("() => true")
+        for _ in range(50):
+            if seen:
+                break
+            page.wait_for_timeout(100)
+        self.assertEqual(seen[-1][0], "download")
+        self.assertEqual(seen[-1][1], ["gumroad"])
+        self.assertEqual(seen[-1][2].get("keys"), ["gumroad:ghostfollower"])
+        page.close()
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")

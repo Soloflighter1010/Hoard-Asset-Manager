@@ -27,7 +27,7 @@ from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_m
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
                          last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
-from .jobs import CHECK_CHOICES, SYNC_CHOICES, Jobs, Schedule, forget_deleted_signins
+from .jobs import CHECK_CHOICES, MAX_SKIP, SYNC_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins
 from .net import is_network_error
 from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
@@ -49,7 +49,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
-           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove")
+           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -143,8 +143,9 @@ def ui_settings(cfg: dict) -> dict:
     for name, open_ in list((ui.get("sections") or {}).items())[:30] if isinstance(ui.get("sections"), dict) else ():
         if isinstance(name, str) and len(name) <= 40 and isinstance(open_, bool):
             out["sections"][name] = open_
-    if isinstance(ui.get("side_folded"), bool):
-        out["side_folded"] = ui["side_folded"]
+    for k in ("side_folded", "stack"):   # the sidebar folded; copies stacked in the Library (issue #111)
+        if isinstance(ui.get(k), bool):
+            out[k] = ui[k]
     for k in ("tile_size", "dl_tile_size"):   # the Library's and the Downloads page's
         if isinstance(ui.get(k), int) and not isinstance(ui.get(k), bool) and 100 <= ui[k] <= 400:
             out[k] = ui[k]
@@ -347,6 +348,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.picking = threading.Lock()   # a system picker is open (see /api/pick)
+        self.cfg_lock = threading.Lock()   # one change to the always-skip list at a time (issue #107)
         self.quit_app = None
         self.show_token = None
         self.last_seen = time.time()
@@ -498,6 +500,33 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _download_choices(self) -> dict:
+        """What Download new and Update all would get, for you to choose from (issue #107), each product once by its
+        tag key: new, things in your library on a store Hoard downloads from with nothing on disk yet; updates, what
+        the last check for updates found; and skipped, what you chose to always skip. Removed products are left
+        out, as downloading leaves them out, and hidden ones too while the hidden library is locked."""
+        srv = self.server
+        on_disk = {a["tag_key"] for a in srv.index(stale_ok=True)["assets"]}
+        marks, unlocked = MarkStore().load(), self._unlocked()
+        updates, skip = AssetUpdates().load()["items"], download_skip(srv.cfg)
+        enabled = {s for s in DOWNLOADABLE if srv.cfg[s].get("enabled", True)}
+        out_of_view = lambda k: k in marks["removed"] or (k in marks["hidden"] and not unlocked)  # noqa: E731
+        known, new = {}, {}
+        for i in srv.lib.snapshot()[0]:
+            key = tag_key(i["store"], i["name"])
+            if i["store"] not in DOWNLOADABLE or out_of_view(key):
+                continue
+            known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or ""})
+            if i["store"] in enabled and key not in on_disk and key not in skip:
+                new.setdefault(key, known[key])
+        ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"])}
+               for k, e in updates.items() if k in on_disk and k not in skip and e["store"] in enabled and not out_of_view(k)]
+        skipped = [known.get(k) or {"key": k, "store": k.split(":", 1)[0], "name": k.split(":", 1)[-1], "creator": ""}
+                   for k in sorted(skip) if not out_of_view(k)]
+        order = lambda e: (e["store"], e["name"].lower())  # noqa: E731
+        return {"new": sorted(new.values(), key=order), "updates": sorted(ups, key=order),
+                "skipped": sorted(skipped, key=order)}
+
     def _hidden_names(self) -> list[str]:
         """The names of hidden products, longest first, while this browser hasn't unlocked the hidden library (so
         they can be taken out of job logs); [] when it has, or nothing is hidden."""
@@ -579,6 +608,8 @@ class Handler(BaseHTTPRequestHandler):
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg)}, compress=True)
+        if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
+            return self._json(self._download_choices(), compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
             tasks, hidden = srv.jobs.tasks(), self._hidden_names()
             if hidden:
@@ -1050,6 +1081,19 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             return self._json({"ok": True, **done, "skipped": [{"path": p, "why": w} for p, w in done["skipped"]],
                                "opened_in": opened})
+        if path == "/api/download-skip":   # issue #107: always skip these products when downloading, or stop
+            keys = body.get("keys") if isinstance(body.get("keys"), list) else []
+            keys = {k for k in keys[:MAX_SKIP] if isinstance(k, str) and 0 < len(k) <= 400 and ":" in k}
+            if not keys:
+                return self._json({"error": "Choose the products to skip."}, 400)
+            with srv.cfg_lock:
+                now = download_skip(srv.cfg)
+                now = (now | keys) if body.get("skip") is not False else (now - keys)
+                if len(now) > MAX_SKIP:
+                    return self._json({"error": f"Hoard can skip up to {MAX_SKIP:,} products."}, 400)
+                srv.cfg["download_skip"] = sorted(now)
+                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            return self._json({"ok": True, "skipped": len(now)})
         if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
             return self._delete_files(body)
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",

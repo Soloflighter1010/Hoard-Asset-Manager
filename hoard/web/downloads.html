@@ -370,6 +370,18 @@ body.selecting .toast { bottom: 96px; }
 .support-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 26px 28px; border: 0;
   border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
 .support-dialog::backdrop { background: rgb(10 8 6 / .76); }
+/* issue #107: what a download would get, to untick, and products always skipped */
+.pick-dialog { width: min(620px, calc(var(--vw) - 32px)); }
+.pick-tools { display: flex; gap: 14px; margin: 10px 0 6px; }
+.pick-list { list-style: none; margin: 0; padding: 0; max-height: min(46vh, 420px); overflow: auto; }
+.pick-list li { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-top: 1px solid var(--seam); }
+.pick-list label { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; cursor: pointer; }
+.pick-list .pk-nm { font-weight: 700; overflow-wrap: anywhere; }
+.pick-list .muted { font-size: 12.5px; color: var(--dust); }
+.pick-list .linkish { flex: none; font-size: 12.5px; }
+.pick-skipped { margin-top: 12px; }
+.pick-skipped summary { cursor: pointer; color: var(--dust); font-size: 13px; }
+.pick-go { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .close-dialog { width: min(520px, calc(var(--vw) - 32px)); }
 .close-choices { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 16px 0 6px; }
 .close-choices .linkish { align-self: center; }
@@ -951,6 +963,18 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <p class="muted" id="closeHow">Stopping keeps what's finished, and a half-downloaded file resumes next time where the
     store allows. <strong>Close now</strong> doesn't wait: use it if stopping takes too long.</p>
 </dialog>
+<dialog id="pickDialog" class="support-dialog pick-dialog" aria-labelledby="pickTitle">
+  <h2 id="pickTitle">Download</h2>
+  <p class="muted">Untick anything you don't want this time. <strong>Always skip</strong> leaves a product out of every
+    download and sync until you stop skipping it; choosing it by name still downloads it.</p>
+  <div class="pick-tools"><button class="linkish" data-pick-all="on">Tick all</button>
+    <button class="linkish" data-pick-all="off">Untick all</button></div>
+  <ul id="pickList" class="pick-list"></ul>
+  <details id="pickSkipped" class="pick-skipped"><summary>Always skipped (<span id="pickSkipN">0</span>)</summary>
+    <ul class="pick-list"></ul></details>
+  <div class="pick-go"><button class="ghost" data-pick-go="cancel">Cancel</button>
+    <button class="primary" data-pick-go="go" id="pickGo">Download</button></div>
+</dialog>
 <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportTitle">
   <h2 id="supportTitle">Create a support report</h2>
   <p id="supportStatus" class="muted">The report is built locally and sanitized before it is saved.</p>
@@ -1305,8 +1329,11 @@ async function checkUpdates(list) {
 }
 $("#viewBar").addEventListener("click", e => {
   const b = e.target.closest("[data-upd]"); if (!b) return;
-  if (b.dataset.upd === "check") checkUpdates(null);
-  else updateItems(DATA.assets.filter(inView));
+  if (b.dataset.upd === "check") { checkUpdates(null); return; }
+  const list = DATA.assets.filter(inView).filter(a => canDownload(a));   // issue #107: to untick, first
+  pickDownloads("Update", "Update", list.map(a => ({ key: a.tag_key, store: storeId(a), name: a.name, creator: a.creator,
+                                                     files: (a.update || []).length })),
+                keys => updateItems(keys ? list.filter(a => keys.includes(a.tag_key)) : list));
 });
 function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
@@ -1610,7 +1637,10 @@ function renderDrives() {
 $("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
-$("#downloadNew").addEventListener("click", () => startDownload(Object.keys(STORE_NAMES)));
+$("#downloadNew").addEventListener("click", () => {   // issue #107: what it would get, to untick, first
+  const stores = Object.keys(STORE_NAMES);
+  pickNew(stores, keys => keys ? startDownload([...new Set(keys.map(k => k.split(":")[0]))], null, keys) : startDownload(stores));
+});
 $("#rescan").addEventListener("click", async () => { const n = await load(true); toast(`Rescanned ${n} assets`); });
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
@@ -2062,6 +2092,77 @@ function wireTags() {
 /* ---------- settings and downloading, the same in both views. T (above) connects this to the page. */
 const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io" };
 let SETTINGS = null, dlActive = false, dlTimer = null;
+
+/* ---------- issue #107: before downloading new things, or updating, the list of what that gets: untick what you
+   don't want this time, or Always skip it (left out of every download and sync until you stop skipping it). Left
+   all ticked, the download runs as it always has; otherwise it gets just what's ticked. */
+const PICK = { items: [], skipped: [], off: new Set(), go: null, verb: "Download" };
+async function downloadChoices() {
+  try { const r = await api("/api/download-choices", { cache: "no-store" }); if (r.ok) return await r.json(); } catch (e) {}
+  return { new: [], updates: [], skipped: [] };
+}
+// Download new (or everything new on some stores): what's in your library with nothing on disk, and the updates the
+// last check found. start(keys): null when everything's left ticked.
+async function pickNew(stores, start) {
+  const c = await downloadChoices(), want = new Set(stores), seen = new Set();
+  const items = [...c.new, ...c.updates].filter(e => want.has(e.store) && !seen.has(e.key) && seen.add(e.key));
+  pickDownloads("Download new", "Download", items, start, c);
+}
+async function pickDownloads(title, verb, items, go, choices) {
+  choices = choices || await downloadChoices();
+  const skip = new Set((choices.skipped || []).map(e => e.key));
+  Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb });
+  if (!PICK.items.length && !PICK.skipped.length) { go(null); return; }   // nothing to choose from: as before
+  $("#pickTitle").textContent = title;
+  drawPick();
+  $("#pickDialog").showModal();
+}
+function drawPick() {
+  const files = n => n ? `, ${n} ${n === 1 ? "file" : "files"}` : "";
+  const row = (e, skipped) => `<li>` + (skipped
+    ? `<span class="dot ${esc(e.store)}"></span><span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}</span>` +
+      `<button class="linkish" data-unskip="${esc(e.key)}">Stop skipping</button>`
+    : `<label><input type="checkbox" data-pick="${esc(e.key)}"${PICK.off.has(e.key) ? "" : " checked"}> <span class="dot ${esc(e.store)}"></span>` +
+      `<span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}${files(e.files)}</span></label>` +
+      `<button class="linkish" data-skip="${esc(e.key)}">Always skip</button>`) + `</li>`;
+  $("#pickList").innerHTML = PICK.items.map(e => row(e, false)).join("") ||
+    `<li class="muted">Nothing here to download, apart from what you always skip.</li>`;
+  $("#pickSkipped").hidden = !PICK.skipped.length;
+  $("#pickSkipN").textContent = PICK.skipped.length;
+  $("#pickSkipped ul").innerHTML = PICK.skipped.map(e => row(e, true)).join("");
+  const n = PICK.items.length - PICK.off.size;
+  $("#pickGo").textContent = !PICK.off.size ? `${PICK.verb} all` : `${PICK.verb} ${n}`;
+  $("#pickGo").disabled = PICK.items.length > 0 && n === 0;
+}
+async function pickSkip(key, on) {
+  const r = await apiPost("/api/download-skip", { keys: [key], skip: on });
+  if (!r.ok) { toast(r.data.error || "That wasn't saved."); return; }
+  if (on) {
+    const e = PICK.items.find(x => x.key === key);
+    PICK.items = PICK.items.filter(x => x.key !== key); PICK.off.delete(key);
+    if (e) PICK.skipped.push(e);
+  } else {
+    const e = PICK.skipped.find(x => x.key === key);
+    PICK.skipped = PICK.skipped.filter(x => x.key !== key);
+    if (e) PICK.items.push(e);
+  }
+  drawPick();
+}
+$("#pickDialog").addEventListener("change", e => {
+  const k = e.target.dataset.pick; if (k == null) return;
+  if (e.target.checked) PICK.off.delete(k); else PICK.off.add(k);
+  drawPick();
+});
+$("#pickDialog").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.skip != null) pickSkip(b.dataset.skip, true);
+  else if (b.dataset.unskip != null) pickSkip(b.dataset.unskip, false);
+  else if (b.dataset.pickAll) { PICK.off = b.dataset.pickAll === "on" ? new Set() : new Set(PICK.items.map(x => x.key)); drawPick(); }
+  else if (b.dataset.pickGo) {
+    $("#pickDialog").close();
+    if (b.dataset.pickGo === "go") PICK.go(PICK.off.size ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
+  }
+});
 
 async function apiPost(url, body) {
   try {

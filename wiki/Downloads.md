@@ -10,9 +10,14 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   when you're offline it tries again 15 minutes later instead of marking your stores as unreachable. Its
   progress shows like any sync, and **Stop** stops it. Hoard doesn't sync while it's closed.
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
-  your Library list first. A store's **Download** button does one store.
-- **Download a copy** in an item's details (in the Library) downloads just that product, and so do **Update**
-  and **Update all** in Downloads. Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
+  your Library list first. A store's **Download** button does one store. Each first lists what it would get:
+  what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
+  don't want this time; left all ticked, it downloads everything new as before. **Always skip** leaves a product
+  out of every download and sync, including automatic ones, until you choose **Stop skipping** (under **Always
+  skipped** in the same list). **Update all** lists the updates the same way.
+- **Download** in an item's details (in the Library) downloads just that product, and so do **Update** in
+  Downloads and **Download** for several selected products in the Library. A product you always skip still
+  downloads when you choose it like this. Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
   page). On Booth it still reads your library list (Booth lists the files there), and on itch.io it asks
   itch.io's API.
 
@@ -189,7 +194,7 @@ Hoard copies its files into a folder of their own, in **Hoard Edits** beside you
 ## Payhip
 
 Hoard doesn't download from Payhip: its check for automated browsers made that unreliable. Your Payhip purchases
-are in the Library, each with **Open download page**, where you download the files from Payhip. **Sync** and
+are in the Library, each with **Open on Payhip**, where you download the files from Payhip. **Sync** and
 the download buttons leave Payhip out. What earlier versions of Hoard downloaded from Payhip stays in the
 `Payhip` folder, and in this view. See [Stores](Stores#payhip).
 

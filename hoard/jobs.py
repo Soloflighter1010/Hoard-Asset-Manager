@@ -155,6 +155,16 @@ class Schedule:
                 print(f"Automatic sync: {type(e).__name__}: {e}", flush=True)
 
 
+MAX_SKIP = 5000   # products you chose to always skip
+
+
+def download_skip(cfg: dict) -> set[str]:
+    """The products you chose to always skip when downloading (issue #107), by tag key. A download of products you
+    choose by name still gets them."""
+    keys = cfg.get("download_skip")
+    return {k for k in keys[:MAX_SKIP] if isinstance(k, str) and 0 < len(k) <= 400} if isinstance(keys, list) else set()
+
+
 # ----------------------------------------------------------------------------- background jobs
 
 TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
@@ -668,6 +678,7 @@ class Jobs:
 
         args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=check, only=only,
                                headed=False, keys=set(keys) if keys else None,
+                               skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
                                targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items))
         try:
             with capture_log(progress):

@@ -124,11 +124,13 @@ class Report:
 
 def skip_product(args, store: str, name: str, creator: str) -> bool:
     """Is this product outside what was asked for: --only (a name or creator), or keys (products chosen on the
-    Downloads page, by tag_key)?"""
+    Downloads page, by tag_key)? Or one you chose to always skip (issue #107), unless it's chosen by name now?"""
     if args.only and args.only.lower() not in f"{name} {creator}".lower():
         return True
     keys = getattr(args, "keys", None)
-    return bool(keys) and tag_key(store, name) not in keys
+    if keys:
+        return tag_key(store, name) not in keys
+    return tag_key(store, name) in (getattr(args, "skip", None) or ())
 
 
 DIRECT_STORES = ("jinxxy", "gumroad")   # stores whose products can be opened one by one, from the library
