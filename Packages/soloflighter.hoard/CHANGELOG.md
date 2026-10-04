@@ -6,6 +6,10 @@
   own copy of something VCC installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK), and Unity finds those
   files there too. So a product you hadn't imported could show as **In this project**, and land in the credits
   list. Now only files under `Assets/` count, and **Select** only selects those.
+- **Nothing is cut off in a narrow window.** Long names end in "…" instead of being cut through a letter, with the
+  whole name when you point at one; a file's name keeps its end ("CyclopsBe….unitypackage") rather than wrapping
+  part way through a word; and when the window is too narrow for one row of buttons, Create Credits List, Reload
+  and Folder... move to a second row instead of off its edge.
 
 ## 0.5.0
 

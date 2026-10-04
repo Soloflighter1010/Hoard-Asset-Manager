@@ -58,6 +58,10 @@ go, and lets you turn off the glow and change the store colours. Everything in t
 - **Only what's in Assets counts as in your project** (issue #114). Many packages carry their own copy of
   something VCC installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK), so products you hadn't imported
   showed as **In this project** and landed in the credits list. Now only files under `Assets/` count.
+- **Nothing is cut off in a narrow window.** Long names end in "…" instead of being cut through a letter, with the
+  whole name when you point at one; a file's name keeps its end ("CyclopsBe….unitypackage") rather than wrapping
+  part way through a word; and when the window is too narrow for one row of buttons, Create Credits List, Reload
+  and Folder... move to a second row instead of off its edge.
 
 ## 3.0.0-beta.3
 

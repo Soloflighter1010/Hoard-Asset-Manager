@@ -371,6 +371,14 @@ public static class CoreTests
         ListView.VisibleRange(0, 520, 52, 0, out first, out last);
         Check("an empty list draws nothing", last < first);
 
+        // text cut with "…" to fit, not clipped part way through a letter (a character is 1 wide here)
+        Func<string, float> w = t => t.Length;
+        Check("text that fits is left alone", TextFit.Fit("Cyclops Edit", 12, w) == "Cyclops Edit");
+        Check("a long name ends in …", TextFit.Fit("Parallax Glasses for Somna", 10, w) == "Parallax…", TextFit.Fit("Parallax Glasses for Somna", 10, w));
+        Check("a file name keeps its end", TextFit.Fit("CyclopsBeast-v1.0.unitypackage", 20, w, true) == "Cyclop….unitypackage", TextFit.Fit("CyclopsBeast-v1.0.unitypackage", 20, w, true));
+        Check("no room at all", TextFit.Fit("Cyclops", 0, w) == "");
+        Check("nothing to fit", TextFit.Fit(null, 10, w) == "");
+
         // a big library: loaded quickly, with each shared folder checked once
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var big = HoardCatalog.Load(Path.Combine(dir, "root_big"), key);
