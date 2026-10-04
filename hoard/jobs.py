@@ -62,24 +62,19 @@ SYNC_CHOICES = (0, 6, 12, 24, 168)   # hours between automatic syncs; 0 = off
 UNATTENDED = ("payhip",)   # never synced automatically: Payhip needs a visible window, for its bot check
 OFFLINE_RETRY = 15 * 60    # an automatic sync that found no connection tries again this much later
 FIRST_WAIT = 2 * 60        # after Hoard starts, before an automatic sync that's due
-CHECK_CHOICES = (0, 1, 7, 30)   # days between routine checks of the downloads (issue #83); 0 = only when you ask
 # issue #113: one routine check instead of both: hours between them (0 = off). It reads your stores, checks your
 # downloads and checks for updates, then asks you which of what it found to download.
 ROUTINE_CHOICES = (0, 6, 12, 24, 168, 720)
-_DAYS_AS_HOURS = {0: 0, 1: 24, 7: 168, 30: 720}
 
 
 def routine_hours(cfg: dict) -> int:
-    """How often the routine check runs. Before beta 4 there were two settings: an automatic sync you turned on
-    keeps its hours, and otherwise the check of your downloads keeps its days (weekly unless you changed it)."""
+    """How often the routine check runs: off until you choose, since it reads your stores. Before beta 4 there was
+    Sync automatically: if you'd turned that on, the routine check keeps its hours."""
     hours = cfg.get("routine_hours")
     if hours in ROUTINE_CHOICES and not isinstance(hours, bool):
         return hours
     sync = cfg.get("auto_sync_hours")
-    if sync in SYNC_CHOICES and sync and not isinstance(sync, bool):
-        return sync
-    days = cfg.get("integrity_check_days", 7)
-    return _DAYS_AS_HOURS[days] if days in CHECK_CHOICES and not isinstance(days, bool) else 168
+    return sync if sync in SYNC_CHOICES and not isinstance(sync, bool) else 0
 
 
 def _routine_file():

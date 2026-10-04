@@ -923,7 +923,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
     before it counts as failed.</p>
   <h3>Routine check</h3>
   <select id="setRoutine" aria-label="Routine check">
-    <option value="0">Off: only when I ask</option>
+    <option value="0">Off: only when I ask (the default)</option>
     <option value="6">Every 6 hours</option>
     <option value="12">Every 12 hours</option>
     <option value="24">Once a day</option>
@@ -2485,7 +2485,7 @@ function fillSettings() {   // the controls, as the settings are now
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
-  $("#setRoutine").value = String(SETTINGS.routine_hours ?? 168);
+  $("#setRoutine").value = String(SETTINGS.routine_hours ?? 0);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;

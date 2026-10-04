@@ -9,12 +9,12 @@ go, and lets you turn off the glow and change the store colours. Everything in t
 ### The routine check
 
 - **One routine check, which asks before downloading** (issue #113). **Sync automatically** and **Check your
-  downloads** are now one setting, **Routine check**: once a week unless you choose every 6 or 12 hours, once a
-  day, once a month, or off. While Hoard is open it reads your stores (not Payhip), checks your downloads and
-  checks for updates, then, when it found something, asks: **Choose what to download** shows the list **Download
-  new** does, to untick from, or **Not now**. It never downloads by itself. A sync you'd turned on keeps its
-  timing; otherwise the check of your downloads keeps its. Unlike that check, the routine check reads your stores,
-  so turn it off in Settings if you'd rather Hoard only did that when you ask.
+  downloads** are now one setting, **Routine check**: every 6 or 12 hours, once a day, once a week or once a
+  month, or off. While Hoard is open it reads your stores (not Payhip), checks your downloads and checks for
+  updates, then, when it found something, asks: **Choose what to download** shows the list **Download new** does,
+  to untick from, or **Not now**. It never downloads by itself. Since it reads your stores, it's off until you
+  choose how often, unless you'd turned on **Sync automatically**: then it keeps that timing. Your downloads are
+  still checked whenever you choose **Check now** in Downloads.
 - **Files new since the last check aren't read again yet** (issue #113): they were checked as they downloaded,
   and the next check takes their fingerprint.
 - **Your tasks go first** (issue #110). Start something while the routine check runs and it stops safely to make

@@ -369,12 +369,12 @@ class RoutineChecks(unittest.TestCase):
 
     def test_the_setting_and_the_page(self):
         cfg = {**config.load_config(), "root": str(self.root)}
-        self.assertEqual(server.public_settings(cfg)["routine_hours"], 168, "weekly, as the check of your downloads was")
+        self.assertEqual(server.public_settings(cfg)["routine_hours"], 0, "off until you choose: it reads your stores")
         self.assertEqual(server.apply_settings(cfg, {"routine_hours": 720}), {"routine_hours": 720})
         for bad in (2, True, "24", 30):
             with self.assertRaises(ValueError):
                 server.apply_settings(cfg, {"routine_hours": bad})
-        self.assertEqual(server.integrity_view(cfg), {"every_hours": 168, "checked": None})
+        self.assertEqual(server.integrity_view(cfg), {"every_hours": 0, "checked": None})
         downloader.check_integrity(self.root)
         view = server.integrity_view(cfg)
         self.assertEqual((view["files"], view["fine"], view["missing"], view["changed"]), (3, 2, 1, 0))
@@ -2727,10 +2727,11 @@ class RoutineCheck(unittest.TestCase):
     def test_the_two_old_settings_become_one(self):
         old = {k: v for k, v in self.cfg.items() if k != "routine_hours"}
         self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 12}), 12, "a sync you turned on keeps its hours")
-        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 0, "integrity_check_days": 30}), 720)
-        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 0, "integrity_check_days": 0}), 0, "both off: off")
-        self.assertEqual(jobs.routine_hours({**old, "routine_hours": None}), 168, "weekly, as the check was")
-        self.assertEqual(jobs.routine_hours({**old, "routine_hours": 5}), 168, "not a choice")
+        self.assertEqual(jobs.routine_hours({**old, "auto_sync_hours": 0, "integrity_check_days": 30}), 0,
+                         "off until you choose: it reads your stores, which the check of your downloads never did")
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": None}), 0)
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": 5}), 0, "not a choice")
+        self.assertEqual(jobs.routine_hours({**old, "routine_hours": 168}), 168, "your choice")
 
     def test_offline_it_tries_again_later(self):
         from unittest import mock
@@ -2855,7 +2856,7 @@ class RoutineCheck(unittest.TestCase):
         odd = server.display_settings({"display": {"glow": "no", "colours": 3, "custom_colours": {"booth": "url(x)", "gumroad": "#123456"}}})
         self.assertEqual((odd["glow"], odd["colours"], odd["custom_colours"]), (True, "standard", {"gumroad": "#123456"}))
         shown = server.public_settings({**cfg, "display": {"text_size": 7}, "routine_hours": 3})
-        self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 168), "damaged values read as defaults")
+        self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 0), "damaged values read as defaults")
 
 
 class DownloadChoices(unittest.TestCase):

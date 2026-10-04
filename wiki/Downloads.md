@@ -4,8 +4,8 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 ## Downloading
 
 - **Sync** (top right) reads what you own from each store you use, then downloads anything new, as one job.
-- **The routine check** (in **Settings**, once a week unless you choose every 6 or 12 hours, once a day, once a
-  month, or off) runs by itself while Hoard is open: it reads your stores, checks your downloads (see [Checking
+- **The routine check** (in **Settings**: off unless you choose every 6 or 12 hours, once a day, once a week or
+  once a month) runs by itself while Hoard is open: it reads your stores, checks your downloads (see [Checking
   your downloads](#checking-your-downloads)) and checks for updates. It downloads nothing itself: when it found
   something new or updated, both pages say so, with **Choose what to download** (the list **Download new** shows)
   and **Not now**. It leaves Payhip out (Payhip needs you there for its bot check), waits for any other job to
@@ -172,9 +172,9 @@ again from the start.
 
 ### Checking your downloads
 
-As part of the routine check (once a week unless you choose otherwise in Settings), Hoard checks that your
-downloads are as it downloaded them: every file there, the size it was downloaded at, and unchanged since. The first check reads each
-file in full and keeps its fingerprint (SHA-256) in Hoard's records; later checks read a file again only if its
+When you choose **Check now**, and as part of the routine check if you've turned it on in Settings, Hoard checks
+that your downloads are as it downloaded them: every file there, the size it was downloaded at, and unchanged
+since. The first check reads each file in full and keeps its fingerprint (SHA-256) in Hoard's records; later checks read a file again only if its
 size or modified time changed, so they're quick. A file downloaded since the last check isn't read until the
 next one: it was checked as it came in. It also checks the seal on Hoard's own records.
 
