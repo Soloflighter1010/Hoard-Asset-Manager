@@ -1687,8 +1687,13 @@ class SetupAssistant(unittest.TestCase):
         self.assertIsNone(setup.browser_problem(RuntimeError("net::ERR_TIMED_OUT")))
 
     def test_status(self):
+        from unittest import mock
         from hoard import browser, setup
         cfg = {**config.load_config(), "profile_dir": tempfile.mkdtemp()}
+        signins = Path(tempfile.mkdtemp()) / "sign-ins"   # its own, not one another test signed in to
+        patch = mock.patch.object(browser, "signins_root", lambda cfg: signins)
+        patch.start()
+        self.addCleanup(patch.stop)
         st = setup.setup_status(cfg)
         self.assertEqual(set(st), {"done", "browser", "stores", "payhip_shops", "root", "default_root"})
         self.assertFalse(st["stores"]["booth"]["signed_in"])
@@ -2834,7 +2839,9 @@ class RoutineCheck(unittest.TestCase):
         runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
         gate = threading.Event()
         self.addCleanup(gate.set)
-        with mock.patch.object(runner, "_download", lambda *a, **k: gate.wait(5)):
+        with mock.patch.object(runner, "_download", lambda *a, **k: gate.wait(5)), \
+                mock.patch.object(runner, "_refresh", lambda stores, **k: []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "fine"):   # never the real stores
             runner.start("download", ["booth"], only="A")
             runner._queue.append({"task": "routine", "stores": ["booth"], "scheduled": True, "id": "q99", "label": "x", "queued": ""})
             runner.start("download", ["gumroad"], only="B")
