@@ -6,6 +6,10 @@ name: Build Release
 #
 # Runs by hand from Actions (it tags unity-v<version> from Packages/soloflighter.hoard/package.json itself), or when
 # that tag is pushed.
+#
+# Releases here are immutable once published, so, as with the app (release.yml), the release is made as a draft,
+# VirusTotal scans its .zip and .unitypackage, and only then is it published. A file VirusTotal flags leaves the
+# draft for a person to check; Run workflow with "Publish even if VirusTotal flags a file" publishes it after that.
 # Needs the repository variable PACKAGE_NAME = soloflighter.hoard (Settings > Secrets and variables > Actions >
 # Variables).
 #
@@ -16,6 +20,11 @@ on:
   push:
     tags: ["unity-v*"]
   workflow_dispatch:
+    inputs:
+      allow_detections:
+        description: "Publish even if VirusTotal flags a file (only after checking its report: a false positive)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -44,21 +53,26 @@ jobs:
     if: needs.config.outputs.ready == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # the tag and the release
+      contents: write        # the draft release and its files
       id-token: write        # sign the build provenance
       attestations: write   # store the provenance with the repository
     env:
       PACKAGE_NAME: ${{ vars.PACKAGE_NAME }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      published: ${{ steps.release.outputs.published }}   # already published: nothing to scan or publish
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: The version, from package.json
+        id: version
         run: |
           version=$(jq -r .version "Packages/$PACKAGE_NAME/package.json")
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "TAG=unity-v$version" >> "$GITHUB_ENV"
+          echo "tag=unity-v$version" >> "$GITHUB_OUTPUT"   # for the scan and publish jobs
           python3 scripts/release_info.py --github-env "unity-v$version" >> "$GITHUB_ENV"   # its title; a beta or not
           if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "unity-v$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json's version $version."
@@ -88,7 +102,8 @@ jobs:
             dist/vpm/*.zip
             dist/vpm/*.unitypackage
 
-      - name: Publish the release
+      - name: Make the release, as a draft
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -96,13 +111,91 @@ jobs:
           draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
           if [ "$draft" = "false" ]; then
             # Published, so its files can't change (releases here are immutable): only its notes are brought up to date
+            # (its VirusTotal results are kept: they're in the notes after the marker this replaces up to)
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > dist/vpm/OLD_NOTES.md
+            if grep -q "^## VirusTotal scan results" dist/vpm/OLD_NOTES.md; then
+              sed -n '/^## VirusTotal scan results/,$p' dist/vpm/OLD_NOTES.md > dist/vpm/VT_REPORT.md
+              python3 scripts/scan_release_virustotal.py --notes dist/vpm/RELEASE_NOTES.md dist/vpm/VT_REPORT.md
+            fi
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file dist/vpm/RELEASE_NOTES.md
             echo "::notice::$TAG is already published: its notes were updated; its files stay as they were."
+            echo "published=true" >> "$GITHUB_OUTPUT"
           elif [ "$draft" = "true" ]; then
             gh release upload "$TAG" $files --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file dist/vpm/RELEASE_NOTES.md
           else
             # Never Latest: that stays on the app, whose files the website's download buttons offer. A beta
             # (package.json 0.6.0-beta.1) is a pre-release. (scripts/release_info.py)
-            gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
               --title "$TITLE" --prerelease="$PRERELEASE" --latest=false --notes-file dist/vpm/RELEASE_NOTES.md
           fi
+
+  # Every file people download (the .zip VCC installs and the .unitypackage) is checked by VirusTotal
+  # (scripts/scan_release_virustotal.py, as for the app), and the results are added to the release notes. If any
+  # engine flags one, this fails and the release stays a draft. Needs the VT_API_KEY repository secret.
+  virustotal:
+    needs: build
+    if: needs.build.outputs.published != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60      # the scans are waited for up to 40 minutes (VT_WAIT_MINUTES); never GitHub's 6 hours
+    permissions:
+      contents: write        # read the draft's files, and add the results to its notes
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Get the draft's files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
+
+      - name: Scan them with VirusTotal
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}   # only this step sees the key
+          VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}
+        run: python3 scripts/scan_release_virustotal.py
+
+      # Defender won't let a browser download a file it flags, so the flagged files are kept in a zip encrypted with
+      # the password "infected" (the form antivirus makers ask samples in), for a false-positive report.
+      - name: Keep any flagged files, for a false-positive report
+        if: ${{ always() && hashFiles('dist/VT_FLAGGED.txt') != '' }}
+        working-directory: dist
+        run: |
+          mapfile -t flagged < VT_FLAGGED.txt
+          zip -j -P infected "../flagged-$TAG.zip" "${flagged[@]}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && hashFiles('dist/VT_FLAGGED.txt') != '' }}
+        with:
+          name: virustotal-flagged-files (zip password infected)
+          path: flagged-${{ env.TAG }}.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Add the results to the release notes
+        if: ${{ always() && hashFiles('dist/VT_REPORT.md') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > dist/NOTES.md
+          python3 scripts/scan_release_virustotal.py --notes dist/NOTES.md dist/VT_REPORT.md   # a re-run's results replace the last
+          gh release edit "$TAG" --notes-file dist/NOTES.md --repo "$GITHUB_REPOSITORY"
+
+  # Last: publishing makes the release immutable (and tags it, for a run started by hand), so it waits for the scan.
+  publish:
+    needs: [build, virustotal]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # publish the draft
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      # Never Latest: that stays on the app, whose files the website's download buttons offer
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --draft=false --latest=false --repo "$GITHUB_REPOSITORY"

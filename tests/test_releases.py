@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -183,10 +184,35 @@ class UnityNotes(unittest.TestCase):
     def test_the_workflow_passes_what_was_released_and_only_updates_a_published_release_notes(self):
         wf = (REPO / ".github/workflows/unity-release.yml").read_text("utf-8")
         self.assertIn('python3 scripts/build_vpm.py --tag "$TAG" --released "$released"', wf)
-        publish = wf[wf.index("- name: Publish the release"):]
-        self.assertIn('if [ "$draft" = "false" ]', publish)
-        self.assertIn("gh release edit", publish.split('elif [ "$draft" = "true" ]')[0], "a published release: notes only")
-        self.assertNotIn("upload", publish.split('elif [ "$draft" = "true" ]')[0])
+        make = wf[wf.index("- name: Make the release, as a draft"):wf.index("\n  virustotal:")]
+        published = make.split('elif [ "$draft" = "true" ]')[0]
+        self.assertIn('if [ "$draft" = "false" ]', make)
+        self.assertIn("gh release edit", published, "a published release: notes only")
+        self.assertNotIn("upload", published)
+        self.assertIn("## VirusTotal scan results", published, "and its scan results stay in them")
+        self.assertIn("--draft", make.split("gh release create", 1)[1], "made as a draft, to be scanned first")
+
+    def test_a_unity_release_is_scanned_before_its_published(self):
+        """Like the app's, Hoard for Unity's .zip and .unitypackage go through VirusTotal before the release is
+        published (releases here are immutable once published, so it's a draft until then)."""
+        import scan_release_virustotal as vt
+        self.assertIn(".unitypackage", vt.SCANNED)
+        self.assertIn(".zip", vt.SCANNED)
+        self.assertNotIn(".json", vt.SCANNED)
+        wf = (REPO / ".github/workflows/unity-release.yml").read_text("utf-8")
+        jobs = {m.group(1): m.group(2) for m in re.finditer(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:\n|\Z)", wf, re.M | re.S)}
+        self.assertIn("needs: build", jobs["virustotal"])
+        self.assertIn("python3 scripts/scan_release_virustotal.py", jobs["virustotal"])
+        self.assertIn("needs: [build, virustotal]", jobs["publish"], "published only after the scan")
+        self.assertIn('--draft=false --latest=false', jobs["publish"])
+        self.assertEqual(wf.count("secrets.VT_API_KEY"), 1)
+        step = jobs["virustotal"].split("- name: Scan them with VirusTotal", 1)[1].split("- name:", 1)[0]
+        self.assertIn("VT_API_KEY: ${{ secrets.VT_API_KEY }}", step, "only the scan step sees the key")
+        self.assertRegex(wf, r"allow_detections:\n\s+description: .+\n\s+type: boolean\n\s+default: false")
+        self.assertIn("VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}", step)
+        self.assertNotIn("ref:", jobs["virustotal"].split("uses: actions/checkout@", 1)[1].split("- name:", 1)[0])
+        self.assertIn("timeout-minutes: 60", jobs["virustotal"])
+        self.assertNotIn("${{ env.", wf.split("steps:", 1)[0], "a job's outputs can't read env")
 
 
 class Notes(unittest.TestCase):
