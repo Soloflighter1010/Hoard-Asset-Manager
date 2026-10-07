@@ -348,6 +348,27 @@ JX_CARDS_JS = r"""
 """
 
 
+def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300) -> None:
+    """Show all of a Jinxxy inventory page: read() what's shown (it returns how many it has found in all), then
+    choose "Load more" or scroll down, until three rounds in a row find nothing new. Reading the library and
+    downloading both go through an inventory this way."""
+    count, quiet = -1, 0
+    for _ in range(rounds):
+        now = read()
+        more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
+        if more.count() and more.first.is_visible() and more.first.is_enabled():
+            more.first.click()
+            settle(page, settle_ms)
+            count, quiet = now, 0
+            continue
+        page.mouse.wheel(0, 20000)
+        page.wait_for_timeout(wait_ms)
+        quiet = quiet + 1 if now == count else 0
+        count = now
+        if quiet >= 3:
+            break
+
+
 def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
     """Every item in your Jinxxy inventory, scrolling and following pages until nothing new appears."""
     page = ctx.new_page()
@@ -360,9 +381,7 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
             raise NotLoggedIn()
         visited, pending = {page.url}, []
         for _ in range(100):  # numbered pages
-            quiet = 0
-            for _ in range(300):  # infinite scroll / load more
-                before = len(found)
+            def read() -> int:
                 for c in page.evaluate(JX_CARDS_JS, pattern):
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
@@ -371,16 +390,8 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
                     if href not in visited and href not in pending:
                         pending.append(href)
                 progress(f"Inventory, {len(found)} items")
-                more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
-                if more.count() and more.first.is_visible() and more.first.is_enabled():
-                    more.first.click()
-                    settle(page, 500)
-                    continue
-                page.mouse.wheel(0, 20000)
-                page.wait_for_timeout(1100)
-                quiet = quiet + 1 if len(found) == before else 0
-                if quiet >= 3:
-                    break
+                return len(found)
+            scroll_inventory(page, read)
             if not pending:
                 break
             nxt = pending.pop(0)

@@ -15,9 +15,9 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 
-from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
+from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context, settle
 from .common import NotLoggedIn, log, now_iso, tick
-from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards
+from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards, scroll_inventory
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
@@ -971,15 +971,6 @@ JX_INFO_JS = r"""
 """
 
 
-def settle(page, ms: int = 800) -> None:
-    """Give a page time to finish loading: wait for the network to go quiet (at most 15 s), then ms more."""
-    try:
-        page.wait_for_load_state("networkidle", timeout=15000)
-    except Exception:
-        pass
-    page.wait_for_timeout(ms)
-
-
 def jinxxy_require_login(page) -> None:
     """Raise NotLoggedIn when Jinxxy is showing its sign-in form."""
     path = urlparse(page.url).path.lower()
@@ -1003,9 +994,8 @@ def jinxxy_link(u) -> bool:
 def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
     """Scroll / click 'load more' until this page stops growing. Returns numbered-page links seen."""
     page_links: list[str] = []
-    quiet = 0
-    for _ in range(300):
-        before = len(found)
+
+    def read() -> int:
         for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
             u = urlparse(href)
             if not jinxxy_link(u):
@@ -1015,17 +1005,8 @@ def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
                 page_links.append(href)
             elif path != inv_path and rx.search(u.path):
                 found.setdefault(f"{u.scheme}://{u.netloc}{path}", None)
-        more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
-        if more.count() and more.first.is_visible() and more.first.is_enabled():
-            more.first.click()
-            settle(page, 600)
-            quiet = 0
-            continue
-        page.mouse.wheel(0, 20000)
-        page.wait_for_timeout(1200)
-        quiet = quiet + 1 if len(found) == before else 0
-        if quiet >= 3:
-            break
+        return len(found)
+    scroll_inventory(page, read, settle_ms=600, wait_ms=1200)
     return page_links
 
 
