@@ -12,6 +12,7 @@ import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 import zlib
@@ -1556,6 +1557,15 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page.get_by_text("Queued: it starts when what's running now is done").wait_for()
             gate.set()
             page.close()
+            # the queued download runs too, still the stand-in: left to run once the stand-in was gone, it was a
+            # real Booth download, which on a slow runner outlasted the next tests' wait for nothing to be running
+            jobs = self.srv.jobs
+            for _ in range(200):
+                if not jobs.state["running"] and not jobs.state["queue"]:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(jobs.busy.acquire(timeout=20), "the queued download finished")
+            jobs.busy.release()
 
 
 def mock_patch(target, name, value):
