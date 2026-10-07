@@ -18,7 +18,7 @@
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
   --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --gold-text: #F0B429; --warn: #FF9F6B;
-  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A;
+  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A; --local: #E8C26A;
   --ph-l: 30%; --ph-s: 28%;
   --slot-size: 172px; --bar-h: 72px;
   --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic UI", "Segoe UI Black", system-ui, sans-serif;
@@ -29,7 +29,7 @@
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
     --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --gold-text: #7A5100;   /* gold as text: 4.5:1 or more on every light background */ --warn: #B4531B;
-    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35;
+    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35; --local: #8A6410;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
   }
@@ -1393,7 +1393,7 @@ async function load() {
 /* ---------- filtering */
 function matches(a, skip) {
   if (!inView(a)) return false;
-  if (state.copies && a[state.copies.field] !== state.copies.key) return false;
+  if (state.copies && (a[state.copies.field] !== state.copies.key || (state.copies.store && a.store !== state.copies.store))) return false;
   if (skip !== "disk" && state.disk && (state.disk === "yes") !== onDisk(a)) return false;
   if (skip !== "fresh" && state.fresh && !a.new) return false;
   if (state.store && a.store !== state.store) return false;
@@ -1420,15 +1420,23 @@ const stackKey = a => a.stack_key ? `${a.store}|${a.stack_key}` : null;   // the
 function stacked(list) {
   stackSize = new Map();
   if (!STACK || sel.on || state.copies) return list;
-  const first = new Map(), out = [];
+  const first = new Map(), out = [], all = new Map();
   for (const a of list) {
     const k = stackKey(a), f = k && first.get(k);
-    if (f) { stackSize.set(f.key, (stackSize.get(f.key) || 1) + 1); continue; }
+    if (f) { stackSize.set(f.key, 2); continue; }
     first.set(k, a); out.push(a);
   }
+  // a stack's ×N is every copy "Copies of" then shows (it clears the filters), not just those the filters let through
+  for (const a of DATA.items) { const k = stackKey(a); if (k && inView(a) && shown(a.store)) all.set(k, (all.get(k) || 0) + 1); }
+  for (const [k, f] of first) if (stackSize.has(f.key)) stackSize.set(f.key, all.get(k));
   return out;
 }
-function showCopies(a, field = "match_key") { state.copies = { field, key: a[field], name: a.name }; state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.tags.clear(); render(); }
+// "Copies of": every copy, whatever the filters were. A stack's copies are on its own store (stackKey); "others" are
+// the same product on any store.
+function showCopies(a, field = "match_key") {
+  state.copies = { field, key: a[field], name: a.name, store: field === "stack_key" ? a.store : "" };
+  state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.fresh = false; state.tags.clear(); render();
+}
 function render() {
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
@@ -1798,11 +1806,12 @@ const PAYHIP_SAVER = String.raw`(async () => {
       const main = doc.querySelector("main, [role=main]") || doc.body;
       parts.push(main.innerHTML);
       if (!first) first = doc;
-      const next = [...doc.querySelectorAll("a[rel=next], .pagination a, a.next")]
-        .find(x => /next|\u203a|\u00bb/i.test(text(x) + " " + (x.getAttribute("rel") || "")));
+      const next = [...doc.querySelectorAll("a[rel=next], .pagination a, a.next")]   // (a last page's Next has no href)
+        .find(x => x.getAttribute("href") && /next|\u203a|\u00bb/i.test(text(x) + " " + (x.getAttribute("rel") || "")));
+      const here = url;
       url = null;
       if (next) {
-        const n = new URL(next.getAttribute("href"));
+        const n = new URL(next.getAttribute("href"), here);
         if (n.origin === location.origin && n.pathname.includes("/b-account")) url = n.href;
       }
     }
@@ -2207,14 +2216,17 @@ async function tagPanelAction(b) {
   if (act === "delete") {
     const n = +b.dataset.count;
     if (!await ask(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""), "Delete", true)) return;
-    state.tags.delete(t);
-    return changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
+    const filtered = state.tags.delete(t);
+    const ok = await changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
+    if (!ok && filtered) { state.tags.add(t); render(); }   // not deleted: still filtered by it
+    return ok;
   }
   if (act === "rename") {
     const to = prompt(`Rename #${t} to (an existing tag's name merges the two):`, t);
     if (!to || !to.trim() || to.trim().toLowerCase() === t) return;
     const filtered = state.tags.delete(t);
-    if (await changeTags({ action: "rename", name: t, to }, `Renamed #${t}.`) && filtered) { state.tags.add(to.trim().toLowerCase()); render(); }
+    const ok = await changeTags({ action: "rename", name: t, to }, `Renamed #${t}.`);
+    if (filtered) { state.tags.add(ok ? to.trim().toLowerCase() : t); render(); }   // not renamed: still filtered by it
     return;
   }
   if (act === "match") {
@@ -3407,7 +3419,9 @@ function pollSetup(onDone, show) {
   SETUP.timer = setTimeout(async () => {
     let st;
     try { st = await setupStatus(); } catch (e) { return pollSetup(onDone, show); }
-    if (st.job && st.job.running) { show(st.job); pollSetup(onDone, show); }
+    // show() fills in this step's progress, which isn't on the page once you've moved to another step: what it
+    // throws mustn't end the watch, or what comes after (reading the library again) never happens
+    if (st.job && st.job.running) { try { show(st.job); } catch (e) {} pollSetup(onDone, show); }
     else { SETUP.watching = false; onDone(st); }
   }, 1000);
 }
@@ -3419,8 +3433,8 @@ const SETUP_WIRES = {
       const r = await apiPost("/api/setup/browser");
       if (!r.ok) { toast(r.data.error || "The browser didn't start installing."); return; }
       b.disabled = true;
-      pollSetup(st => { if (st.browser.ready) toast("Hoard's browser is installed."); else toast(st.job.error || st.job.message || "The browser didn't install."); renderSetup(); },
-                job => { $("#installProgress").textContent = job.message || ""; });
+      pollSetup(st => { if (st.browser.ready) toast("Hoard's browser is installed."); else toast((st.job && (st.job.error || st.job.message)) || "The browser didn't install."); renderSetup(); },
+                job => { const p = $("#installProgress"); if (p) p.textContent = job.message || ""; });
     });
   },
   signin: () => {
@@ -3433,7 +3447,8 @@ const SETUP_WIRES = {
         $("#signinProgress").textContent = `Opening ${SETUP.st.stores[b.dataset.signin].label}'s sign-in window...`;
         $("#linkBox").hidden = false;
         pollSetup(st => { if (st.job && st.job.error) toast(st.job.error); renderSetup(); load(); },
-                  job => { $("#signinProgress").textContent = job.message || ""; $("#linkBox").hidden = job.task !== "login"; });
+                  job => { const p = $("#signinProgress"), l = $("#linkBox");
+                           if (p) p.textContent = job.message || ""; if (l) l.hidden = job.task !== "login"; });
       });
     }
     $("#openLink").addEventListener("click", async () => {
@@ -3769,9 +3784,10 @@ wireTags();
 wireApp();
 wireSetup();
 wirePrivacy();
+const askedSetup = /(^|[#&])setup\b/.test(location.hash);   // read before the first render rewrites the address (saveHash)
 readHash();
 load().finally(() => hideSplash()).then(() => {   // someone new (nothing set up, nothing in the library) is walked through setting up
-  if (/(^|[#&])setup\b/.test(location.hash) || (!DATA.setup_done && !DATA.items.length && !DATA.error)) openSetup();
+  if (askedSetup || (!DATA.setup_done && !DATA.items.length && !DATA.error)) openSetup();
 });
 </script>
 </body>

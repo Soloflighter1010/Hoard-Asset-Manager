@@ -3363,3 +3363,138 @@ class PageLayout(unittest.TestCase):
                          "one window's move doesn't forget the others")
         self.assertEqual(server.ui_settings({"ui": "junk"}), {"windows": {}, "sections": {}})
         self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")
+
+
+class WrongBehaviour(unittest.TestCase):
+    """Fixes from the October 2026 audit (section 5): each did something other than what it says it does."""
+
+    def setUp(self):
+        self.srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def call(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: self.srv.key})
+        r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+        return r.status, data
+
+    def test_download_new_leaves_out_stores_switched_off(self):
+        from unittest import mock
+        started = []
+        self.srv.cfg["gumroad"] = {**self.srv.cfg["gumroad"], "enabled": False}
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"):
+            self.assertEqual(self.call("POST", "/api/download", {"stores": ["booth", "gumroad", "jinxxy"]})[0], 202)
+            self.assertEqual(started[-1][1], ["booth", "jinxxy"])
+            self.call("POST", "/api/download", {"stores": ["gumroad"], "keys": ["gumroad:hoodie"]})
+            self.assertEqual(started[-1][1], ["gumroad"], "a product you chose is downloaded, wherever it is")
+            self.assertEqual(self.call("POST", "/api/check-updates", {"stores": ["gumroad"]}),
+                             (400, {"error": "No stores are switched on in Settings."}))
+
+    def test_migrate_waits_for_a_running_job(self):
+        self.srv.jobs.state["running"] = True
+        try:
+            status, data = self.call("POST", "/api/setup/migrate", {"folder": str(Path(tempfile.mkdtemp()))})
+        finally:
+            self.srv.jobs.state["running"] = False
+        self.assertEqual(status, 409, data)
+
+    def test_the_address_it_opens_is_where_it_listens(self):
+        self.assertEqual(server._reach("127.0.0.1"), "127.0.0.1")
+        self.assertEqual(server._reach("0.0.0.0"), "127.0.0.1")
+        self.assertEqual(server._reach("192.168.1.20"), "192.168.1.20")
+        self.assertEqual(server._reach("fd00::5"), "[fd00::5]")
+
+    def test_stop_while_the_routine_checks_for_updates(self):
+        """Stop in the routine's last step ends it as stopped, keeping nothing it half found."""
+        from unittest import mock
+        cfg = {**config.load_config(), "setup_done": True}
+        runner = jobs.Jobs(cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        asked = []
+        runner.find_choices = lambda: asked.append(True) or {"new": 1, "updates": 0}
+        jobs.save_routine(found=None)
+
+        def stopped(stores, only, keys=None, check=False, **k):   # what _download does on Stop: says so, Stop used up
+            runner._set(message="Stopped checking for updates.")
+            return False
+        with mock.patch.object(runner, "_refresh", lambda stores, **k: []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "All fine."), \
+                mock.patch.object(runner, "_download", stopped), \
+                mock.patch.object(jobs, "tasks_file", lambda: Path(tempfile.mkdtemp()) / "tasks.json"):
+            runner.start("routine", ["booth"], scheduled=True)
+            for _ in range(200):
+                if not runner.state["running"]:
+                    break
+                time.sleep(0.02)
+        self.assertEqual(asked, [])
+        self.assertIsNone(jobs.routine_record()["found"])
+        self.assertEqual(runner.history[-1]["outcome"], "stopped")
+
+    def test_one_projects_revoked_download_key_is_not_a_refused_api_key(self):
+        from hoard import itch
+        self.assertFalse(itch._refuses_api_key("invalid download key"))
+        self.assertFalse(itch._refuses_api_key("this upload's key has been revoked"))
+        self.assertTrue(itch._refuses_api_key("invalid key"))
+        self.assertTrue(itch._refuses_api_key("Invalid API key"))
+        self.assertTrue(itch._refuses_api_key("authentication required"))
+
+    def test_playwright_missing_is_an_error_not_an_exit(self):
+        from unittest import mock
+        from hoard import browser
+        import builtins
+        real = builtins.__import__
+
+        def no_playwright(name, *a, **k):
+            if name.startswith("playwright"):
+                raise ImportError(name)
+            return real(name, *a, **k)
+        with mock.patch.object(builtins, "__import__", no_playwright):
+            with self.assertRaises(browser.PlaywrightMissing):
+                browser._playwright()
+
+    def test_reading_itch_alone_starts_no_browser(self):
+        from unittest import mock
+        runner = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        with mock.patch.object(jobs, "_playwright", side_effect=AssertionError("no browser for itch.io")), \
+                mock.patch.object(jobs, "reachable", lambda store: True), \
+                common.capture_log(lambda line: None):
+            try:
+                runner._refresh(["itch"])
+            except AssertionError:
+                raise
+            except Exception:  # noqa: BLE001 - reading itch.io itself fails here (no key); only the browser matters
+                pass
+
+    def test_projects_find_downloads_in_another_library_folder(self):
+        from hoard import projects
+        index = {"assets": [{"id": 4, "folder": "@1/Booth/Mochi/Rusk", "catalog_folder": "Booth/Mochi/Rusk",
+                             "tag_key": "booth:rusk"}]}
+        p = {"name": "World", "assets": [{"folder": "Booth/Mochi/Rusk", "name": "Rusk", "creator": "Mochi", "store": "booth",
+                                          "status": "full"}], "credits": {"title": "", "style": "List"}}
+        with mock_credits(projects):
+            shown = projects.view([p], index, {})
+        self.assertEqual(shown[0]["assets"][0]["download"], 4)
+
+    def test_a_picture_another_product_uses_is_kept(self):
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        pic = "https://booth.pximg.net/a.jpg"
+        lib.data["items"] = [{"store": "booth", "key": "1", "name": "Rusk", "thumbnail": pic},
+                             {"store": "booth", "key": "2", "name": "Rusk (second copy)", "thumbnail": pic}]
+        import hashlib
+        library.THUMB_DIR.mkdir(parents=True, exist_ok=True)
+        cached = library.THUMB_DIR / (hashlib.sha1(pic.encode()).hexdigest() + ".jpg")
+        cached.write_bytes(b"jpg")
+        lib.forget_products({tags.tag_key("booth", "Rusk (second copy)")} - {tags.tag_key("booth", "Rusk")} or {"booth:x"})
+        lib.data["items"] = lib.data["items"][:1] + [{"store": "booth", "key": "2", "name": "Mochi", "thumbnail": pic}]
+        lib.forget_products({tags.tag_key("booth", "Mochi")})
+        self.assertTrue(cached.exists(), "Rusk still uses it")
+        lib.forget_products({tags.tag_key("booth", "Rusk")})
+        self.assertFalse(cached.exists())
+
+
+def mock_credits(projects):
+    """projects.view builds each credits list too; not what these tests look at."""
+    from unittest import mock
+    return mock.patch.object(projects, "credits_text", lambda p, s: "")

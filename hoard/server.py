@@ -1170,6 +1170,9 @@ class Handler(BaseHTTPRequestHandler):
             save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
             return self._json({"ok": True})
         if path == "/api/setup/migrate":
+            if srv.jobs.state["running"]:   # it can change the downloads folder, which a running job is writing to
+                return self._json({"error": "Wait for Hoard to finish what it's doing (or stop it), then bring your "
+                                            "library over."}, 409)
             folder = str(body.get("folder") or "").strip().strip('"')[:1000]
             if not folder or not Path(folder).expanduser().is_absolute():
                 return self._json({"error": "Enter the full path of the folder you ran Hoard 1.x from."}, 400)
@@ -1178,7 +1181,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "message": said})
 
         stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]
-        if path == "/api/sync":   # only the stores you use
+        bulk = path in ("/api/download", "/api/check-updates") and not (body.get("keys") or body.get("item") or body.get("only"))
+        if path == "/api/sync" or bulk:   # only the stores you use (a chosen product is fetched wherever it is)
             stores = [s for s in stores if srv.cfg[s].get("enabled", True)]
         if path == "/api/login" and stores == ["itch"]:
             return self._json({"error": "itch.io signs in with an API key: choose Sign in on its row in Stores."}, 400)
@@ -1186,7 +1190,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Hoard lists what you own on Payhip, and doesn't download from it. Open the "
                                         "product's download page from its details, and download it there."}, 400)
         if not stores:
-            return self._json({"error": "Unknown store." if path != "/api/sync" else "No stores are switched on in Settings."}, 400)
+            return self._json({"error": "No stores are switched on in Settings." if path == "/api/sync" or bulk else "Unknown store."}, 400)
         task = {"/api/login": "login", "/api/logout": "logout", "/api/download": "download",
                 "/api/sync": "sync", "/api/check-updates": "check-updates"}.get(path, "refresh")
         only = str(body.get("only") or "").strip()[:200] or None
@@ -1240,6 +1244,15 @@ def reseal_in_background(srv, cfg: dict) -> None:
         srv.jobs.kick()   # anything queued meanwhile
 
 
+def _reach(host: str) -> str:
+    """Where this computer reaches a server listening on host: 127.0.0.1 when it listens there (or everywhere), else
+    the address it listens on (--host with one network address, where nothing listens on 127.0.0.1)."""
+    host = (host or "").strip("[]")
+    if host in ("", "0.0.0.0", "::", "localhost", "127.0.0.1"):
+        return "127.0.0.1"
+    return f"[{host}]" if ":" in host else host
+
+
 def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool = True, tls_cert: str | None = None,
           tls_key: str | None = None, plain_http: bool = False, config_path: Path | None = None,
           on_ready=None) -> None:
@@ -1251,7 +1264,7 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
         sys.exit(f"Couldn't start on port {port} ({e}). Try another one with --port.")
     srv.tls_context, srv.tls = tls, bool(tls)
     scheme = "https" if tls else "http"
-    srv.url = url = f"{scheme}://127.0.0.1:{srv.server_port}/"
+    srv.url = url = f"{scheme}://{_reach(host)}:{srv.server_port}/"
     if srv.lan:
         print(f"Other devices on your network: {scheme}://<this computer's address>:{srv.server_port}/#key={srv.key}")
         print("That address includes the access key, new each time Hoard starts. Share it only with devices you trust.")

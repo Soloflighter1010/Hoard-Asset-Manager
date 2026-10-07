@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import __version__
-from .browser import ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
+from .browser import PlaywrightMissing, ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
 from .common import log
 from .config import clean_payhip_shop, load_config, payhip_shops, root_dir, save_config
 from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify
@@ -303,6 +303,8 @@ def main(argv=None) -> None:
         log("\nStopped. Anything half-downloaded resumes next time.")
     except (ProfileBusy, SigninsUnprotected) as e:
         log(f"\n{e}")
+    except PlaywrightMissing as e:
+        sys.exit(str(e))
 
 
 def cmd_migrate(cfg: dict, folder: Path, config_path: Path) -> None:

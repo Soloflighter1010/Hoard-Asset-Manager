@@ -1566,7 +1566,7 @@ function showDetail(a, focus = true) {
     `<p class="d-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)} ${storeLink}</p>` +
     ((a.used_in || []).length ? `<p class="also">Used in ${a.used_in.map(esc).join(", ")}. ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
-    a.also_in.map(o => `<p class="also">You also have this from ${o.store}. ` +
+    a.also_in.map(o => `<p class="also">You also have this from ${esc(storeName(o.store))}. ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View that copy</button></p>`).join("") +
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button>` +
@@ -1836,7 +1836,11 @@ function wireLocal() {
   for (const r of document.querySelectorAll("input[name=localKeep]")) r.addEventListener("change", previewLocal);
   $("#localPath").addEventListener("keydown", e => { if (e.key === "Enter") addLocal(); });
 }
-addEventListener("hashchange", () => { readHash(); render(); });   // the Local tab, from the bar or the Library
+addEventListener("hashchange", () => {   // the Local tab, from the bar or the Library; a download, from Projects
+  const was = openId;
+  readHash(); render();
+  if (openId != null && openId !== was && byId.has(openId)) showDetail(byId.get(openId), true);
+});
 
 // issue #82: a copy of a download for you to change, in a folder of its own that Hoard never checks or replaces
 async function editableCopy(a, button) {
@@ -2972,7 +2976,7 @@ function renderProjects(list, hiddenLeftOut) {
         `<div class="row"><button class="ghost sm" data-proj="forget">Forget this project</button></div></details>`;
     }).join("");
 }
-const storeLabel = s => s === "Itch" ? "itch.io" : s;
+const storeLabel = s => STORE_NAMES[s] || storeName(s);   // a store's id ("booth") or its folder ("Itch"), as people know it
 function wireProjects() {
   makeWindow($("#projectsWin"));
   WINDOWS.projectsWin = () => openProjects(false);

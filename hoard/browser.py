@@ -40,13 +40,17 @@ def use_browsers_folder() -> None:
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browsers_folder()))
 
 
+class PlaywrightMissing(RuntimeError):
+    """Playwright isn't installed. Raised, not an exit: in a task that would end its thread with nothing said."""
+
+
 def _playwright():
-    """Import Playwright's sync API, or exit with a clear message when setup hasn't been run."""
+    """Import Playwright's sync API; raises PlaywrightMissing with a clear message when setup hasn't been run."""
     use_browsers_folder()
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        sys.exit("Playwright isn't installed. Run Setup.bat (Windows) or ./setup.sh first.")
+        raise PlaywrightMissing("Playwright isn't installed. Run Setup.bat (Windows) or ./setup.sh first.") from None
     return sync_playwright
 
 

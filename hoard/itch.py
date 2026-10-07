@@ -8,6 +8,7 @@ reaches with a session that carries nothing of yours.
 """
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from urllib.parse import urlencode, urlparse
@@ -38,6 +39,15 @@ def session(key: str) -> requests.Session:
     return s
 
 
+def _refuses_api_key(text: str) -> bool:
+    """Does an error itch.io gave turn away the API key itself? Not one project's download key (revoked, say), which
+    only means that project can't be downloaded."""
+    t = text.lower()
+    if "download key" in t or "download_key" in t:
+        return False
+    return bool(re.search(r"\b(api[ _-]?key|invalid key|authenticat\w*|unauthori[sz]ed)\b", t))
+
+
 def call(sess: requests.Session, path: str, **params) -> dict:
     """One API request. Raises KeyRefused when itch.io turns the key away."""
     r = egress.get(sess, API + path, sites(), params=params or None, timeout=60)
@@ -53,7 +63,7 @@ def call(sess: requests.Session, path: str, **params) -> dict:
     errors = data.get("errors")
     if errors:
         text = "; ".join(str(e) for e in errors)[:300] if isinstance(errors, list) else str(errors)[:300]
-        if "key" in text.lower() or "auth" in text.lower():
+        if _refuses_api_key(text):
             raise KeyRefused(f"itch.io didn't accept the API key ({text})")
         raise RuntimeError(f"itch.io said: {text}")
     return data

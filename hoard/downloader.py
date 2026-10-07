@@ -809,7 +809,8 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: Stor
     """Download everything new or changed, one purchase at a time (see sync_gumroad)."""
     chosen = (getattr(args, "targets", None) or {}).get("gumroad")
     if chosen:   # straight to the chosen purchases' download pages
-        cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")}},
+        cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")},
+                              "thumbnail_url": i.get("thumbnail")},   # its picture, as the library has it
                   "purchase": {"id": i.get("id"), "download_url": i.get("download_url"), "variants": i.get("variants") or ""}}
                  for i in chosen]
         log(f"Gumroad: {len(cards)} chosen {'purchase' if len(cards) == 1 else 'purchases'}")
@@ -1637,16 +1638,25 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
 def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeout_s: float,
                 name_for=lambda n: n) -> tuple[str, int]:
     """Download one Booth file. The direct route is fastest and resumes where it stopped; if Booth turns it away
-    (sites often screen out anything that isn't a real browser), the rest of the run goes through the browser."""
+    (sites often screen out anything that isn't a real browser), that file goes through the browser, and once it has
+    turned it away twice running, the rest of the run does. A dropped connection isn't Booth turning it away: it's
+    raised to be tried again (with_retries), so the file resumes where it stopped. Signed out shows in the browser."""
     if route["direct"]:
         try:
             loc = booth_file_location(sess, f["url"])
             fname = name_for(booth_filename(f["name"], loc, f"file-{fid}"))
-            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname,
-                                          progress=downloading(fname))
+            got = egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname, progress=downloading(fname))
+            route["refused"] = 0
+            return fname, got
+        except (requests.ConnectionError, requests.Timeout):
+            raise
         except (NotLoggedIn, RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
-            route["direct"] = False
-            log(f"    Booth turned the direct download away ({e}), so Hoard downloads through the browser instead.")
+            route["refused"] = route.get("refused", 0) + 1
+            if route["refused"] >= 2:
+                route["direct"] = False
+                log(f"    Booth turned the direct download away again ({e}), so Hoard downloads through the browser from now on.")
+            else:
+                log(f"    Booth turned the direct download away ({e}), so Hoard downloads this file through the browser.")
     return booth_browser_download(page, f["url"], folder, f["name"], fid, timeout_s, name_for)
 
 
@@ -1674,7 +1684,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     if removed_product("booth", name, report) or man.away(b["id"], f"Booth: {name}", report):
                         continue
                     rec = man.record(b["id"], creator, name)
-                    is_new_asset, had_files = not rec["files"], bool(rec["files"])
+                    is_new_asset = not rec["files"]
                     rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
                     folder = man.folder_of(rec)
                     log(f"\n[Booth] {creator} / {name}")
@@ -1689,7 +1699,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         report.skipped.append(f"Booth: {name} - no files listed in your library or on its page")
                         continue
 
-                    got_any = False
+                    got_any, on_disk = False, None
                     for f in b["files"]:
                         if not store_url(f["url"], ["booth.pm"]):
                             report.skipped.append(f"Booth: {name} - a file link that isn't on booth.pm was ignored")
@@ -1709,14 +1719,17 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         if args.dry_run:
                             would_get(args, report, "booth", rec, name, creator, f["name"] or guess, bool(replaces), old is not None)
                             continue
-                        on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
+                        if on_disk is None:   # what's in its folder, listed once a product (each file saved is added)
+                            on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
                         try:
                             offered = {(re.search(r"/downloadables/(\d+)", x["url"]) or [None, x["url"]])[1] for x in b["files"]}
                             fname, got = with_retries(report, f["name"] or guess, lambda f=f, fid=fid, offered=offered: booth_fetch(
                                 page, sess, f, folder, fid, route, timeout_s,
                                 name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered)))
                             prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
-                            is_update = had_files or prev is not None or fname in on_disk
+                            # an update replaces a file: one it had (this file, or one saved under this name), or
+                            # one already on disk by this name; a file new to the product isn't one
+                            is_update = old is not None or bool(replaces) or prev is not None or fname in on_disk
                         except NotLoggedIn:
                             raise
                         except Exception as e:
@@ -1725,6 +1738,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         if prev:
                             rec["files"].pop(prev, None)
                         rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
+                        on_disk.add(fname)
                         log(f"    {'updated' if is_update else 'saved'}: {fname}")
                         (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
                         report.saved("booth", name, f["name"] or guess)

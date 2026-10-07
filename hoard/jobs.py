@@ -1,6 +1,7 @@
 """Work Hoard does in the background, one job at a time: refreshing, signing in and out, and downloading."""
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 import threading
@@ -721,9 +722,8 @@ class Jobs:
                 return
             downloadable = [s for s in stores if s in DOWNLOADABLE and s not in unread]
             if downloadable:
-                self._download(downloadable, None, check=True)
-                if self.stop.is_set():
-                    return
+                if self._download(downloadable, None, check=True) is False or self.stop.is_set():
+                    return   # stopped while checking for updates: its "Stopped" stands, and nothing found is kept
             counts = self.find_choices() if self.find_choices else {"new": 0, "updates": 0}
             found = {"at": now_iso(), **counts} if counts["new"] or counts["updates"] else None
             save_routine(found=found)
@@ -884,6 +884,7 @@ class Jobs:
                                + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
         except Cancelled:
             self._set(message="Stopped checking for updates." if check else "Stopped. Anything half-downloaded resumes next time.")
+            return False   # (Stop was used up raising Cancelled: a caller carrying on after this checks for False)
         finally:
             self.on_download_done()   # a check can record files it finds already on disk, too
 
@@ -926,7 +927,8 @@ class Jobs:
                       error="You're offline. Your saved library still works.")
             return list(stores)
         refreshed, unread = [], [s for s in stores if s not in online]
-        with _playwright()() as p:
+        # itch.io is read through its API: Playwright isn't started (nor needed) when it's the only store read
+        with (_playwright()() if any(s not in NO_BROWSER for s in online) else contextlib.nullcontext()) as p:
             for store in online:
                 if self._forced:   # Force stop: the rest are left as they were
                     break

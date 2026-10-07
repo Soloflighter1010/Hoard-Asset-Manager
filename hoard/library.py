@@ -883,6 +883,15 @@ def saved_pages_in(paths, limit: int = 2000) -> list[Path]:
 
 # ----------------------------------------------------------------------------- library data
 
+def _forget_pictures(gone: list[dict], kept: set) -> None:
+    """Delete the cached pictures of products taken off the list, but not one a product still listed uses too (the
+    same picture, as two copies of a product share)."""
+    for url in {i.get("thumbnail") for i in gone} - kept:
+        if url:
+            for cached in THUMB_DIR.glob(hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest() + ".*"):
+                cached.unlink(missing_ok=True)
+
+
 class Library:
     """Your combined library, kept in library.json. Safe to use from several threads."""
     def __init__(self, path: Path):
@@ -991,10 +1000,8 @@ class Library:
                 if isinstance(info, dict):
                     info["count"] = sum(1 for i in self.data["items"] if i["store"] == store)
             self.save()
-        for i in gone:
-            if i.get("thumbnail"):
-                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode(), usedforsecurity=False).hexdigest() + ".*"):
-                    cached.unlink(missing_ok=True)
+            kept = {i.get("thumbnail") for i in self.data["items"]}
+        _forget_pictures(gone, kept)
         return len(gone)
 
     def clear_store(self, store: str, note: str) -> int:
@@ -1005,10 +1012,8 @@ class Library:
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store]
             self.data["stores"][store] = {"updated": None, "count": 0, "error": note}
             self.save()
-        for i in gone:
-            if i.get("thumbnail"):
-                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode(), usedforsecurity=False).hexdigest() + ".*"):
-                    cached.unlink(missing_ok=True)
+            kept = {i.get("thumbnail") for i in self.data["items"]}
+        _forget_pictures(gone, kept)
         return len(gone)
 
     def set_error(self, store: str, message: str) -> None:

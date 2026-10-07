@@ -285,6 +285,29 @@ class AccessKey(unittest.TestCase):
             self.assertEqual(refused, [])
             page.close()
 
+    def test_a_link_to_setup_opens_it(self):
+        """Downloads' "Set up Hoard again" goes to /#setup: the Library rewrote the address before reading it."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        self.assertTrue(page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--local').trim()"),
+                        "the Library has Local's colour too (custom colours started it grey)")
+        page.goto(f"{self.srv.url}#setup")
+        page.reload()
+        page.locator("#setup").wait_for(state="visible")
+        page.close()
+
+    def test_a_link_to_a_download_opens_its_details(self):
+        """Projects link to a download as /downloads#open=N: on the page already, that opens its details too."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        n = page.evaluate("DATA.assets[0].id")
+        page.evaluate(f"location.hash = 'open={n}'")
+        page.wait_for_function("document.querySelector('#detail').classList.contains('open')")
+        page.close()
+
     def test_a_used_link_doesnt_work_again(self):
         link = self.srv.entry_url()
         first, _ = self.open(link)

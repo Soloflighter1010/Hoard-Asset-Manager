@@ -164,7 +164,9 @@ def credits_text(project: dict, style: str | None = None) -> str:
 def view(projects: list[dict], index: dict, updates: dict) -> list[dict]:
     """Projects for the page: each product with its download (if it's on disk here) and whether it has an update,
     and the credits list in every style."""
-    by_folder = {a["folder"]: a for a in index.get("assets", [])}
+    # projects name a download as catalog.json does (catalog_folder): "folder" is how the pages show it, which for
+    # one in another library folder starts "@1/"
+    by_folder = {a.get("catalog_folder") or a["folder"]: a for a in index.get("assets", [])}
     out = []
     for p in projects:
         assets = []
