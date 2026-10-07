@@ -2996,6 +2996,61 @@ class TasksAPI(unittest.TestCase):
     """The Tasks window's server side: GET /api/tasks, taking jobs off the queue, and hidden products' names kept
     out of job logs while the hidden library is locked."""
 
+    def test_force_stop_ends_any_task_now(self):
+        """Force stop, in Tasks: any task (Stop only reaches downloads, syncs and checks), ended at once by closing
+        its store browser. It's kept in Tasks as stopped, not failed: the closed browser wasn't the store's fault."""
+        from unittest import mock
+        ended = []
+
+        def refresh(stores, skip_imported=False):
+            self.srv.jobs._set(task="refresh", message="Reading Booth")
+            for _ in range(500):   # reading the store, in its browser, until that browser is closed
+                if ended:
+                    raise RuntimeError("Target page, context or browser has been closed")
+                time.sleep(0.01)
+        with mock.patch.object(self.srv.jobs, "_refresh", refresh), \
+                mock.patch.object(jobs, "end_browsers", lambda: ended.append(True) or 1), \
+                mock.patch.object(jobs, "stop_install", lambda: None):
+            self.assertEqual(self.srv.jobs.start("refresh", ["booth"]), "started")
+            for _ in range(100):
+                if self.srv.jobs.state.get("message") == "Reading Booth":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(self.call("POST", "/api/cancel", {})[1], {"ok": False}, "Stop can't reach a refresh")
+            self.assertEqual(self.call("POST", "/api/force-stop", {}), (200, {"ok": True}))
+            for _ in range(200):
+                if not self.srv.jobs.state["running"]:
+                    break
+                time.sleep(0.02)
+        self.assertEqual(ended, [True], "its browser closed at once, not after Stop's 20 seconds")
+        last = self.call("GET", "/api/tasks")[1]["history"][0]
+        self.assertEqual(last["outcome"], "stopped")
+        self.assertTrue(last["message"].startswith("Force stopped."), last["message"])
+        self.assertNotIn("error", self.srv.lib.data["stores"].get("booth", {}) or {}, "not counted against the store")
+        self.assertEqual(self.call("POST", "/api/force-stop", {})[1], {"ok": False}, "nothing running")
+
+    def test_whats_new(self):
+        """What's new, in the app: the changelog, betas left out unless asked for."""
+        from hoard import __version__, changelog
+        released = self.call("GET", "/api/changelog")[1]
+        self.assertEqual(released["version"], __version__)
+        self.assertTrue(released["releases"], "the changelog is there")
+        self.assertFalse(any(r["beta"] for r in released["releases"]))
+        with_betas = self.call("GET", "/api/changelog?betas=1")[1]["releases"]
+        self.assertTrue(any(r["beta"] for r in with_betas))
+        self.assertEqual(with_betas[0]["version"], __version__, "newest first: this version's changes on top")
+        self.assertNotIn("<script", "".join(r["html"] for r in with_betas))
+        from unittest import mock
+        with mock.patch.object(changelog, "changelog_file", lambda: Path(tempfile.mkdtemp()) / "missing.md"):
+            self.assertEqual(changelog.whats_new(True), [], "no changelog: nothing, not an error")
+        fake = Path(tempfile.mkdtemp()) / "CHANGELOG.md"
+        fake.write_text("# Changelog\n\n## 1.1.0-beta.1\n\n- <b>Soon</b>\n\n## 1.0.0\n\n- **Out.**\n", "utf-8")
+        with mock.patch.object(changelog, "changelog_file", lambda: fake):
+            self.assertEqual([r["version"] for r in changelog.whats_new(False)], ["1.0.0"])
+            beta = changelog.whats_new(True)[0]
+            self.assertTrue(beta["beta"])
+            self.assertIn("&lt;b&gt;Soon&lt;/b&gt;", beta["html"], "escaped, never markup of its own")
+
     def setUp(self):
         from unittest import mock
         self.srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)

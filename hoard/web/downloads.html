@@ -622,6 +622,11 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .tasks h3 .n { font-weight: 500; }
 .tasks h3 .linkish { font-size: 12px; margin-left: auto; }
 .tasks .none { margin: 0; }
+.news-release { margin: 0 0 18px; }
+.news-release h3 { font-size: 15px; }
+.news-release ul { margin: 6px 0; padding-left: 20px; }
+.news-release li, .news-release p { margin: 4px 0; line-height: 1.5; }
+.news-release h4 { margin: 12px 0 4px; font-size: 13px; }
 .task { display: block; margin: 0 0 8px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .task-top { display: flex; align-items: center; gap: 10px; }
 .task-top b { flex: 1; min-width: 0; }
@@ -941,6 +946,7 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
+  <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button>: every change, version by version.</p>
   <h3>Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
@@ -952,6 +958,11 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
   <div id="projectsBody"></div>
+</section>
+<section id="newsWin" class="stores tasks news" hidden aria-labelledby="newsTitle">
+  <h2 id="newsTitle">What's new</h2>
+  <label class="check"><input type="checkbox" id="newsBetas"> Include beta updates</label>
+  <div id="newsBody"></div>
 </section>
 <section id="tasksWin" class="stores tasks" hidden aria-labelledby="tasksTitle">
   <h2 id="tasksTitle">Tasks</h2>
@@ -2516,7 +2527,8 @@ function setGlow(store, stores) {
 /* ---------- the panel (issue #84): Tags, Stores, Settings and Tasks each open in one panel over the page, one at a
    time; opening another takes its place. Escape, the × or a click on the page around it closes it. */
 const WINDOWS = { tagPanel: () => openTagPanel(false), stores: () => { if (typeof openStores === "function") openStores(false); },
-                  settingsPanel: () => closeSettings(), tasksWin: () => openTasks(false) };
+                  settingsPanel: () => closeSettings(), tasksWin: () => openTasks(false),
+                  newsWin: () => { $("#newsWin").hidden = true; } };
 /* How you left the pages: windows' places, the sidebar, the tile size. Kept in Hoard's settings (config.json),
    not the page's own storage, which goes with the server's address, and that's new each time Hoard starts. */
 let UI = { windows: {}, sections: {} }, uiPending = null, uiTimer = null, uiApplied = false;
@@ -2819,7 +2831,8 @@ function renderTasks(t) {
   $("#tasksBody").innerHTML =
     `<h3>Running</h3>` + (cur
       ? `<div class="task run"><div class="task-top"><span class="spin" aria-hidden="true"></span><b>${esc(cur.label)}</b>` +
-        (STOPPABLE.includes(cur.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") + `</div>` +
+        (STOPPABLE.includes(cur.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") +
+        `<button class="ghost sm" data-task="force" title="End it now, whatever it's doing">Force stop</button></div>` +
         (cur.transfer ? transferHtml(cur.transfer) : `<p class="task-msg">${esc(cur.message || "Starting")}</p>`) +
         `<details data-id="${esc(cur.id)}"${open.has(cur.id) ? " open" : ""}><summary>Progress</summary><pre>${esc((cur.log || []).join("\n"))}</pre></details></div>`
       : `<p class="none">Nothing is running.</p>`) +
@@ -2911,6 +2924,30 @@ function wireProjects() {
     }
   });
 }
+/* ---------- What's new: Hoard's changelog, in the app. Betas are left out unless you tick them (ticked to begin
+   with when you get beta updates). The changelog's HTML is made from CHANGELOG.md with everything escaped first. */
+function openNews() {
+  const w = $("#newsWin");
+  makeWindow(w);
+  $("#newsBetas").checked = !!(typeof SETTINGS === "object" && SETTINGS && SETTINGS.beta_updates);
+  w.hidden = false;
+  loadNews();
+}
+async function loadNews() {
+  const body = $("#newsBody");
+  try {
+    const d = await (await api(`/api/changelog?betas=${$("#newsBetas").checked ? 1 : 0}`, { cache: "no-store" })).json();
+    body.innerHTML = d.releases.length ? d.releases.map(r =>
+      `<article class="news-release"><h3>${esc(r.version)}${r.beta ? ' <span class="n">Beta</span>' : ""}` +
+      `${r.version === d.version ? ' <span class="n">This version</span>' : ""}</h3>${r.html}</article>`).join("")
+      : `<p class="none">This copy of Hoard doesn't include its changelog.</p>`;
+    for (const a of body.querySelectorAll("a[href]")) { a.target = "_blank"; a.rel = "noopener noreferrer"; }
+  } catch (e) { body.innerHTML = `<p class="none">Couldn't load the changelog.</p>`; }
+}
+function wireNews() {
+  $("#newsOpen").addEventListener("click", () => { if (typeof closeSettings === "function") closeSettings(); openNews(); });
+  $("#newsBetas").addEventListener("change", loadNews);
+}
 function wireTasks() {
   makeWindow($("#tasksWin"));
   $("#tasksTab").addEventListener("click", () => openTasks());
@@ -2918,6 +2955,12 @@ function wireTasks() {
     const b = e.target.closest("[data-task]"); if (!b) return;
     const act = b.dataset.task;
     if (act === "stop") { const r = await apiPost("/api/cancel"); if (!r.data.ok) toast("That job can't be stopped part-way."); }
+    else if (act === "force") {   // any task, now: its store browser or sign-in window is closed at once
+      if (!await ask("Force stop this task now? Hoard closes its store browser or sign-in window straight away. What " +
+                     "finished is kept, and a file part way through resumes next time where it can.", "Force stop", true)) return;
+      const r = await apiPost("/api/force-stop");
+      if (!r.data.ok) toast("Nothing is running.");
+    }
     else if (act === "remove") await apiPost("/api/queue/remove", { id: b.dataset.id });
     else if (act === "clear-queue") await apiPost("/api/queue/clear");
     else if (act === "clear-history") { if (!await ask("Clear the list of finished tasks?", "Clear")) return; await apiPost("/api/tasks/clear"); }
@@ -3037,6 +3080,7 @@ function wireApp() {
   wireSidebar();
   wireDock();
   wireTasks();
+  wireNews();
   wireProjects();
   wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);

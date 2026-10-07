@@ -11,7 +11,7 @@ from pathlib import Path
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
                       check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
-from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed
+from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
 from .config import payhip_shops
@@ -278,6 +278,8 @@ class Jobs:
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
         self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
         self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
+        self._forced = False     # Force stop was chosen for the running job
+        self._sign_in = None     # the sign-in window open now, for Force stop to close
         self.busy = threading.Lock()
         self.stop = threading.Event()
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
@@ -401,6 +403,7 @@ class Jobs:
                          "label": describe_job(task, stores, only, keys, scheduled), "started": now_iso()}
         self._trail = []
         self.stop.clear()
+        self._forced = False   # (a Force stop that came as the last job ended isn't this one's)
         self.state.update(error=None, partial=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="",
                           transfer=None,
                           job_id=self._current["id"], job_label=self._current["label"])
@@ -467,11 +470,15 @@ class Jobs:
         self._current = None
         st = self.state
         message = str(st.get("message") or "")
+        if self._forced:   # Force stop: whatever it was doing when it ended (a closed browser, say) isn't a failure
+            self._forced = self._made_way = False
+            message = "Force stopped. " + message.removeprefix("Stopped.").removeprefix("Force stopping").strip()
+            st["error"] = None
         if self._made_way:   # not stopped by you: it made way for your task, and carries on after it
             self._made_way = False
             message = "Made way for your task: it carries on after it. " + message.removeprefix("Stopped.").strip()
             st["error"] = None
-        outcome = ("failed" if st.get("error") else "stopped" if message.startswith(("Stopped", "Made way"))
+        outcome = ("failed" if st.get("error") else "stopped" if message.startswith(("Stopped", "Made way", "Force stopped"))
                    else "partial" if st.get("partial") else "done")
         trail = self._trail + [line for line in (st.get("log") or []) if line not in self._trail]
         report = st.get("report") if isinstance(st.get("report"), dict) else None
@@ -740,6 +747,23 @@ class Jobs:
             return True
         return False
 
+    def force_stop(self) -> bool:
+        """Force stop: end the running task now, whatever it is, rather than at its next safe point. Hoard's store
+        browsers, a sign-in window and a browser download are ended at once, so a task waiting on one ends straight
+        away; anything else ends at its next step (a thread can't be ended from outside). What finished is kept, and
+        a file part way through resumes next time where it can. False when nothing is running."""
+        if not self.state["running"]:
+            return False
+        self._forced = True
+        self._set(message="Force stopping")
+        self.stop.set()
+        window = self._sign_in
+        if window is not None:
+            window.end()
+        stop_install()
+        end_browsers()
+        return True
+
     # ---- a job that doesn't stop, or doesn't move
 
     def _still(self, job_id) -> bool:
@@ -878,6 +902,8 @@ class Jobs:
         refreshed, unread = [], [s for s in stores if s not in online]
         with _playwright()() as p:
             for store in online:
+                if self._forced:   # Force stop: the rest are left as they were
+                    break
                 label = STORES[store]["label"]
                 if store == "payhip" and not payhip_shops(self.cfg):   # no shop to read: no window opened for nothing
                     self.lib.set_error(store, PAYHIP_NO_SHOPS)
@@ -917,8 +943,9 @@ class Jobs:
                             if store in IMPORTABLE
                             else f"{label} blocked the automated browser ({e}). Try again later.")
                     except Exception as e:
-                        self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
-                                           else f"Couldn't read the library: {e}")
+                        if not self._forced:   # (its browser was closed by Force stop: not the store's fault)
+                            self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
+                                               else f"Couldn't read the library: {e}")
                 finally:
                     if ctx:
                         ctx.close()
@@ -962,6 +989,8 @@ class Jobs:
             self._sign_in_plainly(store, label, name)
         else:
             self._sign_in_in_hoards_window(store, label, name)
+        if self._forced:   # Force stop while signing in: nothing to read
+            return
         try:
             check_saved_signin(self.cfg, store)
         except SigninsUnprotected as e:
@@ -979,20 +1008,23 @@ class Jobs:
         store), Discord and the like accept it (issue #21). Wait until it's closed."""
         with _playwright()() as p:
             window = SignInWindow(p, self.cfg, store, sign_in_urls(self.cfg, store))
+        self._sign_in = window
         try:
             tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(sign_in_urls(self.cfg, store)) > 1 else ""
             close = "quit it (Command-Q)" if sys.platform == "darwin" else "close that window"
             self._set(task="login", store=store,
                       message=f"Sign in to {label} in the {name} window that opened{tabs}, then {close}.")
-            while window.is_open():
+            while window.is_open() and not self._forced:
                 if self.pending_link:   # a link you pasted from an email: open it in that window
                     link, self.pending_link = self.pending_link, None
                     window.open(link)
                     self._set(message=f"Opened the link from your email in the {label} window. Finish there, "
                                       f"then {close}.")
                 time.sleep(0.5)
-            window.wait_released()
+            if not self._forced:
+                window.wait_released()
         finally:
+            self._sign_in = None
             window.close()
 
     def _sign_in_in_hoards_window(self, store: str, label: str, name: str) -> None:
@@ -1004,7 +1036,7 @@ class Jobs:
             tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(ctx.pages) > 1 else ""
             self._set(task="login", store=store,
                       message=f"Sign in to {label} in the {name} window that opened{tabs}, then close that window.")
-            while True:  # wait for the window to be closed
+            while not self._forced:  # wait for the window to be closed
                 try:
                     if not ctx.pages:
                         break

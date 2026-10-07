@@ -42,7 +42,8 @@ that can't read any of your stores (offline, say, or signed out of them all) fai
 to download. The download panel closes by itself a few seconds after a job that went well; one with problems
 stays until you close it. Take a
 waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync within a few
-seconds. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
+seconds. **Force stop** ends any task at once (a refresh or a sign-in too): it closes the store's browser, the
+sign-in window or the browser download straight away, and keeps what finished. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
 left out of it.
 

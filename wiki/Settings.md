@@ -52,7 +52,9 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   it asks GitHub whether there's a newer version. **Check now** asks straight away, and **Update to** installs
   it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating).
   **Get beta updates** (off unless you turn it on) is for testers: betas of the next version count as updates
-  too, and you're offered the finished version when it's out. Betas may have problems.
+  too, and you're offered the finished version when it's out. Betas may have problems. **What's new in Hoard**
+  shows the changelog, version by version, with the one you're running marked; tick **Include beta updates** there
+  to see betas' changes too.
 - **Browser for store sign-ins:** **Automatic** (Microsoft Edge on Windows, Hoard's own browser elsewhere),
   **Microsoft Edge**, **Google Chrome** or **Hoard's own browser**. After changing it, you may need to sign in to
   your stores again.

@@ -44,6 +44,18 @@ def browser_status(cfg: dict) -> dict:
     return {"channel": "chromium", "name": BROWSER_NAMES["chromium"], "ready": ready, "can_install": not ready, "note": note}
 
 
+_installing: list = []   # the browser download running now, for Force stop (stop_install)
+
+
+def stop_install() -> None:
+    """End the browser download that's running, if one is (Force stop). It's started again from scratch next time."""
+    for proc in list(_installing):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
 def install_browser(progress) -> None:
     """Download Hoard's own browser (Playwright's Chromium), reporting progress. The same as
     `python -m playwright install chromium`, without anyone needing a command line."""
@@ -53,6 +65,15 @@ def install_browser(progress) -> None:
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     proc = subprocess.Popen([str(node), str(cli), "install", "chromium"], env=get_driver_env(), stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, creationflags=flags)
+    _installing.append(proc)
+    try:
+        _read_install(proc, progress)
+    finally:
+        _installing.remove(proc)
+
+
+def _read_install(proc, progress) -> None:
+    """Pass on the download's progress, line by line, until it ends."""
     buf = b""
     while True:
         chunk = proc.stdout.read(256)

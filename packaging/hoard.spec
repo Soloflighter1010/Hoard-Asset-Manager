@@ -18,6 +18,7 @@ version_file = REPO / "build" / "version_info.txt"
 datas = [
     (str(REPO / "hoard" / "web"), "hoard/web"),                          # the pages and their fonts
     (str(REPO / "hoard" / "recovery_words.txt"), "hoard"),                # the hidden library's recovery words
+    (str(REPO / "CHANGELOG.md"), "."),                                    # What's new, in the app (hoard/changelog.py)
 ]
 datas += collect_data_files("playwright")                                 # Playwright's driver (Node and its package)
 hidden = collect_submodules("hoard")

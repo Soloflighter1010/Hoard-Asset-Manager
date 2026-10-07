@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__, diagnostics, itch, libraries, projects, updater, vault
+from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
@@ -41,7 +42,7 @@ from .tags import TagStore, tag_key, tag_overview
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
 FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
-           "/api/download", "/api/sync", "/api/cancel", "/api/settings", "/api/setup/browser", "/api/setup/done",
+           "/api/download", "/api/sync", "/api/cancel", "/api/force-stop", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
            "/api/app/close", "/api/open-logs",
@@ -648,6 +649,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
         if path == "/api/update":
             return self._json(srv.updates.view(srv.can_update()))
+        if path == "/api/changelog":   # What's new, in the app: betas too when asked for (?betas=1)
+            betas = parse_qs(u.query).get("betas", [""])[0] == "1"
+            return self._json({"version": __version__, "releases": whats_new(betas)}, compress=True)
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": srv.jobs.state})
         if path.startswith("/thumb/"):
@@ -1012,6 +1016,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._itch_key(body)
         if path == "/api/cancel":
             return self._json({"ok": srv.jobs.cancel()})
+        if path == "/api/force-stop":   # any task, now (Tasks: Force stop)
+            return self._json({"ok": srv.jobs.force_stop()})
         if path == "/api/queue/remove":   # a job waiting its turn (issue #49)
             return self._json({"ok": srv.jobs.remove(str(body.get("id") or "")[:20])})
         if path == "/api/queue/clear":

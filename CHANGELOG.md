@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.0.0-beta.6
+
+The sixth beta of Hoard 3.0 adds a Force stop for any task, and What's new inside Hoard. Everything in the betas
+before it is still here.
+
+- **Force stop.** The task running in **Tasks** now has **Force stop** beside it, whatever it is: a refresh, a
+  sign-in, installing the browser, as well as downloads and syncs. **Stop** waits for a safe point and only reaches
+  downloads, syncs and checks; Force stop closes the store's browser (or the sign-in window, or the browser
+  download) at once, so the task ends straight away. What finished is kept, a file part way through resumes next
+  time where it can, and Tasks lists it as **Stopped**. It asks first.
+- **What's new, in Hoard.** **Settings › Updates › What's new in Hoard** shows every change, version by version, from
+  Hoard's own changelog, with the version you're running marked. Betas are listed too when you tick **Include beta
+  updates** (ticked to begin with if you get beta updates). Links in it open in your web browser.
+
 ## 3.0.0-beta.5
 
 The fifth beta of Hoard 3.0 makes signing in smoother. Everything in the betas before it is still here.

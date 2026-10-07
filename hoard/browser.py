@@ -714,6 +714,17 @@ class SignInWindow:
                     return
                 time.sleep(0.5)
 
+    def end(self) -> None:
+        """Close the window (Force stop), and everything it started."""
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.proc.pid)], capture_output=True, timeout=15,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            else:
+                self.proc.kill()
+        except (OSError, subprocess.SubprocessError, AttributeError):
+            pass
+
     def close(self) -> None:
         """Let go of the profile (the window closed, or Hoard is stopping)."""
         self.lock.release()
