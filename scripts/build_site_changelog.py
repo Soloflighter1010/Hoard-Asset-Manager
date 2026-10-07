@@ -112,7 +112,7 @@ TEMPLATE = """<!doctype html>
 
   <footer class="foot">
     <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
-    <p>Made by <a href="https://x.com/SoloFlighter101" rel="noopener">@SoloFlighter101</a> on X (Twitter).</p>
+    <p>Made by <a href="https://x.com/SoloFlighter101" rel="noopener">@SoloFlighter101</a></p>
     <p class="small">Built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
     <p><a href="./">Home</a> · <a href="trust.html">How you can trust Hoard</a> · <a href="ai.html">AI disclosure</a></p>
   </footer>
