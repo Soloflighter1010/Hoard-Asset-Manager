@@ -109,10 +109,12 @@ namespace SoloFlighter.Hoard
         public static string Link(string store, string url, bool added)
         {
             if (string.IsNullOrEmpty(url) || url.Length > 500) return null;
+            // every link, the catalog's too, is one plain address: nothing in it could end the link early and start
+            // another one in what you paste (a ")" or a space in a Markdown link), or break a line in the list
+            foreach (char c in url) if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '(' || c == ')' || c == '<' || c == '>') return null;
             if (!added) return HoardCatalog.StoreLink(store, url) ? url : null;
             Uri u;
             if (!Uri.TryCreate(url, UriKind.Absolute, out u) || u.Scheme != "https" || !string.IsNullOrEmpty(u.UserInfo)) return null;
-            foreach (char c in url) if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '(' || c == ')' || c == '<' || c == '>') return null;
             return url;
         }
 

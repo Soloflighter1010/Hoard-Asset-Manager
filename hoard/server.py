@@ -334,6 +334,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         super().__init__(addr, Handler)
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self.unlocks: dict[str, float] = {}   # hidden-library unlock tokens, in memory only: a restart locks it
+        self.unlocks_lock = threading.Lock()   # (requests are answered on threads of their own)
         # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
@@ -515,11 +516,12 @@ class Handler(BaseHTTPRequestHandler):
         cookie = self.headers.get("Cookie") or ""
         token = next((c.split("=", 1)[1] for c in (x.strip() for x in cookie.split(";")) if c.startswith("hoard_unlock=")), "")
         now = time.time()
-        for t in [t for t, until in srv.unlocks.items() if until < now]:
-            del srv.unlocks[t]
-        if token and token in srv.unlocks:
-            srv.unlocks[token] = now + UNLOCK_MINUTES * 60
-            return True
+        with srv.unlocks_lock:
+            for t in [t for t, until in srv.unlocks.items() if until < now]:
+                srv.unlocks.pop(t, None)
+            if token and token in srv.unlocks:
+                srv.unlocks[token] = now + UNLOCK_MINUTES * 60
+                return True
         return False
 
     def _download_choices(self) -> dict:
@@ -589,7 +591,9 @@ class Handler(BaseHTTPRequestHandler):
                 i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
                 i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                              else "archived" if is_archived(i, marks) else None)
-                if i["mark"] != "hidden" or unlocked:   # hidden items never leave the server while it's locked
+                # hidden items never leave the server while it's locked: hidden by the mark itself, whatever else
+                # it's marked (a hidden product also removed is labelled removed, and was let out)
+                if i["tag_key"] not in marks["hidden"] or unlocked:
                     shown.append(i)
             counted = [i for i in shown if i["mark"] not in ("removed", "hidden")]
             privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "recovery_set": bool(marks["recovery"]),
@@ -633,7 +637,7 @@ class Handler(BaseHTTPRequestHandler):
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
-                if mark != "hidden" or unlocked:
+                if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
@@ -655,7 +659,7 @@ class Handler(BaseHTTPRequestHandler):
             betas = parse_qs(u.query).get("betas", [""])[0] == "1"
             return self._json({"version": __version__, "releases": whats_new(betas)}, compress=True)
         if path == "/api/setup":
-            return self._json({**setup_status(srv.cfg), "job": srv.jobs.state})
+            return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names())})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), srv.lib)
             if not got:
@@ -729,7 +733,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, **({"recovery": phrase} if phrase else {})})
             elif path == "/api/pin/recover":   # forgotten PIN: the recovery words set a new one, nothing is lost
                 store.recover(str(body.get("phrase") or "")[:400], str(body.get("pin") or ""))
-                srv.unlocks.clear()
+                with srv.unlocks_lock:
+                    srv.unlocks.clear()
                 return self._json({"ok": True})
             elif path == "/api/pin/phrase":   # a new recovery phrase, replacing the old: only while unlocked
                 if not self._unlocked():
@@ -738,20 +743,23 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/unlock":
                 store.check_pin(str(body.get("pin") or ""))
                 token = secrets.token_urlsafe(32)
-                srv.unlocks[token] = time.time() + UNLOCK_MINUTES * 60
+                with srv.unlocks_lock:
+                    srv.unlocks[token] = time.time() + UNLOCK_MINUTES * 60
                 secure = "; Secure" if getattr(srv, "tls", False) else ""
                 data = json.dumps({"ok": True}).encode()
                 return self._send(200, data, "application/json; charset=utf-8",
                                   {"Set-Cookie": f"hoard_unlock={token}; HttpOnly; SameSite=Strict; Path=/{secure}",
                                    "Cache-Control": "no-store"})
             elif path == "/api/lock":
-                srv.unlocks.clear()
+                with srv.unlocks_lock:
+                    srv.unlocks.clear()
             elif path == "/api/hidden/forget":   # forgotten PIN: the hidden products are deleted, never shown
                 if body.get("confirm") is not True:
                     return self._json({"error": "Confirm first."}, 400)
                 gone = store.forget_hidden()
                 srv.lib.forget_products(gone)
-                srv.unlocks.clear()
+                with srv.unlocks_lock:
+                    srv.unlocks.clear()
                 return self._json({"ok": True, "deleted": len(gone)})
         except PinError as e:
             return self._json({"error": str(e)}, 403)

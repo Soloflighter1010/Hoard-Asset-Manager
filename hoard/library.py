@@ -339,10 +339,8 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
                                        for k in ("key", "url", "name", "creator", "creator_url", "thumbnail")}
-                for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
-                    u = urlparse(href)
-                    if u.path.rstrip("/") == "/my/inventory" and re.search(r"(^|&)page=\d+", u.query) \
-                            and href not in visited and href not in pending:
+                for href in jinxxy_inventory_pages(page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")):
+                    if href not in visited and href not in pending:
                         pending.append(href)
                 progress(f"Inventory, {len(found)} items")
                 more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
@@ -504,6 +502,18 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
         url = result["next"]
         time.sleep(float(cfg.get("request_delay", 0.8)))
     return list(cards.values())
+
+
+def jinxxy_inventory_pages(hrefs) -> list[str]:
+    """The links among these that are more pages of your Jinxxy inventory (/my/inventory?page=N), on Jinxxy itself
+    only: its browser is signed in to Jinxxy, so a page of the same path on another site (a link in someone's
+    product text, say) is never opened in it."""
+    out = []
+    for href in hrefs:
+        u = urlparse(str(href))
+        if u.path.rstrip("/") == "/my/inventory" and re.search(r"(^|&)page=\d+", u.query) and store_link("jinxxy", str(href)):
+            out.append(str(href))
+    return out
 
 
 def sign_in_urls(cfg: dict, store: str) -> list[str]:

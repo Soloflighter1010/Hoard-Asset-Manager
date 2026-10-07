@@ -129,6 +129,8 @@ public static class CoreTests
               list.Find(e => e.Name == "Hair Pack").Url == "https://example.com/hair");
         Check("credits: odd links refused", Credits.Link(null, "javascript:alert(1)", true) == null &&
               Credits.Link(null, "https://a.example/x)(y", true) == null && Credits.Link(null, "https://u:p@a.example/", true) == null);
+        Check("credits: a store link can't carry a second link", Credits.Link("Booth", "https://booth.pm/x) [Free](https://evil.example", false) == null &&
+              Credits.Link("Booth", "https://booth.pm/ja/items/1 x", false) == null && Credits.Link("Booth", "https://booth.pm/ja/items/1", false) != null);
 
         var two = Credits.Build(new List<CreditEntry> {
             new CreditEntry { Store = "Booth", Name = "Rusk", Creator = "Kitsu", Url = "https://booth.pm/ja/items/1" },

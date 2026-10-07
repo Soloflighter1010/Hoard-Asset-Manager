@@ -1054,6 +1054,16 @@ class ArchiveHideRemove(unittest.TestCase):
             call("POST", "/api/lock", {})
             self.assertEqual(len(call("GET", "/api/library", cookie=cookie.split(";")[0])[1]["items"]), 1, "Lock now locks")
             self.assertEqual(call("POST", "/api/purge", {"keys": [secret]})[1].get("deleted"), 0, "only removed items can be purged")
+            # hidden and removed too: still hidden (it was labelled removed, and let out while locked)
+            st.change("removed", {secret}, True)
+            self.assertEqual([i["name"] for i in call("GET", "/api/library")[1]["items"]], ["Plain Hat"])
+            self.assertNotIn("Secret Suit", json.dumps(call("GET", "/api/assets")[1]))
+            # the setup assistant's view of the job is the browser-safe one: no diagnostics, hidden names masked
+            srv.jobs.state.update(message="Read Secret Suit", diagnostic={"traceback": "C:\\Users\\x\\hoard\\jobs.py"})
+            job = call("GET", "/api/setup")[1]["job"]
+            self.assertNotIn("diagnostic", job)
+            self.assertNotIn("Secret Suit", job["message"])
+            srv.jobs.state.update(message="", diagnostic=None)
         finally:
             marks.MarkStore().path.unlink(missing_ok=True)
             srv.shutdown()

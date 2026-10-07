@@ -413,8 +413,6 @@ class ImportingSeveralPages(unittest.TestCase):
                         "its links count once the shop is yours")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -531,3 +529,18 @@ class SigningInPlainly(unittest.TestCase):
                 ctx.close()
         self.assertEqual(got.get("session"), "signed-in",
                          f"cookies in the database after the window closed: {on_disk}; Hoard's window read: {sorted(got)}")
+
+
+class JinxxyPaging(unittest.TestCase):
+
+    def test_only_jinxxys_own_pages_are_followed(self):
+        from hoard import library
+        got = library.jinxxy_inventory_pages([
+            "https://jinxxy.com/my/inventory?page=2", "https://evil.example/my/inventory?page=3",
+            "https://jinxxy.com.evil.example/my/inventory?page=4", "http://jinxxy.com/my/inventory?page=5",
+            "https://jinxxy.com/my/inventory", "https://jinxxy.com/other?page=6"])
+        self.assertEqual(got, ["https://jinxxy.com/my/inventory?page=2"])
+
+
+if __name__ == "__main__":
+    unittest.main()
