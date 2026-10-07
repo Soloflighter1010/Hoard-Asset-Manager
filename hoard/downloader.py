@@ -176,6 +176,19 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
                                  "file": file, "kind": "changed" if changed else "new"})
 
 
+def left_out(args, report: Report, store: str, name: str, file: str) -> bool:
+    """A file you left out when choosing what to download (args.files: {tag_key: the files chosen}). It's named in
+    the summary as skipped, and downloaded another time if you choose it. Products you didn't narrow down, and
+    checks for updates, get every file."""
+    chosen = getattr(args, "files", None)
+    picks = chosen.get(tag_key(store, name)) if isinstance(chosen, dict) and not args.dry_run else None
+    if picks is None or file in picks:
+        return False
+    log(f"    left out, as you chose: {file}")
+    report.skipped.append(f"{STORES[store]['label'] if store in STORES else store}: {name} / {file} - left out, as you chose")
+    return True
+
+
 RETRY_WAITS = (5.0, 15.0, 30.0)   # seconds before each try again (issue #19)
 NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't change by asking again
 
@@ -725,6 +738,8 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
         if old and rel_to_path(folder, old["path"]).exists():
             continue
         stem = f"Page images/{n:02d} {safe_name(token, 40)}"
+        if left_out(args, report, "gumroad", name, stem):
+            continue
         if args.dry_run:
             would_get(args, report, "gumroad", rec, name, creator, stem, False, old is not None)
             continue
@@ -836,6 +851,8 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: Stor
                 continue
             is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
             label = f"{creator} / {name} / {relpath}"
+            if left_out(args, report, "gumroad", name, relpath):
+                continue
             if args.dry_run:
                 would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
                 continue
@@ -1159,6 +1176,8 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
     for pos, (label, k) in enumerate(wanted):
         old = rec["files"].get(k)
         if old and rel_to_path(folder, old["path"]).exists():
+            continue
+        if left_out(args, report, store.lower(), name, label or k):
             continue
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
@@ -1640,6 +1659,8 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         if not old and not replaces and (folder / guess).exists():  # already on disk, e.g. downloaded by hand
                             rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
                             continue
+                        if left_out(args, report, "booth", name, f["name"] or guess):
+                            continue
                         if args.dry_run:
                             would_get(args, report, "booth", rec, name, creator, f["name"] or guess, bool(replaces), old is not None)
                             continue
@@ -1757,6 +1778,8 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRec
         if itch.systems(u) and icfg.get("skip_game_builds", True):
             report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(itch.systems(u))}, so not "
                                   "downloaded (Settings, itch.io: Skip game builds)")
+            continue
+        if left_out(args, report, "itch", name, label):
             continue
         if args.dry_run:
             would_get(args, report, "itch", rec, name, creator, label, old is not None and old.get("shown", shown) != shown,

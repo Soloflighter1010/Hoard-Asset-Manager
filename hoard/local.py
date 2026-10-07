@@ -115,9 +115,21 @@ def split(root: Path, path: str, depth: int, copy: bool) -> dict:
             raise ValueError(f"That's more than {MAX_SPLIT} packages. Add the folders inside it one at a time.")
     if not level:
         raise ValueError(f"There are no folders {'inside it' if depth == 1 else f'{depth} levels down'}.")
+    have = added_sources(root)
     return {"packages": [{"path": str(f), "rel": f.relative_to(source).as_posix(), "name": clean_text(f.name, 300) or "Untitled",
-                          "creator": clean_text(f.parent.name, 200) if depth >= 2 else ""} for f in level],
+                          "creator": clean_text(f.parent.name, 200) if depth >= 2 else "",
+                          "added": str(f.resolve()) in have} for f in level],
             "loose": loose}
+
+
+def added_sources(root: Path) -> set[str]:
+    """The folders and files already in Local, as added (copied in, or listed where they are), so adding a folder
+    of folders again only adds what's new (issue #109). Packages added before Hoard kept this aren't known."""
+    sdir = local_dir(root)
+    if not (sdir / "_manifest.json").is_file():
+        return set()
+    return {str(rec.get("source") or rec.get("location")) for rec in Manifest(sdir).assets.values()
+            if isinstance(rec, dict) and (rec.get("source") or rec.get("location"))}
 
 
 def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", note: str = "", copy: bool = True,
@@ -137,7 +149,8 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     manifest = Manifest(sdir)
     key = "local-" + secrets.token_hex(6)
     rec = manifest.record(key, creator, name)
-    rec.update(name=name, creator=creator, note=clean_text(note, 300) or None, url=None)
+    rec.update(name=name, creator=creator, note=clean_text(note, 300) or None, url=None,
+               source=str(source.resolve()))   # where it came from: adding a folder of folders again skips it (#109)
     base = source.parent if single else source
     if copy:
         dest = rel_to_path(sdir, rec["folder"])

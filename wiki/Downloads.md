@@ -16,7 +16,10 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
   your Library list first. A store's **Download** button does one store. Each first lists what it would get:
   what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
-  don't want this time; left all ticked, it downloads everything new as before. **Always skip** leaves a product
+  don't want this time; left all ticked, it downloads everything new as before. Where Hoard knows a product's
+  files before downloading (an update's new and changed files, and a Booth product's files), **Choose files**
+  under it lists them to untick one by one; what you leave out is listed as skipped, and downloaded another time
+  if you choose it. **Always skip** leaves a product
   out of every download and sync, including automatic ones, until you choose **Stop skipping** (under **Always
   skipped** in the same list). **Update all** lists the updates the same way.
 - **Download** in an item's details (in the Library) downloads just that product, and so do **Update** in

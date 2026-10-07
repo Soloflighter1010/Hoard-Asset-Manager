@@ -2925,7 +2925,9 @@ class DownloadChoices(unittest.TestCase):
         self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "download_skip": []}, lan=False)
         with self.srv.lib.lock:   # in memory only
             self.srv.lib.data["items"] = [
-                library.item("booth", "1", name="Rusk", creator="Kitsu Studio"),
+                library.item("booth", "1", name="Rusk", creator="Kitsu Studio",
+                             files=[{"name": "Rusk.zip", "url": "https://booth.pm/downloadables/1"},
+                                    {"name": "Rusk (Quest).zip", "url": "https://booth.pm/downloadables/2"}]),
                 library.item("gumroad", "2", name="Mochi", creator="Kitsu Studio"),
                 library.item("gumroad", "3", name="Mochi", creator="Kitsu Studio"),   # a second copy: listed once
                 library.item("gumroad", "4", name="Fox Base", creator="Someone"),
@@ -2960,6 +2962,9 @@ class DownloadChoices(unittest.TestCase):
                          "nothing on disk yet, each product once; Payhip left out")
         self.assertEqual([(e["name"], e["files"]) for e in c["updates"]], [("Fox Base", 1)])
         self.assertEqual(c["skipped"], [])
+        # the files each one has, where Hoard knows them first: to choose one by one
+        self.assertEqual([e["names"] for e in c["new"]], [["Rusk.zip", "Rusk (Quest).zip"], []])
+        self.assertEqual(c["updates"][0]["names"], ["Fox 1.1.zip"])
 
     def test_always_skip(self):
         mochi = tags.tag_key("gumroad", "Mochi")
@@ -2990,6 +2995,29 @@ class DownloadChoices(unittest.TestCase):
         self.assertEqual(seen[0].skip, skip, "a download of everything new leaves it out")
         self.assertIsNone(seen[1].skip, "products chosen now are downloaded")
         self.assertEqual(seen[1].keys, {"booth:rusk", "gumroad:mochi"}, "several stores' products, as one job (#106)")
+
+
+class ChosenFiles(unittest.TestCase):
+    """Choosing what to download, file by file: what the page sends, and what the downloader leaves out."""
+
+    def test_only_whats_well_formed_is_kept(self):
+        self.assertIsNone(server.chosen_files(None))
+        self.assertIsNone(server.chosen_files(["gumroad:x"]))
+        got = server.chosen_files({"gumroad:x": ["a.zip", 5, "", "b.zip"], 7: ["c"], "booth:y": "not a list", "x" * 401: ["d"]})
+        self.assertEqual(got, {"gumroad:x": ["a.zip", "b.zip"]})
+
+    def test_the_downloader_leaves_out_what_wasnt_chosen(self):
+        from types import SimpleNamespace
+        report = downloader.Report()
+        args = SimpleNamespace(dry_run=False, files={tags.tag_key("booth", "Rusk"): {"Rusk.zip"}})
+        with common.capture_log(lambda line: None):
+            self.assertFalse(downloader.left_out(args, report, "booth", "Rusk", "Rusk.zip"))
+            self.assertTrue(downloader.left_out(args, report, "booth", "Rusk", "Rusk (Quest).zip"))
+            self.assertFalse(downloader.left_out(args, report, "booth", "Mochi", "Mochi.zip"), "not narrowed down: all of it")
+        self.assertEqual(report.skipped, ["Booth: Rusk / Rusk (Quest).zip - left out, as you chose"])
+        check = SimpleNamespace(dry_run=True, files=args.files)
+        self.assertFalse(downloader.left_out(check, report, "booth", "Rusk", "Rusk (Quest).zip"), "a check sees every file")
+        self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=False), report, "booth", "Rusk", "x"), "the command line")
 
 
 class TasksAPI(unittest.TestCase):

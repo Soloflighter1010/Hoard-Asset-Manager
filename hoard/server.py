@@ -417,10 +417,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             key = tag_key(i["store"], i["name"])
             if i["store"] not in DOWNLOADABLE or out_of_view(key):
                 continue
-            known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or ""})
+            known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or "",
+                                   "names": [f["name"] for f in i.get("files") or [] if isinstance(f, dict) and f.get("name")][:500]})
             if i["store"] in enabled and key not in on_disk and key not in skip:
                 new.setdefault(key, known[key])
-        ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"])}
+        ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"]),
+                "names": [f["file"] for f in e["files"]][:500]}
                for k, e in updates.items() if k in on_disk and k not in skip and e["store"] in enabled and not out_of_view(k)]
         skipped = [known.get(k) or {"key": k, "store": k.split(":", 1)[0], "name": k.split(":", 1)[-1], "creator": ""}
                    for k in sorted(skip) if not out_of_view(k)]
@@ -780,7 +782,7 @@ class Handler(BaseHTTPRequestHandler):
                                    body.get("copy") is not False)
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
-            return self._json({"packages": [{k: p[k] for k in ("rel", "name", "creator")} for p in plan["packages"]],
+            return self._json({"packages": [{k: p[k] for k in ("rel", "name", "creator", "added")} for p in plan["packages"]],
                                "loose": plan["loose"]})
         if path == "/api/local/add":
             copy = body.get("copy") is not False
@@ -1187,10 +1189,23 @@ class Handler(BaseHTTPRequestHandler):
         item = body.get("item") if isinstance(body.get("item"), str) and 0 < len(body.get("item")) <= 400 else None
         started = srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
                                  skip_imported=bool(body.get("all")), only=only, keys=keys,
-                                 items=[item] if item and task in ("download", "check-updates") else None)
+                                 items=[item] if item and task in ("download", "check-updates") else None,
+                                 chosen=chosen_files(body.get("files")) if task == "download" else None)
         if not started:
             return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
         self._json({"ok": True, "queued": started == "queued"}, 202)
+
+
+def chosen_files(raw) -> dict[str, list[str]] | None:
+    """The files you chose of each product, when choosing what to download: {tag_key: [file names]}, for the
+    products you left some of their files out of. Anything else in it is ignored."""
+    if not isinstance(raw, dict):
+        return None
+    out = {}
+    for key, names in list(raw.items())[:5000]:
+        if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(names, list):
+            out[key] = [n for n in names[:500] if isinstance(n, str) and 0 < len(n) <= 500]
+    return out or None
 
 
 def reseal_in_background(srv, cfg: dict) -> None:

@@ -643,6 +643,42 @@ class CopiesAndActions(unittest.TestCase):
             self.assertIsNone(seen[-1][2].get("keys"))
             page.close()
 
+    def test_choose_each_file(self):
+        """Choosing what to download, file by file: a product's files, where Hoard knows them first, can be unticked
+        one at a time, and only the ones left ticked are asked for."""
+        from unittest import mock
+        seen = self.started()
+        names = ["Ghost.unitypackage", "Ghost (Quest).unitypackage", "Textures.zip"]
+        choices = {"new": [], "skipped": [], "updates": [{"key": "gumroad:ghostfollower", "store": "gumroad",
+                   "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3, "names": names}]}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            dialog.locator(".pk-files summary").click()
+            self.assertIn("Choose files (3 of 3)", dialog.locator(".pk-files summary").inner_text())
+            dialog.locator(f"input[data-file='{names[1]}']").uncheck()
+            self.assertIn("2 of 3", dialog.locator(".pk-files summary").inner_text())
+            self.assertTrue(dialog.locator(f"input[data-file='{names[0]}']").is_visible(), "the list stays open")
+            page.click("#pickGo")
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual(seen[-1][0], "download")
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": [names[0], names[2]]})
+            # every file unticked: the product itself is unticked
+            if not page.locator("#downloadAll").is_visible():   # (Stores stays open after a download starts)
+                page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog.wait_for()
+            dialog.locator(".pk-files summary").click()
+            for n in names:   # (clicked: the last one takes its list away with it)
+                dialog.locator(f"input[data-file='{n}']").click()
+            self.assertFalse(dialog.locator("input[data-pick='gumroad:ghostfollower']").is_checked())
+            self.assertEqual(dialog.locator(".pk-files").count(), 0)
+            page.click("[data-pick-go='cancel']")
+            page.close()
+
     def test_the_routine_check_asks(self):
         """Issue #113: what the routine check found, and a way to choose what to download from it, or put it off."""
         from hoard import jobs

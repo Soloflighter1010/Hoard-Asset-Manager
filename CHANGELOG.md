@@ -2,8 +2,8 @@
 
 ## 3.0.0-beta.6
 
-The sixth beta of Hoard 3.0 adds a Force stop for any task, and What's new inside Hoard. Everything in the betas
-before it is still here.
+The sixth beta of Hoard 3.0 adds a Force stop for any task, What's new inside Hoard, and choosing each file to
+download, and lines up the buttons across the app. Everything in the betas before it is still here.
 
 - **Force stop.** The task running in **Tasks** now has **Force stop** beside it, whatever it is: a refresh, a
   sign-in, installing the browser, as well as downloads and syncs. **Stop** waits for a safe point and only reaches
@@ -13,6 +13,17 @@ before it is still here.
 - **What's new, in Hoard.** **Settings › Updates › What's new in Hoard** shows every change, version by version, from
   Hoard's own changelog, with the version you're running marked. Betas are listed too when you tick **Include beta
   updates** (ticked to begin with if you get beta updates). Links in it open in your web browser.
+- **Choose each file to download.** In the list **Download new**, **Download everything new**, a store's
+  **Download** and **Update all** show, a product whose files Hoard knows before downloading (an update's new and
+  changed files, and a Booth product's files) has **Choose files** under it, to untick files one by one. What you
+  leave out is listed as skipped, and downloaded another time if you choose it.
+- **Adding a folder of folders again only adds what's new** (issue #109). Each Local package now remembers the
+  folder it came from, so adding the same folder of folders again leaves the ones already in Local alone (the
+  list before you add says which); before, each came in twice.
+- **Buttons line up.** Every button is one of two heights, gold and plain alike, with its text centred, and small
+  ones match the boxes beside them. The bar's buttons stay on the same row as the search box down to narrower
+  windows, each store's buttons sit on a line of their own in **Stores** so the rows line up, tickboxes are gold
+  everywhere, and the dropdowns in panels look like **Sort**.
 
 ## 3.0.0-beta.5
 

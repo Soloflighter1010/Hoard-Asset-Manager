@@ -245,6 +245,20 @@ class FolderOfFolders(unittest.TestCase):
                                    ("Rusk", "Kitsu Studio", "Old stuff")])
         self.assertTrue((self.root / "Local" / "Kitsu Studio" / "Rusk" / "Rusk.unitypackage").is_file())
 
+        # Again, after adding a folder: only what's new comes in. In 3.0.0-beta.4 every package came in twice.
+        (self.src / "Someone" / "Tail").mkdir()
+        (self.src / "Someone" / "Tail" / "Tail.unitypackage").write_bytes(b"pkg")
+        preview = local.split(self.root, str(self.src), 2, True)["packages"]
+        self.assertEqual([p["name"] for p in preview if not p["added"]], ["Tail"])
+        runner.start("add-local", [], local={"path": str(self.src), "depth": 2, "copy": True, "creator": "", "note": ""})
+        for _ in range(200):
+            if not runner.state["running"] and runner.busy.acquire(blocking=False):
+                runner.busy.release()
+                break
+            time.sleep(0.02)
+        self.assertIn("Added 1 package to Local. 3 were already in Local", runner.history[-1]["message"])
+        self.assertEqual(len(downloader.collect_catalog(self.cfg, self.root)[0]), 4, "no copies of the first three")
+
 
 class LocalPage(unittest.TestCase):
 

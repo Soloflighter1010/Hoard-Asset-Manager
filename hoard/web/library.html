@@ -372,6 +372,11 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-nm { font-weight: 700; overflow-wrap: anywhere; }
 .pick-list .muted { font-size: 12.5px; color: var(--dust); }
 .pick-list .linkish { flex: none; font-size: 12.5px; }
+.pick-list li { flex-wrap: wrap; }
+.pick-list .pk-files { flex-basis: 100%; margin: 2px 0 2px 26px; font-size: 13px; }
+.pick-list .pk-files summary { cursor: pointer; color: var(--dust); }
+.pick-list .pk-files label { padding: 4px 0; font-weight: 400; }
+.pick-list .pk-files span { overflow-wrap: anywhere; }
 .pick-skipped { margin-top: 12px; }
 .pick-skipped summary { cursor: pointer; color: var(--dust); font-size: 13px; }
 .pick-go { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
@@ -727,6 +732,35 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 .librow .muted { white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 560px) { .librow { flex-wrap: wrap; } .librow .muted { white-space: normal; } }
 .settings .libadd #libPick { flex: none; }
+
+/* ---------- buttons, one system on both pages: each size one height, text centred on it, nothing wrapping inside a
+   button, and buttons beside each other lined up on their middles. Gold (.primary) and plain (.ghost) match. */
+:root { --btn-h: 38px; --btn-h-sm: 34px; }   /* small: the height of the boxes they sit beside in panels */
+.ghost, .btn, .primary {
+  height: var(--btn-h); padding: 0 16px; border-radius: 10px; font-size: 14px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; vertical-align: middle;
+}
+.ghost.sm, .btn.sm, .primary.sm { height: var(--btn-h-sm); padding: 0 12px; font-size: 13px; }
+.ghost { font-weight: 600; }
+.primary { font-weight: 700; }
+.ghost:focus-visible, .primary:focus-visible, .linkish:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
+.shelf-tools select { height: var(--btn-h-sm); }   /* the same height as Select and Add your own beside it */
+.field { align-items: center; }
+.settings .field input, .settings select { height: var(--btn-h-sm); }
+/* a panel's dropdowns look like Sort's: the same arrow, not the system's own */
+.settings select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
+/* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
+.store-row .btns { grid-row: auto; grid-column: 1 / -1; max-width: none; justify-content: flex-start; margin-top: 6px; }
+.stores-go { display: flex; gap: 8px; margin-top: 14px; }
+.stores-go > button { flex: 1 1 0; }
+.stores .stores-go .primary { margin-top: 0; width: auto; }
+/* the bar: the search box gives way first, so its buttons stay on the same row down to a narrower window */
+@media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
+.only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
+@media (max-width: 860px) { .only-narrow { display: inline-flex; } }
 </style>
 </head>
 <body>
@@ -803,8 +837,8 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
   <h2 id="storesTitle">Stores</h2>
   <p>Sign in to each store once. Refresh reads what you've bought; nothing is downloaded.</p>
   <div id="storeRows"></div>
-  <button id="refreshAll" class="primary">Refresh all stores</button>
-  <button id="downloadAll" class="ghost">Download everything new</button>
+  <div class="stores-go"><button id="refreshAll" class="primary">Refresh all stores</button>
+    <button id="downloadAll" class="ghost">Download everything new</button></div>
   <p class="hint safe"><span id="signinsText">Your sign-ins stay on this computer, a separate one for each store,
     <span id="signinsNote">encrypted by your operating system</span>, in a folder only Hoard uses<span id="signinsPath"></span>.
     Hoard never keeps your store passwords. Never share that folder.</span>
@@ -2289,12 +2323,26 @@ async function pickNew(stores, start) {
 async function pickDownloads(title, verb, items, go, choices) {
   choices = choices || await downloadChoices();
   const skip = new Set((choices.skipped || []).map(e => e.key));
-  Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb });
+  Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb,
+                        offFiles: new Map(), openFiles: new Set() });
   if (!PICK.items.length && !PICK.skipped.length) { go(null); return; }   // nothing to choose from: as before
   $("#pickTitle").textContent = title;
   drawPick();
   $("#pickDialog").showModal();
 }
+// Each of a product's files, to untick one by one, when Hoard knows them before downloading: an update's changed
+// and added files, and a new product's files where its store lists them (Booth's library does).
+function fileChoice(e) {
+  const names = e.names || [];
+  if (names.length < 2 || PICK.off.has(e.key)) return "";
+  const off = PICK.offFiles.get(e.key) || new Set();
+  return `<details class="pk-files" data-files-of="${esc(e.key)}"${PICK.openFiles.has(e.key) ? " open" : ""}>` +
+    `<summary>Choose files (${names.length - off.size} of ${names.length})</summary>` +
+    names.map(n => `<label><input type="checkbox" data-file-of="${esc(e.key)}" data-file="${esc(n)}"${off.has(n) ? "" : " checked"}>` +
+      ` <span>${esc(n)}</span></label>`).join("") + `</details>`;
+}
+let DL_FILES = null;   // the files chosen of each product, for the download about to start
+function takeFiles() { const f = DL_FILES; DL_FILES = null; return f; }
 function drawPick() {
   const files = n => n ? `, ${n} ${n === 1 ? "file" : "files"}` : "";
   const row = (e, skipped) => `<li>` + (skipped
@@ -2302,7 +2350,7 @@ function drawPick() {
       `<button class="linkish" data-unskip="${esc(e.key)}">Stop skipping</button>`
     : `<label><input type="checkbox" data-pick="${esc(e.key)}"${PICK.off.has(e.key) ? "" : " checked"}> <span class="dot ${esc(e.store)}"></span>` +
       `<span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}${files(e.files)}</span></label>` +
-      `<button class="linkish" data-skip="${esc(e.key)}">Always skip</button>`) + `</li>`;
+      `<button class="linkish" data-skip="${esc(e.key)}">Always skip</button>` + fileChoice(e)) + `</li>`;
   $("#pickList").innerHTML = PICK.items.map(e => row(e, false)).join("") ||
     `<li class="muted">Nothing here to download, apart from what you always skip.</li>`;
   $("#pickSkipped").hidden = !PICK.skipped.length;
@@ -2327,10 +2375,23 @@ async function pickSkip(key, on) {
   drawPick();
 }
 $("#pickDialog").addEventListener("change", e => {
+  const of = e.target.dataset.fileOf;
+  if (of != null) {   // one file of a product
+    const off = PICK.offFiles.get(of) || new Set(), item = PICK.items.find(x => x.key === of);
+    if (e.target.checked) off.delete(e.target.dataset.file); else off.add(e.target.dataset.file);
+    PICK.offFiles.set(of, off);
+    if (item && off.size >= (item.names || []).length) { PICK.off.add(of); PICK.offFiles.delete(of); }   // none: the product's unticked
+    drawPick();
+    return;
+  }
   const k = e.target.dataset.pick; if (k == null) return;
   if (e.target.checked) PICK.off.delete(k); else PICK.off.add(k);
   drawPick();
 });
+$("#pickDialog").addEventListener("toggle", e => {   // a product's files stay open as the list is drawn again
+  const k = e.target.dataset && e.target.dataset.filesOf; if (k == null) return;
+  if (e.target.open) PICK.openFiles.add(k); else PICK.openFiles.delete(k);
+}, true);
 $("#pickDialog").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.skip != null) pickSkip(b.dataset.skip, true);
@@ -2338,7 +2399,14 @@ $("#pickDialog").addEventListener("click", e => {
   else if (b.dataset.pickAll) { PICK.off = b.dataset.pickAll === "on" ? new Set() : new Set(PICK.items.map(x => x.key)); drawPick(); }
   else if (b.dataset.pickGo) {
     $("#pickDialog").close();
-    if (b.dataset.pickGo === "go") PICK.go(PICK.off.size ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
+    if (b.dataset.pickGo !== "go") return;
+    const files = {};
+    for (const [k, off] of PICK.offFiles) {
+      const item = PICK.items.find(x => x.key === k);
+      if (item && off.size && !PICK.off.has(k)) files[k] = (item.names || []).filter(n => !off.has(n));
+    }
+    DL_FILES = Object.keys(files).length ? files : null;
+    PICK.go(PICK.off.size ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
   }
 });
 
@@ -2563,7 +2631,9 @@ async function installUpdate() {
 
 async function startDownload(stores, only, item, keys) {   // item: the library item, so the download goes straight to it
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
-  const r = await apiPost("/api/download", keys ? { stores, keys } : item ? { stores, only, item } : { stores, only });
+  const files = takeFiles();   // the files chosen of each product, if some were left out
+  const r = await apiPost("/api/download", { ...(keys ? { stores, keys } : item ? { stores, only, item } : { stores, only }),
+                                             ...(files ? { files } : {}) });
   if (!r.ok) { toast(r.data.error || "Downloading didn't start."); return; }
   if (queuedToast(r)) return;
   dlActive = true;

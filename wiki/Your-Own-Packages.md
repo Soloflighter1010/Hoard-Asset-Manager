@@ -35,7 +35,8 @@ a package of its own, named for its folder; from two levels down, the folder abo
 under **Made by** to use it for all of them instead). Hoard lists what it would add before you choose **Add**.
 Files in the folders above are left out (the list says how many), Hoard's own downloads folder is never one of
 them, and up to 500 can be added at once. They're copied or listed together, as you choose, and **For** applies
-to them all.
+to them all. Adding the same folder again later only adds the folders that are new: those already in Local are
+marked in the list and left as they are. (Packages added before 3.0.0-beta.6 aren't recognised this way.)
 
 ## Using it
 

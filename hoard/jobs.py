@@ -310,16 +310,17 @@ class Jobs:
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
               items: list[str] | None = None, local: dict | None = None, move: dict | None = None,
-              files: dict | None = None) -> str | None:
+              files: dict | None = None, chosen: dict | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
         download is for, when it's for chosen ones, so it can go straight to them. files: what a rescan, a take-out
-        of Local or a deletion of downloaded files is for, when it waits its turn."""
+        of Local or a deletion of downloaded files is for, when it waits its turn. chosen: of a download, the files
+        chosen of each product ({tag_key: [file names]}) when you left some out."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
                 "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
                 "local": dict(local) if local else None, "move": dict(move) if move else None,
-                "files": dict(files) if files else None}
+                "files": dict(files) if files else None, "chosen": dict(chosen) if chosen else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -408,7 +409,7 @@ class Jobs:
                           transfer=None,
                           job_id=self._current["id"], job_label=self._current["label"])
         if task == "download":
-            target = lambda s: self._download(s, only, keys, items=items)  # noqa: E731
+            target = lambda s: self._download(s, only, keys, items=items, chosen=spec.get("chosen"))  # noqa: E731
         elif task == "check-updates":
             target = lambda s: self._download(s, only, keys, check=True, items=items)  # noqa: E731
         elif task == "sync":
@@ -647,6 +648,8 @@ class Jobs:
             self._set(message=str(e), error=str(e))
             return
         added, left = 0, []
+        already = [pkg for pkg in plan["packages"] if pkg.get("added")]
+        plan["packages"] = [pkg for pkg in plan["packages"] if not pkg.get("added")]   # added before: not twice
         try:
             for n, pkg in enumerate(plan["packages"], 1):
                 if self.stop.is_set():
@@ -662,6 +665,10 @@ class Jobs:
             if added:
                 build_catalog(self.cfg, root)
         said = f"Added {plural(added, 'package')} to Local" + (" (stopped part way)" if self.stop.is_set() else "") + "."
+        if already:
+            one = len(already) == 1
+            said += (f" {len(already)} {'was' if one else 'were'} already in Local, and "
+                     f"{'was left as it was' if one else 'were left as they were'}.")
         if left:
             said += f" Left out {len(left)}: " + "; ".join(left[:5]) + ("…" if len(left) > 5 else "")
         self._set(message=said, log=[f"Left out {x}" for x in left][-200:], partial=bool(left))
@@ -803,7 +810,7 @@ class Jobs:
                                          f"browser if it has stopped answering). Last: {last}")[:500]
 
     def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False,
-                  items: list[str] | None = None) -> None:
+                  items: list[str] | None = None, chosen: dict | None = None) -> None:
         """Download everything new or changed from these stores (or only the products keys names), passing progress
         to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
         each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
@@ -837,7 +844,8 @@ class Jobs:
         args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=check, only=only,
                                headed=False, keys=set(keys) if keys else None,
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
-                               targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items))
+                               targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
+                               files={k: set(v) for k, v in (chosen or {}).items()} or None)   # the files you chose
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
