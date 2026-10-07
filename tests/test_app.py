@@ -3258,8 +3258,7 @@ class TasksAPI(unittest.TestCase):
         self.assertEqual(released["version"], __version__)
         self.assertTrue(released["releases"], "the changelog is there")
         self.assertFalse(any(r["beta"] for r in released["releases"]))
-        with_betas = self.call("GET", "/api/changelog?betas=1")[1]["releases"]
-        self.assertTrue(any(r["beta"] for r in with_betas))
+        with_betas = self.call("GET", "/api/changelog?betas=1")[1]["releases"]   # (betas themselves: the stand-in below)
         self.assertEqual(with_betas[0]["version"], __version__, "newest first: this version's changes on top")
         self.assertNotIn("<script", "".join(r["html"] for r in with_betas))
         from unittest import mock

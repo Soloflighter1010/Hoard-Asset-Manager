@@ -256,23 +256,23 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(len(re.findall(r"<li[ >]", built)), built.count("</li>"))
 
 
-class TheNextChangelog(unittest.TestCase):
-    """3.0.0's changelog, drafted in docs/ until it's released, uses only what the What's new page can show."""
+class TheThreeZeroChangelog(unittest.TestCase):
+    """3.0.0's changelog (the betas folded into one) uses only what the What's new page can show."""
 
-    def test_the_3_0_0_draft_reads_on_the_whats_new_page(self):
-        draft = (REPO / "docs" / "CHANGELOG-3.0.0.md").read_text("utf-8")
-        self.assertTrue(draft.startswith("<!--"))
-        body = draft.split("-->", 1)[1]
+    def test_3_0_0_reads_on_the_whats_new_page(self):
+        text = (REPO / "CHANGELOG.md").read_text("utf-8")
+        body = text.split("## 3.0.0\n", 1)[1].split("\n## ", 1)[0]
         page = changelog.page("## 3.0.0\n" + body, {})
-        text = re.sub(r"<code>.*?</code>", "", page, flags=re.S)
-        self.assertNotIn("**", text, "every bold closes")
-        self.assertNotIn("`", text, "every code span closes")
+        plain = re.sub(r"<code>.*?</code>", "", page, flags=re.S)
+        self.assertNotIn("**", plain, "every bold closes")
+        self.assertNotIn("`", plain, "every code span closes")
         self.assertEqual(page.count("<ul>"), page.count("</ul>"))
         self.assertEqual(len(re.findall(r"<li[ >]", page)), page.count("</li>"))
         self.assertNotRegex(body, r"^\s*(\d+\.|\||>|```)", "no numbered lists, tables, quotes or code blocks")
         for heading in ("Hoard on every computer", "Signing in, your way", "Downloads you can leave running",
                         "Upgrading from 2.8"):
             self.assertIn(f"<h4>{heading}</h4>", page)
+        self.assertNotIn("## 3.0.0-beta", text, "the betas are folded into 3.0.0")
 
 
 class TheDeploy(unittest.TestCase):

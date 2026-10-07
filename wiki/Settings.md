@@ -85,7 +85,7 @@ and keep it valid JSON.
 | `automated_sign_in` | `false` | Sign in to stores in a window Hoard drives, as before 2.11, instead of the browser's own window. Google, Discord and X refuse to sign in there, so only use it if the browser's own window gives you trouble |
 | `profile_dir` with `advanced_signin_location` | `""`, `false` | Keep sign-ins somewhere other than Hoard's private folder. Used only when `advanced_signin_location` is `true`, never on a network share; how well they're protected then depends on that drive |
 | `routine_hours` | `null` | Hours between routine checks while Hoard is open: `0` (off), `6`, `12`, `24`, `168` or `720` (**Routine check** in Settings). `null` until you choose: then it's `auto_sync_hours` if you'd turned that on, else `0` (off) |
-| `auto_sync_hours`, `integrity_check_days` | | Before 3.0.0-beta.4: how often to sync by itself, and to check your downloads. `auto_sync_hours` is read only to set the routine check's first timing |
+| `auto_sync_hours`, `integrity_check_days` | | Before 3.0: how often to sync by itself, and to check your downloads. `auto_sync_hours` is read only to set the routine check's first timing |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `download_skip` | `[]` | Products to always skip when downloading, by tag key (**Always skip** in the list **Download new** shows; see [Downloads](Downloads)) |
 | `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
