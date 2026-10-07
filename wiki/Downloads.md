@@ -14,7 +14,8 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 - **Your tasks go first.** Start something while the routine check runs and the check stops safely to make way;
   Tasks says so, and it carries on after yours. Anything you start also waits ahead of automatic ones in Tasks.
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
-  your Library list first. A store's **Download** button does one store. Each first lists what it would get:
+  your Library list first, from the stores switched on in [Settings](Settings). A store's **Download** button does
+  one store. Each first lists what it would get:
   what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
   don't want this time; left all ticked, it downloads everything new as before. Where Hoard knows a product's
   files before downloading (an update's new and changed files, and a Booth product's files), **Choose files**
@@ -163,7 +164,8 @@ checked, because Hoard doesn't download from it.
 A download that stops partway leaves a `.part` file, and the next download picks up where it ended. Hoard only
 adds to it the part of the file that follows, and only puts the file in place once it's complete, so a file is
 never stitched together from two versions: if the creator changed the file in the meantime, it's downloaded
-again from the start.
+again from the start. Beside the `.part` file Hoard keeps what the store said about the file when it started (its
+ETag, date and size, in `.part-info`), and only resumes when the store says it's still that file.
 
 ## The Downloads view
 

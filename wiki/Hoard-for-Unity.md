@@ -9,13 +9,15 @@ Open **Window › Hoard** to:
   Animated ones (GIFs) play, from 0.3.0.
 - **See what's already in this project.** It reads the asset GUIDs inside each `.unitypackage`, without extracting
   anything, and marks products **In this project** or **Partly in project**. Only what's under `Assets/` counts:
-  a package's own copy of something VCC installs under `Packages/` (Poiyomi, say) doesn't, from 0.5.1. **Select**
-  finds their assets in your Project window.
+  a package's own copy of something VCC installs under `Packages/` (Poiyomi, say) doesn't, from 0.5.1. Only files
+  count, not the folders a package puts them in, from 0.5.2: a creator's folder is all their products' folder.
+  **Select** finds their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 
 Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a project remembers where its
-assets came from.
+assets came from (from 0.5.2, a package with scripts too, though Unity reloads its scripts part way through). If
+the file is damaged, it's kept beside the new one as `imports.json.unreadable-<time>` rather than written over.
 
 ## Credits
 
@@ -26,7 +28,7 @@ Hoard assets this project uses, ready to paste into an avatar or world descripti
   and newer; 0.3.0 also took products only partly there, or imported through Hoard and removed since). Untick any you don't want credited. Assets that didn't come through Hoard can be added by
   hand, with a link if you like.
 - **Styles:** a list (name, creator, store and store link), Markdown (names linked to their store pages), or
-  grouped by creator.
+  grouped by creator (one line a creator, however their name's case differs between stores).
 - **Copy** puts it on the clipboard. **Save as...** writes a text file, in the project's own folder unless you
   choose otherwise; outside `Assets`, it's never part of an upload.
 

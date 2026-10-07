@@ -28,7 +28,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   cli.py               the command line (docs/COMMAND-LINE.md)
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
-  web/                 library.html, downloads.html and the bundled fonts
+  web/                 library.html, downloads.html, shared.js (what both pages share) and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
@@ -95,7 +95,7 @@ all in `browser.py`):
 | Store | How purchases are found | Notes |
 |---|---|---|
 | Gumroad | The library page's embedded Inertia data (`data-page` JSON), 15 purchases a page, archived ones read separately | The most dependable reader; the data shapes follow Gumroad's open-source code |
-| Booth | `BOOTH_JS` reads each card on `accounts.booth.pm/library`, `/library/gifts` and `/library/free_downloads`, page by page | Files come from the download-button placeholders' `data-href` (`test=downloadable`). They redirect to a short-lived address; if Booth refuses the direct request, `booth_fetch` downloads through the browser |
+| Booth | `BOOTH_JS` reads each card on `accounts.booth.pm/library`, `/library/gifts` and `/library/free_downloads`, page by page | Files come from the download-button placeholders' `data-href` (`test=downloadable`). They redirect to a short-lived address; if Booth refuses the direct request, `booth_fetch` downloads that file through the browser (and, refused twice running, the rest of the run); a dropped connection is retried directly. The reader and the downloader page through the library with the same `library.booth_cards` |
 | Jinxxy | `JX_CARDS_JS` reads the inventory cards, scrolling and clicking "load more" until nothing new appears | No buyer API. Card text skips buttons, menus and screen-reader labels |
 | Payhip | Purchases live in each shop (`<shop>/b-account`, often on the shop's own domain). `PAYHIP_SHOP_JS` reads each shop listed in settings (`payhip.shops`), crediting each card to the shop its link is in; on a creator's own shop (its menu's Creator/Customer switch leads back to the page) the cards are their purchases from everywhere, with no creator on them, so they're left as Unknown creator (issue #25). `config.apply_store_sites` adds the listed shops to Payhip's trusted sites | Read only: Hoard lists Payhip purchases and never downloads them (`DOWNLOADABLE` leaves it out). Payhip shows automated browsers a bot check, so a refresh uses a visible window and waits for the user to complete it; most people import each shop's saved pages instead |
 | itch.io | Its API (`itch.py`), with an API key kept by `vault.py` (DPAPI, the Keychain or the Secret Service), since its website stops automated browsers with a Cloudflare check: `/profile/owned-keys`, then `/games/<id>/uploads` and `/uploads/<id>/download` per project. The key is sent only to `api.itch.io` (egress keeps it off the file hosts). For imports, `ITCH_JS` reads `itch.io/my-purchases` by its addresses rather than its layout: a project is `<creator>.itch.io/<project>`, and one you own has a download page, `<creator>.itch.io/<project>/download/<key>`. Items are known by itch.io's project number, from the API or a saved page alike | `KEY_FORMAT` checks a pasted key before it's sent anywhere; `POST /api/itch-key` checks it with itch.io (`/profile`) before keeping it. Game builds are files whose `traits` include an operating system |
@@ -287,8 +287,12 @@ Nothing a page needs comes from outside the computer:
 
 ## The pages
 
-`library.html` and `browser.html` share one design system. The CSS custom properties at the top of each
+`library.html` and `downloads.html` share one design system. The CSS custom properties at the top of each
 file (`--cave`, `--ledge`, `--gold`, the store colours) are the brand's colours for dark and light mode.
+The script both pages share (windows, Settings, Tasks, Projects, choosing what to download, tags) is in
+`web/shared.js`, written once: `server.page_source` puts it into each page's own script where the page says
+`//@include shared.js`, so each page is still served as one inline script, allowed by its hash in the
+Content-Security-Policy.
 Script state lives in a single `state` object that's mirrored in the address bar, so views can be
 bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`.
 

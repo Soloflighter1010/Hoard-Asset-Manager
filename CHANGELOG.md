@@ -25,6 +25,92 @@ download, and lines up the buttons across the app. Everything in the betas befor
   windows, each store's buttons sit on a line of their own in **Stores** so the rows line up, tickboxes are gold
   everywhere, and the dropdowns in panels look like **Sort**.
 
+### Fixed: privacy
+
+- **A product both hidden and removed stays hidden** while the hidden library is locked: its name, picture and files
+  showed in the Library and Downloads. Setting Hoard up again no longer shows a task's raw details (file paths, or
+  hidden products' names) either.
+- **Reading your Jinxxy inventory only follows Jinxxy's own pages.** A "next page" link to another site was opened in
+  your signed-in Jinxxy browser.
+- Unlocking the hidden library from two tabs at once can no longer drop a request.
+
+### Fixed: files and downloads
+
+- **A resumed download is checked against the file it started as.** If the creator uploaded a new file under the
+  same name since, it starts again instead of joining the new file onto the old part.
+- **Jinxxy's shared pictures are kept.** Every sync deleted pictures that several products share byte for byte (then
+  downloaded them again); now only a banner several creators share is put aside, once.
+- **Jinxxy downloads the right file** when a file's button moves on the page: it never takes the button now in the
+  same place, which saved another file under the first one's name.
+- **Choosing files:** two products whose names differ only by version or label ("Outfit (PC)", "Outfit (Quest)")
+  no longer share their choices; files with the same name are one choice, and say so; choices made while offline
+  don't carry over to a later download; and a Jinxxy or Booth file whose label changes, or a chosen Jinxxy item
+  named differently on its page, is still the file you chose.
+- **An update stays on the list until all its files have come**: one left out, or not reached because you stopped,
+  is still offered. Checking one product for updates no longer clears what an earlier check found for the others.
+- **A brand-new Booth file in a product you have counts as new**, not as updated, and a single dropped connection no
+  longer turns Booth's direct downloads off for the rest of the run (the file resumes instead).
+- **Adding your Documents folder (or any folder around the downloads folder) to Local is refused**, instead of
+  copying Hoard's own downloads into Local; and one file name the system can't take no longer stops a Local copy
+  part way.
+- **Stop while a move rebuilds the catalog** says the product moved (it had), and keeps the catalog up to date.
+- A manifest changed outside Hoard is copied aside once, not every time it's opened; two catalog builds at once no
+  longer lose a library folder's list of what it holds; a cached picture another product still uses isn't deleted
+  with one you remove.
+- A Gumroad product downloaded from the Library gets its picture.
+
+### Fixed: Force stop
+
+- Force stop just as a sign-in window opens, or just as Hoard's browser starts downloading, now stops it; on a Mac
+  and Linux it closes a sign-in window an already-running browser opened too, and Hoard keeps the sign-in locked
+  until the browser has really ended. A force-stopped browser install says it was stopped (not "check your
+  connection"), and a force-stopped refresh doesn't go on saving pictures.
+
+### Fixed: everything else
+
+- **Download new skips stores switched off in Settings.**
+- **Stop during the routine check's update step** ends it as stopped, keeping nothing it half found.
+- **One itch.io project's revoked download key** no longer counts as Hoard's API key being refused (which stopped
+  every itch.io download and asked you to sign in again).
+- **Without Playwright, a task says so** instead of ending silently as done; refreshing itch.io alone starts no
+  browser at all.
+- **Projects find downloads in your other library folders**; they showed as not downloaded.
+- **Set up Hoard again** from Downloads opens setup; links from Projects open a download's details; moving to
+  another setup step during a sign-in or install no longer stops the library counts updating.
+- **Copies of** shows exactly the copies the stack's ×N counted; a tag rename or delete that fails keeps your tag
+  filter; "You also have this from" names itch.io properly; custom store colours start from Local's real colour in
+  the Library too.
+- **Save for Hoard** (Payhip) copes with a last page whose Next button has no link.
+- Bringing over Hoard 1.x waits for a running task (it can change the downloads folder); with `--host` set to one
+  network address, the address Hoard prints and opens is that one.
+- Stop and Force stop say when Hoard didn't answer, rather than "can't be stopped"; **Rescan** says why it couldn't;
+  adding the Payhip shops Hoard found never replaces your list when it couldn't be read first.
+- Requests Hoard can't make sense of get a clear error instead of a dropped connection.
+- What's new no longer turns a web address inside a link into a second link, and the website's changelog uses the
+  same rules for betas as the app.
+- The website: an iPad is no longer offered the macOS package, and a credit marked Gumroad that's on Jinxxy says so.
+
+### Faster
+
+- Your hidden, archived and removed choices are read once until they change, not several times a request and once
+  a product while downloading; a Booth product's folder is listed once, not once a file; downloads reuse one
+  connection to file hosts per store; and what both of Hoard's pages share is kept once (the pages are served
+  exactly as before).
+
+### Hoard for Unity 0.5.2
+
+- **Importing a package with scripts is remembered** in `imports.json` (Unity reloading its scripts part way through
+  lost it). An `imports.json` that can't be written no longer leaves **Import** greyed out, and a damaged one is kept
+  aside rather than written over.
+- **A creator's folder doesn't make their other products look partly imported**: only files count, not folders.
+- **A library folder that's a whole drive** (`E:\`) works, **"Checking packages" no longer sticks**, choosing
+  **Folder...** while loading takes effect, and a library that can't be read says why instead of loading for ever.
+- **Credits:** one line a creator in **By creator** whatever the case of their name, a title you can type a space
+  in, and a read-only `credits.json` reported rather than breaking the window. Links in the list are checked more
+  strictly.
+- Faster drawing, pictures read two at a time with nothing left in memory, and times written the same way in
+  every language.
+
 ## 3.0.0-beta.5
 
 The fifth beta of Hoard 3.0 makes signing in smoother. Everything in the betas before it is still here.
