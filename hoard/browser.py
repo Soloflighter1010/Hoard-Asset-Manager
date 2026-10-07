@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 import time
+import weakref
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -424,7 +425,8 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
 # open, from any thread, so everything waiting on one fails at once and the job can finish.
 
 _open: dict = {}              # each browser Hoard has open -> what to do after it's ended (its sign-in's lock)
-_ended: set = set()           # browsers ended by force: closing one of those again can wait for ever
+_ended = weakref.WeakSet()    # browsers ended by force: closing one of those again can wait for ever (each is let
+                              # go with the browser itself, so a long-running Hoard doesn't keep them all)
 _open_lock = threading.Lock()
 
 
@@ -470,7 +472,10 @@ def end_browsers() -> int:
         _open.clear()
     ended, pids = 0, set()
     for ctx, cleanup in found:
-        _ended.add(ctx)
+        try:
+            _ended.add(ctx)
+        except TypeError:   # (a stand-in that can't be weakly held: never closed twice anyway)
+            pass
         pid = _driver_pid(ctx)
         if pid and pid not in pids:
             pids.add(pid)

@@ -44,7 +44,21 @@ def reset_keys():
 
 WEB_SAFETY = (safety,)
 SIGN_INS = (browser,)
-PAGES = (REPO / "hoard" / "web" / "library.html", REPO / "hoard" / "web" / "downloads.html")
+class _Served:
+    """A page as Hoard serves it (server.page_source: with what both pages share in its script), read like a file."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+    def read_bytes(self) -> bytes:
+        from hoard import server
+        return server.page_source(self.name)
+
+    def read_text(self, encoding: str = "utf-8") -> str:
+        return self.read_bytes().decode(encoding)
+
+
+PAGES = (_Served("library.html"), _Served("downloads.html"))
 
 
 def fake_addrinfo(*ips):

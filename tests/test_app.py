@@ -2384,7 +2384,7 @@ class StoreTables(unittest.TestCase):
         self.assertNotIn("payhip", library.DOWNLOADABLE)
         web = REPO / "hoard" / "web"
         for page in ("library.html", "downloads.html"):
-            html = (web / page).read_text("utf-8")
+            html = server.page_source(page).decode("utf-8")   # as served: with what both pages share
             for const in ("STORE_SITES", "STORE_NAMES"):
                 keys = set(re.findall(r"(\w+):", re.search(rf"const {const} = \{{(.*?)\}};", html).group(1)))
                 self.assertEqual(keys, stores, f"{page}: {const}")
@@ -2405,9 +2405,10 @@ class StoreTables(unittest.TestCase):
                          set(downloader.STORE_DIRS.values()))
         self.assertEqual(dict(re.findall(r'\{ "(\w+)", "([\w.]+)" \}', catalog)),
                          {downloader.STORE_DIRS[s]: safety.STORE_LINK_SITES[s][0] for s in stores})
-        window = (unity / "HoardWindow.cs").read_text("utf-8")
-        self.assertEqual(re.findall(r'"(\w+)"', re.search(r"StoreNames = \{(.*?)\};", window).group(1)),
+        self.assertEqual(re.findall(r'"(\w+)"', re.search(r"Stores = \{(.*?)\};", catalog).group(1)),
                          [downloader.STORE_DIRS[s] for s in library.STORES] + ["Local"])   # your own (issue #80)
+        window = (unity / "HoardWindow.cs").read_text("utf-8")
+        self.assertIn('Prepend("All stores", HoardCatalog.Stores)', window, "the window's list is the catalog's")
 
 
 class CommandLine(unittest.TestCase):
@@ -3498,3 +3499,80 @@ def mock_credits(projects):
     """projects.view builds each credits list too; not what these tests look at."""
     from unittest import mock
     return mock.patch.object(projects, "credits_text", lambda p, s: "")
+
+
+class BadInput(unittest.TestCase):
+    """Fixes from the October 2026 audit (section 6): bad input gets a 400, not a dropped connection; and what was
+    made faster (section 7) still gives the same answers."""
+
+    setUp = WrongBehaviour.setUp
+    call = WrongBehaviour.call
+
+    def raw(self, path, body: bytes, length: str):
+        import socket
+        with socket.create_connection(("127.0.0.1", self.srv.server_port), timeout=10) as sock:
+            sock.sendall(f"POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n"
+                         f"{ACCESS_HEADER}: {self.srv.key}\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n".encode() + body)
+            return sock.recv(200).split(b" ", 2)[1]
+
+    def test_a_negative_length(self):
+        self.assertEqual(self.raw("/api/tags", b"{}", "-1"), b"400")
+
+    def test_stores_that_arent_a_list_of_names(self):
+        from unittest import mock
+        with mock.patch.object(self.srv.jobs, "start", lambda *a, **k: "started"):
+            for stores in ("booth", {"booth": 1}, 7):
+                with self.subTest(stores=stores):
+                    self.assertEqual(self.call("POST", "/api/download", {"stores": stores})[0], 400)
+            self.assertEqual(self.call("POST", "/api/download", {"stores": [["booth"], {"x": 1}, "booth"]})[0], 202,
+                             "what isn't a name is left out")
+            status, data = self.call("POST", "/api/login", {"stores": ["itch", "booth"]})
+            self.assertEqual(status, 400, "itch.io signs in with a key, never a browser window")
+            self.assertEqual(self.call("POST", "/api/settings", {"stores": ["booth"]})[0], 400)
+
+    def test_a_product_key_ends_where_it_ends(self):
+        self.assertTrue(tags.TAG_KEY_RX.match("booth:rusk"))
+        self.assertIsNone(tags.TAG_KEY_RX.match("booth:rusk\n"))
+
+    def test_old_settings_that_arent_settings(self):
+        from hoard import setup
+        old = Path(tempfile.mkdtemp())
+        (old / "asset_dl.py").write_text("# 1.x")
+        (old / "config.json").write_text("[1, 2]")
+        (old / "downloads").mkdir()
+        config_file = Path(tempfile.mkdtemp()) / "config.json"
+        said = setup.migrate_from(config.load_config(config_file), old, config_file, library.Library(Path(tempfile.mkdtemp()) / "l.json"))
+        self.assertIn("downloads folder", said)
+
+    def test_marks_are_read_again_once_changed(self):
+        from hoard.marks import MarkStore
+        store = MarkStore(Path(tempfile.mkdtemp()) / "marks.json")
+        self.assertEqual(store.keys("removed"), frozenset())
+        store.change("removed", {"booth:rusk"}, True)
+        self.assertEqual(store.keys("removed"), {"booth:rusk"})
+        mine = store.load()
+        mine["removed"].add("booth:mochi")   # yours to change...
+        self.assertEqual(store.keys("removed"), {"booth:rusk"}, "...without changing what was read")
+        store.change("removed", {"booth:rusk"}, False)
+        self.assertEqual(MarkStore(store.path).keys("removed"), frozenset())
+
+    def test_one_cookie_free_session_for_other_sites(self):
+        from hoard import egress
+        store_sess = egress.session("Hoard test")
+        anon = egress._anon_for(store_sess)
+        self.assertIs(egress._anon_for(store_sess), anon, "made once, then reused")
+        from http.cookiejar import Cookie
+        import urllib.request
+        request = urllib.request.Request("https://files.example/x")
+        cookie = Cookie(0, "id", "1", None, False, "files.example", False, False, "/", False, True, None, False, None, None, {})
+        self.assertFalse(anon.cookies._policy.set_ok(cookie, request), "keeps no cookie")
+        self.assertEqual(anon.headers["User-Agent"], "Hoard test")
+
+    def test_both_pages_share_one_script(self):
+        shared = (REPO / "hoard" / "web" / "shared.js").read_text("utf-8")
+        for page in ("library.html", "downloads.html"):
+            served = server.page_source(page).decode("utf-8")
+            self.assertNotIn("@include", served)
+            self.assertIn("function makeWindow(", served, page)
+            self.assertNotIn("function makeWindow(", (REPO / "hoard" / "web" / page).read_text("utf-8"), "only in shared.js")
+        self.assertIn("function makeWindow(", shared)

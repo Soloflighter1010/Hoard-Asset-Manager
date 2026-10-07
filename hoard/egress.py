@@ -13,10 +13,12 @@ Images from stores' public CDNs have their own small fetcher with the same addre
 """
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import re
 import time
+import weakref
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -87,6 +89,31 @@ def session(user_agent: str = "") -> requests.Session:
     return s
 
 
+class _NoCookies(http.cookiejar.DefaultCookiePolicy):
+    """Keeps no cookie at all: the session for other sites stays cookie-free however many requests it makes."""
+
+    def set_ok(self, cookie, request):
+        return False
+
+
+def _anon_for(store_sess: requests.Session) -> requests.Session:
+    """The cookie-free session for hops off a store's own sites (a file host it sends you to), made once per store
+    session and reused, so each request doesn't open (and leave open) connections of its own. Closed with it."""
+    anon = getattr(store_sess, "__dict__", {}).get("_hoard_anon")
+    agent = store_sess.headers.get("User-Agent", "")
+    if anon is None:
+        anon = session(agent)
+        anon.cookies.set_policy(_NoCookies())
+        try:
+            store_sess._hoard_anon = anon
+            weakref.finalize(store_sess, anon.close)
+        except (AttributeError, TypeError):
+            pass   # (a session that can't carry it: this request's own, as before)
+    elif agent:
+        anon.headers["User-Agent"] = agent
+    return anon
+
+
 def _test_origin(url: str) -> bool:
     u = urlparse(url)
     return f"{u.scheme}://{u.netloc}" in _TEST_ORIGINS
@@ -120,7 +147,7 @@ def get(store_sess: requests.Session, url: str, sites, *, stay_on_sites: bool = 
     """GET a store page or API, following redirects one checked hop at a time. With stay_on_sites (the default for
     pages and APIs), a redirect off the store's own sites is refused rather than followed. With follow=False,
     the first answer is returned as it is, redirect or not."""
-    anon = session(store_sess.headers.get("User-Agent", ""))
+    anon = _anon_for(store_sess)
     timeout = kwargs.pop("timeout", 60)
     for _ in range(MAX_HOPS):
         r = _send(store_sess, anon, url, sites, timeout=timeout, **kwargs)
@@ -178,7 +205,7 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
     to stop."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
-    anon = session(store_sess.headers.get("User-Agent", ""))
+    anon = _anon_for(store_sess)
     try:
         have = os.stat(part, follow_symlinks=False).st_size if part.is_file() and not part.is_symlink() else 0
     except OSError:

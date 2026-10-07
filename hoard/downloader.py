@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import os
 import re
@@ -18,7 +17,7 @@ import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
 from .common import NotLoggedIn, log, now_iso, tick
-from .library import DOWNLOADABLE, STORES
+from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
@@ -559,8 +558,8 @@ def removed_product(store: str, name: str, report: "Report") -> bool:
 
 
 def _removed_keys() -> set:
-    from .marks import MarkStore   # read fresh: removing something takes effect on the next product
-    return MarkStore().load()["removed"]
+    from .marks import MarkStore   # read again once it changes: removing something takes effect on the next product
+    return MarkStore().keys("removed")
 
 
 def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
@@ -580,25 +579,6 @@ def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
 
 
 # ----------------------------------------------------------------------------- Gumroad
-
-def extract_page_json(text: str):
-    """Pull the Inertia page object (component + props) out of a Gumroad HTML page."""
-    m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
-    if m:
-        return json.loads(m.group(1))
-    m = re.search(r'\bdata-page="(\{[^"]*)"', text)
-    if m:
-        return json.loads(html.unescape(m.group(1)))
-    # Older react-on-rails markup, kept as a fallback
-    best = None
-    for m in re.finditer(r'<script[^>]*js-react-on-rails-component[^>]*data-component-name="([^"]+)"[^>]*>(.*?)</script>',
-                         text, re.S):
-        if best is None or len(m.group(2)) > len(best[1]):
-            best = (m.group(1), m.group(2))
-    if best:
-        return {"component": best[0], "props": json.loads(best[1])}
-    return None
-
 
 def gumroad_session(cfg: dict) -> requests.Session:
     """An HTTP session signed in to Gumroad, using your Gumroad sign-in in Hoard's browser.
@@ -641,19 +621,8 @@ class Gumroad:
 
     def library(self):
         """Every purchase card in the library, archived ones included if configured."""
-        modes = [False, True] if self.cfg["gumroad"].get("include_archived", True) else [False]
-        for archived in modes:
-            page_no = 1
-            while True:
-                params = {"page": page_no, "sort": "purchase_date"}
-                if archived:
-                    params["show_archived_only"] = "true"
-                props = self.page(GR_LIBRARY, params).get("props", {})
-                yield from props.get("results") or []
-                pages = (props.get("pagination") or {}).get("pages") or 1
-                if page_no >= pages:
-                    break
-                page_no += 1
+        yield from gumroad_cards(lambda params: self.page(GR_LIBRARY, params).get("props", {}),
+                                 self.cfg["gumroad"].get("include_archived", True))   # (page() waits between pages)
 
     def file_url(self, page_url: str, token: str, file_id: str, fallback: str | None) -> str | None:
         """Ask for a signed download URL; fall back to the redirecting link on the download page."""
@@ -1439,97 +1408,9 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: boo
 BOOTH_LIBRARY = "https://accounts.booth.pm/library"
 
 
-BOOTH_JS = r"""
-() => {
-  const idOf = h => { const m = (h || '').match(/\/items\/(\d+)/); return m ? m[1] : null; };
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const out = new Map();
-  for (const a of document.querySelectorAll('a[href*="/items/"]')) {
-    const id = idOf(a.href);
-    if (!id || out.has(id)) continue;
-    let c = a;
-    while (c.parentElement && c.parentElement !== document.body) {
-      const ids = new Set([...c.parentElement.querySelectorAll('a[href*="/items/"]')].map(x => idOf(x.href)).filter(Boolean));
-      if (ids.size > 1) break;
-      c = c.parentElement;
-    }
-    const name = [...c.querySelectorAll('a[href*="/items/"]')].map(text).sort((x, y) => y.length - x.length)[0]
-      || text(c.querySelector('.font-bold'));
-    let creator = '', creatorUrl = '';
-    for (const s of c.querySelectorAll('a[href]')) {
-      let u; try { u = new URL(s.href); } catch (e) { continue; }
-      if (/\.booth\.pm$/.test(u.hostname) && !['accounts.booth.pm', 'www.booth.pm'].includes(u.hostname)
-          && !/\/items\//.test(u.pathname) && text(s)) { creator = text(s); creatorUrl = u.origin + '/'; break; }
-    }
-    if (!creator) creator = text(c.querySelector('.text-text-gray600'));
-    const img = c.querySelector('a[href*="/items/"] img') || c.querySelector('img');
-    const thumb = img ? (img.getAttribute('data-original') || img.getAttribute('data-src') || img.currentSrc || img.src || '') : '';
-    // Files. Booth now draws each file's buttons from placeholders that carry the address in data-href
-    // (2026); older pages used plain links. "Download" is the file itself; "Open in Browser" (?browse=1) and the
-    // Booth Library Manager links (/deeplink) are other ways to the same file, so they're skipped.
-    const FILE_SEL = '[data-href*="/downloadables/"], a[href*="/downloadables/"]';
-    const addr = el => el.getAttribute('data-href') || el.getAttribute('href') || '';
-    const fileId = el => {
-      const h = addr(el), m = h.match(/\/downloadables\/(\d+)(?:[?#]|$)/);
-      return m && !/[?&]browse=/.test(h) && (el.getAttribute('data-test') || 'downloadable') === 'downloadable' ? m[1] : null;
-    };
-    const seen = new Set(), files = [];
-    for (const d of c.querySelectorAll(FILE_SEL)) {
-      const fid = fileId(d);
-      if (!fid || seen.has(fid)) continue;
-      seen.add(fid);
-      let r = d;   // the file's row: widen from its button while the row is still about this one file
-      while (r.parentElement && r.parentElement !== c) {
-        const p = r.parentElement;
-        const ids = new Set([...p.querySelectorAll(FILE_SEL)].map(x => (addr(x).match(/\/downloadables\/(\d+)/) || [])[1]).filter(Boolean));
-        if (ids.size > 1 || p.querySelector('a[href*="/items/"], img')) break;
-        r = p;
-      }
-      const row = r.cloneNode(true);
-      row.querySelectorAll('.js-download-button, button, [data-href], a[href*="/downloadables/"]').forEach(x => x.remove());
-      const name = (row.textContent || '').replace(/\s+/g, ' ').replace(/ダウンロード|Download|Open in Browser|Other Downloads/gi, '').trim();
-      files.push({ name: name || 'File', url: new URL(addr(d), location.href).href });
-    }
-    const order = c.querySelector('a[href*="/orders/"]');
-    out.set(id, { id, name, creator, creator_url: creatorUrl, thumbnail: thumb, url: a.href,
-                  order_url: order ? order.href : '', files });
-  }
-  return [...out.values()];
-}
-"""
-
-
-def booth_require_login(page) -> None:
-    """Raise NotLoggedIn when Booth has sent the browser to its sign-in page."""
-    u = urlparse(page.url)
-    if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or page.locator("input[type=password]").count():
-        raise NotLoggedIn("Not signed in to Booth")
-
-
 def booth_library(page, cfg: dict) -> list[dict]:
-    """Every purchase (and, if enabled, gift) in your Booth library, one dict per item."""
-    items: dict[str, dict] = {}
-    delay = float(cfg.get("request_delay", 1.0))
-    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
-        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
-    for path, gift in sources:
-        for page_no in range(1, 500):
-            resp = page.goto(f"{BOOTH_LIBRARY}{path}?page={page_no}", wait_until="domcontentloaded")
-            page.wait_for_timeout(400)
-            booth_require_login(page)  # a sign-in page means the session ended, whatever its status code
-            if resp is not None and resp.status >= 400:
-                raise RuntimeError(f"accounts.booth.pm answered HTTP {resp.status}")
-            if not urlparse(page.url).path.startswith("/library"):
-                break
-            new = 0
-            for b in page.evaluate(BOOTH_JS):
-                if b["id"] not in items:
-                    items[b["id"]] = {**b, "gift": gift}
-                    new += 1
-            if not new:  # past the last page
-                break
-            time.sleep(delay)
-    return list(items.values())
+    """Every purchase (and, if enabled, gift) in your Booth library, one dict per item (as the library reads it)."""
+    return [{**b, "gift": gift} for b, gift, _base in booth_cards(page, cfg, float(cfg.get("request_delay", 1.0)))]
 
 
 def session_from_context(ctx, domain: str) -> requests.Session:

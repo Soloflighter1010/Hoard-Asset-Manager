@@ -295,7 +295,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             raise ValueError("These aren't Payhip shop addresses: " + ", ".join(bad) +
                              ". Use the shop's own address, such as myshop.store or payhip.com/MyShop.")
         change.setdefault("payhip", {})["shops"] = list(dict.fromkeys(shops))
-    for store, opts in (body.get("stores") or {}).items():
+    given_stores = body.get("stores") or {}
+    if not isinstance(given_stores, dict):
+        raise ValueError("Unknown store.")
+    for store, opts in given_stores.items():
         if store not in STORES or not isinstance(opts, dict):
             raise ValueError("Unknown store.")
         allowed = {"enabled"} | ({"include_gifts", "include_free"} if store == "booth" else set()) | \
@@ -341,7 +344,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.picking = threading.Lock()   # a system picker is open (see /api/pick)
-        self.cfg_lock = threading.Lock()   # one change to the always-skip list at a time (issue #107)
+        # one change to the settings file at a time (the always-skip list's read and change too, issue #107);
+        # re-entrant, as that change saves the settings while holding it
+        self.cfg_lock = threading.RLock()
         self.quit_app = None
         self.show_token = None
         self.last_seen = time.time()
@@ -402,6 +407,11 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         with self._index_lock:
             self._wanted += 1
 
+    def save_settings(self) -> None:
+        """Write the settings to config.json (the ones it keeps), one writer at a time."""
+        with self.cfg_lock:
+            save_config({k: self.cfg[k] for k in DEFAULT_CONFIG if k in self.cfg}, self.config_path)
+
     def download_choices(self, unlocked: bool) -> dict:
         """What Download new and Update all would get, for you to choose from (issue #107), each product once by its
         tag key: new, things in your library on a store Hoard downloads from with nothing on disk yet; updates, what
@@ -409,7 +419,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         out, as downloading leaves them out, and hidden ones too while the hidden library is locked."""
         srv = self
         on_disk = {a["tag_key"] for a in srv.index(stale_ok=True)["assets"]}
-        marks = MarkStore().load()
+        marks = MarkStore().view()
         updates, skip = AssetUpdates().load()["items"], download_skip(srv.cfg)
         enabled = {s for s in DOWNLOADABLE if srv.cfg[s].get("enabled", True)}
         out_of_view = lambda k: k in marks["removed"] or (k in marks["hidden"] and not unlocked)  # noqa: E731
@@ -436,7 +446,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         Hidden products aren't counted, so a count never gives them away while the hidden library is locked."""
         counts: dict[int, int] = {}
         try:
-            hidden = MarkStore().load()["hidden"]
+            hidden = MarkStore().keys("hidden")
             for a in self.index(stale_ok=True)["assets"]:
                 if a.get("tag_key") in hidden:
                     continue
@@ -530,7 +540,7 @@ class Handler(BaseHTTPRequestHandler):
     def _hidden_names(self) -> list[str]:
         """The names of hidden products, longest first, while this browser hasn't unlocked the hidden library (so
         they can be taken out of job logs); [] when it has, or nothing is hidden."""
-        hidden = MarkStore().load()["hidden"]
+        hidden = MarkStore().keys("hidden")
         if not hidden or self._unlocked():
             return []
         names = {i["name"] for i in self.server.lib.snapshot()[0] if tag_key(i["store"], i["name"]) in hidden}
@@ -565,7 +575,7 @@ class Handler(BaseHTTPRequestHandler):
         path, srv = u.path, self.server
         if path in PAGES:   # the pages hold nothing private: everything they show is fetched with the access key
             srv.last_seen = time.time()
-            return self._send(200, (WEB / PAGES[path]).read_bytes(), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            return self._send(200, page_source(PAGES[path]), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))
             if not font:
@@ -579,7 +589,7 @@ class Handler(BaseHTTPRequestHandler):
             tagdata = TagStore().load()
             items = enrich(items, srv.cfg["tags"], tagdata)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
-            marks, unlocked = MarkStore().load(), self._unlocked()
+            marks, unlocked = MarkStore().view(), self._unlocked()
             updates = AssetUpdates().load()["items"]
             cutoff = new_cutoff(srv.cfg)
             first_read = {s: (info.get("first_read") or "") for s, info in stores.items()}
@@ -628,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
             # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
             # page has the same views (issue #29); hidden products' downloads stay out of view while it's locked
-            marks, unlocked = MarkStore().load(), self._unlocked()
+            marks, unlocked = MarkStore().view(), self._unlocked()
             by_store = {tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
             updates = AssetUpdates().load()   # what the last check for updates found (issue #26)
             used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
@@ -650,7 +660,7 @@ class Handler(BaseHTTPRequestHandler):
             found = self._visible_projects()
             updates = AssetUpdates().load()["items"]
             return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
-                               "hidden_left_out": not self._unlocked() and bool(MarkStore().load()["hidden"])}, compress=True)
+                               "hidden_left_out": not self._unlocked() and bool(MarkStore().keys("hidden"))}, compress=True)
         if path == "/api/settings":
             return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
         if path == "/api/update":
@@ -705,7 +715,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
         srv.cfg["library_folders"] = folders
-        save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+        srv.save_settings()
         try:
             build_catalog(srv.cfg, root_dir(srv.cfg))   # catalog.json (and Hoard for Unity) follow straight away
         except OSError as e:
@@ -774,7 +784,7 @@ class Handler(BaseHTTPRequestHandler):
         found = projects.read_all()
         if self._unlocked():
             return found
-        hidden = MarkStore().load()["hidden"]
+        hidden = MarkStore().keys("hidden")
         if not hidden:
             return found
         return [{**p, "assets": [a for a in p["assets"] if tag_key(a["store"], a["name"]) not in hidden]} for p in found]
@@ -807,7 +817,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e)}, 400)
             if srv.cfg.get("local_copy", True) != copy:   # the choice you made last time is offered next time
                 srv.cfg["local_copy"] = copy
-                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+                srv.save_settings()
             started = srv.jobs.start("add-local", [], local=what)
             if not started:
                 return self._json({"error": "That's already waiting its turn."}, 409)
@@ -850,7 +860,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Confirm first."}, 400)
         raw = body.get("keys")
         keys = {k for k in raw[:5000] if isinstance(k, str)} if isinstance(raw, list) else set()
-        marks = MarkStore().load()
+        marks = MarkStore().view()
         if keys & marks["hidden"] and not self._unlocked():
             return self._json({"error": "Unlock your hidden library first."}, 403)
         if not keys:
@@ -892,7 +902,7 @@ class Handler(BaseHTTPRequestHandler):
         totals = {s: srv.lib.merge_store(s, items) for s, items in found.items()}
         added = [s for s in payhip_shops(srv.cfg) if s not in shops_before]
         if added:   # importing a shop's page, once you've confirmed the shop, adds it to your list
-            save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            srv.save_settings()
         if found and srv.cfg.get("offline_images", True):
             keys = [i["key"] for items in found.values() for i in items]
             threading.Thread(target=cache_images, args=(srv.lib, keys, lambda m: None), daemon=True).start()
@@ -948,6 +958,8 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             return self._json({"error": "Bad request."}, 400)
+        if length < 0:   # (read(-1) would wait for the connection to close)
+            return self._json({"error": "Bad request."}, 400)
         if length > (80 * 1024 * 1024 if path == "/api/import" else 1024 * 1024):  # only imports are large
             return self._json({"error": "That's too large." if path != "/api/import"
                                else "That's too large to be library pages. Import fewer at a time."}, 413)
@@ -983,7 +995,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e)}, 400)
             deep_merge(srv.cfg, change)
             apply_store_sites(srv.cfg)   # added or removed Payhip shops count (or stop counting) straight away
-            save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            srv.save_settings()
             srv.forget_index()
             return self._json({"ok": True, "settings": {**public_settings(srv.cfg), "libraries": srv.library_view()}})
         if path == "/api/diagnostics/open-folder":
@@ -1072,7 +1084,7 @@ class Handler(BaseHTTPRequestHandler):
             asset = next((a for a in srv.index(stale_ok=True)["assets"] if a.get("tag_key") == key), None)
             if asset is None:
                 return self._json({"error": "That isn't downloaded any more."}, 404)
-            if key in MarkStore().load()["hidden"] and not self._unlocked():
+            if key in MarkStore().keys("hidden") and not self._unlocked():
                 return self._json({"error": "Unlock your hidden library first."}, 403)
             started = srv.jobs.start("move", [], move={"key": key, "to": to, "name": asset.get("name")})
             if not started:
@@ -1091,7 +1103,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "queued": started == "queued"})
         if path == "/api/edit-copy":   # a copy of a download to change, outside Hoard's care (issue #82)
             key = str(body.get("key") or "")[:400]
-            if key in MarkStore().load()["hidden"] and not self._unlocked():
+            if key in MarkStore().keys("hidden") and not self._unlocked():
                 return self._json({"error": "Unlock your hidden library first."}, 403)
             try:
                 done = make_editable_copy(srv.cfg, root_dir(srv.cfg), key)
@@ -1121,7 +1133,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(now) > MAX_SKIP:
                     return self._json({"error": f"Hoard can skip up to {MAX_SKIP:,} products."}, 400)
                 srv.cfg["download_skip"] = sorted(now)
-                save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+                srv.save_settings()
             return self._json({"ok": True, "skipped": len(now)})
         if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
             return self._delete_files(body)
@@ -1164,10 +1176,9 @@ class Handler(BaseHTTPRequestHandler):
             if not started:
                 return self._json({"error": "Installing Hoard's browser is already waiting its turn."}, 409)
             return self._json({"ok": True, "queued": started == "queued"}, 202)
-            return self._json({"ok": True}, 202)
         if path == "/api/setup/done":
             srv.cfg["setup_done"] = bool(body.get("done", True))
-            save_config({k: srv.cfg[k] for k in DEFAULT_CONFIG if k in srv.cfg}, srv.config_path)
+            srv.save_settings()
             return self._json({"ok": True})
         if path == "/api/setup/migrate":
             if srv.jobs.state["running"]:   # it can change the downloads folder, which a running job is writing to
@@ -1180,11 +1191,15 @@ class Handler(BaseHTTPRequestHandler):
             srv.forget_index()
             return self._json({"ok": True, "message": said})
 
-        stores = [s for s in (body.get("stores") or list(STORES)) if s in STORES or (path == "/api/logout" and s == "all")]
+        named = body.get("stores")
+        if named is not None and not isinstance(named, list):
+            return self._json({"error": "Unknown store."}, 400)
+        stores = list(dict.fromkeys(s for s in (named or list(STORES))[:20]
+                                    if isinstance(s, str) and (s in STORES or (path == "/api/logout" and s == "all"))))
         bulk = path in ("/api/download", "/api/check-updates") and not (body.get("keys") or body.get("item") or body.get("only"))
         if path == "/api/sync" or bulk:   # only the stores you use (a chosen product is fetched wherever it is)
             stores = [s for s in stores if srv.cfg[s].get("enabled", True)]
-        if path == "/api/login" and stores == ["itch"]:
+        if path == "/api/login" and stores[:1] == ["itch"]:   # (a sign-in is one store's: the first named)
             return self._json({"error": "itch.io signs in with an API key: choose Sign in on its row in Stores."}, 400)
         if path in ("/api/download", "/api/check-updates") and stores and not any(s in DOWNLOADABLE for s in stores):
             return self._json({"error": "Hoard lists what you own on Payhip, and doesn't download from it. Open the "
@@ -1206,6 +1221,18 @@ class Handler(BaseHTTPRequestHandler):
         if not started:
             return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
         self._json({"ok": True, "queued": started == "queued"}, 202)
+
+
+SHARED_MARK = b"//@include shared.js\n"
+
+
+def page_source(name: str) -> bytes:
+    """A page as it's served: its file, with what both pages share (web/shared.js) put in its script where it says
+    so, so each page is still one script the Content-Security-Policy allows by its hash."""
+    page = (WEB / name).read_bytes()
+    if SHARED_MARK in page:
+        page = page.replace(SHARED_MARK, (WEB / "shared.js").read_bytes().replace(b"\r\n", b"\n") + b"\n", 1)
+    return page
 
 
 def chosen_files(raw) -> dict[str, dict] | None:
@@ -1288,4 +1315,4 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
         srv.server_close()
 
 
-__all__ = ["serve", "AppServer", "Handler", "public_settings", "apply_settings", "IMPORTABLE"]
+__all__ = ["serve", "AppServer", "Handler", "public_settings", "apply_settings", "page_source", "IMPORTABLE"]

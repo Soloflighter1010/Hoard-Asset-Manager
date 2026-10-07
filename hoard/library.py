@@ -68,52 +68,75 @@ GR_LIBRARY = "https://app.gumroad.com/library"
 
 
 def extract_page_json(text: str):
-    """The page data Gumroad embeds in its HTML (component and props), or None."""
+    """The page data Gumroad embeds in its HTML (component and props), or None. (Reading the library and
+    downloading both use this.)"""
     m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
     if m:
         return json.loads(m.group(1))
     m = re.search(r'\bdata-page="(\{[^"]*)"', text)
     if m:
         return json.loads(html.unescape(m.group(1)))
+    # Older react-on-rails markup, kept as a fallback
+    best = None
+    for m in re.finditer(r'<script[^>]*js-react-on-rails-component[^>]*data-component-name="([^"]+)"[^>]*>(.*?)</script>',
+                         text, re.S):
+        if best is None or len(m.group(2)) > len(best[1]):
+            best = (m.group(1), m.group(2))
+    if best:
+        return {"component": best[0], "props": json.loads(best[1])}
     return None
+
+
+def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None):
+    """Every purchase card in your Gumroad library, page by page (and the archived ones, when wanted). read_props
+    gets a page's query (page, sort, archived) and returns that page's props; on_page(archived, page, pages) is
+    told as each is read. Listing the library and downloading both read it this way."""
+    for archived in ([False, True] if include_archived else [False]):
+        page_no = 1
+        while True:
+            params = {"page": page_no, "sort": "purchase_date"} | ({"show_archived_only": "true"} if archived else {})
+            props = read_props(params) or {}
+            yield from props.get("results") or []
+            pages = (props.get("pagination") or {}).get("pages") or 1
+            if on_page:
+                on_page(archived, page_no, pages)
+            if page_no >= pages:
+                break
+            page_no += 1
+            time.sleep(delay)
 
 
 def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
     """Every purchase in your Gumroad library, archived ones included when configured."""
     items, seen = [], set()
-    delay = float(cfg.get("request_delay", 0.8))
-    for archived in ([False, True] if cfg["gumroad"].get("include_archived", True) else [False]):
-        page_no = 1
-        while True:
-            q = f"?page={page_no}&sort=purchase_date" + ("&show_archived_only=true" if archived else "")
-            r = ctx.request.get(GR_LIBRARY + q, timeout=60000)
-            if "/login" in urlparse(r.url).path:
-                raise NotLoggedIn()
-            if not r.ok:
-                raise RuntimeError(f"the library page answered HTTP {r.status}")
-            data = extract_page_json(r.text())
-            if not data:
-                raise RuntimeError("couldn't find the library data on the page (Gumroad may have changed its site)")
-            props = data.get("props") or {}
-            for card in props.get("results") or []:
-                prod, pur = card.get("product") or {}, card.get("purchase") or {}
-                creator = prod.get("creator") or {}
-                variants = (pur.get("variants") or "").strip() or None
-                dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
-                if dedupe in seen:  # bought twice
-                    continue
-                seen.add(dedupe)
-                items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
-                                  creator=creator.get("name"), creator_url=creator.get("profile_url"),
-                                  thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
-                                  download_url=pur.get("download_url"), variants=variants,
-                                  archived=bool(pur.get("is_archived"))))
-            pages = (props.get("pagination") or {}).get("pages") or 1
-            progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
-            if page_no >= pages:
-                break
-            page_no += 1
-            time.sleep(delay)
+
+    def read_props(params: dict) -> dict:
+        r = ctx.request.get(GR_LIBRARY, params=params, timeout=60000)
+        if "/login" in urlparse(r.url).path:
+            raise NotLoggedIn()
+        if not r.ok:
+            raise RuntimeError(f"the library page answered HTTP {r.status}")
+        data = extract_page_json(r.text())
+        if not data:
+            raise RuntimeError("couldn't find the library data on the page (Gumroad may have changed its site)")
+        return data.get("props") or {}
+
+    def on_page(archived, page_no, pages):
+        progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
+    for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
+                              float(cfg.get("request_delay", 0.8)), on_page):
+        prod, pur = card.get("product") or {}, card.get("purchase") or {}
+        creator = prod.get("creator") or {}
+        variants = (pur.get("variants") or "").strip() or None
+        dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
+        if dedupe in seen:  # bought twice
+            continue
+        seen.add(dedupe)
+        items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
+                          creator=creator.get("name"), creator_url=creator.get("profile_url"),
+                          thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
+                          download_url=pur.get("download_url"), variants=variants,
+                          archived=bool(pur.get("is_archived"))))
     return items
 
 
@@ -186,37 +209,42 @@ def booth_item(b: dict, gift: bool, library_url: str) -> dict:
                 files=b["files"], gift=gift)
 
 
+def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[tuple[dict, bool, str]]:
+    """Every card in your Booth library, and your gifts and free downloads if you keep those, page by page: each as
+    (the card BOOTH_JS read, whether it's a gift, the library page it's on). Reading the library for the list and
+    for downloading both use this. Raises NotLoggedIn when Booth sends the browser to sign in."""
+    cards: dict[str, tuple[dict, bool, str]] = {}
+    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
+        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
+    for path, gift in sources:
+        base = f"https://accounts.booth.pm/library{path}"
+        for page_no in range(1, 500):
+            goto(page, f"{base}?page={page_no}")
+            page.wait_for_timeout(400)
+            u = urlparse(page.url)   # a sign-in page means the session ended, whatever its status code
+            if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or has_password_field(page):
+                raise NotLoggedIn("Not signed in to Booth")
+            if not u.path.startswith("/library"):
+                break
+            new = 0
+            for b in page.evaluate(BOOTH_JS):
+                if b["id"] not in cards:
+                    cards[b["id"]] = (b, gift, base)
+                    new += 1
+            progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
+            if not new:   # past the last page
+                break
+            time.sleep(delay)
+    return list(cards.values())
+
+
 def fetch_booth(ctx, cfg, progress) -> list[dict]:
     """Every item in your Booth library and gifts, page by page."""
     page = ctx.new_page()
-    delay = float(cfg.get("request_delay", 0.8))
-    items: dict[str, dict] = {}
-    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
-        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
     try:
-        for path, gift in sources:
-            base = f"https://accounts.booth.pm/library{path}"
-            for page_no in range(1, 500):
-                goto(page, f"{base}?page={page_no}")
-                page.wait_for_timeout(400)
-                u = urlparse(page.url)
-                if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or has_password_field(page):
-                    raise NotLoggedIn()
-                if not u.path.startswith("/library"):
-                    break
-                new = 0
-                for b in page.evaluate(BOOTH_JS):
-                    if b["id"] in items:
-                        continue
-                    new += 1
-                    items[b["id"]] = booth_item(b, gift, base)
-                progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(items)} items")
-                if not new:
-                    break
-                time.sleep(delay)
+        return [booth_item(b, gift, base) for b, gift, base in booth_cards(page, cfg, float(cfg.get("request_delay", 0.8)), progress)]
     finally:
         page.close()
-    return list(items.values())
 
 
 # ----------------------------------------------------------------------------- Jinxxy

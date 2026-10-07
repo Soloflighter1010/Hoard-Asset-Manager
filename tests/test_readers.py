@@ -146,7 +146,7 @@ class BoothAndPayhip(unittest.TestCase):
     def test_booth_files_come_from_the_download_placeholders(self):
         """With Booth's 2026 markup the old reader found every item but no files, so nothing could download."""
         pg = self.page_at("https://accounts.booth.pm/library", BOOTH_2026)
-        for js in (library.BOOTH_JS, downloader.BOOTH_JS):
+        for js in (library.BOOTH_JS,):   # (the downloader reads the library with library.booth_cards)
             items = {i["id"]: i for i in pg.evaluate(js)}
             self.assertEqual(sorted(items), ["111", "222"])
             self.assertEqual([(f["name"], f["url"]) for f in items["111"]["files"]],

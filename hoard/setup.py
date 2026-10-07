@@ -162,7 +162,9 @@ def migrate_from(cfg: dict, folder: Path, config_path: Path | None, lib: Library
             old = read_json_file(old_cfg, 1024 * 1024)
         except DataFileError:
             old = {}
-        value = str(old.get("root") or "downloads") if isinstance(old, dict) else "downloads"
+        if not isinstance(old, dict):   # not settings at all: the defaults, as for no file
+            old = {}
+        value = str(old.get("root") or "downloads")
         root = Path(value).expanduser()
         root = root if root.is_absolute() else (old_cfg.parent / root).resolve()
         if root.is_dir():
