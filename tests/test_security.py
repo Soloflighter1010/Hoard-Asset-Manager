@@ -930,6 +930,18 @@ class Seals(unittest.TestCase):
         self.assertIn("rusk.zip", [f["path"] for f in man.assets["111"]["files"].values()], "records are kept")
         self.assertTrue(list((root / "Booth").glob("_manifest.changed-*.json")), "a copy is kept to look at")
 
+    def test_a_changed_manifest_is_copied_once(self):
+        """Opened again and again before a sync saves it (checks, moves, the Downloads page), a changed manifest was
+        copied each time, without limit. One copy of each changed version is kept."""
+        root = self._download_folder()
+        path = root / "Booth" / "_manifest.json"
+        data = json.loads(path.read_text("utf-8"))
+        data["assets"]["111"]["url"] = "https://booth.pm/ja/items/666"
+        path.write_text(json.dumps(data))
+        for _ in range(3):
+            downloader.Manifest(root / "Booth")
+        self.assertEqual(len(list((root / "Booth").glob("_manifest.changed-*.json"))), 1)
+
     def test_older_unsealed_manifests_keep_only_store_links(self):
         root = self.dir / "downloads"
         (root / "Booth" / "A" / "B").mkdir(parents=True)

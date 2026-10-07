@@ -13,6 +13,7 @@ Images from stores' public CDNs have their own small fetcher with the same addre
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -182,9 +183,15 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
         have = os.stat(part, follow_symlinks=False).st_size if part.is_file() and not part.is_symlink() else 0
     except OSError:
         have = 0
+    # what the .part file is part of (the store's ETag or Last-Modified, and the whole size), kept beside it: a
+    # resume asks for the rest only if the file is still that one (If-Range), so a creator's new upload under the
+    # same name is downloaded whole rather than joined onto the old one's start
+    known = _part_info(part) if have else {}
     for _ in range(MAX_HOPS):
+        validator = known.get("etag") or known.get("modified") if have else None
         r = _send(store_sess, anon, url, sites, stream=True, timeout=(20, STALL_SECONDS),
-                  headers={"Accept-Encoding": "identity", **({"Range": f"bytes={have}-"} if have else {})})
+                  headers={"Accept-Encoding": "identity", **({"Range": f"bytes={have}-"} if have else {}),
+                           **({"If-Range": validator} if validator else {})})
         with r:
             if r.is_redirect:
                 url = urljoin(url, r.headers.get("Location", ""))
@@ -199,10 +206,11 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
                 continue
             encoded = r.headers.get("Content-Encoding", "identity").lower() != "identity"
             span = _content_range(r) if r.status_code == 206 else None
-            if r.status_code == 206 and (span is None or span[0] != have or encoded):
+            if r.status_code == 206 and (span is None or span[0] != have or encoded
+                                         or (known.get("size") and span[2] is not None and span[2] != known["size"])):
                 if not have:
                     raise RuntimeError("the store sent only part of the file, in a way that can't be checked")
-                have = 0    # not the part that follows the .part file: never added to it; the whole file is asked for
+                have = 0    # not the part that follows the .part file (or a file of another size now): the whole file
                 continue
             resume = r.status_code == 206 and have > 0
             if r.status_code != 206:
@@ -221,6 +229,9 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
                        desc=desc[:40], leave=False) if tqdm else None
             written = have
             fh, identity = open_part(part, resume=resume)
+            if not resume:   # a new .part file: note which file it's part of, for resuming it
+                known = {"etag": _strong_etag(r), "modified": r.headers.get("Last-Modified"), "size": expected}
+                _save_part_info(part, known)
             said = time.monotonic()
             with fh:
                 if progress:
@@ -238,5 +249,37 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
             if expected is not None and written != expected:
                 raise RuntimeError(f"the download stopped at {written} of {expected} bytes; the next sync resumes it")
             move_into_place(part, dest, identity)
+            _info_path(part).unlink(missing_ok=True)
             return dest.stat().st_size
     raise UnsafeRequest("too many redirects")
+
+
+def _info_path(part: Path) -> Path:
+    return part.with_name(part.name + "-info")
+
+
+def _strong_etag(r) -> str | None:
+    """The response's ETag when it can be used with If-Range (a weak one, W/"...", can't)."""
+    tag = (r.headers.get("ETag") or "").strip()
+    return tag if tag.startswith('"') and len(tag) <= 300 else None
+
+
+def _part_info(part: Path) -> dict:
+    """What a .part file was part of, as noted when it was started; {} for one started before Hoard noted it."""
+    try:
+        raw = json.loads(_info_path(part).read_text("utf-8")[:2000])
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    size = raw.get("size")
+    return {"etag": raw.get("etag") if isinstance(raw.get("etag"), str) else None,
+            "modified": raw.get("modified") if isinstance(raw.get("modified"), str) else None,
+            "size": size if isinstance(size, int) and not isinstance(size, bool) else None}
+
+
+def _save_part_info(part: Path, info: dict) -> None:
+    try:
+        _info_path(part).write_text(json.dumps(info), "utf-8")
+    except OSError:
+        pass   # resuming falls back to checking the size

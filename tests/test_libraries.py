@@ -59,6 +59,24 @@ class LibraryFolders(unittest.TestCase):
         downloader.build_catalog(self.cfg, self.root)
         return json.loads((self.root / "catalog.json").read_text("utf-8"))
 
+    def test_an_unusable_entry_takes_no_place(self):
+        """The first 10 entries were taken before the unusable ones were left out, so a good 11th one was dropped."""
+        good = [self.base / f"Drive {n}" for n in range(libraries.MAX_FOLDERS)]
+        cfg = {**self.cfg, "library_folders": ["relative/path", str(self.root)] + [str(g) for g in good]}
+        self.assertEqual(libraries.other_folders(cfg), good)
+
+    def test_folders_noted_at_once_are_both_kept(self):
+        """Two catalog builds noting different folders at the same time: each wrote over the other's."""
+        import threading as th
+        folders = [self.base / f"F{n}" for n in range(8)]
+        workers = [th.Thread(target=libraries.remember, args=(f, "Booth", [f"k{n}"])) for n, f in enumerate(folders)]
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join()
+        seen = libraries._load_seen()
+        self.assertEqual(sorted(seen), sorted(str(f) for f in folders))
+
     def test_read_as_one_library(self):
         cat = self.catalog()
         self.assertEqual(cat["version"], 4, "a newer format: older Hoard for Unity asks to be updated")

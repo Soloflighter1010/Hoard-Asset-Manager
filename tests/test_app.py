@@ -916,13 +916,24 @@ class SigningOut(unittest.TestCase):
 class JinxxyBanners(unittest.TestCase):
     """Copies of Jinxxy's default banner saved as product pictures by older versions are removed."""
 
+    def setUp(self):
+        from hoard.paths import data_dir
+        self.marker = data_dir() / "jinxxy-banners-checked"
+        self.marker.unlink(missing_ok=True)
+        self.addCleanup(self.marker.unlink, missing_ok=True)
+
     def test_repeated_pictures_are_forgotten(self):
         store = Path(tempfile.mkdtemp()) / "Jinxxy"
-        for creator, product, data in (("A", "One", b"BANNER"), ("B", "Two", b"BANNER"), ("C", "Three", b"REAL")):
+        for creator, product, data in (("A", "One", b"BANNER"), ("B", "Two", b"BANNER"), ("C", "Three", b"REAL"),
+                                       ("C", "Three v2", b"REAL")):   # one creator's two copies: a real picture
             (store / creator / product).mkdir(parents=True)
             (store / creator / product / "_thumbnail.png").write_bytes(data)
         self.assertEqual(downloader.forget_repeated_thumbnails(store), 2)
-        self.assertEqual(sorted(p.parent.name for p in store.rglob("_thumbnail.png")), ["Three"])
+        self.assertEqual(sorted(p.parent.name for p in store.rglob("_thumbnail.png")), ["Three", "Three v2"])
+        for creator in ("D", "E"):   # done once: not every sync (it deleted pictures each time, then saved them again)
+            (store / creator / "X").mkdir(parents=True)
+            (store / creator / "X" / "_thumbnail.png").write_bytes(b"SAME")
+        self.assertEqual(downloader.forget_repeated_thumbnails(store), 0)
 
 
 class PayhipShops(unittest.TestCase):
@@ -2084,7 +2095,7 @@ class ItchAPI(unittest.TestCase):
             if dry_run:
                 updates.record_check(report.stores_done, keys, report.available)
             else:
-                updates.after_download(report.got, report.failed)
+                updates.after_download(report.got, report.failed, report.got_files)
             return report
 
         with mock.patch.object(downloader, "save_thumbnail", lambda *a, **k: None):
@@ -3035,6 +3046,112 @@ class DownloadChoices(unittest.TestCase):
         self.assertEqual(seen[0].skip, skip, "a download of everything new leaves it out")
         self.assertIsNone(seen[1].skip, "products chosen now are downloaded")
         self.assertEqual(seen[1].keys, {"booth:rusk", "gumroad:mochi"}, "several stores' products, as one job (#106)")
+
+
+class UpdatesAfterADownload(unittest.TestCase):
+
+    def test_only_what_came_is_taken_off(self):
+        """An update of two files: download one (the other left out, or the run stopped), and the other is still an
+        update. Before, the whole update was taken off once any file of it came."""
+        from hoard.asset_updates import AssetUpdates
+        updates = AssetUpdates(Path(tempfile.mkdtemp()) / "asset-updates.json")
+        key = tags.tag_key("booth", "Rusk")
+        updates.save({"checked": {}, "items": {key: {"store": "booth", "name": "Rusk", "creator": "Kitsu",
+                                                     "files": [{"file": "Rusk.zip", "kind": "changed"},
+                                                               {"file": "Rusk (Quest).zip", "kind": "new"}]}}})
+        updates.after_download({key}, [], {(key, "Rusk.zip")})
+        self.assertEqual([f["file"] for f in updates.load()["items"][key]["files"]], ["Rusk (Quest).zip"])
+        updates.after_download({key}, [], {(key, "Rusk (Quest).zip")})
+        self.assertEqual(updates.load()["items"], {}, "all of it came: up to date")
+
+    def test_checking_one_product_keeps_the_others(self):
+        """A check for updates of one item (from its details) was recorded as a check of its whole store: every
+        other product's updates were wiped, and the store stamped as checked."""
+        from types import SimpleNamespace
+        from unittest import mock
+        from hoard import asset_updates
+        where = Path(tempfile.mkdtemp()) / "asset-updates.json"
+        other = tags.tag_key("gumroad", "Fox Base")
+        asset_updates.AssetUpdates(where).save({"checked": {}, "items": {other: {"store": "gumroad", "name": "Fox Base",
+                                                "creator": "Someone", "files": [{"file": "Fox 1.1.zip", "kind": "changed"}]}}})
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        with lib.lock:
+            lib.data["items"] = [library.item("gumroad", "1", name="Mochi", creator="Kitsu"),
+                                 library.item("gumroad", "2", name="Fox Base", creator="Someone")]
+        job = jobs.Jobs(config.load_config(), lib)
+        report = downloader.Report()
+        report.stores_done.append("gumroad")
+        real = asset_updates.AssetUpdates
+        with mock.patch.object(asset_updates, "updates_file", lambda: where), \
+                mock.patch("hoard.downloader.cmd_sync", lambda cfg, args: report), \
+                mock.patch.object(job, "on_download_done", lambda: None):
+            job._download(["gumroad"], None, None, check=True, items=["gumroad:1"])
+        data = real(where).load()
+        self.assertIn(other, data["items"], "Fox Base's update is still listed")
+        self.assertEqual(data["checked"], {}, "and Gumroad doesn't count as checked")
+
+
+class StopAfterAMove(unittest.TestCase):
+
+    def test_stop_once_its_moved_lets_it_finish(self):
+        """Stop pressed after a move had gone through (while the catalog was rebuilt) said "Nothing was moved",
+        with the files already in the other folder and the catalog not rebuilt."""
+        from unittest import mock
+        from hoard import downloader as dl
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        rebuilt = []
+
+        def move(cfg, root, key, to, progress=None, committed=None):
+            common.log("Moving Rusk: 1 of 1")
+            committed()
+            job.stop.set()               # Stop, as the catalog is rebuilt
+            common.log("Rebuilding the catalog")
+            rebuilt.append(True)
+            return {"name": "Rusk", "files": 1, "bytes": 3, "to": 1}
+        job._job_thread = threading.get_ident()
+        with mock.patch.object(dl, "move_product", move), mock.patch.object(job, "on_download_done", lambda: None):
+            job._move({"key": "booth:rusk", "to": 1, "name": "Rusk"})
+        self.assertEqual(rebuilt, [True])
+        self.assertNotIn("Nothing was moved", job.state["message"])
+
+
+class SameButtonAgain(unittest.TestCase):
+
+    def test_a_relabelled_page_never_saves_another_file_as_this_one(self):
+        """A store page that re-renders between listing its buttons and clicking one: a file whose button is gone
+        isn't swapped for whichever button is now in its place (that file was saved under this one's record, and
+        this one was never downloaded)."""
+        from types import SimpleNamespace
+        from unittest import mock
+        listings = [[{"idx": 0, "label": "Avatar.zip"}, {"idx": 1, "label": "Textures.zip"}],
+                    [{"idx": 0, "label": "Something else.zip"}, {"idx": 1, "label": "Textures.zip"}]]
+        asked, clicked = [], []
+
+        def evaluate(js, arg=None):   # the first listing, then the page as it is after re-rendering
+            asked.append(1)
+            return listings[0] if len(asked) == 1 else listings[1]
+        page = SimpleNamespace(url="https://jinxxy.com/item", is_closed=lambda: False, evaluate=evaluate)
+        folder = Path(tempfile.mkdtemp())
+
+        def click(ctx, page, idx, timeout_s):
+            clicked.append(idx)
+            return SimpleNamespace(suggested_filename=f"file{idx}.zip", page=page)
+
+        def saved(dl, folder_, fname):
+            (folder_ / fname).write_bytes(b"x")
+        report = downloader.Report(retries=0)
+        rec = {"files": {}}
+        man = SimpleNamespace(checkpoint=lambda: None)
+        with mock.patch.object(downloader, "click_download", click), \
+                mock.patch.object(downloader, "wait_for_browser_download", lambda dl, fname: None), \
+                mock.patch.object(downloader, "save_browser_download", saved), \
+                mock.patch.object(downloader, "close_if_popup", lambda *a: None), \
+                common.capture_log(lambda line: None):
+            downloader.download_by_clicking(None, page, "https://jinxxy.com/item", rec, folder, "Jinxxy", ["jinxxy.com"], 5,
+                                            "Item", "Kitsu", man, SimpleNamespace(dry_run=False), report)
+        self.assertEqual(clicked, [1], "only Textures.zip's own button")
+        self.assertEqual([f["path"] for f in rec["files"].values()], ["file1.zip"], "Textures.zip, under its own record")
+        self.assertTrue(any("no longer on the page" in f for f in report.failed), report.failed)
 
 
 class ForceStopInstall(unittest.TestCase):

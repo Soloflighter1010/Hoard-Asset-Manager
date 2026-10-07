@@ -11,6 +11,7 @@ from pathlib import Path
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
                       check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
+from .tags import tag_key
 from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
@@ -573,16 +574,19 @@ class Jobs:
         from .config import root_dir
         from .downloader import move_product
 
+        moved = []   # set once the move has gone through: a Stop after that can't undo it, so it lets it finish
+
         def sink(msg):
             self._moved = time.monotonic()
             self.state["message"] = str(msg)
-            if self.stop.is_set() and threading.get_ident() == self._job_thread:
+            if self.stop.is_set() and not moved and threading.get_ident() == self._job_thread:
                 self.stop.clear()
                 raise Cancelled()
         self._set(task="move", message=f"Moving {what.get('name') or 'it'}")
         try:
             with capture_log(sink):
-                done = move_product(self.cfg, root_dir(self.cfg), str(what.get("key") or ""), what.get("to"))
+                done = move_product(self.cfg, root_dir(self.cfg), str(what.get("key") or ""), what.get("to"),
+                                    committed=lambda: moved.append(True))
         except Cancelled:
             self._set(message="Stopped. Nothing was moved: it's where it was.")
             return
@@ -856,7 +860,15 @@ class Jobs:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
             if check:
-                total = AssetUpdates().record_check(report.stores_done, args.keys, report.available)
+                # a check of chosen products (by key, by library item, or by name) replaces only what an earlier
+                # check found for those, and doesn't count as a check of the whole store
+                narrowed = args.keys
+                if not narrowed and (items or only):
+                    snap = self.lib.snapshot()[0]
+                    picked = [i for i in snap if (items and i.get("key") in items) or
+                              (only and only.lower() in f"{i.get('name', '')} {i.get('creator', '')}".lower())]
+                    narrowed = {tag_key(i["store"], i["name"]) for i in picked} or {"(none)"}
+                total = AssetUpdates().record_check(report.stores_done, narrowed, report.available)
                 found = len({a["key"] for a in report.available})
                 missed = [STORES[s]["label"] for s in stores if s not in report.stores_done and self.cfg[s].get("enabled", True)]
                 self._set(report={"updates": found, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
@@ -864,7 +876,7 @@ class Jobs:
                                    else "Checked: no updates") + (f" ({total} in all)" if total != found and not keys else "")
                                   + (f". Couldn't check {', '.join(missed)}." if missed else "."))
                 return
-            AssetUpdates().after_download(report.got, report.failed)
+            AssetUpdates().after_download(report.got, report.failed, report.got_files)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
                       partial=bool(summary["failed"]) or None,

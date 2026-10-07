@@ -83,13 +83,29 @@ class AssetUpdates:
             self.save(data)
             return len(data["items"])
 
-    def after_download(self, got: set, failed: list[str]) -> None:
-        """Products that had files saved, with none of theirs failing, are up to date: take them off the list."""
+    def after_download(self, got: set, failed: list[str], got_files: set | None = None) -> None:
+        """Take what came off the list. With got_files ((tag_key, file) saved), each update's files that came are
+        taken off it, and the update once none are left: a file left out when choosing, or not reached because the
+        run stopped, stays an update. Without it (older callers), a product with files saved and none failing is."""
         with _lock:
             data = self.load()
-            done = [k for k, e in data["items"].items() if k in got
-                    and not any(f"{e['name']} /" in line or f"/ {e['name']} " in line for line in failed)]
-            if done:
-                for k in done:
-                    del data["items"][k]
+            changed = False
+            for k, e in list(data["items"].items()):
+                if k not in got:
+                    continue
+                left = [f for f in e["files"] if (k, f["file"]) not in got_files] if got_files is not None else e["files"]
+                if len(left) == len(e["files"]):
+                    # none of its listed files matched what came (a store naming a file differently between
+                    # checking and saving): taken off, as before, when nothing of it failed
+                    if not any(f"{e['name']} /" in line or f"/ {e['name']} " in line for line in failed):
+                        del data["items"][k]
+                        changed = True
+                    continue
+                if len(left) != len(e["files"]):
+                    changed = True
+                    if left:
+                        e["files"] = left
+                    else:
+                        del data["items"][k]
+            if changed:
                 self.save(data)

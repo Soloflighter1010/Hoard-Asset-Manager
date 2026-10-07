@@ -106,6 +106,15 @@ class Report:
     # a check for updates (a dry run): per product already downloaded, what the store has that isn't on disk
     available: list = field(default_factory=list)
     got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
+    got_files: set = field(default_factory=set)       # (tag_key, file) saved in this run, named as a check names it
+
+    def saved(self, store: str, name: str, file: str, *also: str | None) -> None:
+        """A file saved: its product, and the file as Check for updates names it, so only what came is taken off
+        the list of updates (asset_updates.after_download). also: other names the product goes by."""
+        for n in (name, *also):
+            if n:
+                self.got.add(tag_key(store, n))
+                self.got_files.add((tag_key(store, n), file))
     stores_done: list = field(default_factory=list)   # stores read to the end, without an error
     retries: int = 2   # how many more times a failed file download is tried (Settings; see with_retries)
 
@@ -193,6 +202,8 @@ def left_out(args, report: Report, store: str, name: str, file: str, *also: str)
     report.skipped.append(f"{STORES[store]['label'] if store in STORES else store}: {name} / {file} - left out, as you chose")
     return True
 
+
+_SAID_CHANGED: set = set()   # (manifest, its contents' hash) already reported as changed outside Hoard, this run
 
 RETRY_WAITS = (5.0, 15.0, 30.0)   # seconds before each try again (issue #19)
 NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't change by asking again
@@ -390,11 +401,20 @@ class Manifest:
         status = check_seal(raw, self.path)
         name = self.store_dir.name
         if status == "changed":
-            copy = self.path.with_name(f"_manifest.changed-{time.strftime('%Y%m%d-%H%M%S')}.json")
-            shutil.copy2(self.path, copy)
-            log(f"{name}: _manifest.json was changed by something other than Hoard since it last saved it. "
-                f"Its store links won't be used until this sync fetches them from {name} again. A copy is kept as "
-                f"{copy.name}. Check what else can change {self.store_dir}.")
+            # one copy of each changed version, said once: a manifest is opened by checks, moves and the Downloads
+            # page too, which don't save it, so it stays "changed" until a sync does, and a copy each time piled up
+            data = self.path.read_bytes()
+            kept = next((c for c in self.store_dir.glob("_manifest.changed-*.json")
+                         if c.is_file() and not c.is_symlink() and c.stat().st_size == len(data) and c.read_bytes() == data),
+                        None)
+            if kept is None:
+                kept = self.path.with_name(f"_manifest.changed-{time.strftime('%Y%m%d-%H%M%S')}.json")
+                shutil.copy2(self.path, kept)
+            if (str(self.path), hashlib.sha256(data).hexdigest()) not in _SAID_CHANGED:
+                _SAID_CHANGED.add((str(self.path), hashlib.sha256(data).hexdigest()))
+                log(f"{name}: _manifest.json was changed by something other than Hoard since it last saved it. "
+                    f"Its store links won't be used until this sync fetches them from {name} again. A copy is kept as "
+                    f"{kept.name}. Check what else can change {self.store_dir}.")
         elif status == "foreign":
             log(f"{name}: _manifest.json was last saved by Hoard on another computer, so its store links will "
                 f"be fetched from {name} again. To share this folder between computers, copy integrity.key from Hoard's "
@@ -765,7 +785,7 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
         rec["files"][fid] = {"path": relpath, "size": rel_to_path(folder, relpath).stat().st_size, "downloaded_at": now_iso()}
         log(f"    saved: {relpath}")
         report.new_files.append(f"Gumroad: {creator} / {name} / {relpath}")
-        report.got.add(tag_key("gumroad", name))
+        report.saved("gumroad", name, stem)
         got_any = True
         man.checkpoint()
     return got_any
@@ -870,7 +890,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: Stor
                 continue
             log(f"    {'updated' if is_update else 'saved'}: {relpath}")
             (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
-            report.got.add(tag_key("gumroad", name))
+            report.saved("gumroad", name, relpath)
             rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
             got_any = True
             man.checkpoint()
@@ -1170,16 +1190,17 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         report.skipped.append(f"{store}: {name} - no download buttons found on {url}")
         return False
 
-    wanted, used = [], set()
+    wanted, used, seen = [], set(), {}
     for b in buttons:
         k = label_key(b["label"]) or f"file #{b['idx'] + 1}"
         if k in used:
             k = f"{k} #{b['idx'] + 1}"
         used.add(k)
-        wanted.append((b["label"], k))
+        nth = seen[b["label"]] = seen.get(b["label"], -1) + 1   # which of the buttons with this label it is
+        wanted.append((b["label"], k, nth))
 
     got_any = False
-    for pos, (label, k) in enumerate(wanted):
+    for label, k, nth in wanted:
         old = rec["files"].get(k)
         if old and rel_to_path(folder, old["path"]).exists():
             continue
@@ -1190,19 +1211,22 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
             continue
         def named(raw: str, k=k):
             """The file's name in the product's folder, the file it replaces (if any), and whether it's an update."""
-            fname = distinct_name(safe_name(raw or k, 150), k, rec, {key for _label, key in wanted})
+            fname = distinct_name(safe_name(raw or k, 150), k, rec, {key for _label, key, _nth in wanted})
             # the same filename under a different label means the creator updated that file
             prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
             is_update = prev is not None or (folder / fname).exists()
             log(f"    downloading: {fname}")
             return fname, prev, is_update
 
-        def attempt(label=label, k=k, pos=pos):
+        def attempt(label=label, k=k, nth=nth):
             """Click the file's button and save what it downloads (tried again by with_retries)."""
             current = find(allow_all)  # re-tag; the page may have re-rendered
-            match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
+            # the same button again: the nth with its label. Never whatever is now where it was: after a re-render
+            # that may be another file, which would then be saved as this one, and this one never downloaded
+            alike = [b for b in current if b["label"] == label]
+            match = alike[nth] if nth < len(alike) else None
             if not match:
-                raise RuntimeError("button disappeared")
+                raise RuntimeError("its download button is no longer on the page")
             if direct and direct["on"] and match.get("href"):
                 try:
                     raw = file_link_name(direct["sess"], match["href"], direct["sites"])
@@ -1243,27 +1267,37 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         rec["files"][k] = {"path": fname, "size": target.stat().st_size, "label": label, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"{store}: {creator} / {name} / {fname}")
-        report.got.add(tag_key(store, name))
-        if listed_name:   # (its update, if any, is listed under its library name)
-            report.got.add(tag_key(store, listed_name))
+        report.saved(store.lower(), name, label or k, listed_name)   # (its update may be under its library name)
         got_any = True
         man.checkpoint()
     return got_any
 
 
 def forget_repeated_thumbnails(store_dir: Path) -> int:
-    """Delete product pictures that are byte-for-byte identical across different products: that's a site's
-    default banner, not a product. (Versions before 2.0.1 saved Jinxxy's.) Returns how many were removed."""
+    """Delete Jinxxy's default banner where versions before 2.0.1 saved it as product pictures: a picture
+    byte-for-byte identical across different creators' products (Creator/Product/_thumbnail.*). One creator's
+    products sharing a picture (copies of one product, issue #111) are real pictures, and kept. Done once: a
+    marker in Hoard's own folder says so, so pictures aren't read again on every sync. Returns how many were
+    removed."""
+    from .paths import data_dir
+    done = data_dir() / "jinxxy-banners-checked"
+    if done.exists():
+        return 0
     by_hash: dict = {}
     for p in store_dir.glob("*/*/_thumbnail.*"):
         if p.is_file() and not p.is_symlink():
             by_hash.setdefault(hashlib.sha256(p.read_bytes()).hexdigest(), []).append(p)
     removed = 0
     for same in by_hash.values():
-        if len(same) > 1:
+        if len({p.parent.parent.name for p in same}) > 1:   # more than one creator: the site's banner
             for p in same:
                 p.unlink()
                 removed += 1
+    try:
+        done.parent.mkdir(parents=True, exist_ok=True)
+        done.write_text("Jinxxy's default banner, saved as product pictures before 2.0.1, was cleared.\n", "utf-8")
+    except OSError:
+        pass
     return removed
 
 
@@ -1693,7 +1727,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
                         log(f"    {'updated' if is_update else 'saved'}: {fname}")
                         (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
-                        report.got.add(tag_key("booth", name))
+                        report.saved("booth", name, f["name"] or guess)
                         got_any = True
                         man.checkpoint()
                         time.sleep(delay)
@@ -1820,7 +1854,7 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRec
         rec["files"][fid] = {"path": fname, "size": size, "label": label, "shown": shown, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"itch.io: {creator} / {name} / {fname}")
-        report.got.add(tag_key("itch", name))
+        report.saved("itch", name, label)
         got_any = True
         man.checkpoint()
     if got_any and is_new_asset:
@@ -2076,7 +2110,7 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
     return done
 
 
-def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dict:
+def move_product(cfg: dict, root: Path, key: str, to: int, progress=None, committed=None) -> dict:
     """Move a downloaded product's files to another library folder (to: its number, 0 for the downloads folder; see
     hoard/libraries.py), and its record with them, so it's kept up to date there.
 
@@ -2084,7 +2118,8 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dic
     as it arrives; only when all have arrived is the record moved and the originals deleted (Hoard's picture and
     asset.json with them, and the folder when that leaves it empty; anything else of yours in it stays). If anything
     goes wrong part way, what was copied is deleted and the original is left as it was. Nothing is read or written
-    through a link. A Local item stays in the downloads folder. Returns {"name", "files", "bytes", "to"}; raises
+    through a link. A Local item stays in the downloads folder. committed() is called once the move can't be undone
+    (the record has moved), so a Stop after it lets the rest finish. Returns {"name", "files", "bytes", "to"}; raises
     ValueError saying what's wrong."""
     import stat as _stat
     from . import libraries
@@ -2166,6 +2201,8 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dic
     dest_man.save()
     manifest.assets.pop(k)
     manifest.save()
+    if committed:
+        committed()
     dirs = set()
     for rel in [f.get("path") for f in rec["files"].values()] + extras + ["asset.json"]:
         try:

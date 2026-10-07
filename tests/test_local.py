@@ -224,6 +224,31 @@ class FolderOfFolders(unittest.TestCase):
             with self.subTest(why), self.assertRaises(ValueError):
                 local.split(self.root, str(path), depth, True)
 
+    def test_a_folder_around_hoards_own_isnt_added_whole(self):
+        """Adding a folder with Hoard's downloads folder inside it (Documents, say) copied every download, Local too,
+        into Local. Added whole it's refused; as a folder of folders, Hoard's own is left out as before."""
+        around = self.root.parent
+        with self.assertRaises(ValueError) as said:
+            local.check_source(self.root, str(around), True)
+        self.assertIn("downloads folder is inside that folder", str(said.exception))
+        self.assertTrue(local.check_source(self.root, str(around), True, around_ok=True))
+
+    def test_one_name_hoard_wont_use_leaves_out_that_file_only(self):
+        from unittest import mock
+        src = self.base / "Kit"
+        src.mkdir()
+        for n in ("a.png", "bad.png", "c.png"):
+            (src / n).write_bytes(b"x")
+        real = local.rel_to_path
+
+        def picky(base, rel):
+            if rel == "bad.png":
+                raise local.UnsafePath("refused the path")
+            return real(base, rel)
+        with mock.patch.object(local, "rel_to_path", picky), mock.patch.object(local, "build_catalog", lambda *a: None):
+            rec = local.add(self.cfg, self.root, str(src), copy=True)
+        self.assertEqual(sorted(f["path"] for f in rec["files"].values()), ["a.png", "c.png"], "the rest copied and recorded")
+
     def test_a_link_is_never_followed(self):
         try:
             os.symlink(self.base, self.src / "Someone" / "Loop", target_is_directory=True)

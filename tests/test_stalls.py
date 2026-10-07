@@ -69,6 +69,23 @@ class _Store(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        if self.path == "/versioned":   # a file the creator may have replaced: its ETag says which, If-Range honoured
+            fill, size, tag = _Store.version
+            start = int(self.headers.get("Range", "bytes=0-")[6:].rstrip("-") or 0)
+            asked = self.headers.get("If-Range")
+            _Store.seen.append(("versioned", start, asked))
+            if asked is not None and asked != tag:
+                start = 0   # not the file the part is from: the whole of the one it is now (as HTTP says)
+            self.send_response(206 if start else 200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(size - start))
+            if tag:
+                self.send_header("ETag", tag)
+            if start:
+                self.send_header("Content-Range", f"bytes {start}-{size - 1}/{size}")
+            self.end_headers()
+            self.wfile.write(fill * (size - start))
+            return
         if self.path == "/good":
             _Store.seen.append((self.path, bool(self.headers.get("Sec-Fetch-Mode"))))
         start = int(self.headers.get("Range", "bytes=0-")[6:].rstrip("-") or 0)
@@ -120,6 +137,31 @@ class DirectDownloads(unittest.TestCase):
 
     def get(self, path, **kw):
         return egress.download(egress.session(), f"{self.origin}{path}", self.dest, ["127.0.0.1"], **kw)
+
+    def test_a_part_of_an_older_file_is_never_finished_with_a_newer_one(self):
+        """A download left part way, then the creator replaced the file under the same name: the rest was taken
+        from the new file and joined to the old one's start. Now the store is asked for the rest only if the file
+        is still the one the part came from (If-Range), and a file whose whole size changed starts again."""
+        part = self.dest.with_name(self.dest.name + ".part")
+        _Store.version = (b"a", SIZE, '"v1"')
+        part.write_bytes(b"a" * 1000)
+        part.with_name(part.name + "-info").write_text('{"etag": "\\"v1\\"", "modified": null, "size": %d}' % SIZE)
+        self.get("/versioned")
+        self.assertEqual(self.dest.read_bytes(), b"a" * SIZE, "still the same file: resumed")
+        self.assertEqual(_Store.seen[-1], ("versioned", 1000, '"v1"'))
+        self.assertFalse(part.with_name(part.name + "-info").exists(), "tidied away with the part")
+        self.dest.unlink()
+        part.write_bytes(b"a" * 1000)   # the old file's start...
+        part.with_name(part.name + "-info").write_text('{"etag": "\\"v1\\"", "modified": null, "size": %d}' % SIZE)
+        _Store.version = (b"b", SIZE, '"v2"')   # ...and the creator's new upload
+        self.get("/versioned")
+        self.assertEqual(self.dest.read_bytes(), b"b" * SIZE, "the new file, whole: nothing of the old one")
+        self.dest.unlink()
+        part.write_bytes(b"a" * 1000)   # a store with no ETag: the whole size changed, so it starts again
+        part.with_name(part.name + "-info").write_text('{"etag": null, "modified": null, "size": %d}' % SIZE)
+        _Store.version = (b"c", SIZE + 10, None)
+        self.get("/versioned")
+        self.assertEqual(self.dest.read_bytes(), b"c" * (SIZE + 10))
 
     def test_a_stalled_download_is_given_up_on_and_resumed(self):
         began = time.monotonic()
