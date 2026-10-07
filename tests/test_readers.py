@@ -146,7 +146,7 @@ class BoothAndPayhip(unittest.TestCase):
     def test_booth_files_come_from_the_download_placeholders(self):
         """With Booth's 2026 markup the old reader found every item but no files, so nothing could download."""
         pg = self.page_at("https://accounts.booth.pm/library", BOOTH_2026)
-        for js in (library.BOOTH_JS, downloader.BOOTH_JS):
+        for js in (library.BOOTH_JS,):   # (the downloader reads the library with library.booth_cards)
             items = {i["id"]: i for i in pg.evaluate(js)}
             self.assertEqual(sorted(items), ["111", "222"])
             self.assertEqual([(f["name"], f["url"]) for f in items["111"]["files"]],
@@ -413,8 +413,6 @@ class ImportingSeveralPages(unittest.TestCase):
                         "its links count once the shop is yours")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -531,3 +529,18 @@ class SigningInPlainly(unittest.TestCase):
                 ctx.close()
         self.assertEqual(got.get("session"), "signed-in",
                          f"cookies in the database after the window closed: {on_disk}; Hoard's window read: {sorted(got)}")
+
+
+class JinxxyPaging(unittest.TestCase):
+
+    def test_only_jinxxys_own_pages_are_followed(self):
+        from hoard import library
+        got = library.jinxxy_inventory_pages([
+            "https://jinxxy.com/my/inventory?page=2", "https://evil.example/my/inventory?page=3",
+            "https://jinxxy.com.evil.example/my/inventory?page=4", "http://jinxxy.com/my/inventory?page=5",
+            "https://jinxxy.com/my/inventory", "https://jinxxy.com/other?page=6"])
+        self.assertEqual(got, ["https://jinxxy.com/my/inventory?page=2"])
+
+
+if __name__ == "__main__":
+    unittest.main()

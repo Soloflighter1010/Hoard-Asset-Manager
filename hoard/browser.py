@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 import time
+import weakref
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -40,13 +41,17 @@ def use_browsers_folder() -> None:
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browsers_folder()))
 
 
+class PlaywrightMissing(RuntimeError):
+    """Playwright isn't installed. Raised, not an exit: in a task that would end its thread with nothing said."""
+
+
 def _playwright():
-    """Import Playwright's sync API, or exit with a clear message when setup hasn't been run."""
+    """Import Playwright's sync API; raises PlaywrightMissing with a clear message when setup hasn't been run."""
     use_browsers_folder()
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        sys.exit("Playwright isn't installed. Run Setup.bat (Windows) or ./setup.sh first.")
+        raise PlaywrightMissing("Playwright isn't installed. Run Setup.bat (Windows) or ./setup.sh first.") from None
     return sync_playwright
 
 
@@ -420,7 +425,8 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
 # open, from any thread, so everything waiting on one fails at once and the job can finish.
 
 _open: dict = {}              # each browser Hoard has open -> what to do after it's ended (its sign-in's lock)
-_ended: set = set()           # browsers ended by force: closing one of those again can wait for ever
+_ended = weakref.WeakSet()    # browsers ended by force: closing one of those again can wait for ever (each is let
+                              # go with the browser itself, so a long-running Hoard doesn't keep them all)
 _open_lock = threading.Lock()
 
 
@@ -466,7 +472,10 @@ def end_browsers() -> int:
         _open.clear()
     ended, pids = 0, set()
     for ctx, cleanup in found:
-        _ended.add(ctx)
+        try:
+            _ended.add(ctx)
+        except TypeError:   # (a stand-in that can't be weakly held: never closed twice anyway)
+            pass
         pid = _driver_pid(ctx)
         if pid and pid not in pids:
             pids.add(pid)
@@ -597,6 +606,28 @@ def browser_program(p, cfg: dict) -> str:
     return str(path)
 
 
+def end_profile_browser(profile: Path) -> None:
+    """End the browser running on this profile, if one is (Force stop of a sign-in). Only a browser on this
+    computer, on this exact profile, is ended."""
+    if not _profile_in_use(profile):
+        return
+    try:
+        if os.name != "nt":
+            host, _, pid = os.readlink(profile / "SingletonLock").rpartition("-")
+            import socket
+            if host == socket.gethostname() and pid.isdigit() and int(pid) > 1:
+                os.kill(int(pid), signal.SIGTERM)
+        else:   # the browser's processes are the ones started with this profile (passed in the environment, unquoted)
+            script = ("$p = '--user-data-dir=' + $env:HOARD_PROFILE; Get-CimInstance Win32_Process | "
+                      "Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) } | "
+                      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
+                           timeout=20, env={**os.environ, "HOARD_PROFILE": str(profile)},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
+
 def _profile_in_use(profile: Path) -> bool:
     """Is a browser running on this profile? Chromium keeps a lock in it while it's open: a link named SingletonLock
     (macOS, Linux), or a file named lockfile held open (Windows)."""
@@ -713,6 +744,20 @@ class SignInWindow:
                 if time.monotonic() > deadline:
                     return
                 time.sleep(0.5)
+
+    def end(self) -> None:
+        """Close the window (Force stop), and everything it started. The program Hoard started may have handed the
+        window to a browser already open on this profile and ended, so the browser holding the profile is ended
+        too: on macOS and Linux it's named in the profile's SingletonLock; on Windows it's found by its profile."""
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.proc.pid)], capture_output=True, timeout=15,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            else:
+                self.proc.kill()
+        except (OSError, subprocess.SubprocessError, AttributeError):
+            pass
+        end_profile_browser(self.profile)
 
     def close(self) -> None:
         """Let go of the profile (the window closed, or Hoard is stopping)."""

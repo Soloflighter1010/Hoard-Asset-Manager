@@ -68,52 +68,75 @@ GR_LIBRARY = "https://app.gumroad.com/library"
 
 
 def extract_page_json(text: str):
-    """The page data Gumroad embeds in its HTML (component and props), or None."""
+    """The page data Gumroad embeds in its HTML (component and props), or None. (Reading the library and
+    downloading both use this.)"""
     m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
     if m:
         return json.loads(m.group(1))
     m = re.search(r'\bdata-page="(\{[^"]*)"', text)
     if m:
         return json.loads(html.unescape(m.group(1)))
+    # Older react-on-rails markup, kept as a fallback
+    best = None
+    for m in re.finditer(r'<script[^>]*js-react-on-rails-component[^>]*data-component-name="([^"]+)"[^>]*>(.*?)</script>',
+                         text, re.S):
+        if best is None or len(m.group(2)) > len(best[1]):
+            best = (m.group(1), m.group(2))
+    if best:
+        return {"component": best[0], "props": json.loads(best[1])}
     return None
+
+
+def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None):
+    """Every purchase card in your Gumroad library, page by page (and the archived ones, when wanted). read_props
+    gets a page's query (page, sort, archived) and returns that page's props; on_page(archived, page, pages) is
+    told as each is read. Listing the library and downloading both read it this way."""
+    for archived in ([False, True] if include_archived else [False]):
+        page_no = 1
+        while True:
+            params = {"page": page_no, "sort": "purchase_date"} | ({"show_archived_only": "true"} if archived else {})
+            props = read_props(params) or {}
+            yield from props.get("results") or []
+            pages = (props.get("pagination") or {}).get("pages") or 1
+            if on_page:
+                on_page(archived, page_no, pages)
+            if page_no >= pages:
+                break
+            page_no += 1
+            time.sleep(delay)
 
 
 def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
     """Every purchase in your Gumroad library, archived ones included when configured."""
     items, seen = [], set()
-    delay = float(cfg.get("request_delay", 0.8))
-    for archived in ([False, True] if cfg["gumroad"].get("include_archived", True) else [False]):
-        page_no = 1
-        while True:
-            q = f"?page={page_no}&sort=purchase_date" + ("&show_archived_only=true" if archived else "")
-            r = ctx.request.get(GR_LIBRARY + q, timeout=60000)
-            if "/login" in urlparse(r.url).path:
-                raise NotLoggedIn()
-            if not r.ok:
-                raise RuntimeError(f"the library page answered HTTP {r.status}")
-            data = extract_page_json(r.text())
-            if not data:
-                raise RuntimeError("couldn't find the library data on the page (Gumroad may have changed its site)")
-            props = data.get("props") or {}
-            for card in props.get("results") or []:
-                prod, pur = card.get("product") or {}, card.get("purchase") or {}
-                creator = prod.get("creator") or {}
-                variants = (pur.get("variants") or "").strip() or None
-                dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
-                if dedupe in seen:  # bought twice
-                    continue
-                seen.add(dedupe)
-                items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
-                                  creator=creator.get("name"), creator_url=creator.get("profile_url"),
-                                  thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
-                                  download_url=pur.get("download_url"), variants=variants,
-                                  archived=bool(pur.get("is_archived"))))
-            pages = (props.get("pagination") or {}).get("pages") or 1
-            progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
-            if page_no >= pages:
-                break
-            page_no += 1
-            time.sleep(delay)
+
+    def read_props(params: dict) -> dict:
+        r = ctx.request.get(GR_LIBRARY, params=params, timeout=60000)
+        if "/login" in urlparse(r.url).path:
+            raise NotLoggedIn()
+        if not r.ok:
+            raise RuntimeError(f"the library page answered HTTP {r.status}")
+        data = extract_page_json(r.text())
+        if not data:
+            raise RuntimeError("couldn't find the library data on the page (Gumroad may have changed its site)")
+        return data.get("props") or {}
+
+    def on_page(archived, page_no, pages):
+        progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
+    for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
+                              float(cfg.get("request_delay", 0.8)), on_page):
+        prod, pur = card.get("product") or {}, card.get("purchase") or {}
+        creator = prod.get("creator") or {}
+        variants = (pur.get("variants") or "").strip() or None
+        dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
+        if dedupe in seen:  # bought twice
+            continue
+        seen.add(dedupe)
+        items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
+                          creator=creator.get("name"), creator_url=creator.get("profile_url"),
+                          thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
+                          download_url=pur.get("download_url"), variants=variants,
+                          archived=bool(pur.get("is_archived"))))
     return items
 
 
@@ -186,37 +209,42 @@ def booth_item(b: dict, gift: bool, library_url: str) -> dict:
                 files=b["files"], gift=gift)
 
 
+def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[tuple[dict, bool, str]]:
+    """Every card in your Booth library, and your gifts and free downloads if you keep those, page by page: each as
+    (the card BOOTH_JS read, whether it's a gift, the library page it's on). Reading the library for the list and
+    for downloading both use this. Raises NotLoggedIn when Booth sends the browser to sign in."""
+    cards: dict[str, tuple[dict, bool, str]] = {}
+    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
+        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
+    for path, gift in sources:
+        base = f"https://accounts.booth.pm/library{path}"
+        for page_no in range(1, 500):
+            goto(page, f"{base}?page={page_no}")
+            page.wait_for_timeout(400)
+            u = urlparse(page.url)   # a sign-in page means the session ended, whatever its status code
+            if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or has_password_field(page):
+                raise NotLoggedIn("Not signed in to Booth")
+            if not u.path.startswith("/library"):
+                break
+            new = 0
+            for b in page.evaluate(BOOTH_JS):
+                if b["id"] not in cards:
+                    cards[b["id"]] = (b, gift, base)
+                    new += 1
+            progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
+            if not new:   # past the last page
+                break
+            time.sleep(delay)
+    return list(cards.values())
+
+
 def fetch_booth(ctx, cfg, progress) -> list[dict]:
     """Every item in your Booth library and gifts, page by page."""
     page = ctx.new_page()
-    delay = float(cfg.get("request_delay", 0.8))
-    items: dict[str, dict] = {}
-    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
-        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
     try:
-        for path, gift in sources:
-            base = f"https://accounts.booth.pm/library{path}"
-            for page_no in range(1, 500):
-                goto(page, f"{base}?page={page_no}")
-                page.wait_for_timeout(400)
-                u = urlparse(page.url)
-                if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or has_password_field(page):
-                    raise NotLoggedIn()
-                if not u.path.startswith("/library"):
-                    break
-                new = 0
-                for b in page.evaluate(BOOTH_JS):
-                    if b["id"] in items:
-                        continue
-                    new += 1
-                    items[b["id"]] = booth_item(b, gift, base)
-                progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(items)} items")
-                if not new:
-                    break
-                time.sleep(delay)
+        return [booth_item(b, gift, base) for b, gift, base in booth_cards(page, cfg, float(cfg.get("request_delay", 0.8)), progress)]
     finally:
         page.close()
-    return list(items.values())
 
 
 # ----------------------------------------------------------------------------- Jinxxy
@@ -320,6 +348,27 @@ JX_CARDS_JS = r"""
 """
 
 
+def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300) -> None:
+    """Show all of a Jinxxy inventory page: read() what's shown (it returns how many it has found in all), then
+    choose "Load more" or scroll down, until three rounds in a row find nothing new. Reading the library and
+    downloading both go through an inventory this way."""
+    count, quiet = -1, 0
+    for _ in range(rounds):
+        now = read()
+        more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
+        if more.count() and more.first.is_visible() and more.first.is_enabled():
+            more.first.click()
+            settle(page, settle_ms)
+            count, quiet = now, 0
+            continue
+        page.mouse.wheel(0, 20000)
+        page.wait_for_timeout(wait_ms)
+        quiet = quiet + 1 if now == count else 0
+        count = now
+        if quiet >= 3:
+            break
+
+
 def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
     """Every item in your Jinxxy inventory, scrolling and following pages until nothing new appears."""
     page = ctx.new_page()
@@ -332,29 +381,17 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
             raise NotLoggedIn()
         visited, pending = {page.url}, []
         for _ in range(100):  # numbered pages
-            quiet = 0
-            for _ in range(300):  # infinite scroll / load more
-                before = len(found)
+            def read() -> int:
                 for c in page.evaluate(JX_CARDS_JS, pattern):
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
                                        for k in ("key", "url", "name", "creator", "creator_url", "thumbnail")}
-                for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
-                    u = urlparse(href)
-                    if u.path.rstrip("/") == "/my/inventory" and re.search(r"(^|&)page=\d+", u.query) \
-                            and href not in visited and href not in pending:
+                for href in jinxxy_inventory_pages(page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")):
+                    if href not in visited and href not in pending:
                         pending.append(href)
                 progress(f"Inventory, {len(found)} items")
-                more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
-                if more.count() and more.first.is_visible() and more.first.is_enabled():
-                    more.first.click()
-                    settle(page, 500)
-                    continue
-                page.mouse.wheel(0, 20000)
-                page.wait_for_timeout(1100)
-                quiet = quiet + 1 if len(found) == before else 0
-                if quiet >= 3:
-                    break
+                return len(found)
+            scroll_inventory(page, read)
             if not pending:
                 break
             nxt = pending.pop(0)
@@ -504,6 +541,18 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
         url = result["next"]
         time.sleep(float(cfg.get("request_delay", 0.8)))
     return list(cards.values())
+
+
+def jinxxy_inventory_pages(hrefs) -> list[str]:
+    """The links among these that are more pages of your Jinxxy inventory (/my/inventory?page=N), on Jinxxy itself
+    only: its browser is signed in to Jinxxy, so a page of the same path on another site (a link in someone's
+    product text, say) is never opened in it."""
+    out = []
+    for href in hrefs:
+        u = urlparse(str(href))
+        if u.path.rstrip("/") == "/my/inventory" and re.search(r"(^|&)page=\d+", u.query) and store_link("jinxxy", str(href)):
+            out.append(str(href))
+    return out
 
 
 def sign_in_urls(cfg: dict, store: str) -> list[str]:
@@ -873,6 +922,15 @@ def saved_pages_in(paths, limit: int = 2000) -> list[Path]:
 
 # ----------------------------------------------------------------------------- library data
 
+def _forget_pictures(gone: list[dict], kept: set) -> None:
+    """Delete the cached pictures of products taken off the list, but not one a product still listed uses too (the
+    same picture, as two copies of a product share)."""
+    for url in {i.get("thumbnail") for i in gone} - kept:
+        if url:
+            for cached in THUMB_DIR.glob(hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest() + ".*"):
+                cached.unlink(missing_ok=True)
+
+
 class Library:
     """Your combined library, kept in library.json. Safe to use from several threads."""
     def __init__(self, path: Path):
@@ -981,10 +1039,8 @@ class Library:
                 if isinstance(info, dict):
                     info["count"] = sum(1 for i in self.data["items"] if i["store"] == store)
             self.save()
-        for i in gone:
-            if i.get("thumbnail"):
-                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode(), usedforsecurity=False).hexdigest() + ".*"):
-                    cached.unlink(missing_ok=True)
+            kept = {i.get("thumbnail") for i in self.data["items"]}
+        _forget_pictures(gone, kept)
         return len(gone)
 
     def clear_store(self, store: str, note: str) -> int:
@@ -995,10 +1051,8 @@ class Library:
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store]
             self.data["stores"][store] = {"updated": None, "count": 0, "error": note}
             self.save()
-        for i in gone:
-            if i.get("thumbnail"):
-                for cached in THUMB_DIR.glob(hashlib.sha1(i["thumbnail"].encode(), usedforsecurity=False).hexdigest() + ".*"):
-                    cached.unlink(missing_ok=True)
+            kept = {i.get("thumbnail") for i in self.data["items"]}
+        _forget_pictures(gone, kept)
         return len(gone)
 
     def set_error(self, store: str, message: str) -> None:
@@ -1180,12 +1234,13 @@ def unreachable_message(store: str, what: str = "refreshed") -> str:
             "be down. Your saved list is unchanged; try again when you're connected.")
 
 
-def cache_images(lib: "Library", keys: list[str], progress) -> int:
-    """Fetch and keep the images for these items, so they show without a connection. Returns how many are saved."""
+def cache_images(lib: "Library", keys: list[str], progress, stop=lambda: False) -> int:
+    """Fetch and keep the images for these items, so they show without a connection. Returns how many are saved.
+    stop: when it says so, the rest are left (Force stop)."""
     keys = [k for k in keys if lib.thumbnail_for(k)]
     done = saved = 0
     with ThreadPoolExecutor(max_workers=6) as pool:
-        for got in pool.map(lambda k: fetch_thumbnail(k, lib), keys):
+        for got in pool.map(lambda k: None if stop() else fetch_thumbnail(k, lib), keys):
             done += 1
             saved += bool(got)
             if done % 10 == 0 or done == len(keys):

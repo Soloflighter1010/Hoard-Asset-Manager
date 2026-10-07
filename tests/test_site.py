@@ -234,6 +234,14 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(changelog.inline("[the wiki](https://example.com/w)"), '<a href="https://example.com/w">the wiki</a>')
         self.assertEqual(changelog.inline("`**not bold**` and `<b>`"), "<code>**not bold**</code> and <code>&lt;b&gt;</code>")
         self.assertEqual(changelog.inline("a ` stray"), "a ` stray")
+        # an address in a link's text stays text: a link inside a link isn't HTML
+        self.assertEqual(changelog.inline("[see https://example.com/d](https://github.com/x)"),
+                         '<a href="https://github.com/x">see https://example.com/d</a>')
+        # the website, What's new and the updater agree on what's a beta
+        from hoard import updater, versions
+        for v in ("3.1.0-beta.2", "3.1.0", "3.1.0-beta.rc", "3.1.0-beta.1 (hotfix)"):
+            self.assertEqual(changelog.is_beta(v), updater.is_beta(v), v)
+            self.assertIs(changelog.is_beta, versions.is_beta)
         whole = changelog.page((REPO / "CHANGELOG.md").read_text("utf-8"), {})
         self.assertNotIn("**", re.sub(r"<code>.*?</code>", "", whole, flags=re.S), "every bold in the changelog closes")
 
@@ -248,23 +256,23 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(len(re.findall(r"<li[ >]", built)), built.count("</li>"))
 
 
-class TheNextChangelog(unittest.TestCase):
-    """3.0.0's changelog, drafted in docs/ until it's released, uses only what the What's new page can show."""
+class TheThreeZeroChangelog(unittest.TestCase):
+    """3.0.0's changelog (the betas folded into one) uses only what the What's new page can show."""
 
-    def test_the_3_0_0_draft_reads_on_the_whats_new_page(self):
-        draft = (REPO / "docs" / "CHANGELOG-3.0.0.md").read_text("utf-8")
-        self.assertTrue(draft.startswith("<!--"))
-        body = draft.split("-->", 1)[1]
+    def test_3_0_0_reads_on_the_whats_new_page(self):
+        text = (REPO / "CHANGELOG.md").read_text("utf-8")
+        body = text.split("## 3.0.0\n", 1)[1].split("\n## ", 1)[0]
         page = changelog.page("## 3.0.0\n" + body, {})
-        text = re.sub(r"<code>.*?</code>", "", page, flags=re.S)
-        self.assertNotIn("**", text, "every bold closes")
-        self.assertNotIn("`", text, "every code span closes")
+        plain = re.sub(r"<code>.*?</code>", "", page, flags=re.S)
+        self.assertNotIn("**", plain, "every bold closes")
+        self.assertNotIn("`", plain, "every code span closes")
         self.assertEqual(page.count("<ul>"), page.count("</ul>"))
         self.assertEqual(len(re.findall(r"<li[ >]", page)), page.count("</li>"))
         self.assertNotRegex(body, r"^\s*(\d+\.|\||>|```)", "no numbered lists, tables, quotes or code blocks")
         for heading in ("Hoard on every computer", "Signing in, your way", "Downloads you can leave running",
                         "Upgrading from 2.8"):
             self.assertIn(f"<h4>{heading}</h4>", page)
+        self.assertNotIn("## 3.0.0-beta", text, "the betas are folded into 3.0.0")
 
 
 class TheDeploy(unittest.TestCase):
@@ -277,6 +285,8 @@ class TheDeploy(unittest.TestCase):
         paths = re.search(r"paths: \[([^\]]*)\]", self.text).group(1)
         self.assertIn('"CHANGELOG.md"', paths, "and when the changelog does, for its What's new page")
         self.assertIn('"scripts/build_site_changelog.py"', paths)
+        for renderer in ('"hoard/changelog.py"', '"hoard/versions.py"'):   # the page is made by these too
+            self.assertIn(renderer, paths)
 
     def test_the_listing_build_waits_out_a_release_being_made(self):
         """Hoard for Unity 0.3.0's listing builds failed twice ("Could not find valid zip file"): each ran while the

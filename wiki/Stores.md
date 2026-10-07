@@ -56,8 +56,9 @@ person to sign in on this computer never sees what you bought. Your downloaded f
 
 - Hoard reads your library, your gifts and your free downloads. Gifts and free downloads can be switched off
   in [Settings](Settings).
-- Files come from each item's download buttons. If Booth turns Hoard's direct download away, Hoard carries on
-  through its browser instead, by itself.
+- Files come from each item's download buttons. If Booth turns Hoard's direct download away, Hoard downloads that
+  file through its browser instead, by itself, and after a second time, the rest of the run too. A connection that
+  drops part way isn't Booth turning it away: the file is tried again, and carries on where it stopped.
 - Your free downloads are listed without their files, so for those Hoard opens the item's own page and takes the
   download buttons from there.
 - Booth signs you in through pixiv.

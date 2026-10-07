@@ -453,9 +453,10 @@ def record_exception(exc: BaseException, *, area: str = "unknown", task: str | N
         lines.append(f"{type(exc).__name__}: {str(exc)}")
         incident["traceback"] = _clip("\n".join(lines), 24_000)
     try:
-        history = _recent_incidents()
-        history.append(incident)
-        _write_incidents(history)
+        with _INCIDENT_LOCK:   # read, added to and written as one step: two at once would each drop the other's
+            history = _recent_incidents()
+            history.append(incident)
+            _write_incidents(history)
     except Exception:
         pass
     return incident
@@ -579,17 +580,18 @@ def _browser_in_use(cfg: dict) -> str | None:
 
 
 def _settings_summary(cfg: dict) -> dict:
+    from .config import DEFAULT_CONFIG   # the defaults themselves, so this never says other than Hoard does
     from .jobs import routine_hours   # (here: jobs uses this module)
+    from .library import STORES
     display = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
     return {
-        "enabled_stores": [s for s in ("booth", "gumroad", "jinxxy", "payhip", "itch")
-                           if bool((cfg.get(s) or {}).get("enabled", True))],
+        "enabled_stores": [s for s in STORES if bool((cfg.get(s) or {}).get("enabled", True))],
         "browser_channel": cfg.get("browser_channel") or "automatic",
         "browser_in_use": _browser_in_use(cfg),
-        "offline_images": bool(cfg.get("offline_images", True)),
-        "check_for_updates": bool(cfg.get("check_for_updates", False)),
+        "offline_images": bool(cfg.get("offline_images", DEFAULT_CONFIG.get("offline_images", True))),
+        "check_for_updates": bool(cfg.get("check_for_updates", DEFAULT_CONFIG.get("check_for_updates", False))),
         "routine_hours": routine_hours(cfg),
-        "request_delay": cfg.get("request_delay", 1.0),
+        "request_delay": cfg.get("request_delay", DEFAULT_CONFIG.get("request_delay", 1.0)),
         "display_text_size": display.get("text_size", 100),
         "reduce_motion": bool(display.get("reduce_motion")),
         "pause_animations": bool(display.get("pause_animations")),
@@ -597,7 +599,7 @@ def _settings_summary(cfg: dict) -> dict:
         "store_colours": display.get("colours") if display.get("colours") in ("standard", "colourblind", "custom") else "standard",
         "payhip_shop_count": len((cfg.get("payhip") or {}).get("shops") or []) if isinstance(cfg.get("payhip"), dict) else 0,
         "jinxxy_pattern_customized": ((cfg.get("jinxxy") or {}).get("item_link_pattern") !=
-                                      "^/my/(inventory|purchases|library)/[^/]+/?$"),
+                                      DEFAULT_CONFIG["jinxxy"].get("item_link_pattern")),
     }
 
 

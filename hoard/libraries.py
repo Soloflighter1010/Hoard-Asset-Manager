@@ -15,6 +15,7 @@ contain one, or be (or be inside) Hoard's own app-data folder or the editable co
 from __future__ import annotations
 
 import json
+import threading
 import os
 from pathlib import Path
 
@@ -55,7 +56,9 @@ def other_folders(cfg: dict) -> list[Path]:
     one (not a full path, the downloads folder itself, inside or around another) is left out."""
     root = root_dir(cfg)
     kept: list[Path] = []
-    for value in (cfg.get("library_folders") or [])[:MAX_FOLDERS] if isinstance(cfg.get("library_folders"), list) else []:
+    for value in cfg.get("library_folders") if isinstance(cfg.get("library_folders"), list) else []:
+        if len(kept) >= MAX_FOLDERS:   # (the first MAX_FOLDERS that can be one: an unusable entry doesn't take a place)
+            break
         path = _plain(value)
         if path is None or _same_or_inside(path, root) or _same_or_inside(root, path):
             continue
@@ -146,20 +149,25 @@ def _load_seen() -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
+_SEEN_LOCK = threading.Lock()   # catalog builds in a job and in the server can note folders at the same time
+
+
 def remember(folder: Path, store_dir: str, keys) -> None:
-    """Note which products a library folder holds for a store, as just read from it."""
+    """Note which products a library folder holds for a store, as just read from it. Read, changed and written as
+    one step, so two builds noting different folders at once don't each write over the other's."""
     keys = sorted(str(k) for k in keys)[:100000]
-    seen = _load_seen()
-    entry = seen.setdefault(str(folder), {})
-    if not isinstance(entry, dict):
-        entry = seen[str(folder)] = {}
-    if entry.get(store_dir) == keys:
-        return
-    entry[store_dir] = keys
-    try:
-        write_file_safely(_seen_file(), json.dumps(seen, ensure_ascii=False))
-    except OSError:
-        pass   # only a precaution for when the drive is away
+    with _SEEN_LOCK:
+        seen = _load_seen()
+        entry = seen.setdefault(str(folder), {})
+        if not isinstance(entry, dict):
+            entry = seen[str(folder)] = {}
+        if entry.get(store_dir) == keys:
+            return
+        entry[store_dir] = keys
+        try:
+            write_file_safely(_seen_file(), json.dumps(seen, ensure_ascii=False))
+        except OSError:
+            pass   # only a precaution for when the drive is away
 
 
 def away(cfg: dict, store_dir: str) -> dict[str, Path]:

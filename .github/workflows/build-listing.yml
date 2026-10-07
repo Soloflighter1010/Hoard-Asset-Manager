@@ -26,6 +26,7 @@ on:
   push:
     branches: [main]
     paths: ["site/**", "Website/**", "source.json", "CHANGELOG.md", "scripts/build_site_changelog.py",
+            "hoard/changelog.py", "hoard/versions.py",   # (the changelog page's renderer and its beta rule)
             ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]

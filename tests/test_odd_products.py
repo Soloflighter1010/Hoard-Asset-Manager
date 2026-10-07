@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import config, downloader  # noqa: E402
+from hoard import common, config, downloader  # noqa: E402
 
 downloader.RETRY_WAITS = (0.0, 0.0, 0.0)
 
@@ -175,6 +175,95 @@ class BoothFreeItemsInASync(unittest.TestCase):
         self.assertEqual(opened, ["https://booth.pm/en/items/7666744"])
         self.assertEqual(report.new_files, ["Booth: Dgabage Warehouse / Deluxe Getaway Emote / Getaway.zip"])
         self.assertEqual(report.skipped, [])
+
+
+class BoothNewFileInAProductYouHave(unittest.TestCase):
+    """A file new to a Booth product you already have is a new file, not an update; one replacing a file is one."""
+
+    def test_new_and_updated(self):
+        root = Path(tempfile.mkdtemp())
+        cfg = {**config.load_config(), "root": str(root), "request_delay": 0}
+        cfg["booth"] = {**cfg["booth"], "save_thumbnails": False}
+        item = {"id": "77", "name": "Rusk", "creator": "Mochi", "url": "https://booth.pm/en/items/77", "thumbnail": "",
+                "gift": False, "files": [{"name": "Rusk.zip", "url": "https://booth.pm/downloadables/1"},
+                                         {"name": "Rusk Quest.zip", "url": "https://booth.pm/downloadables/2"}]}
+
+        def fetch(page, sess, f, folder, fid, route, timeout_s, name_for=lambda n: n):
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f["name"]).write_bytes(b"zip")
+            return f["name"], 3
+        ctx = mock.MagicMock()
+        ctx.pages = [mock.MagicMock()]
+
+        def run():
+            report = downloader.Report()
+            args = SimpleNamespace(dry_run=False, headed=False, only=None, keys=None, store="booth", targets={})
+            with mock.patch.object(downloader, "_playwright", lambda: (lambda: contextlib.nullcontext(None))), \
+                    mock.patch.object(downloader, "launch_context", lambda *a, **k: ctx), \
+                    mock.patch.object(downloader, "booth_library", lambda page, cfg: [item]), \
+                    mock.patch.object(downloader, "session_from_context", lambda *a: mock.MagicMock()), \
+                    mock.patch.object(downloader, "booth_fetch", fetch):
+                downloader.sync_booth(cfg, root, args, report)
+            return report
+        first = dict(item, files=item["files"][:1])
+        item, keep = first, item
+        self.assertEqual(len(run().new_files), 1)
+        item = keep   # the creator added a Quest file
+        report = run()
+        self.assertEqual(report.updated, [], "a file new to the product isn't an update")
+        self.assertEqual(report.new_files, ["Booth: Mochi / Rusk / Rusk Quest.zip"])
+
+
+class BoothDirectRoute(unittest.TestCase):
+    """Booth's direct downloads: a dropped connection is tried again the same way (it resumes); Booth turning one
+    away sends that file through the browser, and twice running, the rest of the run."""
+
+    def fetch(self, route, fail):
+        def location(sess, url):
+            raise fail
+        folder = Path(tempfile.mkdtemp())
+        with mock.patch.object(downloader, "booth_file_location", location), \
+                mock.patch.object(downloader, "booth_browser_download", lambda *a, **k: ("x.zip", 1)) as browser, \
+                common.capture_log(lambda line: None):
+            return downloader.booth_fetch(None, None, {"url": "https://booth.pm/downloadables/1", "name": "x"}, folder,
+                                          "1", route, 1)
+
+    def test_a_dropped_connection_is_not_booth_turning_it_away(self):
+        import requests
+        route = {"direct": True}
+        with self.assertRaises(requests.ConnectionError):
+            self.fetch(route, requests.ConnectionError("reset"))
+        self.assertTrue(route["direct"])
+
+    def test_turned_away_twice_running(self):
+        route = {"direct": True}
+        self.assertEqual(self.fetch(route, RuntimeError("403")), ("x.zip", 1))
+        self.assertTrue(route["direct"], "once: only that file goes through the browser")
+        self.fetch(route, RuntimeError("403"))
+        self.assertFalse(route["direct"])
+
+
+class GumroadChosenPurchasePicture(unittest.TestCase):
+    """A Gumroad purchase downloaded from the Library gets its picture, from the library's listing."""
+
+    def test_picture(self):
+        content = {"content_items": [{"type": "file", "id": "f1", "file_name": "Hoodie", "extension": "zip",
+                                      "download_url": "/r/x/f1", "file_size": 3}]}
+        page = {"props": {"content": content, "purchase": {"product_id": "p"}, "token": "t"}}
+        store = SimpleNamespace(sess=None, page=lambda url, params=None: page, file_url=lambda *a: "https://app.gumroad.com/f1")
+        saved = []
+        with mock.patch.object(downloader.egress, "download", lambda sess, url, dest, *a, **k: dest.parent.mkdir(parents=True, exist_ok=True) or dest.write_bytes(b"abc") or 3), \
+                mock.patch.object(downloader, "save_thumbnail", lambda url, folder, *a: saved.append(url)), \
+                common.capture_log(lambda line: None):
+            root = Path(tempfile.mkdtemp())
+            downloader._sync_gumroad_purchases(config.load_config(), store, root / "Gumroad",
+                                               downloader.StoreRecords(config.load_config(), root, "Gumroad"),
+                                               SimpleNamespace(dry_run=False, only=None, keys=None, targets={"gumroad": [
+                                                   {"name": "Hoodie", "creator": "Mochi", "id": "1",
+                                                    "thumbnail": "https://public-files.gumroad.com/pic",
+                                                    "download_url": "https://app.gumroad.com/d/x"}]}),
+                                               downloader.Report())
+        self.assertEqual(saved, ["https://public-files.gumroad.com/pic"])
 
 
 if __name__ == "__main__":

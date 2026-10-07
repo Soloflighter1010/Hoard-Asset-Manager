@@ -7,8 +7,10 @@
   const REPO = "Soloflighter1010/Hoard-Asset-Manager";
 
   const ua = navigator.userAgent || "", platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  // an iPad says it's a Mac (since iPadOS 13): a Mac has no touch screen
+  const ios = /iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(platform + ua) && navigator.maxTouchPoints > 1);
   const os = /Win/i.test(platform) || /Windows/i.test(ua) ? "windows"
-    : /Mac/i.test(platform) || /Mac OS X/i.test(ua) ? (/iPhone|iPad/i.test(ua) ? null : "mac")
+    : /Mac/i.test(platform) || /Mac OS X/i.test(ua) ? (ios ? null : "mac")
     : /Linux/i.test(platform) && !/Android/i.test(ua) ? "linux" : null;
   const names = { windows: "Windows", mac: "macOS", linux: "Linux" };
 

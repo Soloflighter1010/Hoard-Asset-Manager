@@ -67,14 +67,45 @@ def _hash(pin: str, salt: bytes, n: int, r: int, p: int) -> bytes:
 
 
 class MarkStore:
-    """marks.json: one lock for every change, read fresh each time."""
+    """marks.json: one lock for every change. Read again whenever the file has changed (a page asks for it several
+    times a request, and a download once a product): what was read is kept until then."""
     _lock = threading.Lock()
+    _read_lock = threading.Lock()
+    _read: dict = {}   # path -> (the file's stamp, what was read from it)
 
     def __init__(self, path: Path | None = None):
         self.path = path or data_dir() / "marks.json"
 
     def load(self) -> dict:
-        """Your choices, as sets of product keys, plus the PIN's hash and lockout state (if any)."""
+        """Your choices, as sets of product keys, plus the PIN's hash and lockout state (if any). Yours to change."""
+        data = self._cached()
+        return {k: (set(v) if isinstance(v, frozenset) else v) for k, v in data.items()}
+
+    def view(self) -> dict:
+        """As load, to look in, not change (its sets are frozen): no copy is made."""
+        return self._cached()
+
+    def keys(self, kind: str) -> frozenset:
+        """The products with one choice (removed, hidden...), to look in, not change: no copy is made."""
+        return self._cached()[kind]
+
+    def _cached(self) -> dict:
+        try:
+            st = self.path.stat()
+            stamp = (st.st_mtime_ns, st.st_size, st.st_ino)   # written by replacing it: a new file each time
+        except OSError:
+            stamp = None
+        with self._read_lock:
+            had = self._read.get(str(self.path))
+        if had and had[0] == stamp and stamp is not None:
+            return had[1]
+        data = self._read_file()
+        data = {k: (frozenset(v) if isinstance(v, set) else v) for k, v in data.items()}
+        with self._read_lock:
+            self._read[str(self.path)] = (stamp, data)
+        return data
+
+    def _read_file(self) -> dict:
         empty = {k: set() for k in KINDS} | {"pin": None, "recovery": None, "failures": 0, "wait_until": 0.0}
         try:
             raw = read_json_file(self.path, 16 * 1024 * 1024) if self.path.exists() else None

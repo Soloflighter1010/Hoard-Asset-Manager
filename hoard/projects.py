@@ -145,10 +145,11 @@ def credits_text(project: dict, style: str | None = None) -> str:
     if md:
         lines.append("")
     if style == "ByCreator":
-        groups: dict[str, list[str]] = {}
+        # one line a creator, however their name's case differs ("kitsu", "Kitsu"), named as first seen (as Unity does)
+        groups: dict[str, tuple[str, list[str]]] = {}
         for e in entries:
-            groups.setdefault(_who(e), []).append(e["name"])
-        lines += [f"{who}: {', '.join(names)}" for who, names in groups.items()]
+            groups.setdefault(_who(e).lower(), (_who(e), []))[1].append(e["name"])
+        lines += [f"{who}: {', '.join(names)}" for who, names in groups.values()]
         return "\n".join(lines) + "\n"
     for e in entries:
         store = STORE_LABELS.get(e["store"], e["store"])
@@ -164,7 +165,9 @@ def credits_text(project: dict, style: str | None = None) -> str:
 def view(projects: list[dict], index: dict, updates: dict) -> list[dict]:
     """Projects for the page: each product with its download (if it's on disk here) and whether it has an update,
     and the credits list in every style."""
-    by_folder = {a["folder"]: a for a in index.get("assets", [])}
+    # projects name a download as catalog.json does (catalog_folder): "folder" is how the pages show it, which for
+    # one in another library folder starts "@1/"
+    by_folder = {a.get("catalog_folder") or a["folder"]: a for a in index.get("assets", [])}
     out = []
     for p in projects:
         assets = []

@@ -14,9 +14,13 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 - **Your tasks go first.** Start something while the routine check runs and the check stops safely to make way;
   Tasks says so, and it carries on after yours. Anything you start also waits ahead of automatic ones in Tasks.
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
-  your Library list first. A store's **Download** button does one store. Each first lists what it would get:
+  your Library list first, from the stores switched on in [Settings](Settings). A store's **Download** button does
+  one store. Each first lists what it would get:
   what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
-  don't want this time; left all ticked, it downloads everything new as before. **Always skip** leaves a product
+  don't want this time; left all ticked, it downloads everything new as before. Where Hoard knows a product's
+  files before downloading (an update's new and changed files, and a Booth product's files), **Choose files**
+  under it lists them to untick one by one; what you leave out is listed as skipped, and downloaded another time
+  if you choose it. **Always skip** leaves a product
   out of every download and sync, including automatic ones, until you choose **Stop skipping** (under **Always
   skipped** in the same list). **Update all** lists the updates the same way.
 - **Download** in an item's details (in the Library) downloads just that product, and so do **Update** in
@@ -42,7 +46,8 @@ that can't read any of your stores (offline, say, or signed out of them all) fai
 to download. The download panel closes by itself a few seconds after a job that went well; one with problems
 stays until you close it. Take a
 waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync within a few
-seconds. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
+seconds. **Force stop** ends any task at once (a refresh or a sign-in too): it closes the store's browser, the
+sign-in window or the browser download straight away, and keeps what finished. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
 left out of it.
 
@@ -159,7 +164,8 @@ checked, because Hoard doesn't download from it.
 A download that stops partway leaves a `.part` file, and the next download picks up where it ended. Hoard only
 adds to it the part of the file that follows, and only puts the file in place once it's complete, so a file is
 never stitched together from two versions: if the creator changed the file in the meantime, it's downloaded
-again from the start.
+again from the start. Beside the `.part` file Hoard keeps what the store said about the file when it started (its
+ETag, date and size, in `.part-info`), and only resumes when the store says it's still that file.
 
 ## The Downloads view
 

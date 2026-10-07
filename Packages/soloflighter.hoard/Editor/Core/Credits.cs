@@ -56,13 +56,18 @@ namespace SoloFlighter.Hoard
             if (format == CreditFormat.Markdown) sb.Append('\n');
             if (format == CreditFormat.ByCreator)
             {
-                for (int i = 0; i < entries.Count;)
+                // one line a creator, however their name's case differs between stores ("kitsu" and "Kitsu"),
+                // named as first seen, in the order they first come
+                var order = new List<string>();
+                var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var e in entries)
                 {
-                    string who = Who(entries[i]);
-                    var names = new List<string>();
-                    for (; i < entries.Count && Who(entries[i]) == who; i++) names.Add(entries[i].Name);
-                    sb.Append(who).Append(": ").Append(string.Join(", ", names)).Append('\n');
+                    string who = Who(e);
+                    List<string> names;
+                    if (!groups.TryGetValue(who, out names)) { groups[who] = names = new List<string>(); order.Add(who); }
+                    names.Add(e.Name);
                 }
+                foreach (string who in order) sb.Append(who).Append(": ").Append(string.Join(", ", groups[who])).Append('\n');
                 return sb.ToString();
             }
             foreach (var e in entries)
@@ -109,10 +114,12 @@ namespace SoloFlighter.Hoard
         public static string Link(string store, string url, bool added)
         {
             if (string.IsNullOrEmpty(url) || url.Length > 500) return null;
+            // every link, the catalog's too, is one plain address: nothing in it could end the link early and start
+            // another one in what you paste (a ")" or a space in a Markdown link), or break a line in the list
+            foreach (char c in url) if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '(' || c == ')' || c == '<' || c == '>') return null;
             if (!added) return HoardCatalog.StoreLink(store, url) ? url : null;
             Uri u;
             if (!Uri.TryCreate(url, UriKind.Absolute, out u) || u.Scheme != "https" || !string.IsNullOrEmpty(u.UserInfo)) return null;
-            foreach (char c in url) if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '(' || c == ')' || c == '<' || c == '>') return null;
             return url;
         }
 

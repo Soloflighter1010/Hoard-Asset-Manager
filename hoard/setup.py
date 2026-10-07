@@ -44,7 +44,19 @@ def browser_status(cfg: dict) -> dict:
     return {"channel": "chromium", "name": BROWSER_NAMES["chromium"], "ready": ready, "can_install": not ready, "note": note}
 
 
-def install_browser(progress) -> None:
+_installing: list = []   # the browser download running now, for Force stop (stop_install)
+
+
+def stop_install() -> None:
+    """End the browser download that's running, if one is (Force stop). It's started again from scratch next time."""
+    for proc in list(_installing):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def install_browser(progress, stop=None) -> None:
     """Download Hoard's own browser (Playwright's Chromium), reporting progress. The same as
     `python -m playwright install chromium`, without anyone needing a command line."""
     from playwright._impl._driver import compute_driver_executable, get_driver_env
@@ -53,6 +65,17 @@ def install_browser(progress) -> None:
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     proc = subprocess.Popen([str(node), str(cli), "install", "chromium"], env=get_driver_env(), stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, creationflags=flags)
+    _installing.append(proc)
+    if stop is not None and stop.is_set():   # Force stop came just as it started: stop_install had nothing to end yet
+        proc.kill()
+    try:
+        _read_install(proc, progress)
+    finally:
+        _installing.remove(proc)
+
+
+def _read_install(proc, progress) -> None:
+    """Pass on the download's progress, line by line, until it ends."""
     buf = b""
     while True:
         chunk = proc.stdout.read(256)
@@ -139,7 +162,9 @@ def migrate_from(cfg: dict, folder: Path, config_path: Path | None, lib: Library
             old = read_json_file(old_cfg, 1024 * 1024)
         except DataFileError:
             old = {}
-        value = str(old.get("root") or "downloads") if isinstance(old, dict) else "downloads"
+        if not isinstance(old, dict):   # not settings at all: the defaults, as for no file
+            old = {}
+        value = str(old.get("root") or "downloads")
         root = Path(value).expanduser()
         root = root if root.is_absolute() else (old_cfg.parent / root).resolve()
         if root.is_dir():

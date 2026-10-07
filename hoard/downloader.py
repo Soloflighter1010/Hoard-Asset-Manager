@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import os
 import re
@@ -16,9 +15,9 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 
-from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context
+from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context, settle
 from .common import NotLoggedIn, log, now_iso, tick
-from .library import DOWNLOADABLE, STORES
+from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards, scroll_inventory
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
@@ -106,6 +105,15 @@ class Report:
     # a check for updates (a dry run): per product already downloaded, what the store has that isn't on disk
     available: list = field(default_factory=list)
     got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
+    got_files: set = field(default_factory=set)       # (tag_key, file) saved in this run, named as a check names it
+
+    def saved(self, store: str, name: str, file: str, *also: str | None) -> None:
+        """A file saved: its product, and the file as Check for updates names it, so only what came is taken off
+        the list of updates (asset_updates.after_download). also: other names the product goes by."""
+        for n in (name, *also):
+            if n:
+                self.got.add(tag_key(store, n))
+                self.got_files.add((tag_key(store, n), file))
     stores_done: list = field(default_factory=list)   # stores read to the end, without an error
     retries: int = 2   # how many more times a failed file download is tried (Settings; see with_retries)
 
@@ -175,6 +183,26 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
         report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
                                  "file": file, "kind": "changed" if changed else "new"})
 
+
+def left_out(args, report: Report, store: str, name: str, file: str, *also: str) -> bool:
+    """A file you left out when choosing what to download (args.files: {tag_key: {"shown": the files listed,
+    "chosen": the ones ticked}}). Only a file that was listed and unticked is left out: one that wasn't listed (a
+    product whose name makes the same key, a file the creator added or relabelled since) is downloaded as usual.
+    also: other names the product goes by (a chosen Jinxxy item's name in your library, besides its page's). It's
+    named in the summary as skipped, and downloaded another time if you choose it. Checks for updates see every
+    file."""
+    chosen = getattr(args, "files", None)
+    if not isinstance(chosen, dict) or args.dry_run:
+        return False
+    pick = next((chosen[k] for k in (tag_key(store, n) for n in (name, *also) if n) if k in chosen), None)
+    if not isinstance(pick, dict) or file not in pick.get("shown", ()) or file in pick.get("chosen", ()):
+        return False
+    log(f"    left out, as you chose: {file}")
+    report.skipped.append(f"{STORES[store]['label'] if store in STORES else store}: {name} / {file} - left out, as you chose")
+    return True
+
+
+_SAID_CHANGED: set = set()   # (manifest, its contents' hash) already reported as changed outside Hoard, this run
 
 RETRY_WAITS = (5.0, 15.0, 30.0)   # seconds before each try again (issue #19)
 NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't change by asking again
@@ -372,11 +400,20 @@ class Manifest:
         status = check_seal(raw, self.path)
         name = self.store_dir.name
         if status == "changed":
-            copy = self.path.with_name(f"_manifest.changed-{time.strftime('%Y%m%d-%H%M%S')}.json")
-            shutil.copy2(self.path, copy)
-            log(f"{name}: _manifest.json was changed by something other than Hoard since it last saved it. "
-                f"Its store links won't be used until this sync fetches them from {name} again. A copy is kept as "
-                f"{copy.name}. Check what else can change {self.store_dir}.")
+            # one copy of each changed version, said once: a manifest is opened by checks, moves and the Downloads
+            # page too, which don't save it, so it stays "changed" until a sync does, and a copy each time piled up
+            data = self.path.read_bytes()
+            kept = next((c for c in self.store_dir.glob("_manifest.changed-*.json")
+                         if c.is_file() and not c.is_symlink() and c.stat().st_size == len(data) and c.read_bytes() == data),
+                        None)
+            if kept is None:
+                kept = self.path.with_name(f"_manifest.changed-{time.strftime('%Y%m%d-%H%M%S')}.json")
+                shutil.copy2(self.path, kept)
+            if (str(self.path), hashlib.sha256(data).hexdigest()) not in _SAID_CHANGED:
+                _SAID_CHANGED.add((str(self.path), hashlib.sha256(data).hexdigest()))
+                log(f"{name}: _manifest.json was changed by something other than Hoard since it last saved it. "
+                    f"Its store links won't be used until this sync fetches them from {name} again. A copy is kept as "
+                    f"{kept.name}. Check what else can change {self.store_dir}.")
         elif status == "foreign":
             log(f"{name}: _manifest.json was last saved by Hoard on another computer, so its store links will "
                 f"be fetched from {name} again. To share this folder between computers, copy integrity.key from Hoard's "
@@ -521,8 +558,8 @@ def removed_product(store: str, name: str, report: "Report") -> bool:
 
 
 def _removed_keys() -> set:
-    from .marks import MarkStore   # read fresh: removing something takes effect on the next product
-    return MarkStore().load()["removed"]
+    from .marks import MarkStore   # read again once it changes: removing something takes effect on the next product
+    return MarkStore().keys("removed")
 
 
 def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
@@ -542,25 +579,6 @@ def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
 
 
 # ----------------------------------------------------------------------------- Gumroad
-
-def extract_page_json(text: str):
-    """Pull the Inertia page object (component + props) out of a Gumroad HTML page."""
-    m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
-    if m:
-        return json.loads(m.group(1))
-    m = re.search(r'\bdata-page="(\{[^"]*)"', text)
-    if m:
-        return json.loads(html.unescape(m.group(1)))
-    # Older react-on-rails markup, kept as a fallback
-    best = None
-    for m in re.finditer(r'<script[^>]*js-react-on-rails-component[^>]*data-component-name="([^"]+)"[^>]*>(.*?)</script>',
-                         text, re.S):
-        if best is None or len(m.group(2)) > len(best[1]):
-            best = (m.group(1), m.group(2))
-    if best:
-        return {"component": best[0], "props": json.loads(best[1])}
-    return None
-
 
 def gumroad_session(cfg: dict) -> requests.Session:
     """An HTTP session signed in to Gumroad, using your Gumroad sign-in in Hoard's browser.
@@ -603,19 +621,8 @@ class Gumroad:
 
     def library(self):
         """Every purchase card in the library, archived ones included if configured."""
-        modes = [False, True] if self.cfg["gumroad"].get("include_archived", True) else [False]
-        for archived in modes:
-            page_no = 1
-            while True:
-                params = {"page": page_no, "sort": "purchase_date"}
-                if archived:
-                    params["show_archived_only"] = "true"
-                props = self.page(GR_LIBRARY, params).get("props", {})
-                yield from props.get("results") or []
-                pages = (props.get("pagination") or {}).get("pages") or 1
-                if page_no >= pages:
-                    break
-                page_no += 1
+        yield from gumroad_cards(lambda params: self.page(GR_LIBRARY, params).get("props", {}),
+                                 self.cfg["gumroad"].get("include_archived", True))   # (page() waits between pages)
 
     def file_url(self, page_url: str, token: str, file_id: str, fallback: str | None) -> str | None:
         """Ask for a signed download URL; fall back to the redirecting link on the download page."""
@@ -725,6 +732,8 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
         if old and rel_to_path(folder, old["path"]).exists():
             continue
         stem = f"Page images/{n:02d} {safe_name(token, 40)}"
+        if left_out(args, report, "gumroad", name, stem):
+            continue
         if args.dry_run:
             would_get(args, report, "gumroad", rec, name, creator, stem, False, old is not None)
             continue
@@ -745,7 +754,7 @@ def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, 
         rec["files"][fid] = {"path": relpath, "size": rel_to_path(folder, relpath).stat().st_size, "downloaded_at": now_iso()}
         log(f"    saved: {relpath}")
         report.new_files.append(f"Gumroad: {creator} / {name} / {relpath}")
-        report.got.add(tag_key("gumroad", name))
+        report.saved("gumroad", name, stem)
         got_any = True
         man.checkpoint()
     return got_any
@@ -769,7 +778,8 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: Stor
     """Download everything new or changed, one purchase at a time (see sync_gumroad)."""
     chosen = (getattr(args, "targets", None) or {}).get("gumroad")
     if chosen:   # straight to the chosen purchases' download pages
-        cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")}},
+        cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")},
+                              "thumbnail_url": i.get("thumbnail")},   # its picture, as the library has it
                   "purchase": {"id": i.get("id"), "download_url": i.get("download_url"), "variants": i.get("variants") or ""}}
                  for i in chosen]
         log(f"Gumroad: {len(cards)} chosen {'purchase' if len(cards) == 1 else 'purchases'}")
@@ -836,6 +846,8 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: Stor
                 continue
             is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
             label = f"{creator} / {name} / {relpath}"
+            if left_out(args, report, "gumroad", name, relpath):
+                continue
             if args.dry_run:
                 would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
                 continue
@@ -848,7 +860,7 @@ def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: Stor
                 continue
             log(f"    {'updated' if is_update else 'saved'}: {relpath}")
             (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
-            report.got.add(tag_key("gumroad", name))
+            report.saved("gumroad", name, relpath)
             rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
             got_any = True
             man.checkpoint()
@@ -959,15 +971,6 @@ JX_INFO_JS = r"""
 """
 
 
-def settle(page, ms: int = 800) -> None:
-    """Give a page time to finish loading: wait for the network to go quiet (at most 15 s), then ms more."""
-    try:
-        page.wait_for_load_state("networkidle", timeout=15000)
-    except Exception:
-        pass
-    page.wait_for_timeout(ms)
-
-
 def jinxxy_require_login(page) -> None:
     """Raise NotLoggedIn when Jinxxy is showing its sign-in form."""
     path = urlparse(page.url).path.lower()
@@ -991,9 +994,8 @@ def jinxxy_link(u) -> bool:
 def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
     """Scroll / click 'load more' until this page stops growing. Returns numbered-page links seen."""
     page_links: list[str] = []
-    quiet = 0
-    for _ in range(300):
-        before = len(found)
+
+    def read() -> int:
         for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
             u = urlparse(href)
             if not jinxxy_link(u):
@@ -1003,17 +1005,8 @@ def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
                 page_links.append(href)
             elif path != inv_path and rx.search(u.path):
                 found.setdefault(f"{u.scheme}://{u.netloc}{path}", None)
-        more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
-        if more.count() and more.first.is_visible() and more.first.is_enabled():
-            more.first.click()
-            settle(page, 600)
-            quiet = 0
-            continue
-        page.mouse.wheel(0, 20000)
-        page.wait_for_timeout(1200)
-        quiet = quiet + 1 if len(found) == before else 0
-        if quiet >= 3:
-            break
+        return len(found)
+    scroll_inventory(page, read, settle_ms=600, wait_ms=1200)
     return page_links
 
 
@@ -1132,7 +1125,8 @@ def file_link_name(sess: requests.Session, href: str, sites: list[str]) -> str:
 
 
 def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: str, hosts: list[str], timeout_s: int,
-                         name: str, creator: str, man: StoreRecords, args, report: "Report", direct=None) -> bool:
+                         name: str, creator: str, man: StoreRecords, args, report: "Report", direct=None,
+                         listed_name: str | None = None) -> bool:
     """Click every file's download button on the open page and save what each one downloads.
 
     direct, when given, is {"sess": a session with the store's cookies, "sites": its sites, "on": True}: a button
@@ -1147,37 +1141,43 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         report.skipped.append(f"{store}: {name} - no download buttons found on {url}")
         return False
 
-    wanted, used = [], set()
+    wanted, used, seen = [], set(), {}
     for b in buttons:
         k = label_key(b["label"]) or f"file #{b['idx'] + 1}"
         if k in used:
             k = f"{k} #{b['idx'] + 1}"
         used.add(k)
-        wanted.append((b["label"], k))
+        nth = seen[b["label"]] = seen.get(b["label"], -1) + 1   # which of the buttons with this label it is
+        wanted.append((b["label"], k, nth))
 
     got_any = False
-    for pos, (label, k) in enumerate(wanted):
+    for label, k, nth in wanted:
         old = rec["files"].get(k)
         if old and rel_to_path(folder, old["path"]).exists():
+            continue
+        if left_out(args, report, store.lower(), name, label or k, listed_name or ""):
             continue
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
             continue
         def named(raw: str, k=k):
             """The file's name in the product's folder, the file it replaces (if any), and whether it's an update."""
-            fname = distinct_name(safe_name(raw or k, 150), k, rec, {key for _label, key in wanted})
+            fname = distinct_name(safe_name(raw or k, 150), k, rec, {key for _label, key, _nth in wanted})
             # the same filename under a different label means the creator updated that file
             prev = next((fk for fk, fv in rec["files"].items() if fv.get("path") == fname and fk != k), None)
             is_update = prev is not None or (folder / fname).exists()
             log(f"    downloading: {fname}")
             return fname, prev, is_update
 
-        def attempt(label=label, k=k, pos=pos):
+        def attempt(label=label, k=k, nth=nth):
             """Click the file's button and save what it downloads (tried again by with_retries)."""
             current = find(allow_all)  # re-tag; the page may have re-rendered
-            match = next((b for b in current if b["label"] == label), current[pos] if pos < len(current) else None)
+            # the same button again: the nth with its label. Never whatever is now where it was: after a re-render
+            # that may be another file, which would then be saved as this one, and this one never downloaded
+            alike = [b for b in current if b["label"] == label]
+            match = alike[nth] if nth < len(alike) else None
             if not match:
-                raise RuntimeError("button disappeared")
+                raise RuntimeError("its download button is no longer on the page")
             if direct and direct["on"] and match.get("href"):
                 try:
                     raw = file_link_name(direct["sess"], match["href"], direct["sites"])
@@ -1218,25 +1218,37 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         rec["files"][k] = {"path": fname, "size": target.stat().st_size, "label": label, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"{store}: {creator} / {name} / {fname}")
-        report.got.add(tag_key(store, name))
+        report.saved(store.lower(), name, label or k, listed_name)   # (its update may be under its library name)
         got_any = True
         man.checkpoint()
     return got_any
 
 
 def forget_repeated_thumbnails(store_dir: Path) -> int:
-    """Delete product pictures that are byte-for-byte identical across different products: that's a site's
-    default banner, not a product. (Versions before 2.0.1 saved Jinxxy's.) Returns how many were removed."""
+    """Delete Jinxxy's default banner where versions before 2.0.1 saved it as product pictures: a picture
+    byte-for-byte identical across different creators' products (Creator/Product/_thumbnail.*). One creator's
+    products sharing a picture (copies of one product, issue #111) are real pictures, and kept. Done once: a
+    marker in Hoard's own folder says so, so pictures aren't read again on every sync. Returns how many were
+    removed."""
+    from .paths import data_dir
+    done = data_dir() / "jinxxy-banners-checked"
+    if done.exists():
+        return 0
     by_hash: dict = {}
     for p in store_dir.glob("*/*/_thumbnail.*"):
         if p.is_file() and not p.is_symlink():
             by_hash.setdefault(hashlib.sha256(p.read_bytes()).hexdigest(), []).append(p)
     removed = 0
     for same in by_hash.values():
-        if len(same) > 1:
+        if len({p.parent.parent.name for p in same}) > 1:   # more than one creator: the site's banner
             for p in same:
                 p.unlink()
                 removed += 1
+    try:
+        done.parent.mkdir(parents=True, exist_ok=True)
+        done.write_text("Jinxxy's default banner, saved as product pictures before 2.0.1, was cleared.\n", "utf-8")
+    except OSError:
+        pass
     return removed
 
 
@@ -1262,8 +1274,10 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
             direct = {"sess": session_from_context(ctx, "jinxxy.com"), "sites": STORE_SITES["jinxxy"],
                       "on": bool(jcfg.get("direct_downloads", True))}
             chosen = (getattr(args, "targets", None) or {}).get("jinxxy")
+            listed = {}   # a chosen item's name in your library, which may not be its page's
             if chosen:   # straight to the chosen items' pages (each checks the sign-in as it opens)
                 links = [i["url"] for i in chosen if jinxxy_link(urlparse(i["url"]))]
+                listed = {i["url"]: i.get("name") for i in chosen}
                 log(f"Jinxxy: {len(links)} chosen {'item' if len(links) == 1 else 'items'}")
             else:
                 page.goto(JX_INVENTORY, wait_until="domcontentloaded")
@@ -1288,7 +1302,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                         page = reopen_tab(p, cfg, args, "jinxxy", browser)
                     try:
                         _jinxxy_item(browser["ctx"], page, url, man, store_dir, jcfg, args, report, chosen=bool(chosen),
-                                     direct=direct)
+                                     direct=direct, listed_name=listed.get(url))
                     except NotLoggedIn:
                         raise
                     except Exception as e:
@@ -1335,7 +1349,8 @@ def reopen_tab(p, cfg: dict, args, store: str, browser: dict):
     return browser["ctx"].pages[0] if browser["ctx"].pages else browser["ctx"].new_page()
 
 
-def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None) -> None:
+def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None,
+                 listed_name: str | None = None) -> None:
     """Open one Jinxxy item and download the files its page offers."""
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
@@ -1356,7 +1371,7 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: boo
 
     got_any = download_by_clicking(ctx, page, url, rec, folder, "Jinxxy", JX_HOSTS,
                                    int(jcfg.get("download_start_timeout", 90)), name, creator, man, args, report,
-                                   direct=direct)
+                                   direct=direct, listed_name=listed_name)
 
     if got_any and is_new_asset:
         report.new_assets.append(f"Jinxxy: {creator} / {name}")
@@ -1374,97 +1389,9 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: boo
 BOOTH_LIBRARY = "https://accounts.booth.pm/library"
 
 
-BOOTH_JS = r"""
-() => {
-  const idOf = h => { const m = (h || '').match(/\/items\/(\d+)/); return m ? m[1] : null; };
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const out = new Map();
-  for (const a of document.querySelectorAll('a[href*="/items/"]')) {
-    const id = idOf(a.href);
-    if (!id || out.has(id)) continue;
-    let c = a;
-    while (c.parentElement && c.parentElement !== document.body) {
-      const ids = new Set([...c.parentElement.querySelectorAll('a[href*="/items/"]')].map(x => idOf(x.href)).filter(Boolean));
-      if (ids.size > 1) break;
-      c = c.parentElement;
-    }
-    const name = [...c.querySelectorAll('a[href*="/items/"]')].map(text).sort((x, y) => y.length - x.length)[0]
-      || text(c.querySelector('.font-bold'));
-    let creator = '', creatorUrl = '';
-    for (const s of c.querySelectorAll('a[href]')) {
-      let u; try { u = new URL(s.href); } catch (e) { continue; }
-      if (/\.booth\.pm$/.test(u.hostname) && !['accounts.booth.pm', 'www.booth.pm'].includes(u.hostname)
-          && !/\/items\//.test(u.pathname) && text(s)) { creator = text(s); creatorUrl = u.origin + '/'; break; }
-    }
-    if (!creator) creator = text(c.querySelector('.text-text-gray600'));
-    const img = c.querySelector('a[href*="/items/"] img') || c.querySelector('img');
-    const thumb = img ? (img.getAttribute('data-original') || img.getAttribute('data-src') || img.currentSrc || img.src || '') : '';
-    // Files. Booth now draws each file's buttons from placeholders that carry the address in data-href
-    // (2026); older pages used plain links. "Download" is the file itself; "Open in Browser" (?browse=1) and the
-    // Booth Library Manager links (/deeplink) are other ways to the same file, so they're skipped.
-    const FILE_SEL = '[data-href*="/downloadables/"], a[href*="/downloadables/"]';
-    const addr = el => el.getAttribute('data-href') || el.getAttribute('href') || '';
-    const fileId = el => {
-      const h = addr(el), m = h.match(/\/downloadables\/(\d+)(?:[?#]|$)/);
-      return m && !/[?&]browse=/.test(h) && (el.getAttribute('data-test') || 'downloadable') === 'downloadable' ? m[1] : null;
-    };
-    const seen = new Set(), files = [];
-    for (const d of c.querySelectorAll(FILE_SEL)) {
-      const fid = fileId(d);
-      if (!fid || seen.has(fid)) continue;
-      seen.add(fid);
-      let r = d;   // the file's row: widen from its button while the row is still about this one file
-      while (r.parentElement && r.parentElement !== c) {
-        const p = r.parentElement;
-        const ids = new Set([...p.querySelectorAll(FILE_SEL)].map(x => (addr(x).match(/\/downloadables\/(\d+)/) || [])[1]).filter(Boolean));
-        if (ids.size > 1 || p.querySelector('a[href*="/items/"], img')) break;
-        r = p;
-      }
-      const row = r.cloneNode(true);
-      row.querySelectorAll('.js-download-button, button, [data-href], a[href*="/downloadables/"]').forEach(x => x.remove());
-      const name = (row.textContent || '').replace(/\s+/g, ' ').replace(/ダウンロード|Download|Open in Browser|Other Downloads/gi, '').trim();
-      files.push({ name: name || 'File', url: new URL(addr(d), location.href).href });
-    }
-    const order = c.querySelector('a[href*="/orders/"]');
-    out.set(id, { id, name, creator, creator_url: creatorUrl, thumbnail: thumb, url: a.href,
-                  order_url: order ? order.href : '', files });
-  }
-  return [...out.values()];
-}
-"""
-
-
-def booth_require_login(page) -> None:
-    """Raise NotLoggedIn when Booth has sent the browser to its sign-in page."""
-    u = urlparse(page.url)
-    if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or page.locator("input[type=password]").count():
-        raise NotLoggedIn("Not signed in to Booth")
-
-
 def booth_library(page, cfg: dict) -> list[dict]:
-    """Every purchase (and, if enabled, gift) in your Booth library, one dict per item."""
-    items: dict[str, dict] = {}
-    delay = float(cfg.get("request_delay", 1.0))
-    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
-        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
-    for path, gift in sources:
-        for page_no in range(1, 500):
-            resp = page.goto(f"{BOOTH_LIBRARY}{path}?page={page_no}", wait_until="domcontentloaded")
-            page.wait_for_timeout(400)
-            booth_require_login(page)  # a sign-in page means the session ended, whatever its status code
-            if resp is not None and resp.status >= 400:
-                raise RuntimeError(f"accounts.booth.pm answered HTTP {resp.status}")
-            if not urlparse(page.url).path.startswith("/library"):
-                break
-            new = 0
-            for b in page.evaluate(BOOTH_JS):
-                if b["id"] not in items:
-                    items[b["id"]] = {**b, "gift": gift}
-                    new += 1
-            if not new:  # past the last page
-                break
-            time.sleep(delay)
-    return list(items.values())
+    """Every purchase (and, if enabled, gift) in your Booth library, one dict per item (as the library reads it)."""
+    return [{**b, "gift": gift} for b, gift, _base in booth_cards(page, cfg, float(cfg.get("request_delay", 1.0)))]
 
 
 def session_from_context(ctx, domain: str) -> requests.Session:
@@ -1573,16 +1500,25 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
 def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeout_s: float,
                 name_for=lambda n: n) -> tuple[str, int]:
     """Download one Booth file. The direct route is fastest and resumes where it stopped; if Booth turns it away
-    (sites often screen out anything that isn't a real browser), the rest of the run goes through the browser."""
+    (sites often screen out anything that isn't a real browser), that file goes through the browser, and once it has
+    turned it away twice running, the rest of the run does. A dropped connection isn't Booth turning it away: it's
+    raised to be tried again (with_retries), so the file resumes where it stopped. Signed out shows in the browser."""
     if route["direct"]:
         try:
             loc = booth_file_location(sess, f["url"])
             fname = name_for(booth_filename(f["name"], loc, f"file-{fid}"))
-            return fname, egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname,
-                                          progress=downloading(fname))
+            got = egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname, progress=downloading(fname))
+            route["refused"] = 0
+            return fname, got
+        except (requests.ConnectionError, requests.Timeout):
+            raise
         except (NotLoggedIn, RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
-            route["direct"] = False
-            log(f"    Booth turned the direct download away ({e}), so Hoard downloads through the browser instead.")
+            route["refused"] = route.get("refused", 0) + 1
+            if route["refused"] >= 2:
+                route["direct"] = False
+                log(f"    Booth turned the direct download away again ({e}), so Hoard downloads through the browser from now on.")
+            else:
+                log(f"    Booth turned the direct download away ({e}), so Hoard downloads this file through the browser.")
     return booth_browser_download(page, f["url"], folder, f["name"], fid, timeout_s, name_for)
 
 
@@ -1610,7 +1546,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     if removed_product("booth", name, report) or man.away(b["id"], f"Booth: {name}", report):
                         continue
                     rec = man.record(b["id"], creator, name)
-                    is_new_asset, had_files = not rec["files"], bool(rec["files"])
+                    is_new_asset = not rec["files"]
                     rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
                     folder = man.folder_of(rec)
                     log(f"\n[Booth] {creator} / {name}")
@@ -1625,7 +1561,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         report.skipped.append(f"Booth: {name} - no files listed in your library or on its page")
                         continue
 
-                    got_any = False
+                    got_any, on_disk = False, None
                     for f in b["files"]:
                         if not store_url(f["url"], ["booth.pm"]):
                             report.skipped.append(f"Booth: {name} - a file link that isn't on booth.pm was ignored")
@@ -1640,17 +1576,22 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         if not old and not replaces and (folder / guess).exists():  # already on disk, e.g. downloaded by hand
                             rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
                             continue
+                        if left_out(args, report, "booth", name, f["name"] or guess):
+                            continue
                         if args.dry_run:
                             would_get(args, report, "booth", rec, name, creator, f["name"] or guess, bool(replaces), old is not None)
                             continue
-                        on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
+                        if on_disk is None:   # what's in its folder, listed once a product (each file saved is added)
+                            on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
                         try:
                             offered = {(re.search(r"/downloadables/(\d+)", x["url"]) or [None, x["url"]])[1] for x in b["files"]}
                             fname, got = with_retries(report, f["name"] or guess, lambda f=f, fid=fid, offered=offered: booth_fetch(
                                 page, sess, f, folder, fid, route, timeout_s,
                                 name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered)))
                             prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
-                            is_update = had_files or prev is not None or fname in on_disk
+                            # an update replaces a file: one it had (this file, or one saved under this name), or
+                            # one already on disk by this name; a file new to the product isn't one
+                            is_update = old is not None or bool(replaces) or prev is not None or fname in on_disk
                         except NotLoggedIn:
                             raise
                         except Exception as e:
@@ -1659,9 +1600,10 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         if prev:
                             rec["files"].pop(prev, None)
                         rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
+                        on_disk.add(fname)
                         log(f"    {'updated' if is_update else 'saved'}: {fname}")
                         (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
-                        report.got.add(tag_key("booth", name))
+                        report.saved("booth", name, f["name"] or guess)
                         got_any = True
                         man.checkpoint()
                         time.sleep(delay)
@@ -1758,6 +1700,8 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRec
             report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(itch.systems(u))}, so not "
                                   "downloaded (Settings, itch.io: Skip game builds)")
             continue
+        if left_out(args, report, "itch", name, label):
+            continue
         if args.dry_run:
             would_get(args, report, "itch", rec, name, creator, label, old is not None and old.get("shown", shown) != shown,
                       old is not None and old.get("shown", shown) == shown)
@@ -1786,7 +1730,7 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRec
         rec["files"][fid] = {"path": fname, "size": size, "label": label, "shown": shown, "downloaded_at": now_iso()}
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"itch.io: {creator} / {name} / {fname}")
-        report.got.add(tag_key("itch", name))
+        report.saved("itch", name, label)
         got_any = True
         man.checkpoint()
     if got_any and is_new_asset:
@@ -2042,7 +1986,7 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
     return done
 
 
-def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dict:
+def move_product(cfg: dict, root: Path, key: str, to: int, progress=None, committed=None) -> dict:
     """Move a downloaded product's files to another library folder (to: its number, 0 for the downloads folder; see
     hoard/libraries.py), and its record with them, so it's kept up to date there.
 
@@ -2050,7 +1994,8 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dic
     as it arrives; only when all have arrived is the record moved and the originals deleted (Hoard's picture and
     asset.json with them, and the folder when that leaves it empty; anything else of yours in it stays). If anything
     goes wrong part way, what was copied is deleted and the original is left as it was. Nothing is read or written
-    through a link. A Local item stays in the downloads folder. Returns {"name", "files", "bytes", "to"}; raises
+    through a link. A Local item stays in the downloads folder. committed() is called once the move can't be undone
+    (the record has moved), so a Stop after it lets the rest finish. Returns {"name", "files", "bytes", "to"}; raises
     ValueError saying what's wrong."""
     import stat as _stat
     from . import libraries
@@ -2132,6 +2077,8 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None) -> dic
     dest_man.save()
     manifest.assets.pop(k)
     manifest.save()
+    if committed:
+        committed()
     dirs = set()
     for rel in [f.get("path") for f in rec["files"].values()] + extras + ["asset.json"]:
         try:

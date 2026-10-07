@@ -1,6 +1,7 @@
 """Work Hoard does in the background, one job at a time: refreshing, signing in and out, and downloading."""
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 import threading
@@ -11,7 +12,8 @@ from pathlib import Path
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
                       check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
-from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed
+from .tags import tag_key
+from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
 from .config import payhip_shops
@@ -278,6 +280,8 @@ class Jobs:
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
         self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
         self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
+        self._forced = False     # Force stop was chosen for the running job
+        self._sign_in = None     # the sign-in window open now, for Force stop to close
         self.busy = threading.Lock()
         self.stop = threading.Event()
         self.pending_link: str | None = None   # a sign-in link from an email, for the open sign-in window
@@ -308,16 +312,17 @@ class Jobs:
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
               items: list[str] | None = None, local: dict | None = None, move: dict | None = None,
-              files: dict | None = None) -> str | None:
+              files: dict | None = None, chosen: dict | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
         download is for, when it's for chosen ones, so it can go straight to them. files: what a rescan, a take-out
-        of Local or a deletion of downloaded files is for, when it waits its turn."""
+        of Local or a deletion of downloaded files is for, when it waits its turn. chosen: of a download, the files
+        chosen of each product ({tag_key: [file names]}) when you left some out."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
                 "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
                 "local": dict(local) if local else None, "move": dict(move) if move else None,
-                "files": dict(files) if files else None}
+                "files": dict(files) if files else None, "chosen": dict(chosen) if chosen else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -401,11 +406,12 @@ class Jobs:
                          "label": describe_job(task, stores, only, keys, scheduled), "started": now_iso()}
         self._trail = []
         self.stop.clear()
+        self._forced = False   # (a Force stop that came as the last job ended isn't this one's)
         self.state.update(error=None, partial=None, log=[], report=None, diagnostic=None, scheduled=scheduled, message="",
                           transfer=None,
                           job_id=self._current["id"], job_label=self._current["label"])
         if task == "download":
-            target = lambda s: self._download(s, only, keys, items=items)  # noqa: E731
+            target = lambda s: self._download(s, only, keys, items=items, chosen=spec.get("chosen"))  # noqa: E731
         elif task == "check-updates":
             target = lambda s: self._download(s, only, keys, check=True, items=items)  # noqa: E731
         elif task == "sync":
@@ -467,11 +473,15 @@ class Jobs:
         self._current = None
         st = self.state
         message = str(st.get("message") or "")
+        if self._forced:   # Force stop: whatever it was doing when it ended (a closed browser, say) isn't a failure
+            self._forced = self._made_way = False
+            message = "Force stopped. " + message.removeprefix("Stopped.").removeprefix("Force stopping").strip()
+            st["error"] = None
         if self._made_way:   # not stopped by you: it made way for your task, and carries on after it
             self._made_way = False
             message = "Made way for your task: it carries on after it. " + message.removeprefix("Stopped.").strip()
             st["error"] = None
-        outcome = ("failed" if st.get("error") else "stopped" if message.startswith(("Stopped", "Made way"))
+        outcome = ("failed" if st.get("error") else "stopped" if message.startswith(("Stopped", "Made way", "Force stopped"))
                    else "partial" if st.get("partial") else "done")
         trail = self._trail + [line for line in (st.get("log") or []) if line not in self._trail]
         report = st.get("report") if isinstance(st.get("report"), dict) else None
@@ -531,6 +541,8 @@ class Jobs:
 
     def _install_browser(self, stores: list[str]) -> None:
         """Download Hoard's own browser, passing progress to the page."""
+        if self._forced:
+            return
         self._set(task="install-browser", message="Downloading Hoard's browser")
         lines: list[str] = []
 
@@ -540,8 +552,11 @@ class Jobs:
             self._set(message=line, log=lines[-20:])
             print(f"Installing the browser: {line}", flush=True)   # in Hoard's log too, for when it goes wrong
         try:
-            install_browser(progress)
+            install_browser(progress, stop=self.stop)
         except RuntimeError as e:   # already a plain explanation
+            if self._forced:   # ended by Force stop, not by a failed download
+                self._set(message="Stopped. Hoard's browser wasn't installed; installing it starts again next time.")
+                return
             why = str(e)[:1].upper() + str(e)[1:]
             print(why, flush=True)
             self._set(message=why, error=why, diagnostic=diagnostics.record_note(
@@ -560,16 +575,19 @@ class Jobs:
         from .config import root_dir
         from .downloader import move_product
 
+        moved = []   # set once the move has gone through: a Stop after that can't undo it, so it lets it finish
+
         def sink(msg):
             self._moved = time.monotonic()
             self.state["message"] = str(msg)
-            if self.stop.is_set() and threading.get_ident() == self._job_thread:
+            if self.stop.is_set() and not moved and threading.get_ident() == self._job_thread:
                 self.stop.clear()
                 raise Cancelled()
         self._set(task="move", message=f"Moving {what.get('name') or 'it'}")
         try:
             with capture_log(sink):
-                done = move_product(self.cfg, root_dir(self.cfg), str(what.get("key") or ""), what.get("to"))
+                done = move_product(self.cfg, root_dir(self.cfg), str(what.get("key") or ""), what.get("to"),
+                                    committed=lambda: moved.append(True))
         except Cancelled:
             self._set(message="Stopped. Nothing was moved: it's where it was.")
             return
@@ -640,6 +658,8 @@ class Jobs:
             self._set(message=str(e), error=str(e))
             return
         added, left = 0, []
+        already = [pkg for pkg in plan["packages"] if pkg.get("added")]
+        plan["packages"] = [pkg for pkg in plan["packages"] if not pkg.get("added")]   # added before: not twice
         try:
             for n, pkg in enumerate(plan["packages"], 1):
                 if self.stop.is_set():
@@ -655,6 +675,10 @@ class Jobs:
             if added:
                 build_catalog(self.cfg, root)
         said = f"Added {plural(added, 'package')} to Local" + (" (stopped part way)" if self.stop.is_set() else "") + "."
+        if already:
+            one = len(already) == 1
+            said += (f" {len(already)} {'was' if one else 'were'} already in Local, and "
+                     f"{'was left as it was' if one else 'were left as they were'}.")
         if left:
             said += f" Left out {len(left)}: " + "; ".join(left[:5]) + ("…" if len(left) > 5 else "")
         self._set(message=said, log=[f"Left out {x}" for x in left][-200:], partial=bool(left))
@@ -698,9 +722,8 @@ class Jobs:
                 return
             downloadable = [s for s in stores if s in DOWNLOADABLE and s not in unread]
             if downloadable:
-                self._download(downloadable, None, check=True)
-                if self.stop.is_set():
-                    return
+                if self._download(downloadable, None, check=True) is False or self.stop.is_set():
+                    return   # stopped while checking for updates: its "Stopped" stands, and nothing found is kept
             counts = self.find_choices() if self.find_choices else {"new": 0, "updates": 0}
             found = {"at": now_iso(), **counts} if counts["new"] or counts["updates"] else None
             save_routine(found=found)
@@ -739,6 +762,23 @@ class Jobs:
             threading.Thread(target=self._force_stop, args=(self.state.get("job_id"),), daemon=True).start()
             return True
         return False
+
+    def force_stop(self) -> bool:
+        """Force stop: end the running task now, whatever it is, rather than at its next safe point. Hoard's store
+        browsers, a sign-in window and a browser download are ended at once, so a task waiting on one ends straight
+        away; anything else ends at its next step (a thread can't be ended from outside). What finished is kept, and
+        a file part way through resumes next time where it can. False when nothing is running."""
+        if not self.state["running"]:
+            return False
+        self._forced = True
+        self._set(message="Force stopping")
+        self.stop.set()
+        window = self._sign_in
+        if window is not None:
+            window.end()
+        stop_install()
+        end_browsers()
+        return True
 
     # ---- a job that doesn't stop, or doesn't move
 
@@ -779,7 +819,7 @@ class Jobs:
                                          f"browser if it has stopped answering). Last: {last}")[:500]
 
     def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False,
-                  items: list[str] | None = None) -> None:
+                  items: list[str] | None = None, chosen: dict | None = None) -> None:
         """Download everything new or changed from these stores (or only the products keys names), passing progress
         to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
         each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
@@ -813,12 +853,22 @@ class Jobs:
         args = SimpleNamespace(store="all" if set(stores) >= set(DOWNLOADABLE) else stores, dry_run=check, only=only,
                                headed=False, keys=set(keys) if keys else None,
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
-                               targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items))
+                               targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
+                               files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"])}
+                                      for k, v in (chosen or {}).items()} or None)   # the files you chose
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
             if check:
-                total = AssetUpdates().record_check(report.stores_done, args.keys, report.available)
+                # a check of chosen products (by key, by library item, or by name) replaces only what an earlier
+                # check found for those, and doesn't count as a check of the whole store
+                narrowed = args.keys
+                if not narrowed and (items or only):
+                    snap = self.lib.snapshot()[0]
+                    picked = [i for i in snap if (items and i.get("key") in items) or
+                              (only and only.lower() in f"{i.get('name', '')} {i.get('creator', '')}".lower())]
+                    narrowed = {tag_key(i["store"], i["name"]) for i in picked} or {"(none)"}
+                total = AssetUpdates().record_check(report.stores_done, narrowed, report.available)
                 found = len({a["key"] for a in report.available})
                 missed = [STORES[s]["label"] for s in stores if s not in report.stores_done and self.cfg[s].get("enabled", True)]
                 self._set(report={"updates": found, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
@@ -826,7 +876,7 @@ class Jobs:
                                    else "Checked: no updates") + (f" ({total} in all)" if total != found and not keys else "")
                                   + (f". Couldn't check {', '.join(missed)}." if missed else "."))
                 return
-            AssetUpdates().after_download(report.got, report.failed)
+            AssetUpdates().after_download(report.got, report.failed, report.got_files)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
                       partial=bool(summary["failed"]) or None,
@@ -834,6 +884,7 @@ class Jobs:
                                + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
         except Cancelled:
             self._set(message="Stopped checking for updates." if check else "Stopped. Anything half-downloaded resumes next time.")
+            return False   # (Stop was used up raising Cancelled: a caller carrying on after this checks for False)
         finally:
             self.on_download_done()   # a check can record files it finds already on disk, too
 
@@ -876,8 +927,11 @@ class Jobs:
                       error="You're offline. Your saved library still works.")
             return list(stores)
         refreshed, unread = [], [s for s in stores if s not in online]
-        with _playwright()() as p:
+        # itch.io is read through its API: Playwright isn't started (nor needed) when it's the only store read
+        with (_playwright()() if any(s not in NO_BROWSER for s in online) else contextlib.nullcontext()) as p:
             for store in online:
+                if self._forced:   # Force stop: the rest are left as they were
+                    break
                 label = STORES[store]["label"]
                 if store == "payhip" and not payhip_shops(self.cfg):   # no shop to read: no window opened for nothing
                     self.lib.set_error(store, PAYHIP_NO_SHOPS)
@@ -917,16 +971,17 @@ class Jobs:
                             if store in IMPORTABLE
                             else f"{label} blocked the automated browser ({e}). Try again later.")
                     except Exception as e:
-                        self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
-                                           else f"Couldn't read the library: {e}")
+                        if not self._forced:   # (its browser was closed by Force stop: not the store's fault)
+                            self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
+                                               else f"Couldn't read the library: {e}")
                 finally:
                     if ctx:
                         ctx.close()
         unread += [s for s in online if s not in refreshed and not (s == "payhip" and not payhip_shops(self.cfg))]
-        if refreshed and self.cfg.get("offline_images", True):
+        if refreshed and self.cfg.get("offline_images", True) and not self._forced:
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
-            cache_images(self.lib, keys, lambda m: self._set(message=m))
+            cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
         if unread and not refreshed:
             why = f"Couldn't read {_names(unread)}. Each store's row in Stores says why."
             self._set(message=why, error=why)
@@ -952,7 +1007,7 @@ class Jobs:
             # Hoard's own browser isn't downloaded yet: download it here, as part of signing in, rather than failing
             # and sending you to Set up Hoard (a tester tried twice before finding it)
             self._install_browser(stores)
-            if self.state.get("error"):
+            if self.state.get("error") or self._forced:
                 return
         # which browser, in the log and on screen: a chosen browser that isn't installed is stood in for by Hoard's
         # own, and that used to happen without a word (issue #20)
@@ -962,6 +1017,8 @@ class Jobs:
             self._sign_in_plainly(store, label, name)
         else:
             self._sign_in_in_hoards_window(store, label, name)
+        if self._forced:   # Force stop while signing in: nothing to read
+            return
         try:
             check_saved_signin(self.cfg, store)
         except SigninsUnprotected as e:
@@ -979,20 +1036,30 @@ class Jobs:
         store), Discord and the like accept it (issue #21). Wait until it's closed."""
         with _playwright()() as p:
             window = SignInWindow(p, self.cfg, store, sign_in_urls(self.cfg, store))
+        self._sign_in = window
+        if self._forced:   # Force stop came while the window was opening: it closes now
+            window.end()
         try:
             tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(sign_in_urls(self.cfg, store)) > 1 else ""
             close = "quit it (Command-Q)" if sys.platform == "darwin" else "close that window"
             self._set(task="login", store=store,
                       message=f"Sign in to {label} in the {name} window that opened{tabs}, then {close}.")
-            while window.is_open():
+            while window.is_open() and not self._forced:
                 if self.pending_link:   # a link you pasted from an email: open it in that window
                     link, self.pending_link = self.pending_link, None
                     window.open(link)
                     self._set(message=f"Opened the link from your email in the {label} window. Finish there, "
                                       f"then {close}.")
                 time.sleep(0.5)
-            window.wait_released()
+            if not self._forced:
+                window.wait_released()
+            else:   # the profile is let go only once its browser has ended, so nothing else opens it meanwhile
+                for _ in range(40):
+                    if not window.is_open():
+                        break
+                    time.sleep(0.25)
         finally:
+            self._sign_in = None
             window.close()
 
     def _sign_in_in_hoards_window(self, store: str, label: str, name: str) -> None:
@@ -1004,7 +1071,7 @@ class Jobs:
             tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(ctx.pages) > 1 else ""
             self._set(task="login", store=store,
                       message=f"Sign in to {label} in the {name} window that opened{tabs}, then close that window.")
-            while True:  # wait for the window to be closed
+            while not self._forced:  # wait for the window to be closed
                 try:
                     if not ctx.pages:
                         break

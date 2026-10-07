@@ -22,6 +22,8 @@ namespace SoloFlighter.Hoard.Editor
         Vector2 listScroll, textScroll;
         bool adding;
         string newName = "", newCreator = "", newUrl = "";
+        string title;              // the title as you're typing it (a space at the end stays while you type)
+        double saveAt = -1;        // typing saves once you pause, not on every key
 
         public static void Open(HoardWindow from)
         {
@@ -35,10 +37,19 @@ namespace SoloFlighter.Hoard.Editor
         void OnEnable()
         {
             settings = CreditsFile.Load(SettingsFile);
+            title = settings.Title;
             EditorApplication.projectChanged += Refresh;
+            EditorApplication.update += SaveWhenDue;
         }
 
-        void OnDisable() { EditorApplication.projectChanged -= Refresh; }
+        void OnDisable()
+        {
+            EditorApplication.projectChanged -= Refresh;
+            EditorApplication.update -= SaveWhenDue;
+            if (saveAt >= 0) Save();
+        }
+
+        void SaveWhenDue() { if (saveAt >= 0 && EditorApplication.timeSinceStartup >= saveAt) Save(); }
 
         void OnFocus() { Refresh(); }
 
@@ -62,11 +73,21 @@ namespace SoloFlighter.Hoard.Editor
             text = Credits.Format(Credits.Build(all, settings.LeftOut), settings.Format, settings.Title);
         }
 
-        void Changed()
+        void Changed(bool typing = false)
         {
-            try { settings.Save(SettingsFile); }
-            catch (IOException e) { Debug.LogWarning("Hoard: couldn't save the credits settings: " + e.Message); }
             Remake();
+            if (typing) { saveAt = EditorApplication.timeSinceStartup + 1; return; }
+            Save();
+        }
+
+        void Save()
+        {
+            saveAt = -1;
+            try { settings.Save(SettingsFile); }   // (read-only, say: said, never thrown out of drawing the window)
+            catch (System.Exception e) when (e is IOException || e is System.UnauthorizedAccessException)
+            {
+                Debug.LogWarning("Hoard: couldn't save the credits settings: " + e.Message);
+            }
             if (source != null) source.ReportSoon();   // Hoard's Projects view shows the same credits
         }
 
@@ -83,7 +104,13 @@ namespace SoloFlighter.Hoard.Editor
                 EditorGUILayout.HelpBox("Still checking " + stillChecking + " packages, so the list may grow. Choose Refresh in a moment.", MessageType.Info);
 
             EditorGUI.BeginChangeCheck();
-            settings.Title = Credits.OneLine(EditorGUILayout.TextField("Title", settings.Title), 100);
+            title = EditorGUILayout.TextField("Title", title ?? "");
+            if (EditorGUI.EndChangeCheck())
+            {
+                settings.Title = Credits.OneLine(title, 100);
+                Changed(true);
+            }
+            EditorGUI.BeginChangeCheck();
             settings.Format = (CreditFormat)EditorGUILayout.Popup("Style", (int)settings.Format, Credits.FormatNames);
             if (EditorGUI.EndChangeCheck()) Changed();
 

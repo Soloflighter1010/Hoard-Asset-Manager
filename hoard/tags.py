@@ -40,7 +40,7 @@ TAG_PUNCTUATION = " -_.+&'"
 TAG_RESERVED = {"__proto__", "constructor", "prototype", "__defineGetter__", "__defineSetter__", "__lookupGetter__"}
 
 
-TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):[^\W_]{1,300}$")   # local: your own (issue #80)
+TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):[^\W_]{1,300}\Z")   # local: your own (issue #80); \Z, as "$" lets a newline end it
 
 
 _tag_lock = threading.Lock()

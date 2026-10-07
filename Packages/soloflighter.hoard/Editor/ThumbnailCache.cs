@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
@@ -18,6 +19,7 @@ namespace SoloFlighter.Hoard.Editor
         const int DecodePerFrame = 6;                 // made into textures per editor update, so scrolling stays smooth
         const long MaxBytes = 8L * 1024 * 1024;       // a picture file bigger than this isn't read
         const int GifSide = 160;                      // a GIF's frames are kept at most this big: the size it's shown at
+        const int Readers = 2;                        // files read and GIFs decoded at once, however fast the list scrolls
 
         sealed class Picture
         {
@@ -26,13 +28,16 @@ namespace SoloFlighter.Hoard.Editor
             public long Bytes;
         }
 
-        sealed class Read { public string Path; public byte[] Still; public GifImage Gif; }
+        sealed class Read { public string Path; public int Generation; public byte[] Still; public GifImage Gif; }
 
         readonly Dictionary<string, Picture> ready = new Dictionary<string, Picture>();   // null: couldn't be shown
         readonly LinkedList<string> recent = new LinkedList<string>();                   // most recently used first
         readonly Dictionary<string, LinkedListNode<string>> place = new Dictionary<string, LinkedListNode<string>>();
         readonly HashSet<string> asked = new HashSet<string>();
         readonly ConcurrentQueue<Read> read = new ConcurrentQueue<Read>();
+        readonly ConcurrentQueue<Read> toRead = new ConcurrentQueue<Read>();
+        int readers;
+        volatile int generation;   // Clear starts a new one: a read asked for before it is dropped, not kept
         long used;
         double animatedDrawnAt = -1;
 
@@ -52,22 +57,45 @@ namespace SoloFlighter.Hoard.Editor
                 return p.Frames[Math.Min(p.Frames.Length - 1, p.Timing.FrameAt(now * 1000))];
             }
             if (asked.Add(path))
-                Task.Run(() =>
+            {
+                toRead.Enqueue(new Read { Path = path, Generation = generation });
+                StartReader();
+            }
+            return null;
+        }
+
+        void StartReader()
+        {
+            if (Interlocked.Increment(ref readers) <= Readers) Task.Run(ReadSome);
+            else Interlocked.Decrement(ref readers);
+        }
+
+        void ReadSome()
+        {
+            try
+            {
+                Read r;
+                while (toRead.TryDequeue(out r))
                 {
-                    var r = new Read { Path = path };
+                    if (r.Generation != generation) continue;   // asked for before a Clear
                     try
                     {
-                        if (new FileInfo(path).Length <= MaxBytes)
+                        if (new FileInfo(r.Path).Length <= MaxBytes)
                         {
-                            byte[] bytes = File.ReadAllBytes(path);
+                            byte[] bytes = File.ReadAllBytes(r.Path);
                             if (GifDecoder.IsGif(bytes)) r.Gif = GifDecoder.Decode(bytes, GifSide);   // null if it can't be read
                             else r.Still = bytes;
                         }
                     }
                     catch (Exception) { r.Still = null; r.Gif = null; }
                     read.Enqueue(r);
-                });
-            return null;
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref readers);
+                if (!toRead.IsEmpty) StartReader();   // one queued just as this reader was finishing
+            }
         }
 
         /// <summary>True while an animated picture is on screen, so the window keeps redrawing to play it.</summary>
@@ -81,6 +109,9 @@ namespace SoloFlighter.Hoard.Editor
             Read item;
             for (int n = 0; n < DecodePerFrame && read.TryDequeue(out item); n++)
             {
+                if (item.Generation != generation) continue;   // read for before a Clear: nothing kept of it
+                Picture had;
+                if (ready.TryGetValue(item.Path, out had) && had != null) { Destroy(had); used -= had.Bytes; }   // never two
                 var p = Make(item);
                 ready[item.Path] = p;
                 if (p != null) used += p.Bytes;
@@ -106,18 +137,28 @@ namespace SoloFlighter.Hoard.Editor
             {
                 var g = item.Gif;
                 var frames = new Texture2D[g.Frames.Count];
-                for (int i = 0; i < frames.Length; i++)
+                try
                 {
-                    frames[i] = new Texture2D(g.Width, g.Height, TextureFormat.RGBA32, false)
-                        { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp };
-                    frames[i].LoadRawTextureData(g.Frames[i]);
-                    frames[i].Apply(false, true);   // no longer readable: its copy in memory is let go
+                    for (int i = 0; i < frames.Length; i++)
+                    {
+                        frames[i] = new Texture2D(g.Width, g.Height, TextureFormat.RGBA32, false)
+                            { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp };
+                        frames[i].LoadRawTextureData(g.Frames[i]);
+                        frames[i].Apply(false, true);   // no longer readable: its copy in memory is let go
+                    }
+                }
+                catch (Exception)   // the frames made so far are let go, not left behind
+                {
+                    Destroy(new Picture { Frames = frames });
+                    return null;
                 }
                 return new Picture { Frames = frames, Timing = g.Frames.Count > 1 ? g : null, Bytes = (long)g.Width * g.Height * 4 * frames.Length };
             }
             if (item.Still == null) return null;
             var t = new Texture2D(2, 2) { hideFlags = HideFlags.HideAndDontSave };
-            if (!t.LoadImage(item.Still, true)) { UnityEngine.Object.DestroyImmediate(t); return null; }
+            bool loaded;
+            try { loaded = t.LoadImage(item.Still, true); } catch (Exception) { loaded = false; }
+            if (!loaded) { UnityEngine.Object.DestroyImmediate(t); return null; }
             return new Picture { Frames = new[] { t }, Bytes = (long)t.width * t.height * 4 };
         }
 
@@ -135,6 +176,7 @@ namespace SoloFlighter.Hoard.Editor
 
         public void Clear()
         {
+            generation++;
             foreach (var p in ready.Values) if (p != null) Destroy(p);
             ready.Clear();
             recent.Clear();

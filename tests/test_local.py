@@ -224,6 +224,31 @@ class FolderOfFolders(unittest.TestCase):
             with self.subTest(why), self.assertRaises(ValueError):
                 local.split(self.root, str(path), depth, True)
 
+    def test_a_folder_around_hoards_own_isnt_added_whole(self):
+        """Adding a folder with Hoard's downloads folder inside it (Documents, say) copied every download, Local too,
+        into Local. Added whole it's refused; as a folder of folders, Hoard's own is left out as before."""
+        around = self.root.parent
+        with self.assertRaises(ValueError) as said:
+            local.check_source(self.root, str(around), True)
+        self.assertIn("downloads folder is inside that folder", str(said.exception))
+        self.assertTrue(local.check_source(self.root, str(around), True, around_ok=True))
+
+    def test_one_name_hoard_wont_use_leaves_out_that_file_only(self):
+        from unittest import mock
+        src = self.base / "Kit"
+        src.mkdir()
+        for n in ("a.png", "bad.png", "c.png"):
+            (src / n).write_bytes(b"x")
+        real = local.rel_to_path
+
+        def picky(base, rel):
+            if rel == "bad.png":
+                raise local.UnsafePath("refused the path")
+            return real(base, rel)
+        with mock.patch.object(local, "rel_to_path", picky), mock.patch.object(local, "build_catalog", lambda *a: None):
+            rec = local.add(self.cfg, self.root, str(src), copy=True)
+        self.assertEqual(sorted(f["path"] for f in rec["files"].values()), ["a.png", "c.png"], "the rest copied and recorded")
+
     def test_a_link_is_never_followed(self):
         try:
             os.symlink(self.base, self.src / "Someone" / "Loop", target_is_directory=True)
@@ -244,6 +269,20 @@ class FolderOfFolders(unittest.TestCase):
         self.assertEqual(entries, [("Fox Base", "Someone", "Old stuff"), ("Mochi", "Kitsu Studio", "Old stuff"),
                                    ("Rusk", "Kitsu Studio", "Old stuff")])
         self.assertTrue((self.root / "Local" / "Kitsu Studio" / "Rusk" / "Rusk.unitypackage").is_file())
+
+        # Again, after adding a folder: only what's new comes in. In 3.0.0-beta.4 every package came in twice.
+        (self.src / "Someone" / "Tail").mkdir()
+        (self.src / "Someone" / "Tail" / "Tail.unitypackage").write_bytes(b"pkg")
+        preview = local.split(self.root, str(self.src), 2, True)["packages"]
+        self.assertEqual([p["name"] for p in preview if not p["added"]], ["Tail"])
+        runner.start("add-local", [], local={"path": str(self.src), "depth": 2, "copy": True, "creator": "", "note": ""})
+        for _ in range(200):
+            if not runner.state["running"] and runner.busy.acquire(blocking=False):
+                runner.busy.release()
+                break
+            time.sleep(0.02)
+        self.assertIn("Added 1 package to Local. 3 were already in Local", runner.history[-1]["message"])
+        self.assertEqual(len(downloader.collect_catalog(self.cfg, self.root)[0]), 4, "no copies of the first three")
 
 
 class LocalPage(unittest.TestCase):

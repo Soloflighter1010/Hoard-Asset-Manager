@@ -31,7 +31,7 @@ namespace SoloFlighter.Hoard
     {
         public const int NewestVersion = 4;
         const long MaxBytes = 64L * 1024 * 1024;
-        static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local" };
+        public static readonly string[] Stores = { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local" };   // by their folders' names
         static readonly Dictionary<string, string> StoreSites = new Dictionary<string, string>
         {
             { "Booth", "booth.pm" }, { "Gumroad", "gumroad.com" }, { "Jinxxy", "jinxxy.com" }, { "Payhip", "payhip.com" },
@@ -262,7 +262,14 @@ namespace SoloFlighter.Hoard
 
         string Inside(string baseFolder, string rel, bool folder)
         {
+            // a library folder that's a whole drive ("E:\", or "/") keeps its separator: "E:" alone is the current
+            // folder on that drive, and Path.Combine("E:", "Booth") is "E:Booth"
             string root = baseFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string drive = Path.GetPathRoot(baseFolder) ?? "";
+            if (root.Length < drive.Length) root = drive;
+            string prefix = root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                            || root.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? root : root + Path.DirectorySeparatorChar;
             string path = root;
             string[] parts = rel.Split('/');
             for (int n = 0; n < parts.Length; n++)
@@ -278,7 +285,7 @@ namespace SoloFlighter.Hoard
                 if (!File.Exists(path) || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) return null;
             }
             string full = Path.GetFullPath(path);
-            return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) ? full : null;
+            return full.StartsWith(prefix, StringComparison.Ordinal) ? full : null;
         }
     }
 }

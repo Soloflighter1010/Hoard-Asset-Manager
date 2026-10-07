@@ -1,127 +1,12 @@
 # Changelog
 
-## 3.0.0-beta.5
-
-The fifth beta of Hoard 3.0 makes signing in smoother. Everything in the betas before it is still here.
-
-- **Signing in installs Hoard's browser if it needs to.** Signing in with Hoard's own browser before it was
-  downloaded failed with "Open Settings, choose Set up Hoard again". Now the sign-in downloads it first, showing
-  its progress, then opens the sign-in window.
-- **Signing in to Payhip before adding your shops no longer looks like it failed.** Payhip keeps your purchases in
-  each shop you bought from, so with no shops added there's nothing to read yet; reading it straight after signing
-  in failed with "add your shops". Now the sign-in says it's done, and to add your shops in Settings (a shop's
-  address is in your purchase email) and then choose Refresh, or to import each shop's saved library pages.
-
-## 3.0.0-beta.4
-
-The fourth beta of Hoard 3.0 lets you choose what downloads, runs one routine check that asks before downloading
-anything, puts your own tasks first, stacks copies of the same product, adds a folder of folders to Local in one
-go, and lets you turn off the glow and change the store colours. Everything in the betas before it is still here.
-
-### The routine check
-
-- **One routine check, which asks before downloading** (issue #113). **Sync automatically** and **Check your
-  downloads** are now one setting, **Routine check**: every 6 or 12 hours, once a day, once a week or once a
-  month, or off. While Hoard is open it reads your stores (not Payhip), checks your downloads and checks for
-  updates, then, when it found something, asks: **Choose what to download** shows the list **Download new** does,
-  to untick from, or **Not now**. It never downloads by itself. Since it reads your stores, it's off until you
-  choose how often, unless you'd turned on **Sync automatically**: then it keeps that timing. Your downloads are
-  still checked whenever you choose **Check now** in Downloads.
-- **Files new since the last check aren't read again yet** (issue #113): they were checked as they downloaded,
-  and the next check takes their fingerprint.
-- **Your tasks go first** (issue #110). Start something while the routine check runs and it stops safely to make
-  way (Tasks says so), then carries on after yours. Anything you start waits ahead of automatic jobs in Tasks.
-
-### Downloading
-
-- **Choose what downloads** (issue #107). **Download new**, **Download everything new**, a store's **Download** and
-  **Update all** first list what they'd get: what's in your library with nothing on disk yet, and the updates the
-  last check found. Untick anything you don't want this time; left all ticked, it downloads as before.
-- **Always skip** (issue #107) leaves a product out of every download and sync, automatic ones included, until you
-  choose **Stop skipping** (under **Always skipped** in the same list). Choosing it by name still downloads it.
-- **Download several at once** (issue #106): select products in the Library and choose **Download**. They download
-  as one job, across stores.
-
-### Your library
-
-- **Add a folder of folders to Local** (issue #109). In **Add your own**, **Folders inside it** makes each folder
-  one, two or three levels down a package of its own, named for its folder; from two levels down, the folder above
-  is who made it. Hoard lists what it would add first. Handy for what you already keep one folder per creator.
-
-- **Clearer buttons in an item's details** (issue #108). There's one thing to do, in gold: **Download** when you
-  don't have a copy yet, **Show in Downloads** when you do (with **See the update** when there's one), or **Open on
-  Payhip** for Payhip's. The store's own pages, which open in your browser, are named for the store (**Open on
-  Gumroad**, **Store page**), and **Archive**, **Hide** and **Remove** sit under **Organise**.
-- **Copies stack** (issue #111). Copies of the same product on one store (bought more than once, or in several
-  versions) show as one tile marked ×3, say. Hoard knows them by their picture: the same image, byte for byte, not
-  the same name, so "Hair Pack 1" and "Hair Pack 2" stay apart. A picture several creators share (a store's default
-  banner) stacks nothing, and neither does one Hoard hasn't saved yet. Choose a stack to see every copy. Untick
-  **Stack copies**, beside **Sort**, to show each on its own.
-
-### Accessibility
-
-- **Store colours you can tell apart** (issue #112). Settings, under **Accessibility**, has **Store colours**:
-  **Standard**, **Easier to tell apart (colour blindness)**, a set chosen to stay distinct with the common kinds of
-  colour blindness and clear on light and dark backgrounds, or **My own**, a colour you pick for each store.
-- **The glow can be turned off** (issue #112): untick **Coloured glow behind the page** for a plain background.
-
-### Hoard for Unity 0.5.1
-
-- **Only what's in Assets counts as in your project** (issue #114). Many packages carry their own copy of
-  something VCC installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK), so products you hadn't imported
-  showed as **In this project** and landed in the credits list. Now only files under `Assets/` count.
-- **Nothing is cut off in a narrow window.** Long names end in "…" instead of being cut through a letter, with the
-  whole name when you point at one; a file's name keeps its end ("CyclopsBe….unitypackage") rather than wrapping
-  part way through a word; and when the window is too narrow for one row of buttons, Create Credits List, Reload
-  and Folder... move to a second row instead of off its edge.
-
-## 3.0.0-beta.3
-
-The third beta of Hoard 3.0 makes downloading from Jinxxy dependable: its files now come straight from Jinxxy,
-not through the browser. Everything in the betas before it is still here.
-
-### Fixed
-
-- **Jinxxy files download straight from Jinxxy,** with your sign-in, the way Booth's already do. In beta 2 the
-  download started, but the browser closed part way through bigger files (a .unitypackage, say), and the file
-  failed. Now a download that's interrupted picks up where it stopped next time, and progress shows its size and
-  speed. If Jinxxy ever turns that away, Hoard downloads through the browser as before, for the rest of that run.
-
-## 3.0.0-beta.2
-
-The second beta of Hoard 3.0 fixes downloading from Jinxxy, and makes library folders on other drives easier to
-use. Everything in beta 1 is still here.
-
-### Fixed
-
-- **Jinxxy downloads work with its new item pages.** Each file there is now a plain link, and clicking one left
-  Hoard waiting for the page to finish loading, which it never did: the download sat at the product's name until
-  Stop closed the browser. Hoard no longer waits for that.
-- **A stuck job's note in the log says where in Hoard it's waiting,** not only that it's waiting on the store's
-  browser, so a support report shows what held it up.
-
-### Library folders
-
-- **A tab for each library folder in Downloads,** after the stores' tabs, once you have more than your downloads
-  folder. Each is named for the folder and its drive ("Hoard (E:)"), says how many downloads it holds, and is
-  dimmed while its drive isn't connected. Choose one to see what's in that folder; choose it again for everything.
-- **Adding a folder is one step.** Settings now has a **Library folders** section: **Add a folder…** picks the folder
-  and adds it, or type its path. Each folder is listed with its drive, how many downloads it holds and how much
-  space is free, with **Open** and **Remove**.
-- **Move several products at once.** Select them in Downloads, choose a folder in the selection bar, then **Move
-  here**. Each is copied, checked, and only then deleted where it was, as when moving one.
-
-### Downloads
-
-- **Delete downloaded files is on every download,** in its details and for a selection, not only in Removed. A
-  product still in your library stays there, to download again; only the files Hoard downloaded are deleted.
-
-## 3.0.0-beta.1
+## 3.0.0
 
 Hoard 3.0 is the biggest update since Hoard began. It's an app on **Windows, macOS and Linux** now, with a new look
 built around your stores' colours. Signing in works with Google, Discord or X. Downloads queue up, retry
-themselves, show their speed and time left, and can't hang. And Hoard can keep working in the background while
-its window is closed.
+themselves, show their speed and time left, and can't hang; you choose what downloads, down to each file, and any
+task can be force stopped. One routine check keeps your library up to date and asks before downloading anything.
+And Hoard can keep working in the background while its window is closed.
 
 Coming from 2.8.4, everything carries over by itself: your library, tags, sign-ins, settings and downloads. See
 **Upgrading from 2.8** at the end.
@@ -154,6 +39,9 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   Hoard reads the store as before. Your sign-in is saved and protected exactly as it was. A link from a sign-in
   email still opens in that window when you paste it into Hoard. If you need the old window,
   `"automated_sign_in": true` in `config.json` brings it back.
+- **Signing in installs Hoard's browser if it needs to,** showing its progress, then opens the sign-in window.
+  Signing in to Payhip before you've added your shops says it's done, and to add them (a shop's address is in your
+  purchase email) or import their saved pages.
 - **Save a whole Payhip shop in one go.** Importing Payhip meant saving every page of every shop's library by
   hand. The **Save for Hoard** bookmark (in Stores, under Import saved pages: drag it to your browser's bookmarks
   bar) reads every page of a shop's library in your usual browser, as you, and saves them as one file to import.
@@ -209,6 +97,17 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - **Large text fits.** With **Largest** text, panels sized to the window no longer run off its edge: Settings,
   Stores, the sidebar, details, the selection bar, dialogs, the setup card and the download panel.
 - Sort, tile size and what's running sit up beside the tabs, out of the way.
+- **Buttons line up.** Every button is one of two heights, gold and plain alike, with its text centred; the bar's
+  buttons stay on one row with the search box down to narrower windows; tickboxes are gold everywhere.
+- **What's new, in Hoard.** **Settings › Updates › What's new in Hoard** shows every change, version by version,
+  with the version you're running marked; betas too when you tick **Include beta updates**.
+
+### Accessibility
+
+- **Store colours you can tell apart** (issue #112). Settings, under **Accessibility**, has **Store colours**:
+  **Standard**, **Easier to tell apart (colour blindness)**, a set chosen to stay distinct with the common kinds of
+  colour blindness and clear on light and dark backgrounds, or **My own**, a colour you pick for each store.
+- **The glow can be turned off** (issue #112): untick **Coloured glow behind the page** for a plain background.
 
 ### Your library
 
@@ -232,12 +131,25 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - While your hidden library is locked, hidden products' names stay out of job progress and the Tasks list, and
   locking it closes any hidden product's details you had open.
 - **Remove a download completely** (issue #81). Removing something you've downloaded asks whether to delete its
-  downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is also in Removed, in
-  the Library and in Downloads. Only the files Hoard downloaded go; anything of your own in the folder stays.
+  downloaded files too, so it no longer lingers in Downloads. **Delete downloaded files** is in every download's
+  details, in the Library and in Downloads, and for a selection: a product still in your library stays there, to
+  download again. Only the files Hoard downloaded go; anything of your own in the folder stays.
 - **Local: your own packages** (issue #80). Packages you make, to move textures and materials between projects or
   to hand to commissioners, live beside what you bought: **Add your own** takes a folder or file on this computer,
   with who it's for. You choose each time whether Hoard copies it in (checked like a download) or lists it where
   it is (never written to; **Rescan** picks up changes). Tagged, searched and imported into Unity like the rest.
+- **Add a folder of folders to Local** (issue #109). In **Add your own**, **Folders inside it** makes each folder
+  one, two or three levels down a package of its own, named for its folder; from two levels down, the folder above
+  is who made it. Hoard lists what it would add first, and adding the same folder again only adds what's new.
+- **Clearer buttons in an item's details** (issue #108). There's one thing to do, in gold: **Download** when you
+  don't have a copy yet, **Show in Downloads** when you do (with **See the update** when there's one), or **Open on
+  Payhip** for Payhip's. The store's own pages are named for the store (**Open on Gumroad**, **Store page**), and
+  **Archive**, **Hide** and **Remove** sit under **Organise**.
+- **Copies stack** (issue #111). Copies of the same product on one store (bought more than once, or in several
+  versions) show as one tile marked ×3, say. Hoard knows them by their picture: the same image, byte for byte, not
+  the same name, so "Hair Pack 1" and "Hair Pack 2" stay apart. A picture several creators share (a store's default
+  banner) stacks nothing. Choose a stack to see every copy. Untick **Stack copies**, beside **Sort**, to show each
+  on its own.
 - **Projects** (issue #86). Every Unity project you open Hoard's window in (Hoard for Unity 0.4.0) shows up under
   **Projects**: each product it uses, all of it or part, which have updates waiting, and its credits list (the
   same one the Unity window makes, with your changes there), ready to copy in any style. Downloads says which
@@ -245,6 +157,15 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 
 ### Downloads you can leave running
 
+- **Choose what downloads** (issue #107). **Download new**, **Download everything new**, a store's **Download** and
+  **Update all** first list what they'd get: what's in your library with nothing on disk yet, and the updates the
+  last check found. Untick anything you don't want this time. Where Hoard knows a product's files before
+  downloading (an update's new and changed files, and a Booth product's files), **Choose files** lets you untick
+  them one by one. Only the stores switched on in Settings are included.
+- **Always skip** (issue #107) leaves a product out of every download and sync, automatic ones included, until you
+  choose **Stop skipping**. Choosing it by name still downloads it.
+- **Download several at once** (issue #106): select products in the Library and choose **Download**. They download
+  as one job, across stores.
 - **Jobs wait their turn** (issue #49). Start a sync, download, refresh or sign-in while something is running, and
   it joins the queue instead of being refused with "Hoard is busy". So does taking something out of Local,
   rescanning it, or deleting a removed product's downloaded files. Take one off the queue in Tasks.
@@ -263,6 +184,17 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
     no progress for 5 minutes says so, and the log notes where it was waiting.
 - **Stop is quick and sure:** it works part way through a file, within a few seconds, and always reaches the
   download it's meant to end.
+- **Force stop, for any task.** The running task in **Tasks** has **Force stop** beside it, whatever it is: a
+  refresh, a sign-in, installing the browser, as well as downloads and syncs. It closes the store's browser (or the
+  sign-in window, or the browser download) at once, so the task ends straight away. What finished is kept, and a
+  file part way through resumes next time where it can. It asks first.
+- **Your tasks go first** (issue #110). Start something while an automatic one runs and it stops safely to make way
+  (Tasks says so), then carries on after yours.
+- **Jinxxy files download straight from Jinxxy,** with your sign-in, the way Booth's do, so a download that's
+  interrupted picks up where it stopped and progress shows its size and speed. If Jinxxy turns that away, Hoard
+  downloads through the browser instead.
+- **A resumed download is never joined onto a different file:** if the creator uploaded a new file under the same
+  name since, it starts again from the beginning.
 - **One product goes straight to its download.** **Download a copy** (Library) and **Update** (Downloads) open just
   that product's page on Jinxxy, and just that purchase's download page on Gumroad, instead of reading through
   the whole store to find it.
@@ -280,17 +212,20 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
   so a sync can't undo your edits. Only files that still match what Hoard downloaded are copied, and a read-me in
   the copy says what it is.
 - **Library folders on other drives.** When your downloads drive fills up, add a folder on another drive (an
-  external disk, say) in Settings, under **Other library folders**. Hoard reads it as part of your library:
+  external disk, say) in Settings, under **Library folders**: **Add a folder…** picks it and adds it. Hoard reads
+  it as part of your library, and Downloads gives each folder a tab of its own, with how many downloads it holds.
   Downloads, Hoard for Unity, the routine checks and syncing all cover it. New downloads still go to your downloads
   folder, and a product already in another folder is updated where it is. To move a product, open its details and
-  choose **Move here**: Hoard copies its files, checks every one, and only then deletes them where they were. When
+  choose **Move here** (or select several and move them together): Hoard copies its files, checks every one, and only then deletes them where they were. When
   a folder's drive isn't connected, its products are left alone, not downloaded again; removing a folder in
   Settings only stops Hoard reading it.
-- **Routine checks of your downloads** (issue #83). Once a week (or a day, a month, or only when you ask, in
-  Settings), Hoard checks every downloaded file is there and unchanged since it was downloaded, by size and
-  SHA-256 fingerprint; after the first check, only files whose size or time changed are read again, so it's quick.
-  Downloads shows when it last checked and what it found, with **Check now**; Tasks names any changed or missing
-  files.
+- **One routine check, which asks before downloading** (issues #83 and #113). Every 6 or 12 hours, once a day, a
+  week or a month (or off, until you choose), while Hoard is open it reads your stores (not Payhip), checks your
+  downloads are there and unchanged (by size and SHA-256 fingerprint, reading only files that changed since the last
+  check), and checks for updates. When it finds something new, it asks: **Choose what to download** shows the list
+  **Download new** does, or **Not now**. It never downloads by itself. If you'd turned on **Sync automatically**,
+  it keeps that timing. Downloads shows when your downloads were last checked and what was found, with **Check
+  now**; Tasks names any changed or missing files.
 
 ### Working in the background, and closing safely
 
@@ -367,8 +302,22 @@ Coming from 2.8.4, everything carries over by itself: your library, tags, sign-i
 - The store tabs no longer make the page bounce as the pointer moves along them.
 - The pages' scripts run in strict mode again.
 - A PIN test could fail when its digits happened to appear inside a random hash.
+- **One itch.io project's revoked download key** no longer counts as your API key being refused, which stopped every
+  itch.io download and asked you to sign in again.
+- **Booth:** one dropped connection no longer sends every later file through the browser (the file resumes
+  instead), and a new file in a product you have counts as new, not updated.
+- **Jinxxy:** pictures several products share are kept instead of being deleted (and downloaded again) every sync,
+  and a file whose button moves on the page is still the file downloaded.
+- A product both hidden and removed stays hidden while the hidden library is locked; reading your Jinxxy inventory
+  only follows Jinxxy's own pages.
+- Adding a folder with your downloads folder inside it (your whole Documents folder, say) to Local is refused, and
+  one file name your system can't take no longer stops a copy part way.
+- A Gumroad product downloaded from the Library gets its picture; removing one product no longer deletes a picture
+  another uses.
+- Requests Hoard can't make sense of get a clear error instead of a dropped connection, and the pages run faster:
+  your hidden, archived and removed choices are read once until they change.
 
-### Hoard for Unity 0.3.0 to 0.5.0
+### Hoard for Unity 0.3.0 to 0.5.2
 
 Released alongside, through VCC (Hoard's listing:
 https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
@@ -384,6 +333,13 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
 - **Projects in Hoard** (issue #86): the window tells Hoard what each project uses (0.4.0).
 - **Library folders on other drives**: products kept in another of Hoard's library folders are listed and
   imported like any other (0.5.0).
+- **Only what's in Assets counts as in your project** (issue #114, 0.5.1): a package's own copy of something VCC
+  installs under `Packages/` (Poiyomi, VRCFury, the VRChat SDK) no longer makes a product look imported, and only
+  files count, not the folders a creator's products share (0.5.2).
+- **Nothing is cut off in a narrow window** (0.5.1): long names end in "…", and the toolbar's buttons move to a
+  second row instead of off its edge.
+- **Importing a package with scripts is remembered** (0.5.2), a damaged `imports.json` is kept aside rather than
+  written over, a library folder that's a whole drive works, and "Checking packages" no longer gets stuck.
 
 ### A website, and thanks
 
@@ -392,7 +348,7 @@ https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json):
   changed.
 - **Thank you to the testers** who tried every beta of 3.0 on their own libraries and told us what broke:
   puzzlella, dx_nacca, kyrmeso, xionite02, vixendavali, djfin, loafevr, doctorlucymoth, surfur, hallowokin,
-  cheapthrill and petra.synth.
+  cheapthrill, petra.synth and xkittygoddessx.
 
 ### Upgrading from 2.8
 

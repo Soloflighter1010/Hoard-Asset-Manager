@@ -59,6 +59,15 @@ class Reports(unittest.TestCase):
                          "only what's all in the project is credited (issue #79)")
         self.assertEqual(projects.used_in([p]), {"Booth/Kitsu Studio/Rusk": ["My Avatar"], "Gumroad/Mochi Works/Mochi": ["My Avatar"]})
 
+    def test_by_creator_whatever_the_case(self):
+        """A creator whose name's case differs between stores is one line, as in Hoard for Unity."""
+        assets = [{"store": "Booth", "name": "Rusk", "creator": "Kitsu", "folder": "Booth/Kitsu/Rusk", "url": None, "status": "yes"},
+                  {"store": "Jinxxy", "name": "Tail", "creator": "Mia", "folder": "Jinxxy/Mia/Tail", "url": None, "status": "yes"},
+                  {"store": "Gumroad", "name": "Ears", "creator": "kitsu", "folder": "Gumroad/kitsu/Ears", "url": None, "status": "yes"}]
+        write("0123456789abcdef", report(assets=assets, credits={"title": "", "style": "ByCreator", "left_out": [], "added": []}))
+        [p] = projects.read_all()
+        self.assertEqual(projects.credits_text(p), "kitsu: Ears, Rusk\nMia: Tail\n", "sorted, then one line a creator")
+
     def test_written_by_another_program_so_checked_as_such(self):
         hostile = report(name="Evil\u202eName" + "x" * 500, assets=[
             {"store": "Steam", "name": "Unknown store", "folder": "Steam/x", "status": "yes"},

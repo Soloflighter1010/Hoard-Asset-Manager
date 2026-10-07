@@ -11,8 +11,16 @@ namespace SoloFlighter.Hoard.Editor
     public sealed class HoardWindow : EditorWindow
     {
         const string RootPref = "SoloFlighter.Hoard.DownloadsFolder";
-        static readonly string[] StoreNames = { "All stores", "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local" };
+        static readonly string[] StoreNames = Prepend("All stores", HoardCatalog.Stores);   // the catalog's own list
         static readonly string[] StoreLabels = Array.ConvertAll(StoreNames, s => HoardCatalog.StoreLabel(s));
+
+        static string[] Prepend(string first, string[] rest)
+        {
+            var all = new string[rest.Length + 1];
+            all[0] = first;
+            Array.Copy(rest, 0, all, 1, rest.Length);
+            return all;
+        }
 
         const float RowHeight = 52;
 
@@ -34,8 +42,6 @@ namespace SoloFlighter.Hoard.Editor
         int store;
         bool packagesOnly = true, inProjectOnly;
         Vector2 listScroll, detailScroll;
-        string importing;           // the file being imported, until Unity says it's done
-        HoardAsset importingAsset;
         bool reportDue;             // what this project uses has changed: tell Hoard's Projects view (issue #86)
         double reportAfter;
         string lastReport;
@@ -54,18 +60,14 @@ namespace SoloFlighter.Hoard.Editor
             Reload();
             EditorApplication.update += Tick;
             EditorApplication.projectChanged += OnProjectChanged;
-            AssetDatabase.importPackageCompleted += OnImportDone;
-            AssetDatabase.importPackageCancelled += OnImportEnded;
-            AssetDatabase.importPackageFailed += OnImportFailed;
+            PendingImport.Ended += OnImportEnded;   // (kept there, not here: it outlives the scripts reloading)
         }
 
         void OnDisable()
         {
             EditorApplication.update -= Tick;
             EditorApplication.projectChanged -= OnProjectChanged;
-            AssetDatabase.importPackageCompleted -= OnImportDone;
-            AssetDatabase.importPackageCancelled -= OnImportEnded;
-            AssetDatabase.importPackageFailed -= OnImportFailed;
+            PendingImport.Ended -= OnImportEnded;
             if (packages != null) packages.Stop();
             thumbs.Clear();
         }
@@ -77,18 +79,32 @@ namespace SoloFlighter.Hoard.Editor
         }
 
         /// <summary>Read the catalog again, in the background: the window stays usable, and shows the new list when
-        /// it's ready.</summary>
+        /// it's ready. Asked again during a load (another folder chosen), the newer one is what's shown.</summary>
         void Reload()
         {
-            if (loading) return;
             loading = true;
-            string root = DownloadsFolder();
+            int mine = System.Threading.Interlocked.Increment(ref generation);
+            string root;
+            try { root = DownloadsFolder(); }
+            catch (Exception e) { root = null; Debug.LogWarning("Hoard: couldn't find Hoard's downloads folder: " + e.Message); }
             System.Threading.Tasks.Task.Run(() =>
             {
-                var keys = Seal.ReadKeys(HoardLocation.KeyFiles());   // every Hoard key of this user account
-                loaded = HoardCatalog.Load(root, keys);
+                HoardCatalog cat;
+                try
+                {
+                    if (root == null) throw new IOException("no downloads folder");
+                    var keys = Seal.ReadKeys(HoardLocation.KeyFiles());   // every Hoard key of this user account
+                    cat = HoardCatalog.Load(root, keys);
+                }
+                catch (Exception e)   // never left "Loading your library..." for good
+                {
+                    cat = new HoardCatalog { Root = root ?? "", Problem = "Hoard's library couldn't be read here (" + e.Message + ")." };
+                }
+                if (mine == generation) loaded = cat;   // an older load finishing late isn't shown
             });
         }
+
+        int generation;
 
         void Tick()
         {
@@ -110,6 +126,7 @@ namespace SoloFlighter.Hoard.Editor
                         all.Add(p);
                     }
                 statusOf.Clear();
+                packages.ProjectChanged();   // a package downloaded again since is counted again
                 selected = selected == null ? null : catalog.Assets.Find(a => a.Key == selected.Key);
                 filesFor = null;
                 packages.Want(all);
@@ -172,12 +189,13 @@ namespace SoloFlighter.Hoard.Editor
             string project = Directory.GetCurrentDirectory();
             string name = string.IsNullOrWhiteSpace(PlayerSettings.productName) ? Path.GetFileName(project) : PlayerSettings.productName;
             var credits = CreditsFile.Load(CreditsWindow.SettingsFile);
-            string body = System.Text.Encoding.UTF8.GetString(ProjectReport.Build(project, name, Application.unityVersion, "", used, credits));
+            byte[] stamped;
+            string body = System.Text.Encoding.UTF8.GetString(ProjectReport.Build(project, name, Application.unityVersion, used, credits,
+                DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'+00:00'", System.Globalization.CultureInfo.InvariantCulture), out stamped));
             if (body == lastReport) return;
             try
             {
-                ProjectReport.Write(ProjectReport.FileFor(HoardLocation.DataDir(), project),
-                                    ProjectReport.Build(project, name, Application.unityVersion, DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'+00:00'", System.Globalization.CultureInfo.InvariantCulture), used, credits));
+                ProjectReport.Write(ProjectReport.FileFor(HoardLocation.DataDir(), project), stamped);
                 lastReport = body;
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
@@ -186,31 +204,14 @@ namespace SoloFlighter.Hoard.Editor
             }
         }
 
-        void OnImportDone(string packageName)
+        void OnImportEnded()
         {
-            if (importing != null && importingAsset != null && Path.GetFileNameWithoutExtension(importing) == packageName)
-            {
-                ImportLog.Record(importingAsset, Path.GetFileName(importing));
-                log = ImportLog.Read();
-            }
-            OnImportEnded(packageName);
-        }
-
-        void OnImportEnded(string packageName)
-        {
-            importing = null;
-            importingAsset = null;
-            packages.ProjectChanged();
+            log = ImportLog.Read();
+            if (packages != null) packages.ProjectChanged();
             statusOf.Clear();
             Filter();
             Repaint();
             ReportSoon();
-        }
-
-        void OnImportFailed(string packageName, string error)
-        {
-            Debug.LogWarning("Hoard: importing " + packageName + " failed: " + error);
-            OnImportEnded(packageName);
         }
 
         // ---- what's shown
@@ -319,7 +320,7 @@ namespace SoloFlighter.Hoard.Editor
                 string picked = EditorUtility.OpenFolderPanel("Hoard's downloads folder", DownloadsFolder(), "");
                 if (!string.IsNullOrEmpty(picked))
                 {
-                    EditorPrefs.SetString(RootPref, picked == HoardLocation.DownloadsFolder() ? "" : picked);
+                    EditorPrefs.SetString(RootPref, SamePath(picked, HoardLocation.DownloadsFolder()) ? "" : picked);
                     Reload();
                 }
             }
@@ -409,7 +410,7 @@ namespace SoloFlighter.Hoard.Editor
             if (a.Tags.Count > 0) GUILayout.Label("Tags: " + string.Join(", ", a.Tags), EditorStyles.wordWrappedMiniLabel);
             EditorGUILayout.Space();
 
-            bool paused = catalog.SealStatus == SealState.Changed || importing != null || EditorApplication.isCompiling;
+            bool paused = catalog.SealStatus == SealState.Changed || PendingImport.Active || EditorApplication.isCompiling;
             foreach (var entry in files)
             {
                 string file = entry.Key, path = entry.Value;
@@ -419,7 +420,7 @@ namespace SoloFlighter.Hoard.Editor
                 FittedLabel(GUILayoutUtility.GetRect(GUIContent.none, EditorStyles.label, GUILayout.MinWidth(60), GUILayout.ExpandWidth(true)),
                             file, EditorStyles.label, true);
                 if (path == null) { GUILayout.Label("missing", EditorStyles.miniLabel, GUILayout.Width(60)); EditorGUILayout.EndHorizontal(); continue; }
-                bool unityPackage = file.EndsWith(".unitypackage", StringComparison.OrdinalIgnoreCase);
+                bool unityPackage = HoardCatalog.IsUnityPackage(file);
                 if (unityPackage)
                 {
                     int have, total;
@@ -454,9 +455,22 @@ namespace SoloFlighter.Hoard.Editor
 
         void Import(HoardAsset a, string path)
         {
-            importing = path;
-            importingAsset = a;
+            PendingImport.Start(a, path);
             AssetDatabase.ImportPackage(path, true);   // Unity's own dialog: you choose what comes in
+        }
+
+        /// <summary>The same folder, however it's written: the folder picker gives "C:/Users/..." where Hoard's own
+        /// is "C:\Users\...", and Windows doesn't mind case.</summary>
+        static bool SamePath(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try
+            {
+                Func<string, string> plain = p => Path.GetFullPath(p).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return string.Equals(plain(a), plain(b), Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.OSXEditor
+                    ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            }
+            catch (Exception) { return a == b; }
         }
 
         void SelectInProject(string packagePath)

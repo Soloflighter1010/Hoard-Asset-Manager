@@ -118,7 +118,8 @@ so) are downloaded from there, by you. A project from a bundle only counts once 
 
 ### "Booth turned the direct download away"
 
-Nothing to do: Hoard carries on through its browser, by itself.
+Nothing to do: Hoard downloads that file through its browser, by itself (and the rest of the run, if Booth does it
+again).
 
 ### "Couldn't reach booth.pm, so Booth wasn't refreshed"
 

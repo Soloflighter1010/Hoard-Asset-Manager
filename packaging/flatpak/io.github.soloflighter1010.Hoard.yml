@@ -32,7 +32,7 @@ modules:
     buildsystem: simple
     build-commands:
       - mkdir -p ${FLATPAK_DEST}/lib/hoard
-      - cp -r hoard LICENSE ${FLATPAK_DEST}/lib/hoard/
+      - cp -r hoard LICENSE CHANGELOG.md ${FLATPAK_DEST}/lib/hoard/   # (the changelog: What's new, in the app)
       - install -Dm755 packaging/flatpak/hoard.sh ${FLATPAK_DEST}/bin/hoard
       - install -Dm644 packaging/flatpak/io.github.soloflighter1010.Hoard.desktop ${FLATPAK_DEST}/share/applications/io.github.soloflighter1010.Hoard.desktop
       # the metainfo, checked, with this version listed first (as software centres show it): no edit by hand

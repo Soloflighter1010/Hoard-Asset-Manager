@@ -23,7 +23,9 @@ Open **Local** (in the bar at the top, or the **Local** tab in Downloads) and ch
 | Disk space | Takes as much again | Only that picture |
 
 A single file can only be copied in; to list something where it is, choose its folder. Links (shortcuts) inside
-a folder are left out, and a folder that is itself a link can't be listed.
+a folder are left out, and a folder that is itself a link can't be listed. A folder with your downloads folder
+inside it (your whole Documents folder, say) can't be added: it would bring Hoard's own downloads into Local. A file
+whose name your system can't take is left out, and the rest are still added.
 
 Copying a large folder takes a while: it runs as a task, so Tasks shows how far it's got.
 
@@ -35,7 +37,8 @@ a package of its own, named for its folder; from two levels down, the folder abo
 under **Made by** to use it for all of them instead). Hoard lists what it would add before you choose **Add**.
 Files in the folders above are left out (the list says how many), Hoard's own downloads folder is never one of
 them, and up to 500 can be added at once. They're copied or listed together, as you choose, and **For** applies
-to them all.
+to them all. Adding the same folder again later only adds the folders that are new: those already in Local are
+marked in the list and left as they are. (Packages added with a beta of 3.0, before beta 6, aren't recognised this way.)
 
 ## Using it
 

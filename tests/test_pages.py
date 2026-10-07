@@ -285,6 +285,29 @@ class AccessKey(unittest.TestCase):
             self.assertEqual(refused, [])
             page.close()
 
+    def test_a_link_to_setup_opens_it(self):
+        """Downloads' "Set up Hoard again" goes to /#setup: the Library rewrote the address before reading it."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        self.assertTrue(page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--local').trim()"),
+                        "the Library has Local's colour too (custom colours started it grey)")
+        page.goto(f"{self.srv.url}#setup")
+        page.reload()
+        page.locator("#setup").wait_for(state="visible")
+        page.close()
+
+    def test_a_link_to_a_download_opens_its_details(self):
+        """Projects link to a download as /downloads#open=N: on the page already, that opens its details too."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        n = page.evaluate("DATA.assets[0].id")
+        page.evaluate(f"location.hash = 'open={n}'")
+        page.wait_for_function("document.querySelector('#detail').classList.contains('open')")
+        page.close()
+
     def test_a_used_link_doesnt_work_again(self):
         link = self.srv.entry_url()
         first, _ = self.open(link)
@@ -641,6 +664,65 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(seen[-1][0], "download")
             self.assertIn("gumroad", seen[-1][1], "every store you use, as always")
             self.assertIsNone(seen[-1][2].get("keys"))
+            page.close()
+
+    def test_choose_each_file(self):
+        """Choosing what to download, file by file: a product's files, where Hoard knows them first, can be unticked
+        one at a time, and only the ones left ticked are asked for."""
+        from unittest import mock
+        seen = self.started()
+        names = ["Ghost.unitypackage", "Ghost (Quest).unitypackage", "Textures.zip"]
+        choices = {"new": [], "skipped": [], "updates": [{"key": "gumroad:ghostfollower", "store": "gumroad",
+                   "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3, "names": names}]}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            dialog.locator(".pk-files summary").click()
+            self.assertIn("Choose files (3 of 3)", dialog.locator(".pk-files summary").inner_text())
+            dialog.locator(f"input[data-file='{names[1]}']").uncheck()
+            self.assertIn("2 of 3", dialog.locator(".pk-files summary").inner_text())
+            self.assertTrue(dialog.locator(f"input[data-file='{names[0]}']").is_visible(), "the list stays open")
+            page.click("#pickGo")
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual(seen[-1][0], "download")
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": [names[0], names[2]]}})
+            # every file unticked: the product itself is unticked
+            if not page.locator("#downloadAll").is_visible():   # (Stores stays open after a download starts)
+                page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog.wait_for()
+            dialog.locator(".pk-files summary").click()
+            for n in names:   # (clicked: the last one takes its list away with it)
+                dialog.locator(f"input[data-file='{n}']").click()
+            self.assertFalse(dialog.locator("input[data-pick='gumroad:ghostfollower']").is_checked())
+            self.assertEqual(dialog.locator(".pk-files").count(), 0)
+            page.click("[data-pick-go='cancel']")
+            page.close()
+
+    def test_files_with_one_name_are_one_choice(self):
+        """Two files a store names alike can't be told apart when downloading, so they're one choice, said so."""
+        from unittest import mock
+        seen = self.started()
+        choices = {"new": [], "skipped": [], "updates": [{"key": "gumroad:ghostfollower", "store": "gumroad",
+                   "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3,
+                   "names": ["Avatar.zip", "Avatar.zip", "Read me.txt"]}]}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            dialog.locator(".pk-files summary").click()
+            self.assertEqual(dialog.locator("input[data-file]").count(), 2)
+            self.assertIn("(2 files)", dialog.locator(".pk-files").inner_text())
+            dialog.locator("input[data-file='Avatar.zip']").uncheck()
+            page.click("#pickGo")
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": ["Avatar.zip", "Read me.txt"],
+                                                                                    "chosen": ["Read me.txt"]}})
             page.close()
 
     def test_the_routine_check_asks(self):
