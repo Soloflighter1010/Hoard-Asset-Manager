@@ -11,9 +11,7 @@ import re
 from pathlib import Path
 
 from .paths import PACKAGE
-
-BETA = re.compile(r"-beta\.\d+$")
-
+from .versions import is_beta   # the same rule as the updater's and the website's
 
 def inline(text: str) -> str:
     """One line of changelog text as HTML: escaped, with `code`, **bold** (around code too), [links](https://...)
@@ -28,7 +26,11 @@ def inline(text: str) -> str:
                    for n, p in enumerate(parts[0::2]))
     rest = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", rest)
     rest = re.sub(r"\[([^\]]+)\]\((https://[^)\s\"<>\x00]+)\)", r'<a href="\2">\1</a>', rest)
-    rest = re.sub(r'(?<![="\w>])(https://[^\s<>"\x00]*[^\s<>"\x00.,;:!?)])', r'<a href="\1">\1</a>', rest)
+    # bare addresses as links, but not inside a link already made (a link's text may hold an address: a link
+    # inside a link isn't HTML, and browsers break it apart)
+    rest = "".join(part if part.startswith("<a ") else
+                   re.sub(r'(?<![="\w>])(https://[^\s<>"\x00]*[^\s<>"\x00.,;:!?)])', r'<a href="\1">\1</a>', part)
+                   for part in re.split(r"(<a [^>]*>.*?</a>)", rest))
     return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], rest)
 
 
@@ -121,7 +123,7 @@ def whats_new(betas: bool, limit: int = 200) -> list[dict]:
         return []
     out = []
     for version, lines in releases(text):
-        beta = bool(BETA.search(version))
+        beta = is_beta(version)
         if beta and not betas:
             continue
         out.append({"version": version, "beta": beta, "html": blocks(lines)})

@@ -492,6 +492,8 @@ def self_test() -> int:
     check("fonts", len(list((WEB / "fonts").glob("*.woff2"))) >= 3)
     from .marks import WORDS
     check("recovery words", len(WORDS) == 2048)
+    from .changelog import changelog_file
+    check("changelog (What's new)", changelog_file().is_file(), str(changelog_file()))
     try:
         from playwright._impl._driver import compute_driver_executable
         node, cli = compute_driver_executable()

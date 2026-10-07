@@ -597,6 +597,28 @@ def browser_program(p, cfg: dict) -> str:
     return str(path)
 
 
+def end_profile_browser(profile: Path) -> None:
+    """End the browser running on this profile, if one is (Force stop of a sign-in). Only a browser on this
+    computer, on this exact profile, is ended."""
+    if not _profile_in_use(profile):
+        return
+    try:
+        if os.name != "nt":
+            host, _, pid = os.readlink(profile / "SingletonLock").rpartition("-")
+            import socket
+            if host == socket.gethostname() and pid.isdigit() and int(pid) > 1:
+                os.kill(int(pid), signal.SIGTERM)
+        else:   # the browser's processes are the ones started with this profile (passed in the environment, unquoted)
+            script = ("$p = '--user-data-dir=' + $env:HOARD_PROFILE; Get-CimInstance Win32_Process | "
+                      "Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) } | "
+                      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True,
+                           timeout=20, env={**os.environ, "HOARD_PROFILE": str(profile)},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
+
 def _profile_in_use(profile: Path) -> bool:
     """Is a browser running on this profile? Chromium keeps a lock in it while it's open: a link named SingletonLock
     (macOS, Linux), or a file named lockfile held open (Windows)."""
@@ -715,7 +737,9 @@ class SignInWindow:
                 time.sleep(0.5)
 
     def end(self) -> None:
-        """Close the window (Force stop), and everything it started."""
+        """Close the window (Force stop), and everything it started. The program Hoard started may have handed the
+        window to a browser already open on this profile and ended, so the browser holding the profile is ended
+        too: on macOS and Linux it's named in the profile's SingletonLock; on Windows it's found by its profile."""
         try:
             if sys.platform == "win32":
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.proc.pid)], capture_output=True, timeout=15,
@@ -724,6 +748,7 @@ class SignInWindow:
                 self.proc.kill()
         except (OSError, subprocess.SubprocessError, AttributeError):
             pass
+        end_profile_browser(self.profile)
 
     def close(self) -> None:
         """Let go of the profile (the window closed, or Hoard is stopping)."""

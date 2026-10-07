@@ -1,9 +1,8 @@
 """Build the website's changelog timeline (site/changelog.html) from CHANGELOG.md.
 
 Run on deploy by build-listing.yml, so the page always matches the changelog; nothing generated is kept in the
-repository. CHANGELOG.md uses a small part of Markdown: "## <version>" for each release, "### " for a heading inside
-one, paragraphs, "- " lists (nested by two spaces, with continuation lines indented), **bold**, `code` and
-[links](https://...). Everything is escaped first, so nothing in the changelog becomes markup of its own.
+repository. The changelog is turned into HTML by hoard/changelog.py (also What's new in the app), which says what
+part of Markdown it uses; betas are told apart by hoard/versions.py.
 
     python3 scripts/build_site_changelog.py OUT.html [--dates DATES.json]
 
@@ -21,8 +20,11 @@ from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO))
-from hoard.changelog import blocks, inline, releases  # noqa: E402,F401  (shared with What's new in the app)
+try:   # (run as a script, the repository isn't on the path yet; imported by the tests, it already is)
+    from hoard.changelog import blocks, inline, is_beta, releases  # noqa: F401  (shared with What's new in the app)
+except ImportError:
+    sys.path.insert(0, str(REPO))
+    from hoard.changelog import blocks, inline, is_beta, releases  # noqa: E402,F401
 REPO_URL = "https://github.com/Soloflighter1010/Hoard-Asset-Manager"
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 
@@ -39,7 +41,7 @@ def when(stamp: str | None) -> tuple[str, str] | None:
 def page(markdown: str, dates: dict[str, str]) -> str:
     cards = []
     # A beta's notes (## 3.1.0-beta.1) are for testers, on its GitHub release: What's new shows releases only
-    for n, (version, lines) in enumerate([r for r in releases(markdown) if "-beta." not in r[0]]):
+    for n, (version, lines) in enumerate([r for r in releases(markdown) if not is_beta(r[0])]):
         plain = VERSION.fullmatch(version)
         anchor = "v" + re.sub(r"[^0-9A-Za-z]+", "-", version).strip("-")
         dated = when(dates.get(f"v{version}")) if plain else None

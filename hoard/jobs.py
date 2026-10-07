@@ -539,6 +539,8 @@ class Jobs:
 
     def _install_browser(self, stores: list[str]) -> None:
         """Download Hoard's own browser, passing progress to the page."""
+        if self._forced:
+            return
         self._set(task="install-browser", message="Downloading Hoard's browser")
         lines: list[str] = []
 
@@ -548,8 +550,11 @@ class Jobs:
             self._set(message=line, log=lines[-20:])
             print(f"Installing the browser: {line}", flush=True)   # in Hoard's log too, for when it goes wrong
         try:
-            install_browser(progress)
+            install_browser(progress, stop=self.stop)
         except RuntimeError as e:   # already a plain explanation
+            if self._forced:   # ended by Force stop, not by a failed download
+                self._set(message="Stopped. Hoard's browser wasn't installed; installing it starts again next time.")
+                return
             why = str(e)[:1].upper() + str(e)[1:]
             print(why, flush=True)
             self._set(message=why, error=why, diagnostic=diagnostics.record_note(
@@ -845,7 +850,8 @@ class Jobs:
                                headed=False, keys=set(keys) if keys else None,
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
                                targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
-                               files={k: set(v) for k, v in (chosen or {}).items()} or None)   # the files you chose
+                               files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"])}
+                                      for k, v in (chosen or {}).items()} or None)   # the files you chose
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
@@ -958,10 +964,10 @@ class Jobs:
                     if ctx:
                         ctx.close()
         unread += [s for s in online if s not in refreshed and not (s == "payhip" and not payhip_shops(self.cfg))]
-        if refreshed and self.cfg.get("offline_images", True):
+        if refreshed and self.cfg.get("offline_images", True) and not self._forced:
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
-            cache_images(self.lib, keys, lambda m: self._set(message=m))
+            cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
         if unread and not refreshed:
             why = f"Couldn't read {_names(unread)}. Each store's row in Stores says why."
             self._set(message=why, error=why)
@@ -987,7 +993,7 @@ class Jobs:
             # Hoard's own browser isn't downloaded yet: download it here, as part of signing in, rather than failing
             # and sending you to Set up Hoard (a tester tried twice before finding it)
             self._install_browser(stores)
-            if self.state.get("error"):
+            if self.state.get("error") or self._forced:
                 return
         # which browser, in the log and on screen: a chosen browser that isn't installed is stood in for by Hoard's
         # own, and that used to happen without a word (issue #20)
@@ -1017,6 +1023,8 @@ class Jobs:
         with _playwright()() as p:
             window = SignInWindow(p, self.cfg, store, sign_in_urls(self.cfg, store))
         self._sign_in = window
+        if self._forced:   # Force stop came while the window was opening: it closes now
+            window.end()
         try:
             tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(sign_in_urls(self.cfg, store)) > 1 else ""
             close = "quit it (Command-Q)" if sys.platform == "darwin" else "close that window"
@@ -1031,6 +1039,11 @@ class Jobs:
                 time.sleep(0.5)
             if not self._forced:
                 window.wait_released()
+            else:   # the profile is let go only once its browser has ended, so nothing else opens it meanwhile
+                for _ in range(40):
+                    if not window.is_open():
+                        break
+                    time.sleep(0.25)
         finally:
             self._sign_in = None
             window.close()

@@ -1180,12 +1180,13 @@ def unreachable_message(store: str, what: str = "refreshed") -> str:
             "be down. Your saved list is unchanged; try again when you're connected.")
 
 
-def cache_images(lib: "Library", keys: list[str], progress) -> int:
-    """Fetch and keep the images for these items, so they show without a connection. Returns how many are saved."""
+def cache_images(lib: "Library", keys: list[str], progress, stop=lambda: False) -> int:
+    """Fetch and keep the images for these items, so they show without a connection. Returns how many are saved.
+    stop: when it says so, the rest are left (Force stop)."""
     keys = [k for k in keys if lib.thumbnail_for(k)]
     done = saved = 0
     with ThreadPoolExecutor(max_workers=6) as pool:
-        for got in pool.map(lambda k: fetch_thumbnail(k, lib), keys):
+        for got in pool.map(lambda k: None if stop() else fetch_thumbnail(k, lib), keys):
             done += 1
             saved += bool(got)
             if done % 10 == 0 or done == len(keys):

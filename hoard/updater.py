@@ -29,13 +29,12 @@ from urllib.parse import urlparse
 
 from . import __version__, egress
 from .paths import data_dir
+from .versions import TAG, is_beta, version_of  # noqa: F401  (one definition: hoard/versions.py)
 from .safety import DataFileError, read_json_file, write_file_safely
 
 REPO = "Soloflighter1010/Hoard-Asset-Manager"
 API = "https://api.github.com"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases"
-# Hoard's own releases (not unity-v..., not anything else): v3.1.0, and its betas, v3.1.0-beta.1
-TAG = re.compile(r"v(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:-beta\.(\d{1,3}))?")
 SETUP_NAME = "Hoard-Setup-{}.exe"
 SUMS_NAME = "SHA256SUMS-windows.txt"
 MAX_SETUP = 400 * 1024 * 1024
@@ -46,21 +45,6 @@ INSTALLER_ARGS = ("/SILENT", "/SP-", "/NORESTART", "/RELAUNCH=1")   # see packag
 
 class UpdateRefused(Exception):
     """A download that isn't the file the release says it is, or a release Hoard can't use."""
-
-
-def version_of(text) -> tuple[int, int, int, int, int] | None:
-    """"2.6.0", "v2.6.0" or "3.1.0-beta.2" as numbers that sort as the versions do (a beta comes before its
-    release), or None when it isn't a Hoard version."""
-    text = str(text or "")
-    m = TAG.fullmatch(text if text.startswith("v") else "v" + text)
-    if not m:
-        return None
-    return (int(m[1]), int(m[2]), int(m[3])) + ((0, int(m[4])) if m[4] else (1, 0))
-
-
-def is_beta(text) -> bool:
-    v = version_of(text)
-    return bool(v and v[3] == 0)
 
 
 def newer(candidate: str, than: str = __version__) -> bool:

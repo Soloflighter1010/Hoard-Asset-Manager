@@ -56,7 +56,7 @@ def stop_install() -> None:
             pass
 
 
-def install_browser(progress) -> None:
+def install_browser(progress, stop=None) -> None:
     """Download Hoard's own browser (Playwright's Chromium), reporting progress. The same as
     `python -m playwright install chromium`, without anyone needing a command line."""
     from playwright._impl._driver import compute_driver_executable, get_driver_env
@@ -66,6 +66,8 @@ def install_browser(progress) -> None:
     proc = subprocess.Popen([str(node), str(cli), "install", "chromium"], env=get_driver_env(), stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, creationflags=flags)
     _installing.append(proc)
+    if stop is not None and stop.is_set():   # Force stop came just as it started: stop_install had nothing to end yet
+        proc.kill()
     try:
         _read_install(proc, progress)
     finally:

@@ -234,6 +234,14 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(changelog.inline("[the wiki](https://example.com/w)"), '<a href="https://example.com/w">the wiki</a>')
         self.assertEqual(changelog.inline("`**not bold**` and `<b>`"), "<code>**not bold**</code> and <code>&lt;b&gt;</code>")
         self.assertEqual(changelog.inline("a ` stray"), "a ` stray")
+        # an address in a link's text stays text: a link inside a link isn't HTML
+        self.assertEqual(changelog.inline("[see https://example.com/d](https://github.com/x)"),
+                         '<a href="https://github.com/x">see https://example.com/d</a>')
+        # the website, What's new and the updater agree on what's a beta
+        from hoard import updater, versions
+        for v in ("3.1.0-beta.2", "3.1.0", "3.1.0-beta.rc", "3.1.0-beta.1 (hotfix)"):
+            self.assertEqual(changelog.is_beta(v), updater.is_beta(v), v)
+            self.assertIs(changelog.is_beta, versions.is_beta)
         whole = changelog.page((REPO / "CHANGELOG.md").read_text("utf-8"), {})
         self.assertNotIn("**", re.sub(r"<code>.*?</code>", "", whole, flags=re.S), "every bold in the changelog closes")
 
@@ -277,6 +285,8 @@ class TheDeploy(unittest.TestCase):
         paths = re.search(r"paths: \[([^\]]*)\]", self.text).group(1)
         self.assertIn('"CHANGELOG.md"', paths, "and when the changelog does, for its What's new page")
         self.assertIn('"scripts/build_site_changelog.py"', paths)
+        for renderer in ('"hoard/changelog.py"', '"hoard/versions.py"'):   # the page is made by these too
+            self.assertIn(renderer, paths)
 
     def test_the_listing_build_waits_out_a_release_being_made(self):
         """Hoard for Unity 0.3.0's listing builds failed twice ("Could not find valid zip file"): each ran while the

@@ -176,13 +176,18 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
                                  "file": file, "kind": "changed" if changed else "new"})
 
 
-def left_out(args, report: Report, store: str, name: str, file: str) -> bool:
-    """A file you left out when choosing what to download (args.files: {tag_key: the files chosen}). It's named in
-    the summary as skipped, and downloaded another time if you choose it. Products you didn't narrow down, and
-    checks for updates, get every file."""
+def left_out(args, report: Report, store: str, name: str, file: str, *also: str) -> bool:
+    """A file you left out when choosing what to download (args.files: {tag_key: {"shown": the files listed,
+    "chosen": the ones ticked}}). Only a file that was listed and unticked is left out: one that wasn't listed (a
+    product whose name makes the same key, a file the creator added or relabelled since) is downloaded as usual.
+    also: other names the product goes by (a chosen Jinxxy item's name in your library, besides its page's). It's
+    named in the summary as skipped, and downloaded another time if you choose it. Checks for updates see every
+    file."""
     chosen = getattr(args, "files", None)
-    picks = chosen.get(tag_key(store, name)) if isinstance(chosen, dict) and not args.dry_run else None
-    if picks is None or file in picks:
+    if not isinstance(chosen, dict) or args.dry_run:
+        return False
+    pick = next((chosen[k] for k in (tag_key(store, n) for n in (name, *also) if n) if k in chosen), None)
+    if not isinstance(pick, dict) or file not in pick.get("shown", ()) or file in pick.get("chosen", ()):
         return False
     log(f"    left out, as you chose: {file}")
     report.skipped.append(f"{STORES[store]['label'] if store in STORES else store}: {name} / {file} - left out, as you chose")
@@ -1149,7 +1154,8 @@ def file_link_name(sess: requests.Session, href: str, sites: list[str]) -> str:
 
 
 def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: str, hosts: list[str], timeout_s: int,
-                         name: str, creator: str, man: StoreRecords, args, report: "Report", direct=None) -> bool:
+                         name: str, creator: str, man: StoreRecords, args, report: "Report", direct=None,
+                         listed_name: str | None = None) -> bool:
     """Click every file's download button on the open page and save what each one downloads.
 
     direct, when given, is {"sess": a session with the store's cookies, "sites": its sites, "on": True}: a button
@@ -1177,7 +1183,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         old = rec["files"].get(k)
         if old and rel_to_path(folder, old["path"]).exists():
             continue
-        if left_out(args, report, store.lower(), name, label or k):
+        if left_out(args, report, store.lower(), name, label or k, listed_name or ""):
             continue
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
@@ -1238,6 +1244,8 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         log(f"    {'updated' if is_update else 'saved'}: {fname}")
         (report.updated if is_update else report.new_files).append(f"{store}: {creator} / {name} / {fname}")
         report.got.add(tag_key(store, name))
+        if listed_name:   # (its update, if any, is listed under its library name)
+            report.got.add(tag_key(store, listed_name))
         got_any = True
         man.checkpoint()
     return got_any
@@ -1281,8 +1289,10 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
             direct = {"sess": session_from_context(ctx, "jinxxy.com"), "sites": STORE_SITES["jinxxy"],
                       "on": bool(jcfg.get("direct_downloads", True))}
             chosen = (getattr(args, "targets", None) or {}).get("jinxxy")
+            listed = {}   # a chosen item's name in your library, which may not be its page's
             if chosen:   # straight to the chosen items' pages (each checks the sign-in as it opens)
                 links = [i["url"] for i in chosen if jinxxy_link(urlparse(i["url"]))]
+                listed = {i["url"]: i.get("name") for i in chosen}
                 log(f"Jinxxy: {len(links)} chosen {'item' if len(links) == 1 else 'items'}")
             else:
                 page.goto(JX_INVENTORY, wait_until="domcontentloaded")
@@ -1307,7 +1317,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                         page = reopen_tab(p, cfg, args, "jinxxy", browser)
                     try:
                         _jinxxy_item(browser["ctx"], page, url, man, store_dir, jcfg, args, report, chosen=bool(chosen),
-                                     direct=direct)
+                                     direct=direct, listed_name=listed.get(url))
                     except NotLoggedIn:
                         raise
                     except Exception as e:
@@ -1354,7 +1364,8 @@ def reopen_tab(p, cfg: dict, args, store: str, browser: dict):
     return browser["ctx"].pages[0] if browser["ctx"].pages else browser["ctx"].new_page()
 
 
-def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None) -> None:
+def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None,
+                 listed_name: str | None = None) -> None:
     """Open one Jinxxy item and download the files its page offers."""
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
@@ -1375,7 +1386,7 @@ def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: boo
 
     got_any = download_by_clicking(ctx, page, url, rec, folder, "Jinxxy", JX_HOSTS,
                                    int(jcfg.get("download_start_timeout", 90)), name, creator, man, args, report,
-                                   direct=direct)
+                                   direct=direct, listed_name=listed_name)
 
     if got_any and is_new_asset:
         report.new_assets.append(f"Jinxxy: {creator} / {name}")

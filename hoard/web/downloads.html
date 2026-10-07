@@ -1374,7 +1374,7 @@ function updateSection(a) {
 }
 function updateItems(list) {
   const chosen = list.filter(a => canDownload(a));
-  if (!chosen.length) return;
+  if (!chosen.length) { takeFiles(); return; }
   startDownload([...new Set(chosen.map(storeId))], null, chosen.map(a => a.tag_key));
 }
 async function checkUpdates(list) {
@@ -2207,14 +2207,16 @@ async function pickDownloads(title, verb, items, go, choices) {
 }
 // Each of a product's files, to untick one by one, when Hoard knows them before downloading: an update's changed
 // and added files, and a new product's files where its store lists them (Booth's library does).
+const fileNames = e => [...new Set(e.names || [])];   // a name two files share is one choice: both, or neither
 function fileChoice(e) {
-  const names = e.names || [];
+  const names = fileNames(e), count = {};
+  for (const n of e.names || []) count[n] = (count[n] || 0) + 1;
   if (names.length < 2 || PICK.off.has(e.key)) return "";
   const off = PICK.offFiles.get(e.key) || new Set();
   return `<details class="pk-files" data-files-of="${esc(e.key)}"${PICK.openFiles.has(e.key) ? " open" : ""}>` +
     `<summary>Choose files (${names.length - off.size} of ${names.length})</summary>` +
     names.map(n => `<label><input type="checkbox" data-file-of="${esc(e.key)}" data-file="${esc(n)}"${off.has(n) ? "" : " checked"}>` +
-      ` <span>${esc(n)}</span></label>`).join("") + `</details>`;
+      ` <span>${esc(n)}${count[n] > 1 ? ` <span class="muted">(${count[n]} files)</span>` : ""}</span></label>`).join("") + `</details>`;
 }
 let DL_FILES = null;   // the files chosen of each product, for the download about to start
 function takeFiles() { const f = DL_FILES; DL_FILES = null; return f; }
@@ -2255,7 +2257,7 @@ $("#pickDialog").addEventListener("change", e => {
     const off = PICK.offFiles.get(of) || new Set(), item = PICK.items.find(x => x.key === of);
     if (e.target.checked) off.delete(e.target.dataset.file); else off.add(e.target.dataset.file);
     PICK.offFiles.set(of, off);
-    if (item && off.size >= (item.names || []).length) { PICK.off.add(of); PICK.offFiles.delete(of); }   // none: the product's unticked
+    if (item && off.size >= fileNames(item).length) { PICK.off.add(of); PICK.offFiles.delete(of); }   // none: the product's unticked
     drawPick();
     return;
   }
@@ -2274,11 +2276,12 @@ $("#pickDialog").addEventListener("click", e => {
   else if (b.dataset.pickAll) { PICK.off = b.dataset.pickAll === "on" ? new Set() : new Set(PICK.items.map(x => x.key)); drawPick(); }
   else if (b.dataset.pickGo) {
     $("#pickDialog").close();
+    DL_FILES = null;   // (whatever was chosen before, and not used, is forgotten)
     if (b.dataset.pickGo !== "go") return;
     const files = {};
     for (const [k, off] of PICK.offFiles) {
       const item = PICK.items.find(x => x.key === k);
-      if (item && off.size && !PICK.off.has(k)) files[k] = (item.names || []).filter(n => !off.has(n));
+      if (item && off.size && !PICK.off.has(k)) files[k] = { shown: fileNames(item), chosen: fileNames(item).filter(n => !off.has(n)) };
     }
     DL_FILES = Object.keys(files).length ? files : null;
     PICK.go(PICK.off.size ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
@@ -2503,8 +2506,8 @@ async function installUpdate() {
 }
 
 async function startDownload(stores, only, keys) {
+  const files = takeFiles();   // the files chosen of each product, if some were left out (taken first: never kept for later)
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
-  const files = takeFiles();   // the files chosen of each product, if some were left out
   const r = await apiPost("/api/download", files ? { stores, only, keys, files } : { stores, only, keys });
   if (!r.ok) { toast(r.data.error || "Downloading didn't start."); return; }
   if (queuedToast(r)) return;

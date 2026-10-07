@@ -1196,15 +1196,17 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": True, "queued": started == "queued"}, 202)
 
 
-def chosen_files(raw) -> dict[str, list[str]] | None:
-    """The files you chose of each product, when choosing what to download: {tag_key: [file names]}, for the
-    products you left some of their files out of. Anything else in it is ignored."""
+def chosen_files(raw) -> dict[str, dict] | None:
+    """The files you chose of each product, when choosing what to download: {tag_key: {"shown": the files the list
+    showed, "chosen": the ones left ticked}}, for the products you left some files out of. Only a file that was
+    shown and unticked is left out (downloader.left_out). Anything else in it is ignored."""
     if not isinstance(raw, dict):
         return None
+    names = lambda v: [n for n in v[:500] if isinstance(n, str) and 0 < len(n) <= 500] if isinstance(v, list) else []  # noqa: E731
     out = {}
-    for key, names in list(raw.items())[:5000]:
-        if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(names, list):
-            out[key] = [n for n in names[:500] if isinstance(n, str) and 0 < len(n) <= 500]
+    for key, pick in list(raw.items())[:5000]:
+        if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
+            out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
 
 

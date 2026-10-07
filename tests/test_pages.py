@@ -665,7 +665,7 @@ class CopiesAndActions(unittest.TestCase):
             page.click("#pickGo")
             page.wait_for_function("() => !document.querySelector('#pickDialog').open")
             self.assertEqual(seen[-1][0], "download")
-            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": [names[0], names[2]]})
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": [names[0], names[2]]}})
             # every file unticked: the product itself is unticked
             if not page.locator("#downloadAll").is_visible():   # (Stores stays open after a download starts)
                 page.click("#storesBtn")
@@ -677,6 +677,29 @@ class CopiesAndActions(unittest.TestCase):
             self.assertFalse(dialog.locator("input[data-pick='gumroad:ghostfollower']").is_checked())
             self.assertEqual(dialog.locator(".pk-files").count(), 0)
             page.click("[data-pick-go='cancel']")
+            page.close()
+
+    def test_files_with_one_name_are_one_choice(self):
+        """Two files a store names alike can't be told apart when downloading, so they're one choice, said so."""
+        from unittest import mock
+        seen = self.started()
+        choices = {"new": [], "skipped": [], "updates": [{"key": "gumroad:ghostfollower", "store": "gumroad",
+                   "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3,
+                   "names": ["Avatar.zip", "Avatar.zip", "Read me.txt"]}]}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            page.click("#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            dialog.locator(".pk-files summary").click()
+            self.assertEqual(dialog.locator("input[data-file]").count(), 2)
+            self.assertIn("(2 files)", dialog.locator(".pk-files").inner_text())
+            dialog.locator("input[data-file='Avatar.zip']").uncheck()
+            page.click("#pickGo")
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": ["Avatar.zip", "Read me.txt"],
+                                                                                    "chosen": ["Read me.txt"]}})
             page.close()
 
     def test_the_routine_check_asks(self):

@@ -1487,7 +1487,8 @@ class SetupAssistant(unittest.TestCase):
                 self.assertIn(f"Signing in to Gumroad with {name}", out.getvalue())
                 self.assertEqual("isn't installed" in out.getvalue(), used != choice)
 
-    def plain_sign_in(self, store="gumroad", cfg_extra=None, after_exit_in_use=0, link=None, installed=True, installs=None):
+    def plain_sign_in(self, store="gumroad", cfg_extra=None, after_exit_in_use=0, link=None, installed=True, installs=None,
+                      forced=False):
         """Sign in with the browser's own window (issue #21), against a stand-in for starting programs. Returns what
         was started, the messages, and whether the store was refreshed."""
         import contextlib
@@ -1523,6 +1524,7 @@ class SetupAssistant(unittest.TestCase):
         p = types.SimpleNamespace(chromium=types.SimpleNamespace(executable_path=str(program)))
         lib = library.Library(tmp / "library.json")
         job = jobs.Jobs(cfg, lib)
+        job._forced = forced
         with mock.patch.object(jobs, "reachable", lambda store: True), \
                 mock.patch.object(jobs, "_playwright", lambda: (lambda: contextlib.nullcontext(p))), \
                 mock.patch.object(jobs, "SignInWindow", lambda *a, **k: browser.SignInWindow(*a, popen=popen, **k)), \
@@ -1571,6 +1573,34 @@ class SetupAssistant(unittest.TestCase):
         installed.clear()
         self.plain_sign_in(installs=lambda stores: installed.append(stores))
         self.assertEqual(installed, [], "not when it's there already")
+
+    @unittest.skipIf(os.name == "nt", "the SingletonLock is how macOS and Linux name the browser")
+    def test_force_stop_ends_the_browser_holding_the_sign_in(self):
+        """Force stop of a sign-in: the browser holding the store's profile is ended, even when the program Hoard
+        started handed the window to it and ended (so ending that program alone closed nothing)."""
+        import socket
+        import subprocess
+        from hoard import browser
+        profile = Path(tempfile.mkdtemp())
+        held = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(held.kill)
+        os.symlink(f"{socket.gethostname()}-{held.pid}", profile / "SingletonLock")
+        self.assertTrue(browser._profile_in_use(profile))
+        browser.end_profile_browser(profile)
+        self.assertIsNotNone(held.wait(10), "ended")
+        browser.end_profile_browser(Path(tempfile.mkdtemp()))   # nothing on it: nothing to do
+
+    def test_force_stop_as_the_sign_in_opens(self):
+        """Force stop that comes while the sign-in window is still opening: it's closed, nothing is read."""
+        from unittest import mock
+        from hoard import browser
+        ended = []
+        with mock.patch.object(browser.SignInWindow, "end", lambda self: ended.append(True)):
+            def installs(stores):   # (stands in for the moment between the button and the window)
+                pass
+            started, said, refreshed, profile, program = self.plain_sign_in(installs=installs, forced=True)
+        self.assertEqual(ended, [True])
+        self.assertEqual(refreshed, [], "nothing is read after a Force stop")
 
     def test_payhip_without_shops_says_what_next_rather_than_failing(self):
         """A tester's report, "Payhip wouldn't login": the sign-in worked, but reading Payhip straight after, with no
@@ -2997,24 +3027,60 @@ class DownloadChoices(unittest.TestCase):
         self.assertEqual(seen[1].keys, {"booth:rusk", "gumroad:mochi"}, "several stores' products, as one job (#106)")
 
 
+class ForceStopInstall(unittest.TestCase):
+
+    def test_a_stop_that_comes_as_the_download_starts(self):
+        """Force stop just before the browser download starts (nothing to end yet): it's ended as it starts."""
+        import threading as th
+        from unittest import mock
+        from hoard import setup
+        killed = []
+
+        class Proc:
+            stdout = mock.Mock(read=lambda n: b"")
+            def kill(self):
+                killed.append(True)
+            def wait(self):
+                return -9 if killed else 0
+        stop = th.Event()
+        stop.set()
+        with mock.patch.object(setup.subprocess, "Popen", lambda *a, **k: Proc()), \
+                mock.patch("playwright._impl._driver.compute_driver_executable", lambda: ("node", "cli.js")), \
+                mock.patch("playwright._impl._driver.get_driver_env", lambda: {}), \
+                mock.patch.object(setup, "use_browsers_folder", lambda: None):
+            with self.assertRaises(RuntimeError):
+                setup.install_browser(lambda line: None, stop=stop)
+        self.assertEqual(killed, [True])
+        self.assertEqual(setup._installing, [], "let go of")
+
+
 class ChosenFiles(unittest.TestCase):
     """Choosing what to download, file by file: what the page sends, and what the downloader leaves out."""
 
     def test_only_whats_well_formed_is_kept(self):
         self.assertIsNone(server.chosen_files(None))
         self.assertIsNone(server.chosen_files(["gumroad:x"]))
-        got = server.chosen_files({"gumroad:x": ["a.zip", 5, "", "b.zip"], 7: ["c"], "booth:y": "not a list", "x" * 401: ["d"]})
-        self.assertEqual(got, {"gumroad:x": ["a.zip", "b.zip"]})
+        got = server.chosen_files({"gumroad:x": {"shown": ["a.zip", 5, "", "b.zip"], "chosen": ["a.zip", None]},
+                                   7: {"shown": ["c"]}, "booth:y": ["a list"], "booth:z": {"shown": []}, "x" * 401: {"shown": ["d"]}})
+        self.assertEqual(got, {"gumroad:x": {"shown": ["a.zip", "b.zip"], "chosen": ["a.zip"]}})
 
     def test_the_downloader_leaves_out_what_wasnt_chosen(self):
         from types import SimpleNamespace
         report = downloader.Report()
-        args = SimpleNamespace(dry_run=False, files={tags.tag_key("booth", "Rusk"): {"Rusk.zip"}})
+        pick = {"shown": {"Rusk.zip", "Rusk (Quest).zip"}, "chosen": {"Rusk.zip"}}
+        args = SimpleNamespace(dry_run=False, files={tags.tag_key("booth", "Rusk"): pick})
         with common.capture_log(lambda line: None):
             self.assertFalse(downloader.left_out(args, report, "booth", "Rusk", "Rusk.zip"))
             self.assertTrue(downloader.left_out(args, report, "booth", "Rusk", "Rusk (Quest).zip"))
             self.assertFalse(downloader.left_out(args, report, "booth", "Mochi", "Mochi.zip"), "not narrowed down: all of it")
-        self.assertEqual(report.skipped, ["Booth: Rusk / Rusk (Quest).zip - left out, as you chose"])
+            # the audit's case: "Rusk (PC)" makes the same key as "Rusk", but its files weren't in the list: all of them
+            self.assertEqual(tags.tag_key("booth", "Rusk (PC)"), tags.tag_key("booth", "Rusk"))
+            self.assertFalse(downloader.left_out(args, report, "booth", "Rusk (PC)", "Rusk PC.zip"))
+            self.assertFalse(downloader.left_out(args, report, "booth", "Rusk", "Rusk 1.1.zip"), "a file added since: downloaded")
+            # a chosen Jinxxy item whose page names it differently: matched by its library name too
+            jx = SimpleNamespace(dry_run=False, files={tags.tag_key("jinxxy", "Foo Hoodie"): {"shown": {"a"}, "chosen": set()}})
+            self.assertTrue(downloader.left_out(jx, report, "jinxxy", "Foo Hoodie [PC/Quest] v2 extra", "a", "Foo Hoodie"))
+        self.assertEqual(report.skipped[0], "Booth: Rusk / Rusk (Quest).zip - left out, as you chose")
         check = SimpleNamespace(dry_run=True, files=args.files)
         self.assertFalse(downloader.left_out(check, report, "booth", "Rusk", "Rusk (Quest).zip"), "a check sees every file")
         self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=False), report, "booth", "Rusk", "x"), "the command line")
