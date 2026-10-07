@@ -16,14 +16,17 @@ namespace SoloFlighter.Hoard.Editor
 
     public sealed class PackageIndex
     {
-        static readonly string CacheFile = Path.Combine("Library", "Hoard", "package-guids.json");
+        // -2: files only (the first kept folders' GUIDs too, which a product shares with others in the same folder)
+        static readonly string CacheFile = Path.Combine("Library", "Hoard", "package-guids-2.json");
         readonly ConcurrentDictionary<string, string[]> guids = new ConcurrentDictionary<string, string[]>();   // "path|size|time" -> GUIDs
-        readonly Dictionary<string, InProject> status = new Dictionary<string, InProject>();
+        struct Counted { public InProject Status; public int Have, Total; }
+        readonly Dictionary<string, Counted> status = new Dictionary<string, Counted>();   // path -> how much is here, until something changes
         readonly ConcurrentQueue<string> waiting = new ConcurrentQueue<string>();
         readonly ConcurrentQueue<string> fresh = new ConcurrentQueue<string>();   // read since the last look
         readonly CancellationTokenSource stop = new CancellationTokenSource();
         int queued, done;
         volatile bool changed, cacheDirty;
+        DateTime saveAfter = DateTime.MinValue;
 
         public int Waiting { get { return queued - done; } }
 
@@ -50,29 +53,35 @@ namespace SoloFlighter.Hoard.Editor
         int working;
         void Work()
         {
-            if (Interlocked.Exchange(ref working, 1) == 1) return;   // one reader at a time: kind to the disk
-            try
+            // One reader at a time: kind to the disk. A package queued just as the reader finished (after its last
+            // look at the queue, before it let go) found it still busy and didn't start one: so it looks again once
+            // it has let go, rather than leave that package waiting for good.
+            do
             {
-                string path;
-                while (!stop.IsCancellationRequested && waiting.TryDequeue(out path))
+                if (Interlocked.Exchange(ref working, 1) == 1) return;
+                try
                 {
-                    try
+                    string path;
+                    while (!stop.IsCancellationRequested && waiting.TryDequeue(out path))
                     {
-                        string stamp = Stamp(path);
-                        if (!guids.ContainsKey(stamp))
+                        try
                         {
-                            var found = UnityPackageReader.ReadAssets(path);
-                            guids[stamp] = new List<string>(found.Keys).ToArray();
-                            cacheDirty = true;
+                            string stamp = Stamp(path);
+                            if (!guids.ContainsKey(stamp))
+                            {
+                                var found = UnityPackageReader.ReadFiles(path);   // not its folders (shared with other products)
+                                guids[stamp] = new List<string>(found.Keys).ToArray();
+                                cacheDirty = true;
+                            }
                         }
+                        catch (Exception) { guids[SafeStamp(path)] = new string[0]; }   // unreadable: counts as not a package
+                        fresh.Enqueue(path);
+                        Interlocked.Increment(ref done);
+                        changed = true;
                     }
-                    catch (Exception) { guids[SafeStamp(path)] = new string[0]; }   // unreadable: counts as not a package
-                    fresh.Enqueue(path);
-                    Interlocked.Increment(ref done);
-                    changed = true;
                 }
-            }
-            finally { Interlocked.Exchange(ref working, 0); }
+                finally { Interlocked.Exchange(ref working, 0); }
+            } while (!stop.IsCancellationRequested && !waiting.IsEmpty);
         }
 
         static string SafeStamp(string path) { try { return Stamp(path); } catch (Exception) { return path; } }
@@ -81,7 +90,7 @@ namespace SoloFlighter.Hoard.Editor
         /// since the last call are added to fresh (when given), so only their products need looking at again.</summary>
         public bool TakeChanges(List<string> freshPaths = null)
         {
-            if (cacheDirty && Waiting == 0) SaveCache();
+            if (cacheDirty && Waiting == 0 && DateTime.UtcNow >= saveAfter) SaveCache();
             if (!changed) return false;
             changed = false;
             string path;
@@ -96,25 +105,37 @@ namespace SoloFlighter.Hoard.Editor
         /// <summary>After the project changes (an import, a deletion), look again.</summary>
         public void ProjectChanged() { status.Clear(); }
 
-        /// <summary>How much of the package the project has. Main thread only.</summary>
+        /// <summary>How much of the package the project has. Main thread only. Worked out once, and kept until the
+        /// project or the package changes (the window asks on every repaint).</summary>
         public InProject Status(string path, out int have, out int total)
         {
             have = total = 0;
+            if (path == null) return InProject.Unknown;
+            Counted c;
+            if (!status.TryGetValue(path, out c))
+            {
+                c = Count(path);
+                if (c.Status != InProject.Unknown || guids.ContainsKey(SafeStamp(path))) status[path] = c;   // (not yet read: asked again)
+            }
+            have = c.Have;
+            total = c.Total;
+            return c.Status;
+        }
+
+        Counted Count(string path)
+        {
+            var c = new Counted { Status = InProject.Unknown };
             string[] list;
-            if (path == null || !File.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return InProject.Unknown;
-            ProjectShare.Count(list, AssetDatabase.GUIDToAssetPath, out have, out total);   // Assets/ only (issue #114)
-            if (total == 0) return InProject.Unknown;
-            return have == 0 ? InProject.No : have == total ? InProject.Yes : InProject.Partly;
+            if (!File.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return c;
+            ProjectShare.Count(list, AssetDatabase.GUIDToAssetPath, out c.Have, out c.Total);   // Assets/ only (issue #114)
+            if (c.Total > 0) c.Status = c.Have == 0 ? InProject.No : c.Have == c.Total ? InProject.Yes : InProject.Partly;
+            return c;
         }
 
         public InProject Status(string path)
         {
-            InProject s;
-            if (path != null && status.TryGetValue(path, out s)) return s;
             int have, total;
-            s = Status(path, out have, out total);
-            if (path != null) status[path] = s;
-            return s;
+            return Status(path, out have, out total);
         }
 
         public string[] Guids(string path)
@@ -142,18 +163,13 @@ namespace SoloFlighter.Hoard.Editor
         {
             try
             {
-                var root = new JsonValue { Kind = JsonKind.Object, Members = new List<KeyValuePair<string, JsonValue>>() };
+                var root = JsonBuild.Obj();
                 foreach (var kv in guids)
-                {
-                    var arr = new JsonValue { Kind = JsonKind.Array, Items = new List<JsonValue>() };
-                    foreach (string g in kv.Value) arr.Items.Add(new JsonValue { Kind = JsonKind.String, Text = g });
-                    root.Members.Add(new KeyValuePair<string, JsonValue>(kv.Key, arr));
-                }
-                Directory.CreateDirectory(Path.GetDirectoryName(CacheFile));
-                File.WriteAllBytes(CacheFile, Json.Canonical(root));
+                    JsonBuild.Put(root, kv.Key, JsonBuild.Arr(new List<string>(kv.Value).ConvertAll(JsonBuild.Str)));
+                JsonBuild.WriteFile(CacheFile, Json.Canonical(root));
                 cacheDirty = false;
             }
-            catch (Exception) { /* next time, then */ }
+            catch (Exception) { saveAfter = DateTime.UtcNow.AddMinutes(1); }   // can't be written now: tried again in a minute, not every tick
         }
     }
 }

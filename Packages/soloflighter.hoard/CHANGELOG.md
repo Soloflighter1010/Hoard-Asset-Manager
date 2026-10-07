@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.2
+
+- **Importing a package with scripts is remembered.** Unity reloads its scripts part way through such an import, and
+  the window forgot what it was importing, so the import was never noted in `imports.json`. It's kept through the
+  reload now. If `imports.json` can't be written (read-only, say), Import is no longer greyed out for the rest of the
+  session, and a damaged `imports.json` is kept beside the new one (`imports.json.unreadable-…`) instead of being
+  written over. Its times are written the same way whatever your computer's language.
+- **A product's folders don't count as its files.** A package lists the folders it puts things in, and a creator's
+  folder is shared by all their products, so having one of them made the others show as **Partly in project**. Only
+  files count now (the window reads each package once more, the first time).
+- **A library folder that's a whole drive** (`E:\`) works: everything in it showed as missing.
+- **"Checking packages: N to go" no longer sticks.** A package queued just as the last one finished could be left
+  waiting for good, and with it the project report and the credits list.
+- **Choosing Folder... while the library is loading** loads that folder, instead of being ignored; a library that
+  can't be read says why, instead of "Loading your library..." for good. Choosing the default folder again (written
+  with `/` rather than `\`) no longer pins it.
+- **Credits:** a creator whose name's case differs between stores is one line in **By creator**; you can type a
+  space in the title; typing saves once you pause rather than on every key; and a read-only `credits.json` is said
+  in the Console instead of breaking the window.
+- Faster: how much of a package is in the project is worked out once rather than on every redraw; pictures are read
+  two at a time however fast you scroll, and none are left behind in memory; an unwritable package cache is tried
+  again once a minute, not on every editor tick. `\u` escapes in Hoard's files must be four hex digits.
+
 ## 0.5.1
 
 - **Products only count as in your project for what's in Assets** (Hoard's issue #114). Many packages carry their

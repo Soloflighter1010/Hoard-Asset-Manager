@@ -150,10 +150,17 @@ def build_material(d: Path) -> None:
                 info = tarfile.TarInfo(f"./{guid}/{name}" if guid.startswith("0123") else f"{guid}/{name}")
                 info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
+        folder_guid = "abcdefabcdefabcdefabcdefabcdef01"   # a folder: its pathname and meta, no asset (U5)
+        for name, data in (("asset.meta", b"fileFormatVersion: 2\nfolderAsset: yes\n"), ("pathname", b"Assets/Kitsu\n00\n")):
+            info = tarfile.TarInfo(f"{folder_guid}/{name}")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
         long_info = tarfile.TarInfo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/" + "n" * 120)   # a long name, stored as a GNU 'L' entry
         long_info.size = 3
         tar.addfile(long_info, io.BytesIO(b"abc"))
     (d / "test.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
+    (d / "package_files_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
+    expected[folder_guid] = "Assets/Kitsu"
     (d / "package_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
     (d / "not_a_package.unitypackage").write_bytes(gzip.compress(b"hello, this is not a tar file" * 3))
     # hostile packages (S-03, 2.3.1 review): headers claiming far more than follows them

@@ -145,10 +145,11 @@ def credits_text(project: dict, style: str | None = None) -> str:
     if md:
         lines.append("")
     if style == "ByCreator":
-        groups: dict[str, list[str]] = {}
+        # one line a creator, however their name's case differs ("kitsu", "Kitsu"), named as first seen (as Unity does)
+        groups: dict[str, tuple[str, list[str]]] = {}
         for e in entries:
-            groups.setdefault(_who(e), []).append(e["name"])
-        lines += [f"{who}: {', '.join(names)}" for who, names in groups.items()]
+            groups.setdefault(_who(e).lower(), (_who(e), []))[1].append(e["name"])
+        lines += [f"{who}: {', '.join(names)}" for who, names in groups.values()]
         return "\n".join(lines) + "\n"
     for e in entries:
         store = STORE_LABELS.get(e["store"], e["store"])

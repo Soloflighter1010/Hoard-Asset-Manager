@@ -56,13 +56,18 @@ namespace SoloFlighter.Hoard
             if (format == CreditFormat.Markdown) sb.Append('\n');
             if (format == CreditFormat.ByCreator)
             {
-                for (int i = 0; i < entries.Count;)
+                // one line a creator, however their name's case differs between stores ("kitsu" and "Kitsu"),
+                // named as first seen, in the order they first come
+                var order = new List<string>();
+                var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var e in entries)
                 {
-                    string who = Who(entries[i]);
-                    var names = new List<string>();
-                    for (; i < entries.Count && Who(entries[i]) == who; i++) names.Add(entries[i].Name);
-                    sb.Append(who).Append(": ").Append(string.Join(", ", names)).Append('\n');
+                    string who = Who(e);
+                    List<string> names;
+                    if (!groups.TryGetValue(who, out names)) { groups[who] = names = new List<string>(); order.Add(who); }
+                    names.Add(e.Name);
                 }
+                foreach (string who in order) sb.Append(who).Append(": ").Append(string.Join(", ", groups[who])).Append('\n');
                 return sb.ToString();
             }
             foreach (var e in entries)

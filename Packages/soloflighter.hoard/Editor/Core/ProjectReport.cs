@@ -37,6 +37,24 @@ namespace SoloFlighter.Hoard
         public static byte[] Build(string projectPath, string name, string unityVersion, string updated,
                                    List<ProjectAsset> assets, CreditsFile credits)
         {
+            return Json.Canonical(Tree(projectPath, name, unityVersion, updated, assets, credits));
+        }
+
+        /// <summary>The report, and the same report saying when it was written: whether it changed is told from the
+        /// first (the time always differs), and the second is what's written. Built once.</summary>
+        public static byte[] Build(string projectPath, string name, string unityVersion, List<ProjectAsset> assets,
+                                   CreditsFile credits, string updated, out byte[] stamped)
+        {
+            var root = Tree(projectPath, name, unityVersion, "", assets, credits);
+            byte[] plain = Json.Canonical(root);
+            root.Get("updated").Text = updated;
+            stamped = Json.Canonical(root);
+            return plain;
+        }
+
+        static JsonValue Tree(string projectPath, string name, string unityVersion, string updated,
+                              List<ProjectAsset> assets, CreditsFile credits)
+        {
             var root = Obj();
             Put(root, "format", Str("hoard-project"));
             Put(root, "version", Num(1));
@@ -73,7 +91,7 @@ namespace SoloFlighter.Hoard
                 return o;
             })));
             Put(root, "credits", c);
-            return Json.Canonical(root);
+            return root;
         }
 
         /// <summary>Write the report, unless it's the same as what's there (so Hoard isn't told of a change that isn't one).
@@ -85,11 +103,7 @@ namespace SoloFlighter.Hoard
                 var old = File.ReadAllBytes(file);
                 if (old.Length == report.Length && Same(old, report)) return false;
             }
-            Directory.CreateDirectory(Path.GetDirectoryName(file));
-            string temp = file + ".tmp";
-            File.WriteAllBytes(temp, report);
-            if (File.Exists(file)) File.Replace(temp, file, null);
-            else File.Move(temp, file);
+            JsonBuild.WriteFile(file, report);
             return true;
         }
 
@@ -99,11 +113,11 @@ namespace SoloFlighter.Hoard
             return true;
         }
 
-        static JsonValue Obj() { return new JsonValue { Kind = JsonKind.Object, Members = new List<KeyValuePair<string, JsonValue>>() }; }
-        static JsonValue Arr(List<JsonValue> items) { return new JsonValue { Kind = JsonKind.Array, Items = items }; }
-        static JsonValue Str(string s) { return new JsonValue { Kind = JsonKind.String, Text = s }; }
-        static JsonValue Num(int n) { return new JsonValue { Kind = JsonKind.Number, Text = n.ToString() }; }
-        static JsonValue Null() { return new JsonValue { Kind = JsonKind.Null }; }
-        static void Put(JsonValue o, string k, JsonValue v) { o.Members.Add(new KeyValuePair<string, JsonValue>(k, v)); }
+        static JsonValue Obj() { return JsonBuild.Obj(); }
+        static JsonValue Arr(List<JsonValue> items) { return JsonBuild.Arr(items); }
+        static JsonValue Str(string s) { return JsonBuild.Str(s); }
+        static JsonValue Num(int n) { return JsonBuild.Num(n); }
+        static JsonValue Null() { return JsonBuild.Null(); }
+        static void Put(JsonValue o, string k, JsonValue v) { JsonBuild.Put(o, k, v); }
     }
 }

@@ -144,6 +144,11 @@ public static class CoreTests
               "- [Rusk](https://booth.pm/ja/items/1) by Kitsu (Booth)\n- \\[Pack\\]\\(javascript:x\\) by Zed\\_z (itch\\.io)\n", md);
         string by = Credits.Format(two, CreditFormat.ByCreator, "");
         Check("credits: by creator", by == "Kitsu: Ears, Rusk\nZed_z: [Pack](javascript:x)\n", by);
+        // U10: a creator whose name's case differs between stores is still one line
+        var cased = new List<CreditEntry> { new CreditEntry { Store = "Booth", Name = "Rusk", Creator = "Kitsu" },
+            new CreditEntry { Store = "Jinxxy", Name = "Tail", Creator = "Mia" }, new CreditEntry { Store = "Gumroad", Name = "Ears", Creator = "kitsu" } };
+        string byCase = Credits.Format(cased, CreditFormat.ByCreator, "");
+        Check("credits: by creator, whatever the case", byCase == "Kitsu: Rusk, Ears\nMia: Tail\n", byCase);
         Check("credits: an empty list says so", Credits.Format(new List<CreditEntry>(), CreditFormat.List) == "Assets used\nNone yet.\n");
         Check("credits: cut without splitting a character", Credits.OneLine("ab\U0001F98A", 3) == "ab");
 
@@ -308,6 +313,27 @@ public static class CoreTests
             Check("itch.io link refused: " + u, !HoardCatalog.StoreLink("Itch", u));
         Check("itch.io named as people write it", HoardCatalog.StoreLabel("Itch") == "itch.io" && HoardCatalog.StoreLabel("Booth") == "Booth");
 
+        // U11: a \\u escape is exactly four hex digits
+        try { Json.Parse("\"\\u 41 \""); Check("a \\u escape with spaces refused", false, "read"); }
+        catch (JsonException) { Check("a \\u escape with spaces refused", true); }
+        Check("a \\u escape read", Json.Parse("\"\\u00e9\\u00C9\"").Text == "\u00e9\u00c9");
+
+        // U4: a library folder that's a whole drive ("E:\\", or "/" here) finds what's on it
+        string onDrive = Path.Combine(Path.GetTempPath(), "hoard-drive-" + Guid.NewGuid().ToString("N"), "Booth", "Kitsu", "Rusk");
+        Directory.CreateDirectory(onDrive);
+        File.WriteAllText(Path.Combine(onDrive, "Rusk.unitypackage"), "x");
+        string rootOfDrive = Path.GetPathRoot(onDrive);
+        var whole = new HoardCatalog { Root = rootOfDrive };
+        var onIt = new HoardAsset { Store = "Booth", Name = "Rusk", Folder = onDrive.Substring(rootOfDrive.Length).Replace('\\', '/') };
+        string found = whole.FilePath(onIt, "Rusk.unitypackage");
+        Check("a library folder that's a whole drive", found == Path.Combine(onDrive, "Rusk.unitypackage"), found ?? "null");
+
+        // the project report, built once for comparing and for writing
+        byte[] stampedReport;
+        byte[] plainReport = ProjectReport.Build(dir, "P", "2022.3", new List<ProjectAsset>(), new CreditsFile(), "2026-10-07T00:00:00+00:00", out stampedReport);
+        Check("report: built once, with and without when", Encoding.UTF8.GetString(plainReport).Contains("\"updated\":\"\"")
+              && Encoding.UTF8.GetString(stampedReport).Contains("\"updated\":\"2026-10-07T00:00:00+00:00\""));
+
         // a Unity package: every GUID and path, nothing extracted
         var assets = UnityPackageReader.ReadAssets(Path.Combine(dir, "test.unitypackage"));
         var want = File.ReadAllLines(Path.Combine(dir, "package_expected.txt"));
@@ -315,6 +341,12 @@ public static class CoreTests
         foreach (var kv in assets) gotLines.Add(kv.Key + " " + kv.Value);
         gotLines.Sort(StringComparer.Ordinal);
         Check("package GUIDs and paths", string.Join("\n", gotLines) == string.Join("\n", want), string.Join(" / ", gotLines));
+        // U5: its files only, not its folders (a creator's folder is every one of their products')
+        var fileLines = new List<string>();
+        foreach (var kv in UnityPackageReader.ReadFiles(Path.Combine(dir, "test.unitypackage"))) fileLines.Add(kv.Key + " " + kv.Value);
+        fileLines.Sort(StringComparer.Ordinal);
+        Check("package files, not folders", string.Join("\n", fileLines) == string.Join("\n", File.ReadAllLines(Path.Combine(dir, "package_files_expected.txt"))),
+              string.Join(" / ", fileLines));
         try { UnityPackageReader.ReadAssets(Path.Combine(dir, "not_a_package.unitypackage")); Check("not a package refused", false, "no error"); }
         catch (Exception e) { Check("not a package refused", e is InvalidDataException || e is IOException, e.GetType().Name); }
         // hostile packages: what a header claims is checked before it's acted on (an 8 GiB name would be allocated)

@@ -49,7 +49,7 @@ namespace SoloFlighter.Hoard
         {
             var root = Obj();
             Put(root, "format", Str("hoard-unity-credits"));
-            Put(root, "version", new JsonValue { Kind = JsonKind.Number, Text = "1" });
+            Put(root, "version", JsonBuild.Num(1));
             Put(root, "title", Str(Title ?? ""));
             Put(root, "style", Str(Format.ToString()));
             var left = new List<string>(LeftOut);
@@ -60,19 +60,15 @@ namespace SoloFlighter.Hoard
                 var o = Obj();
                 Put(o, "name", Str(e.Name ?? ""));
                 Put(o, "creator", Str(e.Creator ?? ""));
-                Put(o, "url", e.Url == null ? new JsonValue { Kind = JsonKind.Null } : Str(e.Url));
+                Put(o, "url", e.Url == null ? JsonBuild.Null() : Str(e.Url));
                 return o;
             })));
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
-            string temp = path + ".tmp";
-            File.WriteAllBytes(temp, Json.Canonical(root));
-            if (File.Exists(path)) File.Replace(temp, path, null);
-            else File.Move(temp, path);
+            JsonBuild.WriteFile(path, Json.Canonical(root));
         }
 
-        static JsonValue Obj() { return new JsonValue { Kind = JsonKind.Object, Members = new List<KeyValuePair<string, JsonValue>>() }; }
-        static JsonValue Arr(List<JsonValue> items) { return new JsonValue { Kind = JsonKind.Array, Items = items }; }
-        static JsonValue Str(string s) { return new JsonValue { Kind = JsonKind.String, Text = s }; }
-        static void Put(JsonValue o, string k, JsonValue v) { o.Members.Add(new KeyValuePair<string, JsonValue>(k, v)); }
+        static JsonValue Obj() { return JsonBuild.Obj(); }
+        static JsonValue Arr(List<JsonValue> items) { return JsonBuild.Arr(items); }
+        static JsonValue Str(string s) { return JsonBuild.Str(s); }
+        static void Put(JsonValue o, string k, JsonValue v) { JsonBuild.Put(o, k, v); }
     }
 }

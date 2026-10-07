@@ -24,6 +24,23 @@ namespace SoloFlighter.Hoard
         /// <summary>GUID to project path, for every asset in the package. Throws InvalidDataException if it isn't one.</summary>
         public static Dictionary<string, string> ReadAssets(string packagePath)
         {
+            return ReadAssets(packagePath, null);
+        }
+
+        /// <summary>GUID to project path, for the files in the package only: not its folders, which a project shares
+        /// with every other package that puts something in the same folder (a creator's own folder, say).</summary>
+        public static Dictionary<string, string> ReadFiles(string packagePath)
+        {
+            var files = new HashSet<string>(StringComparer.Ordinal);
+            var all = ReadAssets(packagePath, files);
+            var result = new Dictionary<string, string>();
+            foreach (var kv in all) if (files.Contains(kv.Key)) result[kv.Key] = kv.Value;
+            return result;
+        }
+
+        /// <summary>As ReadAssets; withFile (when given) gets each GUID that has a file in the package (a folder has none).</summary>
+        static Dictionary<string, string> ReadAssets(string packagePath, HashSet<string> withFile)
+        {
             var result = new Dictionary<string, string>();
             using (var file = File.OpenRead(packagePath))
             using (var gz = new GZipStream(file, CompressionMode.Decompress))
@@ -55,7 +72,11 @@ namespace SoloFlighter.Hoard
                         if (path.Length > 0) result[parts[0]] = path;
                         Skip(gz, Pad(size));
                     }
-                    else Skip(gz, size + Pad(size));
+                    else
+                    {
+                        if (withFile != null && parts.Length == 2 && parts[1] == "asset" && Guid32.IsMatch(parts[0])) withFile.Add(parts[0]);
+                        Skip(gz, size + Pad(size));
+                    }
                 }
             }
             return result;

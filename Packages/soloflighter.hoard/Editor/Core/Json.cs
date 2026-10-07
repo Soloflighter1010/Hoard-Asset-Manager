@@ -48,6 +48,27 @@ namespace SoloFlighter.Hoard
         }
     }
 
+    /// <summary>Building a document to write (Json.Canonical), and writing a file so it's never left half written.</summary>
+    public static class JsonBuild
+    {
+        public static JsonValue Obj() { return new JsonValue { Kind = JsonKind.Object, Members = new List<KeyValuePair<string, JsonValue>>() }; }
+        public static JsonValue Arr(List<JsonValue> items) { return new JsonValue { Kind = JsonKind.Array, Items = items }; }
+        public static JsonValue Str(string s) { return new JsonValue { Kind = JsonKind.String, Text = s }; }
+        public static JsonValue Num(int n) { return new JsonValue { Kind = JsonKind.Number, Text = n.ToString(CultureInfo.InvariantCulture) }; }
+        public static JsonValue Null() { return new JsonValue { Kind = JsonKind.Null }; }
+        public static void Put(JsonValue o, string k, JsonValue v) { o.Members.Add(new KeyValuePair<string, JsonValue>(k, v)); }
+
+        /// <summary>Write bytes to a file through a temporary file beside it, replacing it in one step.</summary>
+        public static void WriteFile(string path, byte[] bytes)
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)));
+            string temp = path + ".tmp";
+            System.IO.File.WriteAllBytes(temp, bytes);
+            if (System.IO.File.Exists(path)) System.IO.File.Replace(temp, path, null);
+            else System.IO.File.Move(temp, path);
+        }
+    }
+
     public sealed class JsonException : Exception
     {
         public JsonException(string message) : base(message) { }
@@ -158,7 +179,15 @@ namespace SoloFlighter.Hoard
                     case 't': sb.Append('\t'); break;
                     case 'u':
                         if (i + 4 > s.Length) throw new JsonException("bad \\u escape");
-                        sb.Append((char)int.Parse(s.Substring(i, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+                        int code = 0;
+                        for (int k = i; k < i + 4; k++)   // exactly four hex digits (HexNumber would let spaces through)
+                        {
+                            char h = s[k];
+                            int d = h >= '0' && h <= '9' ? h - '0' : h >= 'a' && h <= 'f' ? h - 'a' + 10 : h >= 'A' && h <= 'F' ? h - 'A' + 10 : -1;
+                            if (d < 0) throw new JsonException("bad \\u escape");
+                            code = code * 16 + d;
+                        }
+                        sb.Append((char)code);
                         i += 4;
                         break;
                     default: throw new JsonException("bad escape");
