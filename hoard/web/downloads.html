@@ -1357,8 +1357,13 @@ function renderStatus(list) {
 function syncControls() {
   const q = $("#q"); if (q.value !== state.q) q.value = state.q;
   renderDrives();
-  for (const b of $("#stores").querySelectorAll("[data-store]"))   // Everything: every store, on every drive
+  // a store's tab only when there's something of it in this view (Downloads, Archive...), or it's the one you chose
+  // (the Local link in the bar, with nothing in Local yet)
+  const have = new Set(DATA.assets.filter(inView).map(a => a.store));
+  for (const b of $("#stores").querySelectorAll("[data-store]")) {   // Everything: every store, on every drive
+    b.hidden = b.dataset.store !== "" && !have.has(b.dataset.store) && b.dataset.store !== state.store;
     b.setAttribute("aria-checked", String(b.dataset.store === state.store && (b.dataset.store !== "" || state.lib === "")));
+  }
   for (const b of $("#drives").querySelectorAll("[data-lib]")) b.setAttribute("aria-checked", String(b.dataset.lib === state.lib));
   // the stores you have downloads from, for Everything's glow
   setGlow(state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));

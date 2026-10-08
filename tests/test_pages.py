@@ -310,6 +310,20 @@ class AccessKey(unittest.TestCase):
         page.wait_for_function(count + " === '1'")
         page.close()
 
+    def test_downloads_shows_only_stores_with_something(self):
+        """Downloads' store tabs: only stores with something in the view you're in, and the one you chose."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        shown = "() => [...document.querySelectorAll('#stores [data-store]')].filter(b => !b.hidden).map(b => b.dataset.store)"
+        self.assertEqual(page.evaluate(shown), ["", "Booth"], "Everything, and the one store with a download")
+        page.click("nav.apptabs a[href='/downloads#store=Local']")   # Local, with nothing in it yet
+        page.wait_for_function(shown + ".includes('Local')")
+        self.assertEqual(page.evaluate(shown), ["", "Booth", "Local"])
+        page.close()
+
     def test_a_link_to_a_download_opens_its_details(self):
         """Projects link to a download as /downloads#open=N: on the page already, that opens its details too."""
         page, refused = self.open(self.srv.entry_url())
