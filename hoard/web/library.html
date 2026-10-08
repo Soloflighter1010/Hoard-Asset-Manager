@@ -748,8 +748,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .shelf-tools select { height: var(--btn-h-sm); }   /* the same height as Select and Add your own beside it */
 .field { align-items: center; }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
-/* a panel's dropdowns look like Sort's: the same arrow, not the system's own */
-.settings select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+/* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
+.proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
+.settings select, .proj select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
@@ -912,7 +913,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <p class="hint">Changes are saved as you make them.</p>
+  <p>Changes are saved as you make them.</p>
   <h3>Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
@@ -1288,10 +1289,10 @@ function renderStoreSeg() {
   const counts = {};
   const here = DATA.items.filter(inView);
   for (const a of here) counts[a.store] = (counts[a.store] || 0) + 1;
-  const html = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${here.length}</span></button>` +
+  const html = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${here.length.toLocaleString()}</span></button>` +
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
-      `<span class="dot ${s}"></span>${label(s)}<span class="n">${counts[s] || 0}</span></button>`).join("");
+      `<span class="dot ${s}"></span>${label(s)}<span class="n">${(counts[s] || 0).toLocaleString()}</span></button>`).join("");
   if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
 function renderStores() {

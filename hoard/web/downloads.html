@@ -675,6 +675,21 @@ body.no-glow #glow { display: none; }
 .custom-colours { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; }
 .custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
+/* the PIN to unlock hidden items: the Library's dialog, unlocking only (it sets, changes and resets the PIN) */
+dialog.pin { width: min(420px, calc(var(--vw) - 32px)); padding: 24px 26px; border: 0; border-radius: 16px; color: var(--bone);
+  background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 24px 60px rgb(0 0 0 / .5); }
+dialog.pin::backdrop { background: rgb(10 8 6 / .7); }
+dialog.pin h2 { margin: 0 0 8px; font: 400 22px var(--display); }
+dialog.pin p { font-size: 14px; line-height: 1.5; margin: 6px 0; }
+dialog.pin input { display: block; width: 100%; box-sizing: border-box; height: 40px; margin: 10px 0 0; padding: 0 12px; border: 0;
+  border-radius: 9px; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam);
+  font: 700 18px var(--body); letter-spacing: .18em; }
+dialog.pin input[hidden] { display: none; }
+dialog.pin input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+dialog.pin .pin-note { min-height: 1.3em; margin: 8px 0 0; color: var(--warn); font-size: 13px; }
+dialog.pin .muted { color: var(--dust); font-size: 12.5px; }
+dialog.pin textarea[hidden], dialog.pin [hidden] { display: none; }
+dialog.pin .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
 dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
   border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
 dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
@@ -698,8 +713,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .shelf-tools select { height: var(--btn-h-sm); }   /* the same height as Select and Add your own beside it */
 .field { align-items: center; }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
-/* a panel's dropdowns look like Sort's: the same arrow, not the system's own */
-.settings select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+/* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
+.proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
+.settings select, .proj select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
@@ -744,8 +760,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
     <button id="rescan" class="ghost" title="Re-read what's on disk">Rescan</button>
     <button id="settingsBtn" class="ghost" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
-    <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
     <button id="downloadNew" class="ghost" title="Download anything new, without reading your stores first">Download new</button>
+    <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
 </header>
@@ -756,13 +772,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 </div>
 <div class="shelf">
   <div class="seg" role="radiogroup" aria-label="Store" id="stores">
-    <button role="radio" data-store="" aria-checked="true">Everything</button>
-    <button role="radio" class="booth" data-store="Booth" aria-checked="false"><span class="dot booth"></span>Booth</button>
-    <button role="radio" class="gumroad" data-store="Gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad</button>
-    <button role="radio" class="jinxxy" data-store="Jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy</button>
-    <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip</button>
-    <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io</button>
-    <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local</button>
+    <button role="radio" data-store="" aria-checked="true">Everything<span class="n"></span></button>
+    <button role="radio" class="booth" data-store="Booth" aria-checked="false"><span class="dot booth"></span>Booth<span class="n"></span></button>
+    <button role="radio" class="gumroad" data-store="Gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad<span class="n"></span></button>
+    <button role="radio" class="jinxxy" data-store="Jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy<span class="n"></span></button>
+    <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip<span class="n"></span></button>
+    <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io<span class="n"></span></button>
+    <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local<span class="n"></span></button>
     <span id="drives" class="drives" role="radiogroup" aria-label="Library folder" hidden></span>
   </div>
   <div class="shelf-tools">
@@ -842,7 +858,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
 <section id="localPanel" class="stores settings" hidden aria-labelledby="localTitle">
   <h2 id="localTitle">Add to Local</h2>
-  <p class="hint">Your own packages, textures and materials, beside what you bought: tagged, searched and imported
+  <p>Your own packages, textures and materials, beside what you bought: tagged, searched and imported
     into Unity like the rest. They're under <strong>Local</strong>.</p>
   <h3>Folder or file on this computer</h3>
   <div class="field"><input id="localPath" spellcheck="false" autocomplete="off" placeholder="D:\Packages\My Textures"
@@ -877,7 +893,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 </section>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <p class="hint">Changes are saved as you make them.</p>
+  <p>Changes are saved as you make them.</p>
   <h3>Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
@@ -1011,6 +1027,14 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="dlReport" hidden>Create support report</button>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
 </section>
+<dialog id="pinDialog" class="pin" aria-labelledby="pinTitle">
+  <h2 id="pinTitle">Unlock hidden items</h2>
+  <p>Enter your PIN to show hidden items in this browser for a while.</p>
+  <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="PIN" aria-label="PIN">
+  <p class="pin-note" id="pinNote" aria-live="polite"></p>
+  <div class="row"><span><button class="linkish" id="pinForgot">Forgot your PIN?</button></span>
+    <span><button class="ghost" id="pinCancel">Cancel</button> <button class="primary" id="pinOk">OK</button></span></div>
+</dialog>
 <dialog id="closeDialog" class="support-dialog close-dialog" aria-labelledby="closeTitle">
   <h2 id="closeTitle">Hoard is still working</h2>
   <p id="closeWhat"></p>
@@ -1183,7 +1207,8 @@ function renderViews() {
   bar.innerHTML = state.view === "updates" ? updatesBar(n("updates"))
     : state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
     : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them: open one and choose <b>Delete downloaded files</b>.</p>`
-    : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Lock it again in the Library.</p>` : "";
+    : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Change your PIN in the Library.</p>
+        <button class="ghost sm" data-privacy="lock">Lock now</button>` : "";
 }
 /* ---------- updates (issue #26): a check reads your stores without downloading anything, and lists what each
    download is missing that its store has now: files the creator added or changed. Update downloads just those. */
@@ -1234,13 +1259,47 @@ $("#viewBar").addEventListener("click", e => {
                                                      files: (a.update || []).length, names: (a.update || []).map(f => f.file) })),
                 keys => updateItems(keys ? list.filter(a => keys.includes(a.tag_key)) : list));
 });
-function showView(v) {
-  if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
-    toast("Unlock Hidden in the Library first. Its downloads then show here too.");
-    return;
+async function showView(v) {
+  if (v === "hidden" && !(DATA.privacy || {}).unlocked) {   // the same PIN as the Library's Hidden
+    if (!(await unlockDialog())) return;
+    await load();
+    if (!(DATA.privacy || {}).unlocked) return;
   }
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
+$("#viewBar").addEventListener("click", async e => {
+  if (!e.target.closest('[data-privacy="lock"]')) return;
+  const open = openId != null && byId.get(openId);
+  if (open && open.mark === "hidden") closeDetail();   // straight away, before the server answers
+  await apiPost("/api/lock"); state.view = "downloads"; sel.ids.clear(); await load(); toast("Hidden items locked.");
+});
+/* unlocking hidden items: setting, changing or resetting the PIN is the Library's */
+let pinResolve = null;
+function unlockDialog() {
+  return new Promise(resolve => {
+    pinResolve = resolve;
+    $("#pinInput").value = ""; $("#pinNote").textContent = "";
+    $("#pinDialog").showModal();
+    $("#pinInput").focus();
+  });
+}
+function pinDone(ok) {
+  if ($("#pinDialog").open) $("#pinDialog").close();
+  const r = pinResolve; pinResolve = null;
+  if (r) r(ok);
+}
+async function pinSubmit() {
+  const r = await apiPost("/api/unlock", { pin: $("#pinInput").value });
+  if (!r.ok) { $("#pinNote").textContent = r.data.error || "That didn't work."; $("#pinInput").select(); return; }
+  pinDone(true);
+}
+$("#pinOk").addEventListener("click", pinSubmit);
+$("#pinCancel").addEventListener("click", () => pinDone(false));
+$("#pinDialog").addEventListener("cancel", e => { e.preventDefault(); pinDone(false); });
+$("#pinDialog").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); pinSubmit(); } });
+$("#pinForgot").addEventListener("click", () => {
+  $("#pinNote").textContent = "Reset it in the Library: choose Hidden there, then Forgot your PIN?";
+});
 $("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
 
 const slotHTML = a =>
@@ -1357,8 +1416,16 @@ function renderStatus(list) {
 function syncControls() {
   const q = $("#q"); if (q.value !== state.q) q.value = state.q;
   renderDrives();
-  for (const b of $("#stores").querySelectorAll("[data-store]"))   // Everything: every store, on every drive
+  // a store's tab only when there's something of it in this view (Downloads, Archive...), or it's the one you chose
+  // (the Local link in the bar, with nothing in Local yet)
+  const here = DATA.assets.filter(inView), have = {};
+  for (const a of here) have[a.store] = (have[a.store] || 0) + 1;
+  for (const b of $("#stores").querySelectorAll("[data-store]")) {   // Everything: every store, on every drive
+    b.hidden = b.dataset.store !== "" && !have[b.dataset.store] && b.dataset.store !== state.store;
+    const n = (b.dataset.store === "" ? here.length : have[b.dataset.store] || 0).toLocaleString();   // as in the Library
+    if (b.lastChild.textContent !== n) b.lastChild.textContent = n;
     b.setAttribute("aria-checked", String(b.dataset.store === state.store && (b.dataset.store !== "" || state.lib === "")));
+  }
   for (const b of $("#drives").querySelectorAll("[data-lib]")) b.setAttribute("aria-checked", String(b.dataset.lib === state.lib));
   // the stores you have downloads from, for Everything's glow
   setGlow(state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));
