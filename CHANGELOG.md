@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.2
+
+- **Downloads only shows the store tabs you have something in.** A store with nothing downloaded in the view
+  you're in has no tab, as in the Library; Local's tab still shows when you open Local with nothing in it yet.
+- **The store tabs in Downloads show how many things are in each**, as the Library's tabs do.
+- **Sync is the last button in the header on both pages.** In Downloads, **Download new** sat after the gold
+  **Sync**; it's now before it, so Sync is in the same place on every page.
+- **Projects' Credits dropdown looks like the others**: the same arrow, height and text size as Sort and the
+  dropdowns in Settings, instead of the system's own.
+- **Settings and Add to Local start with the same size of text as Stores and Tags.**
+
 ## 3.0.1
 
 - **Fixed: the store tabs' counts went to 0 after a while.** The tabs (Everything, Booth, Gumroad...) count what's

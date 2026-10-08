@@ -698,8 +698,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .shelf-tools select { height: var(--btn-h-sm); }   /* the same height as Select and Add your own beside it */
 .field { align-items: center; }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
-/* a panel's dropdowns look like Sort's: the same arrow, not the system's own */
-.settings select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+/* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
+.proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
+.settings select, .proj select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
@@ -744,8 +745,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
     <button id="rescan" class="ghost" title="Re-read what's on disk">Rescan</button>
     <button id="settingsBtn" class="ghost" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
-    <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
     <button id="downloadNew" class="ghost" title="Download anything new, without reading your stores first">Download new</button>
+    <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
 </header>
@@ -756,13 +757,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 </div>
 <div class="shelf">
   <div class="seg" role="radiogroup" aria-label="Store" id="stores">
-    <button role="radio" data-store="" aria-checked="true">Everything</button>
-    <button role="radio" class="booth" data-store="Booth" aria-checked="false"><span class="dot booth"></span>Booth</button>
-    <button role="radio" class="gumroad" data-store="Gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad</button>
-    <button role="radio" class="jinxxy" data-store="Jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy</button>
-    <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip</button>
-    <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io</button>
-    <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local</button>
+    <button role="radio" data-store="" aria-checked="true">Everything<span class="n"></span></button>
+    <button role="radio" class="booth" data-store="Booth" aria-checked="false"><span class="dot booth"></span>Booth<span class="n"></span></button>
+    <button role="radio" class="gumroad" data-store="Gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad<span class="n"></span></button>
+    <button role="radio" class="jinxxy" data-store="Jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy<span class="n"></span></button>
+    <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip<span class="n"></span></button>
+    <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io<span class="n"></span></button>
+    <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local<span class="n"></span></button>
     <span id="drives" class="drives" role="radiogroup" aria-label="Library folder" hidden></span>
   </div>
   <div class="shelf-tools">
@@ -842,7 +843,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
 <section id="localPanel" class="stores settings" hidden aria-labelledby="localTitle">
   <h2 id="localTitle">Add to Local</h2>
-  <p class="hint">Your own packages, textures and materials, beside what you bought: tagged, searched and imported
+  <p>Your own packages, textures and materials, beside what you bought: tagged, searched and imported
     into Unity like the rest. They're under <strong>Local</strong>.</p>
   <h3>Folder or file on this computer</h3>
   <div class="field"><input id="localPath" spellcheck="false" autocomplete="off" placeholder="D:\Packages\My Textures"
@@ -877,7 +878,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 </section>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <p class="hint">Changes are saved as you make them.</p>
+  <p>Changes are saved as you make them.</p>
   <h3>Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
@@ -1359,9 +1360,12 @@ function syncControls() {
   renderDrives();
   // a store's tab only when there's something of it in this view (Downloads, Archive...), or it's the one you chose
   // (the Local link in the bar, with nothing in Local yet)
-  const have = new Set(DATA.assets.filter(inView).map(a => a.store));
+  const here = DATA.assets.filter(inView), have = {};
+  for (const a of here) have[a.store] = (have[a.store] || 0) + 1;
   for (const b of $("#stores").querySelectorAll("[data-store]")) {   // Everything: every store, on every drive
-    b.hidden = b.dataset.store !== "" && !have.has(b.dataset.store) && b.dataset.store !== state.store;
+    b.hidden = b.dataset.store !== "" && !have[b.dataset.store] && b.dataset.store !== state.store;
+    const n = (b.dataset.store === "" ? here.length : have[b.dataset.store] || 0).toLocaleString();   // as in the Library
+    if (b.lastChild.textContent !== n) b.lastChild.textContent = n;
     b.setAttribute("aria-checked", String(b.dataset.store === state.store && (b.dataset.store !== "" || state.lib === "")));
   }
   for (const b of $("#drives").querySelectorAll("[data-lib]")) b.setAttribute("aria-checked", String(b.dataset.lib === state.lib));

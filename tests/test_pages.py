@@ -322,6 +322,20 @@ class AccessKey(unittest.TestCase):
         page.click("nav.apptabs a[href='/downloads#store=Local']")   # Local, with nothing in it yet
         page.wait_for_function(shown + ".includes('Local')")
         self.assertEqual(page.evaluate(shown), ["", "Booth", "Local"])
+        counts = "() => [...document.querySelectorAll('#stores [data-store]')].filter(b => !b.hidden).map(b => b.querySelector('.n').textContent)"
+        self.assertEqual(page.evaluate(counts), ["1", "1", "0"], "counted, as the Library's tabs are")
+        page.close()
+
+    def test_both_pages_end_their_header_with_sync(self):
+        """The gold Sync is the last button in the header on both pages, as the one thing to press."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        last = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).pop().id"
+        self.assertEqual(page.evaluate(last), "syncBtn")
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        self.assertEqual(page.evaluate(last), "syncBtn")
         page.close()
 
     def test_a_link_to_a_download_opens_its_details(self):
