@@ -10,7 +10,9 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   something new or updated, both pages say so, with **Choose what to download** (the list **Download new** shows)
   and **Not now**. It leaves Payhip out (Payhip needs you there for its bot check), waits for any other job to
   finish, and when you're offline it tries again 15 minutes later instead of marking your stores as unreachable.
-  Hoard doesn't run it while it's closed.
+  Hoard doesn't run it while it's closed. From 3.1, with Hoard in the background, a notification from your system
+  says how many new products and updates it found (never their names): once, and again only when it finds more.
+  Turn that off in [Settings](Settings).
 - **Your tasks go first.** Start something while the routine check runs and the check stops safely to make way;
   Tasks says so, and it carries on after yours. Anything you start also waits ahead of automatic ones in Tasks.
 - **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
@@ -187,6 +189,25 @@ next one: it was checked as it came in. It also checks the seal on Hoard's own r
 The Downloads sidebar says when it last checked and what it found, with **Check now**. The check is a task like a
 sync, so Tasks lists it, with the files that are missing or changed. A file that changed may be your own edit;
 see the next section for editing safely. Delete a changed file and sync to download it again as the store has it.
+
+### Disk space
+
+**Disk space** (beside Downloads, Updates and the rest; from 3.1) lists every download biggest first, with how much
+it takes, and how much they take in all. Two ways to narrow it down:
+
+- **Same file kept twice:** files of 1 MB or more you have more than once: in two products (a bundle and the
+  product also sold on its own, the same package bought from two stores) or in two library folders. It says how
+  much you'd free by keeping one of each. Open a product to see which of its files are elsewhere, and where.
+  This uses the fingerprints [Checking your downloads](#checking-your-downloads) keeps, so it reads nothing
+  itself: a file the check hasn't fingerprinted yet, or that changed since, isn't compared, and the view says how
+  many there are, with **Check now**.
+- **Not in any Unity project:** downloads none of your projects use, as Hoard for Unity reports them (see
+  [Projects](Hoard-for-Unity#projects-in-hoard)).
+
+Choose **Select** to pick several, then **Move here** (to another library folder), **Archive** (as in the
+Library; the files stay) or **Delete downloaded files** (after you confirm; anything of your own in their folders
+stays, and what's in your library can be downloaded again). Those work in every view, not just this one. Your
+own folders listed in Local where they are aren't counted: they aren't Hoard's to free.
 
 ### Changing a download: make an editable copy
 

@@ -583,6 +583,8 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setBetas").checked = !!SETTINGS.beta_updates;
   $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
   $("#backgroundRow").hidden = !DATA.can_background;
+  $("#setNotify").checked = SETTINGS.notify_found !== false;
+  $("#notifyRow").hidden = !DATA.can_notify;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
@@ -866,6 +868,7 @@ function settingsPart(el) {
     case "setUpdates": return { check_for_updates: el.checked };
     case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
+    case "setNotify": return { notify_found: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };

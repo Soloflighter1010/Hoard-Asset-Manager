@@ -2876,6 +2876,26 @@ class RoutineCheck(unittest.TestCase):
         jobs.save_routine(found=None)   # you looked
         self.assertIsNone(jobs.routine_record()["found"])
 
+    def test_it_tells_you_once_what_it_found(self):
+        """With Hoard's app running, a notification says what the routine check found: once, and again only when it
+        finds more than you were told about and haven't looked at yet."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        told, found = [], {"new": 2, "updates": 0}
+        runner.find_choices = lambda: dict(found)
+        runner.on_found = told.append
+        jobs.save_routine(found=None)
+        with mock.patch.object(runner, "_refresh", lambda stores, **k: []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "All fine."), \
+                mock.patch.object(runner, "_download", lambda *a, **k: None):
+            for change in ({}, {}, {"updates": 1}, {"new": 0, "updates": 0}, {"new": 1}):
+                found.update(change)
+                self.assertEqual(runner.start("routine", ["booth"], scheduled=True), "started")
+                self.wait_idle(runner)
+        self.assertEqual(told, [{"new": 2, "updates": 0}, {"new": 2, "updates": 1}, {"new": 1, "updates": 0}],
+                         "the same again isn't news; after nothing was found, anything is")
+        jobs.save_routine(found=None)
+
     def test_yours_go_first(self):
         """Issue #110: an automatic job running makes way for one you start, and carries on after it."""
         from unittest import mock

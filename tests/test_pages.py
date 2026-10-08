@@ -177,7 +177,8 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(st.change, "archived", {rusk}, False)
         page.goto(f"{self.srv.url}downloads")
         page.locator("#views [data-view='archive']").wait_for()
-        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Updates\n0", "Archive\n1"])
+        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Updates\n0", "Archive\n1", "Disk space\n3 bytes"],
+                         "Disk space counts what's archived too: it's still on disk")
         self.assertEqual(page.locator("#grid .slot").count(), 0, "not among the other downloads")
         self.assertEqual(page.locator("#creators li").count(), 0, "nor counted under its creator here")
         self.assertIn("1 thing, ", page.locator("#totals").inner_text())
@@ -411,6 +412,99 @@ class AccessKey(unittest.TestCase):
         again, _ = self.open(link)
         again.get_by_text(NEEDS_KEY).wait_for()
         again.close()
+
+
+class DiskSpace(unittest.TestCase):
+    """Downloads, Disk space: the biggest downloads first, the same file kept twice (from the integrity check's
+    fingerprints), what no Unity project uses, and Select to archive or delete several."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        big = b"\x00" * (2 * 1024 * 1024)
+        items = []
+        for store, key, name, files in (("Booth", "1", "Rusk", {"rusk.unitypackage": big}),
+                                         ("Gumroad", "g", "Rusk Bundle", {"bundle.unitypackage": big, "extra.zip": b"e" * 9}),
+                                         ("Booth", "2", "Tiny Hat", {"hat.zip": b"hat"})):
+            man = downloader.Manifest(root / store)
+            rec = man.record(key, "Kitsu Studio", name)
+            rec.update(name=name, creator="Kitsu Studio")
+            folder = root / store / rec["folder"]
+            folder.mkdir(parents=True)
+            for n, (path, data) in enumerate(files.items()):
+                (folder / path).write_bytes(data)
+                rec["files"][f"f{n}"] = {"path": path, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                                         "mtime_ns": os.stat(folder / path).st_mtime_ns}
+            man.save()
+            items.append(library.item(store.lower(), key, name=name, creator="Kitsu Studio"))
+        cls.root = root
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True},
+                                   lan=False)
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = items
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.tmp.cleanup()
+
+    def open(self):
+        page = self.browser.new_page()
+        page.goto(self.srv.entry_url())
+        page.get_by_text("Tiny Hat").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Tiny Hat").first.wait_for()
+        page.click('#views [data-view="space"]')
+        page.wait_for_function("() => SPACE && document.querySelector('[data-space=copies]')")
+        return page
+
+    def names(self, page):
+        return page.eval_on_selector_all(".slot .nm", "els => els.map(e => e.textContent)")
+
+    def test_biggest_first_and_the_copies(self):
+        page = self.open()
+        self.assertIn("4.0 MB", page.locator('#views [data-view="space"]').inner_text(), "its count is the size on disk")
+        self.assertEqual(self.names(page)[-1], "Tiny Hat", "biggest first")
+        self.assertIn("2.0 MB", page.locator(".slot", has_text="Rusk Bundle").inner_text())
+        self.assertIn("2.0 MB to free", page.locator("[data-space=copies]").inner_text())
+        page.click("[data-space=copies]")
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        self.assertEqual(sorted(self.names(page)), ["Rusk", "Rusk Bundle"])
+        self.assertIn("view=space", page.url)
+        self.assertIn("space=copies", page.url)
+        page.locator(".slot", has_text="Rusk Bundle").click()
+        self.assertIn("1 file is kept elsewhere too", page.locator("#detail").inner_text())
+        page.locator("#detail [data-act=goto]").click()
+        page.wait_for_function("() => document.querySelector('#detail .d-name').textContent === 'Rusk'")
+        page.click("[data-space=unused]")   # no Unity project found: everything, and a note saying why
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 3")
+        self.assertIn("hasn't found any Unity projects", page.locator("#viewBar").inner_text())
+        page.click('#views [data-view="downloads"]')
+        self.assertEqual(page.evaluate("state.sort"), "name", "biggest first only while looking at disk space")
+        page.close()
+
+    def test_select_and_delete_frees_the_space(self):
+        page = self.open()
+        page.click("[data-space=copies]")
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        page.click("#selectBtn")
+        page.locator(".slot", has_text="Rusk Bundle").click()
+        page.click("#bulkDelete")
+        page.wait_for_function("() => document.querySelector('#askDialog').open")
+        self.assertIn("Rusk Bundle (2.0 MB)", page.locator("#askText").inner_text())
+        page.click("#askDialog button.danger")
+        page.wait_for_function("() => SPACE && SPACE.files === 0 && document.querySelectorAll('.slot').length === 0")
+        self.assertFalse((self.root / "Gumroad" / "Kitsu Studio" / "Rusk Bundle" / "bundle.unitypackage").exists())
+        self.assertTrue((self.root / "Booth" / "Kitsu Studio" / "Rusk" / "rusk.unitypackage").exists())
+        page.close()
 
 
 def shop_page(*codes):

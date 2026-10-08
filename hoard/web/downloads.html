@@ -956,6 +956,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <p class="hint">While Hoard is open, it does this often: reads your stores (not Payhip, which needs you there for
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
+  <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -1102,6 +1103,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
   <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
     <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
+  <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
+  <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
   <button class="ghost sm" id="bulkDone">Done</button>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -1110,7 +1113,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 "use strict";   // first, or it applies to nothing
 //@include shared.js
 const grid = $("#grid"), detail = $("#detail");
-const state = { view: "downloads", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
+const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 const storeName = folder => folder === "Itch" ? "itch.io" : folder;
@@ -1154,7 +1157,9 @@ async function load(rescan = false) {
     a.hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path)].join(" "));
   }
   byId = new Map(DATA.assets.map(a => [a.id, a]));
+  if (SPACE) mapSpace(SPACE);
   render();
+  if (state.view === "space" && !SPACE) loadSpace();   // (opened at Disk space)
   if (openId != null && byId.has(openId)) showDetail(byId.get(openId), false);
   return DATA.assets.length;
 }
@@ -1191,23 +1196,26 @@ function render() {
 }
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
-const VIEWS = { downloads: "Downloads", updates: "Updates", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+const VIEWS = { downloads: "Downloads", updates: "Updates", archive: "Archive", removed: "Removed", hidden: "Hidden", space: "Disk space" };
 const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
 // Updates: what the last check found, from the Downloads and the Archive (issue #26)
 const hasUpdate = a => !!(a.update && a.update.length);
-const inView = a => state.view === "updates" ? hasUpdate(a) && a.mark !== "removed" : viewOf(a) === state.view;
+const inView = a => state.view === "updates" ? hasUpdate(a) && a.mark !== "removed"
+  : state.view === "space" ? inSpace(a) : viewOf(a) === state.view;
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.assets) count[viewOf(a)] = (count[viewOf(a)] || 0) + 1;
   count.updates = DATA.assets.filter(a => hasUpdate(a) && a.mark !== "removed").length;
   const n = v => count[v] || 0;
+  const onDisk = DATA.assets.filter(takesSpace).reduce((t, a) => t + a.size, 0);   // Disk space: its count is the size
   $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === "updates" || v === state.view || n(v)
-      || (v === "hidden" && p.pin_set)).map(v =>
+      || (v === "hidden" && p.pin_set) || (v === "space" && onDisk)).map(v =>
     `<button role="radio" data-view="${v}" aria-checked="${state.view === v}">${VIEWS[v]}` +
-    (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>` : `<span class="n">${n(v)}</span>`) + `</button>`).join("");
+    (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>`
+      : `<span class="n">${v === "space" ? sizeText(onDisk) : n(v)}</span>`) + `</button>`).join("");
   const bar = $("#viewBar");
   bar.hidden = state.view === "downloads";
-  bar.innerHTML = state.view === "updates" ? updatesBar(n("updates"))
+  bar.innerHTML = state.view === "updates" ? updatesBar(n("updates")) : state.view === "space" ? spaceBar()
     : state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
     : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them: open one and choose <b>Delete downloaded files</b>.</p>`
     : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Change your PIN in the Library.</p>
@@ -1262,12 +1270,82 @@ $("#viewBar").addEventListener("click", e => {
                                                      files: (a.update || []).length, names: (a.update || []).map(f => f.file) })),
                 keys => updateItems(keys ? list.filter(a => keys.includes(a.tag_key)) : list));
 });
+/* ---------- disk space: the biggest downloads, the same file kept more than once (hoard/space.py, from the
+   fingerprints the integrity check keeps), and what no Unity project uses. Each can be moved to another library
+   folder, archived or deleted, a few at a time with Select. */
+let SPACE = null;   // /api/space: {groups, unchecked, projects}, read when Disk space is opened
+const takesSpace = a => !a.linked;   // (a folder of your own, listed where it is, isn't Hoard's to free)
+const copiesOf = a => (SPACE && SPACE.of.get(a.id)) || null;
+function inSpace(a) {
+  if (!takesSpace(a)) return false;
+  if (state.space === "copies") return !!copiesOf(a);
+  if (state.space === "unused") return !isLocal(a) && !(a.used_in || []).length;
+  return true;
+}
+async function loadSpace() {
+  let j;
+  try { const r = await api("/api/space", { cache: "no-store" }); if (!r.ok) throw new Error(); j = await r.json(); }
+  catch (e) { j = { groups: [], unchecked: 0, projects: 0, failed: true }; }
+  mapSpace(j);
+  if (state.view === "space") render();
+}
+function mapSpace(j) {   // (again after each reload of the downloads, whose ids are new)
+  // each copy, matched to the download it's in: the same library folder, the same product folder
+  const where = new Map(DATA.assets.map(a => [`${a.library || 0}\n${a.catalog_folder}`, a]));
+  const of = new Map();
+  let saving = 0, files = 0;
+  for (const g of j.groups || []) {
+    const here = g.copies.map(c => where.get(`${c.library}\n${c.folder}`)).filter(Boolean);
+    if (here.length < 2) continue;
+    saving += g.size * (here.length - 1); files++;
+    for (const a of here) {
+      const e = of.get(a.id) || { files: 0, bytes: 0, others: new Set() };
+      e.files++; e.bytes += g.size;
+      for (const o of here) if (o !== a) e.others.add(o.id);
+      of.set(a.id, e);
+    }
+  }
+  SPACE = { ...j, of, saving, files };
+}
+function spaceBar() {
+  const here = DATA.assets.filter(takesSpace), total = here.reduce((t, a) => t + a.size, 0);
+  const unused = here.filter(a => !isLocal(a) && !(a.used_in || []).length);
+  const chip = (v, label, n) => `<button class="chip" data-space="${v}" aria-pressed="${state.space === v}">${label}` +
+    (n != null ? `<span class="n">${esc(String(n))}</span>` : "") + `</button>`;
+  const copies = !SPACE ? `<span class="muted">Looking for copies…</span>`
+    : chip("copies", "Same file kept twice", SPACE.files ? `${SPACE.of.size.toLocaleString()} · ${sizeText(SPACE.saving)} to free` : 0);
+  const notes = [];
+  if (SPACE && SPACE.failed) notes.push("Couldn't look for copies just now.");
+  else if (SPACE && SPACE.unchecked) notes.push(`${SPACE.unchecked.toLocaleString()} ${SPACE.unchecked === 1 ? "file hasn't" : "files haven't"} ` +
+    `been checked yet, so copies of ${SPACE.unchecked === 1 ? "it" : "them"} aren't shown. <button class="linkish" data-checknow>Check now</button>`);
+  if (state.space === "unused" && SPACE && !SPACE.projects)
+    notes.push("Hoard hasn't found any Unity projects yet: open a project with Hoard for Unity, or add one in Projects.");
+  return `<p>${here.length.toLocaleString()} ${here.length === 1 ? "download takes" : "downloads take"} ${sizeText(total)}, biggest first. ` +
+    `To free some, choose <b>Select</b>: move them to another library folder, archive them, or delete their files.</p>` +
+    `<div class="chips">${chip("", "Everything")}${copies}${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
+    notes.map(t => `<p class="muted">${t}</p>`).join("");
+}
+function spaceSection(a) {
+  const e = copiesOf(a);
+  if (!e) return "";
+  return `<div class="update"><strong>${e.files.toLocaleString()} ${e.files === 1 ? "file is" : "files are"} kept elsewhere too</strong>` +
+    ` <span class="muted-inline">(${sizeText(e.bytes)})</span><ul>` +
+    [...e.others].map(id => byId.get(id)).filter(Boolean).map(o => `<li>${esc(o.name)} <span class="muted-inline">(${esc(storeName(o.store))}` +
+      `${(DATA.libraries || []).length > 1 ? `, ${esc(libName(o.library || 0))}` : ""})</span> ` +
+      `<button class="linkish" data-act="goto" data-id="${o.id}">View</button></li>`).join("") + `</ul></div>`;
+}
+$("#viewBar").addEventListener("click", e => {
+  const b = e.target.closest("[data-space]"); if (!b) return;
+  state.space = state.space === b.dataset.space ? "" : b.dataset.space; sel.ids.clear(); render();
+});
 async function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {   // the same PIN as the Library's Hidden
     if (!(await unlockDialog())) return;
     await load();
     if (!(DATA.privacy || {}).unlocked) return;
   }
+  if (v === "space" && state.view !== "space") { state.sort = "size"; state.space = ""; SPACE = null; loadSpace(); }
+  else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = "name";
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
 $("#viewBar").addEventListener("click", async e => {
@@ -1310,8 +1388,9 @@ const slotHTML = a =>
       `${a.also_in.length ? `, also from ${a.also_in.map(o => storeName(o.store)).join(" and ")}` : ""}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
       `<span class="art">${art(a)}${notch(a.store.toLowerCase(), a.also_in.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
-        `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}</span>` +
-      `<span class="nm">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span>` +
+        `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}` +
+        `${state.view === "space" && copiesOf(a) ? '<span class="flag upd">Copies</span>' : ""}</span>` +
+      `<span class="nm">${esc(a.name)}</span><span class="cr">${state.view === "space" ? `${fmtSize(a.size)} · ` : ""}${esc(a.creator)}</span>` +
     `</button>`;
 function renderGrid(list) {
   (cards = cards || lazyCards(grid)).show(list, slotHTML);
@@ -1335,6 +1414,9 @@ function renderGrid(list) {
         : `<p>Sign in to your stores (in the Library, choose <strong>Stores</strong>), then choose <strong>Download new</strong>. ` +
           `Files go to <code>${esc(DATA.root)}</code>; you can pick another folder in Settings.</p>` + (other ? `<ul>${other}</ul>` : "")) +
       (Object.values(st.stores).some(i => i.found) ? `<p>Choose <strong>Download new</strong> to download everything you own.</p>` : "");
+  } else if (!list.length && !filtersActive() && state.view === "space") {
+    empty.innerHTML = `<h2>${{ copies: "No file is kept twice", unused: "Every download is in a Unity project" }[state.space] || "Nothing here"}</h2>` +
+      (state.space === "copies" && SPACE && SPACE.unchecked ? `<p>Some files haven't been checked yet: check now to look at those too.</p>` : "");
   } else if (!list.length && !filtersActive()) {
     empty.innerHTML = `<h2>${{ downloads: "Nothing here", archive: "Nothing archived is downloaded", removed: "Nothing removed is downloaded",
                                hidden: "Nothing hidden is downloaded" }[state.view]}</h2>` +
@@ -1387,7 +1469,7 @@ async function checkDownloads() {
   if (queuedToast(r)) return;
   toast("Checking your downloads. Follow it in Tasks.");
 }
-document.addEventListener("click", e => { if (e.target.closest("#checkNow")) checkDownloads(); });
+document.addEventListener("click", e => { if (e.target.closest("#checkNow, [data-checknow]")) checkDownloads(); });
 
 function renderStatus(list) {
   const total = DATA.assets.filter(inView).length;   // this view: Downloads, Archive, ...
@@ -1408,7 +1490,8 @@ function renderStatus(list) {
   $("#count").innerHTML = local && pills.length === 1 && state.view === "downloads"
     ? `${list.length} ${list.length === 1 ? "package" : "packages"} of your own`
     : filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
-    : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}`;
+    : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}` +
+      (state.view === "space" ? `, ${sizeText(list.reduce((t, a) => t + a.size, 0))}` : "");
   $("#status").innerHTML =
     pills.map(([k, v, label, text]) =>
       `<button class="pill" data-clear="${k}" data-v="${esc(v)}" aria-label="Remove ${label.toLowerCase()} filter ${esc(text)}">` +
@@ -1457,6 +1540,7 @@ function showDetail(a, focus = true) {
       (isLocal(a) ? localSection(a)
         : `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
         here, and replaces one that was changed.</p>`) +
+    spaceSection(a) +
     updateSection(a) +
     librarySection(a) +
     tagSection(a) +
@@ -1507,6 +1591,7 @@ function saveHash() {
   if (state.types.size) p.set("types", [...state.types].join(","));
   if (state.sort !== "name") p.set("sort", state.sort);
   if (state.view !== "downloads") p.set("view", state.view);
+  if (state.view === "space" && state.space) p.set("space", state.space);
   const h = p.toString();
   history.replaceState(null, "", h ? "#" + h : location.pathname);
 }
@@ -1518,6 +1603,7 @@ function readHash() {
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
+  state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
   if (/^\d+$/.test(p.get("open") || "")) openId = +p.get("open");  // "Show it in Downloads" from the Library
 }
 
@@ -1560,6 +1646,30 @@ async function bulkMove() {
     await load(true);
     return;
   }
+}
+/* ---------- archiving the selected (in the Library too), and deleting their downloaded files */
+async function bulkArchive() {
+  const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.mark);
+  if (!chosen.length) { toast("Those are archived, removed or hidden already, or are your own packages."); return; }
+  const r = await apiPost("/api/marks", { kind: "archived", keys: [...new Set(chosen.map(a => a.tag_key))], on: true });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  setSelecting(false); await load();
+  toast(`Archived ${chosen.length === 1 ? chosen[0].name : `${chosen.length} products`}. Their files stay where they are: find them in Archive.`);
+}
+async function bulkDelete() {
+  const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked);
+  if (!chosen.length) { toast("Your own packages leave Local from their own panel: Take out of Local."); return; }
+  const bytes = chosen.reduce((t, a) => t + a.size, 0);
+  if (!await ask(`Delete the files Hoard downloaded for ${chosen.length === 1 ? chosen[0].name : `${chosen.length} products`} (${sizeText(bytes)})?\n\n` +
+                 "Anything of your own in the same folders stays. This can't be undone. What's still in your library stays " +
+                 "there, so you can download it again.", "Delete files", true)) return;
+  const r = await apiPost("/api/delete-files", { keys: [...new Set(chosen.map(a => a.tag_key))], confirm: true });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  setSelecting(false);
+  if (r.data.job) return afterQueuedJob(r, "delete-files", () => load(true).then(() => state.view === "space" && loadSpace()));
+  await load();
+  if (state.view === "space") loadSpace();
+  toast(`Deleted ${r.data.files.toLocaleString()} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).`);
 }
 /* ---------- a tab for each library folder (hoard/libraries.py): shown once there's more than the downloads folder */
 const libName = n => ((DATA.libraries || []).find(l => String(l.n) === String(n)) || {}).label || "Another folder";
@@ -1888,6 +1998,8 @@ function wireTags() {
   $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
   $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
   if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
+  if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
+  if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
   $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }

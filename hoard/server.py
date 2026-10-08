@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, libraries, projects, updater, vault
+from . import __version__, diagnostics, itch, libraries, projects, space, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -202,6 +202,7 @@ def public_settings(cfg: dict) -> dict:
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "beta_updates": bool(cfg.get("beta_updates")),
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
+        "notify_found": cfg.get("notify_found", True) is not False,
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -243,6 +244,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["beta_updates"] = bool(body["beta_updates"])
     if "close_to_taskbar" in body:
         change["close_to_taskbar"] = bool(body["close_to_taskbar"])
+    if "notify_found" in body:
+        change["notify_found"] = bool(body["notify_found"])
     if "routine_hours" in body:   # issue #113
         if body["routine_hours"] not in ROUTINE_CHOICES or isinstance(body["routine_hours"], bool):
             raise ValueError("Choose how often to run the routine check from the list.")
@@ -341,6 +344,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
+        self.can_notify = False   # Hoard's app (window or browser) tells you what the routine check found (hoard/notify.py)
         self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.picking = threading.Lock()   # a system picker is open (see /api/pick)
@@ -618,7 +622,7 @@ class Handler(BaseHTTPRequestHandler):
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None,
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg),
                                "routine": routine_record()["found"]}, compress=True)
         if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
@@ -654,13 +658,18 @@ class Handler(BaseHTTPRequestHandler):
                      "libraries": srv.library_view(),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
             updates = AssetUpdates().load()["items"]
             return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
                                "hidden_left_out": not self._unlocked() and bool(MarkStore().keys("hidden"))}, compress=True)
+        if path == "/api/space":   # Downloads, Disk space: the same file kept more than once (hoard/space.py)
+            hidden = frozenset() if self._unlocked() else frozenset(MarkStore().keys("hidden"))
+            with srv.cfg_lock:
+                roots = libraries.roots(srv.cfg, root_dir(srv.cfg))
+            return self._json({**space.copies(roots, hidden), "projects": len(self._visible_projects())}, compress=True)
         if path == "/api/settings":
             return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
         if path == "/api/update":

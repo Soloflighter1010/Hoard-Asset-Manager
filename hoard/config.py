@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     "offline_images": True,        # save every product image after a refresh, so the library works offline
     "check_for_updates": False,    # ask GitHub once a day, when Hoard starts, whether there's a newer version
     "beta_updates": False,         # count betas (GitHub pre-releases) as updates too: for testers
+    "notify_found": True,       # a notification from your system when the routine check finds something to download
     "close_to_taskbar": True,   # closing Hoard's window minimizes it to the taskbar (the Dock), and Hoard carries on
     "auto_sync_hours": 0,          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
     "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
