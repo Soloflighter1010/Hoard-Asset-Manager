@@ -6,7 +6,8 @@ Unity. Open **Window › Hoard** to:
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails
   (animated GIFs play).
 - **See what's already in this project.** Hoard reads the asset GUIDs inside each `.unitypackage` (without
-  extracting anything) and marks products **In this project** or **Partly in project**. **Select** finds
+  extracting anything) and marks products **In this project** or **Partly in project**, by the files that are each
+  product's own (a creator's shared shader in your project doesn't make all their products look imported). **Select** finds
   their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.

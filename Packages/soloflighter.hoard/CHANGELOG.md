@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.3
+
+- **A product counts only by the files that are its own.** Products often carry the same files: a creator's shared
+  shader, textures or materials in each of their hairs, say, or a bundle and the product also sold on its own.
+  Having one of them made every other product carrying those files show as **Partly in project**, in this window,
+  in Hoard's Projects view and on the way to the credits list. Files more than one of your products carry are
+  left out of the count now, so only what you imported shows. A product that has nothing of its own (the same
+  package bought from another store, or a product that's all inside a bundle) still counts by all its files.
+
 ## 0.5.2
 
 - **Importing a package with scripts is remembered.** Unity reloads its scripts part way through such an import, and

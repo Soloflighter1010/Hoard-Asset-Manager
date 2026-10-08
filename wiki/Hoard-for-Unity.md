@@ -11,6 +11,9 @@ Open **Window › Hoard** to:
   anything, and marks products **In this project** or **Partly in project**. Only what's under `Assets/` counts:
   a package's own copy of something VCC installs under `Packages/` (Poiyomi, say) doesn't, from 0.5.1. Only files
   count, not the folders a package puts them in, from 0.5.2: a creator's folder is all their products' folder.
+  From 0.5.3, a product counts only by the files that are its own: a shader or texture several products carry
+  (a creator's shared files, or a bundle and the product sold alone) doesn't make the others **Partly in project**.
+  A product with nothing of its own (the same package from another store) still counts by all its files.
   **Select** finds their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
