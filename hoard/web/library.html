@@ -732,6 +732,9 @@ dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 .librow .muted { white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 560px) { .librow { flex-wrap: wrap; } .librow .muted { white-space: normal; } }
 .settings .libadd #libPick { flex: none; }
+/* a gold button in a row of fields (Add a folder..., Install update) is as wide as its label: the panel's
+   full-width gold buttons would push what's beside it out of the panel */
+.settings .field .primary { width: auto; margin-top: 0; }
 
 /* ---------- buttons, one system on both pages: each size one height, text centred on it, nothing wrapping inside a
    button, and buttons beside each other lined up on their middles. Gold (.primary) and plain (.ghost) match. */

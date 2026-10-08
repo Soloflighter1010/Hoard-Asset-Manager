@@ -359,6 +359,26 @@ class AccessKey(unittest.TestCase):
             page.evaluate(post, ["/api/hidden/forget", {"confirm": True}])
             page.close()
 
+    def test_add_a_folder_leaves_room_beside_it(self):
+        """In Hoard's window (a folder picker), Add a folder... sits beside the path box and Add, all in the panel:
+        a gold button in a row of fields isn't the full width of the panel."""
+        for path in ("", "downloads"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            if path:
+                page.click("nav.apptabs a[href='/downloads']")
+                page.wait_for_url("**/downloads**")
+                page.get_by_text("Rusk").first.wait_for()
+            page.evaluate("DATA.can_pick = true; syncBrowse()")
+            page.click("#settingsBtn")
+            page.locator("#libAdd").wait_for()
+            box = lambda sel: page.locator(sel).bounding_box()
+            panel, pick, field, add = box("#settingsPanel"), box("#libPick"), box("#libPath"), box("#libAdd")
+            self.assertLess(pick["width"], panel["width"] / 2, path or "library")
+            self.assertGreater(field["width"], 100, path or "library")
+            self.assertLessEqual(add["x"] + add["width"], panel["x"] + panel["width"], path or "library")
+            page.close()
+
     def test_both_pages_end_their_header_with_sync(self):
         """The gold Sync is the last button in the header on both pages, as the one thing to press."""
         page, refused = self.open(self.srv.entry_url())

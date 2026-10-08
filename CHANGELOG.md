@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.3
+
+- **Fixed: in Hoard's window, Settings' Add a folder... filled the whole row**, pushing the box for a folder's path
+  and its **Add** button out of the panel (a sliver of them showed at the edge). It's as wide as its label now, with
+  the box and **Add** beside it. **Install update**, in Settings' Updates, had the same problem when an update was
+  waiting.
+
 ## 3.0.2
 
 - **Downloads only shows the store tabs you have something in.** A store with nothing downloaded in the view
