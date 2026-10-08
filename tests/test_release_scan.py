@@ -155,6 +155,26 @@ class Scanning(unittest.TestCase):
         self.assertIn("Hoard-2.zip queued", text)
         self.assertIn("Hoard-1.zip: scanned", text)
 
+    def test_a_scan_virustotal_hasnt_listed_yet_is_waited_for(self):
+        """Release v3.0.3's scan stopped on VirusTotal answering 404 for an analysis it had just handed out: for a
+        moment after a file is sent, its scan may not be listed yet. That's waited out like a queued scan."""
+        folder = release_folder({"Hoard-2.11.0.zip": b"PK"})
+        fake = FakeVirusTotal()
+        answer, missing = fake.opener, [2]
+
+        def not_listed_at_first(req, timeout=None):
+            if "/analyses/" in req.full_url and missing[0]:
+                missing[0] -= 1
+                fake.requests.append((req.get_method(), req.full_url, dict(req.header_items())))
+                raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, io.BytesIO(b'{"error":{"code":"NotFoundError"}}'))
+            return answer(req, timeout)
+        fake.opener = not_listed_at_first
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(run(fake, folder), 0)
+        self.assertIn("Hoard-2.11.0.zip not listed yet", out.getvalue())
+        self.assertIn("0 malicious, 0 suspicious", (folder / "VT_REPORT.md").read_text("utf-8"))
+
     def test_virustotal_errors_are_said_plainly(self):
         folder = release_folder({"Hoard-2.11.0.zip": b"PK"})
         fake = FakeVirusTotal()

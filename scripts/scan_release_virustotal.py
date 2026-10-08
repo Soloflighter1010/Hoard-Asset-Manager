@@ -103,7 +103,11 @@ class VirusTotal:
             for name, analysis_id in pending.items():
                 if name in done:
                     continue
-                attrs = self.request("GET", f"{BASE}/analyses/{analysis_id}")["data"]["attributes"]
+                got = self.request("GET", f"{BASE}/analyses/{analysis_id}", missing_ok=True)
+                if got is None:   # just sent: VirusTotal can answer 404 for a moment before it lists the scan
+                    states[name] = "not listed yet"
+                    continue
+                attrs = got["data"]["attributes"]
                 if attrs.get("status") == "completed":
                     done[name] = attrs.get("stats", {})
                     say(f"{name}: scanned")
