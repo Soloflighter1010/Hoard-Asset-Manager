@@ -11,6 +11,9 @@ Unity. Open **Window › Hoard** to:
   their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
+- **Find where a file came from.** Right-click files in the Project window: **Hoard › Which Product Is This From?**
+- **Import updates.** Products in this project with a newer download show **Update to import**; ones whose creator
+  updated them since Hoard last downloaded show **Update in Hoard**. **Updates** in the toolbar lists just those.
 
 - **Credit the creators.** **Create Credits List** lists the Hoard assets fully in this project, as a list, Markdown or
   grouped by creator, to copy or save. Untick any you don't want credited, or add assets that didn't come
@@ -36,8 +39,8 @@ in the window's toolbar.
 
 ## Safe by design
 
-- **Read-only toward your Hoard library.** It reads `catalog.json` and never changes, moves or deletes
-  anything in your downloads folder.
+- **Read-only toward your Hoard library.** It reads `catalog.json` (and what Hoard's last check for updates
+  found) and never changes, moves or deletes anything in your downloads folder.
 - **Checks Hoard's seal.** `catalog.json` is sealed by Hoard. If something else has edited it, importing
   pauses and store links are hidden until Hoard rebuilds it (choose **Sync** in Hoard).
 - **Checks every entry** against Hoard's documented rules: plain paths inside your downloads folder only,

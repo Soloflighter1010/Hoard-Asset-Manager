@@ -17,6 +17,17 @@ Open **Window › Hoard** to:
   **Select** finds their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
+- **Find which product a file came from** (0.6.0). Select files or folders in the Project window, right-click and
+  choose **Hoard › Which Product Is This From?** (also in the **Assets** menu). The window lists the products
+  whose packages carry them, most files first, with **Show** to find each in the list. It looks at up to 20,000
+  files at a time, and says when Hoard is still reading packages.
+- **Import updates** (0.6.0). A product in this project shows **Update to import** when Hoard has downloaded a
+  newer package of it than the one you have: one downloaded more than an hour after a package that's all in the
+  project, or after you last imported the product through Hoard. Its details have **Import update**, which opens
+  Unity's import dialog on it. A product whose creator updated it since Hoard last downloaded (what Hoard's last
+  **Check for updates** found, in `asset-updates.json` in Hoard's own folder) shows **Update in Hoard**: download
+  the update in Hoard (**Downloads**, **Updates**), then import it here. **Updates** in the toolbar shows just
+  those products.
 
 Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a project remembers where its
 assets came from (from 0.5.2, a package with scripts too, though Unity reloads its scripts part way through). If
@@ -85,8 +96,8 @@ the window's toolbar.
 
 ## Safe by design
 
-- **Read-only toward your Hoard library.** It reads `catalog.json` and never changes, moves or deletes anything
-  in your downloads folder. The one thing it writes outside the project is the small report for **Projects**,
+- **Read-only toward your Hoard library.** It reads `catalog.json`, and from 0.6.0 what Hoard's last check for
+  updates found (`asset-updates.json`), and never changes, moves or deletes anything in your downloads folder. The one thing it writes outside the project is the small report for **Projects**,
   in `projects/` in Hoard's own folder (0.4.0).
 - **Checks Hoard's seal.** Hoard seals `catalog.json`. If something else has edited it, importing pauses and store
   links are hidden until Hoard rebuilds it: choose **Sync** in Hoard, or run `hoard-cli verify`.

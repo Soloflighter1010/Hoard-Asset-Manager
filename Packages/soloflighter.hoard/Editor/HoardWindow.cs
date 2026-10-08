@@ -31,6 +31,12 @@ namespace SoloFlighter.Hoard.Editor
         List<ImportLog.Entry> log = new List<ImportLog.Entry>();
         readonly ThumbnailCache thumbs = new ThumbnailCache();
         readonly Dictionary<HoardAsset, InProject> statusOf = new Dictionary<HoardAsset, InProject>();
+        readonly Dictionary<HoardAsset, string> newerOf = new Dictionary<HoardAsset, string>();   // a newer download to import, or ""
+        Dictionary<string, int> pending = new Dictionary<string, int>();   // updates Hoard's last check found, by Updates.Key
+        volatile Dictionary<string, int> loadedPending;
+        DateTime pendingRead;      // when asset-updates.json was last read, to read it again only when it's changed
+        List<Origin> origins;      // "Which Product Is This From?": what the asked-about files came from, until closed
+        string[] originGuids;      // the files asked about (a folder's, for a folder)
         readonly Dictionary<string, List<HoardAsset>> byPackage = new Dictionary<string, List<HoardAsset>>();
         readonly List<string> fresh = new List<string>();
         List<HoardAsset> shown = new List<HoardAsset>();
@@ -40,7 +46,7 @@ namespace SoloFlighter.Hoard.Editor
         HoardAsset selected;
         string search = "";
         int store;
-        bool packagesOnly = true, inProjectOnly;
+        bool packagesOnly = true, inProjectOnly, updatesOnly;
         Vector2 listScroll, detailScroll;
         bool reportDue;             // what this project uses has changed: tell Hoard's Projects view (issue #86)
         double reportAfter;
@@ -95,6 +101,7 @@ namespace SoloFlighter.Hoard.Editor
                     if (root == null) throw new IOException("no downloads folder");
                     var keys = Seal.ReadKeys(HoardLocation.KeyFiles());   // every Hoard key of this user account
                     cat = HoardCatalog.Load(root, keys);
+                    loadedPending = ReadPending();
                 }
                 catch (Exception e)   // never left "Loading your library..." for good
                 {
@@ -115,6 +122,7 @@ namespace SoloFlighter.Hoard.Editor
                 loading = false;
                 catalog = done;
                 log = ImportLog.Read();
+                if (loadedPending != null) { pending = loadedPending; loadedPending = null; }
                 byPackage.Clear();
                 var all = new List<string>();
                 foreach (var a in catalog.Assets)
@@ -133,7 +141,7 @@ namespace SoloFlighter.Hoard.Editor
                     owners[kv.Key] = string.Join("\n", keys);
                 }
                 packages.SetOwners(owners);
-                statusOf.Clear();
+                Forget();
                 packages.ProjectChanged();   // a package downloaded again since is counted again
                 selected = selected == null ? null : catalog.Assets.Find(a => a.Key == selected.Key);
                 filesFor = null;
@@ -141,17 +149,18 @@ namespace SoloFlighter.Hoard.Editor
                 Filter();
                 Repaint();
                 ReportSoon();
+                if (originGuids != null) FindOrigins();   // asked before the library was loaded
             }
             fresh.Clear();
             if (packages != null && packages.TakeChanges(fresh))
             {
-                if (packages.SharingChanged) statusOf.Clear();   // files shared with others: every product may change
+                if (packages.SharingChanged) Forget();   // files shared with others: every product may change
                 else foreach (string p in fresh)   // only the products whose packages were just read are looked at again
                 {
                     List<HoardAsset> list;
-                    if (byPackage.TryGetValue(p, out list)) foreach (var a in list) statusOf.Remove(a);
+                    if (byPackage.TryGetValue(p, out list)) foreach (var a in list) Forget(a);
                 }
-                if (inProjectOnly) Filter();
+                if (inProjectOnly || updatesOnly) Filter();
                 Repaint();
                 ReportSoon();
             }
@@ -168,7 +177,7 @@ namespace SoloFlighter.Hoard.Editor
 
         double animatedAt;
 
-        void OnProjectChanged() { packages.ProjectChanged(); statusOf.Clear(); if (inProjectOnly) Filter(); Repaint(); ReportSoon(); }
+        void OnProjectChanged() { packages.ProjectChanged(); Forget(); if (inProjectOnly || updatesOnly) Filter(); Repaint(); ReportSoon(); }
 
         /// <summary>Tell Hoard what this project uses, a moment after the last change (once its packages are read).</summary>
         public void ReportSoon()
@@ -185,7 +194,7 @@ namespace SoloFlighter.Hoard.Editor
             reportDue = false;
             if (catalog.Problem != null) return;   // no Hoard library here (yet): nothing to tell it
             log = ImportLog.Read();
-            statusOf.Clear();
+            Forget();
             var used = new List<ProjectAsset>();
             foreach (var a in catalog.Assets)
             {
@@ -217,7 +226,7 @@ namespace SoloFlighter.Hoard.Editor
         {
             log = ImportLog.Read();
             if (packages != null) packages.ProjectChanged();
-            statusOf.Clear();
+            Forget();
             Filter();
             Repaint();
             ReportSoon();
@@ -240,6 +249,157 @@ namespace SoloFlighter.Hoard.Editor
             return best;
         }
 
+        void Forget() { statusOf.Clear(); newerOf.Clear(); }
+
+        void Forget(HoardAsset a) { statusOf.Remove(a); newerOf.Remove(a); }
+
+        /// <summary>A newer download of this product than what the project has, to import: its package, or null.
+        /// Only for products in the project; worked out once, like their status.</summary>
+        string NewerDownload(HoardAsset a)
+        {
+            string known;
+            if (newerOf.TryGetValue(a, out known)) return known.Length == 0 ? null : known;
+            string newer = null;
+            if (ProjectStatus(a) >= InProject.Partly && a.PackagePaths.Count > 0)
+            {
+                var states = new List<PackageState>();
+                foreach (string p in a.PackagePaths)
+                {
+                    try { states.Add(new PackageState { Path = p, Written = File.GetLastWriteTimeUtc(p), AllHere = packages.Status(p) == InProject.Yes }); }
+                    catch (Exception) { /* gone since the library was read */ }
+                }
+                DateTime? lastImport = null;
+                foreach (var e in log)
+                    if (e.Store == a.Store && e.Name == a.Name)
+                    {
+                        var t = Updates.ParseTime(e.ImportedAt);
+                        if (t.HasValue && (!lastImport.HasValue || t.Value > lastImport.Value)) lastImport = t;
+                    }
+                newer = Updates.NewerPackage(states, lastImport);
+            }
+            newerOf[a] = newer ?? "";
+            return newer;
+        }
+
+        /// <summary>How many new or changed files Hoard's last check for updates found for this product, when it's in
+        /// the project and the update isn't downloaded yet (0 otherwise).</summary>
+        int UpdateInHoard(HoardAsset a)
+        {
+            int n;
+            return ProjectStatus(a) >= InProject.Partly && pending.TryGetValue(Updates.Key(a.Store, a.Name), out n) ? n : 0;
+        }
+
+        static Dictionary<string, int> ReadPending()
+        {
+            try
+            {
+                string file = Path.Combine(HoardLocation.DataDir(), "asset-updates.json");
+                if (!File.Exists(file) || new FileInfo(file).Length > 32L * 1024 * 1024) return new Dictionary<string, int>();
+                return Updates.ReadPending(File.ReadAllText(file, System.Text.Encoding.UTF8));
+            }
+            catch (Exception) { return new Dictionary<string, int>(); }   // only ever a hint
+        }
+
+        /// <summary>Back in the window (after checking for updates in Hoard, say): read Hoard's update list again if
+        /// it's changed.</summary>
+        void OnFocus()
+        {
+            try
+            {
+                string file = Path.Combine(HoardLocation.DataDir(), "asset-updates.json");
+                DateTime written = File.Exists(file) ? File.GetLastWriteTimeUtc(file) : DateTime.MinValue;
+                if (written == pendingRead) return;
+                pendingRead = written;
+                pending = ReadPending();
+                if (updatesOnly) Filter();
+                Repaint();
+            }
+            catch (Exception) { /* the next look will do */ }
+        }
+
+        // ---- "Which Product Is This From?" (Assets menu, and the Project window's right-click menu)
+
+        [MenuItem("Assets/Hoard/Which Product Is This From?", false, 1500)]
+        static void WhichProduct()
+        {
+            var guids = Selection.assetGUIDs;
+            if (guids == null || guids.Length == 0) return;
+            var w = GetWindow<HoardWindow>("Hoard");
+            w.minSize = new Vector2(620, 360);
+            w.Show();
+            w.originGuids = guids;
+            w.FindOrigins();
+        }
+
+        [MenuItem("Assets/Hoard/Which Product Is This From?", true)]
+        static bool CanWhichProduct() { return Selection.assetGUIDs != null && Selection.assetGUIDs.Length > 0; }
+
+        const int MaxAskedFiles = 20000;
+
+        void FindOrigins()
+        {
+            if (catalog == null || originGuids == null) return;   // looked up when the library has loaded
+            var files = new HashSet<string>();
+            foreach (string g in originGuids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(g);
+                if (string.IsNullOrEmpty(path)) continue;
+                if (AssetDatabase.IsValidFolder(path))   // a folder: the files in it, which is what packages list
+                {
+                    foreach (string inside in AssetDatabase.FindAssets("", new[] { path }))
+                        if (files.Count < MaxAskedFiles && !AssetDatabase.IsValidFolder(AssetDatabase.GUIDToAssetPath(inside))) files.Add(inside);
+                }
+                else if (files.Count < MaxAskedFiles) files.Add(g);
+            }
+            originFiles = files.Count;
+            origins = packages.OriginsOf(files);
+            Repaint();
+        }
+
+        int originFiles;
+
+        void DrawOrigins()
+        {
+            if (origins == null) return;
+            string still = packages.Waiting > 0 ? " Hoard is still reading " + packages.Waiting + " packages, so look again in a moment." : "";
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.BeginHorizontal();
+            string files = originFiles == 1 ? "this file" : "these " + originFiles + " files";
+            GUILayout.Label(origins.Count == 0 ? "None of " + files + " came from a package Hoard downloaded." + still
+                                               : "Where " + files + " came from:" + still, EditorStyles.wordWrappedLabel);
+            if (GUILayout.Button("Look again", GUILayout.Width(80))) FindOrigins();
+            if (GUILayout.Button("×", GUILayout.Width(22))) { origins = null; originGuids = null; }
+            EditorGUILayout.EndHorizontal();
+            if (origins != null)
+                for (int i = 0; i < origins.Count && i < 5; i++)
+                {
+                    var a = catalog.Assets.Find(x => x.Key == origins[i].Product);
+                    if (a == null) continue;
+                    EditorGUILayout.BeginHorizontal();
+                    GUILayout.Label(a.Name + "  ·  " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.boldLabel, GUILayout.MinWidth(80));
+                    GUILayout.FlexibleSpace();
+                    GUILayout.Label(origins[i].Count + (origins[i].Count == 1 ? " file" : " files"), EditorStyles.miniLabel, GUILayout.Width(70));
+                    if (GUILayout.Button("Show", GUILayout.Width(50))) ShowProduct(a);
+                    EditorGUILayout.EndHorizontal();
+                }
+            EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Select a product in the list, with the filters cleared so it's there to see.</summary>
+        void ShowProduct(HoardAsset a)
+        {
+            search = "";
+            store = 0;
+            if (!a.HasPackages) packagesOnly = false;
+            inProjectOnly = updatesOnly = false;
+            Filter();
+            selected = a;
+            detailScroll = Vector2.zero;
+            int at = shown.IndexOf(a);
+            if (at >= 0) listScroll.y = Mathf.Max(0, at * RowHeight - listView.height / 2);
+            Repaint();
+        }
+
         /// <summary>For the credits list (issues #51 and #79): the products this project uses. Only a product with
         /// one of its packages fully in the project counts: one that's partly there, or that the import log alone
         /// says was imported, isn't credited (it may have been removed, or only a piece of it kept). Products
@@ -252,7 +412,7 @@ namespace SoloFlighter.Hoard.Editor
             ready = catalog != null;
             if (catalog == null) return found;
             log = ImportLog.Read();
-            statusOf.Clear();   // the project may have changed since the list was drawn
+            Forget();   // the project may have changed since the list was drawn
             foreach (var a in catalog.Assets)
                 if (ProjectStatus(a) == InProject.Yes)
                     found.Add(new CreditEntry { Store = a.Store, Name = a.Name, Creator = a.Creator, Url = a.Url });
@@ -269,6 +429,7 @@ namespace SoloFlighter.Hoard.Editor
                 if (store > 0 && a.Store != StoreNames[store]) continue;
                 if (packagesOnly && !a.HasPackages) continue;
                 if (inProjectOnly && ProjectStatus(a) < InProject.Partly) continue;
+                if (updatesOnly && NewerDownload(a) == null && UpdateInHoard(a) == 0) continue;
                 if (q.Length > 0 && !a.SearchText.Contains(q)) continue;
                 shown.Add(a);
             }
@@ -288,6 +449,7 @@ namespace SoloFlighter.Hoard.Editor
                 return;
             }
             DrawBanner();
+            DrawOrigins();
             EditorGUILayout.BeginHorizontal();
             DrawList();
             DrawDetails();
@@ -305,7 +467,7 @@ namespace SoloFlighter.Hoard.Editor
         {
             // the buttons on the right go on a row of their own when the window is too narrow for one row, rather
             // than off its edge
-            bool twoRows = position.width < 160 + 100 + ToolbarWidth("Unity packages only", "In this project",
+            bool twoRows = position.width < 160 + 100 + ToolbarWidth("Unity packages only", "In this project", "Updates",
                                                                      "Create Credits List", "Reload", "Folder...") + 24;
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
             EditorGUI.BeginChangeCheck();
@@ -313,6 +475,7 @@ namespace SoloFlighter.Hoard.Editor
             store = EditorGUILayout.Popup(store, StoreLabels, EditorStyles.toolbarPopup, GUILayout.Width(100));
             packagesOnly = GUILayout.Toggle(packagesOnly, "Unity packages only", EditorStyles.toolbarButton);
             inProjectOnly = GUILayout.Toggle(inProjectOnly, "In this project", EditorStyles.toolbarButton);
+            updatesOnly = GUILayout.Toggle(updatesOnly, new GUIContent("Updates", "Products in this project with a newer download, or an update waiting in Hoard"), EditorStyles.toolbarButton);
             if (EditorGUI.EndChangeCheck()) Filter();
             if (twoRows)
             {
@@ -379,7 +542,11 @@ namespace SoloFlighter.Hoard.Editor
                 FittedLabel(new Rect(row.x + 56, row.y + 6, textWidth, 18), a.Name, EditorStyles.boldLabel);
                 FittedLabel(new Rect(row.x + 56, row.y + 26, textWidth, 18), a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.miniLabel);
                 if (s >= InProject.Partly)
-                    GUI.Label(new Rect(row.xMax - 96, row.y + 16, 92, 18), s == InProject.Yes ? "In this project" : "Partly in project", EditorStyles.miniBoldLabel);
+                {
+                    string mark = NewerDownload(a) != null ? "Update to import" : UpdateInHoard(a) > 0 ? "Update in Hoard" : null;
+                    GUI.Label(new Rect(row.xMax - 96, row.y + (mark == null ? 16 : 7), 92, 18), s == InProject.Yes ? "In this project" : "Partly in project", EditorStyles.miniBoldLabel);
+                    if (mark != null) GUI.Label(new Rect(row.xMax - 96, row.y + 26, 92, 18), mark, EditorStyles.miniLabel);
+                }
                 if (Event.current.type == EventType.MouseDown && row.Contains(Event.current.mousePosition))
                 {
                     selected = a;
@@ -420,6 +587,20 @@ namespace SoloFlighter.Hoard.Editor
             EditorGUILayout.Space();
 
             bool paused = catalog.SealStatus == SealState.Changed || PendingImport.Active || EditorApplication.isCompiling;
+            string newer = NewerDownload(a);
+            int waiting = UpdateInHoard(a);
+            if (newer != null)
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                GUILayout.Label("A newer download than the one in this project: " + Path.GetFileName(newer) + ".", EditorStyles.wordWrappedLabel);
+                EditorGUI.BeginDisabledGroup(paused);
+                if (GUILayout.Button("Import update", GUILayout.Width(100))) Import(a, newer);
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+            }
+            else if (waiting > 0)
+                EditorGUILayout.HelpBox("The creator updated this product (" + waiting + (waiting == 1 ? " new or changed file" : " new or changed files") +
+                                        "). Download the update in Hoard (Downloads, Updates), then import it here.", MessageType.Info);
             foreach (var entry in files)
             {
                 string file = entry.Key, path = entry.Value;

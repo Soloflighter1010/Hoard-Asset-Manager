@@ -170,6 +170,20 @@ namespace SoloFlighter.Hoard.Editor
             return path != null && File.Exists(path) && guids.TryGetValue(Stamp(path), out list) ? list : new string[0];
         }
 
+        /// <summary>Which products these files came from (main thread), most files first, from the packages read
+        /// so far: "Which Product Is This From?" in the Project window.</summary>
+        public List<Origin> OriginsOf(IEnumerable<string> fileGuids)
+        {
+            var read = new List<KeyValuePair<string, string[]>>();
+            foreach (var kv in owners)
+            {
+                string[] list;
+                if (File.Exists(kv.Key) && guids.TryGetValue(SafeStamp(kv.Key), out list))
+                    read.Add(new KeyValuePair<string, string[]>(kv.Value, list));
+            }
+            return Origins.Of(fileGuids, read);
+        }
+
         public void Stop() { stop.Cancel(); if (cacheDirty) SaveCache(); }
 
         void LoadCache()
