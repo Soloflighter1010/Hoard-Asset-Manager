@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.1
+
+- **Fixed: the store tabs' counts went to 0 after a while.** The tabs (Everything, Booth, Gumroad...) count what's
+  in the view you're in: the Library, Archive, Removed or Hidden. They were only redrawn when your library was read
+  again, so if that happened while you were looking at another view (when a routine check or a task finished,
+  say), they kept counting that view: every tab read 0 back in the Library, while the heading still said how many
+  things you have. They now follow the view you're in.
+
 ## 3.0.0
 
 Hoard 3.0 is the biggest update since Hoard began. It's an app on **Windows, macOS and Linux** now, with a new look

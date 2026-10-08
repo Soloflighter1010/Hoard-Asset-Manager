@@ -1223,7 +1223,7 @@ async function load() {
   $("#version").textContent = DATA.version || "";
   for (const a of DATA.items) a.hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
-  renderStoreSeg(); renderStores(); render(); showJob(DATA.job);
+  renderStores(); render(); showJob(DATA.job);
   if (DATA.job && DATA.job.running) startPolling();
   if (openKey && byKey.has(openKey)) showDetail(byKey.get(openKey), false);
   else if (openKey) forgetDetail();   // no longer shown (a hidden item, once locked): its details go too
@@ -1278,16 +1278,21 @@ function showCopies(a, field = "match_key") {
 }
 function render() {
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
-  renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  renderViews(); renderStoreSeg(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
+// The store tabs count what's in the view you're in (Library, Archive...), so they're drawn with everything else: drawn
+// only as the library loaded, a load while you were in another view (a routine check finishing, say) left them
+// counting that view (all 0 in Hidden) once you came back.
+let storeSegShown = "";
 function renderStoreSeg() {
   const counts = {};
   const here = DATA.items.filter(inView);
   for (const a of here) counts[a.store] = (counts[a.store] || 0) + 1;
-  $("#storeSeg").innerHTML = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${here.length}</span></button>` +
+  const html = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${here.length}</span></button>` +
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
       `<span class="dot ${s}"></span>${label(s)}<span class="n">${counts[s] || 0}</span></button>`).join("");
+  if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
 function renderStores() {
   const job = DATA.job || {};

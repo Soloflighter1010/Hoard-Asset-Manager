@@ -297,6 +297,19 @@ class AccessKey(unittest.TestCase):
         page.locator("#setup").wait_for(state="visible")
         page.close()
 
+    def test_the_store_tabs_count_the_view_youre_in(self):
+        """The store tabs went to 0 for good: drawn only as the library loaded, a load while another view was showing
+        (a routine check finishing, say) left them counting that view after you came back to the Library."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        count = "() => document.querySelector('#storeSeg [data-store=\"\"] .n').textContent"
+        self.assertEqual(page.evaluate(count), "1")
+        page.evaluate("async () => { state.view = 'removed'; render(); await load(); }")   # a load in another view
+        self.assertEqual(page.evaluate(count), "0", "Removed has nothing in it")
+        page.evaluate("() => showView('library')")
+        page.wait_for_function(count + " === '1'")
+        page.close()
+
     def test_a_link_to_a_download_opens_its_details(self):
         """Projects link to a download as /downloads#open=N: on the page already, that opens its details too."""
         page, refused = self.open(self.srv.entry_url())
