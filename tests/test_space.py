@@ -69,7 +69,9 @@ class Copies(unittest.TestCase):
     def test_hidden_and_listed_in_place_are_left_out(self):
         put(self.main, "Booth", "1", "K", "A", {"a.zip": BIG})
         put(self.main, "Booth", "2", "K", "Secret", {"a.zip": BIG})
-        put(self.main, "Local", "l", "Me", "Mine", {"a.zip": BIG}, location="/somewhere/of/mine")
+        mine = os.path.normpath(os.path.abspath(Path(self.tmp.name) / "mine"))   # (absolute as each system writes it)
+        put(self.main, "Local", "l", "Me", "Mine", {"a.zip": BIG}, location=mine)
+        self.assertEqual(downloader.Manifest(self.main / "Local").assets["l"].get("location"), mine)
         self.assertEqual(space.copies([self.main], hidden={tag_key("Booth", "Secret")})["groups"], [])
         self.assertEqual(len(space.copies([self.main])["groups"][0]["copies"]), 2, "your own folder isn't Hoard's to free")
 
