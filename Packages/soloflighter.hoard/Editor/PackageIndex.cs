@@ -23,12 +23,18 @@ namespace SoloFlighter.Hoard.Editor
         readonly Dictionary<string, Counted> status = new Dictionary<string, Counted>();   // path -> how much is here, until something changes
         readonly ConcurrentQueue<string> waiting = new ConcurrentQueue<string>();
         readonly ConcurrentQueue<string> fresh = new ConcurrentQueue<string>();   // read since the last look
+        readonly SharedFiles shared = new SharedFiles();   // files more than one product carries: main thread only
+        Dictionary<string, string> owners = new Dictionary<string, string>();   // package path -> its product
         readonly CancellationTokenSource stop = new CancellationTokenSource();
         int queued, done;
         volatile bool changed, cacheDirty;
         DateTime saveAfter = DateTime.MinValue;
 
         public int Waiting { get { return queued - done; } }
+
+        /// <summary>Set by TakeChanges: a package just read shares files with other products, so how much of any
+        /// product is in the project may have changed, not only the products just read.</summary>
+        public bool SharingChanged { get; private set; }
 
         public PackageIndex() { LoadCache(); }
 
@@ -86,19 +92,39 @@ namespace SoloFlighter.Hoard.Editor
 
         static string SafeStamp(string path) { try { return Stamp(path); } catch (Exception) { return path; } }
 
+        /// <summary>Which product each package is (main thread): products are told apart by the files that are
+        /// their own. Set before Want, whenever the library is read.</summary>
+        public void SetOwners(Dictionary<string, string> packageOwners)
+        {
+            owners = packageOwners ?? new Dictionary<string, string>();
+            shared.Clear();
+            foreach (var kv in owners)
+            {
+                string[] list;
+                if (File.Exists(kv.Key) && guids.TryGetValue(SafeStamp(kv.Key), out list)) shared.Add(kv.Value, list);
+            }
+            status.Clear();
+        }
+
         /// <summary>Call from the editor's update loop: true when there's something new to show. The packages read
         /// since the last call are added to fresh (when given), so only their products need looking at again.</summary>
         public bool TakeChanges(List<string> freshPaths = null)
         {
             if (cacheDirty && Waiting == 0 && DateTime.UtcNow >= saveAfter) SaveCache();
+            SharingChanged = false;
             if (!changed) return false;
             changed = false;
             string path;
             while (fresh.TryDequeue(out path))
             {
-                status.Remove(path);   // only what's new is looked at again
+                status.Remove(path);   // only what's new is looked at again (unless it shares files: below)
                 if (freshPaths != null) freshPaths.Add(path);
+                string product;
+                string[] list;
+                if (owners.TryGetValue(path, out product) && guids.TryGetValue(SafeStamp(path), out list) && shared.Add(product, list))
+                    SharingChanged = true;
             }
+            if (SharingChanged) status.Clear();
             return true;
         }
 
@@ -127,7 +153,7 @@ namespace SoloFlighter.Hoard.Editor
             var c = new Counted { Status = InProject.Unknown };
             string[] list;
             if (!File.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return c;
-            ProjectShare.Count(list, AssetDatabase.GUIDToAssetPath, out c.Have, out c.Total);   // Assets/ only (issue #114)
+            ProjectShare.Count(list, shared, AssetDatabase.GUIDToAssetPath, out c.Have, out c.Total);   // its own files, in Assets/ (issue #114)
             if (c.Total > 0) c.Status = c.Have == 0 ? InProject.No : c.Have == c.Total ? InProject.Yes : InProject.Partly;
             return c;
         }

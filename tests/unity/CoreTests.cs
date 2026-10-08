@@ -193,6 +193,23 @@ public static class CoreTests
         ProjectShare.Count(new[] { "p", "q" }, pathOf, out have, out total);
         Check("share: nothing of its own to tell by", have == 0 && total == 0, have + " of " + total);
         Check("share: Assets is a folder, not a prefix", !ProjectShare.InAssets("AssetsBackup/x") && !ProjectShare.InAssets(null));
+
+        // a product is told by its own files: a creator's shared shader doesn't make their other products "partly" here
+        var files = new Dictionary<string, string> { { "shader", "Assets/Aiden/Shared/Hair.shader" }, { "coq", "Assets/Aiden/Coquette/Coquette.prefab" } };
+        Func<string, string> fileOf = g => files.ContainsKey(g) ? files[g] : "";
+        var shared = new SharedFiles();
+        Check("shared: a first package shares nothing", !shared.Add("Gumroad/Coquette", new[] { "coq", "shader" }));
+        Check("shared: a second carrying the same shader shares it", shared.Add("Gumroad/Spiky", new[] { "spiky", "shader" }));
+        Check("shared: its own version again isn't sharing", !shared.Add("Gumroad/Coquette", new[] { "coq", "coq2", "shader" }));
+        ProjectShare.Count(new[] { "coq", "shader" }, shared, fileOf, out have, out total);
+        Check("shared: the imported one is all here", have == 1 && total == 1, have + " of " + total);
+        ProjectShare.Count(new[] { "spiky", "shader" }, shared, fileOf, out have, out total);
+        Check("shared: the other isn't here at all", have == 0 && total == 1, have + " of " + total);
+        shared.Add("Booth/Coquette", new[] { "coq", "shader" });   // the same package from another store: nothing of its own
+        ProjectShare.Count(new[] { "coq", "shader" }, shared, fileOf, out have, out total);
+        Check("shared: nothing of its own: told by all its files", have == 2 && total == 2, have + " of " + total);
+        ProjectShare.Count(new[] { "coq", "x" }, null, fileOf, out have, out total);
+        Check("shared: none known: every file counts", have == 1 && total == 2, have + " of " + total);
     }
 
     static void Check(string name, bool ok, string detail = "")

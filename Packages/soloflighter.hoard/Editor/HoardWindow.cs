@@ -125,6 +125,14 @@ namespace SoloFlighter.Hoard.Editor
                         list.Add(a);
                         all.Add(p);
                     }
+                var owners = new Dictionary<string, string>();   // a package two products list is both of theirs
+                foreach (var kv in byPackage)
+                {
+                    var keys = kv.Value.ConvertAll(a => a.Key);
+                    keys.Sort(StringComparer.Ordinal);
+                    owners[kv.Key] = string.Join("\n", keys);
+                }
+                packages.SetOwners(owners);
                 statusOf.Clear();
                 packages.ProjectChanged();   // a package downloaded again since is counted again
                 selected = selected == null ? null : catalog.Assets.Find(a => a.Key == selected.Key);
@@ -137,7 +145,8 @@ namespace SoloFlighter.Hoard.Editor
             fresh.Clear();
             if (packages != null && packages.TakeChanges(fresh))
             {
-                foreach (string p in fresh)   // only the products whose packages were just read are looked at again
+                if (packages.SharingChanged) statusOf.Clear();   // files shared with others: every product may change
+                else foreach (string p in fresh)   // only the products whose packages were just read are looked at again
                 {
                     List<HoardAsset> list;
                     if (byPackage.TryGetValue(p, out list)) foreach (var a in list) statusOf.Remove(a);

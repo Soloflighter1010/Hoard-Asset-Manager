@@ -23,10 +23,51 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Count, by the files that are the product's own (see SharedFiles).</summary>
+        public static void Count(IEnumerable<string> guids, SharedFiles shared, Func<string, string> pathOf, out int have, out int total)
+        {
+            Count(shared == null ? guids : shared.OwnOf(guids), pathOf, out have, out total);
+        }
+
         /// <summary>Is this project path inside Assets/?</summary>
         public static bool InAssets(string path)
         {
             return path != null && path.Replace('\\', '/').StartsWith("Assets/", StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Files more than one product carries: a creator's shader or textures in each of their products, or a
+    /// product also sold in a bundle. Having them in the project says nothing about which of those products you
+    /// imported, so a product is told by the files that are its own. One with nothing of its own (the same package
+    /// from another store, or a product that's all in a bundle) is told by all of its files, as before.</summary>
+    public sealed class SharedFiles
+    {
+        readonly Dictionary<string, string> owner = new Dictionary<string, string>();   // GUID -> its product, or null: several
+
+        /// <summary>A product's package's files. True when one of them was another product's until now, so how much
+        /// of other products is in the project may have changed too.</summary>
+        public bool Add(string product, IEnumerable<string> guids)
+        {
+            bool changed = false;
+            foreach (string g in guids)
+            {
+                string was;
+                if (!owner.TryGetValue(g, out was)) owner[g] = product;
+                else if (was != null && was != product) { owner[g] = null; changed = true; }
+            }
+            return changed;
+        }
+
+        public bool IsShared(string guid) { string was; return owner.TryGetValue(guid, out was) && was == null; }
+
+        public void Clear() { owner.Clear(); }
+
+        /// <summary>The files a package is told by: those that are its product's own, or all of them if none are.</summary>
+        public List<string> OwnOf(IEnumerable<string> guids)
+        {
+            var all = new List<string>(guids);
+            var own = all.FindAll(g => !IsShared(g));
+            return own.Count > 0 ? own : all;
         }
     }
 }
