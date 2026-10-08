@@ -326,6 +326,39 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(page.evaluate(counts), ["1", "1", "0"], "counted, as the Library's tabs are")
         page.close()
 
+    def test_downloads_unlocks_hidden_with_the_pin(self):
+        """Downloads' Hidden tab asks for the PIN itself, as the Library's does, and can lock again."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        post = "([u, b]) => apiPost(u, b).then(r => r.ok)"
+        key = page.evaluate("DATA.assets[0].tag_key")
+        try:
+            self.assertTrue(page.evaluate(post, ["/api/pin", {"pin": "4821"}]))
+            self.assertTrue(page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": True}]))
+            page.evaluate("load()")
+            page.wait_for_function("() => !document.querySelector('.slot')")
+            page.click('#views [data-view="hidden"]')
+            page.wait_for_function("() => document.querySelector('#pinDialog').open")
+            page.fill("#pinInput", "0000")
+            page.click("#pinOk")
+            page.wait_for_function("() => document.querySelector('#pinNote').textContent !== ''")
+            self.assertTrue(page.evaluate("document.querySelector('#pinDialog').open"), "a wrong PIN keeps it locked")
+            page.fill("#pinInput", "4821")
+            page.click("#pinOk")
+            page.get_by_text("Rusk").first.wait_for()
+            self.assertFalse(page.evaluate("document.querySelector('#pinDialog').open"))
+            self.assertEqual(page.evaluate("state.view"), "hidden")
+            page.click('#viewBar [data-privacy="lock"]')
+            page.wait_for_function("() => state.view === 'downloads' && !DATA.privacy.unlocked")
+        finally:   # as it was: nothing hidden, no PIN
+            page.evaluate(post, ["/api/unlock", {"pin": "4821"}])
+            page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": False}])
+            page.evaluate(post, ["/api/hidden/forget", {"confirm": True}])
+            page.close()
+
     def test_both_pages_end_their_header_with_sync(self):
         """The gold Sync is the last button in the header on both pages, as the one thing to press."""
         page, refused = self.open(self.srv.entry_url())

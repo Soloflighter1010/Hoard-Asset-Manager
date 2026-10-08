@@ -675,6 +675,21 @@ body.no-glow #glow { display: none; }
 .custom-colours { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; }
 .custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
+/* the PIN to unlock hidden items: the Library's dialog, unlocking only (it sets, changes and resets the PIN) */
+dialog.pin { width: min(420px, calc(var(--vw) - 32px)); padding: 24px 26px; border: 0; border-radius: 16px; color: var(--bone);
+  background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 24px 60px rgb(0 0 0 / .5); }
+dialog.pin::backdrop { background: rgb(10 8 6 / .7); }
+dialog.pin h2 { margin: 0 0 8px; font: 400 22px var(--display); }
+dialog.pin p { font-size: 14px; line-height: 1.5; margin: 6px 0; }
+dialog.pin input { display: block; width: 100%; box-sizing: border-box; height: 40px; margin: 10px 0 0; padding: 0 12px; border: 0;
+  border-radius: 9px; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam);
+  font: 700 18px var(--body); letter-spacing: .18em; }
+dialog.pin input[hidden] { display: none; }
+dialog.pin input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+dialog.pin .pin-note { min-height: 1.3em; margin: 8px 0 0; color: var(--warn); font-size: 13px; }
+dialog.pin .muted { color: var(--dust); font-size: 12.5px; }
+dialog.pin textarea[hidden], dialog.pin [hidden] { display: none; }
+dialog.pin .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
 dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
   border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
 dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
@@ -1012,6 +1027,14 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="dlReport" hidden>Create support report</button>
   <details><summary>Details</summary><pre id="dlLog"></pre></details>
 </section>
+<dialog id="pinDialog" class="pin" aria-labelledby="pinTitle">
+  <h2 id="pinTitle">Unlock hidden items</h2>
+  <p>Enter your PIN to show hidden items in this browser for a while.</p>
+  <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="64" placeholder="PIN" aria-label="PIN">
+  <p class="pin-note" id="pinNote" aria-live="polite"></p>
+  <div class="row"><span><button class="linkish" id="pinForgot">Forgot your PIN?</button></span>
+    <span><button class="ghost" id="pinCancel">Cancel</button> <button class="primary" id="pinOk">OK</button></span></div>
+</dialog>
 <dialog id="closeDialog" class="support-dialog close-dialog" aria-labelledby="closeTitle">
   <h2 id="closeTitle">Hoard is still working</h2>
   <p id="closeWhat"></p>
@@ -1184,7 +1207,8 @@ function renderViews() {
   bar.innerHTML = state.view === "updates" ? updatesBar(n("updates"))
     : state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
     : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them: open one and choose <b>Delete downloaded files</b>.</p>`
-    : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Lock it again in the Library.</p>` : "";
+    : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Change your PIN in the Library.</p>
+        <button class="ghost sm" data-privacy="lock">Lock now</button>` : "";
 }
 /* ---------- updates (issue #26): a check reads your stores without downloading anything, and lists what each
    download is missing that its store has now: files the creator added or changed. Update downloads just those. */
@@ -1235,13 +1259,47 @@ $("#viewBar").addEventListener("click", e => {
                                                      files: (a.update || []).length, names: (a.update || []).map(f => f.file) })),
                 keys => updateItems(keys ? list.filter(a => keys.includes(a.tag_key)) : list));
 });
-function showView(v) {
-  if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
-    toast("Unlock Hidden in the Library first. Its downloads then show here too.");
-    return;
+async function showView(v) {
+  if (v === "hidden" && !(DATA.privacy || {}).unlocked) {   // the same PIN as the Library's Hidden
+    if (!(await unlockDialog())) return;
+    await load();
+    if (!(DATA.privacy || {}).unlocked) return;
   }
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
+$("#viewBar").addEventListener("click", async e => {
+  if (!e.target.closest('[data-privacy="lock"]')) return;
+  const open = openId != null && byId.get(openId);
+  if (open && open.mark === "hidden") closeDetail();   // straight away, before the server answers
+  await apiPost("/api/lock"); state.view = "downloads"; sel.ids.clear(); await load(); toast("Hidden items locked.");
+});
+/* unlocking hidden items: setting, changing or resetting the PIN is the Library's */
+let pinResolve = null;
+function unlockDialog() {
+  return new Promise(resolve => {
+    pinResolve = resolve;
+    $("#pinInput").value = ""; $("#pinNote").textContent = "";
+    $("#pinDialog").showModal();
+    $("#pinInput").focus();
+  });
+}
+function pinDone(ok) {
+  if ($("#pinDialog").open) $("#pinDialog").close();
+  const r = pinResolve; pinResolve = null;
+  if (r) r(ok);
+}
+async function pinSubmit() {
+  const r = await apiPost("/api/unlock", { pin: $("#pinInput").value });
+  if (!r.ok) { $("#pinNote").textContent = r.data.error || "That didn't work."; $("#pinInput").select(); return; }
+  pinDone(true);
+}
+$("#pinOk").addEventListener("click", pinSubmit);
+$("#pinCancel").addEventListener("click", () => pinDone(false));
+$("#pinDialog").addEventListener("cancel", e => { e.preventDefault(); pinDone(false); });
+$("#pinDialog").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); pinSubmit(); } });
+$("#pinForgot").addEventListener("click", () => {
+  $("#pinNote").textContent = "Reset it in the Library: choose Hidden there, then Forgot your PIN?";
+});
 $("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
 
 const slotHTML = a =>
