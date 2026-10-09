@@ -8,6 +8,10 @@
   Product names, creators, tags and files stay as they are. Korean uses Malgun Gothic, Apple SD Gothic Neo or Noto
   Sans KR when you have them, and breaks lines between words. The translations are new: if something reads oddly,
   please tell us in an issue. The task log, Hoard for Unity and the website are still in English for now.
+- **The setup assistant starts by asking your language**, with the question written in all three, so you can
+  set Hoard up in yours from the first screen.
+- **The README in Japanese and Korean** ([README.ja.md](README.ja.md), [README.ko.md](README.ko.md)), linked from
+  the top of the English one.
 - **Fixed: Updates, in Downloads, showed "undefined"** when nothing needed updating. It says **Nothing to update**.
 
 ## 3.2.0

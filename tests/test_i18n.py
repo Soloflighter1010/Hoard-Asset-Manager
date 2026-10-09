@@ -167,5 +167,41 @@ class Drawn(unittest.TestCase):
                 self.assertEqual(left, [])
 
 
+@unittest.skipUnless(BROWSER, "Playwright's Chromium isn't installed")
+class SetupAsks(unittest.TestCase):
+    def test_the_first_step_is_the_language(self):
+        """Someone new, whose computer is in Korean: the assistant opens on the language, in Korean and written in
+        all three; choosing Japanese saves it and brings the assistant back in Japanese, one step on."""
+        import threading
+        from unittest import mock
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": False,
+                                                  "display": {"language": "system"}}, lan=False)
+        with srv.lib.lock:
+            srv.lib.data["items"], srv.lib.data["stores"] = [], {}
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with sync_playwright() as p, mock.patch.object(server, "save_config"):
+            browser = p.chromium.launch()
+            page = browser.new_context(locale="ko-KR").new_page()
+            page.goto(srv.entry_url())
+            page.locator("#setup:not([hidden])").wait_for()
+            self.assertEqual(page.evaluate("document.documentElement.lang"), "ko")
+            self.assertEqual(page.locator("#setupTitle").inner_text(), "언어를 선택하세요")
+            self.assertIn("言語を選んでください", page.locator("#setupBody").inner_text())
+            self.assertTrue(page.locator('#setupBody input[value="system"]').is_checked())
+            page.check('#setupBody input[value="ja"]')
+            page.click("#setupNext")
+            page.wait_for_function("() => document.documentElement.lang === 'ja'")
+            page.locator("#setup:not([hidden])").wait_for()
+            self.assertEqual(page.locator("#setupTitle").inner_text(), "Hoardへようこそ")
+            self.assertEqual(srv.cfg["display"]["language"], "ja")
+            page.click("#setupBack")
+            self.assertTrue(page.locator('#setupBody input[value="ja"]').is_checked())
+            browser.close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,8 @@
   </picture>
 </p>
 
+<p align="center"><b>English</b> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a></p>
+
 <p align="center">
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest"><img src="https://img.shields.io/github/v/release/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&logo=github" alt="Latest Release"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases"><img src="https://img.shields.io/github/downloads/Soloflighter1010/Hoard-Asset-Manager/total?style=for-the-badge&color=blue" alt="Downloads"></a>
@@ -92,7 +94,7 @@ Guides for everything, from installing to fixing a problem, are in the
    see [CODE_SIGNING.md](CODE_SIGNING.md). Choose **Run anyway**. To check the download really came from
    this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
 3. Open **Hoard** from the Start menu. It opens in its own window. A short
-   setup assistant walks you through the rest: which stores you use, signing in to each one, your Payhip
+   setup assistant walks you through the rest: your language, which stores you use, signing in to each one, your Payhip
    shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**.
 
 **Updating:** in **Settings**, **Updates**, choose **Check now**, then **Update to** the new version: Hoard
@@ -174,7 +176,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   your disk are still ordinary files. When you set your PIN, Hoard shows 6 recovery words once: write
   them down, because they're how you reset a forgotten PIN without losing your hidden items.
 - **Settings** chooses where downloads go (a `Hoard` folder in Documents unless you pick another), which
-  stores to include, and the browser used for store sign-ins (Microsoft Edge, unless you choose otherwise).
+  stores to include, the browser used for store sign-ins (Microsoft Edge, unless you choose otherwise), and the
+  language Hoard is shown in: English, 日本語 (Japanese) or 한국어 (Korean), or whichever of them your computer uses.
 - **Tags** works the same in both views; see [Tags](#tags) below.
 
 ## Hoard in Unity

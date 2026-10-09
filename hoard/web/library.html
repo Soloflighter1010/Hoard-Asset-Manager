@@ -493,6 +493,9 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .setup .closepick label:has(input:checked) { box-shadow: inset 0 0 0 2px var(--gold); }
 .setup .closepick input { flex: none; width: 18px; height: 18px; margin-top: 2px; accent-color: var(--gold); }
+.setup .langpick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setup .langpick label > span { display: grid; gap: 2px; }
+@media (max-width: 560px) { .setup .langpick { grid-template-columns: 1fr; } }
 .setup .closepick .muted { display: block; margin-top: 4px; font-weight: 500; }
 .setup .signrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--seam); }
 .setup .signrow .who { flex: 1; font-weight: 700; display: flex; align-items: center; gap: 8px; }
@@ -2230,7 +2233,7 @@ function setupPicked(st, s) {
   if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
   return !!((DATA.stores || {})[s] || {}).count;
 }
-const setupSteps = () => ["welcome", "browser", "older", "stores",
+const setupSteps = () => ["language", "welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
 async function setupStatus() {
@@ -2241,6 +2244,10 @@ async function openSetup() {
   try { await setupStatus(); } catch (e) { toast("Hoard isn't running. Open it again."); return; }
   closeSettings(); openStores(false); openTagPanel(false);
   SETUP.step = 0; SETUP.picked = false;
+  try {   // back after choosing a language (the page comes again in it): on to the next step
+    if (sessionStorage.getItem("hoard-setup-step") === "welcome") SETUP.step = setupSteps().indexOf("welcome");
+    sessionStorage.removeItem("hoard-setup-step");
+  } catch (e) { /* no storage: from the start */ }
   SETUP.firstRun = !SETUP.st.done;   // the first time, it's gone through to the end (issue #21); from Settings, it can be left
   $("#setup").hidden = false;
   renderSetup();
@@ -2265,7 +2272,23 @@ const PASSWORD_HELP = `<details><summary>Where are my saved passwords?</summary>
   <li><strong>Signed up with Google, Discord or X?</strong> Try the same button in Hoard's window. If it says the browser isn't supported, set a password for your store account in your usual browser, then sign in here with that.</li>
   <li><strong>Passkeys</strong> on Windows Hello or your phone work in Hoard's window too: choose the passkey option and follow the prompt.</li></ul></details>`;
 
+// the first step, so someone who doesn't read English can set Hoard up in their own language. Each language is
+// named in its own words; "Match my computer" says which one that is here.
+const LANGUAGE_NAMES = { en: "English", ja: "日本語", ko: "한국어" };
 const SETUP_VIEWS = {
+  language: () => {
+    const now = (DATA.display || {}).language || "system", here = LANGUAGE_NAMES[document.documentElement.lang] || "English";
+    const choice = (v, label, own) => `<label><input type="radio" name="setupLang" value="${v}"${now === v ? " checked" : ""}>` +
+      `<span>${own ? `<strong translate="no" lang="${v}">${label}</strong>` : `<strong>${label}</strong>`}</span></label>`;
+    return `<h2 id="setupTitle">Choose your language</h2>
+    <p class="muted" translate="no"><span lang="en">Choose your language</span> · <span lang="ja">言語を選んでください</span> · <span lang="ko">언어를 선택하세요</span></p>
+    <div class="closepick langpick">
+      <label><input type="radio" name="setupLang" value="system"${now === "system" ? " checked" : ""}><span><strong>Match my computer</strong>
+        <span class="muted" translate="no">${esc(here)}</span></span></label>
+      ${choice("en", "English", true)}${choice("ja", "日本語", true)}${choice("ko", "한국어", true)}
+    </div>
+    <p class="muted">You can change it later in Settings, under Appearance.</p>`;
+  },
   welcome: () => `<h2 id="setupTitle">Welcome to Hoard</h2>
     <p>Let's get Hoard ready: choose your stores, sign in to them, and pick where downloads go. It takes a few minutes, and you can run this again from Settings.</p>
     <p class="muted">Hoard runs only on this computer. It never sees your passwords: you sign in on each store's own page, in a browser window that belongs to Hoard alone.</p>`,
@@ -2392,6 +2415,17 @@ function renderSetup() {
 }
 async function setupSave(name) {   // what leaving a step saves; false keeps you on the step
   let body = null;
+  if (name === "language") {
+    const chosen = ($('#setupBody input[name="setupLang"]:checked') || {}).value || "system";
+    if (chosen === ((DATA.display || {}).language || "system")) return true;
+    const r = await apiPost("/api/settings", { display: { language: chosen } });
+    if (!r.ok) { toast(r.data.error || "That wasn't saved."); return false; }
+    // the page comes again in the language chosen, and the assistant with it, one step on
+    try { sessionStorage.setItem("hoard-setup-step", "welcome"); } catch (e) { /* it starts at the language again */ }
+    history.replaceState(null, "", location.pathname + "#setup");
+    location.reload();
+    return false;
+  }
   if (name === "stores") {
     body = { stores: {} };
     for (const c of document.querySelectorAll("#setupBody [data-pick]")) body.stores[c.dataset.pick] = { enabled: c.checked };

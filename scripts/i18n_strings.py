@@ -26,7 +26,9 @@ from hoard import common, config, downloader, i18n, library, server  # noqa: E40
 # what to do on each page, in turn: open a panel or a view, then read what it shows
 STEPS = {
     "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab", "Escape", "#selectBtn", "#selectBtn",
-          ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]'],
+          ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]',
+          # the setup assistant, each step up to the last (not Finish, which would start reading the stores)
+          "#settingsBtn", "#setupAgain", *["#setupNext"] * 7, "Escape"],
     "/downloads": ["", ".slot >> nth=0", "Escape", '[data-view="updates"]', '[data-view="archive"]', '[data-view="removed"]',
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
                    "Escape", "#settingsBtn"],
@@ -61,7 +63,9 @@ def sample_server(root: Path, lang: str) -> server.AppServer:
 def collect(lang: str) -> list[str]:
     from playwright.sync_api import sync_playwright
     found: dict[str, None] = {}
-    with tempfile.TemporaryDirectory() as tmp:
+    from unittest import mock
+    # the setup assistant saves settings on its way through: kept in memory, so the sample's never become yours
+    with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server, "save_config"):
         srv = sample_server(Path(tmp), lang)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:

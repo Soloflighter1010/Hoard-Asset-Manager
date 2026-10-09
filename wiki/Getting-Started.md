@@ -7,30 +7,33 @@ store, or without a Payhip shop, asks first. Run again from Settings, it can be 
 
 ## The setup assistant, step by step
 
-1. **Welcome to Hoard.** What's about to happen. Hoard runs only on your computer and never sees your
+1. **Choose your language.** **Match my computer**, **English**, **日本語** (Japanese) or **한국어** (Korean). The
+   question is also written in all three, so you can find yours whatever Hoard starts in. Choosing one opens the
+   rest of the assistant, and all of Hoard, in it; change it later in [Settings](Settings), under **Appearance**.
+2. **Welcome to Hoard.** What's about to happen. Hoard runs only on your computer and never sees your
    passwords.
-2. **The browser Hoard signs in with.** Hoard reads your stores through a browser it controls, kept apart from
+3. **The browser Hoard signs in with.** Hoard reads your stores through a browser it controls, kept apart from
    the one you browse with: Microsoft Edge on Windows, and Hoard's own browser elsewhere (or on Windows without
    Edge). If that isn't installed yet, **Install Hoard's browser** downloads it (about 150 MB, once).
-3. **Used Hoard before?** If you used Hoard 1.x, **Bring it over** copies your library list and downloads
+4. **Used Hoard before?** If you used Hoard 1.x, **Bring it over** copies your library list and downloads
    folder. New to Hoard? Skip it.
-4. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Tick the ones you use
+5. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Tick the ones you use
    (the first time, only stores you already have items from are ticked). Hoard only shows and
    reads the stores you pick. You can change this later in [Settings](Settings). Hoard keeps copies of your
    files from all of them but Payhip, which it lists: you download from Payhip yourself.
-5. **Your Payhip shops** (only if you picked Payhip). Payhip keeps your purchases in each shop you bought
+6. **Your Payhip shops** (only if you picked Payhip). Payhip keeps your purchases in each shop you bought
    from, not in one library, so add each shop's address, one per line. Rather not sign in to Payhip? Leave
    this empty, save each shop's library page from your usual browser, and import them all from **Stores**
    afterwards. See [Stores](Stores#payhip).
-6. **Sign in to your stores.** Each store opens in Hoard's own window. Sign in there as usual, then close the
+7. **Sign in to your stores.** Each store opens in Hoard's own window. Sign in there as usual, then close the
    window, and Hoard reads what you own.
-7. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive
+8. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive
    with room to spare: VRChat assets add up.
-8. **When you close Hoard's window** (in Hoard's own window, from 3.1): **Keep Hoard running**, minimized to the
+9. **When you close Hoard's window** (in Hoard's own window, from 3.1): **Keep Hoard running**, minimized to the
    taskbar (the Dock on a Mac), so downloads, syncs and the routine check carry on, or **Quit Hoard**. It's the
    same choice as **Closing Hoard** in [Settings](Settings), where you can change it later. Hoard in your web
    browser doesn't ask: closing the tab is the browser's.
-9. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
+10. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
 
 ## Signing in without your saved passwords
 
