@@ -462,6 +462,12 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .setup .storepick label { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 12px; cursor: pointer; font-weight: 700;
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .setup .storepick input { width: 18px; height: 18px; accent-color: var(--gold); }
+.setup .closepick { display: grid; gap: 10px; margin: 14px 0; }
+.setup .closepick label { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; cursor: pointer;
+  background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+.setup .closepick label:has(input:checked) { box-shadow: inset 0 0 0 2px var(--gold); }
+.setup .closepick input { flex: none; width: 18px; height: 18px; margin-top: 2px; accent-color: var(--gold); }
+.setup .closepick .muted { display: block; margin-top: 4px; font-weight: 500; }
 .setup .signrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--seam); }
 .setup .signrow .who { flex: 1; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .setup .signrow .state { font-size: 13px; color: var(--dust); }
@@ -2161,7 +2167,8 @@ function setupPicked(st, s) {
   return !!((DATA.stores || {})[s] || {}).count;
 }
 const setupSteps = () => ["welcome", "browser", "older", "stores",
-  ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
+  ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
+  ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
 async function setupStatus() {
   SETUP.st = await (await api("/api/setup", { cache: "no-store" })).json();
   return SETUP.st;
@@ -2231,6 +2238,17 @@ const SETUP_VIEWS = {
     <p>Hoard keeps local copies of what you own, in folders by store, creator and product.</p>
     <div class="field"><input id="setupRoot" spellcheck="false" aria-label="Downloads folder" value="${esc(st.root)}"><button class="ghost sm" id="setupRootBrowse" data-browse ${canPick() ? "" : "hidden"}>Browse…</button><button class="ghost sm" id="setupRootDefault">Default</button></div>
     <p class="muted">Pick a drive with room to spare; VRChat assets add up. You can change this later in Settings.</p>`,
+  closing: st => `<h2 id="setupTitle">When you close Hoard's window</h2>
+    <div class="closepick" role="radiogroup" aria-labelledby="setupTitle">
+      <label><input type="radio" name="setupClose" value="background"${st.close_to_taskbar !== false ? " checked" : ""}>
+        <span><strong>Keep Hoard running</strong><span class="muted">The window minimizes to the taskbar (the Dock on a Mac).
+        Downloads, syncs and the routine check carry on, and the routine check can tell you what it found. Quit with
+        <strong>Quit Hoard</strong> in Settings.</span></span></label>
+      <label><input type="radio" name="setupClose" value="quit"${st.close_to_taskbar === false ? " checked" : ""}>
+        <span><strong>Quit Hoard</strong><span class="muted">Closing the window quits it. While something's running, Hoard
+        asks first.</span></span></label>
+    </div>
+    <p class="muted">You can change this later in Settings, under Closing Hoard.</p>`,
   older: () => `<h2 id="setupTitle">Used Hoard before?</h2>
     <p>If you used Hoard 1.x, bring over your library list and downloads folder. Your sign-ins and tags carry over by themselves.</p>
     <div class="field"><input id="oldFolder" spellcheck="false" aria-label="Folder you ran Hoard 1.x from" placeholder="The folder you ran Hoard 1.x from, such as D:\\Tools\\Hoard-Bundle">
@@ -2319,6 +2337,8 @@ async function setupSave(name) {   // what leaving a step saves; false keeps you
   } else if (name === "folder") {
     const root = $("#setupRoot").value.trim();
     body = { root: root === SETUP.st.default_root ? "" : root };
+  } else if (name === "closing") {
+    body = { close_to_taskbar: !!$('#setupBody input[name="setupClose"][value="background"]').checked };
   }
   if (!body) return true;
   const r = await apiPost("/api/settings", body);

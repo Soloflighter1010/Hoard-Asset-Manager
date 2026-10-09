@@ -21,6 +21,8 @@
   saved it its own way. The page works out how pictures look once, and Hoard keeps it (`picture-looks.json`).
   Pictures several creators use stack names that are nearly the same, too. Names still need the same numbers and
   (variants), so "Hair Pack 1" and "Hair Pack (Pink)" stay apart.
+- **The setup assistant asks what closing Hoard's window does**: keep Hoard running, minimized to the taskbar
+  (the Dock on a Mac), or quit it. It's the same choice as **Closing Hoard** in Settings.
 - **Hoard for Unity 0.6.0**: right-click files in the Project window and choose **Hoard › Which Product Is This
   From?**, and products in your project with a newer download are marked, to import the update. See its
   changelog.

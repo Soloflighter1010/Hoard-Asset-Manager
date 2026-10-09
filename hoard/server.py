@@ -688,7 +688,8 @@ class Handler(BaseHTTPRequestHandler):
             betas = parse_qs(u.query).get("betas", [""])[0] == "1"
             return self._json({"version": __version__, "releases": whats_new(betas)}, compress=True)
         if path == "/api/setup":
-            return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names())})
+            return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
+                               "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), srv.lib)
             if not got:

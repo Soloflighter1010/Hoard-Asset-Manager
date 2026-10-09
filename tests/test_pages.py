@@ -1393,6 +1393,40 @@ class SetupAssistant(unittest.TestCase):
             page.locator("#setupTitle", has_text="Where should downloads go?").wait_for()
             browser.close()
 
+    def test_choosing_what_closing_the_window_does(self):
+        """In Hoard's own window, the assistant asks whether closing the window keeps Hoard running (minimized to
+        the taskbar) or quits it, as Settings' Closing Hoard does. In a browser, closing is the browser's: not asked."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": True,
+                                                   "close_to_taskbar": True}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with sync_playwright() as p, mock.patch.object(server, "save_config"):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(srv.entry_url())
+            page.wait_for_function("() => DATA && DATA.version")
+            page.evaluate("openSetup()")
+            page.locator("#setup:not([hidden])").wait_for()
+            self.assertNotIn("closing", page.evaluate("setupSteps()"), "Hoard in a browser: nothing to minimize")
+            page.evaluate("closeSetup()")
+            srv.hide_window = lambda: None   # Hoard's own window
+            page.evaluate("load()")
+            page.wait_for_function("() => DATA.can_background")
+            page.evaluate("openSetup().then(() => { SETUP.step = setupSteps().indexOf('closing'); renderSetup(); })")
+            page.locator("#setupTitle", has_text="When you close Hoard's window").wait_for()
+            self.assertTrue(page.locator('input[name="setupClose"][value="background"]').is_checked(), "as it's set now")
+            page.check('input[name="setupClose"][value="quit"]')
+            page.click("#setupNext")
+            page.locator("#setupTitle", has_text="Hoard's ready").wait_for()
+            self.assertIs(srv.cfg["close_to_taskbar"], False)
+            page.click("#setupBack")
+            page.locator("#setupTitle", has_text="When you close Hoard's window").wait_for()
+            self.assertTrue(page.locator('input[name="setupClose"][value="quit"]').is_checked(), "and shown as chosen")
+            browser.close()
+
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
