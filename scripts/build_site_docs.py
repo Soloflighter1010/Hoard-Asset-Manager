@@ -248,8 +248,8 @@ PAGE = """<!doctype html>
   <meta property="og:title" content="{headtitle}">
   <meta property="og:description" content="{description}">
   <meta property="og:type" content="article">
-  <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/docs/{file}">
-  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social-docs.jpg">
+  <meta property="og:url" content="https://hoard.furryup.link/docs/{file}">
+  <meta property="og:image" content="https://hoard.furryup.link/img/social-docs.jpg">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">

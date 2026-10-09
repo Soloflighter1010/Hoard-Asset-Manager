@@ -88,7 +88,7 @@ it appears in Hoard, and isn't covered by Hoard's MIT license. Thank you to thes
 | 結晶化 光の輪 Ring V09 (\[TypeA\]) | 雪械重工 | [Get it on Booth](https://booth.pm/en/items/3138614) |
 
 The same list, with each picture, is on the website's
-[Picture credits](https://soloflighter1010.github.io/Hoard-Asset-Manager/credits.html) page. Made one of these and
+[Picture credits](https://hoard.furryup.link/credits.html) page. Made one of these and
 want it changed or taken out? [Open an issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues).
 
 ## Store names

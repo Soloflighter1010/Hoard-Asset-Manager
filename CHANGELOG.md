@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.3.2
+
+- **Notifications are in Hoard's language.** When the routine check finds something while Hoard runs in the
+  background, the notification from your system is in Japanese or Korean too, not only English.
+- **Fixed: in Japanese and Korean, a message Hoard has no translation for could come out half translated**, with
+  words swapped for marks ("All 12 files / 3 downloads…"). It now stays whole, in English, until it's translated.
+- **Fixed: products with no name to go by** (one that's only marks, such as "★★") **stacked into one tile** with
+  every other such product by the same creator.
+- **"1 file", not "1 files"**, when moving a product, rescanning or adding to Local.
+- **The links to Hoard's website** (in the READMEs, the Hoard for Unity README and the site's own link previews) go
+  to https://hoard.furryup.link/ directly; the old address forwarded without HTTPS.
+
 ## 3.3.1
 
 - **Fixed: in Japanese and Korean, the Stores panel said how your sign-ins are kept in English** ("encrypted by

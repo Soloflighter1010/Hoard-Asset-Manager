@@ -2595,6 +2595,14 @@ class CopiesStack(unittest.TestCase):
             self.assertFalse(any(e.get("look_for") for e in out))
             self.assertEqual(len({keys[0], keys[2], keys[4]}), 3)
 
+    def test_items_without_a_name_dont_stack(self):
+        """Items whose names are only marks ("!!!", "★") have no name to stack by: by one creator, they're not all
+        one product."""
+        from unittest import mock
+        items = [library.item("booth", str(n), name=name, creator="Kitsu") for n, name in enumerate(("!!!", "★★", "Hoodie"))]
+        with mock.patch.object(library, "picture_looks", lambda: {}):
+            self.assertEqual([e["stack_key"] for e in library.enrich(items, {})], ["", "", ""])
+
     def test_how_pictures_look_is_kept(self):
         from unittest import mock
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(library, "_looks_file", lambda: Path(tmp) / "looks.json"):
@@ -3137,7 +3145,6 @@ class UpdatesAfterADownload(unittest.TestCase):
     def test_checking_one_product_keeps_the_others(self):
         """A check for updates of one item (from its details) was recorded as a check of its whole store: every
         other product's updates were wiped, and the store stamped as checked."""
-        from types import SimpleNamespace
         from unittest import mock
         from hoard import asset_updates
         where = Path(tempfile.mkdtemp()) / "asset-updates.json"

@@ -17,13 +17,14 @@ TITLE = "Hoard"
 SHOWN_S = 20   # Windows: how long Hoard's icon stays in the notification area for it
 
 
-def found_text(counts: dict) -> str:
-    """What the routine check found, as a notification says it."""
-    def plural(n: int, word: str) -> str:
-        return f"{n:,} {word}{'' if n == 1 else 's'}"
-    parts = [plural(counts["new"], "new product")] if counts.get("new") else []
-    parts += [plural(counts["updates"], "update")] if counts.get("updates") else []
-    return f"Found {' and '.join(parts)}. Open Hoard to choose what to download."
+def found_text(counts: dict, lang: str = "en") -> str:
+    """What the routine check found, as a notification says it, in Hoard's language (hoard/i18n.py)."""
+    from .i18n import say
+    new, updates = counts.get("new") or 0, counts.get("updates") or 0
+    what = " and ".join(([f"{{0}} new product{'' if new == 1 else 's'}"] if new else [])
+                        + ([f"{{{1 if new else 0}}} update{'' if updates == 1 else 's'}"] if updates else []))
+    values = [f"{n:,}" for n in (new, updates) if n]
+    return say(lang, f"Found {what}. Open Hoard to choose what to download.", *values)
 
 
 def show(text: str, title: str = TITLE) -> bool:

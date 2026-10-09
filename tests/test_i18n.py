@@ -175,6 +175,34 @@ class Drawn(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "Playwright's Chromium isn't installed")
+class Patterns(unittest.TestCase):
+    def test_a_message_with_no_translation_stays_whole(self):
+        """A pattern's {0} takes a name, a number or a message of its own, never a run of English words: Hoard's
+        messages with no translation stay in English, not half translated ("{0} of {1}", "Sync: {0}")."""
+        import threading
+        import i18n_strings
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = i18n_strings.sample_server(Path(tmp.name), "ja")
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(srv.entry_url())
+            page.wait_for_function("() => typeof I18N === 'object'")
+            look = lambda s: page.evaluate("s => I18N.lookup(s)", s)  # noqa: E731
+            self.assertIsNone(look("All 12 files of 3 downloads are as Hoard downloaded them."))
+            self.assertIsNone(look("Sync: the store said something went wrong"))
+            self.assertEqual(look("Sync: Booth, Gumroad"), "同期:Booth, Gumroad")
+            self.assertEqual(look("12.3 MB of 40.0 MB"), "12.3 MB / 40.0 MB")
+            self.assertEqual(look("Checked 3 minutes ago:"), "3分前に確認:")
+            self.assertEqual(page.evaluate("tr('{0} of {1}', 'a b c', 'd')"), "a b c / d")   # the script's own words
+            browser.close()
+
+
+@unittest.skipUnless(BROWSER, "Playwright's Chromium isn't installed")
 class SetupAsks(unittest.TestCase):
     def test_the_first_step_is_the_language(self):
         """Someone new, whose computer is in Korean: the assistant opens on the language, in Korean and written in

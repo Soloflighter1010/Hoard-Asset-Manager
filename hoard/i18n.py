@@ -7,6 +7,7 @@ Standard library only.
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 
 from .paths import PACKAGE
@@ -64,6 +65,13 @@ def catalog(lang: str) -> dict:
     except (OSError, ValueError):
         return {}
     return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str) and v and not k.startswith("//")}
+
+
+def say(lang: str, english: str, *values) -> str:
+    """Hoard's own words in a language, for what isn't on a page (a notification from the system): the catalog's
+    translation of the English, with {0}, {1} filled in; the English when there's none."""
+    text = catalog(lang).get(english, english)
+    return re.sub(r"\{(\d+)\}", lambda m: str(values[int(m.group(1))]) if int(m.group(1)) < len(values) else m.group(0), text)
 
 
 def page_script(lang: str) -> str:

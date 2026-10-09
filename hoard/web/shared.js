@@ -30,6 +30,10 @@ const I18N = (() => {
   patterns.sort((a, b) => b.fixed.length - a.fixed.length);   // the most specific first
   const on = exact.size + patterns.length > 0;
   const norm = s => String(s).replace(/\s+/g, " ").trim();
+  // What fills a pattern's {0} is a name, a number, a path or a message of its own, never a run of English words
+  // with no translation: "All 12 files of 3 downloads are as Hoard downloaded them." isn't "{0} of {1}", and a
+  // message Hoard has no translation for stays whole, in English, rather than half translated.
+  const SENTENCE = /\b[a-z]{2,}(?:[\s,]+[a-z]{2,}){2,}\b/;
   function lookup(key, depth = 0) {
     if (!key || /^[\d\s.,:;%+\-–—/()×#·…]*$/.test(key)) return null;   // numbers and marks need nothing
     const hit = exact.get(key);
@@ -39,8 +43,14 @@ const I18N = (() => {
       const m = p.rx.exec(key);
       if (!m) continue;
       const values = {};
+      let fits = true;
       // a word that changes may be a message of its own ("Failed: {0}"): translated too, two levels down at most
-      p.order.forEach((n, i) => { values[n] = depth < 2 ? (lookup(m[i + 1], depth + 1) ?? m[i + 1]) : m[i + 1]; });
+      p.order.forEach((n, i) => {
+        const part = m[i + 1], to = depth < 2 ? lookup(part, depth + 1) : null;
+        if (to === null && SENTENCE.test(part)) fits = false;
+        values[n] = to ?? part;
+      });
+      if (!fits) continue;
       return p.value.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "");
     }
     return null;
@@ -161,7 +171,7 @@ const I18N = (() => {
   }
   return { on, lookup, start, untranslated, t: (s, ...values) => {
     // for the script's own use (a dialog's words, a title set in code): {0}, {1} filled in after translating
-    const text = lookup(norm(s)) ?? s;
+    const key = norm(s), text = (typeof catalog[key] === "string" && catalog[key]) || lookup(key) || s;   // (its own words, as they're written)
     return text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "");
   } };
 })();

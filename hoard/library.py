@@ -1331,8 +1331,8 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
     for n, k in enumerate(names):
         by_name.setdefault(k, []).append(n)
     look_for: set[int] = set()
-    for group in by_name.values():
-        if len(group) < 2 or len(group) > 200:
+    for k, group in by_name.items():
+        if not k or len(group) < 2 or len(group) > 200:   # (no name: nothing says two are one product)
             continue
         first_by_maker: dict[str, int] = {}
         for n in group:

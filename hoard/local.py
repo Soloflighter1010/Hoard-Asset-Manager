@@ -195,7 +195,8 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     manifest.save()
     if catalog:   # (several added together build it once, at the end)
         build_catalog(cfg, root)
-    log(f"Local: added {name} ({len(rec['files'])} files, {'copied in' if copy else 'listed where it is'})")
+    n = len(rec["files"])
+    log(f"Local: added {name} ({n:,} {'file' if n == 1 else 'files'}, {'copied in' if copy else 'listed where it is'})")
     return rec
 
 
