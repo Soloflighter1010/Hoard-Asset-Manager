@@ -502,7 +502,6 @@ namespace SoloFlighter.Hoard.Editor
             // screen, until they're closed
             if (panel > 0 && w - panel < Mathf.Max(260, tileSize + Pad * 2 + 54)) panel = w;
             var grid = new Rect(0, y, w - panel, h - y);
-            Look.DrawGlow(new Rect(0, y, w, h - y), store > 0 ? StoreNames[store] : null);
             if (grid.width > 0) DrawGrid(grid);
             if (selected != null) DrawDetails(new Rect(w - panel, y, panel, h - y));
             Keys();

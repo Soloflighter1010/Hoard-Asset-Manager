@@ -279,9 +279,9 @@ namespace SoloFlighter.Hoard.Editor
             }
         }
 
-        // ---- the logo, and the glow behind the tiles
+        // ---- the logo
 
-        static Texture2D logoDark, logoLight, glow;
+        static Texture2D logoDark, logoLight;
 
         /// <summary>Hoard's logo (the boxes and the word, 226 × 64 as the app draws it), for this skin.</summary>
         public static Texture2D Logo
@@ -303,44 +303,6 @@ namespace SoloFlighter.Hoard.Editor
             return w;
         }
 
-        /// <summary>A soft round light, brightest in the middle, for the glow of the stores' colours.</summary>
-        public static Texture2D Glow
-        {
-            get
-            {
-                if (glow != null) return glow;
-                const int n = 64;
-                glow = new Texture2D(n, n, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
-                var px = new Color32[n * n];
-                for (int y = 0; y < n; y++)
-                    for (int x = 0; x < n; x++)
-                    {
-                        float dx = (x + 0.5f) / n * 2 - 1, dy = (y + 0.5f) / n * 2 - 1;
-                        float d = Mathf.Clamp01(1 - Mathf.Sqrt(dx * dx + dy * dy));
-                        px[y * n + x] = new Color32(255, 255, 255, (byte)(255 * d * d));
-                    }
-                glow.SetPixels32(px);
-                glow.Apply();
-                return glow;
-            }
-        }
-
-        /// <summary>The glow rising from the bottom of an area, as in the app's library: the shown store's colour, or
-        /// every store's for Everything.</summary>
-        public static void DrawGlow(Rect area, string store)
-        {
-            if (Event.current.type != EventType.Repaint) return;
-            float strength = Dark ? 0.22f : 0.16f;
-            string[] stores = store == null ? new[] { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch" } : new[] { store, store, store };
-            float w = area.width / stores.Length * 2.2f, h = Mathf.Min(area.height * 0.9f, 520);
-            for (int i = 0; i < stores.Length; i++)
-            {
-                float cx = area.x + area.width * (i + 0.5f) / stores.Length;
-                GUI.DrawTexture(new Rect(cx - w / 2, area.yMax - h * 0.55f, w, h), Glow, ScaleMode.StretchToFill, true, 0,
-                                Alpha(Store(stores[i]), strength), 0, 0);
-            }
-        }
-
         static Texture2D FromPng(string base64)
         {
             var t = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Bilinear };
@@ -352,9 +314,9 @@ namespace SoloFlighter.Hoard.Editor
         /// <summary>Let go of the textures made here (a window closing).</summary>
         public static void Release()
         {
-            foreach (var t in new[] { logoDark, logoLight, glow })
+            foreach (var t in new[] { logoDark, logoLight })
                 if (t != null) UnityEngine.Object.DestroyImmediate(t);
-            logoDark = logoLight = glow = null;
+            logoDark = logoLight = null;
             ReleaseBoxes();
         }
 

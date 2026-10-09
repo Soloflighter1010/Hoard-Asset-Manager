@@ -5,8 +5,7 @@
 - **It looks like Hoard.** The window now has the app's colours (its dark ones, or its light ones with Unity's light
   skin), Hoard's logo, and the app's pieces:
   - a bar with a rounded search box (**/** to search) and the tools;
-  - a folder tab for each store, with how many products each has. The shown store is raised and its colour glows
-    behind the products;
+  - a folder tab for each store, with how many products each has. The shown store's tab is raised;
   - **Unity packages only**, **In this project** and **Updates** as pills that turn gold when they're on;
   - the products as tiles: each picture with its store's colour along its foot and badges for **In this project**,
     **Partly in project** and the updates. A slider sets the tile size, and the arrow keys move between tiles;
