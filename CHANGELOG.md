@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.1
+
+- **The logo glows while an update to Hoard is waiting**, and gives a little shake now and then. Choose it to open
+  Updates in Settings. With reduced motion (Settings, or your system's), it only glows.
+- **There are a few things to find in Hoard.**
+- **Fixed: a stacked tile with a tall picture grew to the picture's height** instead of staying square.
+
 ## 3.1.0
 
 - **Disk space, in Downloads.** A new view lists your downloads biggest first, with how much they take, and two

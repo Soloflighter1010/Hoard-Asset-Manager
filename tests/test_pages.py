@@ -45,22 +45,22 @@ def png() -> bytes:
             + chunk(b"IDAT", zlib.compress(b"\x00" * 5)) + chunk(b"IEND", b""))
 
 
-def picture(seed: int, noise: int = 0, size: int = 48) -> bytes:
+def picture(seed: int, noise: int = 0, size: int = 48, height: int | None = None) -> bytes:
     """A PNG of 8 by 8 squares of random greys (the same for a seed); noise changes every pixel a little, as a store
     saving the picture again does."""
     import random
     cells, jitter = random.Random(seed), random.Random(seed * 1000 + noise)
     grid = [[cells.randrange(256) for _ in range(8)] for _ in range(8)]
-    rows = b""
-    for y in range(size):
+    rows, height = b"", height or size
+    for y in range(height):
         row = bytearray([0])
         for x in range(size):
-            v = max(0, min(255, grid[y * 8 // size][x * 8 // size] + (jitter.randint(-noise, noise) if noise else 0)))
+            v = max(0, min(255, grid[y * 8 // height][x * 8 // size] + (jitter.randint(-noise, noise) if noise else 0)))
             row += bytes([v, v, v])
         rows += bytes(row)
     def chunk(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, height, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
@@ -532,7 +532,7 @@ class StackingAcrossStores(unittest.TestCase):
     it differently (the page works out how it looks). Two creators' products with one name and different pictures
     stay apart."""
 
-    ROWS = [("gumroad", "Gumroad", "m1", "Fluffy Mane For Nardoragon", "Sesilaso", picture(1)),
+    ROWS = [("gumroad", "Gumroad", "m1", "Fluffy Mane For Nardoragon", "Sesilaso", picture(1, height=120)),   # (portrait)
             ("jinxxy", "Jinxxy", "m2", "Fluffy Mane For Nardoragon", "Sesilaso", picture(2)),
             ("gumroad", "Gumroad", "a1", "Face Tracking - Ashbeast DLC", "Han's Creations", picture(3)),
             ("jinxxy", "Jinxxy", "a2", "Face Tracking - Ashbeast DLC", "hantnor", picture(3, noise=6)),
@@ -590,6 +590,9 @@ class StackingAcrossStores(unittest.TestCase):
         self.assertEqual(sum(t.startswith("Hoodie") for t in tiles), 2, "two creators' hoodies stay apart")
         stack = page.locator(".slot.stacked", has_text="Ashbeast")
         self.assertIn("×2", stack.inner_text())
+        page.wait_for_function("() => [...document.querySelectorAll('.slot.stacked .art img')].every(i => i.complete && i.naturalWidth)")
+        for box in (page.locator(".slot.stacked", has_text=t).locator(".art").bounding_box() for t in ("Fluffy Mane", "Ashbeast")):
+            self.assertAlmostEqual(box["height"], box["width"], delta=1, msg="square, though its picture is a portrait")
         stack.click()   # every copy, from both stores
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
         self.assertEqual(sorted(page.eval_on_selector_all(".slot .cr", "els => els.map(e => e.textContent)")),
@@ -613,6 +616,76 @@ class StackingAcrossStores(unittest.TestCase):
             page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
             page.evaluate("uiFlush()")
             page.wait_for_timeout(300)
+        page.close()
+
+
+class Delights(unittest.TestCase):
+    """The logo glows and shakes while an update to Hoard is waiting, and opens Updates when chosen; and a few
+    things for people to find."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
+                                   lan=False)
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = [library.item("booth", "1", name="Rusk", creator="Kitsu Studio")]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        cls.tmp.cleanup()
+
+    def open(self, path=""):
+        page = self.browser.new_page()
+        page.goto(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        if path:
+            page.click(f"nav.apptabs a[href='/{path}']")
+            page.wait_for_url(f"**/{path}**")
+        return page
+
+    def test_the_logo_says_an_update_is_waiting(self):
+        latest = self.srv.updates.state.get("latest")
+        self.srv.updates.state["latest"] = {"version": "99.0.0", "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/tag/v99.0.0",
+                                            "has_installer": False}
+        try:
+            for path in ("", "downloads"):
+                page = self.open(path)
+                page.wait_for_function("() => document.querySelector('.brand').classList.contains('has-update')")
+                self.assertIn("99.0.0", page.locator(".brand").get_attribute("title"), path or "library")
+                self.assertNotEqual(page.evaluate("getComputedStyle(document.querySelector('.brand svg')).animationName"), "none")
+                page.click(".brand")
+                page.locator("#settingsPanel:not([hidden])").wait_for()
+                self.assertIn("/" + path, page.url, "Updates opens, rather than going anywhere")
+                page.close()
+        finally:
+            self.srv.updates.state["latest"] = latest
+        page = self.open()
+        page.wait_for_function("() => UPDATE")
+        self.assertFalse(page.evaluate("document.querySelector('.brand').classList.contains('has-update')"), "nothing waiting")
+        page.close()
+
+    def test_things_to_find(self):
+        page = self.open()
+        page.locator("body").focus()
+        for key in ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"]:
+            page.keyboard.press(key)
+        page.locator(".confetti i").first.wait_for(state="attached")
+        page.get_by_text("A fine hoard.").wait_for()
+        for _ in range(5):
+            page.click(".brand")
+        page.get_by_text("somebody's treasure").wait_for()
+        self.assertIn("tumble", page.locator(".brand").get_attribute("class"))
+        self.assertEqual(page.url.split("#")[0], self.srv.url, "still here")
+        page.fill("#q", "hoard")
+        page.get_by_text("You're looking at it.").wait_for()
         page.close()
 
 

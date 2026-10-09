@@ -52,7 +52,9 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   These apply to both views straight away.
 - **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
   it asks GitHub whether there's a newer version. **Check now** asks straight away, and **Update to** installs
-  it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating).
+  it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating). While an
+  update is waiting (from 3.1.1), the Hoard logo at the top glows (and shakes now and then, unless motion is
+  reduced): choose it to come straight here.
   **Get beta updates** (off unless you turn it on) is for testers: betas of the next version count as updates
   too, and you're offered the finished version when it's out. Betas may have problems. **What's new in Hoard**
   shows the changelog, version by version, with the one you're running marked; tick **Include beta updates** there
