@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.1
+
+- **Fixed: in Japanese and Korean, the Stores panel said how your sign-ins are kept in English** ("encrypted by
+  your Windows account", or your Mac's Keychain, Linux keyring or folder), in the middle of the translated
+  sentence. It's translated now.
+
 ## 3.3.0
 
 - **Hoard in Japanese and Korean (日本語, 한국어).** Settings, Appearance has a new **Language** choice: **Match my
