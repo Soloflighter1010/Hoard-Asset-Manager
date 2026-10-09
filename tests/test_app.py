@@ -2385,6 +2385,7 @@ class StoreTables(unittest.TestCase):
         web = REPO / "hoard" / "web"
         for page in ("library.html", "downloads.html"):
             html = server.page_source(page).decode("utf-8")   # as served: with what both pages share
+            html = re.sub(r'<style id="theme">.*?</style>', "", html, flags=re.S)   # (the theme's own: tests/test_themes.py)
             for const in ("STORE_SITES", "STORE_NAMES"):
                 keys = set(re.findall(r"(\w+):", re.search(rf"const {const} = \{{(.*?)\}};", html).group(1)))
                 self.assertEqual(keys, stores, f"{page}: {const}")

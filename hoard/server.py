@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, libraries, projects, space, updater, vault
+from . import __version__, diagnostics, itch, libraries, projects, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -96,13 +96,16 @@ def custom_colours(given) -> dict:
 
 
 def display_settings(cfg: dict) -> dict:
-    """Text size, motion, the glow and the store colours, as the pages apply them."""
+    """Text size, motion, the glow, the store colours and the theme, as the pages apply them."""
     d = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
     return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
             "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion")),
             "glow": d.get("glow") is not False,
             "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
-            "custom_colours": custom_colours(d.get("custom_colours"))}
+            "custom_colours": custom_colours(d.get("custom_colours")),
+            # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
+            "theme": themes.theme_id(d.get("theme")), "mode": themes.mode_id(d.get("mode")),
+            "theme_css": themes.css(d.get("theme"), d.get("mode")), "themes": themes.choices()}
 
 
 def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
@@ -274,6 +277,14 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["colours"] not in COLOUR_SCHEMES:
                 raise ValueError("Choose store colours from the list.")
             display["colours"] = given["colours"]
+        if "theme" in given:
+            if given["theme"] not in themes.THEMES:
+                raise ValueError("Choose a theme from the list.")
+            display["theme"] = given["theme"]
+        if "mode" in given:
+            if given["mode"] not in themes.MODES:
+                raise ValueError("Choose Match my computer, Light or Dark.")
+            display["mode"] = given["mode"]
         if "custom_colours" in given:
             colours = custom_colours(given["custom_colours"])
             if not isinstance(given["custom_colours"], dict) or len(colours) != len(given["custom_colours"]):
@@ -580,7 +591,7 @@ class Handler(BaseHTTPRequestHandler):
         path, srv = u.path, self.server
         if path in PAGES:   # the pages hold nothing private: everything they show is fetched with the access key
             srv.last_seen = time.time()
-            return self._send(200, page_source(PAGES[path]), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            return self._send(200, page_source(PAGES[path], srv.cfg), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))
             if not font:
@@ -1254,13 +1265,16 @@ class Handler(BaseHTTPRequestHandler):
 SHARED_MARK = b"//@include shared.js\n"
 
 
-def page_source(name: str) -> bytes:
+def page_source(name: str, cfg: dict | None = None) -> bytes:
     """A page as it's served: its file, with what both pages share (web/shared.js) put in its script where it says
-    so, so each page is still one script the Content-Security-Policy allows by its hash."""
+    so, so each page is still one script the Content-Security-Policy allows by its hash; and the theme you chose
+    (Settings, Appearance) after the page's own colours, so it shows from the first moment."""
     page = (WEB / name).read_bytes()
     if SHARED_MARK in page:
         page = page.replace(SHARED_MARK, (WEB / "shared.js").read_bytes().replace(b"\r\n", b"\n") + b"\n", 1)
-    return page
+    d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
+    style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
+    return page.replace(b"</head>", style.encode() + b"</head>", 1)
 
 
 def chosen_files(raw) -> dict[str, dict] | None:

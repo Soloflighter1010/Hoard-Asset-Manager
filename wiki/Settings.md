@@ -37,6 +37,14 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   downloads**: a sync you'd turned on keeps its timing. See [Downloads](Downloads#downloading).
   **Tell me when it finds something to download** (on unless you turn it off, from 3.1) shows a notification from
   your system when it finds new products or updates while Hoard is open in the background.
+- **Appearance** (from 3.2):
+  - **Match my computer**, **Light** or **Dark**: Hoard follows your computer's light or dark setting, or stays the
+    one you choose.
+  - **A theme**, each in a light and a dark version: **Hoard** (the cave and its gold), **Dragonfire**, **Frost
+    Cave**, **Geode**, **Mossy Ruins**, **Synthwave**, **Sakura**, **Midnight & Paper** (true black, for OLED
+    screens, and white), **High contrast** and **Spooky Hoard**. In a theme whose accent is close to a store's
+    colour, that store's colour shifts a little, so the two aren't mistaken for each other. **Store colours** (below)
+    still apply in every theme.
 - **Accessibility:**
   - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
@@ -94,6 +102,8 @@ and keep it valid JSON.
 | `download_skip` | `[]` | Products to always skip when downloading, by tag key (**Always skip** in the list **Download new** shows; see [Downloads](Downloads)) |
 | `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
+| `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |
+| `display.mode` | `"system"` | `"system"` (match your computer), `"light"` or `"dark"` (**Appearance** in Settings) |
 | `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |
