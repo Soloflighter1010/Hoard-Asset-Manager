@@ -91,17 +91,44 @@ namespace SoloFlighter.Hoard.Editor
             if (source != null) source.ReportSoon();   // Hoard's Projects view shows the same credits
         }
 
+        // In the app's look, as the Hoard window is (Look.cs): its colours, its buttons, its boxes.
         void OnGUI()
         {
+            if (Event.current.type == EventType.MouseMove) Repaint();
+            Look.Fill(new Rect(0, 0, position.width, position.height), Look.Cave);
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(16);
+            GUILayout.BeginVertical();
+            GUILayout.Space(14);
+            GUILayout.Label("Credits list", Look.Style(Look.Styles.Heading));
+            GUILayout.Label("The creators of the Hoard products in this project, to credit them where you share it.", Look.Style("intro", Look.Styles.Dust));
+            GUILayout.Space(8);
+            Body();
+            GUILayout.Space(14);
+            GUILayout.EndVertical();
+            GUILayout.Space(16);
+            GUILayout.EndHorizontal();
+        }
+
+        static void Note(string text)
+        {
+            GUILayout.BeginVertical(Look.Box("note", Look.Ledge, Look.Seam));
+            GUILayout.Label(text, Look.Style(Look.Styles.Wrapped));
+            GUILayout.EndVertical();
+        }
+
+        void Body()
+        {
+            wantsMouseMove = true;
             if (source == null)
             {
-                EditorGUILayout.HelpBox("Open Window > Hoard: the credits list is made from what it finds in this project.", MessageType.Info);
-                if (GUILayout.Button("Open Hoard")) { HoardWindow.Open(); Refresh(); }
+                Note("Open Window > Hoard: the credits list is made from what it finds in this project.");
+                if (Look.LayoutButton("Open Hoard", Look.Kind.Primary)) { HoardWindow.Open(); Refresh(); }
                 return;
             }
-            if (!ready) EditorGUILayout.HelpBox("Hoard is still loading your library.", MessageType.Info);
+            if (!ready) Note("Hoard is still loading your library.");
             else if (stillChecking > 0)
-                EditorGUILayout.HelpBox("Still checking " + stillChecking + " packages, so the list may grow. Choose Refresh in a moment.", MessageType.Info);
+                Note("Still checking " + stillChecking + " packages, so the list may grow. Choose Refresh in a moment.");
 
             EditorGUI.BeginChangeCheck();
             title = EditorGUILayout.TextField("Title", title ?? "");
@@ -116,11 +143,12 @@ namespace SoloFlighter.Hoard.Editor
 
             int included = all.FindAll(e => !settings.LeftOut.Contains(e.Key)).Count;
             EditorGUILayout.BeginHorizontal();
-            GUILayout.Label(included + " of " + all.Count + " in the list. Untick any you don't want credited.", EditorStyles.miniLabel);
+            GUILayout.Label(included + " of " + all.Count + " in the list. Untick any you don't want credited.", Look.Style(Look.Styles.Small), GUILayout.Height(Look.ButtonHeight));
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Refresh", GUILayout.Width(70))) Refresh();
+            if (Look.LayoutButton("Refresh")) Refresh();
             EditorGUILayout.EndHorizontal();
 
+            GUILayout.BeginVertical(Look.Box("list", Look.Ledge, Look.Seam, 10, 10, 6));
             listScroll = EditorGUILayout.BeginScrollView(listScroll, GUILayout.MinHeight(120), GUILayout.MaxHeight(260));
             CreditEntry remove = null;
             foreach (var e in all)
@@ -135,13 +163,14 @@ namespace SoloFlighter.Hoard.Editor
                     if (now) settings.LeftOut.Remove(e.Key); else settings.LeftOut.Add(e.Key);
                     Changed();
                 }
-                if (e.Added && GUILayout.Button("Remove", EditorStyles.miniButton, GUILayout.Width(60))) remove = e;
+                if (e.Added && Look.LayoutButton("Remove")) remove = e;
                 EditorGUILayout.EndHorizontal();
             }
             if (all.Count == 0)
                 GUILayout.Label("Nothing from Hoard is in this project yet. Import something from Window > Hoard, or add an asset by hand.",
-                                EditorStyles.wordWrappedMiniLabel);
+                                Look.Style("nothing", Look.Styles.Centered));
             EditorGUILayout.EndScrollView();
+            GUILayout.EndVertical();
             if (remove != null)
             {
                 settings.Added.RemoveAll(a => a.Key == remove.Key);
@@ -159,9 +188,9 @@ namespace SoloFlighter.Hoard.Editor
                 newUrl = EditorGUILayout.TextField("Link (optional)", newUrl);
                 string name = Credits.OneLine(newName, 300), url = newUrl.Trim();
                 bool badLink = url.Length > 0 && Credits.Link(null, url, true) == null;
-                if (badLink) EditorGUILayout.HelpBox("A link must be a plain https:// address.", MessageType.None);
+                if (badLink) Note("A link must be a plain https:// address.");
                 EditorGUI.BeginDisabledGroup(name.Length == 0 || badLink || settings.Added.Count >= CreditsFile.MaxAdded);
-                if (GUILayout.Button("Add", GUILayout.Width(80)))
+                if (Look.LayoutButton("Add", Look.Kind.Primary))
                 {
                     var e = new CreditEntry { Store = "", Name = name, Creator = Credits.OneLine(newCreator, 200), Added = true,
                                               Url = url.Length > 0 ? Credits.Link(null, url, true) : null };
@@ -176,19 +205,20 @@ namespace SoloFlighter.Hoard.Editor
                 EditorGUI.indentLevel--;
             }
 
-            GUILayout.Label("Preview", EditorStyles.boldLabel);
+            GUILayout.Space(6);
+            GUILayout.Label("Preview", Look.Style(Look.Styles.Section));
             textScroll = EditorGUILayout.BeginScrollView(textScroll, GUILayout.ExpandHeight(true));
             EditorGUILayout.SelectableLabel(text, EditorStyles.textArea, GUILayout.ExpandHeight(true),
                                             GUILayout.MinHeight(EditorStyles.textArea.CalcHeight(new GUIContent(text), position.width - 30)));
             EditorGUILayout.EndScrollView();
 
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Copy", GUILayout.Width(90)))
+            if (Look.LayoutButton("Copy", Look.Kind.Primary))
             {
                 EditorGUIUtility.systemCopyBuffer = text;
                 ShowNotification(new GUIContent("Copied"));
             }
-            if (GUILayout.Button("Save as...", GUILayout.Width(90))) SaveAs();
+            if (Look.LayoutButton("Save as...")) SaveAs();
             EditorGUILayout.EndHorizontal();
         }
 

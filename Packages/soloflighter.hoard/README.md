@@ -3,8 +3,8 @@
 The VRChat assets you've downloaded with [Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager), inside
 Unity. Open **Window › Hoard** to:
 
-- **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails
-  (animated GIFs play).
+- **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, as tiles in the app's
+  look: a tab for each store, the pictures with their store's colour along the foot (animated GIFs play).
 - **See what's already in this project.** Hoard reads the asset GUIDs inside each `.unitypackage` (without
   extracting anything) and marks products **In this project** or **Partly in project**, by the files that are each
   product's own (a creator's shared shader in your project doesn't make all their products look imported). **Select** finds
@@ -13,7 +13,7 @@ Unity. Open **Window › Hoard** to:
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 - **Find where a file came from.** Right-click files in the Project window: **Hoard › Which Product Is This From?**
 - **Import updates.** Products in this project with a newer download show **Update to import**; ones whose creator
-  updated them since Hoard last downloaded show **Update in Hoard**. **Updates** in the toolbar lists just those.
+  updated them since Hoard last downloaded show **Update in Hoard**. **Updates** above the tiles lists just those.
 
 - **Credit the creators.** **Create Credits List** lists the Hoard assets fully in this project, as a list, Markdown or
   grouped by creator, to copy or save. Untick any you don't want credited, or add assets that didn't come
@@ -35,7 +35,7 @@ VCC**), then add **Hoard** to your project. Without VCC, import the `.unitypacka
 [release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases) into your project.
 
 It finds Hoard's downloads folder the same way the app does. If yours is somewhere else, choose **Folder...**
-in the window's toolbar.
+in the window's bar.
 
 ## Safe by design
 

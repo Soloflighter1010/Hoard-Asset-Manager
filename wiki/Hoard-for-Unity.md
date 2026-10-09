@@ -7,6 +7,8 @@ Open **Window › Hoard** to:
 
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails.
   Animated ones (GIFs) play, from 0.3.0.
+- **The app's look** (0.7.0): Hoard's colours and logo, a tab for each store, the products as tiles (a slider
+  sets their size, the arrow keys move between them, **/** searches), and the chosen one's details beside them.
 - **See what's already in this project.** It reads the asset GUIDs inside each `.unitypackage`, without extracting
   anything, and marks products **In this project** or **Partly in project**. Only what's under `Assets/` counts:
   a package's own copy of something VCC installs under `Packages/` (Poiyomi, say) doesn't, from 0.5.1. Only files
@@ -26,7 +28,7 @@ Open **Window › Hoard** to:
   project, or after you last imported the product through Hoard. Its details have **Import update**, which opens
   Unity's import dialog on it. A product whose creator updated it since Hoard last downloaded (what Hoard's last
   **Check for updates** found, in `asset-updates.json` in Hoard's own folder) shows **Update in Hoard**: download
-  the update in Hoard (**Downloads**, **Updates**), then import it here. **Updates** in the toolbar shows just
+  the update in Hoard (**Downloads**, **Updates**), then import it here. **Updates** above the tiles shows just
   those products.
 
 Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a project remembers where its
@@ -35,7 +37,7 @@ the file is damaged, it's kept beside the new one as `imports.json.unreadable-<t
 
 ## Credits
 
-Creators often ask to be credited when you use their assets. **Create Credits List** in the window's toolbar lists the
+Creators often ask to be credited when you use their assets. **Create Credits List** in the window's bar lists the
 Hoard assets this project uses, ready to paste into an avatar or world description, a post or a store page:
 
 - **What's in it:** each product fully in the project, with all the files of one of its packages there (0.3.1
@@ -92,7 +94,7 @@ open its window again.
 project.
 
 It finds Hoard's downloads folder the same way the app does. If yours is somewhere else, choose **Folder...** in
-the window's toolbar.
+the window's bar.
 
 ## Safe by design
 
@@ -117,7 +119,7 @@ package twice.
 - **"catalog.json was changed by something other than Hoard"**: see the seal note above. If you share one
   downloads folder between computers, copy `integrity.key` as described in
   [Where Hoard keeps things](Where-Hoard-Keeps-Things#one-downloads-folder-two-computers).
-- **Nothing to show:** check the folder in the toolbar is your Hoard downloads folder, and that Hoard has
+- **Nothing to show:** check the folder (**Folder...** in the bar) is your Hoard downloads folder, and that Hoard has
   downloaded something (its **Downloads** tab lists it).
 
 The package's own notes are in

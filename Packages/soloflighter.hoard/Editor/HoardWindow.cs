@@ -12,7 +12,6 @@ namespace SoloFlighter.Hoard.Editor
     {
         const string RootPref = "SoloFlighter.Hoard.DownloadsFolder";
         static readonly string[] StoreNames = Prepend("All stores", HoardCatalog.Stores);   // the catalog's own list
-        static readonly string[] StoreLabels = Array.ConvertAll(StoreNames, s => HoardCatalog.StoreLabel(s));
 
         static string[] Prepend(string first, string[] rest)
         {
@@ -22,7 +21,9 @@ namespace SoloFlighter.Hoard.Editor
             return all;
         }
 
-        const float RowHeight = 52;
+        const string SizePref = "SoloFlighter.Hoard.TileSize";
+        const float BarHeight = 50, TabsHeight = 40, ToolsHeight = 34, Pad = 18, Gap = 16;
+        const int SmallestTile = 96, BiggestTile = 200;
 
         HoardCatalog catalog;                  // null until the first load finishes
         volatile HoardCatalog loaded;          // a load that has finished in the background, waiting to be shown
@@ -40,14 +41,19 @@ namespace SoloFlighter.Hoard.Editor
         readonly Dictionary<string, List<HoardAsset>> byPackage = new Dictionary<string, List<HoardAsset>>();
         readonly List<string> fresh = new List<string>();
         List<HoardAsset> shown = new List<HoardAsset>();
-        Rect listView;                         // where the list is drawn (known after the first layout)
+        Rect gridView;                         // where the tiles are drawn, how many to a row, and each row's height
+        int gridColumns = 1;
+        float gridRow = 200;
+        int[] counts = new int[0];             // how many each store's tab has, with the other filters
+        int tileSize = 132;
+        readonly Dictionary<HoardAsset, KeyValuePair<float, string>> nameFits = new Dictionary<HoardAsset, KeyValuePair<float, string>>();
         HoardAsset filesFor;                   // the product whose files are listed below, and their paths
         List<KeyValuePair<string, string>> files = new List<KeyValuePair<string, string>>();
         HoardAsset selected;
         string search = "";
         int store;
         bool packagesOnly = true, inProjectOnly, updatesOnly;
-        Vector2 listScroll, detailScroll;
+        Vector2 gridScroll, detailScroll;
         bool reportDue;             // what this project uses has changed: tell Hoard's Projects view (issue #86)
         double reportAfter;
         string lastReport;
@@ -63,6 +69,8 @@ namespace SoloFlighter.Hoard.Editor
         void OnEnable()
         {
             packages = new PackageIndex();
+            tileSize = Mathf.Clamp(EditorPrefs.GetInt(SizePref, 132), SmallestTile, BiggestTile);
+            wantsMouseMove = true;   // the app's hover: a tile lifts, a button lights
             Reload();
             EditorApplication.update += Tick;
             EditorApplication.projectChanged += OnProjectChanged;
@@ -76,6 +84,7 @@ namespace SoloFlighter.Hoard.Editor
             PendingImport.Ended -= OnImportEnded;
             if (packages != null) packages.Stop();
             thumbs.Clear();
+            Look.Release();
         }
 
         string DownloadsFolder()
@@ -358,34 +367,52 @@ namespace SoloFlighter.Hoard.Editor
 
         int originFiles;
 
-        void DrawOrigins()
+        /// <summary>What "Which Product Is This From?" found, in a box above the tiles. Returns where the next thing goes.</summary>
+        float DrawOrigins(float y)
         {
-            if (origins == null) return;
+            if (origins == null) return y;
+            float w = position.width - Pad * 2;
             string still = packages.Waiting > 0 ? " Hoard is still reading " + packages.Waiting + " packages, so look again in a moment." : "";
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.BeginHorizontal();
             string files = originFiles == 1 ? "this file" : "these " + originFiles + " files";
-            GUILayout.Label(origins.Count == 0 ? "None of " + files + " came from a package Hoard downloaded." + still
-                                               : "Where " + files + " came from:" + still, EditorStyles.wordWrappedLabel);
-            if (GUILayout.Button("Look again", GUILayout.Width(80))) FindOrigins();
-            if (GUILayout.Button("×", GUILayout.Width(22))) { origins = null; originGuids = null; }
-            EditorGUILayout.EndHorizontal();
-            if (origins != null)
-                for (int i = 0; i < origins.Count && i < 5; i++)
-                {
-                    var a = catalog.Assets.Find(x => x.Key == origins[i].Product);
-                    if (a == null) continue;
-                    EditorGUILayout.BeginHorizontal();
-                    GUILayout.Label(a.Name + "  ·  " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.boldLabel, GUILayout.MinWidth(80));
-                    GUILayout.FlexibleSpace();
-                    GUILayout.Label(origins[i].Count + (origins[i].Count == 1 ? " file" : " files"), EditorStyles.miniLabel, GUILayout.Width(70));
-                    if (GUILayout.Button("Show", GUILayout.Width(50))) ShowProduct(a);
-                    EditorGUILayout.EndHorizontal();
-                }
-            EditorGUILayout.EndVertical();
+            string text = origins.Count == 0 ? "None of " + files + " came from a package Hoard downloaded." + still
+                                             : "Where " + files + " came from:" + still;
+            var rows = new List<HoardAsset>();
+            var found = new List<int>();
+            for (int i = 0; i < origins.Count && rows.Count < 5; i++)
+            {
+                var a = catalog.Assets.Find(x => x.Key == origins[i].Product);
+                if (a != null) { rows.Add(a); found.Add(origins[i].Count); }
+            }
+            var wrapped = Look.Style(Look.Styles.Wrapped);
+            float buttons = Look.ButtonWidth("Look again") + 6 + 30;
+            float textH = Mathf.Max(Look.ButtonHeight, wrapped.CalcHeight(new GUIContent(text), w - 24 - buttons));
+            var box = new Rect(Pad, y + 8, w, 20 + textH + rows.Count * 30);
+            if (Event.current.type == EventType.Repaint) Look.Box("origins", Look.Ledge, Look.Seam).Draw(box, false, false, false, false);
+            Look.Fill(new Rect(box.x, box.y + 8, 3, box.height - 16), Look.Gold, 1.5f);
+            GUI.Label(new Rect(box.x + 14, box.y + 10, w - 24 - buttons, textH), text, wrapped);
+            float bx = box.xMax - 10 - buttons + 6;
+            if (Look.Button(new Rect(bx, box.y + 10, Look.ButtonWidth("Look again"), Look.ButtonHeight), "Look again")) FindOrigins();
+            if (Look.Button(new Rect(box.xMax - 10 - 26, box.y + 10, 26, Look.ButtonHeight), new GUIContent("×", "Close"), Look.Kind.Ghost))
+            {
+                origins = null;
+                originGuids = null;
+                return y;
+            }
+            float ry = box.y + 14 + textH;
+            for (int i = 0; i < rows.Count; i++, ry += 30)
+            {
+                var a = rows[i];
+                Look.Dot(new Vector2(box.x + 20, ry + 13), Look.Store(a.Store));
+                float showW = Look.ButtonWidth("Show"), countW = 70;
+                FittedLabel(new Rect(box.x + 32, ry + 4, w - 52 - showW - countW, 18), a.Name + "  ·  " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store),
+                            Look.Style("originName", Look.Styles.Name));
+                GUI.Label(new Rect(box.xMax - 14 - showW - countW, ry + 5, countW - 6, 18), found[i] + (found[i] == 1 ? " file" : " files"), Look.Style(Look.Styles.Small));
+                if (Look.Button(new Rect(box.xMax - 10 - showW, ry, showW, Look.ButtonHeight), "Show")) ShowProduct(a);
+            }
+            return box.yMax;
         }
 
-        /// <summary>Select a product in the list, with the filters cleared so it's there to see.</summary>
+        /// <summary>Select a product, with the filters cleared so it's there to see.</summary>
         void ShowProduct(HoardAsset a)
         {
             search = "";
@@ -393,10 +420,20 @@ namespace SoloFlighter.Hoard.Editor
             if (!a.HasPackages) packagesOnly = false;
             inProjectOnly = updatesOnly = false;
             Filter();
+            Select(a, true);
+        }
+
+        void Select(HoardAsset a, bool scrollTo)
+        {
             selected = a;
             detailScroll = Vector2.zero;
-            int at = shown.IndexOf(a);
-            if (at >= 0) listScroll.y = Mathf.Max(0, at * RowHeight - listView.height / 2);
+            int at = a == null ? -1 : shown.IndexOf(a);
+            if (scrollTo && at >= 0)
+            {
+                float top = Pad + (at / Mathf.Max(1, gridColumns)) * gridRow;
+                if (top < gridScroll.y) gridScroll.y = Mathf.Max(0, top - Pad);
+                else if (top + gridRow > gridScroll.y + gridView.height) gridScroll.y = top + gridRow - gridView.height + Pad;
+            }
             Repaint();
         }
 
@@ -422,219 +459,543 @@ namespace SoloFlighter.Hoard.Editor
         void Filter()
         {
             shown = new List<HoardAsset>();
+            counts = new int[StoreNames.Length];
             if (catalog == null) return;
             string q = search.Trim().ToLowerInvariant();
             foreach (var a in catalog.Assets)
             {
-                if (store > 0 && a.Store != StoreNames[store]) continue;
                 if (packagesOnly && !a.HasPackages) continue;
                 if (inProjectOnly && ProjectStatus(a) < InProject.Partly) continue;
                 if (updatesOnly && NewerDownload(a) == null && UpdateInHoard(a) == 0) continue;
                 if (q.Length > 0 && !a.SearchText.Contains(q)) continue;
+                counts[0]++;   // each store's tab counts what the other filters leave, as the app's do
+                int at = Array.IndexOf(StoreNames, a.Store);
+                if (at > 0) counts[at]++;
+                if (store > 0 && a.Store != StoreNames[store]) continue;
                 shown.Add(a);
             }
             shown.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.CurrentCultureIgnoreCase));
         }
 
-        // ---- drawing
+        // ---- drawing: the app's library, in Unity. The bar (logo, search, tools), the store tabs with the filters,
+        // the tiles, and the chosen product's details beside them.
 
         void OnGUI()
         {
-            DrawToolbar();
+            if (Event.current.type == EventType.MouseMove) Repaint();   // hover: a tile lifts, a button lights
+            float w = position.width, h = position.height;
+            Look.Fill(new Rect(0, 0, w, h), Look.Cave);
+            float y = DrawBar();
             if (catalog == null)
             {
-                GUILayout.FlexibleSpace();
-                GUILayout.Label("Loading your library...", EditorStyles.centeredGreyMiniLabel);
-                GUILayout.FlexibleSpace();
+                DrawEmpty(new Rect(0, y, w, h - y), "Loading your library…", "Hoard for Unity reads the catalog the Hoard app keeps.", false);
                 return;
             }
-            DrawBanner();
-            DrawOrigins();
-            EditorGUILayout.BeginHorizontal();
-            DrawList();
-            DrawDetails();
-            EditorGUILayout.EndHorizontal();
+            y = DrawShelf(y);
+            y = DrawNotices(y);
+            y = DrawOrigins(y);
+            float panel = selected == null ? 0 : Mathf.Clamp(w * 0.38f, 300, 460);
+            var grid = new Rect(0, y, w - panel, h - y);
+            Look.DrawGlow(grid, store > 0 ? StoreNames[store] : null);
+            DrawGrid(grid);
+            if (selected != null) DrawDetails(new Rect(w - panel, y, panel, h - y));
+            Keys();
         }
 
-        static float ToolbarWidth(params string[] labels)
+        float DrawBar()
         {
-            float w = 0;
-            foreach (var l in labels) w += EditorStyles.toolbarButton.CalcSize(new GUIContent(l)).x;
-            return w;
-        }
-
-        void DrawToolbar()
-        {
-            // the buttons on the right go on a row of their own when the window is too narrow for one row, rather
-            // than off its edge
-            bool twoRows = position.width < 160 + 100 + ToolbarWidth("Unity packages only", "In this project", "Updates",
-                                                                     "Create Credits List", "Reload", "Folder...") + 24;
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            EditorGUI.BeginChangeCheck();
-            search = GUILayout.TextField(search, EditorStyles.toolbarSearchField, GUILayout.MinWidth(160));
-            store = EditorGUILayout.Popup(store, StoreLabels, EditorStyles.toolbarPopup, GUILayout.Width(100));
-            packagesOnly = GUILayout.Toggle(packagesOnly, "Unity packages only", EditorStyles.toolbarButton);
-            inProjectOnly = GUILayout.Toggle(inProjectOnly, "In this project", EditorStyles.toolbarButton);
-            updatesOnly = GUILayout.Toggle(updatesOnly, new GUIContent("Updates", "Products in this project with a newer download, or an update waiting in Hoard"), EditorStyles.toolbarButton);
-            if (EditorGUI.EndChangeCheck()) Filter();
-            if (twoRows)
+            float w = position.width;
+            string[] tools = { "Create Credits List", "Reload", "Folder..." };
+            float toolsW = 0;
+            foreach (string t in tools) toolsW += Look.ButtonWidth(t) + 6;
+            float x = 16;
+            x += Look.DrawLogo(new Vector2(x, 13), 24, w < 720) + 18;   // a narrow window: just the boxes
+            float right = w - 16 - toolsW;
+            DrawSearch(new Rect(x, 11, Mathf.Clamp(right - 12 - x, 80, 440), 28));
+            float bx = w - 16 - toolsW + 6;
+            var tips = new[] { "A list of the creators of the Hoard products in this project, to credit them",
+                               "Read Hoard's library again", "Choose where Hoard's downloads are, if not where Hoard keeps them" };
+            for (int i = 0; i < tools.Length; i++)
             {
-                EditorGUILayout.EndHorizontal();
-                EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            }
-            GUILayout.FlexibleSpace();
-            if (packages.Waiting > 0) GUILayout.Label("Checking packages: " + packages.Waiting + " to go", EditorStyles.miniLabel);
-            if (loading && catalog != null) GUILayout.Label("Loading...", EditorStyles.miniLabel);
-            if (GUILayout.Button("Create Credits List", EditorStyles.toolbarButton)) CreditsWindow.Open(this);
-            if (GUILayout.Button("Reload", EditorStyles.toolbarButton)) Reload();
-            if (GUILayout.Button("Folder...", EditorStyles.toolbarButton))
-            {
-                string picked = EditorUtility.OpenFolderPanel("Hoard's downloads folder", DownloadsFolder(), "");
-                if (!string.IsNullOrEmpty(picked))
+                var r = new Rect(bx, 12, Look.ButtonWidth(tools[i]), Look.ButtonHeight);
+                bx += r.width + 6;
+                if (!Look.Button(r, new GUIContent(tools[i], tips[i]), Look.Kind.Ghost)) continue;
+                if (i == 0) CreditsWindow.Open(this);
+                else if (i == 1) Reload();
+                else
                 {
-                    EditorPrefs.SetString(RootPref, SamePath(picked, HoardLocation.DownloadsFolder()) ? "" : picked);
-                    Reload();
+                    string picked = EditorUtility.OpenFolderPanel("Hoard's downloads folder", DownloadsFolder(), "");
+                    if (!string.IsNullOrEmpty(picked))
+                    {
+                        EditorPrefs.SetString(RootPref, SamePath(picked, HoardLocation.DownloadsFolder()) ? "" : picked);
+                        Reload();
+                    }
+                    GUIUtility.ExitGUI();   // the folder dialog ran in the middle of drawing
                 }
             }
-            EditorGUILayout.EndHorizontal();
+            return BarHeight;
         }
 
-        void DrawBanner()
+        const string SearchControl = "HoardSearch";
+
+        void DrawSearch(Rect r)
+        {
+            bool focused = GUI.GetNameOfFocusedControl() == SearchControl;
+            Look.Fill(r, Look.Ledge, 10);
+            Look.Outline(r, focused ? Look.Gold : Look.Seam, focused ? 2 : 1, 10);
+            // a magnifier: a ring, and its handle
+            var ring = new Rect(r.x + 10, r.y + 8, 10, 10);
+            Look.Outline(ring, Look.Dust, 2, 5);
+            if (Event.current.type == EventType.Repaint)
+            {
+                var m = GUI.matrix;
+                var at = new Vector2(ring.xMax - 1.5f, ring.yMax - 1.5f);
+                GUIUtility.RotateAroundPivot(45, at);
+                Look.Fill(new Rect(at.x, at.y - 1, 5, 2), Look.Dust, 1);
+                GUI.matrix = m;
+            }
+            var field = new Rect(r.x + 28, r.y + 1, r.width - 28 - 26, r.height - 2);
+            EditorGUI.BeginChangeCheck();
+            GUI.SetNextControlName(SearchControl);
+            search = EditorGUI.TextField(field, search, Look.SearchField);
+            if (EditorGUI.EndChangeCheck()) { Filter(); gridScroll = Vector2.zero; }
+            if (search.Length == 0 && !focused)
+            {
+                var hint = Look.Style("placeholder", Look.Styles.Dust);
+                hint.alignment = TextAnchor.MiddleLeft;
+                hint.padding = new RectOffset(0, 0, 0, 0);
+                GUI.Label(field, "Search your hoard    /", hint);
+            }
+            if (search.Length > 0)
+            {
+                var clear = Look.Style("clear", Look.Styles.Dust);
+                clear.alignment = TextAnchor.MiddleCenter;
+                clear.fontSize = 15;
+                if (GUI.Button(new Rect(r.xMax - 26, r.y + 2, 22, r.height - 4), new GUIContent("×", "Clear the search"), clear))
+                {
+                    search = "";
+                    GUI.FocusControl(null);
+                    Filter();
+                }
+            }
+        }
+
+        string TabLabel(int i) { return i == 0 ? "Everything" : HoardCatalog.StoreLabel(StoreNames[i]); }
+
+        string TabCount(int i) { return (i < counts.Length ? counts[i] : 0).ToString("N0"); }
+
+        float TabWidth(int i, bool withCount)
+        {
+            float wd = 28 + Look.Style("tab", Look.Styles.Tab).CalcSize(new GUIContent(TabLabel(i))).x + (i > 0 ? 15 : 0);
+            if (withCount) wd += 6 + Look.Style(Look.Styles.TabCount).CalcSize(new GUIContent(TabCount(i))).x;
+            return wd;
+        }
+
+        /// <summary>The shelf: a folder tab for each store, the shown one raised and open into the tiles, with the
+        /// filters and the tile size beside them (above them, when there isn't room beside).</summary>
+        float DrawShelf(float y)
+        {
+            float w = position.width;
+            var tabs = new List<int>();
+            for (int i = 0; i < StoreNames.Length; i++)
+                if (i == 0 || i == store || (i < counts.Length && counts[i] > 0)) tabs.Add(i);
+            bool withCounts = true;
+            float tabsW = 0;
+            foreach (int i in tabs) tabsW += TabWidth(i, true) + 4;
+            if (tabsW > w - Pad * 2)   // narrow: the tabs without their counts
+            {
+                withCounts = false;
+                tabsW = 0;
+                foreach (int i in tabs) tabsW += TabWidth(i, false) + 4;
+            }
+            string[] pills = { "Unity packages only", "In this project", "Updates" };
+            string[] pillTips = { "Only products with a .unitypackage to import", "Only products whose files are in this project",
+                                  "Products in this project with a newer download, or an update waiting in Hoard" };
+            float pillsW = 0;
+            foreach (string p in pills) pillsW += Look.ButtonWidth(p) - 4 + 6;
+            float toolsW = pillsW + 12 + 110;
+            bool above = tabsW + toolsW + 12 > w - Pad * 2;
+            float tabsTop = above ? y + ToolsHeight : y, bottom = tabsTop + TabsHeight;
+
+            // the filters, and the tile size
+            float tx = above ? Pad : w - Pad - toolsW, ty = above ? y + 6 : bottom - 31;
+            EditorGUI.BeginChangeCheck();
+            for (int i = 0; i < pills.Length; i++)
+            {
+                bool on = i == 0 ? packagesOnly : i == 1 ? inProjectOnly : updatesOnly;
+                var r = new Rect(tx, ty, Look.ButtonWidth(pills[i]) - 4, 24);
+                tx += r.width + 6;
+                if (Look.Button(r, new GUIContent(pills[i], pillTips[i]), on ? Look.Kind.PillOn : Look.Kind.Pill))
+                {
+                    if (i == 0) packagesOnly = !packagesOnly;
+                    else if (i == 1) inProjectOnly = !inProjectOnly;
+                    else updatesOnly = !updatesOnly;
+                    GUI.changed = true;
+                }
+            }
+            if (EditorGUI.EndChangeCheck()) { Filter(); gridScroll = Vector2.zero; }
+            tx += 12;
+            Look.Outline(new Rect(tx, ty + 8, 8, 8), Look.Dust, 1.5f, 2);   // small tiles … big tiles
+            int size = Mathf.RoundToInt(GUI.HorizontalSlider(new Rect(tx + 14, ty + 4, 70, 16), tileSize, SmallestTile, BiggestTile));
+            Look.Outline(new Rect(tx + 90, ty + 5, 14, 14), Look.Dust, 1.5f, 3);
+            if (size != tileSize) { tileSize = size; EditorPrefs.SetInt(SizePref, size); nameFits.Clear(); }
+
+            // the tabs: drawn a little taller than their row, the part below covered by the tiles' cave, so only
+            // their top corners show rounded
+            float x = Pad;
+            Rect chosen = new Rect(-1, 0, 0, 0);
+            var mouse = Event.current.mousePosition;
+            foreach (int i in tabs)
+            {
+                float tw = TabWidth(i, withCounts);
+                bool on = i == store, hover = !on && new Rect(x, bottom - 34, tw, 34).Contains(mouse);
+                float th = on ? 34 : hover ? 32 : 30;
+                var r = new Rect(x, bottom - th, tw, th);
+                Look.Fill(new Rect(r.x, r.y, r.width, r.height + 12), on ? Look.Cave : hover ? Look.Stone : Look.Ledge, 10);
+                Look.Outline(new Rect(r.x, r.y, r.width, r.height + 12), Look.Seam, 1, 10);
+                if (on) chosen = r;
+                float lx = r.x + 14;
+                if (i > 0) { Look.Dot(new Vector2(lx + 4, r.center.y), Look.Store(StoreNames[i])); lx += 15; }
+                var ls = Look.Style("tab", Look.Styles.Tab);
+                ls.normal.textColor = on || hover ? Look.Bone : Look.Dust;
+                var label = new GUIContent(TabLabel(i));
+                float lw = ls.CalcSize(label).x;
+                GUI.Label(new Rect(lx, r.y, lw + 2, r.height), label, ls);
+                if (withCounts)
+                    GUI.Label(new Rect(lx + lw + 6, r.y, tw - (lx - r.x) - lw - 6, r.height), TabCount(i), Look.Style(Look.Styles.TabCount));
+                if (GUI.Button(r, GUIContent.none, GUIStyle.none) && store != i)
+                {
+                    store = i;
+                    Filter();
+                    gridScroll = Vector2.zero;
+                }
+                x += tw + 4;
+            }
+            Look.Fill(new Rect(0, bottom, w, 12), Look.Cave);
+            if (chosen.x < 0) Look.Fill(new Rect(0, bottom, w, 1), Look.Seam);
+            else
+            {
+                Look.Fill(new Rect(0, bottom, chosen.x, 1), Look.Seam);
+                Look.Fill(new Rect(chosen.xMax, bottom, w - chosen.xMax, 1), Look.Seam);
+            }
+            return bottom + 1;
+        }
+
+        /// <summary>What's wrong with the library, if anything, in boxes above the tiles.</summary>
+        float DrawNotices(float y)
         {
             if (catalog.Problem != null)
-            {
-                EditorGUILayout.HelpBox(catalog.Problem + "\nLooking in: " + catalog.Root, MessageType.Info);
-                return;
-            }
-            if (catalog.SealStatus == SealState.Changed)
-                EditorGUILayout.HelpBox("catalog.json was changed by something other than Hoard, so importing is paused and store links are hidden. " +
-                                        "Open Hoard and choose Sync (or run Hoard.bat verify) to rebuild it.", MessageType.Warning);
+                y = Notice(y, catalog.Problem + "\nLooking in: " + catalog.Root, Look.Gold);
+            else if (catalog.SealStatus == SealState.Changed)
+                y = Notice(y, "catalog.json was changed by something other than Hoard, so importing is paused and store links are hidden. " +
+                              "Open Hoard and choose Sync (or run Hoard.bat verify) to rebuild it.", Look.Warn);
             else if (catalog.SealStatus == SealState.Foreign)
-                EditorGUILayout.HelpBox("catalog.json was sealed with a Hoard key this account doesn't have (Hoard on another computer, " +
-                                        "or an earlier Hoard install), so it can't be checked here. Opening Hoard seals it again with this " +
-                                        "computer's key, then choose Reload.", MessageType.Info);
-            if (catalog.LeftOut > 0)
-                EditorGUILayout.HelpBox(catalog.LeftOut + " entries in catalog.json didn't look right and were left out.", MessageType.None);
+                y = Notice(y, "catalog.json was sealed with a Hoard key this account doesn't have (Hoard on another computer, " +
+                              "or an earlier Hoard install), so it can't be checked here. Opening Hoard seals it again with this " +
+                              "computer's key, then choose Reload.", Look.Gold);
+            if (catalog.Problem == null && catalog.LeftOut > 0)
+                y = Notice(y, catalog.LeftOut + " entries in catalog.json didn't look right and were left out.", Look.Dust);
+            return y;
         }
 
-        void DrawList()
+        float Notice(float y, string text, Color accent)
         {
-            float width = Mathf.Max(280, position.width * 0.45f);
-            EditorGUILayout.BeginVertical(GUILayout.Width(width));
-            GUILayout.Label(shown.Count + " of " + catalog.Assets.Count + " downloaded products", EditorStyles.miniLabel);
-            Rect view = GUILayoutUtility.GetRect(width, 10, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
-            if (Event.current.type != EventType.Layout) listView = view;   // the layout pass doesn't know it yet
-            var content = new Rect(0, 0, Mathf.Max(0, listView.width - 16), shown.Count * RowHeight);
-            listScroll = GUI.BeginScrollView(listView, listScroll, content);
-            int first, last;   // only what's on screen is drawn, however long the list
-            ListView.VisibleRange(listScroll.y, listView.height, RowHeight, shown.Count, out first, out last);
-            for (int i = first; i <= last; i++)
+            float w = position.width - Pad * 2;
+            var s = Look.Style(Look.Styles.Wrapped);
+            float th = s.CalcHeight(new GUIContent(text), w - 30);
+            var box = new Rect(Pad, y + 8, w, th + 20);
+            if (Event.current.type == EventType.Repaint) Look.Box("notice", Look.Ledge, Look.Seam).Draw(box, false, false, false, false);
+            Look.Fill(new Rect(box.x, box.y + 8, 3, box.height - 16), accent, 1.5f);
+            GUI.Label(new Rect(box.x + 16, box.y + 10, w - 30, th), text, s);
+            return box.yMax;
+        }
+
+        void DrawGrid(Rect area)
+        {
+            // "112 things in your hoard", as the app counts them, with how many there are in all when it's filtered
+            var hs = Look.Style(Look.Styles.Heading);
+            string count = shown.Count.ToString("N0") + (shown.Count == 1 ? " thing in your hoard" : " things in your hoard");
+            float cw = hs.CalcSize(new GUIContent(count)).x;
+            GUI.Label(new Rect(area.x + Pad, area.y + 12, cw + 4, 26), count, hs);
+            if (shown.Count != catalog.Assets.Count)
+                GUI.Label(new Rect(area.x + Pad + cw, area.y + 12, area.width - Pad * 2 - cw, 26), "of " + catalog.Assets.Count.ToString("N0"), Look.Style(Look.Styles.HeadingDust));
+            string busy = packages.Waiting > 0 ? "Checking packages: " + packages.Waiting + " to go" : loading ? "Loading..." : null;
+            if (busy != null)
             {
-                var a = shown[i];
-                var row = new Rect(0, i * RowHeight, content.width, RowHeight);
-                if (a == selected) EditorGUI.DrawRect(row, EditorGUIUtility.isProSkin ? new Color(0.24f, 0.37f, 0.59f) : new Color(0.6f, 0.75f, 1f));
-                var t = thumbs.Get(a.ThumbPath);
-                var pic = new Rect(row.x + 4, row.y + 4, 44, 44);
-                if (t != null) GUI.DrawTexture(pic, t, ScaleMode.ScaleAndCrop);
-                else EditorGUI.DrawRect(pic, new Color(0.3f, 0.3f, 0.3f, 0.5f));
-                var s = ProjectStatus(a);
-                float textWidth = row.width - 60 - (s >= InProject.Partly ? 100 : 6);   // room for the status only when it shows
-                FittedLabel(new Rect(row.x + 56, row.y + 6, textWidth, 18), a.Name, EditorStyles.boldLabel);
-                FittedLabel(new Rect(row.x + 56, row.y + 26, textWidth, 18), a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store), EditorStyles.miniLabel);
-                if (s >= InProject.Partly)
-                {
-                    string mark = NewerDownload(a) != null ? "Update to import" : UpdateInHoard(a) > 0 ? "Update in Hoard" : null;
-                    GUI.Label(new Rect(row.xMax - 96, row.y + (mark == null ? 16 : 7), 92, 18), s == InProject.Yes ? "In this project" : "Partly in project", EditorStyles.miniBoldLabel);
-                    if (mark != null) GUI.Label(new Rect(row.xMax - 96, row.y + 26, 92, 18), mark, EditorStyles.miniLabel);
-                }
-                if (Event.current.type == EventType.MouseDown && row.Contains(Event.current.mousePosition))
-                {
-                    selected = a;
-                    detailScroll = Vector2.zero;
-                    Event.current.Use();
-                    Repaint();
-                }
+                var bs = Look.Style("busy", Look.Styles.Small);
+                bs.alignment = TextAnchor.MiddleRight;
+                GUI.Label(new Rect(area.x + Pad, area.y + 40, area.width - Pad * 2, 16), busy, bs);
             }
-            GUI.EndScrollView();
-            EditorGUILayout.EndVertical();
-        }
-
-        void DrawDetails()
-        {
-            EditorGUILayout.BeginVertical();
-            if (selected == null)
+            var view = new Rect(area.x, area.y + 46, area.width, Mathf.Max(0, area.height - 46));
+            if (shown.Count == 0)
             {
-                GUILayout.FlexibleSpace();
-                GUILayout.Label("Choose a product on the left.", EditorStyles.centeredGreyMiniLabel);
-                GUILayout.FlexibleSpace();
-                EditorGUILayout.EndVertical();
+                bool filtered = search.Length > 0 || store > 0 || inProjectOnly || updatesOnly || (packagesOnly && catalog.Assets.Count > 0);
+                if (catalog.Problem != null)
+                    DrawEmpty(view, "Hoard's library isn't here", "Open the Hoard app and choose Sync, or choose Folder... to show Hoard for Unity where Hoard's downloads are.", false);
+                else if (catalog.Assets.Count == 0)
+                    DrawEmpty(view, "Nothing in your hoard yet", "Download something with the Hoard app, then choose Reload.", false);
+                else
+                    DrawEmpty(view, "Nothing here", filtered ? "Try another store, or clear the search and the filters." : "", filtered);
                 return;
             }
+            float inner = view.width - Pad * 2 - 14;   // (room for the scroll bar)
+            int cols = Mathf.Max(1, Mathf.FloorToInt((inner + Gap) / (tileSize + Gap)));
+            float tw = Mathf.Floor((inner - Gap * (cols - 1)) / cols);
+            var ns = Look.Style("name", Look.Styles.Name);
+            float rowH = tw + 8 + ns.lineHeight * 2 + 4 + 16 + 20;
+            int rows = (shown.Count + cols - 1) / cols;
+            gridView = view;
+            gridColumns = cols;
+            gridRow = rowH;
+            var content = new Rect(0, 0, view.width - 14, Pad + rows * rowH);
+            gridScroll = GUI.BeginScrollView(view, gridScroll, content, false, false);
+            int first, last;   // only the rows on screen are drawn, however many there are
+            ListView.VisibleRange(gridScroll.y - Pad, view.height, rowH, rows, out first, out last);
+            for (int r = first; r <= last; r++)
+                for (int c = 0; c < cols; c++)
+                {
+                    int i = r * cols + c;
+                    if (i >= shown.Count) break;
+                    DrawTile(shown[i], new Rect(Pad + c * (tw + Gap), Pad / 2 + r * rowH, tw, rowH - 20));
+                }
+            GUI.EndScrollView();
+        }
+
+        /// <summary>A product as the app's tiles show it: its picture with its store's colour along the foot and badges
+        /// for what's in this project, its name (two lines at most) and its creator. Choosing it shows its details.</summary>
+        void DrawTile(HoardAsset a, Rect slot)
+        {
+            var e = Event.current;
+            // (a tile scrolled part way out of sight is only under the pointer where it shows)
+            bool inView = e.mousePosition.y >= gridScroll.y && e.mousePosition.y <= gridScroll.y + gridView.height;
+            bool hover = inView && slot.Contains(e.mousePosition), chosen = a == selected;
+            var art = new Rect(slot.x, slot.y + (hover ? 0 : 3), slot.width, slot.width);   // lifts on hover
+            if (chosen) Look.Outline(new Rect(art.x - 5, art.y - 5, art.width + 10, art.height + 10), Look.Gold, 3, 16);
+            Look.Art(art, thumbs.Get(a.ThumbPath), a.Store, a.Name);
+
+            var s = ProjectStatus(a);
+            float by = art.y + 7;
+            if (s >= InProject.Partly)
+            {
+                string mark = s == InProject.Yes ? "In this project" : "Partly in project";
+                if (Look.BadgeWidth(mark) > art.width - 14) mark = s == InProject.Yes ? "In project" : "Partly";
+                Look.Badge(new Vector2(art.x + 7, by), mark, false);
+                by += 22;
+                string upd = NewerDownload(a) != null ? "Update to import" : UpdateInHoard(a) > 0 ? "Update in Hoard" : null;
+                if (upd != null)
+                {
+                    bool gold = upd == "Update to import";   // to import here: gold, as the app's updates are
+                    if (Look.BadgeWidth(upd) > art.width - 14) upd = "Update";
+                    Look.Badge(new Vector2(art.x + 7, by), upd, gold);
+                }
+            }
+
+            var ns = Look.Style("name", Look.Styles.Name);
+            ns.normal.textColor = chosen ? Look.GoldText : Look.Bone;
+            string name = NameFit(a, slot.width, ns);
+            float nameH = ns.CalcHeight(new GUIContent(name), slot.width);
+            float ny = slot.y + 3 + slot.width + 8;
+            GUI.Label(new Rect(slot.x, ny, slot.width, nameH), name, ns);
+            FittedLabel(new Rect(slot.x, ny + nameH, slot.width, 16), a.Creator, Look.Style(Look.Styles.Small));
+            GUI.Label(slot, new GUIContent("", a.Name + "\n" + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store)), GUIStyle.none);
+            if (e.type == EventType.MouseDown && e.button == 0 && hover)
+            {
+                Select(a, false);
+                e.Use();
+            }
+        }
+
+        /// <summary>A product's name cut to two lines with "…", worked out once for each tile width.</summary>
+        string NameFit(HoardAsset a, float width, GUIStyle style)
+        {
+            KeyValuePair<float, string> known;
+            if (nameFits.TryGetValue(a, out known) && known.Key == width) return known.Value;
+            float twoLines = style.CalcHeight(new GUIContent("Ag\nAg"), width) + 1;
+            string fit = TextFit.Fit(a.Name, 1, t => style.CalcHeight(new GUIContent(t), width) <= twoLines ? 0 : 2);
+            if (nameFits.Count > 4000) nameFits.Clear();
+            nameFits[a] = new KeyValuePair<float, string>(width, fit);
+            return fit;
+        }
+
+        void DrawEmpty(Rect area, string title, string hint, bool clear)
+        {
+            var ts = Look.Style("emptyTitle", Look.Styles.Heading);
+            ts.alignment = TextAnchor.MiddleCenter;
+            float w = Mathf.Min(area.width - Pad * 2, 420), x = area.x + (area.width - w) / 2, y = area.y + Mathf.Min(80, area.height / 4);
+            GUI.Label(new Rect(x, y, w, 30), title, ts);
+            var hs = Look.Style(Look.Styles.Centered);
+            float hh = hint.Length > 0 ? hs.CalcHeight(new GUIContent(hint), w) : 0;
+            GUI.Label(new Rect(x, y + 36, w, hh), hint, hs);
+            if (clear)
+            {
+                float bw = Look.ButtonWidth("Clear the filters");
+                if (Look.Button(new Rect(x + (w - bw) / 2, y + 48 + hh, bw, Look.ButtonHeight), "Clear the filters"))
+                {
+                    search = "";
+                    store = 0;
+                    inProjectOnly = updatesOnly = false;
+                    GUI.FocusControl(null);
+                    Filter();
+                }
+            }
+        }
+
+        /// <summary>The chosen product, beside the tiles as the app's panel: its picture, name, creator and store, its
+        /// files with Import, and its folder and store page.</summary>
+        void DrawDetails(Rect area)
+        {
             var a = selected;
-            detailScroll = EditorGUILayout.BeginScrollView(detailScroll);
-            var t = thumbs.Get(a.ThumbPath);
-            if (t != null) GUI.DrawTexture(GUILayoutUtility.GetRect(160, 160, GUILayout.Width(160), GUILayout.Height(160)), t, ScaleMode.ScaleToFit);
-            if (filesFor != a)   // the selected product's files are looked up once, not on every repaint
+            Look.Fill(area, Look.Ledge);
+            Look.Fill(new Rect(area.x, area.y, 1, area.height), Look.Seam);
+            if (Look.Button(new Rect(area.xMax - 16 - 28, area.y + 12, 28, Look.ButtonHeight), new GUIContent("×", "Close (Esc)"), Look.Kind.Ghost))
+            {
+                selected = null;
+                GUIUtility.ExitGUI();
+            }
+            GUILayout.BeginArea(new Rect(area.x + 1, area.y + 12, area.width - 1, area.height - 12));
+            detailScroll = GUILayout.BeginScrollView(detailScroll);
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(18);
+            GUILayout.BeginVertical();
+            float width = area.width - 1 - 36 - 14;
+
+            float side = Mathf.Min(width - 40, 240);
+            var pic = GUILayoutUtility.GetRect(side, side, GUILayout.Width(side), GUILayout.Height(side));
+            Look.Art(pic, thumbs.Get(a.ThumbPath), a.Store, a.Name, 14);
+            if (filesFor != a)   // the chosen product's files are looked up once, not on every repaint
             {
                 filesFor = a;
                 files = a.Files.ConvertAll(f => new KeyValuePair<string, string>(f, catalog.FilePath(a, f)));
             }
-            if (wrappedLarge == null) wrappedLarge = new GUIStyle(EditorStyles.largeLabel) { wordWrap = true };
-            GUILayout.Label(a.Name, wrappedLarge);
-            GUILayout.Label("by " + a.Creator + "  ·  " + HoardCatalog.StoreLabel(a.Store) + (a.Variants != null ? "  ·  " + a.Variants : ""), EditorStyles.wordWrappedLabel);
-            if (a.Note != null) GUILayout.Label("For " + a.Note, EditorStyles.miniLabel);
-            if (a.Tags.Count > 0) GUILayout.Label("Tags: " + string.Join(", ", a.Tags), EditorStyles.wordWrappedMiniLabel);
-            EditorGUILayout.Space();
+            GUILayout.Space(12);
+            GUILayout.Label(a.Name, Look.Style(Look.Styles.Title), GUILayout.Width(width));
+            GUILayout.Label("by " + a.Creator, Look.Style("by", Look.Styles.Wrapped), GUILayout.Width(width));
+            StorePill(a.Store);
+            if (a.Variants != null) GUILayout.Label(a.Variants, Look.Style("variants", Look.Styles.Dust), GUILayout.Width(width));
+            if (a.Note != null) GUILayout.Label("For " + a.Note, Look.Style("note", Look.Styles.Dust), GUILayout.Width(width));
+            if (a.Tags.Count > 0)
+            {
+                GUILayout.Space(4);
+                GUILayout.Label("#" + string.Join("   #", a.Tags.ToArray()), Look.Style("tags", Look.Styles.Name), GUILayout.Width(width));
+            }
+            GUILayout.Space(10);
 
             bool paused = catalog.SealStatus == SealState.Changed || PendingImport.Active || EditorApplication.isCompiling;
             string newer = NewerDownload(a);
             int waiting = UpdateInHoard(a);
             if (newer != null)
             {
-                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-                GUILayout.Label("A newer download than the one in this project: " + Path.GetFileName(newer) + ".", EditorStyles.wordWrappedLabel);
+                GUILayout.BeginVertical(Look.Box("update", Look.Alpha(Look.Gold, 0.16f), Look.Alpha(Look.Gold, 0.6f)), GUILayout.Width(width));
+                GUILayout.Label("A newer download than the one in this project: " + Path.GetFileName(newer) + ".", Look.Style(Look.Styles.Wrapped));
+                GUILayout.Space(6);
                 EditorGUI.BeginDisabledGroup(paused);
-                if (GUILayout.Button("Import update", GUILayout.Width(100))) Import(a, newer);
+                if (Look.LayoutButton("Import update", Look.Kind.Primary)) Import(a, newer);
                 EditorGUI.EndDisabledGroup();
-                EditorGUILayout.EndHorizontal();
+                GUILayout.EndVertical();
             }
             else if (waiting > 0)
-                EditorGUILayout.HelpBox("The creator updated this product (" + waiting + (waiting == 1 ? " new or changed file" : " new or changed files") +
-                                        "). Download the update in Hoard (Downloads, Updates), then import it here.", MessageType.Info);
+            {
+                GUILayout.BeginVertical(Look.Box("waiting", Look.Cave, Look.Seam), GUILayout.Width(width));
+                GUILayout.Label("The creator updated this product (" + waiting + (waiting == 1 ? " new or changed file" : " new or changed files") +
+                                "). Download the update in Hoard (Downloads, Updates), then import it here.", Look.Style(Look.Styles.Wrapped));
+                GUILayout.EndVertical();
+            }
+
+            GUILayout.Space(6);
+            GUILayout.Label("Files", Look.Style(Look.Styles.Section));
             foreach (var entry in files)
             {
                 string file = entry.Key, path = entry.Value;
-                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-                // the name takes the room the buttons leave, cut in the middle if it must be ("CyclopsBe….unitypackage"),
-                // never wrapped part way through a word; the whole name is its tooltip
-                FittedLabel(GUILayoutUtility.GetRect(GUIContent.none, EditorStyles.label, GUILayout.MinWidth(60), GUILayout.ExpandWidth(true)),
-                            file, EditorStyles.label, true);
-                if (path == null) { GUILayout.Label("missing", EditorStyles.miniLabel, GUILayout.Width(60)); EditorGUILayout.EndHorizontal(); continue; }
-                bool unityPackage = HoardCatalog.IsUnityPackage(file);
-                if (unityPackage)
+                GUILayout.BeginVertical(Look.Box("file", Look.Cave, Look.Seam), GUILayout.Width(width));
+                // the name takes the whole width, cut in the middle if it must be ("CyclopsBe….unitypackage"), never
+                // wrapped part way through a word; the whole name is its tooltip
+                FittedLabel(GUILayoutUtility.GetRect(GUIContent.none, Look.Style(Look.Styles.Body), GUILayout.Height(18), GUILayout.ExpandWidth(true)),
+                            file, Look.Style(Look.Styles.Body), true);
+                if (path == null)
+                {
+                    GUILayout.Label("Missing from Hoard's folder", Look.Style(Look.Styles.Small));
+                    GUILayout.EndVertical();
+                    continue;
+                }
+                GUILayout.Space(4);
+                GUILayout.BeginHorizontal();
+                if (HoardCatalog.IsUnityPackage(file))
                 {
                     int have, total;
                     var s = packages.Status(path, out have, out total);
-                    if (s != InProject.Unknown) GUILayout.Label(have + " of " + total + " here", EditorStyles.miniLabel, GUILayout.Width(80));
+                    var small = Look.Style("here", Look.Styles.Small);
+                    if (s != InProject.Unknown) GUILayout.Label(have + " of " + total + " here", small, GUILayout.Height(Look.ButtonHeight));
+                    GUILayout.FlexibleSpace();
                     EditorGUI.BeginDisabledGroup(paused);
-                    if (GUILayout.Button(s == InProject.Yes ? "Import again" : "Import", GUILayout.Width(90))) Import(a, path);
+                    if (s == InProject.Yes ? Look.LayoutButton("Import again") : Look.LayoutButton("Import", Look.Kind.Primary)) Import(a, path);
                     EditorGUI.EndDisabledGroup();
-                    if (have > 0 && GUILayout.Button("Select", GUILayout.Width(60))) SelectInProject(path);
+                    if (have > 0 && Look.LayoutButton("Select", Look.Kind.Ghost, "Select its files in the Project window")) SelectInProject(path);
                 }
-                if (GUILayout.Button("Show", GUILayout.Width(50))) EditorUtility.RevealInFinder(path);
-                EditorGUILayout.EndHorizontal();
+                else GUILayout.FlexibleSpace();
+                if (Look.LayoutButton("Show", Look.Kind.Ghost, "Show the file in its folder")) EditorUtility.RevealInFinder(path);
+                GUILayout.EndHorizontal();
+                GUILayout.EndVertical();
             }
-            EditorGUILayout.Space();
-            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(10);
+            GUILayout.BeginHorizontal();
             string folder = catalog.FolderPath(a);
-            if (folder != null && GUILayout.Button("Open folder", GUILayout.Width(100))) EditorUtility.RevealInFinder(folder);
-            if (HoardCatalog.StoreLink(a.Store, a.Url) && GUILayout.Button("Store page", GUILayout.Width(100))) Application.OpenURL(a.Url);
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
+            if (folder != null && Look.LayoutButton("Open folder")) EditorUtility.RevealInFinder(folder);
+            if (HoardCatalog.StoreLink(a.Store, a.Url) && Look.LayoutButton("Store page", Look.Kind.Ghost, a.Url)) Application.OpenURL(a.Url);
+            GUILayout.EndHorizontal();
+            GUILayout.Space(18);
+            GUILayout.EndVertical();
+            GUILayout.Space(18);
+            GUILayout.EndHorizontal();
+            GUILayout.EndScrollView();
+            GUILayout.EndArea();
         }
 
-        static GUIStyle wrappedLarge;
+        /// <summary>The store as the app shows it on a product: its diamond and its name, in a pill.</summary>
+        static void StorePill(string store)
+        {
+            string label = HoardCatalog.StoreLabel(store);
+            var s = Look.Style("pill", Look.Styles.Tab);
+            s.normal.textColor = Look.Bone;
+            float w = s.CalcSize(new GUIContent(label)).x + 34;
+            var r = GUILayoutUtility.GetRect(w, 24, GUILayout.Width(w), GUILayout.Height(24));
+            r.y += 2;
+            Look.Fill(r, Look.Cave, 12);
+            Look.Outline(r, Look.Seam, 1, 12);
+            Look.Dot(new Vector2(r.x + 13, r.center.y), Look.Store(store));
+            GUI.Label(new Rect(r.x + 23, r.y, w - 26, r.height), label, s);
+            GUILayout.Space(2);
+        }
+
+        /// <summary>The keys the app's library has: / to search, Esc to close the details (or leave the search), and the
+        /// arrows to move between tiles.</summary>
+        void Keys()
+        {
+            var e = Event.current;
+            if (e.type != EventType.KeyDown) return;
+            bool typing = EditorGUIUtility.editingTextField;
+            if (!typing && e.character == '/')
+            {
+                EditorGUI.FocusTextInControl(SearchControl);
+                e.Use();
+                return;
+            }
+            if (e.keyCode == KeyCode.Escape)
+            {
+                if (typing) GUI.FocusControl(null);
+                else if (selected != null) selected = null;
+                else return;
+                e.Use();
+                Repaint();
+                return;
+            }
+            if (typing || shown.Count == 0) return;
+            int step = e.keyCode == KeyCode.LeftArrow ? -1 : e.keyCode == KeyCode.RightArrow ? 1
+                     : e.keyCode == KeyCode.UpArrow ? -gridColumns : e.keyCode == KeyCode.DownArrow ? gridColumns : 0;
+            if (step == 0) return;
+            int at = selected == null ? -1 : shown.IndexOf(selected);
+            Select(shown[at < 0 ? 0 : Mathf.Clamp(at + step, 0, shown.Count - 1)], true);
+            e.Use();
+        }
 
         /// <summary>A label cut with "…" to fit its rectangle (TextFit), with the whole text as its tooltip when it's cut.</summary>
         static void FittedLabel(Rect r, string text, GUIStyle style, bool middle = false)

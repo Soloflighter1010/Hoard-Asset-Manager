@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0
+
+- **It looks like Hoard.** The window now has the app's colours (its dark ones, or its light ones with Unity's light
+  skin), Hoard's logo, and the app's pieces:
+  - a bar with a rounded search box (**/** to search) and the tools;
+  - a folder tab for each store, with how many products each has. The shown store is raised and its colour glows
+    behind the products;
+  - **Unity packages only**, **In this project** and **Updates** as pills that turn gold when they're on;
+  - the products as tiles: each picture with its store's colour along its foot and badges for **In this project**,
+    **Partly in project** and the updates. A slider sets the tile size, and the arrow keys move between tiles;
+  - the chosen product's details beside the tiles, as the app's panel. **Import** is gold, and **Esc** or **×**
+    closes the panel.
+- **Create Credits List** has the same look.
+
 ## 0.6.0
 
 - **Which product is this from?** Right-click files or folders in the Project window (or use the **Assets** menu)
