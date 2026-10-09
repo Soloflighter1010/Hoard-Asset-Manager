@@ -21,14 +21,25 @@ RELEASES = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/lat
 
 sys.path.insert(0, str(REPO / "scripts"))
 import build_site_changelog as changelog  # noqa: E402
+import build_site_docs as docs  # noqa: E402
+import site_chrome  # noqa: E402
 
 
 def built_site() -> Path:
-    """The site as deployed: site/ with its What's new page built from CHANGELOG.md."""
+    """The site as deployed: site/ with its What's new page built from CHANGELOG.md, and the docs from wiki/."""
     out = Path(tempfile.mkdtemp()) / "site"
     shutil.copytree(SITE, out)
     changelog.main([str(out / "changelog.html")])
+    docs.build(out / "docs")
     return out
+
+
+PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html")
+
+
+def every_page(site: Path) -> list[str]:
+    """Every page of the built site, the docs' too, by its path in the site."""
+    return list(PAGES) + sorted(f"docs/{p.name}" for p in (site / "docs").glob("*.html"))
 
 
 class Refs(HTMLParser):
@@ -58,8 +69,14 @@ class TheSite(unittest.TestCase):
         self.page.feed(self.html)
 
     def test_everything_it_uses_is_here(self):
+        import posixpath
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
+        ids = {}
+        for name in every_page(site):
+            refs = Refs()
+            refs.feed((site / name).read_text("utf-8"))
+            ids[name] = refs.ids
+        for name in every_page(site):
             page = Refs()
             page.feed((site / name).read_text("utf-8"))
             for tag, key, value in page.refs:
@@ -68,12 +85,15 @@ class TheSite(unittest.TestCase):
                 if value.startswith("#"):
                     self.assertIn(value[1:], page.ids, f"{name}: {value}")
                     continue
-                if value in ("./", "vcc/"):
-                    continue   # the site itself, and the listing's page put at vcc/ on deploy
-                target = value.split("#")[0][2:] if value.startswith("./") else value.split("#")[0]
-                self.assertTrue((site / (target or "index.html")).is_file(), f"{name}: {value}")
-                if "#" in value and target in ("", "index.html"):   # a section of the front page
-                    self.assertIn(value.split("#", 1)[1], self.page.ids, f"{name}: {value}")
+                path, _, anchor = value.partition("#")
+                target = posixpath.normpath(posixpath.join(posixpath.dirname(name), path)) if path else name
+                if target == "vcc":
+                    continue   # the listing's page, put at vcc/ on deploy
+                if target in (".", "docs") or path.endswith("/"):
+                    target = posixpath.join("" if target == "." else target, "index.html")
+                self.assertTrue((site / target).is_file(), f"{name}: {value}")
+                if anchor and target in ids:   # a section of a page
+                    self.assertIn(anchor, ids[target], f"{name}: {value}")
             self.assertEqual(page.external_loads, [], f"{name} loads nothing from other sites")
         css = (SITE / "styles.css").read_text("utf-8")
         for url in re.findall(r"url\(([^)]+)\)", css):
@@ -84,8 +104,9 @@ class TheSite(unittest.TestCase):
         css = (SITE / "styles.css").read_text("utf-8")
         self.assertNotRegex(css, r"url\(\s*[\"']?https?://|@import")
         js = (SITE / "site.js").read_text("utf-8")
-        self.assertEqual(set(re.findall(r"fetch\(`?([^`'\"]*)", js)), {"https://api.github.com/repos/${REPO}/releases/latest"},
-                         "only asks GitHub which files the latest release has")
+        self.assertEqual(set(re.findall(r"fetch\([`'\"]([^`'\"]*)", js)),
+                         {"https://api.github.com/repos/${REPO}/releases/latest", "search.json"},
+                         "only asks GitHub which files the latest release has (and the docs their own search list)")
         self.assertNotIn("innerHTML", js, "nothing from GitHub's answer becomes page markup")
 
     def test_the_glow_is_the_apps(self):
@@ -181,24 +202,68 @@ class TheOtherPages(unittest.TestCase):
             self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', page, name)
 
     def test_it_looks_like_the_app(self):
-        """Every page has the app's bar (its logo, the pages as tabs, Help, GitHub and a gold Download) and its
-        footer, the same everywhere but for which tab is the page you're on."""
+        """Every page has the app's bar (its logo, the pages as tabs, GitHub and a gold Download) and its footer, the
+        same everywhere (scripts/site_chrome.py) but for which tab is the page you're on; the docs', one folder
+        down, with their links going up one."""
         site = built_site()
-        bars, foots = {}, {}
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
+        self.assertEqual(site_chrome.main([]), 0, "site/*.html carry scripts/site_chrome.py's bar and footer")
+        for name in every_page(site):
             page = (site / name).read_text("utf-8")
             bar = re.search(r'<header class="bar">.*?</header>', page, re.S).group(0)
-            self.assertLessEqual(bar.count('aria-current="page"'), 1, name)
-            bars[name] = bar.replace(' aria-current="page"', "")
-            foots[name] = re.sub(r" This page is built from <a [^>]*>CHANGELOG\.md</a>\.", "", re.search(r'<footer class="foot">.*?</footer>', page, re.S).group(0))
+            foot = re.search(r'<footer class="foot">.*?</footer>', page, re.S).group(0)
+            if name.startswith("docs/"):
+                self.assertEqual(bar, site_chrome.header("docs/", up="../"), name)
+                self.assertEqual(foot, site_chrome.footer(up="../"), name)
+                self.assertIn('<a href="../docs/" aria-current="page">Docs</a>', bar)
+            else:
+                self.assertEqual(bar, site_chrome.header(site_chrome.CURRENT.get(name)), name)
+                self.assertIn(foot, (site_chrome.footer(), site_chrome.footer(
+                    ' This page is built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.')), name)
             self.assertIn('class="boxes"', bar, f"{name}: the app's logo, whose boxes move")
-            self.assertIn('<nav class="apptabs"', bar, name)
-            self.assertIn('<a class="primary" href="./#download">Download</a>', bar, name)
-        self.assertEqual(len(set(bars.values())), 1, "one bar on every page")
-        self.assertEqual(len(set(foots.values())), 1, "one footer on every page")
         css = (SITE / "styles.css").read_text("utf-8")
         self.assertIn(".seg button[aria-checked=\"true\"]", css, "the store tabs are the app's folder tabs")
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+
+    def test_the_docs_are_the_wikis_pages(self):
+        """Every wiki page is a docs page, with the sidebar, a link on each heading, and search; raw HTML (Home's
+        logo) stays out, and nothing in a page becomes markup of its own."""
+        site = built_site()
+        wiki = {p.stem for p in (REPO / "wiki").glob("*.md") if not p.name.startswith("_")}
+        built = {p.stem for p in (site / "docs").glob("*.html")}
+        self.assertEqual(built, (wiki - {"Home"}) | {"index"})
+        settings = (site / "docs" / "Settings.html").read_text("utf-8")
+        self.assertIn('<a href="Settings.html" aria-current="page">Settings</a>', settings, "the sidebar marks the page")
+        self.assertIn('<div class="table"><table>', settings)
+        self.assertRegex(settings, r'<h2 id="settings-only-in-configjson">Settings only in config\.json<a class="anchor"')
+        cli = (site / "docs" / "Command-Line.html").read_text("utf-8")
+        self.assertIn("<pre><code>hoard-cli sync --dry-run</code></pre>", cli)
+        self.assertIn("<td><code>login &lt;store&gt;</code></td>", cli, "code in a table, escaped")
+        home = (site / "docs" / "index.html").read_text("utf-8")
+        self.assertNotIn("<picture>", home, "the wiki's raw HTML isn't the site's")
+        self.assertIn('href="Installing-Hoard.html"', home, "wiki links go to the docs page")
+        index = json.loads((site / "docs" / "search.json").read_text("utf-8"))
+        self.assertTrue(any(s["page"] == "Stores.html" and s["anchor"] == "payhip" for s in index))
+
+    def test_a_broken_link_stops_the_docs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wiki = Path(tmp) / "wiki"
+            wiki.mkdir()
+            (wiki / "Home.md").write_text("See [Settings](Settings#nowhere).\n\n<script>alert(1)</script>\n\n"
+                                          "A **<b>bold</b>** [link](javascript:alert(1)).\n", "utf-8")
+            (wiki / "Settings.md").write_text("## Somewhere\n", "utf-8")
+            with self.assertRaises(docs.BrokenLink):
+                docs.build(Path(tmp) / "out", wiki)
+            (wiki / "Home.md").write_text("See [Settings](Settings#somewhere).\n\n<script>alert(1)</script>\n\n"
+                                          "A **<b>bold</b>** [link](javascript:alert(1)).\n", "utf-8")
+            with self.assertRaises(docs.BrokenLink, msg="only pages, headings and https addresses"):
+                docs.build(Path(tmp) / "out", wiki)
+            (wiki / "Home.md").write_text("See [Settings](Settings#somewhere).\n\n<script>alert(1)</script>\n\n"
+                                          "A **<b>bold</b>**.\n", "utf-8")
+            docs.build(Path(tmp) / "out", wiki)
+            page = (Path(tmp) / "out" / "index.html").read_text("utf-8")
+            self.assertIn('<a href="Settings.html#somewhere">Settings</a>', page)
+            self.assertNotIn("<script>alert", page)
+            self.assertIn("<strong>&lt;b&gt;bold&lt;/b&gt;</strong>", page)
 
     def test_the_store_tabs_say_what_hoard_does_on_each(self):
         html = (SITE / "index.html").read_text("utf-8")
@@ -315,6 +380,9 @@ class TheDeploy(unittest.TestCase):
         paths = re.search(r"paths: \[([^\]]*)\]", self.text).group(1)
         self.assertIn('"CHANGELOG.md"', paths, "and when the changelog does, for its What's new page")
         self.assertIn('"scripts/build_site_changelog.py"', paths)
+        for docs_source in ('"wiki/**"', '"scripts/build_site_docs.py"', '"scripts/site_chrome.py"'):
+            self.assertIn(docs_source, paths, "and when the docs, or every page's bar, change")
+        self.assertIn('python3 scripts/build_site_docs.py "${{ env.listPublishDirectory }}/docs"', self.text)
         for renderer in ('"hoard/changelog.py"', '"hoard/versions.py"'):   # the page is made by these too
             self.assertIn(renderer, paths)
 

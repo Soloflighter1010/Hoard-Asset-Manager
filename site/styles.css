@@ -279,6 +279,56 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .slot .nm { font-weight: 700; font-size: 1.05rem; margin: 0; }
 .slot .cr { margin: -4px 0 0; color: var(--dust); font-size: .95rem; }
 
+/* ---------- the docs (docs/, built from the wiki by scripts/build_site_docs.py): the app's sidebar, the page, and
+   its headings beside it */
+.docs { max-width: 1320px; margin: 0 auto; padding: 24px 24px 0; display: grid; gap: 40px;
+        grid-template-columns: 240px minmax(0, 1fr) 200px; align-items: start; }
+.docs-side { position: sticky; top: 86px; max-height: calc(100vh - 100px); overflow-y: auto; padding-right: 6px;
+             scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
+.docs-side h2 { font: 700 13px var(--body); color: var(--dust); text-transform: none; margin: 18px 0 6px; letter-spacing: .02em; }
+.docs-side ul { list-style: none; margin: 0; padding: 0; }
+.docs-side li a { display: block; padding: 6px 10px; border-radius: 9px; color: var(--bone); text-decoration: none; font-size: 15px; }
+.docs-side li a:hover { background: var(--stone); }
+.docs-side li a[aria-current="page"] { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); font-weight: 700; }
+.docs-search { position: relative; margin-bottom: 10px; }
+.docs-search input { width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
+                     box-shadow: inset 0 0 0 1px var(--seam); color: var(--bone); font: 500 15px var(--body); }
+.docs-search ol { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 6px); max-height: 65vh; overflow-y: auto;
+                  list-style: none; margin: 0; padding: 6px; border-radius: 12px; background: var(--ledge);
+                  box-shadow: inset 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .3); }
+.docs-search li a { display: block; padding: 7px 9px; border-radius: 8px; color: var(--bone); text-decoration: none; font-size: 14px; }
+.docs-search li a:hover, .docs-search li a:focus-visible { background: var(--stone); }
+.docs-search li small { display: block; color: var(--dust); font-size: 12.5px; }
+.docs-search .none { padding: 7px 9px; color: var(--dust); font-size: 14px; }
+.doc { min-width: 0; max-width: 820px; margin: 0; padding: 0; }   /* (not the site's centred main: in a grid, that sizes it to its widest line) */
+.doc h1 { font-size: clamp(2rem, 4vw, 2.8rem); margin: 6px 0 .5em; }
+.doc h2 { font-size: 1.55rem; margin: 1.8em 0 .5em; scroll-margin-top: 90px; }
+.doc h3 { font-size: 1.15rem; margin: 1.6em 0 .4em; scroll-margin-top: 90px; }
+.doc .anchor { margin-left: .4em; color: var(--dust); text-decoration: none; opacity: 0; font: 700 .8em var(--body); }
+.doc h2:hover .anchor, .doc h3:hover .anchor, .doc .anchor:focus-visible { opacity: 1; }
+.doc p, .doc li { overflow-wrap: anywhere; }
+.doc li { margin: .3em 0; }
+.doc pre { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); border-radius: 12px; padding: 14px 16px;
+           overflow-x: auto; font-size: .9rem; }
+.doc pre code { background: none; padding: 0; }
+.doc .table { overflow-x: auto; margin: 1em 0; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--seam); }
+.doc table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+.doc th, .doc td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--seam); }
+.doc th { background: var(--ledge); font-weight: 700; }
+.doc tr:last-child td { border-bottom: 0; }
+.doc-edit { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--seam); }
+.doc-toc { position: sticky; top: 86px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.doc-toc h2 { font: 700 13px var(--body); color: var(--dust); margin: 6px 0 6px; }
+.doc-toc a { color: var(--dust); text-decoration: none; padding: 3px 0; }
+.doc-toc a:hover { color: var(--gold-text); }
+.doc-toc a.l3 { padding-left: 12px; font-size: 13px; }
+@media (max-width: 1100px) { .docs { grid-template-columns: 220px minmax(0, 1fr); } .doc-toc { display: none; } }
+@media (max-width: 760px) {
+  .docs { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px 16px 0; }
+  .docs-side { position: static; max-height: none; }
+  .docs-side nav { display: none; }
+}
+
 /* a moment's note at the foot of the window, as the app's */
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 12px); opacity: 0; z-index: 20; pointer-events: none;
          padding: 10px 16px; border-radius: 12px; background: var(--bone); color: var(--cave); font-weight: 700;

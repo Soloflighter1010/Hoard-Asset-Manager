@@ -3,6 +3,7 @@
 // - each download button gets its file's own address from the latest release (else it opens the releases page),
 // - Copy copies the VCC listing's address,
 // - the store tabs on the front page tint the glow and say what Hoard does on each store, as the app's tabs do,
+// - the docs' search box finds any section of the docs (docs/search.json),
 // - and there are a few things to find, as in the app.
 (() => {
   "use strict";
@@ -104,6 +105,52 @@
         next.focus(); showStore(next.dataset.store);
       });
     }
+  }
+
+  // The docs' search: every section of every page (search.json, built with the docs), by its heading and words.
+  // Results are made as elements, never as markup.
+  const search = document.getElementById("docSearch"), results = document.getElementById("docResults");
+  if (search && results) {
+    let sections = null;
+    const load = () => sections || fetch("search.json").then(r => r.json()).then(j => (sections = Array.isArray(j) ? j : []))
+      .catch(() => (sections = []));
+    const norm = s => String(s).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    async function find() {
+      const words = norm(search.value).split(/\s+/).filter(Boolean);
+      results.replaceChildren();
+      if (!words.length) { results.hidden = true; return; }
+      const all = await load();
+      const hits = all.map(s => {
+        const head = norm(s.heading), text = norm(s.text);
+        if (!words.every(w => head.includes(w) || text.includes(w))) return null;
+        return { s, score: words.filter(w => head.includes(w)).length * 3 + (s.anchor ? 0 : 1) };
+      }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 12);
+      for (const { s } of hits) {
+        const li = document.createElement("li"), a = document.createElement("a"), small = document.createElement("small");
+        a.href = s.page + (s.anchor ? "#" + s.anchor : "");
+        a.textContent = s.heading;
+        small.textContent = s.anchor ? s.title : "";
+        a.append(small);
+        li.append(a);
+        results.append(li);
+      }
+      if (!hits.length) {
+        const li = document.createElement("li");
+        li.className = "none"; li.textContent = "Nothing in the docs matches that.";
+        results.append(li);
+      }
+      results.hidden = false;
+    }
+    let timer;
+    search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(find, 120); });
+    search.addEventListener("focus", load, { once: true });
+    search.addEventListener("keydown", e => {
+      if (e.key === "Enter") { const first = results.querySelector("a"); if (first) location.href = first.href; }
+      if (e.key === "Escape") { search.value = ""; find(); }
+    });
+    document.addEventListener("keydown", e => {   // "/" goes to the search box, as in the app
+      if (e.key === "/" && !e.target.closest("input, textarea")) { e.preventDefault(); search.focus(); }
+    });
   }
 
   // ---------- a few things to find, as in the app. Each stays still when motion is reduced.
