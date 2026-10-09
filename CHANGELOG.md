@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.1
+
+- **The logo glows while an update to Hoard is waiting**, and gives a little shake now and then. Choose it to open
+  Updates in Settings. With reduced motion (Settings, or your system's), it only glows.
+- **There are a few things to find in Hoard.**
+- **Fixed: a stacked tile with a tall picture grew to the picture's height** instead of staying square.
+
 ## 3.1.0
 
 - **Disk space, in Downloads.** A new view lists your downloads biggest first, with how much they take, and two
@@ -23,10 +30,6 @@
   (variants), so "Hair Pack 1" and "Hair Pack (Pink)" stay apart.
 - **The setup assistant asks what closing Hoard's window does**: keep Hoard running, minimized to the taskbar
   (the Dock on a Mac), or quit it. It's the same choice as **Closing Hoard** in Settings.
-- **The logo glows while an update to Hoard is waiting**, and gives a little shake now and then. Choose it to open
-  Updates in Settings. With reduced motion (Settings, or your system's), it only glows.
-- **There are a few things to find in Hoard.**
-- **Fixed: a stacked tile with a tall picture grew to the picture's height** instead of staying square.
 - **Hoard for Unity 0.6.0**: right-click files in the Project window and choose **Hoard › Which Product Is This
   From?**, and products in your project with a newer download are marked, to import the update. See its
   changelog.
