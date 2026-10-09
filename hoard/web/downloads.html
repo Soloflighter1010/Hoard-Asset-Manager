@@ -27,7 +27,7 @@
 @media (prefers-color-scheme: light) {
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
-    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #FFFFFF; --gold-text: #7A5100;   /* gold as text: 4.5:1 or more on every light background */ --warn: #B4531B;
+    --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #1F1500; --gold-text: #7A5100;   /* gold as text, and text on gold: 4.5:1 or more on every light background */ --warn: #A34818;
     --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35; --local: #8A6410;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
@@ -698,6 +698,22 @@ details.task summary b { overflow-wrap: anywhere; }
 body.less-motion #glow.flow .glow-in { animation: none; }
 body.no-glow #glow { display: none; }
 .custom-colours { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; }
+/* Appearance: Light or Dark, and a theme: each with a swatch of its dark and light pages and their accent */
+.mode-pick { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin: 6px 0 10px; border-radius: 12px; background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); }
+.mode-pick label { position: relative; padding: 5px 12px; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--dust); cursor: pointer; }
+.mode-pick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.mode-pick label:has(input:checked) { background: var(--gold); color: var(--gold-ink); }
+.mode-pick label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
+.theme-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 0 0 6px; }
+.theme-choice { position: relative; display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 10px; cursor: pointer;
+  background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); font-size: 13px; font-weight: 700; line-height: 1.25; }
+.theme-choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.theme-choice:has(input:checked) { box-shadow: inset 0 0 0 2px var(--gold); }
+.theme-choice:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
+.theme-choice small { display: block; font-weight: 500; font-size: 11.5px; color: var(--dust); }
+.theme-swatch { flex: none; width: 34px; height: 34px; border-radius: 8px; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; box-shadow: 0 0 0 1px var(--seam); }
+.theme-swatch span { display: grid; place-items: center; }
+.theme-swatch i { width: 9px; height: 9px; border-radius: 3px; transform: rotate(45deg); }
 .custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
 /* the PIN to unlock hidden items: the Library's dialog, unlocking only (it sets, changes and resets the PIN) */
@@ -980,6 +996,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
+  <h3>Appearance</h3>
+  <div class="mode-pick" role="radiogroup" aria-label="Light or dark">
+    <label><input type="radio" name="setMode" id="setModeSystem" value="system"> Match my computer</label>
+    <label><input type="radio" name="setMode" id="setModeLight" value="light"> Light</label>
+    <label><input type="radio" name="setMode" id="setModeDark" value="dark"> Dark</label>
+  </div>
+  <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">

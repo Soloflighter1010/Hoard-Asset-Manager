@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import config, downloader, library, server  # noqa: E402
+from hoard import config, downloader, library, server, themes  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -1312,6 +1312,31 @@ class HighlightsAndAccessibility(unittest.TestCase):
             page.wait_for_function(f"() => ({colour})() === '{standard}'")
             self.assertTrue(page.locator("#customColours").is_hidden())
             self.assertFalse(self.srv.cfg["display"]["glow"])
+            page.close()
+
+    def test_themes_and_light_or_dark(self):
+        """Settings, Appearance: a theme and Light or Dark change the page at once, and the page is served in them."""
+        from unittest import mock
+        from playwright.sync_api import expect
+        cave = "() => getComputedStyle(document.documentElement).getPropertyValue('--cave').trim().toUpperCase()"
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            page.click("#settingsBtn")
+            expect(page.locator('input[name="setTheme"][value="hoard"]')).to_be_checked()
+            self.assertEqual(page.locator('input[name="setTheme"]').count(), len(themes.THEMES))
+            expect(page.locator("#setModeSystem")).to_be_checked()
+            page.check("#setModeDark")
+            page.wait_for_function(f"() => ({cave})() === '#211C18'")
+            page.check('input[name="setTheme"][value="dragonfire"]')
+            page.wait_for_function(f"() => ({cave})() === '#1A1210'")
+            self.assertEqual((self.srv.cfg["display"]["theme"], self.srv.cfg["display"]["mode"]), ("dragonfire", "dark"))
+            page.check("#setModeLight")
+            page.wait_for_function(f"() => ({cave})() === '#F3ECE8'")
+            self.assertEqual(page.evaluate("getComputedStyle(document.documentElement).colorScheme"), "light")
+            page.close()
+            page = self.browser.new_page()   # opened again: in the theme from the first moment
+            page.goto(self.srv.entry_url())
+            self.assertEqual(page.evaluate(cave), "#F3ECE8")
             page.close()
 
     def test_the_largest_text_still_fits_the_window(self):

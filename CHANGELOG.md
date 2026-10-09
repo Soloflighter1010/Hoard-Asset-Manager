@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.2.0
+
+- **Themes, and Light or Dark.** Settings has a new **Appearance** section: choose **Match my computer**, **Light**
+  or **Dark**, and one of ten themes, each with a light and a dark version: **Hoard** (as before), **Dragonfire**,
+  **Frost Cave**, **Geode**, **Mossy Ruins**, **Synthwave**, **Sakura**, **Midnight & Paper** (true black for OLED
+  screens, and white), **High contrast** and **Spooky Hoard**. The pages open in your theme from the first moment.
+  Every theme keeps text easy to read, at the same contrast as Hoard's own colours. Where a theme's accent is close
+  to a store's colour, that store's colour shifts a little so the two can't be mistaken for each other.
+- **Text on gold buttons is darker in the light theme**, so **Sync**, **Download** and the like are easier to read.
+  Warnings in the light theme are a little darker too.
+
 ## 3.1.1
 
 - **The logo glows while an update to Hoard is waiting**, and gives a little shake now and then. Choose it to open

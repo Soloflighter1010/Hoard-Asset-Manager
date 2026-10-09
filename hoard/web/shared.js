@@ -137,8 +137,20 @@ function fillColours() {
     return `<label class="check"><input type="color" data-colour="${c}" value="${/^#[0-9a-f]{6}$/i.test(v) ? v : "#888888"}"> ${COLOUR_NAMES[c]}</label>`;
   }).join("");
 }
+// Appearance (hoard/themes.py): the themes, each with a swatch of its dark and light pages and their accent
+function fillThemes() {
+  const d = SETTINGS.display, box = $("#themeChoices");
+  if (!box) return;
+  const half = c => `<span style="background:${c[0]}"><i style="background:${c[2]}"></i></span>`;
+  box.innerHTML = (d.themes || []).map(t => `<label class="theme-choice" title="${esc(t.mood)}"><input type="radio" name="setTheme" value="${esc(t.id)}"${t.id === d.theme ? " checked" : ""}>` +
+    `<span class="theme-swatch" aria-hidden="true">${half(t.dark)}${half(t.light)}</span><span>${esc(t.name)}${t.tag ? `<small>${esc(t.tag)}</small>` : ""}</span></label>`).join("");
+  for (const r of document.querySelectorAll('input[name="setMode"]')) r.checked = r.value === d.mode;
+}
 function applyDisplay(d) {
   if (!d) return;
+  // the theme, in place of the one the page was served with (the same colours, from the same place)
+  const theme = $("#theme");
+  if (theme && typeof d.theme_css === "string" && theme.textContent.trim() !== d.theme_css.trim()) { theme.textContent = d.theme_css; }
   document.documentElement.style.zoom = d.text_size && d.text_size !== 100 ? String(d.text_size / 100) : "";
   // Zoom scales every length, the window's own size (vh, vw) included: --zoom undoes that for --vh and --vw, so
   // what's sized to the window still fits it at a larger text size (issue #48)
@@ -640,6 +652,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setGlowOn").checked = SETTINGS.display.glow;
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
+  fillThemes();
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
     `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
@@ -732,10 +745,11 @@ function setGlow(store, stores) {
   const el = $("#glow");
   if (!el) return;
   const list = store ? [store] : (stores || []).filter(s => GLOW_COLORS.includes(s));
-  const key = (store ? "one:" : "all:") + list.join(",");
+  // light as the page shows it: Settings' Light or Dark, or the computer's
+  const light = getComputedStyle(document.documentElement).colorScheme.includes("light");
+  const key = (light ? "light:" : "dark:") + (store ? "one:" : "all:") + list.join(",");
   if (key === glowShown) return;
   glowShown = key;
-  const light = matchMedia("(prefers-color-scheme: light)").matches;
   const strength = light ? 32 : 48;
   const tint = c => `color-mix(in srgb, var(--${c}) ${strength}%, transparent)`;
   const inner = el.firstElementChild;
@@ -917,6 +931,8 @@ function settingsPart(el) {
     return { display: { colours: "custom", custom_colours: mine } };
   }
   if (el.dataset.setStore) return { stores: { [el.dataset.setStore]: { [el.dataset.opt]: el.checked } } };
+  if (el.name === "setTheme") return { display: { theme: el.value } };
+  if (el.name === "setMode") return { display: { mode: el.value } };
   switch (el.id) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
