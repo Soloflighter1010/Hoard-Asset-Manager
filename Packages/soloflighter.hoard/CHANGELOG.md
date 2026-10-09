@@ -12,6 +12,8 @@
     **Partly in project** and the updates. A slider sets the tile size, and the arrow keys move between tiles;
   - the chosen product's details beside the tiles, as the app's panel. **Import** is gold, and **Esc** or **×**
     closes the panel.
+- **Pause GIFs** beside the tile size shows animated pictures as a still of their first frame, like the app's
+  **Pause animated pictures**. Unity remembers your choice for every project.
 - **Create Credits List** has the same look.
 - **A narrow window** shows the details over the tiles until you close them. The bar's buttons use shorter
   words when the search box needs the room.

@@ -41,6 +41,9 @@ namespace SoloFlighter.Hoard.Editor
         long used;
         double animatedDrawnAt = -1;
 
+        /// <summary>Animated pictures shown as a still of their first frame, as the app's Pause animated pictures.</summary>
+        public bool Paused;
+
         /// <summary>The picture (for an animated GIF, the frame showing now), or null while it's loading (or when
         /// there isn't one).</summary>
         public Texture2D Get(string path)
@@ -51,7 +54,7 @@ namespace SoloFlighter.Hoard.Editor
             {
                 Touch(path);
                 if (p == null) return null;
-                if (p.Timing == null || p.Frames.Length == 1) return p.Frames[0];
+                if (p.Timing == null || p.Frames.Length == 1 || Paused) return p.Frames[0];
                 double now = EditorApplication.timeSinceStartup;
                 animatedDrawnAt = now;
                 return p.Frames[Math.Min(p.Frames.Length - 1, p.Timing.FrameAt(now * 1000))];

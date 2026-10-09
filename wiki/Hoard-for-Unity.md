@@ -6,7 +6,7 @@ hunting for it or downloading it again.
 Open **Window › Hoard** to:
 
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails.
-  Animated ones (GIFs) play, from 0.3.0.
+  Animated ones (GIFs) play, from 0.3.0. **Pause GIFs** keeps them still (0.7.0).
 - **The app's look** (0.7.0): Hoard's colours and logo, a tab for each store, the products as tiles (a slider
   sets their size, the arrow keys move between them, **/** searches), and the chosen one's details beside them.
 - **See what's already in this project.** It reads the asset GUIDs inside each `.unitypackage`, without extracting

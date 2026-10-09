@@ -22,6 +22,8 @@ namespace SoloFlighter.Hoard.Editor
         }
 
         const string SizePref = "SoloFlighter.Hoard.TileSize";
+        const string PausePref = "SoloFlighter.Hoard.PauseAnimations";
+        const string PauseLabel = "Pause GIFs";
         const float BarHeight = 50, TabsHeight = 40, ToolsHeight = 34, Pad = 18, Gap = 16;
         const int SmallestTile = 96, BiggestTile = 200;
 
@@ -70,6 +72,7 @@ namespace SoloFlighter.Hoard.Editor
         {
             packages = new PackageIndex();
             tileSize = Mathf.Clamp(EditorPrefs.GetInt(SizePref, 132), SmallestTile, BiggestTile);
+            thumbs.Paused = EditorPrefs.GetBool(PausePref, false);
             wantsMouseMove = true;   // the app's hover: a tile lifts, a button lights
             Reload();
             EditorApplication.update += Tick;
@@ -623,7 +626,7 @@ namespace SoloFlighter.Hoard.Editor
                                   "Products in this project with a newer download, or an update waiting in Hoard" };
             float pillsW = 0;
             foreach (string p in pills) pillsW += Look.ButtonWidth(p) - 4 + 6;
-            float toolsW = pillsW + 12 + 110;
+            float toolsW = pillsW + 12 + 110 + 12 + Look.ButtonWidth(PauseLabel) - 4;
             bool above = tabsW + toolsW + 12 > w - Pad * 2;
             float tabsTop = above ? y + ToolsHeight : y, bottom = tabsTop + TabsHeight;
 
@@ -649,6 +652,16 @@ namespace SoloFlighter.Hoard.Editor
             int size = Mathf.RoundToInt(GUI.HorizontalSlider(new Rect(tx + 14, ty + 4, 70, 16), tileSize, SmallestTile, BiggestTile));
             Look.Outline(new Rect(tx + 90, ty + 5, 14, 14), Look.Dust, 1.5f, 3);
             if (size != tileSize) { tileSize = size; EditorPrefs.SetInt(SizePref, size); nameFits.Clear(); }
+            // animated pictures: playing, or a still of their first frame (kept for every project, as the tile size is)
+            var pause = new Rect(tx + 110 + 12, ty, Look.ButtonWidth(PauseLabel) - 4, 24);
+            if (Look.Button(pause, new GUIContent(PauseLabel, thumbs.Paused ? "Animated pictures are paused: choose to play them"
+                                                                              : "Show animated pictures as a still of their first frame"),
+                            thumbs.Paused ? Look.Kind.PillOn : Look.Kind.Pill))
+            {
+                thumbs.Paused = !thumbs.Paused;
+                EditorPrefs.SetBool(PausePref, thumbs.Paused);
+                Repaint();
+            }
 
             // the tabs: drawn a little taller than their row, the part below covered by the tiles' cave, so only
             // their top corners show rounded

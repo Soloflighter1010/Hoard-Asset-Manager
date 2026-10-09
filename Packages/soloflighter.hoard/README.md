@@ -4,7 +4,8 @@ The VRChat assets you've downloaded with [Hoard](https://github.com/Soloflighter
 Unity. Open **Window › Hoard** to:
 
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, as tiles in the app's
-  look: a tab for each store, the pictures with their store's colour along the foot (animated GIFs play).
+  look: a tab for each store, the pictures with their store's colour along the foot (animated GIFs play, or
+  stay still with **Pause GIFs**).
 - **See what's already in this project.** Hoard reads the asset GUIDs inside each `.unitypackage` (without
   extracting anything) and marks products **In this project** or **Partly in project**, by the files that are each
   product's own (a creator's shared shader in your project doesn't make all their products look imported). **Select** finds
