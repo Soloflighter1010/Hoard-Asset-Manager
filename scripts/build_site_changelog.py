@@ -25,6 +25,8 @@ try:   # (run as a script, the repository isn't on the path yet; imported by the
 except ImportError:
     sys.path.insert(0, str(REPO))
     from hoard.changelog import blocks, inline, is_beta, releases  # noqa: E402,F401
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from site_chrome import footer, header  # noqa: E402  (the bar and footer every page has)
 REPO_URL = "https://github.com/Soloflighter1010/Hoard-Asset-Manager"
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 
@@ -56,7 +58,9 @@ def page(markdown: str, dates: dict[str, str]) -> str:
           {link}
         </article>
       </li>""")
-    return TEMPLATE.replace("{releases}", "\n".join(cards))
+    built = ' This page is built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.'
+    return (TEMPLATE.replace("{header}", header("changelog.html")).replace("{footer}", footer(built))
+            .replace("{releases}", "\n".join(cards)))
 
 
 TEMPLATE = """<!doctype html>
@@ -85,19 +89,7 @@ TEMPLATE = """<!doctype html>
 <body>
   <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
   <a class="skip" href="#main">Skip to the page</a>
-  <header class="bar">
-    <a class="brand" href="./"><img src="img/mark.svg" alt="" width="32" height="32"><span>hoard</span></a>
-    <nav aria-label="Site">
-      <a href="./#features">What it does</a>
-      <a href="how-it-works.html">How it works</a>
-      <a href="trust.html">Trust</a>
-      <a href="./#download">Download</a>
-      <a href="changelog.html" aria-current="page">What's new</a>
-      <a href="testers.html">Testers</a>
-      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki">Help</a>
-      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
-    </nav>
-  </header>
+  {header}
 
   <main id="main">
     <section class="page-head">
@@ -110,12 +102,8 @@ TEMPLATE = """<!doctype html>
     </ol>
   </main>
 
-  <footer class="foot">
-    <p><img src="img/mark.svg" alt="" width="20" height="20"> Hoard is free and open source under the MIT license.</p>
-    <p>Made by <a href="https://x.com/SoloFlighter101" rel="noopener">@SoloFlighter101</a></p>
-    <p class="small">Built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
-    <p><a href="./">Home</a> · <a href="trust.html">How you can trust Hoard</a> · <a href="ai.html">AI disclosure</a></p>
-  </footer>
+  {footer}
+  <script src="site.js" defer></script>
 </body>
 </html>
 """

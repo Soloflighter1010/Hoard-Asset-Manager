@@ -2,7 +2,8 @@ name: Build Repo Listing
 
 # Builds the VCC listing (index.json) and its page (Website/) from every release's package .zip with VRChat's
 # package-list-action, as the template-package does, and deploys them to GitHub Pages with Hoard's website (site/,
-# issue #27) in front: the site at the root, the listing's page at vcc/, and index.json where VCC knows it. Runs
+# issue #27) in front: the site at the root, the docs (from wiki/) at docs/, the listing's page at vcc/, and
+# index.json where VCC knows it. Runs
 # after Build Release, whenever a release changes, when the site or the listing's files change on main, or by hand.
 # Needs Settings > Pages > Source: GitHub Actions.
 # The listing's name, id and address are in source.json.
@@ -27,6 +28,7 @@ on:
     branches: [main]
     paths: ["site/**", "Website/**", "source.json", "CHANGELOG.md", "scripts/build_site_changelog.py",
             "hoard/changelog.py", "hoard/versions.py",   # (the changelog page's renderer and its beta rule)
+            "wiki/**", "scripts/build_site_docs.py", "scripts/site_chrome.py",   # (the docs, and every page's bar)
             ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
@@ -122,6 +124,12 @@ jobs:
           gh release list --repo "$GITHUB_REPOSITORY" --limit 300 --json tagName,publishedAt > "$RUNNER_TEMP/dates.json" || echo "[]" > "$RUNNER_TEMP/dates.json"
           python3 scripts/build_site_changelog.py "${{ env.listPublishDirectory }}/changelog.html" --dates "$RUNNER_TEMP/dates.json"
           test -s "${{ env.listPublishDirectory }}/changelog.html"
+
+      # The docs, from the wiki's pages (wiki/): a link to a page or heading that isn't there stops the deploy.
+      - name: Build the docs from the wiki
+        run: |
+          python3 scripts/build_site_docs.py "${{ env.listPublishDirectory }}/docs"
+          test -s "${{ env.listPublishDirectory }}/docs/index.html" && test -s "${{ env.listPublishDirectory }}/docs/search.json"
 
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
