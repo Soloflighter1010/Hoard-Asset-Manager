@@ -40,6 +40,16 @@
 @media (prefers-color-scheme: light) {
   :root[data-colours="colourblind"] { --booth: #A86A00; --gumroad: #A84D86; --jinxxy: #1F72AE; --payhip: #7D7300; --itch: #00775A; --local: #5E5E5E; }
 }
+/* Your language (hoard/i18n.py): the page stays hidden until it's translated (a moment at most), and Korean gets a
+   font that has it (the bundled ones have Japanese, not Hangul) and keeps its words whole when it wraps */
+html[data-i18n] body { visibility: hidden; animation: i18n-show 0s 3s forwards; }
+@keyframes i18n-show { to { visibility: visible; } }
+:root:lang(ko) {
+  --display: "Dela Gothic One", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI Black", system-ui, sans-serif;
+  --body: "Zen Maru Gothic", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", system-ui, sans-serif;
+}
+:lang(ko) body { word-break: keep-all; overflow-wrap: anywhere; }
+:lang(ja) body { line-break: strict; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -910,17 +920,17 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <div class="layout">
   <nav id="filters" class="side" aria-label="Filters">
     <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
-    <h2 class="sidehead">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
+    <h2 class="sidehead" data-sec="your-tags">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
-    <h2>Suggested</h2>
+    <h2 data-sec="suggested">Suggested</h2>
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
     <datalist id="tagList"></datalist>
-    <h2>Show</h2>
+    <h2 data-sec="show">Show</h2>
     <div id="disk" class="chips" role="group" aria-label="Downloaded, not yet, or new"></div>
-    <h2>Creators</h2>
+    <h2 data-sec="creators">Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
-    <ul id="creators" class="creators"></ul>
+    <ul id="creators" class="creators" translate="no"></ul>
     <p id="totals" class="totals"></p>
   </nav>
   <main>
@@ -1017,6 +1027,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
   <h3>Appearance</h3>
+  <label class="check">Language
+    <select id="setLanguage" aria-label="Language">
+      <option value="system">Match my computer</option>
+      <option value="en" translate="no" lang="en">English</option>
+      <option value="ja" translate="no" lang="ja">日本語</option>
+      <option value="ko" translate="no" lang="ko">한국어</option>
+    </select></label>
   <div class="mode-pick" role="radiogroup" aria-label="Light or dark">
     <label><input type="radio" name="setMode" id="setModeSystem" value="system"> Match my computer</label>
     <label><input type="radio" name="setMode" id="setModeLight" value="light"> Light</label>
@@ -1148,7 +1165,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </div>
   <div class="support-cols">
     <div><strong>Included</strong><ul class="support-list"><li>Hoard and browser versions</li><li>Operating system details</li><li>Sanitized error messages and tracebacks</li><li>Store/job counts and status</li><li>Recent sanitized log entries</li></ul></div>
-    <div><strong>Removed</strong><ul class="support-list"><li>Passwords, cookies and API keys</li><li>Email addresses and local user paths</li><li>Downloaded files and your library list</li><li>Purchase names and creator names</li><li>Signed URL values and other tokens</li></ul></div>
+    <div><strong>Left out</strong><ul class="support-list"><li>Passwords, cookies and API keys</li><li>Email addresses and local user paths</li><li>Downloaded files and your library list</li><li>Purchase names and creator names</li><li>Signed URL values and other tokens</li></ul></div>
   </div>
   <label for="supportNotes"><strong>What were you doing when it failed?</strong></label>
   <textarea id="supportNotes" maxlength="5000" placeholder="Optional. For example: I clicked Sync, Booth opened normally, then the job stopped with an error."></textarea>
@@ -1239,11 +1256,11 @@ const label = s => DATA.labels[s] || s;
 const placeholder = a => `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b></span>`;
 const thumb = a => a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="" loading="lazy" decoding="async">` : placeholder(a);
 function ago(iso) {
-  if (!iso) return "never";
+  if (!iso) return tr("never");
   const s = (Date.now() - Date.parse(iso)) / 1000;
-  if (s < 90) return "just now";
+  if (s < 90) return tr("just now");
   const [n, u] = s < 3600 ? [s / 60, "minute"] : s < 86400 ? [s / 3600, "hour"] : [s / 86400, "day"];
-  const r = Math.round(n); return `${r} ${u}${r === 1 ? "" : "s"} ago`;
+  const r = Math.round(n); return tr(`{0} ${u}${r === 1 ? "" : "s"} ago`, r);
 }
 /* ---------- highlights and accessibility */
 function toast(msg) {
@@ -1368,8 +1385,9 @@ function renderStores() {
       (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
       (signedIn ? `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button>` : "") + `</span>` +
       (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}${!/^Signed out/.test(info.error) ? ` <button class="linkish" data-report-store="${esc(s)}">Create report</button>` : ""}</span>` : "") +
-      ((info.found_shops || []).length ? `<span class="found">Your library has products from ${info.found_shops.length} more ` +
-        `Payhip ${info.found_shops.length === 1 ? "shop" : "shops"} on their own addresses. <button class="linkish" data-review-shops>Review</button></span>` : "") +
+      ((info.found_shops || []).length ? `<span class="found">${esc(tr(info.found_shops.length === 1 ? "Your library has products from {0} more Payhip shop on its own address."
+                                                                      : "Your library has products from {0} more Payhip shops on their own addresses.", info.found_shops.length))} ` +
+        `<button class="linkish" data-review-shops>Review</button></span>` : "") +
       `</div>`;
   }).join("");
   $("#refreshAll").disabled = !!job.running;
@@ -1386,14 +1404,14 @@ function renderStores() {
 }
 const slotHTML = a => {
     const n = stackSize.get(a.key) || 0;
-    return `<button class="slot${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
-      `${n > 1 ? `, ${n} copies: choose to see them all` : ""}` +
-      `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}${onDisk(a) ? ", downloaded" : ""}${a.new ? ", new" : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
+    const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
+                  a.also_in.length && tr("also on {0}", listed(a.also_in.map(label))), onDisk(a) && tr("downloaded"), a.new && tr("new")];
+    return `<button class="slot${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span></span>` +
-      `<span class="nm-t">${esc(a.name)}</span><span class="cr">${esc(a.creator)}</span></button>`;
+      `<span class="nm-t" translate="no">${esc(a.name)}</span><span class="cr" translate="no">${esc(a.creator)}</span></button>`;
 };
 function renderGrid(list) {
   (cards = cards || lazyCards($("#grid"))).show(list, slotHTML);
@@ -1515,7 +1533,7 @@ function showDetail(a, focus = true) {
   openKey = a.key;
   markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
   const by = storeUrl(a.store, a.creator_url) ? `<a href="${esc(storeUrl(a.store, a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
-  const extra = [a.variants && esc(a.variants), a.gift && "gift", a.archived && "archived on Gumroad"].filter(Boolean).join(", ");
+  const extra = [a.variants && esc(a.variants), a.gift && tr("gift"), a.archived && tr("archived on Gumroad")].filter(Boolean).join(", ");
   const store = label(a.store);
   // issue #108: one thing to do, in gold (download it, or see it in Downloads); the store's own pages, which open in
   // your browser, beside it and named for the store; archiving and the like under their own heading
@@ -1531,8 +1549,8 @@ function showDetail(a, focus = true) {
   $("#detail").innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
     `<div class="d-art">${a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="">` : placeholder(a)}</div>` +
-    `<h2 class="d-name">${esc(a.name)}</h2>` +
-    `<p class="d-by">by ${by}${extra ? `, ${extra}` : ""}</p>` +
+    `<h2 class="d-name" translate="no">${esc(a.name)}</h2>` +
+    `<p class="d-by" translate="no">${trHTML("by {0}", by)}${extra ? esc(tr(", {0}", extra)) : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store}"></span>${store}</p>` +
     (a.also_in.length ? `<p class="note">You also own this on ${a.also_in.map(label).join(" and ")}. ` +
       `<button class="linkish" data-act="others">Show all copies</button></p>` : "") +
@@ -1720,7 +1738,6 @@ const PAGE_FILE = /\.(mhtml|mht|html|htm)$/i;
 const IMPORT_BATCH = { pages: 10, bytes: 24 * 1024 * 1024 };   // per request, well inside what Hoard accepts
 const MOST_PAGES = 2000;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const listed = list => new Intl.ListFormat("en", { type: "conjunction" }).format(list);
 const shopName = s => String(s).replace(/^https:\/\//, "");
 
 async function importPages(files, store) {
@@ -1742,12 +1759,17 @@ async function importPages(files, store) {
       // Pages from Payhip shops that aren't in your list: a shop is only added when you say so, all of them at once
       const shops = [...done.shops.keys()], again = [...done.shops.values()].flat(), n = shops.length;
       done.shops = new Map();
-      if (await ask(`${plural(again.length, "page is", "pages are")} from ${n === 1 ? "a Payhip shop that isn't" : `${n} Payhip shops that aren't`} in your list:\n\n` +
-          shops.map(s => "   " + shopName(s)).join("\n") + `\n\nAdd ${n === 1 ? "it" : "them"} to your Payhip shops, and import ${again.length === 1 ? "that page" : "those pages"}? ` +
-          "Only add shops you bought from.", "Add and import")) {
+      const head = again.length === 1
+        ? (n === 1 ? tr("1 page is from a Payhip shop that isn't in your list:") : tr("1 page is from {0} Payhip shops that aren't in your list:", n))
+        : (n === 1 ? tr("{0} pages are from a Payhip shop that isn't in your list:", again.length)
+                   : tr("{0} pages are from {1} Payhip shops that aren't in your list:", again.length, n));
+      const tail = n === 1 ? tr(again.length === 1 ? "Add it to your Payhip shops, and import that page?" : "Add it to your Payhip shops, and import those pages?")
+                           : tr(again.length === 1 ? "Add them to your Payhip shops, and import that page?" : "Add them to your Payhip shops, and import those pages?");
+      if (await ask(head + "\n\n" + shops.map(s => "   " + shopName(s)).join("\n") + "\n\n" + tail + " " + tr("Only add shops you bought from."),
+          "Add and import")) {
         await sendPages(again, store, shops, done);
       } else {
-        done.problems.push(`${listed(again.map(f => f.name))}: from ${listed(shops.map(shopName))}, which you didn't add to your Payhip shops, so not imported.`);
+        done.problems.push(tr("{0}: from {1}, which you didn't add to your Payhip shops, so not imported.", listed(again.map(f => f.name)), listed(shops.map(shopName))));
       }
     }
   } finally {
@@ -1789,7 +1811,7 @@ async function sendPages(files, store, trust, done) {
         if (!done.shops.has(res.confirm_shop)) done.shops.set(res.confirm_shop, []);
         done.shops.get(res.confirm_shop).push(batch[k]);
       } else {
-        done.problems.push(`${res.filename}: ${res.error}`);
+        done.problems.push(`${res.filename}: ${tr(res.error)}`);
       }
     });
     for (const s of Object.values(r.data.totals || {})) done.totals[s.label] = s.total;
@@ -1807,14 +1829,16 @@ function showImport(done, message, finished = false, title = "Importing pages") 
   $("#impLog").textContent = done.log.join("\n");
 }
 function finishImport(done, notPages, stopped) {
-  if (notPages) done.problems.push(`${plural(notPages, "file isn't a saved page", "files aren't saved pages")} (.mhtml or .html), so ${notPages === 1 ? "it was" : "they were"} left alone.`);
+  if (notPages) done.problems.push(notPages === 1 ? tr("{0} file isn't a saved page (.mhtml or .html), so it was left alone.", notPages)
+                                                  : tr("{0} files aren't saved pages (.mhtml or .html), so they were left alone.", notPages));
   const got = Object.entries(done.items), totals = Object.entries(done.totals);
-  let said = got.length
-    ? `Imported ${listed(got.map(([l, n]) => plural(n, `${l} item`, `${l} items`)))} from ${plural(done.pages, "page", "pages")}.`
-    : "Nothing was imported.";
-  if (totals.length) said += ` Your library now has ${listed(totals.map(([l, n]) => `${n} from ${l}`))}.`;
-  if (done.added.length) said += ` Added ${listed(done.added.map(shopName))} to your Payhip shops.`;
-  showImport(done, (stopped ? "Stopped. " : "") + said, true,
+  const said = [stopped && tr("Stopped."), got.length
+    ? tr("Imported {0} from {1}.", listed(got.map(([l, n]) => tr(n === 1 ? "{0} {1} item" : "{0} {1} items", n, l))),
+         tr(done.pages === 1 ? "{0} page" : "{0} pages", done.pages))
+    : tr("Nothing was imported."),
+    totals.length && tr("Your library now has {0}.", listed(totals.map(([l, n]) => tr("{0} from {1}", n, l)))),
+    done.added.length && tr("Added {0} to your Payhip shops.", listed(done.added.map(shopName)))].filter(Boolean).join(" ");
+  showImport(done, said, true,
              stopped ? "Import stopped" : done.problems.length ? (got.length ? "Imported, with problems" : "Nothing imported") : "Imported");
 }
 $("#impStop").addEventListener("click", () => {
@@ -1977,14 +2001,14 @@ async function tagPanelAction(b) {
   if (act === "unhide") return changeTags({ action: "unhide", name: t });
   if (act === "delete") {
     const n = +b.dataset.count;
-    if (!await ask(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""), "Delete", true)) return;
+    if (!await ask(tr("Delete #{0}?", t) + (n ? " " + tr(n === 1 ? "It comes off 1 item." : "It comes off {0} items.", n) : ""), "Delete", true)) return;
     const filtered = state.tags.delete(t);
     const ok = await changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
     if (!ok && filtered) { state.tags.add(t); render(); }   // not deleted: still filtered by it
     return ok;
   }
   if (act === "rename") {
-    const to = prompt(`Rename #${t} to (an existing tag's name merges the two):`, t);
+    const to = prompt(tr("Rename #{0} to (an existing tag's name merges the two):", t), t);
     if (!to || !to.trim() || to.trim().toLowerCase() === t) return;
     const filtered = state.tags.delete(t);
     const ok = await changeTags({ action: "rename", name: t, to }, `Renamed #${t}.`);
@@ -1992,7 +2016,7 @@ async function tagPanelAction(b) {
     return;
   }
   if (act === "match") {
-    const word = prompt(`Also tag every item whose name contains this word, including ones you buy later. Leave it empty to stop.`, b.dataset.match || t);
+    const word = prompt(tr("Also tag every item whose name contains this word, including ones you buy later. Leave it empty to stop."), b.dataset.match || t);
     if (word !== null) return changeTags({ action: "match", name: t, match: word });
   }
 }
@@ -2058,11 +2082,11 @@ function wireSupportReport() {
    only in the app Hoard-Setup installed on Windows */
 function describeUpdate(u) {
   if (u.error) return u.error;
-  if (u.busy) return u.message || "Getting the update";
-  if (u.available) return `Hoard ${verText(u.latest.version)} is available (you have ${verText(u.current)}).` +
-    (u.can_install ? "" : " " + (u.how || "Download it from the releases page, and install it over this one."));
-  if (u.checked) return `Hoard ${verText(u.current)} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
-  return `You have Hoard ${verText(u.current)}.`;
+  if (u.busy) return u.message || tr("Getting the update");
+  if (u.available) return tr("Hoard {0} is available (you have {1}).", verText(u.latest.version), verText(u.current)) +
+    (u.can_install ? "" : " " + (u.how ? tr(u.how) : tr("Download it from the releases page, and install it over this one.")));
+  if (u.checked) return tr("Hoard {0} is the newest version.", verText(u.current)) + " " + tr("Last checked {0}.", ago(new Date(u.checked * 1000).toISOString()));
+  return tr("You have Hoard {0}.", verText(u.current));
 }
 async function startDownload(stores, only, item, keys) {   // item: the library item, so the download goes straight to it
   const files = takeFiles();   // the files chosen of each product, if some were left out (taken first: never kept for later)
@@ -2473,10 +2497,13 @@ function updateBulkButtons() {
   $("#bulkPurge").hidden = v !== "removed";
   $("#bulkDeleteFiles").hidden = false;   // in every view: a product kept in your library can be downloaded again
 }
-const MARK_DONE = {
-  "archived true": n => `Archived ${n}. It's in Archive.`, "unarchived true": n => `Moved ${n} back to your library.`,
-  "removed true": n => `Removed ${n}. Restore from Removed if you change your mind.`, "removed false": n => `Restored ${n}.`,
-  "hidden true": n => `Hidden ${n}. It's in Hidden, behind your PIN.`, "hidden false": n => `${n} no longer hidden.`,
+const MARK_DONE = {   // [one, many]
+  "archived true": ["Archived 1 item. It's in Archive.", "Archived {0} items. They're in Archive."],
+  "unarchived true": ["Moved 1 item back to your library.", "Moved {0} items back to your library."],
+  "removed true": ["Removed 1 item. Restore it from Removed if you change your mind.", "Removed {0} items. Restore them from Removed if you change your mind."],
+  "removed false": ["Restored 1 item.", "Restored {0} items."],
+  "hidden true": ["Hidden 1 item. It's in Hidden, behind your PIN.", "Hidden {0} items. They're in Hidden, behind your PIN."],
+  "hidden false": ["1 item is no longer hidden.", "{0} items are no longer hidden."],
 };
 async function markItems(list, kind, on) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
@@ -2485,7 +2512,7 @@ async function markItems(list, kind, on) {
   const r = await apiPost("/api/marks", { kind, keys, on });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   sel.ids.clear(); T.closeDetail(); await load();
-  toast(MARK_DONE[`${kind} ${on}`](keys.length === 1 ? "1 item" : `${keys.length} items`));
+  toast(tr(MARK_DONE[`${kind} ${on}`][keys.length === 1 ? 0 : 1], keys.length));
   // issue #81: removing something you downloaded offers to delete its files too, so Downloads doesn't keep it
   if (kind === "removed" && on) {
     const downloaded = list.filter(a => a && onDisk(a));
@@ -2496,27 +2523,30 @@ async function deleteFiles(list, justRemoved = false) {
   const keys = [...new Set(list.filter(a => a && onDisk(a)).map(a => a.tag_key))];
   if (!keys.length) { toast("None of those are downloaded."); return; }
   const kept = list.some(a => a && onDisk(a) && a.mark !== "removed");   // still in your library: downloadable again
-  const what = keys.length === 1 ? (justRemoved ? "It's" : "This item is") + " downloaded." : `${keys.length} of them are downloaded.`;
-  if (!await ask(`${what} Delete ${keys.length === 1 ? "its" : "their"} downloaded files${justRemoved ? " too" : ""}?\n\n` +
-               "Only the files Hoard downloaded are deleted; anything of your own in the same folder stays. " +
-               "This can't be undone." + (justRemoved ? " If you keep them, they stay under Removed in Downloads."
-               : kept ? ` ${keys.length === 1 ? "It stays" : "They stay"} in your library, so you can download ${keys.length === 1 ? "it" : "them"} again.` : ""),
-               "Delete files", true, "Keep the files")) return;
+  const one = keys.length === 1;
+  const head = one ? tr(justRemoved ? "It's downloaded. Delete its downloaded files too?" : "This item is downloaded. Delete its downloaded files?")
+                   : tr(justRemoved ? "{0} of them are downloaded. Delete their downloaded files too?" : "{0} of them are downloaded. Delete their downloaded files?", keys.length);
+  const body = [tr("Only the files Hoard downloaded are deleted; anything of your own in the same folder stays."), tr("This can't be undone."),
+                justRemoved ? tr("If you keep them, they stay under Removed in Downloads.")
+                : kept ? tr(one ? "It stays in your library, so you can download it again." : "They stay in your library, so you can download them again.") : ""];
+  if (!await ask(head + "\n\n" + body.filter(Boolean).join(" "), "Delete files", true, "Keep the files")) return;
   const r = await apiPost("/api/delete-files", { keys, confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   if (r.data.job) { sel.ids.clear(); T.closeDetail(); return afterQueuedJob(r, "delete-files", load); }
   sel.ids.clear(); T.closeDetail(); await load();
-  toast(`Deleted ${r.data.files} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).` +
-        (r.data.kept.length ? ` ${r.data.kept.length === 1 ? "A folder still has" : r.data.kept.length + " folders still have"} other files, so ${r.data.kept.length === 1 ? "it was" : "they were"} kept.` : ""));
+  toast([tr(r.data.files === 1 ? "Deleted {0} file ({1})." : "Deleted {0} files ({1}).", r.data.files, sizeText(r.data.bytes)),
+         r.data.kept.length && tr(r.data.kept.length === 1 ? "A folder still has other files, so it was kept." : "{0} folders still have other files, so they were kept.",
+                                  r.data.kept.length)].filter(Boolean).join(" "));
 }
 async function purgeItems(list) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
   if (!keys.length) return;
-  if (!await ask(`Delete ${keys.length === 1 ? "this item" : keys.length + " items"} from Hoard for good? They stay out of your library even if a store lists them again. Downloaded files stay on disk.`, "Delete for good", true)) return;
+  if (!await ask(tr(keys.length === 1 ? "Delete this item from Hoard for good?" : "Delete {0} items from Hoard for good?", keys.length) + " " +
+                 tr("They stay out of your library even if a store lists them again. Downloaded files stay on disk."), "Delete for good", true)) return;
   const r = await apiPost("/api/purge", { keys });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   sel.ids.clear(); T.closeDetail(); await load();
-  toast(`Deleted ${r.data.deleted} ${r.data.deleted === 1 ? "item" : "items"} from Hoard's library.`);
+  toast(tr(r.data.deleted === 1 ? "Deleted {0} item from Hoard's library." : "Deleted {0} items from Hoard's library.", r.data.deleted));
 }
 async function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
@@ -2645,7 +2675,8 @@ function wirePrivacy() {
     const r = await apiPost("/api/hidden/forget", { confirm: true });
     pinDone(false);
     state.view = "library"; await load();
-    toast(r.ok ? `Deleted ${r.data.deleted} hidden ${r.data.deleted === 1 ? "item" : "items"} and removed the PIN.` : (r.data.error || "That didn't work."));
+    toast(r.ok ? tr(r.data.deleted === 1 ? "Deleted {0} hidden item and removed the PIN." : "Deleted {0} hidden items and removed the PIN.", r.data.deleted)
+               : (r.data.error || "That didn't work."));
   });
   for (const b of document.querySelectorAll("#bulk [data-mark]")) {
     b.addEventListener("click", () => markItems([...sel.ids].map(T.byId), b.dataset.kind, b.dataset.on === "true"));

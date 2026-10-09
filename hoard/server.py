@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, libraries, projects, space, themes, updater, vault
+from . import __version__, diagnostics, i18n, itch, libraries, projects, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -105,7 +105,8 @@ def display_settings(cfg: dict) -> dict:
             "custom_colours": custom_colours(d.get("custom_colours")),
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
             "theme": themes.theme_id(d.get("theme")), "mode": themes.mode_id(d.get("mode")),
-            "theme_css": themes.css(d.get("theme"), d.get("mode")), "themes": themes.choices()}
+            "theme_css": themes.css(d.get("theme"), d.get("mode")), "themes": themes.choices(),
+            "language": i18n.setting(d.get("language"))}
 
 
 def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
@@ -281,6 +282,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["theme"] not in themes.THEMES:
                 raise ValueError("Choose a theme from the list.")
             display["theme"] = given["theme"]
+        if "language" in given:
+            if given["language"] not in i18n.SETTINGS:
+                raise ValueError("Choose a language from the list.")
+            display["language"] = given["language"]
         if "mode" in given:
             if given["mode"] not in themes.MODES:
                 raise ValueError("Choose Match my computer, Light or Dark.")
@@ -591,7 +596,8 @@ class Handler(BaseHTTPRequestHandler):
         path, srv = u.path, self.server
         if path in PAGES:   # the pages hold nothing private: everything they show is fetched with the access key
             srv.last_seen = time.time()
-            return self._send(200, page_source(PAGES[path], srv.cfg), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
+            return self._send(200, page_source(PAGES[path], srv.cfg, self.headers.get("Accept-Language")), "text/html; charset=utf-8",
+                              {"Cache-Control": "no-store"})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))
             if not font:
@@ -1265,16 +1271,23 @@ class Handler(BaseHTTPRequestHandler):
 SHARED_MARK = b"//@include shared.js\n"
 
 
-def page_source(name: str, cfg: dict | None = None) -> bytes:
+def page_source(name: str, cfg: dict | None = None, accept_language: str | None = None) -> bytes:
     """A page as it's served: its file, with what both pages share (web/shared.js) put in its script where it says
-    so, so each page is still one script the Content-Security-Policy allows by its hash; and the theme you chose
-    (Settings, Appearance) after the page's own colours, so it shows from the first moment."""
+    so, so each page is still one script the Content-Security-Policy allows by its hash; the theme you chose
+    (Settings, Appearance) after the page's own colours, so it shows from the first moment; and your language: the
+    page's lang, and the catalog it translates itself from (hoard/i18n.py), before its script. The page stays
+    hidden until it has (data-i18n), so it never shows in English first."""
     page = (WEB / name).read_bytes()
     if SHARED_MARK in page:
         page = page.replace(SHARED_MARK, (WEB / "shared.js").read_bytes().replace(b"\r\n", b"\n") + b"\n", 1)
     d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
-    return page.replace(b"</head>", style.encode() + b"</head>", 1)
+    page = page.replace(b"</head>", style.encode() + b"</head>", 1)
+    lang = i18n.language(cfg, accept_language)
+    if lang != "en":
+        page = page.replace(b'<html lang="en">', f'<html lang="{lang}" data-i18n>'.encode(), 1)
+        page = page.replace(b"\n<script>\n", b"\n" + i18n.page_script(lang).encode() + b"<script>\n", 1)
+    return page
 
 
 def chosen_files(raw) -> dict[str, dict] | None:

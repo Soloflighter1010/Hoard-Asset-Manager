@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Iterable
 
 from . import __version__
-from . import paths, themes
+from . import i18n, paths, themes
 from .paths import data_dir, documents_dir, log_files
 from .safety import scrub, write_file_safely
 
@@ -598,6 +598,7 @@ def _settings_summary(cfg: dict) -> dict:
         "glow": display.get("glow") is not False,
         "store_colours": display.get("colours") if display.get("colours") in ("standard", "colourblind", "custom") else "standard",
         "theme": themes.theme_id(display.get("theme")), "theme_mode": themes.mode_id(display.get("mode")),
+        "language": i18n.setting(display.get("language")),
         "payhip_shop_count": len((cfg.get("payhip") or {}).get("shops") or []) if isinstance(cfg.get("payhip"), dict) else 0,
         "jinxxy_pattern_customized": ((cfg.get("jinxxy") or {}).get("item_link_pattern") !=
                                       DEFAULT_CONFIG["jinxxy"].get("item_link_pattern")),

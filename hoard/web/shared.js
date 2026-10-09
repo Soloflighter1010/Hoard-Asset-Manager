@@ -1,5 +1,177 @@
 // What both of Hoard's pages share, served inside each page's own script (server.page_source): each page
 // is still one script, which the Content-Security-Policy allows by its hash. Changed here, it changes on both.
+/* ---------- languages (Settings, Appearance). The pages are written in English and translated as they're drawn,
+   from the catalog the server puts in the page for your language (hoard/web/i18n/<language>.json): one dictionary
+   for the markup, what the script builds and Hoard's own messages alike. A key is the English as it shows, with
+   spaces run together; {0}, {1} stand for words that change (a count, a name), and <0>…</0> for an element inside a
+   sentence (a link, a bold word), so a translation can put it where its own word order needs it; the element itself
+   is kept, with what it does. Your own things (product names, creators, tags, files) are marked translate="no" and
+   left as they are. English has no catalog, and nothing is done. */
+const I18N = (() => {
+  const data = document.getElementById("i18n");
+  let catalog = {};
+  try { catalog = data ? JSON.parse(data.textContent) : {}; } catch (e) { catalog = {}; }
+  const exact = new Map(), patterns = [];
+  const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const [key, value] of Object.entries(catalog)) {
+    if (typeof value !== "string" || !value) continue;
+    if (!/\{\d+\}/.test(key)) { exact.set(key, value); continue; }
+    const order = [], parts = key.split(/(\{\d+\})/);
+    const rx = new RegExp("^" + parts.map(part => {
+      const m = /^\{(\d+)\}$/.exec(part);
+      if (!m) return escape(part);
+      order.push(+m[1]);
+      return "(.+?)";
+    }).join("") + "$", "s");
+    // the longest fixed part, to skip a pattern quickly when the text doesn't have it
+    const fixed = parts.filter(x => !/^\{\d+\}$/.test(x)).sort((a, b) => b.length - a.length)[0] || "";
+    patterns.push({ rx, order, value, fixed });
+  }
+  patterns.sort((a, b) => b.fixed.length - a.fixed.length);   // the most specific first
+  const on = exact.size + patterns.length > 0;
+  const norm = s => String(s).replace(/\s+/g, " ").trim();
+  function lookup(key, depth = 0) {
+    if (!key || /^[\d\s.,:;%+\-–—/()×#·…]*$/.test(key)) return null;   // numbers and marks need nothing
+    const hit = exact.get(key);
+    if (hit !== undefined) return hit;
+    for (const p of patterns) {
+      if (p.fixed && !key.includes(p.fixed)) continue;
+      const m = p.rx.exec(key);
+      if (!m) continue;
+      const values = {};
+      // a word that changes may be a message of its own ("Failed: {0}"): translated too, two levels down at most
+      p.order.forEach((n, i) => { values[n] = depth < 2 ? (lookup(m[i + 1], depth + 1) ?? m[i + 1]) : m[i + 1]; });
+      return p.value.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "");
+    }
+    return null;
+  }
+  const SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "PRE", "CODE", "svg", "SVG", "CANVAS", "IMG", "VIDEO"]);
+  const INLINE = new Set(["STRONG", "B", "EM", "I", "CODE", "KBD", "A", "SPAN", "SMALL", "BR", "ABBR", "MARK", "SUP", "SUB", "U", "S", "Q", "TIME", "BUTTON"]);
+  const ATTRS = ["title", "placeholder", "aria-label", "alt"];
+  const kept = el => el.closest && el.closest('[translate="no"]');
+  // an element whose children are words and simple inline elements (each only words): a sentence to translate whole.
+  // A label beside a count or a mark ("Tasks <span>3</span>", "<span class=chev></span>Your tags") isn't one: its
+  // words are translated on their own, and the count left as it is. Words on both sides of a number are a sentence.
+  const bare = n => !/[A-Za-z]/.test(n.textContent);
+  function sentence(el) {
+    let texts = 0, elements = 0, worded = 0;
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) { if (n.data.trim()) texts++; continue; }
+      if (n.nodeType !== 1) continue;
+      if (!INLINE.has(n.tagName) || n.getAttribute("translate") === "no") return false;
+      if (n.tagName !== "BR" && [...n.childNodes].some(c => c.nodeType === 1 && c.tagName !== "BR")) return false;
+      elements++;
+      if (n.tagName !== "BR" && !bare(n)) worded++;
+    }
+    if (!texts || !elements) return false;
+    return worded > 0 || texts > 1;
+  }
+  function sentenceKey(el) {
+    let i = 0, key = "";
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) key += n.data;
+      else if (n.nodeType === 1) key += n.tagName === "BR" ? `<${i++}/>` : `<${i}>${n.textContent}</${i++}>`;
+    }
+    return norm(key);
+  }
+  function applySentence(el, text) {
+    const kids = [...el.childNodes].filter(n => n.nodeType === 1), out = document.createDocumentFragment();
+    let last = 0;
+    const rx = /<(\d+)>([\s\S]*?)<\/\1>|<(\d+)\/>/g;
+    let m;
+    while ((m = rx.exec(text))) {
+      if (m.index > last) out.append(text.slice(last, m.index));
+      const kid = kids[+(m[1] ?? m[3])];
+      if (kid) {
+        if (m[1] !== undefined && ![...kid.childNodes].some(c => c.nodeType === 1)) kid.textContent = m[2];
+        out.append(kid);
+      }
+      last = rx.lastIndex;
+    }
+    if (last < text.length) out.append(text.slice(last));
+    el.replaceChildren(out);
+  }
+  // missing: when given (a Set), nothing is changed, and the English that has no translation is added to it
+  // (tests/test_i18n.py, and scripts/i18n_strings.py to find what's still to translate)
+  let missing = null;
+  const find = key => {
+    const to = lookup(key);
+    // (words already translated, with a name or two in them, aren't missing)
+    if (to === null && missing && /[A-Za-z]{2}/.test(key) && !/[\u3000-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(key)) missing.add(key);
+    return missing ? null : to;
+  };
+  function translateText(node) {
+    const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(node.data), to = find(norm(m[2]));
+    if (to !== null && to !== m[2]) node.data = m[1] + to + m[3];
+  }
+  function translateAttrs(el) {
+    for (const a of ATTRS) {
+      const v = el.getAttribute(a);
+      if (!v) continue;
+      const to = find(norm(v));
+      if (to !== null && to !== v) el.setAttribute(a, to);
+    }
+  }
+  function walk(el) {
+    if (el.nodeType === 3) { if (!kept(el.parentElement || document.body)) translateText(el); return; }
+    if (el.nodeType !== 1 || SKIP.has(el.tagName) || el.getAttribute("translate") === "no") return;
+    translateAttrs(el);
+    if (el.tagName === "INPUT") return;
+    if (sentence(el)) {
+      const key = sentenceKey(el), to = lookup(key);
+      if (to !== null && !missing) { applySentence(el, to); for (const k of el.children) translateAttrs(k); return; }
+      if (to !== null) return;
+      if (missing) { find(key); return; }
+    }
+    for (const n of [...el.childNodes]) {
+      if (n.nodeType === 3) translateText(n);
+      else walk(n);
+    }
+  }
+  let observer = null;
+  const watch = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS };
+  function translateAll(root) {
+    if (!on) return;
+    if (observer) observer.disconnect();
+    walk(root);
+    if (observer) observer.observe(document.body, watch);
+  }
+  function start() {
+    if (!on) return;
+    translateAll(document.body);
+    document.title = lookup(norm(document.title)) ?? document.title;
+    // what the script draws later (and Hoard's messages in it), as it's drawn
+    observer = new MutationObserver(records => {
+      observer.disconnect();
+      const seen = new Set();
+      for (const r of records) {
+        if (r.type === "attributes") { if (!kept(r.target)) translateAttrs(r.target); continue; }
+        const el = r.type === "characterData" ? r.target.parentElement : r.target;
+        if (!el || seen.has(el) || kept(el)) continue;
+        seen.add(el);
+        walk(el);
+      }
+      observer.observe(document.body, watch);
+    });
+    observer.observe(document.body, watch);
+  }
+  function untranslated(root = document.body) {
+    missing = new Set();
+    try { walk(root); return [...missing]; } finally { missing = null; }
+  }
+  return { on, lookup, start, untranslated, t: (s, ...values) => {
+    // for the script's own use (a dialog's words, a title set in code): {0}, {1} filled in after translating
+    const text = lookup(norm(s)) ?? s;
+    return text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "");
+  } };
+})();
+const tr = I18N.t;   // the script's own words: tr("Copied"), tr("{0} files", n)
+// tr() for HTML: the words escaped, and each value (already HTML: a link, a name in <strong>) put in as it is
+const trHTML = (s, ...html) => esc(tr(s, ...html.map((_, i) => `\u0001${i}\u0002`))).replace(/\u0001(\d+)\u0002/g, (_, n) => html[n]);
+const listed = list => new Intl.ListFormat(document.documentElement.lang || "en", { type: "conjunction" }).format(list);   // "A, B and C"
+I18N.start();
+delete document.documentElement.dataset.i18n;   // shown now: translated (or English, if there's no catalog)
+
 /* ---------- splash (issue #50): the logo while the page first reads your library. It's in the markup, so it shows
    from the first paint; on the window's first page it stays at least a moment, and on later pages (Library to
    Downloads and back) the stylesheet only fades it in if reading takes more than a moment. */
@@ -365,12 +537,13 @@ const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payh
 let SETTINGS = null, dlActive = false, dlTimer = null;
 
 const DRIVE_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="5" width="15" height="10" rx="2.5"/><circle cx="14" cy="10" r="1" fill="currentColor"/><path d="M5.5 10h5"/></svg>';
-const libCount = n => `${n.toLocaleString()} ${n === 1 ? "product" : "products"}`;
+const libText = l => l.main ? tr(l.label) : (l.label || l.path);   // "Downloads folder" in your language; others by their name
+const libCount = n => tr(n === 1 ? "{0} product" : "{0} products", n.toLocaleString());
 function renderLibs(list) {   // every library folder, the downloads folder first (hoard/libraries.py)
   $("#setLibs").innerHTML = (list || []).map(l => `<div class="librow${l.available ? "" : " away"}">${DRIVE_ICON}` +
-    `<span class="lp"><b>${esc(l.label || l.path)}</b><small>${esc(l.path)}${l.main ? " · new downloads go here" : ""}</small></span>` +
-    `<span class="muted">${l.available ? `${libCount(l.products || 0)}${l.free != null ? ` · ${sizeText(l.free)} free` : ""}`
-      : "Drive not connected"}</span>` +
+    `<span class="lp"><b translate="no">${esc(libText(l))}</b><small><span translate="no">${esc(l.path)}</span>${l.main ? ` · <span>new downloads go here</span>` : ""}</small></span>` +
+    `<span class="muted">${esc(l.available ? [libCount(l.products || 0), l.free != null && tr("{0} free", sizeText(l.free))].filter(Boolean).join(" · ")
+      : tr("Drive not connected"))}</span>` +
     (l.available ? `<button class="ghost sm" data-lib-open="${l.n}">Open</button>` : "") +
     (l.main ? "" : `<button class="ghost sm" data-lib-remove="${l.n}">Remove</button>`) + `</div>`).join("");
 }
@@ -389,8 +562,8 @@ async function addLibrary(path) {
   const libs = await libraryChange("/api/libraries/add", { path });
   if (!libs) return false;
   const added = libs.find(l => !before.has(l.path));
-  if (added) toast(`Added ${added.label}: ${added.products ? `${libCount(added.products)} found there` : "nothing downloaded there yet"}. ` +
-                   "It has a tab in Downloads.");
+  if (added) toast((added.products ? tr("Added {0}: {1} found there.", libText(added), libCount(added.products))
+                                    : tr("Added {0}: nothing downloaded there yet.", libText(added))) + " " + tr("It has a tab in Downloads."));
   return true;
 }
 function wireLibs() {
@@ -409,14 +582,14 @@ function wireLibs() {
     const open = e.target.closest("[data-lib-open]");
     if (open) {
       const lib = (SETTINGS.libraries || []).find(l => l.n === +open.dataset.libOpen);
-      if (lib) { const r = await apiPost("/api/open", { path: lib.main ? "" : `@${lib.n}/` }); toast(r.ok ? `Opened in ${r.data.opened_in}` : r.data.error); }
+      if (lib) { const r = await apiPost("/api/open", { path: lib.main ? "" : `@${lib.n}/` }); toast(r.ok ? tr("Opened in {0}", tr(r.data.opened_in)) : r.data.error); }
       return;
     }
     const b = e.target.closest("[data-lib-remove]"); if (!b) return;
     const lib = (SETTINGS.libraries || []).find(l => l.n === +b.dataset.libRemove);
-    if (!lib || !await ask(`Stop reading ${lib.label} (${lib.path}) as part of your library?\n\nIts files stay where they are, ` +
-                           "and come back to your library if you add the folder again.", "Remove")) return;
-    if (await libraryChange("/api/libraries/remove", { n: lib.n })) toast(`${lib.label} is no longer part of your library.`);
+    if (!lib || !await ask(tr("Stop reading {0} ({1}) as part of your library?", libText(lib), lib.path) + "\n\n" +
+                           tr("Its files stay where they are, and come back to your library if you add the folder again."), "Remove")) return;
+    if (await libraryChange("/api/libraries/remove", { n: lib.n })) toast(tr("{0} is no longer part of your library.", libText(lib)));
   });
 }
 /* ---------- issue #107: before downloading new things, or updating, the list of what that gets: untick what you
@@ -460,12 +633,12 @@ function fileChoice(e) {
 let DL_FILES = null;   // the files chosen of each product, for the download about to start
 function takeFiles() { const f = DL_FILES; DL_FILES = null; return f; }
 function drawPick() {
-  const files = n => n ? `, ${n} ${n === 1 ? "file" : "files"}` : "";
+  const files = n => n ? tr(n === 1 ? ", {0} file" : ", {0} files", n) : "";
   const row = (e, skipped) => `<li>` + (skipped
-    ? `<span class="dot ${esc(e.store)}"></span><span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}</span>` +
+    ? `<span class="dot ${esc(e.store)}"></span><span class="pk-nm" translate="no">${esc(e.name)}</span><span class="muted" translate="no">${esc(e.creator)}</span>` +
       `<button class="linkish" data-unskip="${esc(e.key)}">Stop skipping</button>`
     : `<label><input type="checkbox" data-pick="${esc(e.key)}"${PICK.off.has(e.key) ? "" : " checked"}> <span class="dot ${esc(e.store)}"></span>` +
-      `<span class="pk-nm">${esc(e.name)}</span><span class="muted">${esc(e.creator)}${files(e.files)}</span></label>` +
+      `<span class="pk-nm" translate="no">${esc(e.name)}</span><span class="muted" translate="no">${esc(e.creator)}${esc(files(e.files))}</span></label>` +
       `<button class="linkish" data-skip="${esc(e.key)}">Always skip</button>` + fileChoice(e)) + `</li>`;
   $("#pickList").innerHTML = PICK.items.map(e => row(e, false)).join("") ||
     `<li class="muted">Nothing here to download, apart from what you always skip.</li>`;
@@ -473,7 +646,7 @@ function drawPick() {
   $("#pickSkipN").textContent = PICK.skipped.length;
   $("#pickSkipped ul").innerHTML = PICK.skipped.map(e => row(e, true)).join("");
   const n = PICK.items.length - PICK.off.size;
-  $("#pickGo").textContent = !PICK.off.size ? `${PICK.verb} all` : `${PICK.verb} ${n}`;
+  $("#pickGo").textContent = !PICK.off.size ? tr(`${PICK.verb} all`) : tr(`${PICK.verb} {0}`, n);
   $("#pickGo").disabled = PICK.items.length > 0 && n === 0;
 }
 async function pickSkip(key, on) {
@@ -653,6 +826,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
   fillThemes();
+  $("#setLanguage").value = SETTINGS.display.language || "system";
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
     `<label class="check${sub ? " sub" : ""}"><input type="checkbox" data-set-store="${store}" data-opt="${opt}"${on ? " checked" : ""}> ${label}</label>`;
@@ -704,8 +878,8 @@ async function checkUpdate() {
 }
 async function installUpdate() {
   if (!UPDATE || !UPDATE.available) return;
-  if (!await ask(`Update to Hoard ${verText(UPDATE.latest.version)}? Hoard downloads it, closes, installs it and opens again. ` +
-               "Your library, settings, sign-ins and downloads stay as they are.", "Update")) return;
+  if (!await ask(tr("Update to Hoard {0}?", verText(UPDATE.latest.version)) + " " + tr("Hoard downloads it, closes, installs it and opens again.") + " " +
+               tr("Your library, settings, sign-ins and downloads stay as they are."), "Update")) return;
   const r = await apiPost("/api/update/install");
   if (!r.ok) { toast(r.data.error || "The update didn't start."); return; }
   showUpdate({ ...UPDATE, busy: true, message: "Starting", error: "" });
@@ -858,7 +1032,7 @@ function makeWindow(el) {
   if (title) bar.appendChild(title);
   const extra = document.createElement("span"); extra.className = "win-extra"; extra.setAttribute("aria-live", "polite");
   const x = document.createElement("button"); x.className = "win-x"; x.textContent = "×";
-  x.setAttribute("aria-label", "Close " + (title ? title.textContent.trim() : "panel"));
+  x.setAttribute("aria-label", title ? tr("Close {0}", title.textContent.trim()) : tr("Close panel"));
   bar.append(extra, x);
   el.append(bar, body);
   el.setAttribute("role", "dialog");
@@ -894,7 +1068,7 @@ function wireSidebar() {
     h.before(sec); sec.append(h, body); body.append(...rest);
     const text = h.firstChild && h.firstChild.nodeType === 3 ? h.firstChild : null;
     const name = (text ? text.textContent : h.textContent).trim();
-    const key = name.toLowerCase().replace(/\W+/g, "-").slice(0, 40);
+    const key = h.dataset.sec || name.toLowerCase().replace(/\W+/g, "-").slice(0, 40);   // data-sec: the same in every language
     const btn = document.createElement("button");
     btn.className = "sec-toggle"; btn.innerHTML = `<span class="chev" aria-hidden="true"></span>`;
     btn.append(document.createTextNode(name));
@@ -932,6 +1106,7 @@ function settingsPart(el) {
   }
   if (el.dataset.setStore) return { stores: { [el.dataset.setStore]: { [el.dataset.opt]: el.checked } } };
   if (el.name === "setTheme") return { display: { theme: el.value } };
+  if (el.id === "setLanguage") return { display: { language: el.value } };
   if (el.name === "setMode") return { display: { mode: el.value } };
   switch (el.id) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
@@ -968,6 +1143,7 @@ function autosave(el) {
       return;
     }
     SETTINGS = r.data.settings;
+    if (part.display && "language" in part.display) { location.reload(); return; }   // the page comes again in it
     applyDisplay(SETTINGS.display);
     if ("display" in part) refitWindows();
     if (part.display && "colours" in part.display) fillColours();
@@ -994,22 +1170,22 @@ function sizeText(n) {
   const units = ["bytes", "KB", "MB", "GB"];
   let i = 0;
   while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return i ? `${n.toFixed(1)} ${units[i]}` : `${Math.round(n)} bytes`;
+  return i ? `${n.toFixed(1)} ${units[i]}` : tr("{0} bytes", Math.round(n));
 }
 function timeLeft(s) {
   s = Math.max(0, Math.round(s));
-  return s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.round(s % 3600 / 60)} min`;
+  return s < 60 ? tr("{0} s", s) : s < 3600 ? tr("{0} min", Math.round(s / 60)) : tr("{0} h {1} min", Math.floor(s / 3600), Math.round(s % 3600 / 60));
 }
 function transferHtml(t) {
   if (!t || !t.file) return "";
   const pct = t.total ? Math.min(100, (t.got || 0) * 100 / t.total) : null;
-  const stats = [t.total ? `${sizeText(t.got || 0)} of ${sizeText(t.total)}` : `${sizeText(t.got || 0)} so far`];
+  const stats = [t.total ? tr("{0} of {1}", sizeText(t.got || 0), sizeText(t.total)) : tr("{0} so far", sizeText(t.got || 0))];
   if (t.speed != null) stats.push(`${sizeText(t.speed)}/s`);
-  if (t.eta != null) stats.push(`${timeLeft(t.eta)} left`);
+  if (t.eta != null) stats.push(tr("{0} left", timeLeft(t.eta)));
   const bar = pct == null
     ? `<div class="xfer-bar unknown" role="progressbar" aria-label="${esc(t.file)}"><span></span></div>`
     : `<div class="xfer-bar" role="progressbar" aria-label="${esc(t.file)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.floor(pct)}"><span style="width: ${pct.toFixed(1)}%"></span></div>`;
-  return `<div class="xfer"><div class="xfer-file" title="${esc(t.file)}">${esc(t.file)}</div>${bar}` +
+  return `<div class="xfer"><div class="xfer-file" title="${esc(t.file)}" translate="no">${esc(t.file)}</div>${bar}` +
     `<div class="xfer-stats"><span>${pct == null ? "" : Math.floor(pct) + "%"}</span><span>${esc(stats.join(" · "))}</span></div></div>`;
 }
 function showTransfer(box, t) {   // updates the bar in place, so it slides rather than jumps
@@ -1047,7 +1223,7 @@ async function loadTasks() {
 }
 const OUTCOMES = { done: "Done", partial: "Partly done", failed: "Failed", stopped: "Stopped" };
 const STOPPABLE = ["download", "check-updates", "sync"];
-function whenDone(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }); }
+function whenDone(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" }); }
 function tookTime(a, b) {
   const s = (Date.parse(b) - Date.parse(a)) / 1000;
   return isNaN(s) ? "" : s < 60 ? `${Math.max(0, Math.round(s))} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`;
@@ -1107,8 +1283,8 @@ async function loadProjects() {
   } catch (e) { body.innerHTML = `<p class="none">Projects couldn't be read just now.</p>`; }
 }
 function renderProjects(list, hiddenLeftOut) {
-  if (!list.length) return `<p class="none">No projects yet. Open <strong>Window &gt; Hoard</strong> in a Unity project
-    (Hoard for Unity 0.4.0 or newer) and it appears here, with every asset it uses and its credits list.</p>`;
+  if (!list.length) return `<p class="none">No projects yet. Open <strong>Hoard › Open Hoard</strong> in a Unity project
+    (<strong>Window › Hoard</strong> before Hoard for Unity 0.7.0) and it appears here, with every asset it uses and its credits list.</p>`;
   return (hiddenLeftOut ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "") +
     list.map((p, i) => {
       const used = p.assets.length, updates = p.assets.filter(a => a.update).length;

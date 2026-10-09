@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.3.0
+
+- **Hoard in Japanese and Korean (日本語, 한국어).** Settings, Appearance has a new **Language** choice: **Match my
+  computer** (the language your system or browser asks for, English if it's neither), **English**, **日本語** or
+  **한국어**. Both pages, Settings, the panels and dialogs, and Hoard's own messages on the page are translated.
+  Product names, creators, tags and files stay as they are. Korean uses Malgun Gothic, Apple SD Gothic Neo or Noto
+  Sans KR when you have them, and breaks lines between words. The translations are new: if something reads oddly,
+  please tell us in an issue. The task log, Hoard for Unity and the website are still in English for now.
+- **Fixed: Updates, in Downloads, showed "undefined"** when nothing needed updating. It says **Nothing to update**.
+
 ## 3.2.0
 
 - **Themes, and Light or Dark.** Settings has a new **Appearance** section: choose **Match my computer**, **Light**
