@@ -159,7 +159,9 @@ class TheSite(unittest.TestCase):
             return None
         base = "https://soloflighter1010.github.io/Hoard-Asset-Manager/"
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
+        cards = set()
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
+                     "docs/index.html", "docs/Settings.html"):
             html = (site / name).read_text("utf-8")
             image = re.search(r'<meta property="og:image" content="([^"]+)">', html)
             self.assertIsNotNone(image, f"{name}: no og:image")
@@ -171,6 +173,15 @@ class TheSite(unittest.TestCase):
             self.assertTrue(picture.is_file(), image.group(1))
             self.assertLess(picture.stat().st_size, 300_000)
             self.assertEqual(jpeg_size(picture.read_bytes()), (1200, 630), "a JPEG every site shows, at 1.91:1")
+            self.assertIn('<meta name="theme-color" content="#F0B429">', html, f"{name}: the embed's edge in Hoard's gold")
+            cards.add(image.group(1))
+        self.assertEqual(len(cards), 8, "each page its own card, with its name on it (the docs share one)")
+        self.assertEqual({p.name for p in SITE.glob("img/social*.jpg")}, {c.rsplit("/", 1)[1] for c in cards},
+                         "scripts/make_social_cards.py draws just the cards the pages show")
+
+    def test_the_chosen_store_tab_has_no_line_on_top(self):
+        """The app took the coloured line off the chosen tab's top (with the Local tab); the site follows."""
+        self.assertNotRegex((SITE / "styles.css").read_text("utf-8"), r'\.seg button\[aria-checked="true"\]::after')
 
     def test_it_works_on_a_phone(self):
         self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', self.html)
@@ -241,6 +252,8 @@ class TheOtherPages(unittest.TestCase):
         home = (site / "docs" / "index.html").read_text("utf-8")
         self.assertNotIn("<picture>", home, "the wiki's raw HTML isn't the site's")
         self.assertIn('href="Installing-Hoard.html"', home, "wiki links go to the docs page")
+        self.assertIn("<title>Hoard docs</title>", home, "the docs' home is named once")
+        self.assertIn("<title>Settings · Hoard docs</title>", settings)
         index = json.loads((site / "docs" / "search.json").read_text("utf-8"))
         self.assertTrue(any(s["page"] == "Stores.html" and s["anchor"] == "payhip" for s in index))
 

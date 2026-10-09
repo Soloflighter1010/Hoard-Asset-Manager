@@ -242,20 +242,20 @@ PAGE = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} · Hoard docs</title>
+  <title>{headtitle}</title>
   <meta name="description" content="{description}">
   <meta property="og:site_name" content="Hoard">
-  <meta property="og:title" content="{title} · Hoard docs">
+  <meta property="og:title" content="{headtitle}">
   <meta property="og:description" content="{description}">
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/docs/{file}">
-  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social.jpg">
+  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social-docs.jpg">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Hoard's library: VRChat assets from Booth, Gumroad and Payhip as tiles, with tags and creators beside them">
+  <meta property="og:image:alt" content="Hoard's logo and “Hoard docs”, beside a shelf of tiles in each store's colour">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="theme-color" content="#211C18">
+  <meta name="theme-color" content="#F0B429">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="../favicon.ico">
   <link rel="stylesheet" href="../styles.css">
@@ -317,7 +317,9 @@ def build(out: Path, folder: Path = WIKI) -> list[str]:
         page = (PAGE.replace("{header}", header("docs/", up="../")).replace("{footer}", footer(up="../"))
                 .replace("{sidebar}", side).replace("{toc}", toc).replace("{GITHUB}", GITHUB)
                 .replace("{name}", name).replace("{file}", page_file(name))
-                .replace("{description}", html.escape(intro, quote=True)).replace("{title}", html.escape(title))
+                .replace("{description}", html.escape(intro, quote=True))
+                .replace("{headtitle}", html.escape(title if name == "Home" else f"{title} · Hoard docs"))
+                .replace("{title}", html.escape(title))
                 .replace("{body}", body))
         (out / page_file(name)).write_text(page, "utf-8")
         written.append(page_file(name))

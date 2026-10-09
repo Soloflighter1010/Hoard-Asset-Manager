@@ -243,8 +243,6 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .seg button:hover { height: 41px; color: var(--bone); background: var(--stone); }
 .seg button[aria-checked="true"] { height: 46px; color: var(--bone); z-index: 1; background: var(--cave);
   box-shadow: inset 0 1px 0 var(--seam), inset 1px 0 0 var(--seam), inset -1px 0 0 var(--seam); }
-.seg button[aria-checked="true"]::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  border-radius: 12px 12px 0 0; background: var(--c, var(--gold)); }
 .seg .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); transform: rotate(45deg); }
 .seg .n { font-weight: 500; font-size: 13px; opacity: .8; }
 .store-notes { min-height: 3.4em; margin: 16px auto 0; max-width: 44em; color: var(--dust); }
