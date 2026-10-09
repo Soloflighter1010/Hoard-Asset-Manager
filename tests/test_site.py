@@ -180,6 +180,36 @@ class TheOtherPages(unittest.TestCase):
             self.assertIn('href="ai.html"', page, f"{name}: the AI disclosure, from every page")
             self.assertIn('name="viewport" content="width=device-width, initial-scale=1"', page, name)
 
+    def test_it_looks_like_the_app(self):
+        """Every page has the app's bar (its logo, the pages as tabs, Help, GitHub and a gold Download) and its
+        footer, the same everywhere but for which tab is the page you're on."""
+        site = built_site()
+        bars, foots = {}, {}
+        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
+            page = (site / name).read_text("utf-8")
+            bar = re.search(r'<header class="bar">.*?</header>', page, re.S).group(0)
+            self.assertLessEqual(bar.count('aria-current="page"'), 1, name)
+            bars[name] = bar.replace(' aria-current="page"', "")
+            foots[name] = re.sub(r" This page is built from <a [^>]*>CHANGELOG\.md</a>\.", "", re.search(r'<footer class="foot">.*?</footer>', page, re.S).group(0))
+            self.assertIn('class="boxes"', bar, f"{name}: the app's logo, whose boxes move")
+            self.assertIn('<nav class="apptabs"', bar, name)
+            self.assertIn('<a class="primary" href="./#download">Download</a>', bar, name)
+        self.assertEqual(len(set(bars.values())), 1, "one bar on every page")
+        self.assertEqual(len(set(foots.values())), 1, "one footer on every page")
+        css = (SITE / "styles.css").read_text("utf-8")
+        self.assertIn(".seg button[aria-checked=\"true\"]", css, "the store tabs are the app's folder tabs")
+        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+
+    def test_the_store_tabs_say_what_hoard_does_on_each(self):
+        html = (SITE / "index.html").read_text("utf-8")
+        tabs = re.findall(r'role="radio" aria-checked="(true|false)" data-store="(\w*)"', html)
+        self.assertEqual([s for _, s in tabs], ["", "booth", "gumroad", "jinxxy", "payhip", "itch"])
+        self.assertEqual([c for c, _ in tabs].count("true"), 1, "Everything, to start with")
+        notes = re.findall(r'<p data-for="(\w*)">', html)
+        self.assertEqual(sorted(notes), sorted(s for _, s in tabs), "each store has its line, shown when it's chosen")
+        self.assertIn(".js .store-notes p:not(.here) { display: none; }", (SITE / "styles.css").read_text("utf-8"),
+                      "without the script, every store's line shows")
+
     def test_how_it_works_covers_every_store_and_step(self):
         page = (SITE / "how-it-works.html").read_text("utf-8")
         for store in ("booth", "gumroad", "jinxxy", "payhip", "itch"):
@@ -348,6 +378,49 @@ class TheDeploy(unittest.TestCase):
         for f in ("index.json", "vpm/index.json", "banner.png", "site.js", "img/library-dark.webp"):
             self.assertTrue((pub / f).exists(), f)
 
+
+
+def _browser() -> bool:
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            p.chromium.launch().close()
+        return True
+    except Exception:  # no Playwright browser here
+        return False
+
+
+@unittest.skipUnless(_browser(), "needs Playwright's Chromium (python -m playwright install chromium)")
+class InABrowser(unittest.TestCase):
+    """The front page's store tabs, as the app's: choosing one raises it and says what Hoard does there; and the
+    things to find, as in the app. Opened from disk, so nothing is fetched (the download buttons keep their links)."""
+
+    def test_the_store_tabs_and_things_to_find(self):
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.route("https://**", lambda route: route.abort())   # (GitHub's list of downloads: not from a test)
+            page.goto((SITE / "index.html").as_uri())
+            visible = lambda: page.eval_on_selector_all(".store-notes p", "ps => ps.filter(p => p.offsetParent).map(p => p.dataset.for)")  # noqa: E731
+            page.wait_for_function("() => document.documentElement.classList.contains('js')")
+            self.assertEqual(visible(), [""], "Everything, to start with")
+            page.click('.seg [data-store="payhip"]')
+            self.assertEqual(visible(), ["payhip"])
+            self.assertEqual(page.get_attribute('.seg [data-store="payhip"]', "aria-checked"), "true")
+            self.assertIn("payhip", page.eval_on_selector(".glow-in", "g => g.style.backgroundImage"), "the glow takes its colour")
+            page.keyboard.press("ArrowRight")
+            self.assertEqual(visible(), ["itch"], "arrow keys move along the tabs")
+            page.click("h1")
+            for key in ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"]:
+                page.keyboard.press(key)
+            page.locator(".confetti i").first.wait_for(state="attached")
+            page.get_by_text("A fine hoard.").wait_for()
+            page.evaluate("scrollTo(0, 0)")
+            for _ in range(5):
+                page.click(".brand")
+            page.get_by_text("somebody's treasure").wait_for()
+            browser.close()
 
 if __name__ == "__main__":
     unittest.main()
