@@ -1,6 +1,7 @@
 // Hoard's Credits window (issue #51): the creators of the assets this project uses, ready to paste where you share
-// your avatar or world. Opened from the Create Credits List button in Window > Hoard. What you change (entries added by hand,
-// ones left out, the title and style) is kept in ProjectSettings/Hoard/credits.json, so it travels with the project.
+// your avatar or world. Opened from Create Credits List in the Hoard window, or Hoard › Create Credits List. What
+// you change (entries added by hand, ones left out, the title and style) is kept in ProjectSettings/Hoard/credits.json,
+// so it travels with the project.
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -122,7 +123,7 @@ namespace SoloFlighter.Hoard.Editor
             wantsMouseMove = true;
             if (source == null)
             {
-                Note("Open Window > Hoard: the credits list is made from what it finds in this project.");
+                Note("Open Hoard (Hoard › Open Hoard): the credits list is made from what it finds in this project.");
                 if (Look.LayoutButton("Open Hoard", Look.Kind.Primary)) { HoardWindow.Open(); Refresh(); }
                 return;
             }
@@ -167,7 +168,7 @@ namespace SoloFlighter.Hoard.Editor
                 EditorGUILayout.EndHorizontal();
             }
             if (all.Count == 0)
-                GUILayout.Label("Nothing from Hoard is in this project yet. Import something from Window > Hoard, or add an asset by hand.",
+                GUILayout.Label("Nothing from Hoard is in this project yet. Import something from Hoard › Open Hoard, or add an asset by hand.",
                                 Look.Style("nothing", Look.Styles.Centered));
             EditorGUILayout.EndScrollView();
             GUILayout.EndVertical();

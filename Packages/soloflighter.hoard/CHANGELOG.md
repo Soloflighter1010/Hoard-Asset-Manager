@@ -14,6 +14,9 @@
 - **Pause GIFs** beside the tile size shows animated pictures as a still of their first frame, like the app's
   **Pause animated pictures**. Unity remembers your choice for every project.
 - **Create Credits List** has the same look.
+- **Hoard has its own menu** in Unity's menu bar, beside the other creator tools, in place of **Window › Hoard**:
+  **Open Hoard**, **Create Credits List** and **Which Product Is This From?** (still in the Project window's
+  right-click menu too).
 - **A narrow window** shows the details over the tiles until you close them. The bar's buttons use shorter
   words when the search box needs the room.
 - No more warning in the Console about `CreditsWindow.title` when the package compiles.

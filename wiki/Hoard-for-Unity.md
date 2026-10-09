@@ -3,7 +3,8 @@ hunting for it or downloading it again.
 
 ## What it does
 
-Open **Window › Hoard** to:
+Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 0.7.0; before, it was
+**Window › Hoard**) to:
 
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, with thumbnails.
   Animated ones (GIFs) play, from 0.3.0. **Pause GIFs** keeps them still (0.7.0).
@@ -54,7 +55,7 @@ control. The list is made from what's on your computer; nothing is sent anywhere
 
 ## Projects in Hoard
 
-Each project you open **Window > Hoard** in shows up in Hoard under **Projects** (at the top of the page), from
+Each project you open Hoard's window in shows up in Hoard under **Projects** (at the top of the page), from
 0.4.0. For each one, Projects lists:
 
 - every product of yours it uses, and how much of it: **In the project**, **Partly in the project**, or

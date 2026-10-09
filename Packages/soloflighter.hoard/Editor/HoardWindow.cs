@@ -1,4 +1,4 @@
-// Window > Hoard: the assets you've downloaded with the Hoard app, inside Unity. Read-only toward your Hoard
+// Hoard › Open Hoard (its own menu in Unity's menu bar): the assets you've downloaded with the Hoard app, inside Unity. Read-only toward your Hoard
 // library: it reads the catalog Hoard writes, and importing hands a .unitypackage to Unity's own import dialog.
 using System;
 using System.Collections.Generic;
@@ -60,13 +60,20 @@ namespace SoloFlighter.Hoard.Editor
         double reportAfter;
         string lastReport;
 
-        [MenuItem("Window/Hoard")]
-        public static void Open()
+        // Hoard's own menu in Unity's menu bar, as other tools for VRChat creators have theirs
+        [MenuItem("Hoard/Open Hoard", false, 0)]
+        public static void Open() { OpenWindow(); }
+
+        static HoardWindow OpenWindow()
         {
             var w = GetWindow<HoardWindow>("Hoard");
             w.minSize = new Vector2(620, 360);
             w.Show();
+            return w;
         }
+
+        [MenuItem("Hoard/Create Credits List", false, 1)]
+        static void OpenCredits() { CreditsWindow.Open(OpenWindow()); }
 
         void OnEnable()
         {
@@ -331,18 +338,18 @@ namespace SoloFlighter.Hoard.Editor
 
         // ---- "Which Product Is This From?" (Assets menu, and the Project window's right-click menu)
 
+        [MenuItem("Hoard/Which Product Is This From?", false, 20)]
         [MenuItem("Assets/Hoard/Which Product Is This From?", false, 1500)]
         static void WhichProduct()
         {
             var guids = Selection.assetGUIDs;
             if (guids == null || guids.Length == 0) return;
-            var w = GetWindow<HoardWindow>("Hoard");
-            w.minSize = new Vector2(620, 360);
-            w.Show();
+            var w = OpenWindow();
             w.originGuids = guids;
             w.FindOrigins();
         }
 
+        [MenuItem("Hoard/Which Product Is This From?", true)]
         [MenuItem("Assets/Hoard/Which Product Is This From?", true)]
         static bool CanWhichProduct() { return Selection.assetGUIDs != null && Selection.assetGUIDs.Length > 0; }
 

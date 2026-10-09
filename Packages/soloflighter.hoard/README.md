@@ -1,7 +1,7 @@
 # Hoard for Unity
 
 The VRChat assets you've downloaded with [Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager), inside
-Unity. Open **Window › Hoard** to:
+Unity. Open **Hoard › Open Hoard** (Hoard's own menu in Unity's menu bar) to:
 
 - **Browse and search** everything Hoard has downloaded, by name, creator, store or tag, as tiles in the app's
   look: a tab for each store, the pictures with their store's colour along the foot (animated GIFs play, or
