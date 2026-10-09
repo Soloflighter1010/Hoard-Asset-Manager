@@ -22,7 +22,7 @@ namespace SoloFlighter.Hoard.Editor
         Vector2 listScroll, textScroll;
         bool adding;
         string newName = "", newCreator = "", newUrl = "";
-        string title;              // the title as you're typing it (a space at the end stays while you type)
+        string listTitle;          // the title as you're typing it (a space at the end stays while you type)
         double saveAt = -1;        // typing saves once you pause, not on every key
 
         public static void Open(HoardWindow from)
@@ -37,7 +37,7 @@ namespace SoloFlighter.Hoard.Editor
         void OnEnable()
         {
             settings = CreditsFile.Load(SettingsFile);
-            title = settings.Title;
+            listTitle = settings.Title;
             EditorApplication.projectChanged += Refresh;
             EditorApplication.update += SaveWhenDue;
         }
@@ -131,10 +131,10 @@ namespace SoloFlighter.Hoard.Editor
                 Note("Still checking " + stillChecking + " packages, so the list may grow. Choose Refresh in a moment.");
 
             EditorGUI.BeginChangeCheck();
-            title = EditorGUILayout.TextField("Title", title ?? "");
+            listTitle = EditorGUILayout.TextField("Title", listTitle ?? "");
             if (EditorGUI.EndChangeCheck())
             {
-                settings.Title = Credits.OneLine(title, 100);
+                settings.Title = Credits.OneLine(listTitle, 100);
                 Changed(true);
             }
             EditorGUI.BeginChangeCheck();

@@ -495,9 +495,12 @@ namespace SoloFlighter.Hoard.Editor
             y = DrawNotices(y);
             y = DrawOrigins(y);
             float panel = selected == null ? 0 : Mathf.Clamp(w * 0.38f, 300, 460);
+            // a window too narrow for the tiles beside the details: the details cover them, as in the app on a small
+            // screen, until they're closed
+            if (panel > 0 && w - panel < Mathf.Max(260, tileSize + Pad * 2 + 54)) panel = w;
             var grid = new Rect(0, y, w - panel, h - y);
-            Look.DrawGlow(grid, store > 0 ? StoreNames[store] : null);
-            DrawGrid(grid);
+            Look.DrawGlow(new Rect(0, y, w, h - y), store > 0 ? StoreNames[store] : null);
+            if (grid.width > 0) DrawGrid(grid);
             if (selected != null) DrawDetails(new Rect(w - panel, y, panel, h - y));
             Keys();
         }
@@ -508,8 +511,15 @@ namespace SoloFlighter.Hoard.Editor
             string[] tools = { "Create Credits List", "Reload", "Folder..." };
             float toolsW = 0;
             foreach (string t in tools) toolsW += Look.ButtonWidth(t) + 6;
+            bool compact = w < 720;   // a narrow window: just the logo's boxes, and shorter words when the search needs room
+            if (w - 16 - toolsW - 12 - (16 + (compact ? 24 : 85) + 18) < 160)
+            {
+                tools[0] = "Credits";
+                toolsW = 0;
+                foreach (string t in tools) toolsW += Look.ButtonWidth(t) + 6;
+            }
             float x = 16;
-            x += Look.DrawLogo(new Vector2(x, 13), 24, w < 720) + 18;   // a narrow window: just the boxes
+            x += Look.DrawLogo(new Vector2(x, 13), 24, compact) + 18;
             float right = w - 16 - toolsW;
             DrawSearch(new Rect(x, 11, Mathf.Clamp(right - 12 - x, 80, 440), 28));
             float bx = w - 16 - toolsW + 6;

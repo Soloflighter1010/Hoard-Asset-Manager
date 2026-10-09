@@ -13,6 +13,9 @@
   - the chosen product's details beside the tiles, as the app's panel. **Import** is gold, and **Esc** or **×**
     closes the panel.
 - **Create Credits List** has the same look.
+- **A narrow window** shows the details over the tiles until you close them. The bar's buttons use shorter
+  words when the search box needs the room.
+- No more warning in the Console about `CreditsWindow.title` when the package compiles.
 
 ## 0.6.0
 
