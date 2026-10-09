@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.0
+
+- **It looks like Hoard.** The window now has the app's colours (its dark ones, or its light ones with Unity's light
+  skin), Hoard's logo, and the app's pieces:
+  - a bar with a rounded search box (**/** to search) and the tools;
+  - a folder tab for each store, with how many products each has. The shown store's tab is raised;
+  - **Unity packages only**, **In this project** and **Updates** as pills that turn gold when they're on;
+  - the products as tiles: each picture with its store's colour along its foot and badges for **In this project**,
+    **Partly in project** and the updates. A slider sets the tile size, and the arrow keys move between tiles;
+  - the chosen product's details beside the tiles, as the app's panel. **Import** is gold, and **Esc** or **×**
+    closes the panel.
+- **Pause GIFs** beside the tile size shows animated pictures as a still of their first frame, like the app's
+  **Pause animated pictures**. Unity remembers your choice for every project.
+- **Create Credits List** has the same look.
+- **Hoard has its own menu** in Unity's menu bar, beside the other creator tools, in place of **Window › Hoard**:
+  **Open Hoard**, **Create Credits List** and **Which Product Is This From?** (still in the Project window's
+  right-click menu too).
+- **A narrow window** shows the details over the tiles until you close them. The bar's buttons use shorter
+  words when the search box needs the room.
+- No more warning in the Console about `CreditsWindow.title` when the package compiles.
+
 ## 0.6.0
 
 - **Which product is this from?** Right-click files or folders in the Project window (or use the **Assets** menu)

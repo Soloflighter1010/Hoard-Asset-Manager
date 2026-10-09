@@ -179,7 +179,7 @@ your library list and downloads folder: choose the folder you ran 1.x from.
 
 ## Hoard in Unity
 
-**Hoard for Unity** brings what Hoard has downloaded into the Unity editor. Open **Window › Hoard** to
+**Hoard for Unity** brings what Hoard has downloaded into the Unity editor. Open **Hoard › Open Hoard** (its own menu in Unity's menu bar) to
 search your downloads with thumbnails, see which products are already in the open project (read from
 the asset GUIDs inside each `.unitypackage`), and **Import** one through Unity's own import dialog, with no
 downloading again. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
