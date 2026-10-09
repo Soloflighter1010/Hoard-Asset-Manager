@@ -1140,5 +1140,12 @@
  "the installer isn't the size GitHub lists for it": "インストーラーのサイズがGitHubに載っているものと違います",
  "the installer doesn't match the release's checksum, so Hoard deleted it": "インストーラーがリリースのチェックサムと一致しないため、Hoardが削除しました",
  "Hoard is up to date.": "Hoardは最新です。",
- "Closing Hoard to update": "アップデートのためHoardを終了します"
+ "Closing Hoard to update": "アップデートのためHoardを終了します",
+ "encrypted by your operating system": "OSによって暗号化",
+ "encrypted by your Windows account": "Windowsアカウントによって暗号化",
+ "encrypted with your macOS Keychain": "macOSのキーチェーンで暗号化",
+ "encrypted with your KWallet": "KWalletで暗号化",
+ "encrypted with your Secret Service keyring": "Secret Serviceのキーリングで暗号化",
+ "protected only by folder permissions, because this computer has no keyring": "キーリングがないため、フォルダーの権限だけで保護",
+ "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions": "あなたが選んだフォルダー（保護の強さはそのドライブと権限しだい）に保管"
 }

@@ -1140,5 +1140,12 @@
  "the installer isn't the size GitHub lists for it": "설치 프로그램 크기가 GitHub에 나온 것과 달라요",
  "the installer doesn't match the release's checksum, so Hoard deleted it": "설치 프로그램이 릴리스의 체크섬과 맞지 않아서 Hoard가 삭제했어요",
  "Hoard is up to date.": "Hoard가 최신이에요.",
- "Closing Hoard to update": "업데이트하려고 Hoard를 닫아요"
+ "Closing Hoard to update": "업데이트하려고 Hoard를 닫아요",
+ "encrypted by your operating system": "운영체제로 암호화",
+ "encrypted by your Windows account": "Windows 계정으로 암호화",
+ "encrypted with your macOS Keychain": "macOS 키체인으로 암호화",
+ "encrypted with your KWallet": "KWallet으로 암호화",
+ "encrypted with your Secret Service keyring": "Secret Service 키링으로 암호화",
+ "protected only by folder permissions, because this computer has no keyring": "키링이 없어서 폴더 권한으로만 보호",
+ "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions": "내가 고른 폴더(보호 수준은 그 드라이브와 권한에 따라 달라요)에 보관"
 }
