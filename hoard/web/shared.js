@@ -660,6 +660,7 @@ async function showUpdate(u) {
     } catch (e) { return; }
   }
   UPDATE = u;
+  markBrand();
   $("#updStatus").textContent = describeUpdate(u);
   $("#updInstall").hidden = !u.can_install || u.busy;
   $("#updInstall").textContent = u.available ? `Update to ${verText(u.latest.version)}` : "";
@@ -670,6 +671,15 @@ async function showUpdate(u) {
   if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : ""; }
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
+}
+/* The logo glows, and shakes now and then, while an update to Hoard is waiting; choosing it then opens Updates */
+function markBrand() {
+  const b = $(".brand");
+  if (!b) return;
+  const on = !!(UPDATE && UPDATE.available);
+  b.classList.toggle("has-update", on);
+  if (on) b.title = `Hoard ${verText(UPDATE.latest.version)} is ready: choose to update`; else b.removeAttribute("title");
+  b.querySelector("svg").setAttribute("aria-label", on ? `Hoard: version ${verText(UPDATE.latest.version)} is ready to install` : "Hoard");
 }
 async function checkUpdate() {
   if (!navigator.onLine) { toast("You're offline. Checking for updates needs a connection."); return; }
@@ -1237,3 +1247,62 @@ function queuedToast(r) {   // a job started while another runs waits its turn
   return false;
 }
 
+/* ---------- a few things to find. Nothing here reads or changes your library; each stays still with reduced motion */
+const motionOk = () => !document.body.classList.contains("less-motion") && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+function confetti(n = 90) {   // every store's colour, falling
+  if (!motionOk()) return;
+  const box = document.createElement("div");
+  box.className = "confetti"; box.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("i");
+    p.style.left = `${Math.random() * 100}vw`;
+    p.style.background = `var(--${STRIPE_STORES[i % STRIPE_STORES.length]})`;
+    p.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
+    p.style.animationDelay = `${Math.random() * 0.9}s`;
+    p.style.setProperty("--spin", `${Math.round(Math.random() * 1080 - 540)}deg`);
+    box.append(p);
+  }
+  document.body.append(box);
+  setTimeout(() => box.remove(), 4000);
+}
+// up, up, down, down, left, right, left, right, B, A
+const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+let konami = 0;
+document.addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable]")) { konami = 0; return; }
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  konami = k === KONAMI[konami] ? konami + 1 : k === KONAMI[0] ? 1 : 0;
+  if (konami === KONAMI.length) { konami = 0; confetti(); toast("Every store at once. A fine hoard."); }
+});
+// the logo: while an update waits, it opens Updates; on the Library with nothing filtered, poking it five times...
+let pokes = [];
+document.addEventListener("click", e => {
+  const b = e.target.closest(".brand");
+  if (!b || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
+  if (b.classList.contains("has-update")) { e.preventDefault(); openSettings(true); return; }
+  if (/downloads/.test(location.pathname) || location.hash) return;   // to the Library, or back to all of it
+  e.preventDefault();
+  const now = Date.now();
+  pokes = [...pokes.filter(t => now - t < 2500), now];
+  if (pokes.length < 5) return;
+  pokes = [];
+  b.classList.remove("tumble"); void b.offsetWidth; b.classList.add("tumble");
+  toast("Careful: everything in here is somebody's treasure.");
+});
+// a few words in the search box
+const SEARCH_EGGS = { hoard: "You're looking at it.", dragon: "Every hoard needs one. 🐉", treasure: "It's all treasure.",
+                      gold: "Shiny." };
+const eggSaid = new Set();
+let eggTimer;
+document.addEventListener("input", e => {
+  if (e.target.id !== "q") return;
+  clearTimeout(eggTimer);
+  eggTimer = setTimeout(() => {
+    const w = e.target.value.trim().toLowerCase();
+    if (!SEARCH_EGGS[w] || eggSaid.has(w)) return;
+    eggSaid.add(w);
+    toast(SEARCH_EGGS[w]);
+  }, 700);
+});
+// and on the 1st of April, the boxes have fallen over
+if (new Date().getMonth() === 3 && new Date().getDate() === 1) document.documentElement.classList.add("april");

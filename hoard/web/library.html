@@ -60,6 +60,22 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
+/* the logo while an update to Hoard is waiting: a warm glow, and a shake now and then. Choosing it opens Updates */
+.brand .boxes { transform-box: fill-box; transform-origin: 50% 85%; }
+.brand.has-update svg { filter: drop-shadow(0 0 6px rgba(240, 180, 41, .8)); animation: brand-glow 2.6s ease-in-out infinite; }
+.brand.has-update .boxes { animation: brand-shake 5s ease-in-out infinite; }
+@keyframes brand-glow { 0%, 100% { filter: drop-shadow(0 0 2px rgba(240, 180, 41, .35)); } 50% { filter: drop-shadow(0 0 9px rgba(240, 180, 41, .95)); } }
+@keyframes brand-shake { 0%, 80%, 92%, 100% { transform: rotate(0); } 82% { transform: rotate(-9deg); } 84% { transform: rotate(8deg); }
+  86% { transform: rotate(-6deg); } 88% { transform: rotate(4deg); } 90% { transform: rotate(-2deg); } }
+/* things to find (shared.js) */
+.brand.tumble .boxes { animation: brand-tumble .9s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes brand-tumble { 30% { transform: translateY(-7px) rotate(-25deg); } 70% { transform: translateY(1px) rotate(370deg); } 100% { transform: rotate(360deg); } }
+.april .brand .boxes { transform: rotate(180deg); }
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 1000; overflow: hidden; }
+.confetti i { position: absolute; top: -16px; width: 10px; height: 10px; border-radius: 3px; animation: confetti-fall linear forwards; }
+@keyframes confetti-fall { to { transform: translateY(calc(100vh + 32px)) rotate(var(--spin)); } }
+body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animation: none; }
+@media (prefers-reduced-motion: reduce) { .brand.has-update svg, .brand .boxes { animation: none; } }
 .search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
@@ -599,7 +615,8 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 .badges .badge { position: static; }
 .badge.new { background: var(--gold); color: var(--gold-ink); }
 /* issue #111: copies of one product (several purchases, or its versions) as one tile, a stack of cards behind it */
-.slot.stacked .art { overflow: visible; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
+/* min-height: 0, or a square box that lets its picture show past it (for the cards behind) grows to a tall one's height */
+.slot.stacked .art { overflow: visible; min-height: 0; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
 .slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
 .badge.count { background: var(--bone); color: var(--cave); }
 .stack-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dust); cursor: pointer; }
@@ -787,7 +804,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </div>
 </div>
 <header class="bar">
-  <a class="brand" href="/"><svg viewBox="0 0 226 64" role="img" aria-label="Hoard"><g transform="translate(0 0) scale(1.0)">
+  <a class="brand" href="/"><svg viewBox="0 0 226 64" role="img" aria-label="Hoard"><g class="boxes" transform="translate(0 0) scale(1.0)">
   <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
