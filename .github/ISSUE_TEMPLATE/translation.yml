@@ -1,0 +1,47 @@
+name: "🌐 Translation fix · 翻訳の修正 · 번역 수정"
+description: "Something in Hoard's Japanese or Korean reads wrong · 日本語の表示がおかしい · 한국어 표시가 어색해요"
+title: "[Translation]: "
+labels: ["translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hoard's Japanese and Korean were made with AI help, so some wording may be off. Thank you for helping fix it.
+        You can write in Japanese, Korean or English.
+
+        Hoardの日本語訳はAIの助けを借りて作ったため、不自然な表現があるかもしれません。日本語で書いてかまいません。
+
+        Hoard의 한국어 번역은 AI의 도움을 받아 만들어서 어색한 표현이 있을 수 있어요. 한국어로 써도 괜찮아요.
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language · 言語 · 언어
+      options:
+        - 日本語 (Japanese)
+        - 한국어 (Korean)
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where is it? · 場所 · 위치
+      description: "The page, panel or step, e.g. Settings › Appearance · 例:設定 › 外観 · 예: 설정 › 모양"
+    validations:
+      required: true
+
+  - type: textarea
+    id: now
+    attributes:
+      label: What it says now · 今の表示 · 지금 표시
+      description: Copy the text, or attach a screenshot (check it doesn't show your account or purchases).
+    validations:
+      required: true
+
+  - type: textarea
+    id: better
+    attributes:
+      label: What it should say · 正しい表示 · 고친 표시
+    validations:
+      required: true

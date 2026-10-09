@@ -339,8 +339,10 @@ and leaves your saved library and downloads as they were.
 ## Made with AI
 
 Most of Hoard's code, design and documentation was written by an AI assistant (Anthropic's Claude),
-directed and tested by the maintainer. [AI-DISCLOSURE.md](AI-DISCLOSURE.md) explains what that means
-for you. Hoard itself doesn't use AI, and your data never goes to one.
+directed and tested by the maintainer. That includes the Japanese and Korean translations of the app and of this
+README, so some of their wording may be off: [tell us](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml) when something reads wrong.
+[AI-DISCLOSURE.md](AI-DISCLOSURE.md) explains what that means for you. Hoard itself doesn't use AI, and your data
+never goes to one.
 
 ## For developers
 

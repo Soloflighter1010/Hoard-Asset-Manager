@@ -41,7 +41,8 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   - **Language** (from 3.3): **Match my computer**, **English**, **日本語** (Japanese) or **한국어** (Korean). Match
     my computer uses the first of these your system or browser asks for, and English if it asks for none of them.
     The page reloads in the language you choose. Your product names, creators, tags and files are never
-    translated. The task log, Hoard for Unity and the website are in English.
+    translated. The task log, Hoard for Unity and the website are in English. The Japanese and Korean were made
+    with AI help, so some wording may be off: [tell us](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml) when something reads wrong.
   - **Match my computer**, **Light** or **Dark**: Hoard follows your computer's light or dark setting, or stays the
     one you choose.
   - **A theme**, each in a light and a dark version: **Hoard** (the cave and its gold), **Dragonfire**, **Frost

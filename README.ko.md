@@ -22,6 +22,8 @@ Booth, Gumroad, Jinxxy, Payhip, itch.io에서 구매한 것을 검색하고, 거
 그 후드티, Booth에서 샀나요, Gumroad에서 샀나요? 제작자가 업데이트했나요? 파일은 아직 가지고 있나요?
 Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 
+> **이 페이지와 Hoard의 한국어 번역은 AI의 도움을 받아 만들었어요.** 어색한 표현이나 잘못된 곳이 있을 수 있어요. 찾으면 [번역 수정](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml)으로 알려 주세요.
+>
 > 이 페이지는 영어 [README](README.md)의 번역이에요. 내용이 다르면 영어판이 맞는 정보예요. Hoard 앱도 한국어로 쓸 수 있어요(**설정 › 모양 › 언어**, 또는 처음 설정할 때 첫 화면에서 고를 수 있어요).
 
 - **라이브러리:** Booth, Gumroad, Jinxxy, Payhip, itch.io에서 가진 모든 것을 검색하고, 거르고, 태그를 붙일 수 있는 한 페이지에. 여러 스토어에서 가진 상품도 찾아내요.
@@ -224,12 +226,12 @@ Hoard에는 두 종류의 태그가 있어요:
 - **기능 요청:** 사용 흐름을 개선할 아이디어가 있다면 [기능 요청](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=feature_request.yml)을 열어 주세요.
 - **새 스토어:** 다른 플랫폼도 지원했으면 한다면 [스토어 지원 요청](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=storefront_integration.yml)을 보내 주세요.
 - **토론과 지원:** 일반적인 질문은 [Discussions](https://github.com/Soloflighter1010/Hoard-Asset-Manager/discussions)에 글을 올려 주세요.
-- **번역:** 한국어 번역이 어색한 곳이 있으면 이슈로 알려 주세요. 번역은 `hoard/web/i18n/ko.json`에 있어요.
+- **번역:** 한국어 번역은 AI의 도움을 받아 만들었어요. 어색한 곳이 있으면 [번역 수정](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml)으로 알려 주세요. 번역은 `hoard/web/i18n/ko.json`에 있어요.
 - **보안 문제:** [SECURITY.md](SECURITY.md)(영어)에 나온 방법으로 비공개로 신고해 주세요.
 
 ## AI로 제작
 
-Hoard의 코드, 디자인, 문서 대부분은 관리자의 지시와 테스트를 거쳐 AI 어시스턴트(Anthropic의 Claude)가 작성했어요. 그게 나에게 무슨 의미인지는 [AI-DISCLOSURE.md](AI-DISCLOSURE.md)(영어)에서 설명해요. Hoard 자체는 AI를 쓰지 않고, 내 데이터가 AI로 가는 일도 없어요.
+Hoard의 코드, 디자인, 문서 대부분은 관리자의 지시와 테스트를 거쳐 AI 어시스턴트(Anthropic의 Claude)가 작성했어요. 그게 나에게 무슨 의미인지는 [AI-DISCLOSURE.md](AI-DISCLOSURE.md)(영어)에서 설명해요. 일본어와 한국어 번역도 이 페이지를 포함해 AI의 도움을 받아 만들었어요. Hoard 자체는 AI를 쓰지 않고, 내 데이터가 AI로 가는 일도 없어요.
 
 <a id="developers"></a>
 ## 개발자용

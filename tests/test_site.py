@@ -298,7 +298,7 @@ class TheOtherPages(unittest.TestCase):
 
     def test_trust_and_the_ai_disclosure_link_their_sources(self):
         """Each point on How you can trust Hoard, and on the AI disclosure, says where to check it."""
-        for name, points in (("trust.html", 8), ("ai.html", 6)):
+        for name, points in (("trust.html", 8), ("ai.html", 7)):
             page = (SITE / name).read_text("utf-8")
             cards = re.findall(r"<li>\s*<h3>.*?</li>", page, re.S)
             self.assertEqual(len(cards), points, name)

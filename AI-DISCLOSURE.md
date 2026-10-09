@@ -16,4 +16,8 @@ wrong, and publishes the releases.
   service. AI was only used to build it.
 - The privacy policy, terms of use and other documents were drafted with AI help and haven't been
   reviewed by a lawyer.
+- Hoard's Japanese and Korean translations, in the app and in [README.ja.md](README.ja.md) and
+  [README.ko.md](README.ko.md), were made with AI help, so some wording may be unnatural or wrong. Hoard says so
+  in its Language setting. If something reads wrong, please [send a translation fix](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml); the English is
+  always the one that counts.
 - Hoard isn't affiliated with or endorsed by Anthropic.

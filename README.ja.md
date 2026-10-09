@@ -22,6 +22,8 @@ Booth、Gumroad、Jinxxy、Payhip、itch.ioで購入したものを、検索・�
 あのパーカー、買ったのはBoothでしたか、それともGumroad?クリエイターはアップデートしましたか?ファイルはまだ手元にありますか?
 Hoardなら、タブを4つも開かずに答えが分かります。
 
+> **このページとHoardの日本語訳は、AIの助けを借りて作りました。** 不自然な表現や誤りがあるかもしれません。見つけたら[翻訳の修正](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml)で教えてください。
+>
 > このページは英語版の[README](README.md)の翻訳です。内容が異なる場合は英語版が正しい情報です。Hoardのアプリ自体も日本語で使えます(**設定 › 外観 › 言語**、または初回セットアップの最初の画面で選べます)。
 
 - **ライブラリ:** Booth、Gumroad、Jinxxy、Payhip、itch.ioで持っているものを、検索・絞り込み・タグづけができる1つのページに。複数のストアで持っている商品も見つけます。
@@ -224,12 +226,12 @@ Issueやディスカッションは日本語でもかまいません。
 - **機能の要望:** 使い勝手を良くするアイデアがあれば、[機能の要望](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=feature_request.yml)を開いてください。
 - **新しいストア:** ほかのストアに対応してほしい場合は、[ストア対応の要望](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=storefront_integration.yml)を送ってください。
 - **ディスカッションとサポート:** 一般的な質問は[Discussions](https://github.com/Soloflighter1010/Hoard-Asset-Manager/discussions)でスレッドを立ててください。
-- **翻訳:** 日本語の訳がおかしいところがあれば、Issueで教えてください。訳は `hoard/web/i18n/ja.json` にあります。
+- **翻訳:** 日本語の訳はAIの助けを借りて作りました。おかしいところがあれば[翻訳の修正](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml)で教えてください。訳は `hoard/web/i18n/ja.json` にあります。
 - **セキュリティの問題:** [SECURITY.md](SECURITY.md)(英語)の方法で、非公開で報告してください。
 
 ## AIを使って作成
 
-Hoardのコード、デザイン、ドキュメントの大部分は、メンテナーの指示とテストのもとでAIアシスタント(AnthropicのClaude)が書いたものです。それがあなたにとって何を意味するかは[AI-DISCLOSURE.md](AI-DISCLOSURE.md)(英語)で説明しています。Hoard自体はAIを使っておらず、あなたのデータがAIに送られることはありません。
+Hoardのコード、デザイン、ドキュメントの大部分は、メンテナーの指示とテストのもとでAIアシスタント(AnthropicのClaude)が書いたものです。それがあなたにとって何を意味するかは[AI-DISCLOSURE.md](AI-DISCLOSURE.md)(英語)で説明しています。日本語と韓国語の翻訳も、このページを含めてAIの助けを借りて作りました。Hoard自体はAIを使っておらず、あなたのデータがAIに送られることはありません。
 
 <a id="developers"></a>
 ## 開発者向け

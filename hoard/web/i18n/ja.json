@@ -961,6 +961,7 @@
  "Refresh: {0}": "更新:{0}",
  "Opening your hoard": "コレクションを開いています",
  "Hidden": "非表示",
+ "The Japanese and Korean translations were made with AI help, so some wording may be off. <0>Tell us what reads wrong</0>.": "日本語と韓国語の翻訳はAIの助けを借りて作ったため、不自然な表現があるかもしれません。おかしなところは<0>お知らせください</0>。",
  "only Hoard's own server on this computer": "このコンピューター上のHoard自身のサーバーだけ",
  "Hoard is already running, but isn't answering. Close it (or restart your computer) and open it again.": "Hoardはすでに動いていますが、応答していません。終了して(またはコンピューターを再起動して)から、もう一度開いてください。",
  "Hoard's window couldn't open on this PC, so Hoard opens in your web browser instead.": "このPCではHoardのウィンドウを開けなかったため、代わりにWebブラウザーで開きます。",
