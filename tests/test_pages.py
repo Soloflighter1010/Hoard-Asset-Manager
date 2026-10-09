@@ -1459,6 +1459,9 @@ class SetupAssistant(unittest.TestCase):
             self.assertTrue(page.locator("#setupSkip").is_hidden(), "no Skip the first time")
             page.keyboard.press("Escape")
             self.assertTrue(page.locator("#setup").is_visible(), "and Escape doesn't close it")
+            page.locator("#setupTitle", has_text="Choose your language").wait_for()
+            page.click("#setupNext")   # the language, as it is: on without reloading
+            page.locator("#setupTitle", has_text="Welcome to Hoard").wait_for()
             page.click("#setupNext")   # welcome
             page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()
             page.click("#setupNext")

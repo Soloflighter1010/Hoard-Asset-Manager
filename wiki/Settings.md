@@ -38,6 +38,11 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   **Tell me when it finds something to download** (on unless you turn it off, from 3.1) shows a notification from
   your system when it finds new products or updates while Hoard is open in the background.
 - **Appearance** (from 3.2):
+  - **Language** (from 3.3): **Match my computer**, **English**, **日本語** (Japanese) or **한국어** (Korean). Match
+    my computer uses the first of these your system or browser asks for, and English if it asks for none of them.
+    The page reloads in the language you choose. Your product names, creators, tags and files are never
+    translated. The task log, Hoard for Unity and the website are in English. The Japanese and Korean were made
+    with AI help, so some wording may be off: [tell us](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml) when something reads wrong.
   - **Match my computer**, **Light** or **Dark**: Hoard follows your computer's light or dark setting, or stays the
     one you choose.
   - **A theme**, each in a light and a dark version: **Hoard** (the cave and its gold), **Dragonfire**, **Frost
@@ -104,6 +109,7 @@ and keep it valid JSON.
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
 | `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |
 | `display.mode` | `"system"` | `"system"` (match your computer), `"light"` or `"dark"` (**Appearance** in Settings) |
+| `display.language` | `"system"` | `"system"` (match your computer), `"en"`, `"ja"` or `"ko"` (**Appearance** in Settings) |
 | `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |

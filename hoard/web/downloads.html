@@ -39,6 +39,16 @@
 @media (prefers-color-scheme: light) {
   :root[data-colours="colourblind"] { --booth: #A86A00; --gumroad: #A84D86; --jinxxy: #1F72AE; --payhip: #7D7300; --itch: #00775A; --local: #5E5E5E; }
 }
+/* Your language (hoard/i18n.py): the page stays hidden until it's translated (a moment at most), and Korean gets a
+   font that has it (the bundled ones have Japanese, not Hangul) and keeps its words whole when it wraps */
+html[data-i18n] body { visibility: hidden; animation: i18n-show 0s 3s forwards; }
+@keyframes i18n-show { to { visibility: visible; } }
+:root:lang(ko) {
+  --display: "Dela Gothic One", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI Black", system-ui, sans-serif;
+  --body: "Zen Maru Gothic", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", system-ui, sans-serif;
+}
+:lang(ko) body { word-break: keep-all; overflow-wrap: anywhere; }
+:lang(ja) body { line-break: strict; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -855,17 +865,17 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <div class="layout">
   <nav id="filters" class="side" aria-label="Filters">
     <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
-    <h2 class="sidehead">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
+    <h2 class="sidehead" data-sec="your-tags">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
-    <h2>Suggested</h2>
+    <h2 data-sec="suggested">Suggested</h2>
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
     <datalist id="tagList"></datalist>
-    <h2>File types</h2>
+    <h2 data-sec="file-types">File types</h2>
     <div id="types" class="chips"></div>
-    <h2>Creators</h2>
+    <h2 data-sec="creators">Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
-    <ul id="creators" class="creators"></ul>
+    <ul id="creators" class="creators" translate="no"></ul>
     <p id="totals" class="totals"></p>
     <p id="integrity" class="totals integrity"></p>
   </nav>
@@ -997,6 +1007,14 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
   <h3>Appearance</h3>
+  <label class="check">Language
+    <select id="setLanguage" aria-label="Language">
+      <option value="system">Match my computer</option>
+      <option value="en" translate="no" lang="en">English</option>
+      <option value="ja" translate="no" lang="ja">日本語</option>
+      <option value="ko" translate="no" lang="ko">한국어</option>
+    </select></label>
+  <p class="hint" id="langNote">The Japanese and Korean translations were made with AI help, so some wording may be off. <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml" target="_blank" rel="noopener noreferrer">Tell us what reads wrong</a>.</p>
   <div class="mode-pick" role="radiogroup" aria-label="Light or dark">
     <label><input type="radio" name="setMode" id="setModeSystem" value="system"> Match my computer</label>
     <label><input type="radio" name="setMode" id="setModeLight" value="light"> Light</label>
@@ -1118,7 +1136,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </div>
   <div class="support-cols">
     <div><strong>Included</strong><ul class="support-list"><li>Hoard and browser versions</li><li>Operating system details</li><li>Sanitized error messages and tracebacks</li><li>Store/job counts and status</li><li>Recent sanitized log entries</li></ul></div>
-    <div><strong>Removed</strong><ul class="support-list"><li>Passwords, cookies and API keys</li><li>Email addresses and local user paths</li><li>Downloaded files and your library list</li><li>Purchase names and creator names</li><li>Signed URL values and other tokens</li></ul></div>
+    <div><strong>Left out</strong><ul class="support-list"><li>Passwords, cookies and API keys</li><li>Email addresses and local user paths</li><li>Downloaded files and your library list</li><li>Purchase names and creator names</li><li>Signed URL values and other tokens</li></ul></div>
   </div>
   <label for="supportNotes"><strong>What were you doing when it failed?</strong></label>
   <textarea id="supportNotes" maxlength="5000" placeholder="Optional. For example: I clicked Sync, the store window opened normally, then the job stopped with an error."></textarea>
@@ -1282,12 +1300,14 @@ function whenChecked() {
   const times = Object.values(DATA.updates_checked || {}).filter(Boolean).sort();
   if (!times.length) return "";
   const d = new Date(times[times.length - 1]);   // the latest check
-  return isNaN(d) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return isNaN(d) ? "" : d.toLocaleString(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 function updatesBar(n) {
   const when = whenChecked();
-  return `<p>${n ? `${n} ${n === 1 ? "download has" : "downloads have"} newer files on the store: files the creator added or changed since you downloaded them.`
-                 : "Nothing to update."} ${when ? `Last checked ${esc(when)}.` : "Not checked yet."}</p>` +
+  const say = [n ? tr(n === 1 ? "1 download has newer files on the store: files the creator added or changed since you downloaded them."
+                               : "{0} downloads have newer files on the store: files the creator added or changed since you downloaded them.", n)
+                 : tr("Nothing to update."), when ? tr("Last checked {0}.", when) : tr("Not checked yet.")];
+  return `<p>${say.map(esc).join(" ")}</p>` +
     `<button class="ghost sm" data-upd="check">Check for updates</button>` +
     (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
 }
@@ -1368,19 +1388,20 @@ function spaceBar() {
     : chip("copies", "Same file kept twice", SPACE.files ? `${SPACE.of.size.toLocaleString()} · ${sizeText(SPACE.saving)} to free` : 0);
   const notes = [];
   if (SPACE && SPACE.failed) notes.push("Couldn't look for copies just now.");
-  else if (SPACE && SPACE.unchecked) notes.push(`${SPACE.unchecked.toLocaleString()} ${SPACE.unchecked === 1 ? "file hasn't" : "files haven't"} ` +
-    `been checked yet, so copies of ${SPACE.unchecked === 1 ? "it" : "them"} aren't shown. <button class="linkish" data-checknow>Check now</button>`);
+  else if (SPACE && SPACE.unchecked) notes.push(esc(tr(SPACE.unchecked === 1 ? "1 file hasn't been checked yet, so copies of it aren't shown."
+                                                                            : "{0} files haven't been checked yet, so copies of them aren't shown.",
+                                                     SPACE.unchecked.toLocaleString())) + ` <button class="linkish" data-checknow>Check now</button>`);
   if (state.space === "unused" && SPACE && !SPACE.projects)
     notes.push("Hoard hasn't found any Unity projects yet: open a project with Hoard for Unity, or add one in Projects.");
-  return `<p>${here.length.toLocaleString()} ${here.length === 1 ? "download takes" : "downloads take"} ${sizeText(total)}, biggest first. ` +
-    `To free some, choose <b>Select</b>: move them to another library folder, archive them, or delete their files.</p>` +
+  return `<p>${esc(tr(here.length === 1 ? "1 download takes {1}." : "{0} downloads take {1}, biggest first.", here.length.toLocaleString(), sizeText(total)))} ` +
+    `<span>To free some, choose <b>Select</b>: move them to another library folder, archive them, or delete their files.</span></p>` +
     `<div class="chips">${chip("", "Everything")}${copies}${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
     notes.map(t => `<p class="muted">${t}</p>`).join("");
 }
 function spaceSection(a) {
   const e = copiesOf(a);
   if (!e) return "";
-  return `<div class="update"><strong>${e.files.toLocaleString()} ${e.files === 1 ? "file is" : "files are"} kept elsewhere too</strong>` +
+  return `<div class="update"><strong>${esc(tr(e.files === 1 ? "1 file is kept elsewhere too" : "{0} files are kept elsewhere too", e.files.toLocaleString()))}</strong>` +
     ` <span class="muted-inline">(${sizeText(e.bytes)})</span><ul>` +
     [...e.others].map(id => byId.get(id)).filter(Boolean).map(o => `<li>${esc(o.name)} <span class="muted-inline">(${esc(storeName(o.store))}` +
       `${(DATA.libraries || []).length > 1 ? `, ${esc(libName(o.library || 0))}` : ""})</span> ` +
@@ -1459,15 +1480,16 @@ function otherCopies(a) {
 }
 const slotHTML = a => {
     const n = stackSize.get(a.id) || 0, others = otherCopies(a);
-    return `<button class="slot${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${storeName(a.store)}` +
-      `${n > 1 ? `, ${n} copies` : ""}` +
-      `${others.some(o => o.store !== a.store) ? `, also from ${[...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))].join(" and ")}` : ""}"` +
+    const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
+    const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, storeName(a.store)), n > 1 && tr("{0} copies", n),
+                  also.length && tr("also from {0}", listed(also))];
+    return `<button class="slot${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
       `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
         `${n > 1 ? `<span class="flag count" aria-hidden="true">×${n}</span>` : ""}` +
         `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}` +
         `${state.view === "space" && copiesOf(a) ? '<span class="flag upd">Copies</span>' : ""}</span>` +
-      `<span class="nm">${esc(a.name)}</span><span class="cr">${state.view === "space" ? `${fmtSize(a.size)} · ` : ""}${esc(a.creator)}</span>` +
+      `<span class="nm" translate="no">${esc(a.name)}</span><span class="cr">${state.view === "space" ? `${fmtSize(a.size)} · ` : ""}<span translate="no">${esc(a.creator)}</span></span>` +
     `</button>`;
 };
 function renderGrid(list) {
@@ -1496,8 +1518,8 @@ function renderGrid(list) {
     empty.innerHTML = `<h2>${{ copies: "No file is kept twice", unused: "Every download is in a Unity project" }[state.space] || "Nothing here"}</h2>` +
       (state.space === "copies" && SPACE && SPACE.unchecked ? `<p>Some files haven't been checked yet: check now to look at those too.</p>` : "");
   } else if (!list.length && !filtersActive()) {
-    empty.innerHTML = `<h2>${{ downloads: "Nothing here", archive: "Nothing archived is downloaded", removed: "Nothing removed is downloaded",
-                               hidden: "Nothing hidden is downloaded" }[state.view]}</h2>` +
+    empty.innerHTML = `<h2>${{ updates: "Nothing to update", archive: "Nothing archived is downloaded", removed: "Nothing removed is downloaded",
+                               hidden: "Nothing hidden is downloaded" }[state.view] || "Nothing here"}</h2>` +
       (state.view === "downloads" ? `<p>Everything downloaded is archived, removed or hidden in the Library.</p>` : "");
   } else if (!list.length) {
     empty.innerHTML = `<h2>Nothing in your downloads matches that</h2><p><button class="linkish" data-clear="all">Clear filters</button></p>`;
@@ -1525,9 +1547,12 @@ function renderFacets(list) {
   const missing = DATA.assets.reduce((s, a) => s + a.missing, 0);
   const gone = DATA.gone || 0;   // downloaded before, every file since deleted from disk (issue #24)
   renderIntegrity();
-  $("#totals").textContent = (DATA.assets.length
-    ? `${DATA.assets.length} ${DATA.assets.length === 1 ? "thing" : "things"}, ${fmtSize(total)} on disk.` + (missing ? ` ${missing} ${missing === 1 ? "file" : "files"} missing.` : "")
-    : "") + (gone ? ` ${gone} ${gone === 1 ? "download was" : "downloads were"} deleted from disk and ${gone === 1 ? "isn't" : "aren't"} shown; the library offers ${gone === 1 ? "it" : "them"} to download again.` : "");
+  $("#totals").textContent = [
+    DATA.assets.length && tr(DATA.assets.length === 1 ? "1 thing, {1} on disk." : "{0} things, {1} on disk.", DATA.assets.length, fmtSize(total)),
+    DATA.assets.length && missing && tr(missing === 1 ? "1 file missing." : "{0} files missing.", missing),
+    gone && tr(gone === 1 ? "1 download was deleted from disk and isn't shown; the library offers it to download again."
+                          : "{0} downloads were deleted from disk and aren't shown; the library offers them to download again.", gone),
+  ].filter(Boolean).join(" ");
 }
 
 /* issue #83: when the downloads were last checked to be as Hoard downloaded them, and what that found */
@@ -1535,10 +1560,11 @@ function renderIntegrity() {
   const v = DATA.integrity || {}, el = $("#integrity");
   if (!el || !DATA.assets.length) { if (el) el.innerHTML = ""; return; }
   const every = { 6: "every 6 hours", 12: "every 12 hours", 24: "every day", 168: "every week", 720: "every month" }[v.every_hours];
-  const when = v.checked ? `Checked ${esc(ago(v.checked))}` : "Not checked yet";
-  const found = !v.checked ? "" : !v.complete ? " (stopped part way)." : (v.changed || v.missing || v.data_changed)
-    ? `: <strong class="warn">${esc(v.summary)}</strong> Which files is in Tasks.` : `: ${esc(v.summary)}`;
-  el.innerHTML = `${when}${found} ${every ? `Hoard checks ${every}, in its routine check` : "Hoard checks only when you ask"} (Settings). ` +
+  const when = !v.checked ? tr("Not checked yet.") : !v.complete ? tr("Checked {0} (stopped part way).", ago(v.checked))
+    : tr("Checked {0}:", ago(v.checked));
+  const found = !v.checked || !v.complete ? "" : (v.changed || v.missing || v.data_changed)
+    ? ` <strong class="warn">${esc(v.summary)}</strong> ${esc(tr("Which files is in Tasks."))}` : ` ${esc(v.summary)}`;
+  el.innerHTML = `${esc(when)}${found} ${esc(every ? tr("Hoard checks {0}, in its routine check (Settings).", tr(every)) : tr("Hoard checks only when you ask (Settings)."))} ` +
     `<button class="linkish" id="checkNow">Check now</button>`;
 }
 async function checkDownloads() {
@@ -1563,10 +1589,10 @@ function renderStatus(list) {
   const local = state.store === "Local";
   for (const [a, here] of [[$('.apptabs a[href="/downloads"]'), !local], [$('.apptabs a[href="/downloads#store=Local"]'), local]])
     if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
-  document.title = local ? "Hoard: Local" : "Hoard: Downloads";
+  document.title = local ? tr("Hoard: Local") : tr("Hoard: Downloads");
   $("#count").hidden = !total;
   $("#count").innerHTML = local && pills.length === 1 && state.view === "downloads"
-    ? `${list.length} ${list.length === 1 ? "package" : "packages"} of your own`
+    ? esc(tr(list.length === 1 ? "1 package of your own" : "{0} packages of your own", list.length))
     : filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
     : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}` +
       (state.view === "space" ? `, ${sizeText(list.reduce((t, a) => t + a.size, 0))}` : "");
@@ -1604,13 +1630,14 @@ function showDetail(a, focus = true) {
   detail.innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
     `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="">` : placeholder(a)}</div>` +
-    `<h2 class="d-name">${esc(a.name)}</h2>` +
-    `<p class="d-by">by ${esc(a.creator)}${a.variants ? `, ${esc(a.variants)}` : ""}</p>` +
+    `<h2 class="d-name" translate="no">${esc(a.name)}</h2>` +
+    `<p class="d-by" translate="no">${esc(tr("by {0}", a.creator))}${a.variants ? esc(tr(", {0}", a.variants)) : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)} ${storeLink}</p>` +
-    ((a.used_in || []).length ? `<p class="also">Used in ${a.used_in.map(esc).join(", ")}. ` +
+    ((a.used_in || []).length ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
-    otherCopies(a).map(o => `<p class="also">You also have this ${o.store === a.store ? "again" : `from ${esc(storeName(o.store))}`}` +
-      `${o.creator !== a.creator ? ` (by ${esc(o.creator)})` : ""}. ` +
+    otherCopies(a).map(o => `<p class="also"><span translate="no">${esc(tr(o.store === a.store ? (o.creator !== a.creator ? "You also have this again (by {1})." : "You also have this again.")
+                                                                         : (o.creator !== a.creator ? "You also have this from {0} (by {1})." : "You also have this from {0}."),
+                                                     storeName(o.store), o.creator))}</span> ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View that copy</button></p>`).join("") +
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button>` +
@@ -1645,7 +1672,7 @@ async function reveal(path) {
   try {
     const r = await api("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
     const j = await r.json();
-    toast(r.ok ? `Opened in ${j.opened_in}` : j.error);
+    toast(r.ok ? tr("Opened in {0}", tr(j.opened_in)) : j.error);
   } catch (e) { toast("Couldn't reach the library server."); }
 }
 async function copyPath() {
@@ -1699,24 +1726,25 @@ $("#stores").addEventListener("click", e => {
 function fillBulkMove() {
   const libs = (DATA.libraries || []).filter(l => l.available);
   $("#bulkMoveWrap").hidden = (DATA.libraries || []).length < 2 || !libs.length;
-  $("#bulkMoveTo").innerHTML = libs.map(l => `<option value="${l.n}">${esc(l.label)}${l.free != null ? `, ${sizeText(l.free)} free` : ""}</option>`).join("");
+  $("#bulkMoveTo").innerHTML = libs.map(l => `<option value="${l.n}">${esc(l.free != null ? tr("{0}, {1} free", libText(l), sizeText(l.free)) : libText(l))}</option>`).join("");
 }
 async function bulkMove() {
   const to = +$("#bulkMoveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
   const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked && (a.library || 0) !== to);
   if (!lib) return;
-  if (!chosen.length) { toast(`Those are already in ${lib.label}, or are your own packages (which stay in Local).`); return; }
-  if (!await ask(`Move ${chosen.length === 1 ? chosen[0].name : `${chosen.length} products`} to ${lib.label} (${lib.path})?\n\n` +
-                 "Hoard copies the files there, checks every one, then deletes them where they were. Anything of your own " +
-                 "in their folders stays. Each move is a task of its own: follow them in Tasks.", "Move them")) return;
+  if (!chosen.length) { toast(tr("Those are already in {0}, or are your own packages (which stay in Local).", libText(lib))); return; }
+  if (!await ask(tr(chosen.length === 1 ? "Move {0} to {1} ({2})?" : "Move {0} products to {1} ({2})?",
+                    chosen.length === 1 ? chosen[0].name : chosen.length, libText(lib), lib.path) + "\n\n" +
+                 tr("Hoard copies the files there, checks every one, then deletes them where they were. Anything of your own " +
+                    "in their folders stays. Each move is a task of its own: follow them in Tasks."), "Move them")) return;
   let started = 0, refused = 0;
   for (const a of chosen) {
     const r = await apiPost("/api/move", { key: a.tag_key, to });
     if (r.ok) started++; else refused++;
   }
   setSelecting(false);
-  toast(`Moving ${started} ${started === 1 ? "product" : "products"} to ${lib.label}. Follow it in Tasks.` +
-        (refused ? ` ${refused} couldn't start (the queue may be full): try those again when it's done.` : ""));
+  toast([tr(started === 1 ? "Moving 1 product to {1}. Follow it in Tasks." : "Moving {0} products to {1}. Follow them in Tasks.", started, libText(lib)),
+         refused && tr("{0} couldn't start (the queue may be full): try those again when it's done.", refused)].filter(Boolean).join(" "));
   for (let n = 0; started && n < 4000; n++) {   // when they're done, show where they are now (quick ones too)
     await new Promise(ok => setTimeout(ok, n < 20 ? 300 : 1500));
     let t = {};
@@ -1733,25 +1761,27 @@ async function bulkArchive() {
   const r = await apiPost("/api/marks", { kind: "archived", keys: [...new Set(chosen.map(a => a.tag_key))], on: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   setSelecting(false); await load();
-  toast(`Archived ${chosen.length === 1 ? chosen[0].name : `${chosen.length} products`}. Their files stay where they are: find them in Archive.`);
+  toast(tr(chosen.length === 1 ? "Archived {0}. Its files stay where they are: find it in Archive." : "Archived {0} products. Their files stay where they are: find them in Archive.",
+           chosen.length === 1 ? chosen[0].name : chosen.length));
 }
 async function bulkDelete() {
   const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked);
   if (!chosen.length) { toast("Your own packages leave Local from their own panel: Take out of Local."); return; }
   const bytes = chosen.reduce((t, a) => t + a.size, 0);
-  if (!await ask(`Delete the files Hoard downloaded for ${chosen.length === 1 ? chosen[0].name : `${chosen.length} products`} (${sizeText(bytes)})?\n\n` +
-                 "Anything of your own in the same folders stays. This can't be undone. What's still in your library stays " +
-                 "there, so you can download it again.", "Delete files", true)) return;
+  if (!await ask(tr(chosen.length === 1 ? "Delete the files Hoard downloaded for {0} ({1})?" : "Delete the files Hoard downloaded for {0} products ({1})?",
+                    chosen.length === 1 ? chosen[0].name : chosen.length, sizeText(bytes)) + "\n\n" +
+                 tr("Anything of your own in the same folders stays. This can't be undone. What's still in your library stays " +
+                    "there, so you can download it again."), "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [...new Set(chosen.map(a => a.tag_key))], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   setSelecting(false);
   if (r.data.job) return afterQueuedJob(r, "delete-files", () => load(true).then(() => state.view === "space" && loadSpace()));
   await load();
   if (state.view === "space") loadSpace();
-  toast(`Deleted ${r.data.files.toLocaleString()} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).`);
+  toast(tr(r.data.files === 1 ? "Deleted {0} file ({1})." : "Deleted {0} files ({1}).", r.data.files.toLocaleString(), sizeText(r.data.bytes)));
 }
 /* ---------- a tab for each library folder (hoard/libraries.py): shown once there's more than the downloads folder */
-const libName = n => ((DATA.libraries || []).find(l => String(l.n) === String(n)) || {}).label || "Another folder";
+const libName = n => { const l = (DATA.libraries || []).find(l => String(l.n) === String(n)); return l ? libText(l) : tr("Another folder"); };
 let drivesShown = "";
 function renderDrives() {
   const libs = DATA.libraries || [];
@@ -1760,7 +1790,7 @@ function renderDrives() {
   for (const a of DATA.assets) if (inView(a)) counts[a.library || 0] = (counts[a.library || 0] || 0) + 1;
   const html = libs.length < 2 ? "" : '<span class="tabsep" aria-hidden="true"></span>' + libs.map(l =>
     `<button role="radio" data-lib="${l.n}" aria-checked="false" class="${l.available ? "" : "away"}" ` +
-    `title="${esc(l.path)}${l.available ? "" : " (its drive isn't connected)"}">${DRIVE_ICON}${esc(l.label)}` +
+    `title="${esc(l.available ? l.path : tr("{0} (its drive isn't connected)", l.path))}">${DRIVE_ICON}${esc(libText(l))}` +
     `<span class="n">${(counts[l.n] || 0).toLocaleString()}</span></button>`).join("");
   if (html !== drivesShown) { $("#drives").innerHTML = html; drivesShown = html; }
   $("#drives").hidden = !html;
@@ -1772,7 +1802,7 @@ const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(store
 $("#downloadNew").addEventListener("click", () => downloadNew(Object.keys(STORE_NAMES)));
 $("#rescan").addEventListener("click", async () => {
   const n = await load(true);
-  toast(DATA.error ? DATA.error : `Rescanned ${n} assets`);   // not "Rescanned 0" when it couldn't be
+  toast(DATA.error ? DATA.error : tr(n === 1 ? "Rescanned 1 asset" : "Rescanned {0} assets", n));   // not "Rescanned 0" when it couldn't be
 });
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
@@ -1812,7 +1842,7 @@ grid.addEventListener("error", e => {  // thumbnail missing or unreadable: fall 
 }, true);
 /* ---------- Local (issue #80): your own packages, copied into Hoard or listed where they are */
 function localSection(a) {
-  return `<p class="sub">${a.note ? `For ${esc(a.note)}. ` : ""}${a.linked
+  return `<p class="sub">${a.note ? `${esc(tr("For {0}.", a.note))} ` : ""}${a.linked
       ? "Listed where it is: Hoard never changes anything in this folder."
       : "A copy in Hoard, checked like your downloads."}</p>` +
     `<div class="actions">${a.linked ? `<button class="ghost" data-act="local-rescan">Rescan</button>` : ""}` +
@@ -1821,8 +1851,8 @@ function localSection(a) {
 async function localAction(act, a) {
   if (!a) return;
   if (act === "local-remove" && !await ask(a.linked
-      ? `Take ${a.name} out of Local? Nothing in its folder is touched.`
-      : `Take ${a.name} out of Local, and delete Hoard's copy of it? Your original isn't touched.`, "Take it out")) return;
+      ? tr("Take {0} out of Local? Nothing in its folder is touched.", a.name)
+      : tr("Take {0} out of Local, and delete Hoard's copy of it? Your original isn't touched.", a.name), "Take it out")) return;
   const r = await apiPost(act === "local-rescan" ? "/api/local/rescan" : "/api/local/remove",
                           { folder: a.folder, confirm: act === "local-remove" });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
@@ -1830,8 +1860,8 @@ async function localAction(act, a) {
   if (r.data.job) return afterQueuedJob(r, act === "local-rescan" ? "rescan-local" : "remove-local", () => load(true));
   await load(true);
   if (act === "local-rescan") { const again = DATA.assets.find(x => x.folder === a.folder); if (again) showDetail(again, false); }
-  toast(act === "local-rescan" ? `Rescanned: ${r.data.files} ${r.data.files === 1 ? "file" : "files"}.`
-        : `Took ${a.name} out of Local.`);
+  toast(act === "local-rescan" ? tr(r.data.files === 1 ? "Rescanned: 1 file." : "Rescanned: {0} files.", r.data.files)
+        : tr("Took {0} out of Local.", a.name));
 }
 function openLocal(open) {
   const panel = $("#localPanel");
@@ -1862,11 +1892,11 @@ async function previewLocal() {
   list.hidden = false;
   if (!r.ok) { list.innerHTML = `<li class="muted">${esc(r.data.error || "That folder can't be split.")}</li>`; return; }
   const n = r.data.packages.length;
-  list.innerHTML = `<li class="muted">${n} ${n === 1 ? "package" : "packages"}` +
-    (r.data.loose ? `; ${r.data.loose} ${r.data.loose === 1 ? "file" : "files"} in the folders above ${r.data.loose === 1 ? "is" : "are"} left out` : "") + `:</li>` +
+  list.innerHTML = `<li class="muted">${esc(r.data.loose ? tr(r.data.loose === 1 ? "{0} packages; 1 file in the folders above is left out:" : "{0} packages; {1} files in the folders above are left out:", n, r.data.loose)
+                                                        : tr(n === 1 ? "1 package:" : "{0} packages:", n))}</li>` +
     r.data.packages.slice(0, 200).map(p => `<li${p.added ? ' class="muted"' : ""}><strong>${esc(p.name)}</strong>` +
-      `${p.creator ? ` <span class="muted">by ${esc(p.creator)}</span>` : ""}${p.added ? " (already in Local: left as it is)" : ""}</li>`).join("") +
-    (n > 200 ? `<li class="muted">and ${n - 200} more</li>` : "");
+      `${p.creator ? ` <span class="muted" translate="no">${esc(tr("by {0}", p.creator))}</span>` : ""}${p.added ? ` <span>${esc(tr("(already in Local: left as it is)"))}</span>` : ""}</li>`).join("") +
+    (n > 200 ? `<li class="muted">${esc(tr("and {0} more", n - 200))}</li>` : "");
 }
 async function addLocal() {
   const depth = Number($("#localDepth").value);
@@ -1916,42 +1946,43 @@ addEventListener("hashchange", () => {   // the Local tab, from the bar or the L
 // issue #82: a copy of a download for you to change, in a folder of its own that Hoard never checks or replaces
 async function editableCopy(a, button) {
   if (!a) return;
-  if (!await ask(`Copy ${a.name} into a folder of its own for you to change?\n\n` +
-               "Hoard never checks, updates or replaces that copy. Only files that still match what Hoard downloaded " +
-               "are copied. Anything you add to the copy later hasn't been checked by Hoard, so be as careful with it as " +
-               "with any download.", "Make the copy")) return;
+  if (!await ask(tr("Copy {0} into a folder of its own for you to change?", a.name) + "\n\n" +
+               tr("Hoard never checks, updates or replaces that copy. Only files that still match what Hoard downloaded " +
+                  "are copied. Anything you add to the copy later hasn't been checked by Hoard, so be as careful with it as " +
+                  "with any download."), "Make the copy")) return;
   button.disabled = true;
   const r = await apiPost("/api/edit-copy", { key: a.tag_key, open: true });
   button.disabled = false;
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   const left = r.data.skipped.length;
-  toast(`Copied ${r.data.files} ${r.data.files === 1 ? "file" : "files"} to ${r.data.folder}.` +
-        (left ? ` Left out ${left} that ${left === 1 ? "has" : "have"} changed or gone since Hoard downloaded ${left === 1 ? "it" : "them"} (listed in the read-me there).` : ""));
+  toast([tr(r.data.files === 1 ? "Copied 1 file to {1}." : "Copied {0} files to {1}.", r.data.files, r.data.folder),
+         left && tr(left === 1 ? "Left out 1 that has changed or gone since Hoard downloaded it (listed in the read-me there)."
+                               : "Left out {0} that have changed or gone since Hoard downloaded them (listed in the read-me there).", left)].filter(Boolean).join(" "));
 }
 // Library folders (Settings): a product kept in one of them can be moved to another
-const libLabel = l => `${l.label || l.path} (${l.path})`;
+const libLabel = l => `${libText(l)} (${l.path})`;
 function librarySection(a) {
   const libs = DATA.libraries || [];
   if (isLocal(a) || a.linked || libs.length < 2) return "";
   const here = libs.find(l => l.n === a.library), others = libs.filter(l => l.n !== a.library && l.available);
-  return `<h3>Library folder</h3><p class="sub">Kept in ${esc(here ? libLabel(here) : "another folder")}.</p>` +
+  return `<h3>Library folder</h3><p class="sub">${esc(here ? tr("Kept in {0}.", libLabel(here)) : tr("Kept in another folder."))}</p>` +
     (others.length ? `<div class="field movefield"><select id="moveTo" aria-label="Move it to">` +
-      others.map(l => `<option value="${l.n}">${esc(libLabel(l))}${l.free != null ? `, ${sizeText(l.free)} free` : ""}</option>`).join("") +
+      others.map(l => `<option value="${l.n}">${esc(l.free != null ? tr("{0}, {1} free", libLabel(l), sizeText(l.free)) : libLabel(l))}</option>`).join("") +
       `</select><button class="ghost sm" data-act="move">Move here</button></div>`
       : `<p class="sub">Your other library folders' drives aren't connected.</p>`);
 }
 async function moveProduct(a, button) {
   const to = +$("#moveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
   if (!a || !lib) return;
-  if (!await ask(`Move ${a.name} to ${lib.path}?\n\nHoard copies its files there, checks every one, then deletes them ` +
-                 "here. Anything of your own in its folder stays where it is.", "Move it")) return;
+  if (!await ask(tr("Move {0} to {1}?", a.name, lib.path) + "\n\n" + tr("Hoard copies its files there, checks every one, then deletes them " +
+                 "here. Anything of your own in its folder stays where it is."), "Move it")) return;
   button.disabled = true;
   const r = await apiPost("/api/move", { key: a.tag_key, to });
   button.disabled = false;
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   closeDetail();
   if (queuedToast(r)) return;
-  toast(`Moving ${a.name}. Follow it in Tasks.`);
+  toast(tr("Moving {0}. Follow it in Tasks.", a.name));
   for (let n = 0; n < 4000; n++) {   // when it's done, show where it is now
     await new Promise(ok => setTimeout(ok, n < 20 ? 300 : 1500));
     let j = {};
@@ -1965,15 +1996,16 @@ async function moveProduct(a, button) {
 // issue #81: a download can be deleted from disk, after you confirm
 async function deleteFiles(a) {   // issue #81; and since 3.0, for anything downloaded, whether or not it's removed
   if (!a || isLocal(a)) return;   // (your own packages: Take out of Local)
-  if (!await ask(`Delete the files Hoard downloaded for ${a.name}?\n\nAnything of your own in the same folder stays. ` +
-               "This can't be undone." + (a.mark === "removed" ? "" : " It stays in your library, so you can download it again."),
+  if (!await ask(tr("Delete the files Hoard downloaded for {0}?", a.name) + "\n\n" +
+               [tr("Anything of your own in the same folder stays."), tr("This can't be undone."),
+                a.mark !== "removed" && tr("It stays in your library, so you can download it again.")].filter(Boolean).join(" "),
                "Delete files", true)) return;
   const r = await apiPost("/api/delete-files", { keys: [a.tag_key], confirm: true });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   if (r.data.job) { closeDetail(); return afterQueuedJob(r, "delete-files", () => load(true)); }
   closeDetail(); await load();
-  toast(`Deleted ${r.data.files} ${r.data.files === 1 ? "file" : "files"} (${sizeText(r.data.bytes)}).` +
-        (r.data.kept.length ? " Its folder still has other files, so it was kept." : ""));
+  toast([tr(r.data.files === 1 ? "Deleted {0} file ({1})." : "Deleted {0} files ({1}).", r.data.files, sizeText(r.data.bytes)),
+         r.data.kept.length && tr("Its folder still has other files, so it was kept.")].filter(Boolean).join(" "));
 }
 detail.addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
@@ -2048,19 +2080,19 @@ async function tagPanelAction(b) {
   if (act === "unhide") return changeTags({ action: "unhide", name: t });
   if (act === "delete") {
     const n = +b.dataset.count;
-    if (!await ask(`Delete #${t}?` + (n ? ` It comes off ${n} ${n === 1 ? "item" : "items"}.` : ""), "Delete", true)) return;
+    if (!await ask(tr("Delete #{0}?", t) + (n ? " " + tr(n === 1 ? "It comes off 1 item." : "It comes off {0} items.", n) : ""), "Delete", true)) return;
     state.tags.delete(t);
     return changeTags({ action: "delete", name: t }, `Deleted #${t}.`);
   }
   if (act === "rename") {
-    const to = prompt(`Rename #${t} to (an existing tag's name merges the two):`, t);
+    const to = prompt(tr("Rename #{0} to (an existing tag's name merges the two):", t), t);
     if (!to || !to.trim() || to.trim().toLowerCase() === t) return;
     const filtered = state.tags.delete(t);
     if (await changeTags({ action: "rename", name: t, to }, `Renamed #${t}.`) && filtered) { state.tags.add(to.trim().toLowerCase()); render(); }
     return;
   }
   if (act === "match") {
-    const word = prompt(`Also tag every item whose name contains this word, including ones you buy later. Leave it empty to stop.`, b.dataset.match || t);
+    const word = prompt(tr("Also tag every item whose name contains this word, including ones you buy later. Leave it empty to stop."), b.dataset.match || t);
     if (word !== null) return changeTags({ action: "match", name: t, match: word });
   }
 }
@@ -2118,19 +2150,19 @@ function wireSupportReport() {
 /* ---------- updates: checked with GitHub when you ask (or daily, if you turned that on); installed by Hoard itself
    only in the app Hoard-Setup installed on Windows */
 function ago(iso) {   // the Library page has this in its own part; the Downloads page needs it for "Last checked"
-  if (!iso) return "never";
+  if (!iso) return tr("never");
   const s = (Date.now() - Date.parse(iso)) / 1000;
-  if (s < 90) return "just now";
+  if (s < 90) return tr("just now");
   const [n, u] = s < 3600 ? [s / 60, "minute"] : s < 86400 ? [s / 3600, "hour"] : [s / 86400, "day"];
-  const r = Math.round(n); return `${r} ${u}${r === 1 ? "" : "s"} ago`;
+  const r = Math.round(n); return tr(`{0} ${u}${r === 1 ? "" : "s"} ago`, r);
 }
 function describeUpdate(u) {
   if (u.error) return u.error;
-  if (u.busy) return u.message || "Getting the update";
-  if (u.available) return `Hoard ${verText(u.latest.version)} is available (you have ${verText(u.current)}).` +
-    (u.can_install ? "" : " Download it from the releases page, and install it over this one.");
-  if (u.checked) return `Hoard ${verText(u.current)} is the newest version. Last checked ${ago(new Date(u.checked * 1000).toISOString())}.`;
-  return `You have Hoard ${verText(u.current)}.`;
+  if (u.busy) return u.message || tr("Getting the update");
+  if (u.available) return tr("Hoard {0} is available (you have {1}).", verText(u.latest.version), verText(u.current)) +
+    (u.can_install ? "" : " " + tr("Download it from the releases page, and install it over this one."));
+  if (u.checked) return tr("Hoard {0} is the newest version.", verText(u.current)) + " " + tr("Last checked {0}.", ago(new Date(u.checked * 1000).toISOString()));
+  return tr("You have Hoard {0}.", verText(u.current));
 }
 async function startDownload(stores, only, keys) {
   const files = takeFiles();   // the files chosen of each product, if some were left out (taken first: never kept for later)
