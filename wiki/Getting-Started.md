@@ -26,7 +26,11 @@ store, or without a Payhip shop, asks first. Run again from Settings, it can be 
    window, and Hoard reads what you own.
 7. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive
    with room to spare: VRChat assets add up.
-8. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
+8. **When you close Hoard's window** (in Hoard's own window, from 3.1): **Keep Hoard running**, minimized to the
+   taskbar (the Dock on a Mac), so downloads, syncs and the routine check carry on, or **Quit Hoard**. It's the
+   same choice as **Closing Hoard** in [Settings](Settings), where you can change it later. Hoard in your web
+   browser doesn't ask: closing the tab is the browser's.
+9. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
 
 ## Signing in without your saved passwords
 

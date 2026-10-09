@@ -20,6 +20,7 @@ finish-args:
   - --talk-name=org.freedesktop.secrets    # store sign-ins are encrypted with your keyring (GNOME Keyring,
   - --talk-name=org.kde.kwalletd5          #   KeePassXC, KWallet); without one, Hoard won't keep them
   - --talk-name=org.kde.kwalletd6
+  - --talk-name=org.freedesktop.Notifications   # what the routine check found, as a notification (Settings)
   - --filesystem=home                      # the downloads folder you choose (Documents/Hoard unless you pick one)
   - --filesystem=/media                    #   and on other drives
   - --filesystem=/run/media

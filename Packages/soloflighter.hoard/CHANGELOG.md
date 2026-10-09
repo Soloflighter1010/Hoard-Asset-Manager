@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+- **Which product is this from?** Right-click files or folders in the Project window (or use the **Assets** menu)
+  and choose **Hoard › Which Product Is This From?**. The window lists the products whose packages carry them,
+  most files first, with **Show** to find each one in the list. Files no package Hoard downloaded carries are
+  said to be from none.
+- **Updates for what's in your project.** A product in this project shows **Update to import** when Hoard has
+  downloaded a newer package of it than the one you imported (a package downloaded later than the one in the
+  project, or than when you last imported it through Hoard), and **Update in Hoard** when Hoard's last check for
+  updates found new or changed files you haven't downloaded yet. Its details have **Import update**, or say to
+  download the update in Hoard first. **Updates** in the toolbar shows just those.
+
 ## 0.5.3
 
 - **A product counts only by the files that are its own.** Products often carry the same files: a creator's shared

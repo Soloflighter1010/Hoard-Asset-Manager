@@ -209,6 +209,9 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         from . import updater
         updater.tidy()
         srv.updates.check_in_background()
+        from . import notify
+        srv.jobs.on_found = lambda counts: srv.cfg.get("notify_found", True) is not False and notify.show(notify.found_text(counts))
+        srv.can_notify = True
         srv.start_schedule()
         from .safety import write_file_safely
         write_file_safely(running_file(), json.dumps({"url": url, "token": token, "pid": os.getpid()}))

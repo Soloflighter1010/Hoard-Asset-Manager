@@ -20,6 +20,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   library.py           reading what you own from each store; the library list
   downloader.py        downloading, the records of what's on disk, the catalog files, verify
   downloads.py         the Downloads view's index of what's on disk
+  space.py             Downloads' Disk space: the same file kept more than once, from the integrity check's fingerprints
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
                        browser; Schedule, the routine check
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across
@@ -27,6 +28,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   server.py            the local server behind both views
   cli.py               the command line (docs/COMMAND-LINE.md)
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
+  notify.py            a notification from the system when the routine check finds something to download
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
   web/                 library.html, downloads.html, shared.js (what both pages share) and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)

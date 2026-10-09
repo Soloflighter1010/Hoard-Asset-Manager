@@ -278,6 +278,7 @@ class Jobs:
         self.cfg, self.lib = cfg, lib
         self.on_download_done = on_download_done or (lambda: None)
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
+        self.on_found = None   # the routine check found more to download than before: Hoard's app tells you (hoard/notify.py)
         self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
         self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
         self._forced = False     # Force stop was chosen for the running job
@@ -726,7 +727,10 @@ class Jobs:
                     return   # stopped while checking for updates: its "Stopped" stands, and nothing found is kept
             counts = self.find_choices() if self.find_choices else {"new": 0, "updates": 0}
             found = {"at": now_iso(), **counts} if counts["new"] or counts["updates"] else None
+            before = routine_record()["found"] or {"new": 0, "updates": 0}
             save_routine(found=found)
+            if found and self.on_found and (counts["new"] > before["new"] or counts["updates"] > before["updates"]):
+                self.on_found(counts)   # (what you were told already and haven't looked at, only once)
             said = (f"Found {plural(counts['new'], 'new product')} and {plural(counts['updates'], 'update')}: "
                     "choose what to download." if found else "Nothing new to download.")
             self._set(message=f"{checked} {said}" + (f" Couldn't read {_names(unread)}: see Stores." if unread else ""),

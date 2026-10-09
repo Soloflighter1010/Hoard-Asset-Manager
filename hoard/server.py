@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, itch, libraries, projects, updater, vault
+from . import __version__, diagnostics, itch, libraries, projects, space, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -30,7 +30,8 @@ from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_do
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import is_network_error
-from .library import DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages
+from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages,
+                      save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
                      header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
@@ -51,7 +52,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
-           "/api/routine/seen", "/api/local/preview")
+           "/api/routine/seen", "/api/local/preview", "/api/picture-looks")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -202,6 +203,7 @@ def public_settings(cfg: dict) -> dict:
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "beta_updates": bool(cfg.get("beta_updates")),
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
+        "notify_found": cfg.get("notify_found", True) is not False,
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -243,6 +245,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["beta_updates"] = bool(body["beta_updates"])
     if "close_to_taskbar" in body:
         change["close_to_taskbar"] = bool(body["close_to_taskbar"])
+    if "notify_found" in body:
+        change["notify_found"] = bool(body["notify_found"])
     if "routine_hours" in body:   # issue #113
         if body["routine_hours"] not in ROUTINE_CHOICES or isinstance(body["routine_hours"], bool):
             raise ValueError("Choose how often to run the routine check from the list.")
@@ -341,6 +345,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # The desktop app (app.py) fills these in: bring its window to the front, quit, and the token a second
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
+        self.can_notify = False   # Hoard's app (window or browser) tells you what the routine check found (hoard/notify.py)
         self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.picking = threading.Lock()   # a system picker is open (see /api/pick)
@@ -618,7 +623,7 @@ class Handler(BaseHTTPRequestHandler):
                                "signins": str(signins_root(srv.cfg)), "signins_note": signin_protection(srv.cfg),
                                "store_sites": store_sites(), "version": __version__,
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
-                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None,
+                               "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg),
                                "routine": routine_record()["found"]}, compress=True)
         if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
@@ -642,6 +647,14 @@ class Handler(BaseHTTPRequestHandler):
             by_store = {tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
             updates = AssetUpdates().load()   # what the last check for updates found (issue #26)
             used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
+            stacks, looks = {}, []   # copies of one product stack here as in the Library: by its products (hoard/library.py)
+            listed = [dict(i) for i in srv.lib.snapshot()[0]]
+            stack_by_picture(listed)
+            for i in listed:
+                if i["stack_key"]:
+                    stacks.setdefault(tag_key(i["store"], i["name"]), i["stack_key"])
+                if i.get("look_for") and (unlocked or tag_key(i["store"], i["name"]) not in marks["hidden"]):
+                    looks.append({"look_for": i["look_for"], "key": i["key"]})   # (its picture: /thumb/<key>)
             assets = []
             for a in index["assets"]:
                 key = a.get("tag_key")
@@ -649,18 +662,24 @@ class Handler(BaseHTTPRequestHandler):
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                                   "stack_key": stacks.get(key, ""),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
-            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked},
+            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}, "looks_wanted": looks[:500],
                      "libraries": srv.library_view(),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
             updates = AssetUpdates().load()["items"]
             return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
                                "hidden_left_out": not self._unlocked() and bool(MarkStore().keys("hidden"))}, compress=True)
+        if path == "/api/space":   # Downloads, Disk space: the same file kept more than once (hoard/space.py)
+            hidden = frozenset() if self._unlocked() else frozenset(MarkStore().keys("hidden"))
+            with srv.cfg_lock:
+                roots = libraries.roots(srv.cfg, root_dir(srv.cfg))
+            return self._json({**space.copies(roots, hidden), "projects": len(self._visible_projects())}, compress=True)
         if path == "/api/settings":
             return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
         if path == "/api/update":
@@ -669,7 +688,8 @@ class Handler(BaseHTTPRequestHandler):
             betas = parse_qs(u.query).get("betas", [""])[0] == "1"
             return self._json({"version": __version__, "releases": whats_new(betas)}, compress=True)
         if path == "/api/setup":
-            return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names())})
+            return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
+                               "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), srv.lib)
             if not got:
@@ -1119,6 +1139,14 @@ class Handler(BaseHTTPRequestHandler):
                     pass
             return self._json({"ok": True, **done, "skipped": [{"path": p, "why": w} for p, w in done["skipped"]],
                                "opened_in": opened})
+        if path == "/api/picture-looks":   # how pictures look, worked out by a page, for stacking copies (hoard/library.py)
+            looks = body.get("looks") if isinstance(body.get("looks"), dict) else {}
+            if not looks or len(looks) > 500:
+                return self._json({"error": "Send between 1 and 500 at a time."}, 400)
+            try:
+                return self._json({"ok": True, "kept": save_picture_looks(looks)})
+            except OSError as e:
+                return self._json({"error": f"Couldn't keep them: {e}"}, 500)
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})

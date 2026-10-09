@@ -35,6 +35,8 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   week or once a month, while Hoard is open. It reads your stores (not Payhip), checks your downloads and checks
   for updates, then asks which of what it found to download. It replaces **Sync automatically** and **Check your
   downloads**: a sync you'd turned on keeps its timing. See [Downloads](Downloads#downloading).
+  **Tell me when it finds something to download** (on unless you turn it off, from 3.1) shows a notification from
+  your system when it finds new products or updates while Hoard is open in the background.
 - **Accessibility:**
   - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first

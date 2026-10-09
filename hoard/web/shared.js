@@ -71,6 +71,51 @@ function notch(store, others) {
   const other = (others || []).find(o => STRIPE_STORES.includes(o) && o !== store);
   return other ? `<i class="notch ${store} dup" style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"></i>`;
 }
+/* Stacking copies across stores (hoard/library.py): when two shops' copies of one product have the same name but
+   their pictures aren't the same file, Hoard asks the page how the pictures look. A difference hash: the picture
+   in grey, 9 by 8, and for each square whether it's brighter than the one to its right. A store re-saving a
+   picture barely changes it; another product's picture changes most of it. */
+function pictureLook(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const W = 72, H = 64, c = document.createElement("canvas");   // 8 by 8 pixels to each square, averaged
+        c.width = W; c.height = H;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.imageSmoothingQuality = "high";
+        g.drawImage(img, 0, 0, W, H);
+        const d = g.getImageData(0, 0, W, H).data, grey = new Array(72).fill(0);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          grey[(y >> 3) * 9 + (x >> 3)] += d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114;
+        }
+        if (Math.max(...grey) - Math.min(...grey) < Math.max(...grey) * 0.02 + 1) { resolve(null); return; }   // flat: no look to go by
+        let hex = "";
+        for (let n = 0; n < 64; n += 4) {
+          let v = 0;
+          for (let b = n; b < n + 4; b++) { const y = b >> 3, x = b & 7; v = v * 2 + (grey[y * 9 + x] > grey[y * 9 + x + 1] ? 1 : 0); }
+          hex += v.toString(16);
+        }
+        resolve(hex);
+      } catch (e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+const lookedAt = new Set();   // pictures already worked out while this page is open, found or not
+async function lookAtPictures(wanted) {   // [{look_for: its SHA-256, src}]: true when there's something new to stack by
+  const looks = {};
+  for (const w of wanted) {
+    if (lookedAt.has(w.look_for) || Object.keys(looks).length >= 500) continue;
+    lookedAt.add(w.look_for);
+    const hex = await pictureLook(w.src);
+    if (hex) looks[w.look_for] = hex;
+  }
+  if (!Object.keys(looks).length) return false;
+  try { return (await apiPost("/api/picture-looks", { looks })).ok; } catch (e) { return false; }
+}
 // The item whose details are open stays marked in the grid.
 function markCurrent(selector) {
   for (const s of document.querySelectorAll('.slot[aria-current="true"]')) s.removeAttribute("aria-current");
@@ -583,6 +628,8 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setBetas").checked = !!SETTINGS.beta_updates;
   $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
   $("#backgroundRow").hidden = !DATA.can_background;
+  $("#setNotify").checked = SETTINGS.notify_found !== false;
+  $("#notifyRow").hidden = !DATA.can_notify;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
   showBrowserInUse();
@@ -866,6 +913,7 @@ function settingsPart(el) {
     case "setUpdates": return { check_for_updates: el.checked };
     case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
+    case "setNotify": return { notify_found: el.checked };
     case "setBrowser": return { browser_channel: el.value };
     case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };

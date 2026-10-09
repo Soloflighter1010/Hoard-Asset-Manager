@@ -220,6 +220,45 @@ public static class CoreTests
 
     // Hoard's Projects view (issue #86): the report the window writes, which Hoard's test then reads back, checking
     // it makes the very credits list this code makes.
+    // "Which product is this from?" and the update marks in Hoard for Unity
+    static void OriginChecks(string dir)
+    {
+        var packages = new List<KeyValuePair<string, string[]>>
+        {
+            new KeyValuePair<string, string[]>("Booth/Aiden/Coquette", new[] { "coq", "shader" }),
+            new KeyValuePair<string, string[]>("Booth/Aiden/Spiky", new[] { "spiky", "shader" }),
+            new KeyValuePair<string, string[]>("Booth/Aiden/Coquette", new[] { "coq", "coq2" }),   // its other version
+            new KeyValuePair<string, string[]>("Booth/Kitsu/Rusk\nGumroad/Kitsu/Rusk", new[] { "rusk" }),   // two stores' copy
+        };
+        var found = Origins.Of(new[] { "coq", "coq2", "shader" }, packages);
+        Check("origins: most files first", found.Count == 2 && found[0].Product == "Booth/Aiden/Coquette" && found[0].Count == 3
+              && found[1].Product == "Booth/Aiden/Spiky" && found[1].Count == 1, found.Count + " found");
+        found = Origins.Of(new[] { "rusk" }, packages);
+        Check("origins: a package two products list is both of theirs", found.Count == 2 && found[0].Count == 1 && found[1].Count == 1);
+        Check("origins: nothing of Hoard's", Origins.Of(new[] { "elsewhere" }, packages).Count == 0);
+
+        var day = new DateTime(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+        var v1 = new PackageState { Path = "v1", Written = day, AllHere = true };
+        var v2 = new PackageState { Path = "v2", Written = day.AddDays(20), AllHere = false };
+        Check("updates: a later download than the one in the project", Updates.NewerPackage(new[] { v1, v2 }, null) == "v2");
+        var extras = new PackageState { Path = "extras", Written = day.AddMinutes(2), AllHere = false };
+        Check("updates: a package from the same download isn't an update", Updates.NewerPackage(new[] { v1, extras }, null) == null);
+        var old = new PackageState { Path = "v0", Written = day.AddDays(-30), AllHere = false };
+        Check("updates: an older version isn't one", Updates.NewerPackage(new[] { v1, old }, null) == null);
+        var replaced = new PackageState { Path = "same", Written = day.AddDays(5), AllHere = false };   // changed in place
+        Check("updates: downloaded again after the last import", Updates.NewerPackage(new[] { replaced }, day) == "same");
+        Check("updates: downloaded before the last import", Updates.NewerPackage(new[] { replaced }, day.AddDays(6)) == null);
+        Check("updates: all of it here", Updates.NewerPackage(new[] { v1 }, day.AddDays(-1)) == null);
+        Check("updates: import time read", Updates.ParseTime("2026-10-01T12:00:00Z") == day && Updates.ParseTime("1.10.2026") == null);
+
+        var pending = Updates.ReadPending(File.ReadAllText(Path.Combine(dir, "asset-updates.json"), Encoding.UTF8));
+        int n;
+        Check("updates: Hoard's list read, matched by store and name", pending.TryGetValue(Updates.Key("Booth", "Rusk Avatar ラスク"), out n) && n == 2,
+              string.Join(" | ", pending.Keys));
+        Check("updates: itch.io's folder name matches", pending.ContainsKey(Updates.Key("Itch", "Tail Glow")));
+        Check("updates: a damaged list is nothing", Updates.ReadPending("{not json").Count == 0);
+    }
+
     static void ProjectChecks(string dir)
     {
         string project = Path.Combine(dir, "My Avatar");
@@ -446,6 +485,7 @@ public static class CoreTests
         GifChecks(Path.Combine(dir, "gifs"));
         PictureChecks(Path.Combine(dir, "gifs"));
         ProjectChecks(dir);
+        OriginChecks(dir);
 
         Console.WriteLine(failures == 0 ? "ALL PASSED" : failures + " FAILED");
         return failures == 0 ? 0 : 1;

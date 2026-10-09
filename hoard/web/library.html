@@ -462,6 +462,12 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .setup .storepick label { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 12px; cursor: pointer; font-weight: 700;
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .setup .storepick input { width: 18px; height: 18px; accent-color: var(--gold); }
+.setup .closepick { display: grid; gap: 10px; margin: 14px 0; }
+.setup .closepick label { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; cursor: pointer;
+  background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+.setup .closepick label:has(input:checked) { box-shadow: inset 0 0 0 2px var(--gold); }
+.setup .closepick input { flex: none; width: 18px; height: 18px; margin-top: 2px; accent-color: var(--gold); }
+.setup .closepick .muted { display: block; margin-top: 4px; font-weight: 500; }
 .setup .signrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--seam); }
 .setup .signrow .who { flex: 1; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .setup .signrow .state { font-size: 13px; color: var(--dust); }
@@ -819,7 +825,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
         <option value="added">Recently added</option>
       </select>
     </label>
-    <label class="stack-toggle" title="Show copies of the same product, from the same store and creator, as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
+    <label class="stack-toggle" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -976,6 +982,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <p class="hint">While Hoard is open, it does this often: reads your stores (not Payhip, which needs you there for
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
+  <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -1231,6 +1238,9 @@ async function load() {
   if (DATA.job && DATA.job.running) startPolling();
   if (openKey && byKey.has(openKey)) showDetail(byKey.get(openKey), false);
   else if (openKey) forgetDetail();   // no longer shown (a hidden item, once locked): its details go too
+  // copies on two stores whose pictures may be one picture saved twice: how they look decides (then read again)
+  const wanted = DATA.items.filter(a => a.look_for && a.thumbnail).map(a => ({ look_for: a.look_for, src: keyed("/thumb/" + encodeURIComponent(a.key)) }));
+  if (wanted.length && await lookAtPictures(wanted)) load();
 }
 
 /* ---------- filtering */
@@ -1256,17 +1266,19 @@ const SORTS = {
 const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
-// issue #111: copies of the same product on one store (bought more than once, or in several versions), known by the
-// same picture, byte for byte, show as one tile. Choosing it shows them all, as "Copies of". Not while selecting, so each can be chosen.
-let STACK = true, stackSize = new Map();   // the first copy's key -> how many copies its tile stands for
-const stackKey = a => a.stack_key ? `${a.store}|${a.stack_key}` : null;   // the same picture, byte for byte (enrich)
+// issue #111: copies of the same product (bought more than once, in several versions, or on two stores, by the same
+// picture, name and creator: hoard/library.py) show as one tile. Choosing it shows them all, as "Copies of". Not
+// while selecting, so each can be chosen.
+let STACK = true, stackSize = new Map(), stackStores = new Map();   // the first copy's key -> how many copies, and their stores
+const stackKey = a => a.stack_key || null;
 function stacked(list) {
-  stackSize = new Map();
+  stackSize = new Map(); stackStores = new Map();
   if (!STACK || sel.on || state.copies) return list;
   const first = new Map(), out = [], all = new Map();
   for (const a of list) {
     const k = stackKey(a), f = k && first.get(k);
-    if (f) { stackSize.set(f.key, 2); continue; }
+    if (f) { stackSize.set(f.key, 2); stackStores.get(f.key).add(a.store); continue; }
+    if (k) stackStores.set(a.key, new Set([a.store]));
     first.set(k, a); out.push(a);
   }
   // a stack's ×N is every copy "Copies of" then shows (it clears the filters), not just those the filters let through
@@ -1274,10 +1286,9 @@ function stacked(list) {
   for (const [k, f] of first) if (stackSize.has(f.key)) stackSize.set(f.key, all.get(k));
   return out;
 }
-// "Copies of": every copy, whatever the filters were. A stack's copies are on its own store (stackKey); "others" are
-// the same product on any store.
+// "Copies of": every copy, whatever the filters were: a stack's (stack_key), or the same product on any store ("others").
 function showCopies(a, field = "match_key") {
-  state.copies = { field, key: a[field], name: a.name, store: field === "stack_key" ? a.store : "" };
+  state.copies = { field, key: a[field], name: a.name, store: "" };
   state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.fresh = false; state.tags.clear(); render();
 }
 function render() {
@@ -1338,7 +1349,7 @@ const slotHTML = a => {
     return `<button class="slot${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
       `${n > 1 ? `, ${n} copies: choose to see them all` : ""}` +
       `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}${onDisk(a) ? ", downloaded" : ""}${a.new ? ", new" : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
-      `<span class="art">${thumb(a)}${notch(a.store, a.also_in)}<i class="tick" aria-hidden="true"></i>` +
+      `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span></span>` +
@@ -2156,7 +2167,8 @@ function setupPicked(st, s) {
   return !!((DATA.stores || {})[s] || {}).count;
 }
 const setupSteps = () => ["welcome", "browser", "older", "stores",
-  ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder", "done"];
+  ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
+  ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
 async function setupStatus() {
   SETUP.st = await (await api("/api/setup", { cache: "no-store" })).json();
   return SETUP.st;
@@ -2226,6 +2238,17 @@ const SETUP_VIEWS = {
     <p>Hoard keeps local copies of what you own, in folders by store, creator and product.</p>
     <div class="field"><input id="setupRoot" spellcheck="false" aria-label="Downloads folder" value="${esc(st.root)}"><button class="ghost sm" id="setupRootBrowse" data-browse ${canPick() ? "" : "hidden"}>Browse…</button><button class="ghost sm" id="setupRootDefault">Default</button></div>
     <p class="muted">Pick a drive with room to spare; VRChat assets add up. You can change this later in Settings.</p>`,
+  closing: st => `<h2 id="setupTitle">When you close Hoard's window</h2>
+    <div class="closepick" role="radiogroup" aria-labelledby="setupTitle">
+      <label><input type="radio" name="setupClose" value="background"${st.close_to_taskbar !== false ? " checked" : ""}>
+        <span><strong>Keep Hoard running</strong><span class="muted">The window minimizes to the taskbar (the Dock on a Mac).
+        Downloads, syncs and the routine check carry on, and the routine check can tell you what it found. Quit with
+        <strong>Quit Hoard</strong> in Settings.</span></span></label>
+      <label><input type="radio" name="setupClose" value="quit"${st.close_to_taskbar === false ? " checked" : ""}>
+        <span><strong>Quit Hoard</strong><span class="muted">Closing the window quits it. While something's running, Hoard
+        asks first.</span></span></label>
+    </div>
+    <p class="muted">You can change this later in Settings, under Closing Hoard.</p>`,
   older: () => `<h2 id="setupTitle">Used Hoard before?</h2>
     <p>If you used Hoard 1.x, bring over your library list and downloads folder. Your sign-ins and tags carry over by themselves.</p>
     <div class="field"><input id="oldFolder" spellcheck="false" aria-label="Folder you ran Hoard 1.x from" placeholder="The folder you ran Hoard 1.x from, such as D:\\Tools\\Hoard-Bundle">
@@ -2314,6 +2337,8 @@ async function setupSave(name) {   // what leaving a step saves; false keeps you
   } else if (name === "folder") {
     const root = $("#setupRoot").value.trim();
     body = { root: root === SETUP.st.default_root ? "" : root };
+  } else if (name === "closing") {
+    body = { close_to_taskbar: !!$('#setupBody input[name="setupClose"][value="background"]').checked };
   }
   if (!body) return true;
   const r = await apiPost("/api/settings", body);

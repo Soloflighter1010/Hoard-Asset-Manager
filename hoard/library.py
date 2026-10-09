@@ -1211,20 +1211,158 @@ def picture_hashes(urls) -> dict[str, str]:
     return out
 
 
-def stack_by_picture(items: list[dict]) -> None:
-    """Give each item a stack_key: copies of one product (bought more than once, or in several versions) have the
-    same picture, byte for byte, so they stack into one tile (issue #111). Names aren't used: "Hair Pack 1" and
-    "Hair Pack 2" are different products. A picture shared by more than one creator is a store's stand-in (a default
-    banner, say), not a product's own, so it stacks nothing; nor does an item whose picture isn't saved yet."""
+PICTURE_LOOKS_FILE = "picture-looks.json"
+MAX_LOOKS = 50_000
+LOOK_DISTANCE = 10      # of 64 bits: two pictures closer than this look the same (a store re-saved it, say)
+_LOOKS_CACHE: dict = {"at": None, "looks": {}}
+
+
+def _looks_file() -> Path:
+    from .paths import data_dir
+    return data_dir() / PICTURE_LOOKS_FILE
+
+
+def picture_looks() -> dict[str, str]:
+    """How each saved picture looks, by its SHA-256: a 64-bit difference hash (16 hex digits) the pages work out
+    from the picture as they show it, kept in picture-looks.json so it's worked out once. Read again only when
+    the file changes."""
+    path = _looks_file()
+    try:
+        st = path.stat()
+    except OSError:
+        return {}
+    if _LOOKS_CACHE["at"] == (st.st_size, st.st_mtime_ns):
+        return _LOOKS_CACHE["looks"]
+    try:
+        raw = read_json_file(path, 8 * 1024 * 1024)
+    except (DataFileError, OSError):
+        raw = {}
+    looks = {k: v for k, v in (raw.get("looks") if isinstance(raw, dict) and isinstance(raw.get("looks"), dict) else {}).items()
+             if _is_hex(k, 64) and _is_hex(v, 16)}
+    _LOOKS_CACHE.update(at=(st.st_size, st.st_mtime_ns), looks=looks)
+    return looks
+
+
+def save_picture_looks(new: dict) -> int:
+    """Keep how these pictures look (from a page: SHA-256 -> difference hash). Returns how many are kept now."""
+    with _PICTURE_LOCK:
+        looks = dict(picture_looks())
+        looks.update({k: v for k, v in new.items() if _is_hex(k, 64) and _is_hex(v, 16)})
+        if len(looks) > MAX_LOOKS:   # the oldest go first (dicts keep their order)
+            looks = dict(list(looks.items())[-MAX_LOOKS:])
+        write_file_safely(_looks_file(), json.dumps({"looks": looks}))
+        return len(looks)
+
+
+def _is_hex(value, n: int) -> bool:
+    return isinstance(value, str) and len(value) == n and all(c in "0123456789abcdef" for c in value)
+
+
+def stack_name(name: str) -> str:
+    """A product's name for stacking: without case, spacing, punctuation and 【store】 [labels], but with its
+    numbers and (variants), so "Hair Pack 1" isn't "Hair Pack 2" and "Hoodie (Pink)" isn't "Hoodie (Blue)"."""
+    s = unicodedata.normalize("NFKC", name or "").casefold()
+    key = re.sub(r"[\W_]+", "", re.sub(r"【[^】]*】|\[[^\]]*\]", " ", s))
+    return key if len(key) >= 4 else re.sub(r"[\W_]+", "", s)
+
+
+def _maker(creator: str) -> str:
+    key = re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", creator or "").casefold())
+    return "" if key in ("", "unknowncreator") else key
+
+
+def _names_alike(a: str, b: str) -> bool:
+    """Two stack names that are probably one product's: the same, or nearly (a word more or less), with the same
+    numbers in them."""
+    if a == b:
+        return True
+    if not a or not b or re.findall(r"\d+", a) != re.findall(r"\d+", b):
+        return False
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, a, b).ratio() >= 0.8
+
+
+def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
+    """Give each item a stack_key: copies of one product show as one tile (issue #111), from any store. Copies are:
+
+    - items with the same picture, byte for byte, when no other creator uses it (bought twice, or in versions);
+    - items whose picture other creators use too (a store's stand-in, say, or a creator who renamed their shop)
+      when their names are alike as well;
+    - items with the same name by the same creator, on any store (bought on both);
+    - items with the same name by creators named differently (one shop under two names) whose pictures look the
+      same (picture_looks): the same picture saved again by another store isn't the same bytes.
+
+    "Hair Pack 1" and "Hair Pack 2" stay apart unless they have the same picture. An item that might stack, once
+    it's known how its picture looks, gets look_for: its picture's SHA-256, for the page to work out (save_picture_looks).
+    An item with nothing to stack with gets "", as does one whose picture isn't saved yet unless its name and
+    creator say it's a copy."""
+    looks = picture_looks() if looks is None else looks
     hashes = picture_hashes(i["thumbnail"] for i in items if i.get("thumbnail"))
-    creators: dict[str, set] = {}
-    for i in items:
-        h = hashes.get(i.get("thumbnail") or "")
+    pic = [hashes.get(i.get("thumbnail") or "", "") for i in items]
+    names = [stack_name(i.get("name") or "") for i in items]
+    makers = [_maker(i.get("creator") or "") for i in items]
+    parent = list(range(len(items)))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    by_pic: dict[str, list[int]] = {}
+    for n, h in enumerate(pic):
         if h:
-            creators.setdefault(h, set()).add(str(i.get("creator") or "").lower())
-    for i in items:
-        h = hashes.get(i.get("thumbnail") or "")
-        i["stack_key"] = h if h and len(creators[h]) == 1 else ""
+            by_pic.setdefault(h, []).append(n)
+    for group in by_pic.values():
+        if len({makers[n] for n in group}) == 1:
+            for n in group[1:]:
+                union(group[0], n)
+        elif len(group) <= 200:   # (a stand-in on hundreds of items: those aren't copies of each other)
+            for x, a in enumerate(group):
+                for b in group[x + 1:]:
+                    if _names_alike(names[a], names[b]):
+                        union(a, b)
+    by_name: dict[str, list[int]] = {}
+    for n, k in enumerate(names):
+        by_name.setdefault(k, []).append(n)
+    look_for: set[int] = set()
+    for group in by_name.values():
+        if len(group) < 2 or len(group) > 200:
+            continue
+        first_by_maker: dict[str, int] = {}
+        for n in group:
+            if makers[n]:
+                if makers[n] in first_by_maker:
+                    union(first_by_maker[makers[n]], n)
+                else:
+                    first_by_maker[makers[n]] = n
+        for x, a in enumerate(group):
+            for b in group[x + 1:]:
+                if find(a) == find(b) or not (pic[a] and pic[b]) or makers[a] == makers[b]:
+                    continue
+                la, lb = looks.get(pic[a]), looks.get(pic[b])
+                if la and lb:
+                    if bin(int(la, 16) ^ int(lb, 16)).count("1") <= LOOK_DISTANCE:
+                        union(a, b)
+                else:
+                    look_for.update(n for n, known in ((a, la), (b, lb)) if not known)
+    members: dict[int, list[int]] = {}
+    for n in range(len(items)):
+        members.setdefault(find(n), []).append(n)
+    for root, group in members.items():
+        key = ""
+        if len(group) > 1:   # named by its copies, so it's the same from one read to the next
+            key = hashlib.sha256("\n".join(sorted(items[n].get("key") or f"{items[n].get('store')}:{items[n].get('name')}"
+                                                   for n in group)).encode()).hexdigest()[:24]
+        for n in group:
+            items[n]["stack_key"] = key
+    for n in look_for:
+        items[n]["look_for"] = pic[n]
 
 
 def unreachable_message(store: str, what: str = "refreshed") -> str:

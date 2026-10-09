@@ -163,6 +163,12 @@ def build_material(d: Path) -> None:
     expected[folder_guid] = "Assets/Kitsu"
     (d / "package_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
     (d / "not_a_package.unitypackage").write_bytes(gzip.compress(b"hello, this is not a tar file" * 3))
+    # what a check for updates found, written by the app's own code, for Hoard for Unity's "Update in Hoard" mark
+    from hoard.asset_updates import AssetUpdates
+    AssetUpdates(d / "asset-updates.json").record_check(["booth", "itch"], None, [
+        {"key": "booth:rusk", "store": "booth", "name": "Rusk Avatar ラスク", "creator": "Kitsu Studio", "file": "rusk_v2.zip", "kind": "new"},
+        {"key": "booth:rusk", "store": "booth", "name": "Rusk Avatar ラスク", "creator": "Kitsu Studio", "file": "rusk.unitypackage", "kind": "changed"},
+        {"key": "itch:tailglow", "store": "itch", "name": "Tail Glow", "creator": "Mia", "file": "glow.zip", "kind": "new"}])
     # hostile packages (S-03, 2.3.1 review): headers claiming far more than follows them
     (d / "huge_name.unitypackage").write_bytes(gzip.compress(tar_header("././@LongLink", 8 ** 11 - 1, b"L") + b"x" * 100))
     (d / "too_big.unitypackage").write_bytes(gzip.compress(tar_header("0123456789abcdef0123456789abcdef/asset",

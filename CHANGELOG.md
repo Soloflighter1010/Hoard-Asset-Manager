@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.1.0
+
+- **Disk space, in Downloads.** A new view lists your downloads biggest first, with how much they take, and two
+  ways to narrow it down:
+  - **Same file kept twice**: files you have more than once, in two products (a bundle and the product also sold
+    on its own, the same package bought from two stores) or in two library folders, with how much you'd free.
+    Open one to see where else its files are. It's worked out from the fingerprints Hoard's download check
+    already keeps, so it reads nothing; files the check hasn't seen yet are counted, with **Check now**.
+  - **Not in any Unity project**: downloads none of your projects use (as Hoard for Unity reports them).
+  Choose **Select** to move several to another library folder, archive them, or delete their downloaded files.
+- **Select in Downloads can archive, and delete downloaded files, for several at once**, in any view.
+- **A notification when the routine check finds something.** With Hoard open in the background, your system
+  tells you how many new products and updates the routine check found (never their names), once: the same again
+  isn't news. Turn it off in Settings, under **Routine check**. On Linux it needs `notify-send` or `gdbus`; the
+  Flatpak asks to talk to the notification service for it.
+- **Copies on two stores stack.** A product you have on two stores is one tile now, in the Library and in
+  Downloads (which stacks copies too, with **Stack copies** beside Sort): by the same name and creator, or, when a
+  creator's shops have different names, by the same name and a picture that looks the same, though each store
+  saved it its own way. The page works out how pictures look once, and Hoard keeps it (`picture-looks.json`).
+  Pictures several creators use stack names that are nearly the same, too. Names still need the same numbers and
+  (variants), so "Hair Pack 1" and "Hair Pack (Pink)" stay apart.
+- **The setup assistant asks what closing Hoard's window does**: keep Hoard running, minimized to the taskbar
+  (the Dock on a Mac), or quit it. It's the same choice as **Closing Hoard** in Settings.
+- **Hoard for Unity 0.6.0**: right-click files in the Project window and choose **Hoard › Which Product Is This
+  From?**, and products in your project with a newer download are marked, to import the update. See its
+  changelog.
+
 ## 3.0.3
 
 - **Fixed: in Hoard's window, Settings' Add a folder... filled the whole row**, pushing the box for a folder's path

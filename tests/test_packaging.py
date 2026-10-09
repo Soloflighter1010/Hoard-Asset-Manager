@@ -126,11 +126,13 @@ class TheFlatpak(unittest.TestCase):
         self.assertRegex(m, r"type: dir\s+path: \.\./\.\.")
 
     def test_the_sandbox(self):
-        """Only what Hoard needs: the network, a window, the keyring for sign-ins, and your files for the downloads
-        folder. Never the host system, or the whole session bus."""
+        """Only what Hoard needs: the network, a window, the keyring for sign-ins, the notification service (what the
+        routine check found), and your files for the downloads folder. Never the host system, or the whole session
+        bus."""
         self.assertEqual(set(self.finish_args()), {
             "--share=network", "--share=ipc", "--socket=wayland", "--socket=fallback-x11", "--device=dri",
             "--talk-name=org.freedesktop.secrets", "--talk-name=org.kde.kwalletd5", "--talk-name=org.kde.kwalletd6",
+            "--talk-name=org.freedesktop.Notifications",
             "--filesystem=home", "--filesystem=/media", "--filesystem=/run/media", "--filesystem=/mnt",
             "--env=PYWEBVIEW_GUI=gtk"})
 

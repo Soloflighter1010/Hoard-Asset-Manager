@@ -2548,11 +2548,59 @@ class CopiesStack(unittest.TestCase):
                                 ("Fox", "Kitsu"), ("Wolf", "Someone Else"), ("Unsaved", "Kitsu")])]
             keys = [e["stack_key"] for e in library.enrich(items, {})]
             self.assertTrue(keys[0] and keys[0] == keys[1], "two copies, one picture")
-            self.assertNotEqual(keys[2], keys[3], "two products, two pictures, however alike their names")
+            self.assertEqual(keys[2:4], ["", ""], "two products, two pictures, however alike their names")
             self.assertEqual(keys[4:], ["", "", ""], "a picture two creators share is a stand-in; an unsaved one stacks nothing")
             (Path(tmp) / (hashlib.sha1(pic(1).encode()).hexdigest() + ".png")).write_bytes(b"rusk, updated")
             keys = [e["stack_key"] for e in library.enrich(items, {})]
-            self.assertNotEqual(keys[0], keys[1], "a picture that changes is read again")
+            self.assertEqual(keys[:2], ["", ""], "a picture that changes is read again")
+
+    def test_copies_on_other_stores_stack(self):
+        """One product bought on two stores is one tile: by the same creator and name; or, from one shop under two
+        names, by the same name and a picture that looks the same (worked out by the page, picture_looks), or the
+        same picture and a name alike."""
+        import hashlib
+        from unittest import mock
+        def pic(n):
+            return f"https://public-files.gumroad.com/p{n}.png"
+        pictures = {0: b"mane", 1: b"mane, saved again", 2: b"ashbeast", 3: b"ashbeast, jinxxy's", 4: b"nova",
+                    5: b"nova", 6: b"hoodie", 7: b"another hoodie", 8: b"hair"}
+        rows = [("gumroad", "Fluffy Mane For Nardoragon", "Sesilaso"), ("jinxxy", "Fluffy Mane For Nardoragon", "Sesilaso"),
+                ("gumroad", "Face Tracking - Ashbeast DLC", "Han's Creations"), ("jinxxy", "Face Tracking - Ashbeast DLC", "hantnor"),
+                ("gumroad", "Face Tracking - Novabeast DLC (2026 Update)", "Han's Creations"),
+                ("jinxxy", "Face Tracking: Novabeast DLC 2026 Update", "hantnor"),
+                ("booth", "Hoodie", "Kitsu"), ("gumroad", "Hoodie", "Someone Else"),
+                ("booth", "Hair Pack (Pink)", "Kitsu")]
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(library, "THUMB_DIR", Path(tmp)):
+            for n, data in pictures.items():
+                (Path(tmp) / (hashlib.sha1(pic(n).encode()).hexdigest() + ".png")).write_bytes(data)
+            items = [library.item(store, str(n), name=name, creator=creator, thumbnail=pic(n))
+                     for n, (store, name, creator) in enumerate(rows)]
+            with mock.patch.object(library, "picture_looks", lambda: {}):
+                out = library.enrich(items, {})
+            keys = [e["stack_key"] for e in out]
+            self.assertTrue(keys[0] and keys[0] == keys[1], "the same creator and name, on two stores")
+            self.assertTrue(keys[4] and keys[4] == keys[5], "the same picture, and names alike")
+            self.assertEqual(keys[2:4], ["", ""], "two creators' names: not until it's known how the pictures look")
+            sha = {n: hashlib.sha256(pictures[n]).hexdigest() for n in pictures}
+            self.assertEqual({e.get("look_for") for e in out if e.get("look_for")}, {sha[2], sha[3], sha[6], sha[7]},
+                             "the page is asked how those pictures look")
+            looks = {sha[2]: "f0f0f0f0f0f0f0f0", sha[3]: "f0f0f0f0f0f0f0f1", sha[6]: "0000000000000000",
+                     sha[7]: "ffffffffffffffff"}
+            with mock.patch.object(library, "picture_looks", lambda: looks):
+                out = library.enrich(items, {})
+            keys = [e["stack_key"] for e in out]
+            self.assertTrue(keys[2] and keys[2] == keys[3], "pictures that look the same")
+            self.assertEqual(keys[6:9], ["", "", ""], "two creators' hoodies that look nothing alike stay apart")
+            self.assertFalse(any(e.get("look_for") for e in out))
+            self.assertEqual(len({keys[0], keys[2], keys[4]}), 3)
+
+    def test_how_pictures_look_is_kept(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(library, "_looks_file", lambda: Path(tmp) / "looks.json"):
+            self.assertEqual(library.picture_looks(), {})
+            self.assertEqual(library.save_picture_looks({"a" * 64: "0123456789abcdef", "nothex": "0123456789abcdef",
+                                                         "b" * 64: "short"}), 1)
+            self.assertEqual(library.picture_looks(), {"a" * 64: "0123456789abcdef"})
 
 
 class TagMatching(unittest.TestCase):
@@ -2875,6 +2923,26 @@ class RoutineCheck(unittest.TestCase):
         self.assertAlmostEqual(jobs.routine_record()["last"], time.time(), delta=5)
         jobs.save_routine(found=None)   # you looked
         self.assertIsNone(jobs.routine_record()["found"])
+
+    def test_it_tells_you_once_what_it_found(self):
+        """With Hoard's app running, a notification says what the routine check found: once, and again only when it
+        finds more than you were told about and haven't looked at yet."""
+        from unittest import mock
+        runner = jobs.Jobs(self.cfg, library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        told, found = [], {"new": 2, "updates": 0}
+        runner.find_choices = lambda: dict(found)
+        runner.on_found = told.append
+        jobs.save_routine(found=None)
+        with mock.patch.object(runner, "_refresh", lambda stores, **k: []), \
+                mock.patch.object(runner, "_verify", lambda stores, fresh=False: "All fine."), \
+                mock.patch.object(runner, "_download", lambda *a, **k: None):
+            for change in ({}, {}, {"updates": 1}, {"new": 0, "updates": 0}, {"new": 1}):
+                found.update(change)
+                self.assertEqual(runner.start("routine", ["booth"], scheduled=True), "started")
+                self.wait_idle(runner)
+        self.assertEqual(told, [{"new": 2, "updates": 0}, {"new": 2, "updates": 1}, {"new": 1, "updates": 0}],
+                         "the same again isn't news; after nothing was found, anything is")
+        jobs.save_routine(found=None)
 
     def test_yours_go_first(self):
         """Issue #110: an automatic job running makes way for one you start, and carries on after it."""
