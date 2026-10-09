@@ -287,7 +287,9 @@ class TemplateLayout(unittest.TestCase):
         self.assertIn("!soloflighter.hoard", (REPO / "Packages" / ".gitignore").read_text())
         self.assertTrue((REPO / "ProjectSettings" / "ProjectVersion.txt").read_text().startswith("m_EditorVersion: 2022.3"))
         source = json.loads((REPO / "source.json").read_text("utf-8"))
-        self.assertEqual(source["url"], "https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json")
+        # the website's own address: the github.io one forwards there, by way of http, and VCC won't follow a
+        # redirect from https to http, so a listing added by it couldn't be added at all
+        self.assertEqual(source["url"], "https://hoard.furryup.link/index.json")
         self.assertEqual(source["githubRepos"], ["Soloflighter1010/Hoard-Asset-Manager"])
         self.assertIn(source["url"], (REPO / "README.md").read_text("utf-8"))
 
