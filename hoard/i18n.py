@@ -14,6 +14,8 @@ from .paths import PACKAGE
 LANGUAGES = {"en": "English", "ja": "日本語", "ko": "한국어"}   # each in its own words, as Settings lists them
 SETTINGS = ("system",) + tuple(LANGUAGES)
 CATALOGS = PACKAGE / "web" / "i18n"
+# each catalog's file, fixed here: a language a window asks for only ever picks one of these, never names a path
+CATALOG_FILES = {code: CATALOGS / f"{code}.json" for code in LANGUAGES if code != "en"}
 
 
 def setting(value) -> str:
@@ -38,8 +40,9 @@ def from_header(accept_language: str | None) -> str:
         if code and q > 0:
             asked.append((-q, i, code))
     for _, _, code in sorted(asked):
-        if code in LANGUAGES:
-            return code
+        for known in LANGUAGES:   # Hoard's own word for it, not the window's
+            if code == known:
+                return known
     return "en"
 
 
@@ -53,10 +56,11 @@ def language(cfg: dict | None, accept_language: str | None = None) -> str:
 @lru_cache(maxsize=None)
 def catalog(lang: str) -> dict:
     """A language's catalog: {English: translation}. English (or a language without a file) has none."""
-    if lang == "en" or lang not in LANGUAGES:
+    path = CATALOG_FILES.get(lang)
+    if path is None:   # English, or a language Hoard hasn't a catalog for
         return {}
     try:
-        data = json.loads((CATALOGS / f"{lang}.json").read_text("utf-8"))
+        data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
         return {}
     return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str) and v and not k.startswith("//")}

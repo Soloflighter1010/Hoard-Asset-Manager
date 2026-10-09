@@ -128,6 +128,13 @@ class ChoosingTheLanguage(unittest.TestCase):
         self.assertEqual(i18n.language({"display": {"language": "xx"}}, "ja"), "ja")   # not one of the choices
         self.assertEqual(i18n.language({}, None), "en")
 
+    def test_only_hoards_own_catalogs_are_read(self):
+        # what a window asks for picks a catalog, never names a file
+        for asked in ("../config", "ja/../../x", "ja.json", "JA", "", "en", "fr"):
+            self.assertEqual(i18n.catalog(asked), {}, asked)
+        self.assertEqual(set(i18n.CATALOG_FILES), {"ja", "ko"})
+        self.assertEqual(i18n.from_header("JA-jp"), "ja")
+
     def test_the_setting_is_checked(self):
         self.assertEqual(config.DEFAULT_CONFIG["display"]["language"], "system")
         self.assertEqual(set(i18n.SETTINGS), {"system", "en", "ja", "ko"})
