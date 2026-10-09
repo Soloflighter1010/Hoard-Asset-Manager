@@ -168,7 +168,7 @@ the release's tag and commit.
    **VirusTotal flagged a file?** above), then run **Build Release** again with **Publish even if VirusTotal flags
    a file** ticked.
 4. **Build Repo Listing** runs after it, rebuilding the VCC listing from every release and publishing it to GitHub
-   Pages (https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json).
+   Pages (https://hoard.furryup.link/index.json, the website's own address: the github.io one only forwards there).
 
 Once, when setting the repository up: add the repository variable `PACKAGE_NAME` = `soloflighter.hoard`
 (**Settings › Secrets and variables › Actions › Variables**), and set **Settings › Pages › Source** to **GitHub

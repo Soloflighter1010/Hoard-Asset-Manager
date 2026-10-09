@@ -85,10 +85,15 @@ open its window again.
 
 **With the VRChat Creator Companion (VCC):**
 
-1. Open [Hoard's website](https://soloflighter1010.github.io/Hoard-Asset-Manager/#unity) and choose **Add to VCC**.
+1. Open [Hoard's website](https://hoard.furryup.link/#unity) and choose **Add to VCC**.
    Or, in VCC, go to **Settings › Packages › Add Repository** and paste
-   `https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json`.
+   `https://hoard.furryup.link/index.json`.
 2. Add **Hoard** to your project, like any other package. VCC offers updates when there's a new version.
+
+**VCC couldn't add the repository, or stopped finding Hoard?** The listing's address changed in October 2026.
+The old one (`https://soloflighter1010.github.io/Hoard-Asset-Manager/index.json`) forwards to the website's own
+address in a way VCC won't follow. In VCC, remove the old repository under **Settings › Packages**, then add
+`https://hoard.furryup.link/index.json`.
 
 **Without VCC:** download the `.unitypackage` from a Hoard for Unity release (its tags start `unity-v`) on the
 [releases page](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases), and import it into your
