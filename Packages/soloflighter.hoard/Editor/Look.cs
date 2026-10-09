@@ -264,20 +264,17 @@ namespace SoloFlighter.Hoard.Editor
 
         static GUIStyle searchField;
 
-        /// <summary>A text field with nothing of its own to draw: the search box's rounded ledge is drawn under it.</summary>
+        /// <summary>A text field with nothing of its own to draw (a plain style, not the editor's field): the search
+        /// box's rounded ledge is drawn under it.</summary>
         public static GUIStyle SearchField
         {
             get
             {
                 if (searchField != null && stylesDark == Dark) return searchField;
-                var s = new GUIStyle(EditorStyles.textField) { fontSize = 12, padding = new RectOffset(0, 0, 0, 0), margin = new RectOffset(0, 0, 0, 0),
-                                                               border = new RectOffset(0, 0, 0, 0), alignment = TextAnchor.MiddleLeft };
+                var s = new GUIStyle { font = EditorStyles.label.font, fontSize = 12, alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip,
+                                       wordWrap = false, padding = new RectOffset(0, 0, 0, 0) };
                 foreach (var state in new[] { s.normal, s.hover, s.focused, s.active, s.onNormal, s.onHover, s.onFocused, s.onActive })
-                {
-                    state.background = null;
-                    state.scaledBackgrounds = new Texture2D[0];
                     state.textColor = Bone;
-                }
                 return searchField = s;
             }
         }

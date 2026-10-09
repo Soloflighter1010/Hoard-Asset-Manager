@@ -557,7 +557,7 @@ namespace SoloFlighter.Hoard.Editor
             var field = new Rect(r.x + 28, r.y + 1, r.width - 28 - 26, r.height - 2);
             EditorGUI.BeginChangeCheck();
             GUI.SetNextControlName(SearchControl);
-            search = EditorGUI.TextField(field, search, Look.SearchField);
+            search = GUI.TextField(field, search, Look.SearchField);
             if (EditorGUI.EndChangeCheck()) { Filter(); gridScroll = Vector2.zero; }
             if (search.Length == 0 && !focused)
             {
@@ -718,7 +718,7 @@ namespace SoloFlighter.Hoard.Editor
             float cw = hs.CalcSize(new GUIContent(count)).x;
             GUI.Label(new Rect(area.x + Pad, area.y + 12, cw + 4, 26), count, hs);
             if (shown.Count != catalog.Assets.Count)
-                GUI.Label(new Rect(area.x + Pad + cw, area.y + 12, area.width - Pad * 2 - cw, 26), "of " + catalog.Assets.Count.ToString("N0"), Look.Style(Look.Styles.HeadingDust));
+                GUI.Label(new Rect(area.x + Pad + cw, area.y + 12, area.width - Pad * 2 - cw, 26), " of " + catalog.Assets.Count.ToString("N0"), Look.Style(Look.Styles.HeadingDust));
             string busy = packages.Waiting > 0 ? "Checking packages: " + packages.Waiting + " to go" : loading ? "Loading..." : null;
             if (busy != null)
             {
@@ -740,7 +740,9 @@ namespace SoloFlighter.Hoard.Editor
             }
             float inner = view.width - Pad * 2 - 14;   // (room for the scroll bar)
             int cols = Mathf.Max(1, Mathf.FloorToInt((inner + Gap) / (tileSize + Gap)));
-            float tw = Mathf.Floor((inner - Gap * (cols - 1)) / cols);
+            // tiles share out the row as the app's do, but no bigger than a third over the size chosen (one column in a
+            // narrow window would otherwise be as wide as the window)
+            float tw = Mathf.Floor(Mathf.Min((inner - Gap * (cols - 1)) / cols, tileSize * 1.33f));
             var ns = Look.Style("name", Look.Styles.Name);
             float rowH = tw + 8 + ns.lineHeight * 2 + 4 + 16 + 20;
             int rows = (shown.Count + cols - 1) / cols;
@@ -853,7 +855,7 @@ namespace SoloFlighter.Hoard.Editor
                 GUIUtility.ExitGUI();
             }
             GUILayout.BeginArea(new Rect(area.x + 1, area.y + 12, area.width - 1, area.height - 12));
-            detailScroll = GUILayout.BeginScrollView(detailScroll);
+            detailScroll = GUILayout.BeginScrollView(detailScroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);   // never sideways
             GUILayout.BeginHorizontal();
             GUILayout.Space(18);
             GUILayout.BeginVertical();
@@ -903,35 +905,54 @@ namespace SoloFlighter.Hoard.Editor
 
             GUILayout.Space(6);
             GUILayout.Label("Files", Look.Style(Look.Styles.Section));
+            float inner = width - 24;   // inside a file's box
+            var body = Look.Style(Look.Styles.Body);
             foreach (var entry in files)
             {
                 string file = entry.Key, path = entry.Value;
                 GUILayout.BeginVertical(Look.Box("file", Look.Cave, Look.Seam), GUILayout.Width(width));
-                // the name takes the whole width, cut in the middle if it must be ("CyclopsBe….unitypackage"), never
-                // wrapped part way through a word; the whole name is its tooltip
-                FittedLabel(GUILayoutUtility.GetRect(GUIContent.none, Look.Style(Look.Styles.Body), GUILayout.Height(18), GUILayout.ExpandWidth(true)),
-                            file, Look.Style(Look.Styles.Body), true);
-                if (path == null)
+                bool package = path != null && HoardCatalog.IsUnityPackage(file);
+                float showW = Look.ButtonWidth("Show");
+                if (!package)   // one line: the name, and Show
                 {
-                    GUILayout.Label("Missing from Hoard's folder", Look.Style(Look.Styles.Small));
+                    GUILayout.BeginHorizontal();
+                    // the name takes the room the button leaves, cut in the middle if it must be
+                    // ("CyclopsBe….unitypackage"), never wrapped part way through a word; the whole name is its tooltip
+                    float nameW = path == null ? inner : inner - showW - 8;
+                    FittedLabel(GUILayoutUtility.GetRect(nameW, Look.ButtonHeight, GUILayout.Width(nameW), GUILayout.Height(Look.ButtonHeight)), file, body, true);
+                    if (path != null)
+                    {
+                        GUILayout.Space(8);
+                        if (Look.LayoutButton("Show", Look.Kind.Ghost, "Show the file in its folder")) EditorUtility.RevealInFinder(path);
+                    }
+                    GUILayout.EndHorizontal();
+                    if (path == null) GUILayout.Label("Missing from Hoard's folder", Look.Style(Look.Styles.Small));
                     GUILayout.EndVertical();
                     continue;
                 }
+                FittedLabel(GUILayoutUtility.GetRect(inner, 20, GUILayout.Width(inner), GUILayout.Height(20)), file, body, true);
+                int have, total;
+                var st = packages.Status(path, out have, out total);
+                string importLabel = st == InProject.Yes ? "Import again" : "Import";
+                float buttonsW = Look.ButtonWidth(importLabel) + 6 + (have > 0 ? Look.ButtonWidth("Select") + 6 : 0) + showW;
+                var small = Look.Style("here", Look.Styles.Small);
+                string here = st != InProject.Unknown ? have + " of " + total + " here" : "";
+                float hereW = here.Length > 0 ? small.CalcSize(new GUIContent(here)).x + 8 : 0;
+                bool oneRow = hereW + buttonsW <= inner;   // else the count goes above the buttons
+                if (!oneRow && here.Length > 0) GUILayout.Label(here, small, GUILayout.Width(inner));
                 GUILayout.Space(4);
-                GUILayout.BeginHorizontal();
-                if (HoardCatalog.IsUnityPackage(file))
+                GUILayout.BeginHorizontal(GUILayout.Width(inner));
+                if (oneRow && here.Length > 0) GUILayout.Label(here, small, GUILayout.Width(hereW), GUILayout.Height(Look.ButtonHeight));
+                GUILayout.FlexibleSpace();
+                EditorGUI.BeginDisabledGroup(paused);
+                if (Look.LayoutButton(importLabel, st == InProject.Yes ? Look.Kind.Ghost : Look.Kind.Primary)) Import(a, path);
+                EditorGUI.EndDisabledGroup();
+                GUILayout.Space(6);
+                if (have > 0)
                 {
-                    int have, total;
-                    var s = packages.Status(path, out have, out total);
-                    var small = Look.Style("here", Look.Styles.Small);
-                    if (s != InProject.Unknown) GUILayout.Label(have + " of " + total + " here", small, GUILayout.Height(Look.ButtonHeight));
-                    GUILayout.FlexibleSpace();
-                    EditorGUI.BeginDisabledGroup(paused);
-                    if (s == InProject.Yes ? Look.LayoutButton("Import again") : Look.LayoutButton("Import", Look.Kind.Primary)) Import(a, path);
-                    EditorGUI.EndDisabledGroup();
-                    if (have > 0 && Look.LayoutButton("Select", Look.Kind.Ghost, "Select its files in the Project window")) SelectInProject(path);
+                    if (Look.LayoutButton("Select", Look.Kind.Ghost, "Select its files in the Project window")) SelectInProject(path);
+                    GUILayout.Space(6);
                 }
-                else GUILayout.FlexibleSpace();
                 if (Look.LayoutButton("Show", Look.Kind.Ghost, "Show the file in its folder")) EditorUtility.RevealInFinder(path);
                 GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
@@ -940,6 +961,7 @@ namespace SoloFlighter.Hoard.Editor
             GUILayout.BeginHorizontal();
             string folder = catalog.FolderPath(a);
             if (folder != null && Look.LayoutButton("Open folder")) EditorUtility.RevealInFinder(folder);
+            if (folder != null) GUILayout.Space(6);
             if (HoardCatalog.StoreLink(a.Store, a.Url) && Look.LayoutButton("Store page", Look.Kind.Ghost, a.Url)) Application.OpenURL(a.Url);
             GUILayout.EndHorizontal();
             GUILayout.Space(18);
