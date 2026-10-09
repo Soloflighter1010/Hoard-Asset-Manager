@@ -290,6 +290,11 @@ body.less-motion .slot:hover .art { transform: none; }
 .ph small { font-size: 12px; font-weight: 700; opacity: .7; }
 .flag.upd { background: var(--gold); color: var(--gold-ink); }
 .slot .flag.upd + .flag { top: 34px; }
+/* copies of one product (bought twice, or on two stores) as one tile, a stack of cards behind it, as in the Library */
+.slot.stacked .art { overflow: visible; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
+.slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
+.flag.count { right: auto; left: 8px; background: var(--bone); color: var(--cave); }
+.stack-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dust); cursor: pointer; }
 .update { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
 .update ul { margin: 6px 0 10px; padding-left: 18px; overflow-wrap: anywhere; }
 .update .muted { display: block; margin-top: 8px; color: var(--dust); font-size: 13px; }
@@ -795,6 +800,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
         <option value="size">Largest</option>
       </select>
     </label>
+    <label class="stack-toggle" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -1157,10 +1163,15 @@ async function load(rescan = false) {
     a.hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path)].join(" "));
   }
   byId = new Map(DATA.assets.map(a => [a.id, a]));
+  stackMembers = new Map();
+  for (const a of DATA.assets) if (a.stack_key) stackMembers.set(a.stack_key, [...(stackMembers.get(a.stack_key) || []), a]);
   if (SPACE) mapSpace(SPACE);
   render();
   if (state.view === "space" && !SPACE) loadSpace();   // (opened at Disk space)
   if (openId != null && byId.has(openId)) showDetail(byId.get(openId), false);
+  // copies on two stores whose pictures may be one picture saved twice: how they look decides (then read again)
+  const wanted = (DATA.looks_wanted || []).map(w => ({ look_for: w.look_for, src: keyed("/thumb/" + encodeURIComponent(w.key)) }));
+  if (wanted.length) lookAtPictures(wanted).then(found => { if (found) load(); });
   return DATA.assets.length;
 }
 
@@ -1192,7 +1203,7 @@ const filtersActive = () => state.q || state.store || state.lib !== "" || state.
 function render() {
   if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
   const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
-  renderViews(); renderGrid(list); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
 }
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
@@ -1383,15 +1394,41 @@ $("#pinForgot").addEventListener("click", () => {
 });
 $("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
 
-const slotHTML = a =>
-    `<button class="slot" data-id="${a.id}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${storeName(a.store)}` +
-      `${a.also_in.length ? `, also from ${a.also_in.map(o => storeName(o.store)).join(" and ")}` : ""}"` +
+/* copies of one product (bought twice, in versions, or on two stores: hoard/library.py's stack_key) as one tile, as in
+   the Library: its details list the others. Every copy shows while selecting, and in Disk space (each takes space). */
+let stackSize = new Map();   // the first copy's id -> how many copies its tile stands for
+function stacked(list) {
+  stackSize = new Map();
+  if (UI.stack === false || sel.on || state.view === "space") return list;
+  const first = new Map(), out = [];
+  for (const a of list) {
+    const f = a.stack_key && first.get(a.stack_key);
+    if (f) { stackSize.set(f.id, (stackSize.get(f.id) || 1) + 1); continue; }
+    if (a.stack_key) first.set(a.stack_key, a);
+    out.push(a);
+  }
+  return out;
+}
+// the other copies of a product: on another store by the same creator (also_in), or in its stack
+let stackMembers = new Map();   // stack_key -> its copies (made with byId, in load)
+function otherCopies(a) {
+  const ids = new Set(a.also_in.map(o => o.id));
+  for (const o of (a.stack_key && stackMembers.get(a.stack_key)) || []) if (o.id !== a.id) ids.add(o.id);
+  return [...ids].map(id => byId.get(id)).filter(Boolean);
+}
+const slotHTML = a => {
+    const n = stackSize.get(a.id) || 0, others = otherCopies(a);
+    return `<button class="slot${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${storeName(a.store)}` +
+      `${n > 1 ? `, ${n} copies` : ""}` +
+      `${others.some(o => o.store !== a.store) ? `, also from ${[...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))].join(" and ")}` : ""}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
-      `<span class="art">${art(a)}${notch(a.store.toLowerCase(), a.also_in.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
+      `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
+        `${n > 1 ? `<span class="flag count" aria-hidden="true">×${n}</span>` : ""}` +
         `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}` +
         `${state.view === "space" && copiesOf(a) ? '<span class="flag upd">Copies</span>' : ""}</span>` +
       `<span class="nm">${esc(a.name)}</span><span class="cr">${state.view === "space" ? `${fmtSize(a.size)} · ` : ""}${esc(a.creator)}</span>` +
     `</button>`;
+};
 function renderGrid(list) {
   (cards = cards || lazyCards(grid)).show(list, slotHTML);
 
@@ -1531,7 +1568,8 @@ function showDetail(a, focus = true) {
     `<p class="d-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)} ${storeLink}</p>` +
     ((a.used_in || []).length ? `<p class="also">Used in ${a.used_in.map(esc).join(", ")}. ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
-    a.also_in.map(o => `<p class="also">You also have this from ${esc(storeName(o.store))}. ` +
+    otherCopies(a).map(o => `<p class="also">You also have this ${o.store === a.store ? "again" : `from ${esc(storeName(o.store))}`}` +
+      `${o.creator !== a.creator ? ` (by ${esc(o.creator)})` : ""}. ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View that copy</button></p>`).join("") +
     `<div class="actions"><button class="primary" data-act="open" data-path="${esc(a.folder)}">Open folder</button>` +
       `<button class="ghost" data-act="copy">Copy path</button>` +
@@ -2115,7 +2153,9 @@ function applyUi(ui) {   // once, when the page first has its data
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
+  $("#stackCopies").checked = UI.stack !== false;   // the same choice as the Library's
 }
+$("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.checked }); render(); });
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
    Both are remembered. */
 /* ---------- Settings save as you change them: a box or list straight away, a folder or the Payhip shops when you

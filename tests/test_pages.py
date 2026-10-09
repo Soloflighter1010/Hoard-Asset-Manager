@@ -45,6 +45,25 @@ def png() -> bytes:
             + chunk(b"IDAT", zlib.compress(b"\x00" * 5)) + chunk(b"IEND", b""))
 
 
+def picture(seed: int, noise: int = 0, size: int = 48) -> bytes:
+    """A PNG of 8 by 8 squares of random greys (the same for a seed); noise changes every pixel a little, as a store
+    saving the picture again does."""
+    import random
+    cells, jitter = random.Random(seed), random.Random(seed * 1000 + noise)
+    grid = [[cells.randrange(256) for _ in range(8)] for _ in range(8)]
+    rows = b""
+    for y in range(size):
+        row = bytearray([0])
+        for x in range(size):
+            v = max(0, min(255, grid[y * 8 // size][x * 8 // size] + (jitter.randint(-noise, noise) if noise else 0)))
+            row += bytes([v, v, v])
+        rows += bytes(row)
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class AccessKey(unittest.TestCase):
     """S-01: Hoard opens its page with a one-time link, which the page trades for the access key; from then on
@@ -507,6 +526,96 @@ class DiskSpace(unittest.TestCase):
         page.close()
 
 
+class StackingAcrossStores(unittest.TestCase):
+    """One product bought on two stores is one tile, in the Library and in Downloads: by the same name and creator,
+    or, from one shop under two names, by the same name and a picture that looks the same, though each store saved
+    it differently (the page works out how it looks). Two creators' products with one name and different pictures
+    stay apart."""
+
+    ROWS = [("gumroad", "Gumroad", "m1", "Fluffy Mane For Nardoragon", "Sesilaso", picture(1)),
+            ("jinxxy", "Jinxxy", "m2", "Fluffy Mane For Nardoragon", "Sesilaso", picture(2)),
+            ("gumroad", "Gumroad", "a1", "Face Tracking - Ashbeast DLC", "Han's Creations", picture(3)),
+            ("jinxxy", "Jinxxy", "a2", "Face Tracking - Ashbeast DLC", "hantnor", picture(3, noise=6)),
+            ("gumroad", "Gumroad", "h1", "Hoodie", "Kitsu Studio", picture(4)),
+            ("jinxxy", "Jinxxy", "h2", "Hoodie", "Someone Else", picture(5))]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        library.THUMB_DIR.mkdir(parents=True, exist_ok=True)
+        cls.pictures, items = [], []
+        for store, folder, key, name, creator, data in cls.ROWS:
+            url = f"https://example.{store}.com/{key}.png"
+            cached = library.THUMB_DIR / (hashlib.sha1(url.encode()).hexdigest() + ".png")
+            cached.write_bytes(data)
+            cls.pictures.append(cached)
+            items.append(library.item(store, key, name=name, creator=creator, thumbnail=url))
+            man = downloader.Manifest(root / folder)
+            rec = man.record(key, creator, name)
+            rec.update(name=name, creator=creator)
+            (root / folder / rec["folder"]).mkdir(parents=True)
+            (root / folder / rec["folder"] / "pack.zip").write_bytes(b"zip")
+            rec["files"]["f1"] = {"path": "pack.zip", "size": 3}
+            man.save()
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True,
+                                                       "ui": {}}, lan=False)   # (stacking on, whatever a test before chose)
+        with cls.srv.lib.lock:   # in memory only
+            cls.srv.lib.data["items"] = items
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+        for p in cls.pictures:
+            p.unlink(missing_ok=True)
+        cls.tmp.cleanup()
+
+    def tiles(self, page):
+        return sorted(page.eval_on_selector_all(".slot", "els => els.map(e => e.getAttribute('aria-label'))"))
+
+    def test_both_pages_stack_them(self):
+        page = self.browser.new_page()
+        page.goto(self.srv.entry_url())
+        page.get_by_text("Hoodie").first.wait_for()
+        # the Ashbeast pictures aren't the same bytes: once the page has worked out how they look, they stack too
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        tiles = self.tiles(page)
+        self.assertEqual(sum("2 copies" in t for t in tiles), 2, tiles)
+        self.assertEqual(sum(t.startswith("Hoodie") for t in tiles), 2, "two creators' hoodies stay apart")
+        stack = page.locator(".slot.stacked", has_text="Ashbeast")
+        self.assertIn("×2", stack.inner_text())
+        stack.click()   # every copy, from both stores
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        self.assertEqual(sorted(page.eval_on_selector_all(".slot .cr", "els => els.map(e => e.textContent)")),
+                         ["Han's Creations", "hantnor"])
+
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Hoodie").first.wait_for()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        mane = page.locator(".slot.stacked", has_text="Fluffy Mane")
+        self.assertIn("×2", mane.inner_text())
+        self.assertEqual(mane.locator(".notch.dup").count(), 1, "striped: on both stores")
+        page.locator(".slot.stacked", has_text="Ashbeast").click()
+        self.assertIn("You also have this from", page.locator("#detail").inner_text())
+        self.assertIn("(by ", page.locator("#detail").inner_text(), "the other copy's creator name, as that store has it")
+        page.click("#detail .x")
+        with mock.patch.object(server, "save_config"):   # (the choice is kept with the Library's: not in your config)
+            page.click("#stackCopies")   # every copy, as before
+            page.wait_for_function("() => document.querySelectorAll('.slot').length === 6")
+            page.click("#stackCopies")
+            page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+            page.evaluate("uiFlush()")
+            page.wait_for_timeout(300)
+        page.close()
+
+
 def shop_page(*codes):
     """A Payhip shop's own library page (testshop.store/b-account)."""
     return ('<html><head><meta charset="utf-8"><title>Dashboard - Test Shop</title></head><body><header>'
@@ -963,8 +1072,9 @@ class HighlightsAndAccessibility(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
-                                   lan=False)
+        # Stack copies off: Rusk, owned on two stores, shows as two striped tiles (StackingAcrossStores stacks them)
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True,
+                                                       "ui": {"stack": False}}, lan=False)
         with cls.srv.lib.lock:   # in memory only
             cls.srv.lib.data["items"] = [
                 library.item("booth", "111", name="Rusk", creator="Kitsu Studio", thumbnail=THUMB),

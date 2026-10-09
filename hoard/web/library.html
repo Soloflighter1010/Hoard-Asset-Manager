@@ -819,7 +819,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
         <option value="added">Recently added</option>
       </select>
     </label>
-    <label class="stack-toggle" title="Show copies of the same product, from the same store and creator, as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
+    <label class="stack-toggle" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -1232,6 +1232,9 @@ async function load() {
   if (DATA.job && DATA.job.running) startPolling();
   if (openKey && byKey.has(openKey)) showDetail(byKey.get(openKey), false);
   else if (openKey) forgetDetail();   // no longer shown (a hidden item, once locked): its details go too
+  // copies on two stores whose pictures may be one picture saved twice: how they look decides (then read again)
+  const wanted = DATA.items.filter(a => a.look_for && a.thumbnail).map(a => ({ look_for: a.look_for, src: keyed("/thumb/" + encodeURIComponent(a.key)) }));
+  if (wanted.length && await lookAtPictures(wanted)) load();
 }
 
 /* ---------- filtering */
@@ -1257,17 +1260,19 @@ const SORTS = {
 const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
-// issue #111: copies of the same product on one store (bought more than once, or in several versions), known by the
-// same picture, byte for byte, show as one tile. Choosing it shows them all, as "Copies of". Not while selecting, so each can be chosen.
-let STACK = true, stackSize = new Map();   // the first copy's key -> how many copies its tile stands for
-const stackKey = a => a.stack_key ? `${a.store}|${a.stack_key}` : null;   // the same picture, byte for byte (enrich)
+// issue #111: copies of the same product (bought more than once, in several versions, or on two stores, by the same
+// picture, name and creator: hoard/library.py) show as one tile. Choosing it shows them all, as "Copies of". Not
+// while selecting, so each can be chosen.
+let STACK = true, stackSize = new Map(), stackStores = new Map();   // the first copy's key -> how many copies, and their stores
+const stackKey = a => a.stack_key || null;
 function stacked(list) {
-  stackSize = new Map();
+  stackSize = new Map(); stackStores = new Map();
   if (!STACK || sel.on || state.copies) return list;
   const first = new Map(), out = [], all = new Map();
   for (const a of list) {
     const k = stackKey(a), f = k && first.get(k);
-    if (f) { stackSize.set(f.key, 2); continue; }
+    if (f) { stackSize.set(f.key, 2); stackStores.get(f.key).add(a.store); continue; }
+    if (k) stackStores.set(a.key, new Set([a.store]));
     first.set(k, a); out.push(a);
   }
   // a stack's ×N is every copy "Copies of" then shows (it clears the filters), not just those the filters let through
@@ -1275,10 +1280,9 @@ function stacked(list) {
   for (const [k, f] of first) if (stackSize.has(f.key)) stackSize.set(f.key, all.get(k));
   return out;
 }
-// "Copies of": every copy, whatever the filters were. A stack's copies are on its own store (stackKey); "others" are
-// the same product on any store.
+// "Copies of": every copy, whatever the filters were: a stack's (stack_key), or the same product on any store ("others").
 function showCopies(a, field = "match_key") {
-  state.copies = { field, key: a[field], name: a.name, store: field === "stack_key" ? a.store : "" };
+  state.copies = { field, key: a[field], name: a.name, store: "" };
   state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.fresh = false; state.tags.clear(); render();
 }
 function render() {
@@ -1339,7 +1343,7 @@ const slotHTML = a => {
     return `<button class="slot${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(a.name)}, by ${esc(a.creator)}, from ${label(a.store)}` +
       `${n > 1 ? `, ${n} copies: choose to see them all` : ""}` +
       `${a.also_in.length ? `, also on ${a.also_in.map(label).join(" and ")}` : ""}${onDisk(a) ? ", downloaded" : ""}${a.new ? ", new" : ""}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
-      `<span class="art">${thumb(a)}${notch(a.store, a.also_in)}<i class="tick" aria-hidden="true"></i>` +
+      `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span></span>` +

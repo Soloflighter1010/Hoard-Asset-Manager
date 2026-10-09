@@ -12,12 +12,22 @@ The **Library** shows everything you own on the stores you use, whether or not y
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
 - **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs.
-- **Stack copies:** copies of the same product on one store (bought more than once, or in several versions) show
-  as one tile with a count on it (×3). Hoard knows copies by their picture, the same image byte for byte, not by
-  their names, so "Hair Pack 1" and "Hair Pack 2" stay apart. A picture more than one creator uses (a store's
-  default banner) stacks nothing, and neither does a product whose picture Hoard hasn't saved yet (see
-  [Offline](#offline)). Choose a stack to see every copy. Untick **Stack copies**,
-  beside **Sort**, to show each on its own; Hoard remembers. While you're choosing several, each copy shows.
+- **Stack copies:** copies of the same product show as one tile with a count on it (×3): bought more than once,
+  in several versions, or on two stores (from 3.1). Hoard knows copies by:
+  - **the same picture**, byte for byte, when no other creator uses it: "Hair Pack 1" and "Hair Pack 2" stay
+    apart, as their pictures differ;
+  - **the same name by the same creator**, on any store (case, spacing, punctuation and 【store】 [labels] aside,
+    but not numbers or (variants));
+  - **the same name, and a picture that looks the same**, when a creator's shops have different names (say,
+    their Gumroad and Jinxxy). Each store saves a picture its own way, so Hoard compares how the pictures look:
+    the page works that out once and Hoard keeps it in `picture-looks.json`. Two creators' products with the same
+    name and different pictures stay apart;
+  - **a picture several creators use and a name nearly the same** (a word more or less, the same numbers).
+
+  A picture several creators use for different names (a store's default banner) stacks nothing. Choose a stack to
+  see every copy. Downloads stacks the same copies, and lists the others in a copy's details. Untick **Stack
+  copies**, beside **Sort** on either page, to show each on its own; Hoard remembers. While you're choosing
+  several, and in Disk space, each copy shows.
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
   library** in Settings). What was already there when Hoard first read a store isn't new.
 

@@ -18,6 +18,7 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `library.json` | Your library list: names, creators, links and picture addresses for what you own |
 | `keys/` | On Windows: your itch.io API key, encrypted by your Windows account. (On a Mac it's in your Keychain, on Linux in your keyring.) See [Stores](Stores#itchio) |
 | `tags.json` | Your tags |
+| `picture-looks.json` | How product pictures look (a 64-bit hash of each, by the picture's SHA-256), so copies of one product saved differently by two stores stack. See [Library](Library#finding-things) |
 | `asset-updates.json` | What the last **Check for updates** found: for each thing you've downloaded, the files its store has that you don't yet. See [Downloads](Downloads#checking-for-updates-without-downloading) |
 | `marks.json` | What you've archived, hidden or removed, and your hidden library's PIN and recovery words, each only as a salted, slow hash |
 | `projects/` | One small report per Unity project you've opened Hoard's window in (Hoard for Unity 0.4.0 and newer): its name and folder, which of your assets it uses, and its credits settings. **Projects** in Hoard shows them; **Forget this project** deletes one. See [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) |
