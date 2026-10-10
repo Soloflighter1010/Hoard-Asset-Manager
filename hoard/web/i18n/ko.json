@@ -1258,5 +1258,9 @@
  "That isn't a Hoard backup (it can't be read as one).": "그건 Hoard 백업이 아니에요(백업으로 읽을 수 없어요).",
  "That file is far larger than a Hoard backup.": "그 파일은 Hoard 백업이라기엔 너무 커요.",
  "That backup was made by a newer Hoard. Update Hoard, then restore it.": "그 백업은 더 새로운 Hoard로 만들어졌어요. Hoard를 업데이트한 뒤 되돌리세요.",
- "This backup has hidden items, which take the place of yours: unlock your hidden library first, then restore it.": "이 백업에는 숨긴 상품이 있어서 지금 것과 바뀌어요. 먼저 숨긴 라이브러리의 잠금을 푼 뒤 되돌리세요."
+ "This backup has hidden items, which take the place of yours: unlock your hidden library first, then restore it.": "이 백업에는 숨긴 상품이 있어서 지금 것과 바뀌어요. 먼저 숨긴 라이브러리의 잠금을 푼 뒤 되돌리세요.",
+ "Folders": "폴더",
+ "Look": "모양",
+ "Sign-ins": "로그인",
+ "Parts of Settings": "설정 항목"
 }

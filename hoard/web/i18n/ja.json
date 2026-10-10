@@ -1258,5 +1258,9 @@
  "That isn't a Hoard backup (it can't be read as one).": "それはHoardのバックアップではありません(バックアップとして読み込めません)。",
  "That file is far larger than a Hoard backup.": "そのファイルはHoardのバックアップにしては大きすぎます。",
  "That backup was made by a newer Hoard. Update Hoard, then restore it.": "そのバックアップは新しいHoardで作られています。Hoardをアップデートしてから戻してください。",
- "This backup has hidden items, which take the place of yours: unlock your hidden library first, then restore it.": "このバックアップには非表示の商品が入っていて、今のものと置き換わります。先に非表示ライブラリのロックを解除してから戻してください。"
+ "This backup has hidden items, which take the place of yours: unlock your hidden library first, then restore it.": "このバックアップには非表示の商品が入っていて、今のものと置き換わります。先に非表示ライブラリのロックを解除してから戻してください。",
+ "Folders": "フォルダー",
+ "Look": "見た目",
+ "Sign-ins": "サインイン",
+ "Parts of Settings": "設定の項目"
 }

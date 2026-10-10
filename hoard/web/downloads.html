@@ -253,7 +253,10 @@ body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* t
 }
 .detail.open { transform: none; visibility: visible; transition: transform .2s ease-out; }
 .x { position: sticky; top: 0; float: right; width: 38px; height: 38px; border-radius: 10px; border: 0; background: var(--stone); font-size: 20px; line-height: 1; z-index: 1; }
-.d-art { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--stone); clear: both; margin-top: 10px; }
+.d-art { position: relative; aspect-ratio: 16 / 11; max-height: 36vh; width: 100%; border-radius: 14px; overflow: hidden; background: var(--stone);
+  clear: both; margin-top: 10px; cursor: zoom-in; transition: aspect-ratio .2s, max-height .2s; }
+.d-art.big { aspect-ratio: 1; max-height: none; cursor: zoom-out; }
+.d-art:not(:has(img)) { cursor: default; }
 .d-art img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .d-art .ph b { font-size: 96px; }
 .d-name { font: 400 26px/1.2 var(--display); margin: 20px 0 6px; overflow-wrap: anywhere; }
@@ -463,6 +466,13 @@ body.selecting .toast { bottom: 96px; }
 .apptabs a:hover { color: var(--bone); background: var(--stone); }
 .apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
 .settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }
+.setjump { position: sticky; top: -1px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; margin: -4px -4px 10px; padding: 6px 4px 8px;
+  background: var(--ledge); border-bottom: 1px solid var(--seam); box-shadow: 0 -24px 0 0 var(--ledge); }
+.setjump button { border: 0; border-radius: 999px; padding: 5px 11px; background: var(--stone); color: var(--bone);
+  font: 600 12.5px var(--body); cursor: pointer; }
+.setjump button:hover { background: var(--seam); }
+.setjump button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.settings h3[id] { scroll-margin-top: 64px; }
 .settings .field { display: flex; gap: 6px; }
 /* a tab for each library folder (hoard/libraries.py), after the stores' tabs, once there's more than one folder */
 .drives { display: contents; }
@@ -974,8 +984,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 </section>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
+  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button></nav>
   <p>Changes are saved as you make them.</p>
-  <h3>Downloads folder</h3>
+  <h3 id="part-folders">Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
@@ -992,7 +1003,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops
     Hoard reading it: its files stay where they are.</p>
   <p class="hint" id="libMsg" role="status"></p>
-  <h3>Stores</h3>
+  <h3 id="part-stores">Stores</h3>
   <div id="setStores"></div>
   <h3>Payhip shops</h3>
   <textarea id="setShops" rows="3" spellcheck="false" autocomplete="off" aria-label="Payhip shops"
@@ -1000,7 +1011,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <p class="hint">Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's
     address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you. Hoard lists
     what you bought on Payhip; you download it from Payhip yourself.</p>
-  <h3>Offline</h3>
+  <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
   <h3>New in your library</h3>
   <select id="setNewDays" aria-label="Mark new things as New for">
@@ -1045,7 +1056,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
-  <h3>Appearance</h3>
+  <h3 id="part-look">Appearance</h3>
   <label class="check">Language
     <select id="setLanguage" aria-label="Language">
       <option value="system">Match my computer</option>
@@ -1077,7 +1088,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     </select></label>
   <div id="customColours" class="custom-colours" role="group" aria-label="Your store colours" hidden></div>
   <p class="hint">Motion is also reduced when your computer's settings ask for less of it.</p>
-  <h3>Browser for store sign-ins</h3>
+  <h3 id="part-signins">Browser for store sign-ins</h3>
   <select id="setBrowser" aria-label="Browser for store sign-ins">
     <option value="">Automatic (Microsoft Edge on Windows)</option>
     <option value="msedge">Microsoft Edge</option>
@@ -1092,7 +1103,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <p class="hint">Downloads, syncs and automatic syncs carry on with the window closed. Open Hoard again (from the
       Start menu) to bring the window back, and quit it here, with <strong>Quit Hoard</strong>.</p>
   </div>
-  <h3>Updates</h3>
+  <h3 id="part-updates">Updates</h3>
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
   <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
     version. GitHub sees your IP address, as with any website; nothing else is sent.</p>
@@ -1104,13 +1115,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
   <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button>: every change, version by version.</p>
-  <h3>Backup</h3>
+  <h3 id="part-backup">Backup</h3>
   <div class="field"><button class="ghost sm" id="backupMake">Make a backup</button>
     <button class="ghost sm" id="backupRestore">Restore a backup...</button>
     <input type="file" id="backupFile" accept=".json,application/json" hidden></div>
   <p class="hint" id="backupNote">Your settings, tags, sets, choices and library list in one file, in Documents ›
     Hoard backups: to keep, or to move to another computer. Never your sign-ins, keys or downloads.</p>
-  <h3>Troubleshooting</h3>
+  <h3 id="part-help">Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
   <button class="ghost sm" id="openLogs">Open logs folder</button>
@@ -1249,7 +1260,8 @@ const art = a => a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="" loading="lazy"
 /* ---------- highlights and accessibility */
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  clearTimeout(toastTimer);   // long enough to read: a longer message stays longer
+  toastTimer = setTimeout(() => t.classList.remove("show"), Math.min(10000, Math.max(2200, String(msg).length * 60)));
 }
 
 /* ---------- data */
@@ -1817,12 +1829,6 @@ function showDetail(a, focus = true) {
       (isLocal(a) ? localSection(a)
         : `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
         here, and replaces one that was changed.</p>`) +
-    spaceSection(a) +
-    updateSection(a) +
-    needsSection(a) +
-    librarySection(a) +
-    tagSection(a) +
-    setsSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
     `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}</span>` +
       `<span class="fs">${f.missing ? "Missing on disk" : fmtSize(f.size)}</span>` +
@@ -1830,6 +1836,12 @@ function showDetail(a, focus = true) {
         ? `<button class="ghost sm" data-act="inside" data-path="${esc(a.folder + "/" + f.path)}">Look inside</button>` : "") +
         `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button></span>`) +
       `</li>`).join("")}</ul>` +
+    spaceSection(a) +
+    updateSection(a) +
+    needsSection(a) +
+    librarySection(a) +
+    tagSection(a) +
+    setsSection(a) +
     previousSection(a) +
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
   detail.classList.add("open"); document.body.classList.add("panel-open");

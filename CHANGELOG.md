@@ -32,6 +32,13 @@
   replaces, so you can change your mind). Hoard keeps the last one of each file; choose none, or up to 5, in
   Settings (**Previous versions**). Deleting a product's downloaded files deletes them too, and moving it takes
   them along.
+- **Easier to get around.**
+  - A product's picture in its details is shorter, so its name and buttons show without scrolling; click it to
+    see it full size.
+  - In Downloads, a product's files come straight after what you can do with them.
+  - Settings has a row of its parts at the top (Folders, Stores, Downloading, Look, Sign-ins, Updates, Backup,
+    Troubleshooting), to jump to one.
+  - A longer message stays up long enough to read.
 - **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
   without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
 

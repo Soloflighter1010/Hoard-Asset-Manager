@@ -769,6 +769,14 @@ async function createSupportReport() {
   result.hidden = false;
   button.disabled = false;
 }
+/* ---------- the details' picture: shorter, so the name and buttons show; full size when it's clicked. And Settings'
+   row of its parts: each scrolls to its part of the panel */
+document.addEventListener("click", e => {
+  const art = e.target.closest(".d-art");
+  if (art && art.querySelector("img")) art.classList.toggle("big");
+  const jump = e.target.closest("[data-jump]");
+  if (jump) { const h = document.getElementById(jump.dataset.jump); if (h) h.scrollIntoView({ block: "start", behavior: motionOk() ? "smooth" : "auto" }); }
+});
 /* ---------- Settings, Backup (hoard/backup.py): what you've set up, in one file; and putting one back */
 function wireBackup() {
   const note = $("#backupNote");
