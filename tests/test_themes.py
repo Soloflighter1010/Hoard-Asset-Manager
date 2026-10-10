@@ -1,8 +1,13 @@
 """The app's themes (hoard/themes.py): every one keeps the promises the default makes, in both modes, and reaches
 the pages."""
 import math
+import os
 import re
+import tempfile
 import unittest
+from pathlib import Path
+
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import server, themes
 
