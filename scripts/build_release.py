@@ -23,9 +23,10 @@ NAME = "Hoard"
 # Next to the program: launchers, the locked requirements, and the documents people should have with it.
 TOP_FILES = ("Hoard.bat", "Setup.bat", "run.sh", "setup.sh", "requirements.txt", "README.md", "CHANGELOG.md",
              "LICENSE", "TERMS.md", "PRIVACY.md", "COPYRIGHT.md", "SECURITY.md", "AI-DISCLOSURE.md")
-# The program: every Python module, both pages and the bundled fonts with their licenses.
-PACKAGE_PATTERNS = ("hoard/*.py", "hoard/recovery_words.txt", "hoard/web/*.html", "hoard/web/*.js", "hoard/web/fonts/*.woff2", "hoard/web/fonts/*.txt",
-                    "hoard/web/fonts/README.md")
+# The program: every Python module and the data it reads, both pages with their translations, and the bundled fonts
+# with their licenses.
+PACKAGE_PATTERNS = ("hoard/*.py", "hoard/recovery_words.txt", "hoard/known_tools.json", "hoard/web/*.html", "hoard/web/*.js",
+                    "hoard/web/i18n/*.json", "hoard/web/fonts/*.woff2", "hoard/web/fonts/*.txt", "hoard/web/fonts/README.md")
 
 
 def version() -> str:

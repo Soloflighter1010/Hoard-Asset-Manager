@@ -300,3 +300,26 @@ class Workflows(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EveryBuildHasHoardsFiles(unittest.TestCase):
+    """Each build carries every file Hoard reads, not only its code (3.3.0's portable zip had no translations)."""
+
+    def files(self) -> set[str]:
+        import subprocess
+        tracked = subprocess.run(["git", "ls-files", "hoard"], cwd=REPO, capture_output=True, text=True).stdout.split()
+        return {f for f in tracked if not f.endswith(".py") and "/__pycache__/" not in f} or {
+            p.relative_to(REPO).as_posix() for p in (REPO / "hoard").rglob("*") if p.is_file() and p.suffix != ".py"
+            and "__pycache__" not in p.parts}
+
+    def test_the_portable_zip(self):
+        import build_release
+        packed = {p.relative_to(REPO).as_posix() for pattern in build_release.PACKAGE_PATTERNS for p in REPO.glob(pattern)}
+        self.assertEqual(sorted(self.files() - packed), [])
+
+    def test_the_windows_and_mac_apps(self):
+        spec = (REPO / "packaging" / "hoard.spec").read_text("utf-8")
+        given = set(re.findall(r'REPO / "hoard" / "([^"]+)"\), "hoard"', spec))
+        for f in self.files():
+            with self.subTest(f=f):
+                self.assertTrue(f.startswith("hoard/web/") or f[len("hoard/"):] in given, f"{f} isn't in packaging/hoard.spec")

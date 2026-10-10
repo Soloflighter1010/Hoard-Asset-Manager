@@ -10,6 +10,8 @@
   the `.unitypackage` inside. Hoard for Unity now lists each such package under its `.zip`, counts it towards
   **In this project**, and **Import** unpacks just that package (into the project's `Library` folder, checked as it's
   unpacked) and opens Unity's import dialog as usual.
+- **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
+  without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
 
 ## 3.3.2
 
