@@ -374,6 +374,9 @@ body.less-motion .slot:hover .art { transform: none; }
 .tagadd input, .bulk input, .newtag input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .tagadd input:focus, .bulk input:focus, .newtag input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.tagadd select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
+  background-color: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.tagadd select:focus, .bulkmove select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .headrow .ghost { flex: none; }
 .headrow .ghost[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); box-shadow: none; font-weight: 700; }
@@ -803,9 +806,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
 /* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
 .proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
-.settings select, .proj select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+.settings select, .proj select, .tagadd select, .bulkmove select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
+.bulkmove select { background-position: calc(100% - 16px) 13px, calc(100% - 11px) 13px; }   /* 30px tall: the arrow centred */
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
 .store-row .btns { grid-row: auto; grid-column: 1 / -1; max-width: none; justify-content: flex-start; margin-top: 6px; }
 .stores-go { display: flex; gap: 8px; margin-top: 14px; }
@@ -1227,7 +1231,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
   <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
     <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
-  <span class="bulkmove"><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
+  <button class="ghost sm" id="bulkNewSet" data-needs>New set</button>
+  <span class="bulkmove" id="bulkSetWrap" hidden><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
     <button class="ghost sm" id="bulkSet" data-needs>Add to set</button></span>
   <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
   <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
@@ -1377,10 +1382,10 @@ function updatesBar(n) {
 }
 // Sets (hoard/sets.py): products you group to use together; Hoard for Unity imports a set in one go
 const setById = id => (DATA.sets || []).find(s => s.id === id);
-function setOptions(first) {
+function setOptions(first, withNew = true) {
   return `<option value="">${esc(tr(first))}</option>` +
     (DATA.sets || []).map(s => `<option value="${esc(s.id)}" translate="no">${esc(s.name)}</option>`).join("") +
-    `<option value="new">${esc(tr("New set..."))}</option>`;
+    (withNew ? `<option value="new">${esc(tr("New set..."))}</option>` : "");
 }
 function renderSets(list) {
   const here = new Map((DATA.sets || []).map(s => [s.id, 0]));
@@ -1388,7 +1393,8 @@ function renderSets(list) {
   $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
     `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
     `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
-  $("#bulkSetTo").innerHTML = setOptions("Choose a set");
+  $("#bulkSetTo").innerHTML = setOptions("Choose a set", false);   // (New set is its own button beside it)
+  $("#bulkSetWrap").hidden = !(DATA.sets || []).length;
 }
 function setsSection(a) {
   const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
@@ -2435,6 +2441,7 @@ function wireTags() {
   if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
   if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
   $("#bulkSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), $("#bulkSetTo").value));
+  $("#bulkNewSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), "new"));
   document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
   if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
   $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });

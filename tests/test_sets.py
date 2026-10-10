@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
+
 from hoard import downloader, sets
 from hoard.tags import tag_key
 
@@ -103,11 +105,13 @@ class Page(unittest.TestCase):
             page.click("#selectBtn")
             page.locator('#grid .slot[aria-label^="Rusk"]').click()
             page.locator('#grid .slot[aria-label^="Hoodie for Rusk"]').click()
-            page.select_option("#bulkSetTo", "new")
-            page.click("#bulkSet")
+            self.assertFalse(page.locator("#bulkSetTo").is_visible(), "no sets yet: nothing to add to")
+            page.click("#bulkNewSet")   # a set made of what's selected
             page.fill("dialog[open] #askName", "Rusk, winter")
             page.locator("dialog[open] button", has_text="OK").click()
             page.get_by_text("Made the set Rusk, winter, with 2 products in it.").wait_for()
+            page.locator("#bulkSetTo").wait_for()
+            self.assertEqual(page.locator("#bulkSetTo option").all_inner_texts(), ["Choose a set", "Rusk, winter"])
             page.click("#bulkDone")
             page.locator("#sets .chip", has_text="Rusk, winter").click()
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")

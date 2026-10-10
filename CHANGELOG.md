@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.0.1
+
+- **New set, in Select.** Making a set of the products you've selected was the last choice in the **Choose a set**
+  list, easy to miss. **Select** now has a **New set** button of its own; **Add to set** shows once you have sets.
+- **The set list in a product's details** looks like Hoard's other lists, at the height of **Add** beside it.
+- **Fixed: a task's progress jumped back to the top with every new line**, in Tasks. It stays where you've scrolled
+  to, and while you're at the end it follows the newest lines.
+- **Hoard for Unity 0.8.1** leaves Poiyomi's `OptimizedShaders` folders out of how much of a product is in a
+  project, and works that out again only when a change in the project can alter it.
+
 ## 4.0.0
 
 - **Look inside a download.** In Downloads, each `.unitypackage` and `.zip` in a product's files has **Look inside**:

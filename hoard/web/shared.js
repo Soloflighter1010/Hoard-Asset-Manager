@@ -1291,6 +1291,10 @@ function renderTasks(t) {
   if (json === tasksShown) return;
   tasksShown = json;
   const open = new Set([...document.querySelectorAll("#tasksBody details[open]")].map(d => d.dataset.id));
+  // where each log was scrolled to, and the panel: drawn again, they'd start from the top on every new line
+  const place = new Map([...document.querySelectorAll("#tasksBody details[data-id] pre")].map(pre =>
+    [pre.closest("details").dataset.id, { top: pre.scrollTop, atEnd: pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4 }]));
+  const win = $("#tasksWin"), winTop = win ? win.scrollTop : 0;
   const cur = t.current;
   const problems = h => ((h.report && h.report.problems) || []);
   $("#tasksBody").innerHTML =
@@ -1299,7 +1303,7 @@ function renderTasks(t) {
         (STOPPABLE.includes(cur.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") +
         `<button class="ghost sm" data-task="force" title="End it now, whatever it's doing">Force stop</button></div>` +
         (cur.transfer ? transferHtml(cur.transfer) : `<p class="task-msg">${esc(cur.message || "Starting")}</p>`) +
-        `<details data-id="${esc(cur.id)}"${open.has(cur.id) ? " open" : ""}><summary>Progress</summary><pre>${esc((cur.log || []).join("\n"))}</pre></details></div>`
+        `<details class="live" data-id="${esc(cur.id)}"${open.has(cur.id) ? " open data-kept" : ""}><summary>Progress</summary><pre>${esc((cur.log || []).join("\n"))}</pre></details></div>`
       : `<p class="none">Nothing is running.</p>`) +
     `<h3>Waiting <span class="n">${t.queue.length || ""}</span>${t.queue.length > 1 ? `<button class="linkish" data-task="clear-queue">Clear</button>` : ""}</h3>` +
     (t.queue.length
@@ -1315,8 +1319,22 @@ function renderTasks(t) {
       (problems(h).length ? `<ul class="problems">${problems(h).map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : "") +
       ((h.log || []).length ? `<pre>${esc(h.log.join("\n"))}</pre>` : "") + `</details>`).join("")
       : `<p class="none">Nothing yet. Each refresh, sync and download is listed here when it's done.</p>`);
+  for (const pre of document.querySelectorAll("#tasksBody details[data-id] pre")) {
+    const d = pre.closest("details"), was = place.get(d.dataset.id);
+    // what's running follows its newest lines, unless you've scrolled up to read; the rest stay where they were
+    pre.scrollTop = d.classList.contains("live") && (!was || was.atEnd) ? pre.scrollHeight : was ? was.top : 0;
+  }
+  if (win) win.scrollTop = winTop;
   taskCount((cur ? 1 : 0) + t.queue.length);
 }
+// opening what's running shows its newest lines (while it was closed, it had no size to scroll)
+document.addEventListener("toggle", e => {
+  const d = e.target;
+  if (!d.matches || !d.matches("#tasksBody details.live[open]")) return;
+  if (d.hasAttribute("data-kept")) { d.removeAttribute("data-kept"); return; }   // open before it was drawn again: left in place
+  const pre = d.querySelector("pre");
+  if (pre) pre.scrollTop = pre.scrollHeight;
+}, true);
 function taskCount(n) {
   const b = $("#tasksCount");
   if (b) { b.hidden = !n; b.textContent = n || ""; }

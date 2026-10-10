@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1
+
+- **Poiyomi's OptimizedShaders are left alone.** Locking a Poiyomi material writes its shader into an
+  `OptimizedShaders` folder, and unlocking deletes it, so those files say nothing about what you imported: they no
+  longer count towards how much of a product is in the project (a product whose package ships them stayed "partly"
+  in it once the material was unlocked). Packages are read again once for this.
+- **Quicker after changes in the project.** The window used to work out every product again, and tell Hoard, after
+  any change to the project. Now it does that only when a change can alter what it shows: a file a product has
+  arriving, moving or going. Saving a material, locking or unlocking one, or making files of your own doesn't.
+
 ## 0.8.0
 
 - **Packages that came in a .zip.** Many products, on Booth especially, come as a `.zip` with the `.unitypackage`

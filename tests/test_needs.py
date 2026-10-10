@@ -8,6 +8,8 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
+
 from hoard import downloader, needs, packages
 from tests.test_packages import unitypackage
 

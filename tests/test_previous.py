@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
+
 from hoard import downloader, downloads, previous, safety
 from hoard.tags import tag_key
 from tests import test_libraries as library_folders   # (its fixture; imported as a module, so its tests run once)

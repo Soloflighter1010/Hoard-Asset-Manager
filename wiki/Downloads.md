@@ -149,8 +149,8 @@ a different name, the old file stays in the folder too; Hoard never deletes your
 ### Sets
 
 From 4.0, a set groups products you use together: an avatar, its outfits and hair, and the shaders they need, say.
-Make one with **New set** (under **Sets** in the sidebar), or choose **Select**, pick products and use **Add to set**
-(**New set...** makes one with them in it); a product's details list its sets, with **Add** and **×** to take it out.
+Make one with **New set** (under **Sets** in the sidebar), or choose **Select**, pick products and use **New set** (a
+set of them) or **Add to set**; a product's details list its sets, with **Add** and **×** to take it out.
 Choose a set in the sidebar to see just its products; **Rename set** and **Delete set** are beside its filter (deleting
 a set leaves its products as they are). Sets are kept in `sets.json` in Hoard's app-data folder, and listed in
 `catalog.json` for Hoard for Unity, whose **Import set** imports them in one go (see

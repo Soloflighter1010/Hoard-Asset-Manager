@@ -28,6 +28,7 @@ namespace SoloFlighter.Hoard.Editor
         const int SmallestTile = 96, BiggestTile = 200;
 
         HoardCatalog catalog;                  // null until the first load finishes
+        readonly HashSet<string> needed = new HashSet<string>(StringComparer.Ordinal);   // every GUID What it needs names
         volatile HoardCatalog loaded;          // a load that has finished in the background, waiting to be shown
         bool loading;
         PackageIndex packages;
@@ -87,6 +88,7 @@ namespace SoloFlighter.Hoard.Editor
             EditorApplication.update += Tick;
             EditorApplication.projectChanged += OnProjectChanged;
             PendingImport.Ended += OnImportEnded;   // (kept there, not here: it outlives the scripts reloading)
+            ProjectWatch.Matters = g => packages.Tracks(g) || needed.Contains(g);
         }
 
         void OnDisable()
@@ -94,6 +96,7 @@ namespace SoloFlighter.Hoard.Editor
             EditorApplication.update -= Tick;
             EditorApplication.projectChanged -= OnProjectChanged;
             PendingImport.Ended -= OnImportEnded;
+            ProjectWatch.Matters = null;
             if (packages != null) packages.Stop();
             thumbs.Clear();
             Look.Release();
@@ -142,6 +145,8 @@ namespace SoloFlighter.Hoard.Editor
                 loaded = null;
                 loading = false;
                 catalog = done;
+                needed.Clear();
+                foreach (var a in catalog.Assets) foreach (var n in a.Needs) needed.UnionWith(n.Guids);
                 log = ImportLog.Read();
                 if (loadedPending != null) { pending = loadedPending; loadedPending = null; }
                 byPackage.Clear();
@@ -198,7 +203,11 @@ namespace SoloFlighter.Hoard.Editor
 
         double animatedAt;
 
-        void OnProjectChanged() { packages.ProjectChanged(); Forget(); if (inProjectOnly || updatesOnly) Filter(); Repaint(); ReportSoon(); }
+        void OnProjectChanged()
+        {
+            if (!ProjectWatch.LastChangeCounts()) return;   // only what was here changed, or Poiyomi's OptimizedShaders: nothing shown can
+            packages.ProjectChanged(); Forget(); if (inProjectOnly || updatesOnly) Filter(); Repaint(); ReportSoon();
+        }
 
         /// <summary>Tell Hoard what this project uses, a moment after the last change (once its packages are read).</summary>
         public void ReportSoon()
@@ -280,7 +289,7 @@ namespace SoloFlighter.Hoard.Editor
         {
             List<HoardNeed> known;
             if (missingOf.TryGetValue(a, out known)) return known;
-            var missing = a.Needs.FindAll(n => !n.Guids.TrueForAll(g => !string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(g))));
+            var missing = a.Needs.FindAll(n => !n.Guids.TrueForAll(g => !string.IsNullOrEmpty(ProjectWatch.PathOf(g))));
             missingOf[a] = missing;
             return missing;
         }

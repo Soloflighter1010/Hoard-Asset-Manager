@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
+
 from hoard import downloader, space
 from hoard.tags import tag_key
 

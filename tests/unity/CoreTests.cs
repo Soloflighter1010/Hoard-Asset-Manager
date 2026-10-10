@@ -194,6 +194,10 @@ public static class CoreTests
         ProjectShare.Count(new[] { "p", "q" }, pathOf, out have, out total);
         Check("share: nothing of its own to tell by", have == 0 && total == 0, have + " of " + total);
         Check("share: Assets is a folder, not a prefix", !ProjectShare.InAssets("AssetsBackup/x") && !ProjectShare.InAssets(null));
+        Check("regenerated: Poiyomi's locked shaders", ProjectShare.IsRegenerated("Assets/Kitsu/Materials/OptimizedShaders/Crystal/CGI_PoiFrag.cginc")
+            && ProjectShare.IsRegenerated("Assets\\Kitsu\\optimizedshaders\\Crystal.shader"));
+        Check("regenerated: only that folder, by its whole name", !ProjectShare.IsRegenerated("Assets/Kitsu/OptimizedShadersOld/x.shader")
+            && !ProjectShare.IsRegenerated("Assets/Kitsu/Crystal.mat") && !ProjectShare.IsRegenerated(null));
 
         // a product is told by its own files: a creator's shared shader doesn't make their other products "partly" here
         var files = new Dictionary<string, string> { { "shader", "Assets/Aiden/Shared/Hair.shader" }, { "coq", "Assets/Aiden/Coquette/Coquette.prefab" } };

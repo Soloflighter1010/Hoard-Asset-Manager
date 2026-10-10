@@ -1,6 +1,11 @@
 """A notification from the system when the routine check finds something (hoard/notify.py)."""
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
+
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import notify
 

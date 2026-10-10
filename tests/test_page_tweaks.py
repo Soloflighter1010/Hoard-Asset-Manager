@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
+
 from hoard import config, downloader, server
 
 try:
@@ -82,6 +84,43 @@ class Tweaks(unittest.TestCase):
         self.assertTrue(page.locator("#part-help").is_visible())
         box, bar = page.locator("#part-help").bounding_box(), page.locator(".setjump").bounding_box()
         self.assertGreaterEqual(box["y"], bar["y"] + bar["height"] - 1, "not under the row")
+
+    def test_the_set_picker_looks_like_the_other_dropdowns(self):
+        """It was the browser's own grey dropdown, taller than the Add button beside it, in larger text."""
+        page = self.downloads()
+        page.click("#grid .slot")
+        pick, add = page.locator("#setPick"), page.locator("#detail [data-act='toset']")
+        pick.wait_for()
+        look = "e => { const c = getComputedStyle(e); return [c.appearance, c.height, c.fontSize]; }"
+        appearance, height, size = pick.evaluate(look)
+        self.assertEqual(appearance, "none", "the app's own arrow, not the system's")
+        self.assertEqual(height, add.evaluate(look)[1], "as tall as Add")
+        self.assertEqual(size, add.evaluate(look)[2], "the same size text as Add")
+
+    def test_the_task_log_keeps_its_place(self):
+        """Every new line drew the Tasks panel again, and the log went back to the top."""
+        import json
+        page = self.downloads()
+        lines = [200]
+        page.route("**/api/tasks*", lambda route: route.fulfill(content_type="application/json", body=json.dumps(
+            {"current": {"id": "t1", "task": "sync", "label": "Sync", "message": "Working",
+                         "log": [f"line {i}" for i in range(lines[0])]}, "queue": [], "history": []})))
+        page.click("#tasksTab")
+        page.click("#tasksBody .task.run details summary")
+        pre = page.locator("#tasksBody .task.run details pre")
+        at_end = "p => p.scrollTop + p.clientHeight >= p.scrollHeight - 4"
+
+        def more():   # a new line, drawn by the panel's own refresh
+            lines[0] += 1
+            page.wait_for_function(f"() => (document.querySelector('#tasksBody .task.run details pre') || {{}}).textContent"
+                                   f"?.endsWith('line {lines[0] - 1}')")
+        self.assertTrue(pre.evaluate(at_end), "opened: its newest lines")
+        more()
+        self.assertTrue(pre.evaluate(at_end), "at the end, it follows what's new")
+        pre.evaluate("p => p.scrollTop = 300")
+        more()
+        self.assertEqual(pre.evaluate("p => p.scrollTop"), 300, "scrolled up to read: it stays there")
+        self.assertTrue(page.locator("#tasksBody .task.run details").evaluate("d => d.open"))
 
     def test_a_long_message_stays_longer(self):
         page = self.downloads()
