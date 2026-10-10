@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.3
+
+- **What it needs no longer names other products.** Telling the product another one really needs (an outfit's base
+  avatar) from files creators share and reuse across their products wasn't reliable enough, so for now it lists the
+  shaders and tools a product uses, and says when it also uses files from other products, without naming them. Hoard
+  for Unity's warning before importing lists the shaders and tools only, and **Import set** imports a set in name
+  order.
+
 ## 4.0.2
 
 - **What it needs names fewer products that aren't needs.** Products that only carry files many of your products
