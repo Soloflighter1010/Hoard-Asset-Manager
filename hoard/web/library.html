@@ -1098,6 +1098,12 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
   <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button>: every change, version by version.</p>
+  <h3>Backup</h3>
+  <div class="field"><button class="ghost sm" id="backupMake">Make a backup</button>
+    <button class="ghost sm" id="backupRestore">Restore a backup...</button>
+    <input type="file" id="backupFile" accept=".json,application/json" hidden></div>
+  <p class="hint" id="backupNote">Your settings, tags, sets, choices and library list in one file, in Documents ›
+    Hoard backups: to keep, or to move to another computer. Never your sign-ins, keys or downloads.</p>
   <h3>Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
@@ -2157,6 +2163,7 @@ function wireApp() {
   $("#syncBtn").addEventListener("click", startSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
   wireSupportReport();
+  wireBackup();
   for (const id of ["tagPanel", "stores", "settingsPanel"]) makeWindow($("#" + id));
   wireAutosave();
   wireLibs();

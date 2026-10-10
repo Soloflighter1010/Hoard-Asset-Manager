@@ -17,6 +17,11 @@
   nothing else is running: the IDs its materials and prefabs name, less its own, are what it needs from elsewhere.
   It knows the tools' IDs from their own published releases. Hoard for Unity 0.8 says what's missing from the
   project, and asks before importing without it.
+- **Backup and restore.** **Make a backup** (in Settings) saves what you've set up in one file, in Documents ›
+  Hoard backups: your settings, tags, sets, archive choices and library list (without its download links), and
+  your hidden items with their PIN while they're unlocked. Never your sign-ins, keys or downloads. **Restore a
+  backup...** checks everything in it as Settings would, saves how things are now first so you can go back, and
+  puts it in place: on a new computer, sign in to your stores and copy your downloads folder, and the rest is back.
 - **Sets.** Group products you use together, such as an avatar, its outfits and hair, and the shaders they need: in
   Downloads, **Sets** in the sidebar (**New set**), **Add to set** for the products you've selected, or a product's
   details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import

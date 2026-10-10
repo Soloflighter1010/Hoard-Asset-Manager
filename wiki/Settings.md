@@ -84,6 +84,16 @@ job has finished. Everything else changes straight away.
 
 Also here:
 
+- **Backup** (4.0): **Make a backup** saves what you've set up in Hoard to one file in your Documents, in
+  `Hoard backups`: your settings (the downloads folder and other library folders as places), tags, sets, archive and
+  removed choices, and your library list without its download links. Hidden items, with the PIN and recovery words
+  that hide them (as their slow hashes, never the words or PIN themselves), go in only while your hidden library is
+  unlocked. It never holds your store sign-ins, your itch.io key, the key Hoard seals its records with, or anything
+  you downloaded: on a new computer, copy the downloads folder yourself and sign in to your stores again. **Restore a
+  backup...** asks what's in the file, saves a backup of how things are now first (marked "before restoring"), then
+  puts the file's settings, tags, sets and choices in place, each checked as if you'd made it here. A folder that
+  isn't on this computer is left as it is, and the library list fills in only stores that have nothing listed yet.
+  A backup with hidden items replaces yours only once your hidden library is unlocked.
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
   close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and the routine check

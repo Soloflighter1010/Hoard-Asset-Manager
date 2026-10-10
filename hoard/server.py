@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, space, themes, updater, vault
+from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -54,7 +54,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
-           "/api/previous/restore", "/api/sets")
+           "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
+           "/api/backup/show")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -1045,7 +1046,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Bad request."}, 400)
         if length < 0:   # (read(-1) would wait for the connection to close)
             return self._json({"error": "Bad request."}, 400)
-        if length > (80 * 1024 * 1024 if path == "/api/import" else 1024 * 1024):  # only imports are large
+        if length > (80 * 1024 * 1024 if path in ("/api/import", "/api/backup/check", "/api/backup/restore")
+                     else 1024 * 1024):  # only imports and backups are large
             return self._json({"error": "That's too large." if path != "/api/import"
                                else "That's too large to be library pages. Import fewer at a time."}, 413)
         try:
@@ -1131,6 +1133,53 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e) if isinstance(e, ValueError) else "That version couldn't be put back."}, 400)
             srv.forget_index()
             return self._json({"ok": True})
+        if path == "/api/backup/make":   # Settings, Backup (hoard/backup.py)
+            with srv.cfg_lock:
+                doc = backup.make(srv.cfg, public_settings(srv.cfg), srv.lib, self._unlocked())
+            try:
+                where = backup.save(doc)
+            except OSError as e:
+                return self._json({"error": f"The backup couldn't be saved ({e.strerror or e})."}, 500)
+            return self._json({"ok": True, "path": str(where), "hidden": "hidden" in doc["marks"],
+                               "pin_set": bool(MarkStore().view()["pin"])})
+        if path == "/api/backup/show":
+            backup.backups_dir().mkdir(parents=True, exist_ok=True)
+            try:
+                return self._json({"ok": True, "opened_in": reveal(backup.backups_dir())})
+            except OSError as e:
+                return self._json({"error": str(e)}, 500)
+        if path in ("/api/backup/check", "/api/backup/restore"):
+            try:
+                doc = backup.read(str(body.get("content") or ""))
+            except backup.BackupError as e:
+                return self._json({"error": str(e)}, 400)
+            if path == "/api/backup/check":
+                return self._json({"ok": True, **backup.summary(doc)})
+            if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+                return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
+            replaces_hidden = isinstance((doc.get("marks") or {}).get("pin"), dict) if isinstance(doc.get("marks"), dict) else False
+            if replaces_hidden and MarkStore().view()["pin"] and not self._unlocked():
+                return self._json({"error": "This backup has hidden items, which take the place of yours: unlock your "
+                                            "hidden library first, then restore it."}, 409)
+            try:   # how things are now, kept first, so a restore can be undone
+                with srv.cfg_lock:
+                    before = backup.save(backup.make(srv.cfg, public_settings(srv.cfg), srv.lib, self._unlocked()),
+                                         label=" (before restoring)")
+            except OSError as e:
+                return self._json({"error": f"A backup of how things are now couldn't be saved first ({e.strerror or e}), "
+                                            "so nothing was restored."}, 500)
+
+            def add_folder(value: str) -> None:
+                folder = str(libraries.check_new_folder(srv.cfg, value))
+                srv.cfg["library_folders"] = [str(f) for f in libraries.other_folders(srv.cfg)] + [folder]
+            with srv.cfg_lock:
+                done = backup.restore(doc, srv.cfg, srv.lib, apply_settings, add_folder)
+                apply_store_sites(srv.cfg)
+                previous.set_keep(keep_previous(srv.cfg))
+            srv.save_settings()
+            srv.forget_index()
+            threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()
+            return self._json({"ok": True, **done, "before": str(before)})
         if path == "/api/sets":   # Downloads: your sets (hoard/sets.py)
             if body.get("action") in ("add", "remove", "create") and not self._unlocked():
                 hidden = MarkStore().keys("hidden")   # a hidden product isn't added or taken out while it's locked

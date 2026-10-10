@@ -155,6 +155,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   Poiyomi or Modular Avatar, and other products you have, such as the avatar an outfit is made for. When an update
   replaces a file, the old one is kept (**Previous versions**, with **Restore**). **Sets** group products you use
   together (an avatar, its outfits, its shaders), and Hoard for Unity imports a set in one go.
+- **Backup** (in **Settings**) saves what you've set up (settings, tags, sets, choices and your library list, never
+  sign-ins or keys) in one file, to keep or to move to another computer, and restores it.
 - **Payhip** is listed, not downloaded: Hoard shows everything you bought there, with each product's
   download page, and you download the files from Payhip yourself. Payhip keeps your purchases under the
   shops you bought from, one library page per shop, so the easy way in is to save each shop's library

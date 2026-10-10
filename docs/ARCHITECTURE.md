@@ -25,6 +25,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   needs.py             What it needs: the GUIDs each package names and has, read in the background; known_tools.json
   previous.py          Previous versions: the file an update replaces, kept in the product's folder, and Restore
   sets.py              Sets: products grouped to use together (sets.json), listed in catalog.json for Import set
+  backup.py            Backup and restore: settings, tags, sets, choices and the library list in one file
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
                        browser; Schedule, the routine check
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across

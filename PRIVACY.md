@@ -25,6 +25,7 @@ Hoard, and I never receive any of your information.
 | Your settings | So Hoard remembers your choices | `config.json` in Hoard's app-data folder |
 | The last 60 finished jobs (refreshes, syncs, downloads): what each did, how it went, and its progress, which names products and creators | So the Tasks window can show them after Hoard restarts | `tasks.json` in Hoard's app-data folder (Clear in Tasks empties it) |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug` in Hoard's app-data folder |
+| Backups you make (4.0): your settings, tags, sets, choices and library list, without sign-ins, keys or download links; hidden items only if you made it while they were unlocked | So you can keep what you've set up, or move it to another computer | `Documents/Hoard backups`, only when you choose **Make a backup** (or restore one, which saves how things were first) |
 | Local error history and support reports | So errors can be investigated and a sanitized report can be shared by you | `diagnostics/incidents.jsonl` in app-data; reports you create go to `Documents\\Hoard\\Support Reports` (see below) |
 
 None of this leaves your computer unless you share it yourself.
