@@ -31,7 +31,7 @@ assets came from. The credits list's settings are kept beside it, in `credits.js
 - The Hoard app (version 2.3.1 or newer), with some downloads. Hoard doesn't need to be running.
 - Unity 2022.3, the version VRChat uses.
 
-**Installing:** in VCC, add the listing from https://soloflighter1010.github.io/Hoard-Asset-Manager/ (**Add to
+**Installing:** in VCC, add the listing from https://hoard.furryup.link/ (**Add to
 VCC**), then add **Hoard** to your project. Without VCC, import the `.unitypackage` from a
 [release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases) into your project.
 

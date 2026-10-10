@@ -12,7 +12,7 @@
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases"><img src="https://img.shields.io/github/downloads/Soloflighter1010/Hoard-Asset-Manager/total?style=for-the-badge&color=blue" alt="Downloads"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/stargazers"><img src="https://img.shields.io/github/stars/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&color=yellow" alt="Stars"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues"><img src="https://img.shields.io/github/issues/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&color=orange" alt="Issues"></a>
-  <a href="https://soloflighter1010.github.io/Hoard-Asset-Manager/"><img src="https://img.shields.io/badge/VCC-Supported-00a896?style=for-the-badge&logo=unity" alt="VCC Supported"></a>
+  <a href="https://hoard.furryup.link/"><img src="https://img.shields.io/badge/VCC-Supported-00a896?style=for-the-badge&logo=unity" alt="VCC Supported"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge" alt="License"></a>
 </p>
 
@@ -52,7 +52,7 @@ files? Hoard answers those without opening four tabs.
 </p>
 
 <sub>Library, Downloads, Projects, your own packages and Stores, with real products from the maintainer's own library,
-shown with their creators' pictures. <a href="https://soloflighter1010.github.io/Hoard-Asset-Manager/credits.html">Who made
+shown with their creators' pictures. <a href="https://hoard.furryup.link/credits.html">Who made
 each one, and where to get it</a>. Thank you for making them.</sub>
 
 Guides for everything, from installing to fixing a problem, are in the

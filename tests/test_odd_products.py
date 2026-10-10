@@ -223,7 +223,7 @@ class BoothDirectRoute(unittest.TestCase):
             raise fail
         folder = Path(tempfile.mkdtemp())
         with mock.patch.object(downloader, "booth_file_location", location), \
-                mock.patch.object(downloader, "booth_browser_download", lambda *a, **k: ("x.zip", 1)) as browser, \
+                mock.patch.object(downloader, "booth_browser_download", lambda *a, **k: ("x.zip", 1)), \
                 common.capture_log(lambda line: None):
             return downloader.booth_fetch(None, None, {"url": "https://booth.pm/downloadables/1", "name": "x"}, folder,
                                           "1", route, 1)

@@ -210,7 +210,9 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         updater.tidy()
         srv.updates.check_in_background()
         from . import notify
-        srv.jobs.on_found = lambda counts: srv.cfg.get("notify_found", True) is not False and notify.show(notify.found_text(counts))
+        from . import i18n
+        srv.jobs.on_found = lambda counts: srv.cfg.get("notify_found", True) is not False and notify.show(
+            notify.found_text(counts, i18n.language(srv.cfg, srv.accept_language)))   # in the pages' language
         srv.can_notify = True
         srv.start_schedule()
         from .safety import write_file_safely

@@ -1147,5 +1147,13 @@
  "encrypted with your KWallet": "KWallet으로 암호화",
  "encrypted with your Secret Service keyring": "Secret Service 키링으로 암호화",
  "protected only by folder permissions, because this computer has no keyring": "키링이 없어서 폴더 권한으로만 보호",
- "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions": "내가 고른 폴더(보호 수준은 그 드라이브와 권한에 따라 달라요)에 보관"
+ "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions": "내가 고른 폴더(보호 수준은 그 드라이브와 권한에 따라 달라요)에 보관",
+ "Found {0} new product. Open Hoard to choose what to download.": "새 상품 {0}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} new products. Open Hoard to choose what to download.": "새 상품 {0}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} update. Open Hoard to choose what to download.": "업데이트 {0}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} updates. Open Hoard to choose what to download.": "업데이트 {0}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} new product and {1} update. Open Hoard to choose what to download.": "새 상품 {0}개와 업데이트 {1}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} new product and {1} updates. Open Hoard to choose what to download.": "새 상품 {0}개와 업데이트 {1}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} new products and {1} update. Open Hoard to choose what to download.": "새 상품 {0}개와 업데이트 {1}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.",
+ "Found {0} new products and {1} updates. Open Hoard to choose what to download.": "새 상품 {0}개와 업데이트 {1}개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요."
 }

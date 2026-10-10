@@ -11,6 +11,14 @@ class Notify(unittest.TestCase):
                          "Found 1 new product. Open Hoard to choose what to download.")
         self.assertEqual(notify.found_text({"new": 1200, "updates": 3}),
                          "Found 1,200 new products and 3 updates. Open Hoard to choose what to download.")
+        self.assertEqual(notify.found_text({"new": 0, "updates": 1}), "Found 1 update. Open Hoard to choose what to download.")
+
+    def test_in_hoards_language(self):
+        self.assertEqual(notify.found_text({"new": 2, "updates": 1}, "ja"),
+                         "新しい商品2件とアップデート1件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。")
+        self.assertEqual(notify.found_text({"new": 0, "updates": 3}, "ko"),
+                         "업데이트 3개를 찾았어요. Hoard를 열어 다운로드할 것을 고르세요.")
+        self.assertEqual(notify.found_text({"new": 1, "updates": 0}, "fr"), "Found 1 new product. Open Hoard to choose what to download.")
 
     def sent(self, platform, which=lambda name: "/usr/bin/" + name):
         """The command each system is sent, run straight away rather than in the background."""

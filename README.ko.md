@@ -12,7 +12,7 @@
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases"><img src="https://img.shields.io/github/downloads/Soloflighter1010/Hoard-Asset-Manager/total?style=for-the-badge&color=blue" alt="다운로드 수"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/stargazers"><img src="https://img.shields.io/github/stars/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&color=yellow" alt="스타"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues"><img src="https://img.shields.io/github/issues/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge&color=orange" alt="이슈"></a>
-  <a href="https://soloflighter1010.github.io/Hoard-Asset-Manager/"><img src="https://img.shields.io/badge/VCC-Supported-00a896?style=for-the-badge&logo=unity" alt="VCC 지원"></a>
+  <a href="https://hoard.furryup.link/"><img src="https://img.shields.io/badge/VCC-Supported-00a896?style=for-the-badge&logo=unity" alt="VCC 지원"></a>
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge" alt="라이선스"></a>
 </p>
 
@@ -53,7 +53,7 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 </picture>
 </p>
 
-<sub>라이브러리, 다운로드, 프로젝트, 내 패키지, 스토어 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://soloflighter1010.github.io/Hoard-Asset-Manager/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
+<sub>라이브러리, 다운로드, 프로젝트, 내 패키지, 스토어 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://hoard.furryup.link/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
 
 설치부터 문제 해결까지 모든 안내는 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**(영어)에 있어요.
 

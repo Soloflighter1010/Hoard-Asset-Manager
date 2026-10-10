@@ -219,7 +219,7 @@ OUTCOMES = ("done", "partial", "failed", "stopped")
 
 
 def plural(n: int, word: str) -> str:
-    return f"{n} {word}{'' if n == 1 else 's'}"
+    return f"{n:,} {word}{'' if n == 1 else 's'}"
 
 
 def _names(stores: list[str]) -> str:
@@ -598,7 +598,7 @@ class Jobs:
             return
         finally:
             self.on_download_done()
-        self._set(message=f"Moved {done['name']}: {done['files']:,} files to {done['to']}.")
+        self._set(message=f"Moved {done['name']}: {plural(done['files'], 'file')} to {done['to']}.")
 
     def _files(self, task: str, what: dict) -> None:
         """A rescan or take-out of something in Local, or deleting a removed product's downloaded files, that was
@@ -619,7 +619,7 @@ class Jobs:
                     raise ValueError(f"{name} isn't in Local any more.")
                 if task == "rescan-local":
                     rec = local.rescan(self.cfg, root, found[0])
-                    message = f"Rescanned {name}: {len(rec['files']):,} files."
+                    message = f"Rescanned {name}: {plural(len(rec['files']), 'file')}."
                 else:
                     local.remove(self.cfg, root, found[0])
                     message = f"Took {name} out of Local."
@@ -643,7 +643,7 @@ class Jobs:
         except ValueError as e:
             self._set(message=str(e), error=str(e))
             return
-        self._set(message=f"Added {rec['name']} to Local: {len(rec['files']):,} files"
+        self._set(message=f"Added {rec['name']} to Local: {plural(len(rec['files']), 'file')}"
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
 

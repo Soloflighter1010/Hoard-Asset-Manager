@@ -176,7 +176,7 @@ Actions**. Pages only deploys from `main`, so a listing build started by a relea
 
 ## The website
 
-Hoard's website (https://soloflighter1010.github.io/Hoard-Asset-Manager/) is the `site/` folder, deployed by
+Hoard's website (https://hoard.furryup.link/, its own address for GitHub Pages) is the `site/` folder, deployed by
 **Build Repo Listing** with the VCC listing: the site at the root, VRChat's listing page at `vcc/`, and
 `index.json` (and the older `vpm/index.json`) where VCC finds them. A change to `site/` reaching `main` deploys
 it. It loads nothing from other sites (a test checks); its download buttons ask GitHub's API for the latest

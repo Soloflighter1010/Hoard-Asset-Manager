@@ -157,7 +157,7 @@ class TheSite(unittest.TestCase):
                     return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
                 i += 2 + length
             return None
-        base = "https://soloflighter1010.github.io/Hoard-Asset-Manager/"
+        base = "https://hoard.furryup.link/"
         site = built_site()
         cards = set()
         for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",

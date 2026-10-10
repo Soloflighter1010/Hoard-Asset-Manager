@@ -74,8 +74,8 @@ TEMPLATE = """<!doctype html>
   <meta property="og:title" content="What's new in Hoard">
   <meta property="og:description" content="Every Hoard release, newest first: what changed, what was fixed, and when.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/changelog.html">
-  <meta property="og:image" content="https://soloflighter1010.github.io/Hoard-Asset-Manager/img/social-changelog.jpg">
+  <meta property="og:url" content="https://hoard.furryup.link/changelog.html">
+  <meta property="og:image" content="https://hoard.furryup.link/img/social-changelog.jpg">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">

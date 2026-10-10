@@ -362,6 +362,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # copy of Hoard proves itself with. last_seen: when a page last asked for anything.
         self.show_window = None
         self.can_notify = False   # Hoard's app (window or browser) tells you what the routine check found (hoard/notify.py)
+        self.accept_language = None   # the language the window last asked a page in: Match my computer's, for a notification
         self.hide_window = None   # the window only: minimized to the taskbar, and Hoard carries on
         self.pick_path = None     # Hoard's own window: the system's folder or file picker (kind, start) -> path or None
         self.picking = threading.Lock()   # a system picker is open (see /api/pick)
@@ -596,7 +597,8 @@ class Handler(BaseHTTPRequestHandler):
         path, srv = u.path, self.server
         if path in PAGES:   # the pages hold nothing private: everything they show is fetched with the access key
             srv.last_seen = time.time()
-            return self._send(200, page_source(PAGES[path], srv.cfg, self.headers.get("Accept-Language")), "text/html; charset=utf-8",
+            srv.accept_language = self.headers.get("Accept-Language")
+            return self._send(200, page_source(PAGES[path], srv.cfg, srv.accept_language), "text/html; charset=utf-8",
                               {"Cache-Control": "no-store"})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))

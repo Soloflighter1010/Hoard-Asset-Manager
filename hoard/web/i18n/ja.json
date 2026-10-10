@@ -1147,5 +1147,13 @@
  "encrypted with your KWallet": "KWalletで暗号化",
  "encrypted with your Secret Service keyring": "Secret Serviceのキーリングで暗号化",
  "protected only by folder permissions, because this computer has no keyring": "キーリングがないため、フォルダーの権限だけで保護",
- "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions": "あなたが選んだフォルダー（保護の強さはそのドライブと権限しだい）に保管"
+ "kept in a folder you chose; how well they're protected depends on that folder's drive and permissions": "あなたが選んだフォルダー（保護の強さはそのドライブと権限しだい）に保管",
+ "Found {0} new product. Open Hoard to choose what to download.": "新しい商品{0}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} new products. Open Hoard to choose what to download.": "新しい商品{0}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} update. Open Hoard to choose what to download.": "アップデート{0}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} updates. Open Hoard to choose what to download.": "アップデート{0}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} new product and {1} update. Open Hoard to choose what to download.": "新しい商品{0}件とアップデート{1}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} new product and {1} updates. Open Hoard to choose what to download.": "新しい商品{0}件とアップデート{1}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} new products and {1} update. Open Hoard to choose what to download.": "新しい商品{0}件とアップデート{1}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。",
+ "Found {0} new products and {1} updates. Open Hoard to choose what to download.": "新しい商品{0}件とアップデート{1}件が見つかりました。Hoardを開いて、ダウンロードするものを選んでください。"
 }
