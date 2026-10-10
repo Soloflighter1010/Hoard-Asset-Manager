@@ -784,6 +784,9 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
 dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
   border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
 dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
+dialog.ask input:not([type=checkbox]):not([type=radio]) { height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0;
+  background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; }   /* (the dialog is stone) */
+dialog.ask input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
 dialog.ask p:first-child { font-weight: 700; }
 .ask-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
