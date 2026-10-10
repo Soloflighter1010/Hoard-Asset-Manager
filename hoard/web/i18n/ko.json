@@ -1179,5 +1179,13 @@
  "It isn't a Unity package, or it's damaged.": "Unity 패키지가 아니거나 손상됐어요.",
  "It's packed in a way Hoard can't read (an unusual kind of compression).": "Hoard가 읽을 수 없는 방식으로 압축돼 있어요(흔치 않은 압축 방식).",
  "This zip is locked with a password, so what's in this package can't be read.": "이 zip은 비밀번호로 잠겨 있어서 이 패키지의 내용을 읽을 수 없어요.",
- "It couldn't be read: it may be damaged.": "읽지 못했어요. 손상됐을 수 있어요."
+ "It couldn't be read: it may be damaged.": "읽지 못했어요. 손상됐을 수 있어요.",
+ "What it needs": "필요한 것",
+ "Get it": "받기",
+ "(every VRChat project has it)": "(모든 VRChat 프로젝트에 들어 있어요)",
+ "And 1 more thing Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.": "그 밖에 Hoard가 모르는 것이 1개 있어요. 보통 Hoard로 다운로드하지 않은 아바타 본체나 셰이더예요.",
+ "And {0} more things Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.": "그 밖에 Hoard가 모르는 것이 {0}개 있어요. 보통 Hoard로 다운로드하지 않은 아바타 본체나 셰이더예요.",
+ "Hoard is reading your packages to find out ({0} of {1}).": "Hoard가 패키지를 읽어서 확인하는 중이에요({1}개 중 {0}개).",
+ "Hoard reads your packages to find out, while nothing else is running.": "다른 작업이 없을 때 Hoard가 패키지를 읽어서 확인해요.",
+ "Nothing from elsewhere: everything it uses is in it.": "다른 곳에서 필요한 것은 없어요. 쓰는 것은 모두 들어 있어요."
 }

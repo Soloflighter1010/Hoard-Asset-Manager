@@ -1179,5 +1179,13 @@
  "It isn't a Unity package, or it's damaged.": "Unityパッケージではないか、壊れています。",
  "It's packed in a way Hoard can't read (an unusual kind of compression).": "Hoardが読めない形式で圧縮されています(珍しい圧縮方式)。",
  "This zip is locked with a password, so what's in this package can't be read.": "このzipはパスワードで保護されているため、このパッケージの中身は読めません。",
- "It couldn't be read: it may be damaged.": "読み込めませんでした。壊れている可能性があります。"
+ "It couldn't be read: it may be damaged.": "読み込めませんでした。壊れている可能性があります。",
+ "What it needs": "必要なもの",
+ "Get it": "入手する",
+ "(every VRChat project has it)": "(どのVRChatプロジェクトにも入っています)",
+ "And 1 more thing Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.": "ほかに、Hoardが知らないものが1つあります。たいていは、Hoardでダウンロードしていない素体やシェーダーです。",
+ "And {0} more things Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.": "ほかに、Hoardが知らないものが{0}個あります。たいていは、Hoardでダウンロードしていない素体やシェーダーです。",
+ "Hoard is reading your packages to find out ({0} of {1}).": "Hoardがパッケージを読み込んで調べています({1}件中{0}件)。",
+ "Hoard reads your packages to find out, while nothing else is running.": "ほかに何も動いていないときに、Hoardがパッケージを読み込んで調べます。",
+ "Nothing from elsewhere: everything it uses is in it.": "ほかから必要なものはありません。使うものはすべて入っています。"
 }

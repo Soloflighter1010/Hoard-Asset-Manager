@@ -335,6 +335,16 @@ public static class CoreTests
         var itch = cat.Assets.Find(a => a.Name == "Paw Suit");
         Check("an itch.io asset, with its link", itch != null && itch.Store == "Itch" && itch.Url == "https://kitsu.itch.io/paw-suit"
               && cat.FilePath(itch, "PawSuit.unitypackage") != null, itch == null ? "missing" : itch.Url ?? "null");
+        // what it needs (Hoard 4.0): checked like the rest, a broken need left out (not the product)
+        Check("needs: the good ones read", itch != null && itch.Needs.Count == 3, itch == null ? "missing" : itch.Needs.Count.ToString());
+        if (itch != null && itch.Needs.Count == 3)
+        {
+            Check("needs: a tool, with its versions and link", itch.Needs[0].Kind == "tool" && itch.Needs[0].Label == "Poiyomi Toon 8.1"
+                  && itch.Needs[0].Url == "https://www.poiyomi.com/" && itch.Needs[0].Guids.Count == 1);
+            Check("needs: a link off the tool's own website dropped", itch.Needs[1].Name == "lilToon" && itch.Needs[1].Url == null);
+            Check("needs: another product, by its folder", itch.Needs[2].Kind == "product" && itch.Needs[2].Folder == "Booth/Kitsu Studio/Rusk Avatar Base"
+                  && itch.Needs[2].Store == "Booth" && itch.Needs[2].Guids.Count == 2);
+        }
         var badLink = cat.Assets.Find(a => a.Name == "Odd Link");
         Check("off-store link dropped", badLink != null && badLink.Url == null);
         Check("file found inside the folder", good != null && cat.FilePath(good, "Rusk.unitypackage") != null);

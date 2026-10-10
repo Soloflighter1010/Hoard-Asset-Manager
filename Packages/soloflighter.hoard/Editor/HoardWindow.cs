@@ -35,6 +35,7 @@ namespace SoloFlighter.Hoard.Editor
         readonly ThumbnailCache thumbs = new ThumbnailCache();
         readonly Dictionary<HoardAsset, InProject> statusOf = new Dictionary<HoardAsset, InProject>();
         readonly Dictionary<HoardAsset, string> newerOf = new Dictionary<HoardAsset, string>();   // a newer download to import, or ""
+        readonly Dictionary<HoardAsset, List<HoardNeed>> missingOf = new Dictionary<HoardAsset, List<HoardNeed>>();   // its needs not in the project
         Dictionary<string, int> pending = new Dictionary<string, int>();   // updates Hoard's last check found, by Updates.Key
         volatile Dictionary<string, int> loadedPending;
         DateTime pendingRead;      // when asset-updates.json was last read, to read it again only when it's changed
@@ -268,9 +269,27 @@ namespace SoloFlighter.Hoard.Editor
             return best;
         }
 
-        void Forget() { statusOf.Clear(); newerOf.Clear(); }
+        void Forget() { statusOf.Clear(); newerOf.Clear(); missingOf.Clear(); }
 
-        void Forget(HoardAsset a) { statusOf.Remove(a); newerOf.Remove(a); }
+        void Forget(HoardAsset a) { statusOf.Remove(a); newerOf.Remove(a); missingOf.Remove(a); }
+
+        /// <summary>What the product needs (Hoard's What it needs) that this project doesn't have: a need is here when
+        /// every GUID it names is. Worked out once, like its status, until the project changes.</summary>
+        List<HoardNeed> Missing(HoardAsset a)
+        {
+            List<HoardNeed> known;
+            if (missingOf.TryGetValue(a, out known)) return known;
+            var missing = a.Needs.FindAll(n => !n.Guids.TrueForAll(g => !string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(g))));
+            missingOf[a] = missing;
+            return missing;
+        }
+
+        static string Listed(List<HoardNeed> needs)
+        {
+            var names = needs.ConvertAll(n => n.Label);
+            return names.Count <= 1 ? string.Join("", names.ToArray())
+                : string.Join(", ", names.GetRange(0, names.Count - 1).ToArray()) + " and " + names[names.Count - 1];
+        }
 
         /// <summary>A newer download of this product than what the project has, to import: its package, or null.
         /// Only for products in the project; worked out once, like their status.</summary>
@@ -941,6 +960,31 @@ namespace SoloFlighter.Hoard.Editor
                 GUILayout.EndVertical();
             }
 
+            var missing = Missing(a);
+            if (missing.Count > 0)   // what its packages use that isn't here yet: import that first
+            {
+                GUILayout.Space(6);
+                GUILayout.BeginVertical(Look.Box("needs", Look.Cave, Look.Seam), GUILayout.Width(width));
+                GUILayout.Label(missing.Count == 1 ? "It needs this, which isn't in this project yet:" : "It needs these, which aren't in this project yet:",
+                                Look.Style(Look.Styles.Wrapped));
+                foreach (var n in missing)
+                {
+                    GUILayout.Space(4);
+                    GUILayout.BeginHorizontal();
+                    string label = n.Kind == "product" ? n.Label + " (" + HoardCatalog.StoreLabel(n.Store) + ")" : n.Label;
+                    GUILayout.Label(label, Look.Style(Look.Styles.Body), GUILayout.Height(Look.ButtonHeight));
+                    GUILayout.FlexibleSpace();
+                    if (n.Kind == "tool" && n.Url != null && Look.LayoutButton("Get it", Look.Kind.Ghost, n.Url)) Application.OpenURL(n.Url);
+                    if (n.Kind == "product")
+                    {
+                        var other = catalog.Assets.Find(o => o.Folder == n.Folder);
+                        if (other != null && Look.LayoutButton("Show", Look.Kind.Ghost, "Show it in this window")) { Select(other, true); GUIUtility.ExitGUI(); }
+                    }
+                    GUILayout.EndHorizontal();
+                }
+                GUILayout.EndVertical();
+            }
+
             GUILayout.Space(6);
             GUILayout.Label("Files", Look.Style(Look.Styles.Section));
             float inner = width - 24;   // inside a file's box
@@ -1067,6 +1111,11 @@ namespace SoloFlighter.Hoard.Editor
 
         void Import(HoardAsset a, string path)
         {
+            var missing = Missing(a);
+            if (missing.Count > 0 && !EditorUtility.DisplayDialog("Hoard", a.Name + " needs " + Listed(missing) +
+                    (missing.Count == 1 ? ", which isn't" : ", which aren't") + " in this project yet. Without " +
+                    (missing.Count == 1 ? "it" : "them") + ", some of it may be pink or missing. Import it anyway?", "Import anyway", "Cancel"))
+                return;
             string file;
             try
             {

@@ -10,6 +10,13 @@
   the `.unitypackage` inside. Hoard for Unity now lists each such package under its `.zip`, counts it towards
   **In this project**, and **Import** unpacks just that package (into the project's `Library` folder, checked as it's
   unpacked) and opens Unity's import dialog as usual.
+- **What it needs.** A product's details in Downloads list what its packages use that isn't in them: shaders and
+  tools (lilToon, Poiyomi Toon with the version its materials were made with, Modular Avatar, VRCFury, NDMF, Avatar
+  Optimizer, the VRChat SDK) with **Get it**, other products you've downloaded, such as the base avatar an outfit is
+  made for, with **View**, and a count of anything else. Hoard reads each package once, in the background while
+  nothing else is running: the IDs its materials and prefabs name, less its own, are what it needs from elsewhere.
+  It knows the tools' IDs from their own published releases. Hoard for Unity 0.8 says what's missing from the
+  project, and asks before importing without it.
 - **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
   without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
 

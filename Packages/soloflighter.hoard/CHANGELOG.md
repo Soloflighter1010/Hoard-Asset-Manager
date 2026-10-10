@@ -8,6 +8,11 @@
   and **Update to import** like any other, and **Import** unpacks just that package into the project's
   `Library/Hoard/Unzipped` folder (never into `Assets`), checked against the zip's checksum as it's unpacked, then
   opens Unity's import dialog. A `.zip` locked with a password is left out.
+- **What it needs.** With Hoard 4.0, a product's details say what its packages use that isn't in this project: a
+  shader (lilToon, Poiyomi Toon, with the version its materials were made with), a tool (Modular Avatar, VRCFury, NDMF,
+  Avatar Optimizer, the VRChat SDK) or another product, such as the base avatar an outfit is made for. **Get it**
+  opens the tool's website, **Show** finds the product in this window, and **Import** asks first while something is
+  missing. A need is in the project when every asset ID Hoard listed for it is.
 - The `.zip` is read by the package's own reader (stored and deflated files, ZIP64, and Japanese file names), so it
   works on every .NET profile a project can use.
 

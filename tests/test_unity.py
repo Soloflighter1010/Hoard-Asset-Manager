@@ -74,7 +74,14 @@ def build_material(d: Path) -> None:
     good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"]),
             asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
             asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"]),
-            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch"),
+            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch",
+                  needs=[   # what it needs (Hoard 4.0, hoard/needs.py): two kept, one link dropped, two broken ones left out
+                      {"kind": "tool", "name": "Poiyomi Toon", "url": "https://www.poiyomi.com/", "versions": ["8.1"], "guids": ["a" * 32]},
+                      {"kind": "tool", "name": "lilToon", "url": "https://lilxyzw.github.io.evil.example/", "versions": [], "guids": ["b" * 32]},
+                      {"kind": "product", "name": "Rusk Avatar Base", "creator": "Kitsu Studio", "store": "Booth",
+                       "folder": "Booth/Kitsu Studio/Rusk Avatar Base", "guids": ["c" * 32, "d" * 32]},
+                      {"kind": "tool", "name": "Bad", "url": "https://www.poiyomi.com/", "versions": [], "guids": ["NOT A GUID"]},
+                      {"kind": "product", "name": "Escaping", "creator": "x", "store": "Booth", "folder": "../x", "guids": ["e" * 32]}]),
             # your own, listed where it is (issue #80): a folder outside the downloads, named by the sealed catalog
             asset("My Textures", "Local/_linked/local-1", None, ["Mine.unitypackage", "sub/skin.png"], store="Local",
                   location=os.path.normpath(str(d / "mine")), note="A commission")]

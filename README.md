@@ -150,7 +150,9 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   **Check for updates** (under **Updates**) lists what creators added or changed since you downloaded it,
   without downloading anything; then **Update** one, or **Update all**. **Look inside** (beside a `.unitypackage`
   or `.zip` in a product's files) shows every file it holds, in its folders, with the previews Unity keeps for
-  them, without extracting anything; for a `.zip`, what each Unity package in it holds too.
+  them, without extracting anything; for a `.zip`, what each Unity package in it holds too. **What it needs**
+  (in a product's details) lists what its packages use that isn't in them: shaders and tools such as lilToon,
+  Poiyomi or Modular Avatar, and other products you have, such as the avatar an outfit is made for.
 - **Payhip** is listed, not downloaded: Hoard shows everything you bought there, with each product's
   download page, and you download the files from Payhip yourself. Payhip keeps your purchases under the
   shops you bought from, one library page per shop, so the easy way in is to save each shop's library
@@ -188,7 +190,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
 search your downloads with thumbnails, see which products are already in the open project (read from
 the asset GUIDs inside each `.unitypackage`), and **Import** one through Unity's own import dialog, with no
 downloading again. A package a product came zipped in (as many Booth products do) is there too, under its `.zip`:
-**Import** unpacks just that package and opens the same dialog. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
+**Import** unpacks just that package and opens the same dialog. A product whose packages need something this
+project doesn't have (a shader, a tool, its base avatar) says what, and **Import** asks first. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
 nothing reaches your uploads.
 
 Add it in the VRChat Creator Companion: open [Hoard's website](https://hoard.furryup.link/#unity)

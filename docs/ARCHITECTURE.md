@@ -21,6 +21,8 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   downloader.py        downloading, the records of what's on disk, the catalog files, verify
   downloads.py         the Downloads view's index of what's on disk
   space.py             Downloads' Disk space: the same file kept more than once, from the integrity check's fingerprints
+  packages.py          Look inside: a .unitypackage's assets and previews, and a .zip's files and packages, read in place
+  needs.py             What it needs: the GUIDs each package names and has, read in the background; known_tools.json
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
                        browser; Schedule, the routine check
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across
@@ -189,6 +191,15 @@ from when that shop isn't in the user's list (it's only added when the user conf
   page (the `hoard-close` event), which answers at `POST /api/app/close` (`wait`: `app.quit_when_done`,
   `background`, or `now`: `app.quit_now`). `POST /api/quit` answers 409 `busy` while something runs, and the
   page asks the same.
+
+- What it needs (`needs.py`): `NeedsReader` (started by `serve()`, never while a job runs) reads each downloaded
+  `.unitypackage`, and each one in a `.zip`, once: the GUIDs of its assets and the GUIDs its YAML text assets name
+  (`packages.read_unitypackage(refs=...)`), kept in `package-needs.json` by path, size and time. `work_out()` takes
+  away each product's own GUIDs and names the rest: a tool from `known_tools.json` (built from the tools' own
+  repositories and VRChat's package listing by `scripts/build_known_tools.py`), another downloaded product that has
+  them, or a count of the rest. `/api/assets` gives each asset's `needs` (leaving out hidden products while locked),
+  and `build_catalog` writes them into `catalog.json` (`needs.add_to_catalog`), checked by `valid_needs`. After a
+  read finds something new, the catalog is written again if no job is running.
 
 ## Tags
 

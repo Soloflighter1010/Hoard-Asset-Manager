@@ -2343,6 +2343,10 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: note isn't clean text")
     if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
         problems.append(f"{label}: url isn't an https address on the store's own website")
+    if "needs" in entry:
+        from .needs import valid_needs
+        if not valid_needs(entry["needs"], set(STORE_DIRS.values())):
+            problems.append(f"{label}: needs isn't as Hoard writes it")
     for key in ("tags", "suggested_tags"):
         if not isinstance(entry.get(key), list) or any(not isinstance(t, str) or clean_tag(t) != t or not t for t in entry[key]):
             problems.append(f"{label}: {key} has a tag that isn't clean")
@@ -2352,6 +2356,12 @@ def validate_catalog_entry(entry: dict) -> list[str]:
 def build_catalog(cfg: dict, root: Path) -> None:
     """Write catalog.json, tags.json and each product's asset.json."""
     catalog, ordered = collect_catalog(cfg, root)
+    if catalog:   # what each product needs, as far as its packages have been read (hoard/needs.py)
+        from .needs import add_to_catalog
+        try:
+            add_to_catalog(root, catalog)
+        except Exception as e:   # the catalog is written without it rather than not at all
+            log(f"What the downloads need couldn't be added to catalog.json: {e}")
     if not catalog:
         stale = [name for name in ("catalog.json", "tags.json") if os.path.lexists(root / name)]
         if stale:   # an earlier catalog mustn't go on listing products that are no longer here

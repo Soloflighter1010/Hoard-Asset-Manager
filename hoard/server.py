@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, i18n, itch, libraries, packages, projects, space, themes, updater, vault
+from . import __version__, diagnostics, i18n, itch, libraries, needs, packages, projects, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -386,6 +386,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
         self.schedule = Schedule(cfg, self.jobs)
+        # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
+        self.needs_index = needs.NeedsIndex()
+        self.needs_reader = needs.NeedsReader(self.needs_index, lambda: self.index(stale_ok=True).get("assets", []),
+                                              lambda: bool(self.jobs.state.get("running")))
+        self.needs_reader.on_read = lambda: rebuild_catalog_quietly(self)
+        self._needs = (None, None)   # (what it was worked out from, {product id: what it needs})
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
 
     def start_schedule(self) -> threading.Event:
@@ -428,6 +434,15 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         (downloads call this after every file)."""
         with self._index_lock:
             self._wanted += 1
+        self.needs_reader.poke()   # (it waits for the job to finish before reading anything new)
+
+    def needs_view(self, index: dict) -> dict:
+        """What each product in the downloads index needs (hoard/needs.py), worked out again only when the index or
+        what's been read changes."""
+        key = (id(index), self.needs_index.changed_at)
+        if self._needs[0] != key:
+            self._needs = (key, needs.work_out(index.get("assets", []), self.needs_index))
+        return self._needs[1]
 
     def save_settings(self) -> None:
         """Write the settings to config.json (the ones it keeps), one writer at a time."""
@@ -675,17 +690,23 @@ class Handler(BaseHTTPRequestHandler):
                 if i.get("look_for") and (unlocked or tag_key(i["store"], i["name"]) not in marks["hidden"]):
                     looks.append({"look_for": i["look_for"], "key": i["key"]})   # (its picture: /thumb/<key>)
             assets = []
+            needed = srv.needs_view(index)
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
-                                   "stack_key": stacks.get(key, ""),
+                                   "stack_key": stacks.get(key, ""), "needs": needed.get(a["id"]),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
+            shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
+            for a in assets:
+                if a["needs"]:
+                    a["needs"] = {**a["needs"], "products": [o for o in a["needs"]["products"] if o["id"] in shown]}
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}, "looks_wanted": looks[:500],
                      "libraries": srv.library_view(),
-                     "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
+                     "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
+                     "needs_reading": dict(srv.needs_reader.state)}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
@@ -1320,6 +1341,20 @@ def chosen_files(raw) -> dict[str, dict] | None:
     return out or None
 
 
+def rebuild_catalog_quietly(srv) -> None:
+    """After packages were read for What it needs: write catalog.json again, so Hoard for Unity knows what each
+    product needs. Skipped while a job runs: that job writes the catalog itself when it ends."""
+    if not srv.jobs.busy.acquire(blocking=False):
+        return
+    try:
+        build_catalog(srv.cfg, root_dir(srv.cfg))
+    except Exception as e:   # never stops Hoard
+        print(f"Couldn't write catalog.json: {e}")
+    finally:
+        srv.jobs.busy.release()
+        srv.jobs.kick()
+
+
 def reseal_in_background(srv, cfg: dict) -> None:
     """At startup: if the downloads folder's catalog.json isn't sealed with this install's key, rebuild and seal it
     (the Unity window reads it). Skipped when a job is already running: that job rebuilds the catalog anyway. The
@@ -1372,6 +1407,7 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
     if store_python():
         print(STORE_PYTHON_NOTE)
     threading.Thread(target=reseal_in_background, args=(srv, cfg), name="hoard-reseal", daemon=True).start()
+    threading.Thread(target=srv.needs_reader.run_forever, args=(threading.Event(),), name="hoard-needs", daemon=True).start()
     if on_ready:   # the desktop app: it opens its window with a one-time link, and never logs the key
         on_ready(url, srv)
     else:

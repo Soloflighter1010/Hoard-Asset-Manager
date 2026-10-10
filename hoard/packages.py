@@ -88,10 +88,42 @@ def _octal(h: bytes, at: int, length: int) -> int:
         return -1
 
 
-def read_unitypackage(stream, on_preview=None) -> dict:
+REF = re.compile(rb"guid: ([0-9a-f]{32})")
+MAX_SCAN = 64 << 20              # a text asset (a material, a prefab) larger than this isn't looked through
+MAX_REFS = 20_000                # GUIDs noted as named by one package
+
+
+def _scan(gz, size: int, refs: set) -> None:
+    """Go through one asset's bytes, noting every GUID it names if it's a text asset (Unity's YAML: a material names
+    its shader's GUID, a prefab each component's script's), else just passing over it."""
+    head = gz.read(min(size, 1 << 16))
+    if len(head) != min(size, 1 << 16):
+        raise NotAPackage("the package ends partway")
+    left = size - len(head)
+    if not head.startswith(b"%YAML") or size > MAX_SCAN:
+        _skip(gz, left)
+        return
+    tail = b""
+    chunk = head
+    while True:
+        block = tail + chunk
+        for m in REF.finditer(block):
+            if len(refs) < MAX_REFS:
+                refs.add(m.group(1).decode())
+        tail = block[-48:]          # a GUID cut in two by a chunk's end is found in the next
+        if left <= 0:
+            return
+        chunk = gz.read(min(left, 1 << 20))
+        if not chunk:
+            raise NotAPackage("the package ends partway")
+        left -= len(chunk)
+
+
+def read_unitypackage(stream, on_preview=None, refs: set | None = None) -> dict:
     """What a .unitypackage holds, from a stream of its (gzipped) bytes: {GUID: {"path", "size" (None for a folder),
-    "preview" (has one)}}. on_preview(guid, png bytes) gets each preview that's a real PNG of a sensible size.
-    Raises NotAPackage for anything that isn't one."""
+    "preview" (has one)}}. on_preview(guid, png bytes) gets each preview that's a real PNG of a sensible size. refs,
+    when given, gets every GUID the package's text assets name (its own among them). Raises NotAPackage for anything
+    that isn't one."""
     assets: dict[str, dict] = {}
     try:
         gz = gzip.GzipFile(fileobj=stream, mode="rb")
@@ -133,7 +165,11 @@ def read_unitypackage(stream, on_preview=None) -> dict:
                     assets.setdefault(guid, {"size": None, "preview": False})["path"] = path
             elif part == "asset" and kind in ("0", "\x00"):
                 assets.setdefault(guid, {"size": None, "preview": False})["size"] = size
-                _skip(gz, size + pad)
+                if refs is not None:
+                    _scan(gz, size, refs)
+                    _skip(gz, pad)
+                else:
+                    _skip(gz, size + pad)
             elif part == "preview.png" and 8 <= size <= MAX_PREVIEW and on_preview is not None:
                 data = _read_exactly(gz, size)
                 _skip(gz, pad)

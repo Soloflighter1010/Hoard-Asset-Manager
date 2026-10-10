@@ -268,6 +268,10 @@ a.ghost { height: 42px; }
 .files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
 .files .fn { overflow-wrap: anywhere; }
 .files .fb { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.needs { list-style: none; margin: 0; padding: 0; }
+.needs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+.needs .nm { overflow-wrap: anywhere; }
+.needs .muted { font-size: 12px; color: var(--dust); }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 30;
@@ -1337,6 +1341,27 @@ function updatesBar(n) {
     `<button class="ghost sm" data-upd="check">Check for updates</button>` +
     (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
 }
+// What it needs (hoard/needs.py): the tools and other products its packages use, from what Hoard has read of them
+function needsSection(a) {
+  const n = a.needs, R = DATA.needs_reading || {};
+  if (!n) return "";
+  const head = `<h3>What it needs</h3>`;
+  if (!n.read) return head + `<p class="sub">${esc(R.reading && R.total
+    ? tr("Hoard is reading your packages to find out ({0} of {1}).", R.done.toLocaleString(), R.total.toLocaleString())
+    : tr("Hoard reads your packages to find out, while nothing else is running."))}</p>`;
+  const rows = [
+    ...n.tools.map(t => `<li><span class="nm"><span translate="no">${esc(t.name)}${t.versions.length ? " " + esc(t.versions.join(", ")) : ""}</span>` +
+      (t.common ? ` <span class="muted">${esc(tr("(every VRChat project has it)"))}</span>` : "") + `</span>` +
+      (t.common || !safeUrl(t.url) ? "<span></span>" : `<a class="ghost sm" href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener noreferrer">Get it</a>`) + `</li>`),
+    ...n.products.map(o => `<li><span class="nm"><span translate="no">${esc(o.name)}</span> <span class="muted" translate="no">${esc(tr("by {0}", o.creator))}</span></span>` +
+      `<button class="ghost sm" data-act="goto" data-id="${o.id}">View</button></li>`),
+  ];
+  const unknown = n.unknown ? `<p class="sub">${esc(tr(n.unknown === 1
+    ? "And 1 more thing Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard."
+    : "And {0} more things Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.", n.unknown.toLocaleString()))}</p>` : "";
+  if (!rows.length && !unknown) return head + `<p class="sub">${esc(tr("Nothing from elsewhere: everything it uses is in it."))}</p>`;
+  return head + (rows.length ? `<ul class="needs">${rows.join("")}</ul>` : "") + unknown;
+}
 function updateSection(a) {
   if (!canDownload(a)) return "";
   if (!hasUpdate(a)) return `<div class="update"><button class="ghost sm" data-act="check-one">Check for updates</button>` +
@@ -1674,6 +1699,7 @@ function showDetail(a, focus = true) {
         here, and replaces one that was changed.</p>`) +
     spaceSection(a) +
     updateSection(a) +
+    needsSection(a) +
     librarySection(a) +
     tagSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +

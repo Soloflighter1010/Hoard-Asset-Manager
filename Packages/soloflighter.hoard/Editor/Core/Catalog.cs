@@ -17,6 +17,7 @@ namespace SoloFlighter.Hoard
         public List<string> Files = new List<string>();
         public List<string> Tags = new List<string>();
         public List<string> SuggestedTags = new List<string>();
+        public List<HoardNeed> Needs = new List<HoardNeed>();   // what its packages use from elsewhere (Hoard 4.0)
         public string Key { get { return Store + "/" + Folder; } }
 
         // Worked out once when the catalog is loaded (in the background), so the window never touches the disk
@@ -26,6 +27,16 @@ namespace SoloFlighter.Hoard
         public string ThumbPath;
         public string SearchText = "";
         public bool HasPackages;
+    }
+
+    /// <summary>Something a product's packages use that isn't in them (Hoard's What it needs): a tool, such as a
+    /// shader, or another product Hoard has downloaded. It's in a project when every one of its GUIDs is.</summary>
+    public sealed class HoardNeed
+    {
+        public string Kind, Name, Url, Creator, Store, Folder;   // Kind: "tool" or "product"
+        public List<string> Versions = new List<string>();
+        public List<string> Guids = new List<string>();
+        public string Label { get { return Versions.Count > 0 ? Name + " " + string.Join(", ", Versions.ToArray()) : Name; } }
     }
 
     public sealed class HoardCatalog
@@ -45,6 +56,11 @@ namespace SoloFlighter.Hoard
             return store == "Itch" ? "itch.io" : store;
         }
         static readonly Regex BadPathChars = new Regex("[<>:\"\\\\|?*]");
+        static readonly Regex Guid32 = new Regex("^[0-9a-f]{32}$");
+        static readonly Regex ToolVersion = new Regex("^[0-9]{1,3}\\.[0-9]{1,3}$");
+        // the tools' own websites (Hoard's known_tools.json): a need's "Get it" link goes nowhere else
+        static readonly string[] ToolSites = { "lilxyzw.github.io", "www.poiyomi.com", "modular-avatar.nadena.dev", "vrcfury.com",
+                                               "ndmf.nadena.dev", "vpm.anatawa12.com", "creators.vrchat.com" };
 
         public string Root;
         public List<HoardAsset> Assets = new List<HoardAsset>();
@@ -122,7 +138,46 @@ namespace SoloFlighter.Hoard
             }
             string note = e.Str("note");
             a.Note = a.Store == "Local" && note != null && CleanText(note, 300) ? note : null;
+            var needs = e.Get("needs");
+            if (needs != null && needs.Kind == JsonKind.Array)
+                foreach (var n in needs.Items)
+                {
+                    if (a.Needs.Count >= 30) break;
+                    var need = ReadNeed(n, trustLinks);
+                    if (need != null) a.Needs.Add(need);
+                }
             return a;
+        }
+
+        /// <summary>One of a product's needs, or null when it breaks a promise (left out, not the product).</summary>
+        static HoardNeed ReadNeed(JsonValue n, bool trustLinks)
+        {
+            if (n == null || n.Kind != JsonKind.Object) return null;
+            var need = new HoardNeed { Kind = n.Str("kind"), Name = n.Str("name"), Guids = n.Strings("guids") };
+            if ((need.Kind != "tool" && need.Kind != "product") || !CleanText(need.Name, 200)) return null;
+            if (need.Guids.Count == 0 || need.Guids.Count > 50 || !need.Guids.TrueForAll(g => Guid32.IsMatch(g))) return null;
+            if (need.Kind == "tool")
+            {
+                need.Versions = n.Strings("versions");
+                if (need.Versions.Count > 30 || !need.Versions.TrueForAll(v => ToolVersion.IsMatch(v))) return null;
+                string url = n.Str("url");
+                need.Url = trustLinks && ToolLink(url) ? url : null;
+            }
+            else
+            {
+                need.Creator = n.Str("creator"); need.Store = n.Str("store"); need.Folder = n.Str("folder");
+                if (!CleanText(need.Creator, 200) || Array.IndexOf(Stores, need.Store) < 0 || !PlainPath(need.Folder)) return null;
+            }
+            return need;
+        }
+
+        /// <summary>An https address on one of the tools' own websites, with no user name or port.</summary>
+        public static bool ToolLink(string url)
+        {
+            Uri u;
+            if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out u)) return false;
+            return u.Scheme == "https" && string.IsNullOrEmpty(u.UserInfo) && u.IsDefaultPort
+                   && Array.IndexOf(ToolSites, u.Host.ToLowerInvariant()) >= 0;
         }
 
         /// <summary>No control or invisible formatting characters, not empty, not too long.</summary>

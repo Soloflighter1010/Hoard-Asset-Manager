@@ -184,6 +184,14 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   store page usually gives the password), and one that isn't what its name says, or is damaged, says that. Hoard
   keeps what it read (in its `cache` folder) for the 40 files you looked inside most recently, so a second look
   is instant.
+- **What it needs** (from 4.0, in a product's details) lists what its packages use that isn't in them: tools such
+  as lilToon, Poiyomi Toon (with the version its materials were made with), Modular Avatar, VRCFury, NDMF, Avatar
+  Optimizer and the VRChat SDK, each with **Get it** (its own website); other products you've downloaded with Hoard,
+  such as the base avatar an outfit is made for, with **View**; and a count of anything else (often a base avatar or
+  a paid shader you didn't download with Hoard). Hoard works it out by reading each package once, in the background
+  while nothing else is running, and again only when it changes: Unity names everything an asset uses by an ID, so
+  the IDs a package's materials and prefabs name, less its own, are what it needs from elsewhere. Hoard knows the
+  tools' IDs from their own published releases. Hoard for Unity uses the same list to warn you before importing.
 
 ### Checking your downloads
 
