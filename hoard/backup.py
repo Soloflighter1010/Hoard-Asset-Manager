@@ -1,7 +1,7 @@
 """Backup and restore (Settings, Backup): what you've set up in Hoard, in one file, to keep or to move to another
 computer.
 
-A backup holds your settings (the downloads folder and other library folders as places, used only where they exist),
+A backup holds your settings (the downloads folder and other library folders as places, used only where they exist and suit),
 your tags, sets, archive and removed choices, and your library list, without its download links. Hidden products,
 with the PIN and recovery words that hide them (as their slow hashes, never the words), go in only while the hidden
 library is unlocked: a backup made while it's locked leaves them out, so the file never names them.
@@ -115,6 +115,7 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
     """Put a backup's contents in place. apply_settings(cfg, change) checks settings as Settings does (raising
     ValueError), returning the change to make; add_folder(path) adds a library folder (raising ValueError). Returns
     {"settings": [what was taken], "skipped": [what wasn't, and why], "items": library items added}."""
+    from . import libraries
     from .config import deep_merge
     from .marks import KINDS, MarkStore, _SCRYPT
     from .sets import SetStore
@@ -131,11 +132,11 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
             report["skipped"].append(f"the setting {key}, which isn't one this Hoard can use")
     root = given.get("root")
     if isinstance(root, str) and root:
-        if Path(root).is_dir():
-            deep_merge(cfg, apply_settings(cfg, {"root": root}))
+        try:
+            deep_merge(cfg, apply_settings(cfg, {"root": str(libraries.check_restored_root(root))}))
             report["settings"].append("root")
-        else:
-            report["skipped"].append(f"the downloads folder {root[:200]}, which isn't on this computer")
+        except ValueError as e:
+            report["skipped"].append(f"the downloads folder {root[:200]}, because {e}")
     for folder in given.get("library_folders") if isinstance(given.get("library_folders"), list) else []:
         try:
             add_folder(str(folder)[:1000])

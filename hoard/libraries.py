@@ -104,6 +104,25 @@ def check_new_folder(cfg: dict, value) -> Path:
     return path
 
 
+def check_restored_root(value) -> Path:
+    """The downloads folder a backup names, checked before it's taken (backup.restore): a full path to a folder on
+    this computer, not a link, and not a whole drive, your home folder or Hoard's own app-data folder, nor inside
+    Hoard's. Raises ValueError saying what's wrong."""
+    path = _plain(value)
+    if path is None:
+        raise ValueError("it isn't a full path")
+    if path.parent == path or _same_or_inside(Path.home(), path):
+        raise ValueError("it's a whole drive or your home folder")
+    own = data_dir()
+    if _same_or_inside(path, own) or _same_or_inside(own, path):
+        raise ValueError("it's Hoard's own app-data folder, or inside or around it")
+    if not path.is_dir():
+        raise ValueError("it isn't on this computer")
+    if path.is_symlink():
+        raise ValueError("it's a shortcut (a link)")
+    return path
+
+
 def address(cfg: dict, folder: Path) -> int | None:
     """Which library folder this is, as the pages name it: 0 for the downloads folder, 1, 2... for the others in
     order; None when it isn't one of them."""

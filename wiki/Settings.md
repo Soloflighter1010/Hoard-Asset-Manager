@@ -92,7 +92,8 @@ Also here:
   you downloaded: on a new computer, copy the downloads folder yourself and sign in to your stores again. **Restore a
   backup...** asks what's in the file, saves a backup of how things are now first (marked "before restoring"), then
   puts the file's settings, tags, sets and choices in place, each checked as if you'd made it here. A folder that
-  isn't on this computer is left as it is, and the library list fills in only stores that have nothing listed yet.
+  isn't on this computer is left as it is, and so is a downloads folder that's a whole drive, your home folder or
+  Hoard's own app-data folder. The library list fills in only stores that have nothing listed yet.
   A backup with hidden items replaces yours only once your hidden library is unlocked.
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the

@@ -104,6 +104,20 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(cfg["download_retries"], 2, "a setting this Hoard can't use isn't taken")
         self.assertEqual(len(done["skipped"]), 2, done["skipped"])
 
+    def test_a_folder_hoard_shouldnt_download_into_isnt_taken(self):
+        (self.tmp / "data").mkdir(exist_ok=True)
+        for folder in (Path(self.tmp.anchor), self.tmp / "home", self.tmp / "data", Path(__file__).parent, "rel/dir"):
+            with self.subTest(folder=folder):
+                doc = self.make(unlocked=False)
+                doc["settings"]["root"] = str(folder)
+                cfg = {**config.load_config(), "root": str(self.root)}
+                done = backup.restore(doc, cfg, self.lib, server.apply_settings, lambda p: None)
+                if folder == Path(__file__).parent:
+                    self.assertEqual(Path(cfg["root"]), folder, "an ordinary folder that's here is taken")
+                    continue
+                self.assertEqual(cfg["root"], str(self.root))
+                self.assertTrue(any("downloads folder" in s for s in done["skipped"]), done["skipped"])
+
     def test_a_store_already_read_here_keeps_its_list(self):
         doc = self.make(unlocked=False)
         doc["library"]["items"][0]["name"] = "Old name"
