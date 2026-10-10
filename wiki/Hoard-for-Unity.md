@@ -30,12 +30,12 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   day. A `.zip` locked with a password is left out: unzip it yourself.
 - **Import set** (0.8.0, with Hoard 4.0). The **Sets** pill (shown once you've made a set in Hoard's Downloads) shows
   one set's products, with **Import set**: their packages are imported one after another, each through Unity's import
-  dialog (**Cancel** skips one), what's needed first, so an outfit's avatar comes before the outfit. Packages already
+  dialog (**Cancel** skips one), in name order (with Hoard 4.0.0 to 4.0.2, what's needed first). Packages already
   all in the project are left out, and it says which tools (lilToon, say) the set still needs. Importing carries on
   when a package's scripts make the editor reload; **Stop** ends it.
 - **What it needs** (0.8.0, with Hoard 4.0). A product whose packages use something that isn't in this project (a
-  shader such as lilToon or Poiyomi Toon 8.1, Modular Avatar, VRCFury, or the base avatar an outfit is made for)
-  says so in its details, with **Get it** (the tool's own website) or **Show** (that product, in this window).
+  shader such as lilToon or Poiyomi Toon 8.1, Modular Avatar or VRCFury) says so in its details, with **Get it** (the
+  tool's own website).
   **Import** asks first when something is missing, as without it parts of the product may be pink or missing. Hoard
   works out what each product needs (see [Downloads](Downloads#the-downloads-view)); the window checks whether this
   project has it.

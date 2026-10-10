@@ -112,6 +112,12 @@ class WorkingOut(unittest.TestCase):
         self.assertEqual(reader.run_once(), 2)
         return index
 
+    def test_other_products_arent_named_for_now(self):
+        got = needs.work_out(self.assets, self.read_all())[1]
+        self.assertEqual([t["name"] for t in got["tools"]], ["lilToon", "Poiyomi Toon", "VRChat SDK"])
+        self.assertEqual((got["products"], got["unknown"]), ([], 2), "the avatar's prefab is only counted")
+
+    @mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
     def test_an_outfit_needs_its_shaders_the_sdk_and_its_avatar(self):
         got = needs.work_out(self.assets, self.read_all())[1]
         self.assertTrue(got["read"])
@@ -153,6 +159,7 @@ class WorkingOut(unittest.TestCase):
             needs.NeedsReader(needs.NeedsIndex(), lambda: self.assets, lambda: next(busy)).run_once()
         self.assertEqual(slept.call_count, 2)
 
+    @mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
     def test_in_the_catalog(self):
         self.read_all()
         catalog = [{"store": "Booth", "name": a["name"], "creator": a["creator"], "folder": a["catalog_folder"],
@@ -170,6 +177,7 @@ class WorkingOut(unittest.TestCase):
                 self.assertNotEqual(downloader.validate_catalog_entry({**catalog[1], "needs": [bad]}), [])
 
 
+@mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
 class WeakMatches(unittest.TestCase):
     """What other products a product needs leaves out what's noise: a creator's shared files that many products carry,
     and a few files from another product by the same creator (most often their own files used again)."""
@@ -313,14 +321,13 @@ class Page(unittest.TestCase):
         rows = page.locator("#detail .needs li")
         rows.first.wait_for()
         self.assertEqual([r.split("\n")[0] for r in rows.all_inner_texts()],
-                         ["lilToon", "Poiyomi Toon 8.1", "VRChat SDK (every VRChat project has it)", "Rusk by Kitsu"])
+                         ["lilToon", "Poiyomi Toon 8.1", "VRChat SDK (every VRChat project has it)"],
+                         "other products aren't named, for now")
         self.assertEqual(rows.nth(0).locator("a").get_attribute("href"), "https://lilxyzw.github.io/lilToon/")
-        self.assertIn("1 more thing Hoard doesn't know", page.locator("#detail").inner_text())
-        rows.nth(3).locator("[data-act='goto']").click()
-        page.locator("#detail .d-name", has_text="Rusk").wait_for()
-        self.assertEqual(page.locator("#detail .needs li").all_inner_texts()[0].split("\n")[0],
-                         "VRChat SDK (every VRChat project has it)")
+        self.assertIn("It also uses files from other products", page.locator("#detail").inner_text())
+        self.assertEqual(page.locator("#detail [data-act='goto']").count(), 0)
 
+    @mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
     def test_a_hidden_product_isnt_named(self):
         from hoard.marks import MarkStore
         from hoard.tags import tag_key

@@ -152,7 +152,7 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   or `.zip` in a product's files) shows every file it holds, in its folders, with the previews Unity keeps for
   them, without extracting anything; for a `.zip`, what each Unity package in it holds too. **What it needs**
   (in a product's details) lists what its packages use that isn't in them: shaders and tools such as lilToon,
-  Poiyomi or Modular Avatar, and other products you have, such as the avatar an outfit is made for. When an update
+  Poiyomi or Modular Avatar, and whether it also uses files from other products (a base avatar, say). When an update
   replaces a file, the old one is kept (**Previous versions**, with **Restore**). **Sets** group products you use
   together (an avatar, its outfits, its shaders), and Hoard for Unity imports a set in one go.
 - **Backup** (in **Settings**) saves what you've set up (settings, tags, sets, choices and your library list, never
@@ -195,7 +195,7 @@ search your downloads with thumbnails, see which products are already in the ope
 the asset GUIDs inside each `.unitypackage`), and **Import** one through Unity's own import dialog, with no
 downloading again. A package a product came zipped in (as many Booth products do) is there too, under its `.zip`:
 **Import** unpacks just that package and opens the same dialog. A product whose packages need something this
-project doesn't have (a shader, a tool, its base avatar) says what, and **Import** asks first. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
+project doesn't have (a shader or a tool) says what, and **Import** asks first. It only reads Hoard's catalog, checks Hoard's seal on it, and is editor-only, so
 nothing reaches your uploads.
 
 Add it in the VRChat Creator Companion: open [Hoard's website](https://hoard.furryup.link/#unity)

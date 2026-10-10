@@ -1494,9 +1494,7 @@ function needsSection(a) {
     ...n.products.map(o => `<li><span class="nm"><span translate="no">${esc(o.name)}</span> <span class="muted" translate="no">${esc(tr("by {0}", o.creator))}</span></span>` +
       `<button class="ghost sm" data-act="goto" data-id="${o.id}">View</button></li>`),
   ];
-  const unknown = n.unknown ? `<p class="sub">${esc(tr(n.unknown === 1
-    ? "And 1 more thing Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard."
-    : "And {0} more things Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.", n.unknown.toLocaleString()))}</p>` : "";
+  const unknown = n.unknown ? `<p class="sub">${esc(tr("It also uses files from other products, such as a base avatar or a shader."))}</p>` : "";
   if (!rows.length && !unknown) return head + `<p class="sub">${esc(tr("Nothing from elsewhere: everything it uses is in it."))}</p>`;
   return head + (rows.length ? `<ul class="needs">${rows.join("")}</ul>` : "") + unknown;
 }

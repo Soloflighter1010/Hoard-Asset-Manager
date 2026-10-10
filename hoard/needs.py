@@ -35,6 +35,9 @@ MAX_LISTED = 5          # other products named as needed, the most needed first
 # same creator are most often their own files used again (a texture a reused material still names), not a need.
 SHARED_BY = 3
 SAME_CREATOR_MIN = 5
+# Naming the other products a product needs is off for now (4.0.3): telling a real need (an outfit's avatar) from
+# files creators share and reuse wasn't reliable enough. What's needed from elsewhere is only said to be there.
+MATCH_PRODUCTS = False
 BUILT_IN = "0000000000000000"   # Unity's own resources (the default material, built-in shaders): never needed
 
 
@@ -223,7 +226,7 @@ def work_out(assets: list[dict], index: NeedsIndex) -> dict:
                 rest.add(g)
         counts: dict[int, set] = {}
         holders: dict[str, set] = {}   # guid -> the products (as who made them and what they're called) that carry it
-        for g in rest:
+        for g in rest if MATCH_PRODUCTS else ():   # (off: each is counted with what Hoard doesn't know)
             for other in providers.get(g, ()):
                 if other != pid and by_id[other]["tag_key"] != a["tag_key"] and _who(by_id[other]) != _who(a):
                     counts.setdefault(other, set()).add(g)   # (a copy on another store isn't another product)
