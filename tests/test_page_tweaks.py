@@ -76,7 +76,7 @@ class Tweaks(unittest.TestCase):
         page.click("#settingsBtn")
         jumps = page.locator(".setjump button")
         self.assertEqual(jumps.count(), 8)
-        self.assertTrue(page.locator("#setStores input").first.is_visible(), "the stores' boxes are where they were")
+        page.locator("#setStores input").first.wait_for()   # the stores' boxes are where they were (drawn once Settings loads)
         page.click("[data-jump='part-help']")
         page.wait_for_timeout(800)
         self.assertTrue(page.locator("#part-help").is_visible())

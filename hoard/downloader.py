@@ -2114,6 +2114,12 @@ def restore_previous(cfg: dict, root: Path, folder: Path, stamp: str, name: str)
     downloads takes the restored file's, rather than calling it changed. Raises ValueError when there's no such
     version, or no product of Hoard's in that folder."""
     from . import previous
+
+    def same(a: Path, b: Path) -> bool:   # as resolved: one may be written with Windows' short names (RUNNER~1)
+        try:
+            return a == b or a.resolve() == b.resolve()
+        except OSError:
+            return False
     found = None
     for _base, _store, sdir in library_store_dirs(cfg, root):
         if not (sdir / "_manifest.json").is_file():
@@ -2121,7 +2127,7 @@ def restore_previous(cfg: dict, root: Path, folder: Path, stamp: str, name: str)
         man = Manifest(sdir)
         for rec in man.assets.values():
             try:
-                if not rec.get("location") and rel_to_path(sdir, rec["folder"]) == folder:
+                if not rec.get("location") and same(rel_to_path(sdir, rec["folder"]), folder):
                     found = (man, rec)
                     break
             except (UnsafePath, KeyError, TypeError):

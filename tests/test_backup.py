@@ -18,10 +18,14 @@ class RoundTrip(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
-        self.env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(self.tmp / "data"), "HOME": str(self.tmp / "home")})
+        home = str(self.tmp / "home")
+        self.env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(self.tmp / "data"), "HOME": home, "USERPROFILE": home})
         self.env.start()
         self.addCleanup(self.env.stop)
         (self.tmp / "home" / "Documents").mkdir(parents=True)
+        docs = mock.patch.object(backup, "documents_dir", return_value=self.tmp / "home" / "Documents")   # Windows asks the system
+        docs.start()
+        self.addCleanup(docs.stop)
         self.root = self.tmp / "Hoard downloads"
         self.root.mkdir()
         self.cfg = {**config.load_config(), "root": str(self.root), "download_retries": 3}
@@ -154,6 +158,9 @@ class Page(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         (tmp / "home" / "Documents").mkdir(parents=True)
+        docs = mock.patch.object(backup, "documents_dir", return_value=tmp / "home" / "Documents")
+        docs.start()
+        self.addCleanup(docs.stop)
         (tmp / "dl").mkdir()
         srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(tmp / "dl"), "setup_done": True}, lan=False)
         threading.Thread(target=srv.serve_forever, daemon=True).start()

@@ -112,6 +112,20 @@ class WithTheRecords(unittest.TestCase):
         result = downloader.check_integrity(self.root, others=[self.drive])
         self.assertEqual(result["changed"], [], "the restored file is taken as it is, not called changed")
 
+    def test_the_folder_written_another_way(self):
+        """The page names the folder as resolved, the records as the downloads folder is written: on Windows one can
+        have a short name (RUNNER~1) where the other has the long one. A link stands in for that here."""
+        alias = self.base / "alias"
+        try:
+            alias.symlink_to(self.base, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("can't make a link here")
+        [v] = previous.listed(self.rusk)
+        root = alias / self.root.relative_to(self.base)
+        downloader.restore_previous({**self.cfg, "root": str(root)}, root, self.rusk.resolve(), v["stamp"],
+                                    "rusk.unitypackage")
+        self.assertEqual((self.rusk / "rusk.unitypackage").read_bytes(), b"pkg")
+
     def test_not_a_download_of_hoards(self):
         elsewhere = self.base / "elsewhere"
         elsewhere.mkdir()
