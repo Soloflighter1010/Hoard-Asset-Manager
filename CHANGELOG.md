@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.2
+
+- **What it needs names fewer products that aren't needs.** Products that only carry files many of your products
+  share (a creator's free extras, each with the same files), or a few files of another product by the same creator
+  (most often their own textures or materials used again), are counted with what Hoard doesn't know instead of being
+  listed. Hoard for Unity's warning before importing follows.
+- **The box for naming a set** (New set, Rename set) has Hoard's look rather than the browser's own grey box.
+
 ## 4.0.1
 
 - **New set, in Select.** Making a set of the products you've selected was the last choice in the **Choose a set**

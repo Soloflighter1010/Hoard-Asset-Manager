@@ -212,7 +212,10 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   a paid shader you didn't download with Hoard). Hoard works it out by reading each package once, in the background
   while nothing else is running, and again only when it changes: Unity names everything an asset uses by an ID, so
   the IDs a package's materials and prefabs name, less its own, are what it needs from elsewhere. Hoard knows the
-  tools' IDs from their own published releases. Hoard for Unity uses the same list to warn you before importing.
+  tools' IDs from their own published releases. From 4.0.2, weak matches aren't named, only counted: files that
+  three or more of your other products carry (a creator's shared files), and fewer than five files from another
+  product by the same creator (most often their own files used again). Hoard for Unity uses the same list to warn
+  you before importing.
 
 ### Checking your downloads
 
