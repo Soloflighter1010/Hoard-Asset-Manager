@@ -345,6 +345,23 @@ public static class CoreTests
             Check("needs: another product, by its folder", itch.Needs[2].Kind == "product" && itch.Needs[2].Folder == "Booth/Kitsu Studio/Rusk Avatar Base"
                   && itch.Needs[2].Store == "Booth" && itch.Needs[2].Guids.Count == 2);
         }
+        // sets (Hoard 4.0): only products the catalog has; a set with none, or a name that isn't clean, left out
+        Check("sets read", cat.Sets.Count == 1 && cat.Sets[0].Name == "Kitsu, winter"
+              && string.Join("|", cat.Sets[0].Folders.ToArray()) == "Itch/Kitsu Studio/Paw Suit|Booth/Kitsu Studio/Rusk Avatar Base",
+              cat.Sets.Count + " sets");
+        if (itch != null && good != null)
+        {
+            // Paw Suit needs Rusk Avatar Base (its needs, above): the avatar comes first, then the rest by name
+            var extra = new HoardAsset { Name = "Aaa Hair", Folder = "Booth/x/Aaa Hair" };
+            var order = SetOrder.Order(new List<HoardAsset> { itch, extra, good });
+            Check("Import set: what's needed first", string.Join("|", order.ConvertAll(a => a.Name).ToArray()) == "Aaa Hair|Rusk Avatar Base|Paw Suit",
+                  string.Join("|", order.ConvertAll(a => a.Name).ToArray()));
+            var loop = new HoardAsset { Name = "Loop", Folder = "Booth/l" };
+            loop.Needs.Add(new HoardNeed { Kind = "product", Folder = "Booth/l2" });
+            var loop2 = new HoardAsset { Name = "Loop 2", Folder = "Booth/l2" };
+            loop2.Needs.Add(new HoardNeed { Kind = "product", Folder = "Booth/l" });
+            Check("Import set: a loop of needs is broken", SetOrder.Order(new List<HoardAsset> { loop, loop2 }).Count == 2);
+        }
         var badLink = cat.Assets.Find(a => a.Name == "Odd Link");
         Check("off-store link dropped", badLink != null && badLink.Url == null);
         Check("file found inside the folder", good != null && cat.FilePath(good, "Rusk.unitypackage") != null);

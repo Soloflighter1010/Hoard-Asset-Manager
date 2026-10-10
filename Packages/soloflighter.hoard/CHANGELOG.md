@@ -13,6 +13,10 @@
   Avatar Optimizer, the VRChat SDK) or another product, such as the base avatar an outfit is made for. **Get it**
   opens the tool's website, **Show** finds the product in this window, and **Import** asks first while something is
   missing. A need is in the project when every asset ID Hoard listed for it is.
+- **Import set.** With Hoard 4.0's sets (made in Hoard's Downloads), the **Sets** pill shows one set's products, and
+  **Import set** imports their packages one after another, each through Unity's import dialog (Cancel skips one),
+  what's needed first: an outfit's avatar before the outfit. Packages already all in the project are left out, and it
+  says which tools the set still needs. It carries on after a package's scripts reload the editor; **Stop** ends it.
 - The `.zip` is read by the package's own reader (stored and deflated files, ZIP64, and Japanese file names), so it
   works on every .NET profile a project can use.
 

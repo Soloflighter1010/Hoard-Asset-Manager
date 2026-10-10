@@ -102,7 +102,11 @@ def build_material(d: Path) -> None:
            asset("Relative Library", "Booth/v", None, [], library="drive"),
            asset("Library And Place", "Local/_linked/local-3", None, [], store="Local", library=os.path.normpath(str(drive)),
                  location=os.path.normpath(str(d / "mine")))]
-    catalog = {"format": "hoard-catalog", "version": 4, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
+    catalog = {"format": "hoard-catalog", "version": 4, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad,
+               "sets": [   # your sets (Hoard 4.0): only products the catalog has, by their folders
+                   {"name": "Kitsu, winter", "items": ["Itch/Kitsu Studio/Paw Suit", "Booth/Kitsu Studio/Rusk Avatar Base",
+                                                       "Booth/Gone", "../outside", "Booth/Kitsu Studio/Rusk Avatar Base"]},
+                   {"name": "Nothing here", "items": ["Booth/Gone"]}, {"name": "\u202ebad", "items": ["Booth/Kitsu Studio/Anko"]}]}
     (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
     (d / "good_names.txt").write_text("|".join(a["name"] for a in good))
 

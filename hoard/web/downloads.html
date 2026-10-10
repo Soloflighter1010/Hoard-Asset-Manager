@@ -894,6 +894,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
     <h2 class="sidehead" data-sec="your-tags">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
+    <h2 class="sidehead" data-sec="sets">Sets <button class="linkish" id="newSet">New set</button></h2>
+    <div id="sets" class="chips"></div>
     <h2 data-sec="suggested">Suggested</h2>
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
@@ -1208,6 +1210,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
   <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
     <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
+  <span class="bulkmove"><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
+    <button class="ghost sm" id="bulkSet" data-needs>Add to set</button></span>
   <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
   <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
   <button class="ghost sm" id="bulkDone">Done</button>
@@ -1218,7 +1222,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 "use strict";   // first, or it applies to nothing
 //@include shared.js
 const grid = $("#grid"), detail = $("#detail");
-const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
+const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 const storeName = folder => folder === "Itch" ? "itch.io" : folder;
@@ -1283,6 +1287,7 @@ function matches(a, skip) {
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const t of state.types) if (!a.types.includes(t)) return false;
+  if (state.set && !(setById(state.set) || { items: [] }).items.includes(a.tag_key)) return false;
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
 }
@@ -1297,7 +1302,7 @@ const countBy = (list, key) => {
   for (const a of list) for (const v of a[key]) m.set(v, (m.get(v) || 0) + 1);
   return m;
 };
-const filtersActive = () => state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size;
+const filtersActive = () => state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size || state.set;
 
 /* ---------- rendering */
 function render() {
@@ -1351,6 +1356,80 @@ function updatesBar(n) {
   return `<p>${say.map(esc).join(" ")}</p>` +
     `<button class="ghost sm" data-upd="check">Check for updates</button>` +
     (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
+}
+// Sets (hoard/sets.py): products you group to use together; Hoard for Unity imports a set in one go
+const setById = id => (DATA.sets || []).find(s => s.id === id);
+function setOptions(first) {
+  return `<option value="">${esc(tr(first))}</option>` +
+    (DATA.sets || []).map(s => `<option value="${esc(s.id)}" translate="no">${esc(s.name)}</option>`).join("") +
+    `<option value="new">${esc(tr("New set..."))}</option>`;
+}
+function renderSets(list) {
+  const here = new Map((DATA.sets || []).map(s => [s.id, 0]));
+  for (const a of list) for (const s of DATA.sets || []) if (s.items.includes(a.tag_key)) here.set(s.id, here.get(s.id) + 1);
+  $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
+    `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
+    `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
+  $("#bulkSetTo").innerHTML = setOptions("Choose a set");
+}
+function setsSection(a) {
+  const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
+  return `<h3>Sets</h3><div class="chips">${mine.map(s => `<span class="tagpill"><button class="chip" data-act="showset" data-set="${esc(s.id)}" translate="no">${esc(s.name)}</button>` +
+      `<button class="untag" data-act="unset" data-set="${esc(s.id)}" aria-label="${esc(tr("Take it out of {0}", s.name))}">×</button></span>`).join("") ||
+      `<span class="none">${esc(tr("In no set yet"))}</span>`}</div>` +
+    `<div class="tagadd"><select id="setPick" aria-label="Set to add it to">${setOptions("Add it to a set")}</select>` +
+    `<button class="ghost sm" data-act="toset">Add</button></div>`;
+}
+function askName(title, value = "") {
+  return new Promise(resolve => {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
+      `<p><input id="askName" maxlength="60" style="width:100%;box-sizing:border-box"></p>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
+    document.body.appendChild(d);
+    const input = d.querySelector("input");
+    input.value = value;
+    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
+    d.showModal();
+    input.select();
+  });
+}
+async function changeSets(body) {
+  const r = await apiPost("/api/sets", body);
+  if (!r.ok) { toast(r.data.error || "That set couldn't be changed."); return null; }
+  await load();
+  return r.data;
+}
+async function addToSet(list, id) {
+  const items = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!items.length) return;
+  if (!id) { toast("Choose a set first."); return; }
+  if (id === "new") {
+    const name = await askName("Name the new set");
+    if (!name) return;
+    const done = await changeSets({ action: "create", name, items });
+    if (done) toast(tr(items.length === 1 ? "Made the set {0}, with this in it." : "Made the set {0}, with {1} products in it.", name, items.length));
+    return;
+  }
+  const done = await changeSets({ action: "add", id, items });
+  if (done) toast(tr(items.length === 1 ? "Added it to {0}." : "Added {1} products to {0}.", (setById(id) || {}).name || "", items.length));
+}
+async function newSet() {
+  const name = await askName("Name the new set");
+  if (!name) return;
+  const done = await changeSets({ action: "create", name, items: [] });
+  if (done && done.made) { state.set = done.made; render(); toast("Add products to it from their details, or select several."); }
+}
+async function setAction(act) {
+  const s = setById(state.set); if (!s) return;
+  if (act === "rename") {
+    const name = await askName("Rename the set", s.name);
+    if (name && name !== s.name) changeSets({ action: "rename", id: s.id, name });
+  } else if (act === "delete" && await ask(tr("Delete the set {0}? The products in it stay as they are.", s.name), "Delete set", true)) {
+    state.set = "";
+    changeSets({ action: "delete", id: s.id });
+  }
 }
 // Previous versions (hoard/previous.py): what updates replaced, kept in the product's folder, to put back
 function previousSection(a) {
@@ -1612,6 +1691,7 @@ function renderGrid(list) {
 
 function renderFacets(list) {
   renderTagFacets(list);
+  renderSets(DATA.assets.filter(inView));
 
   const typeCounts = countBy(list, "types");
   for (const t of state.types) if (!typeCounts.has(t)) typeCounts.set(t, 0);
@@ -1667,6 +1747,7 @@ function renderStatus(list) {
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
+  if (state.set && setById(state.set)) pills.push(["set", "", "Set", setById(state.set).name]);
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
   const local = state.store === "Local";
@@ -1683,7 +1764,8 @@ function renderStatus(list) {
     pills.map(([k, v, label, text]) =>
       `<button class="pill" data-clear="${k}" data-v="${esc(v)}" aria-label="Remove ${label.toLowerCase()} filter ${esc(text)}">` +
       `<b>${label}</b> ${esc(text)}<span aria-hidden="true">×</span></button>`).join("") +
-    (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
+    (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "") +
+    (state.set && setById(state.set) ? ` <button class="linkish" data-setact="rename">Rename set</button> <button class="linkish" data-setact="delete">Delete set</button>` : "");
 }
 
 function syncControls() {
@@ -1734,6 +1816,7 @@ function showDetail(a, focus = true) {
     needsSection(a) +
     librarySection(a) +
     tagSection(a) +
+    setsSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
     `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}</span>` +
       `<span class="fs">${f.missing ? "Missing on disk" : fmtSize(f.size)}</span>` +
@@ -1907,6 +1990,7 @@ function saveHash() {
   if (state.creator) p.set("creator", state.creator);
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.types.size) p.set("types", [...state.types].join(","));
+  if (state.set) p.set("set", state.set);
   if (state.sort !== "name") p.set("sort", state.sort);
   if (state.view !== "downloads") p.set("view", state.view);
   if (state.view === "space" && state.space) p.set("space", state.space);
@@ -1919,6 +2003,7 @@ function readHash() {
   state.lib = /^\d+$/.test(p.get("lib") || "") ? p.get("lib") : "";
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
+  state.set = /^[0-9a-f]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
@@ -2028,7 +2113,10 @@ try { const z = localStorage.getItem("hoard-dl-tile-size"); if (z) setZoom(z); }
 function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); }
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), ty = e.target.closest("[data-type]"), c = e.target.closest("[data-creator]");
-  if (t) toggle(state.tags, t.dataset.tag);
+  const st = e.target.closest("[data-set]");
+  if (e.target.closest("#newSet")) { newSet(); return; }
+  if (st) state.set = state.set === st.dataset.set ? "" : st.dataset.set;
+  else if (t) toggle(state.tags, t.dataset.tag);
   else if (ty) toggle(state.types, ty.dataset.type);
   else if (c) state.creator = state.creator === c.dataset.creator ? "" : c.dataset.creator;
   else return;
@@ -2037,7 +2125,8 @@ $("#filters").addEventListener("click", e => {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); }
+  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; }
+  else if (k === "set") state.set = "";
   else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v); else if (k === "type") state.types.delete(v);
   render();
@@ -2227,6 +2316,9 @@ detail.addEventListener("click", e => {
   else if (act === "open") reveal(b.dataset.path);
   else if (act === "inside") lookInside(b.dataset.path);
   else if (act === "restore") restorePrevious(byId.get(openId), b);
+  else if (act === "unset") changeSets({ action: "remove", id: b.dataset.set, items: [byId.get(openId).tag_key] });
+  else if (act === "toset") addToSet([byId.get(openId)], $("#setPick").value);
+  else if (act === "showset") { state.set = b.dataset.set; render(); }
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
   else if (act === "update-one") updateItems([byId.get(openId)]);
@@ -2324,6 +2416,8 @@ function wireTags() {
   $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
   if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
   if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
+  $("#bulkSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), $("#bulkSetTo").value));
+  document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
   if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
   $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
   document.addEventListener("keydown", e => {

@@ -56,6 +56,7 @@ namespace SoloFlighter.Hoard.Editor
         string search = "";
         int store;
         bool packagesOnly = true, inProjectOnly, updatesOnly;
+        string setName;   // the set shown (Hoard 4.0's sets), or null for every product
         Vector2 gridScroll, detailScroll;
         bool reportDue;             // what this project uses has changed: tell Hoard's Projects view (issue #86)
         double reportAfter;
@@ -490,12 +491,15 @@ namespace SoloFlighter.Hoard.Editor
             shown = new List<HoardAsset>();
             counts = new int[StoreNames.Length];
             if (catalog == null) return;
+            var set = CurrentSet();
+            var inSet = set == null ? null : new HashSet<string>(set.Folders);
             string q = search.Trim().ToLowerInvariant();
             foreach (var a in catalog.Assets)
             {
                 if (packagesOnly && !a.HasPackages) continue;
                 if (inProjectOnly && ProjectStatus(a) < InProject.Partly) continue;
                 if (updatesOnly && NewerDownload(a) == null && UpdateInHoard(a) == 0) continue;
+                if (inSet != null && !inSet.Contains(a.Folder)) continue;
                 if (q.Length > 0 && !a.SearchText.Contains(q)) continue;
                 counts[0]++;   // each store's tab counts what the other filters leave, as the app's do
                 int at = Array.IndexOf(StoreNames, a.Store);
@@ -522,6 +526,7 @@ namespace SoloFlighter.Hoard.Editor
             }
             y = DrawShelf(y);
             y = DrawNotices(y);
+            y = DrawSetBar(y);
             y = DrawOrigins(y);
             float panel = selected == null ? 0 : Mathf.Clamp(w * 0.38f, 300, 460);
             // a window too narrow for the tiles beside the details: the details cover them, as in the app on a small
@@ -646,9 +651,13 @@ namespace SoloFlighter.Hoard.Editor
                 tabsW = 0;
                 foreach (int i in tabs) tabsW += TabWidth(i, false) + 4;
             }
-            string[] pills = { "Unity packages only", "In this project", "Updates" };
+            bool withSets = catalog.Sets.Count > 0;
+            string setPill = CurrentSet() != null ? "Set: " + TextFit.Fit(setName, 140, t => Look.Style(Look.Styles.ButtonText).CalcSize(new GUIContent(t)).x) : "Sets";
+            string[] pills = withSets ? new[] { "Unity packages only", "In this project", "Updates", setPill }
+                                      : new[] { "Unity packages only", "In this project", "Updates" };
             string[] pillTips = { "Only products with a .unitypackage to import", "Only products whose files are in this project",
-                                  "Products in this project with a newer download, or an update waiting in Hoard" };
+                                  "Products in this project with a newer download, or an update waiting in Hoard",
+                                  "Show one of your sets (made in Hoard's Downloads), to import it in one go" };
             float pillsW = 0;
             foreach (string p in pills) pillsW += Look.ButtonWidth(p) - 4 + 6;
             float toolsW = pillsW + 12 + 110 + 12 + Look.ButtonWidth(PauseLabel) - 4;
@@ -660,14 +669,15 @@ namespace SoloFlighter.Hoard.Editor
             EditorGUI.BeginChangeCheck();
             for (int i = 0; i < pills.Length; i++)
             {
-                bool on = i == 0 ? packagesOnly : i == 1 ? inProjectOnly : updatesOnly;
+                bool on = i == 0 ? packagesOnly : i == 1 ? inProjectOnly : i == 2 ? updatesOnly : CurrentSet() != null;
                 var r = new Rect(tx, ty, Look.ButtonWidth(pills[i]) - 4, 24);
                 tx += r.width + 6;
                 if (Look.Button(r, new GUIContent(pills[i], pillTips[i]), on ? Look.Kind.PillOn : Look.Kind.Pill))
                 {
                     if (i == 0) packagesOnly = !packagesOnly;
                     else if (i == 1) inProjectOnly = !inProjectOnly;
-                    else updatesOnly = !updatesOnly;
+                    else if (i == 2) updatesOnly = !updatesOnly;
+                    else { ChooseSet(r); continue; }
                     GUI.changed = true;
                 }
             }
@@ -744,6 +754,88 @@ namespace SoloFlighter.Hoard.Editor
             if (catalog.Problem == null && catalog.LeftOut > 0)
                 y = Notice(y, catalog.LeftOut + " entries in catalog.json didn't look right and were left out.", Look.Dust);
             return y;
+        }
+
+        HoardSet CurrentSet() { return setName == null || catalog == null ? null : catalog.Sets.Find(s => s.Name == setName); }
+
+        void ChooseSet(Rect under)
+        {
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Every product"), setName == null, () => { setName = null; Filter(); Repaint(); });
+            menu.AddSeparator("");
+            foreach (var s in catalog.Sets)
+            {
+                string name = s.Name;
+                menu.AddItem(new GUIContent(name.Replace("/", "∕")), name == setName, () => { setName = name; Filter(); gridScroll = Vector2.zero; Repaint(); });
+            }
+            menu.DropDown(under);
+        }
+
+        /// <summary>While a set is shown: its name, and Import set (or how far importing it has got).</summary>
+        float DrawSetBar(float y)
+        {
+            var set = CurrentSet();
+            if (set == null && !ImportQueue.Active) return y;
+            float w = position.width - Pad * 2;
+            var box = new Rect(Pad, y + 8, w, 44);
+            if (Event.current.type == EventType.Repaint) Look.Box("setbar", Look.Ledge, Look.Seam).Draw(box, false, false, false, false);
+            Look.Fill(new Rect(box.x, box.y + 8, 3, box.height - 16), Look.Gold, 1.5f);
+            string text, button;
+            if (ImportQueue.Active)
+            {
+                text = "Importing a set: " + (ImportQueue.Total - ImportQueue.Left) + " of " + ImportQueue.Total + " packages. Each opens Unity's import dialog in turn.";
+                button = "Stop";
+            }
+            else
+            {
+                int n = set.Folders.Count;
+                text = set.Name + ": " + n + (n == 1 ? " product" : " products") + ".";
+                button = "Import set";
+            }
+            float bw = Look.ButtonWidth(button);
+            GUI.Label(new Rect(box.x + 16, box.y + 12, w - bw - 40, 20), text, Look.Style(Look.Styles.Body));
+            bool paused = catalog.SealStatus == SealState.Changed || EditorApplication.isCompiling || (!ImportQueue.Active && PendingImport.Active);
+            EditorGUI.BeginDisabledGroup(paused);
+            if (Look.Button(new Rect(box.xMax - bw - 10, box.y + 7, bw, Look.ButtonHeight), new GUIContent(button),
+                            ImportQueue.Active ? Look.Kind.Ghost : Look.Kind.Primary))
+            {
+                if (ImportQueue.Active) ImportQueue.Stop(); else ImportSet(set);
+            }
+            EditorGUI.EndDisabledGroup();
+            return box.yMax;
+        }
+
+        /// <summary>Import a set: each product's packages that aren't all in the project yet, what's needed first.</summary>
+        void ImportSet(HoardSet set)
+        {
+            var members = catalog.Assets.FindAll(a => set.Folders.Contains(a.Folder));
+            var items = new List<ImportQueue.Item>();
+            var names = new List<string>();
+            var tools = new List<string>();
+            foreach (var a in SetOrder.Order(members))
+            {
+                bool any = false;
+                foreach (string p in a.PackagePaths)
+                    if (packages.Status(p) != InProject.Yes)
+                    {
+                        items.Add(new ImportQueue.Item { Path = p, Store = a.Store, Name = a.Name, Creator = a.Creator });
+                        any = true;
+                    }
+                if (any) names.Add(a.Name);
+                foreach (var n in Missing(a))
+                    if (n.Kind == "tool" && !tools.Contains(n.Label)) tools.Add(n.Label);
+            }
+            if (items.Count == 0)
+            {
+                EditorUtility.DisplayDialog("Hoard", "Everything in " + set.Name + " is in this project already.", "OK");
+                return;
+            }
+            string message = "Import " + items.Count + (items.Count == 1 ? " package" : " packages") + " from " + set.Name + ", in this order: " +
+                             string.Join(", ", names.ToArray()) + ".\n\nUnity's import dialog opens for each in turn: choose what comes in, or " +
+                             "Cancel to skip one. Packages already all in this project are left out." +
+                             (tools.Count > 0 ? "\n\nNot in this project yet, and not in the set: " + string.Join(", ", tools.ToArray()) +
+                                                ". Import " + (tools.Count == 1 ? "it" : "them") + " first, or parts may be pink or missing." : "");
+            if (EditorUtility.DisplayDialog("Hoard", message, "Import", "Cancel")) ImportQueue.Start(items);
         }
 
         float Notice(float y, string text, Color accent)

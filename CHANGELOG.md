@@ -17,6 +17,11 @@
   nothing else is running: the IDs its materials and prefabs name, less its own, are what it needs from elsewhere.
   It knows the tools' IDs from their own published releases. Hoard for Unity 0.8 says what's missing from the
   project, and asks before importing without it.
+- **Sets.** Group products you use together, such as an avatar, its outfits and hair, and the shaders they need: in
+  Downloads, **Sets** in the sidebar (**New set**), **Add to set** for the products you've selected, or a product's
+  details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import
+  set** imports its packages one after another through Unity's import dialog, what's needed first (an outfit's
+  avatar before the outfit), leaving out packages already all in the project and saying which tools it still needs.
 - **Previous versions.** When an update replaces a file, the old one is kept in `_Previous versions` in the product's
   folder, and a product's details in Downloads list it with **Restore**, which puts it back (and keeps the one it
   replaces, so you can change your mind). Hoard keeps the last one of each file; choose none, or up to 5, in

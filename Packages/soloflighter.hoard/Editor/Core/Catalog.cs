@@ -64,6 +64,7 @@ namespace SoloFlighter.Hoard
 
         public string Root;
         public List<HoardAsset> Assets = new List<HoardAsset>();
+        public List<HoardSet> Sets = new List<HoardSet>();   // your sets (Hoard 4.0), each with products the catalog has
         public SealState SealStatus = SealState.Unsealed;
         public string Problem;          // why the catalog couldn't be read at all, or null
         public int LeftOut;             // entries that broke a promise, and were left out
@@ -98,6 +99,7 @@ namespace SoloFlighter.Hoard
                     var asset = Read(entry, cat.SealStatus != SealState.Changed, cat.SealStatus == SealState.Sealed);
                     if (asset != null) cat.Assets.Add(asset); else cat.LeftOut++;
                 }
+                cat.ReadSets(doc.Get("sets"));
                 cat.Resolve();
             }
             catch (JsonException e) { cat.Problem = "catalog.json couldn't be read (" + e.Message + ")."; }
@@ -147,6 +149,25 @@ namespace SoloFlighter.Hoard
                     if (need != null) a.Needs.Add(need);
                 }
             return a;
+        }
+
+        /// <summary>The sets, each with only the products this catalog has (by their folders); a set left with none,
+        /// or whose name isn't clean, is left out.</summary>
+        void ReadSets(JsonValue sets)
+        {
+            if (sets == null || sets.Kind != JsonKind.Array) return;
+            var folders = new HashSet<string>();
+            foreach (var a in Assets) folders.Add(a.Folder);
+            foreach (var s in sets.Items)
+            {
+                if (Sets.Count >= 200) break;
+                if (s == null || s.Kind != JsonKind.Object) continue;
+                var set = new HoardSet { Name = s.Str("name") };
+                if (!CleanText(set.Name, 60)) continue;
+                foreach (string f in s.Strings("items"))
+                    if (set.Folders.Count < 500 && PlainPath(f) && folders.Contains(f) && !set.Folders.Contains(f)) set.Folders.Add(f);
+                if (set.Folders.Count > 0) Sets.Add(set);
+            }
         }
 
         /// <summary>One of a product's needs, or null when it breaks a promise (left out, not the product).</summary>

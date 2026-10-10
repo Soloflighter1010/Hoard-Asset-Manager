@@ -78,6 +78,10 @@ An `<asset>`:
 
 | `needs` | list, only on some entries (4.0) | What the product's packages use that isn't in them (What it needs): see below |
 
+The catalog can also have `sets` (4.0): `[{"name": "Rusk, winter", "items": ["Booth/Kitsu Studio/Rusk", ...]}]`, your
+sets, each product by its `folder` (every copy of it), only products the catalog lists, and only sets with any. A
+reader that doesn't know it ignores it.
+
 `version` is 4 when any entry has `library`, and 3 otherwise, so a reader that doesn't know `library` (Hoard for
 Unity before 0.5.0) still reads a library that's all in one folder.
 

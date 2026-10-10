@@ -14,6 +14,8 @@ Unity. Open **Hoard › Open Hoard** (Hoard's own menu in Unity's menu bar) to:
   downloaded, so you choose exactly what comes in. A package that came in a `.zip` is listed under it, and
   **Import** unpacks just that package (into the project's `Library` folder) first. Other files (textures, archives)
   open in Explorer.
+- **Import a set.** Sets you make in Hoard's Downloads (an avatar, its outfits, its shaders) are imported in one go,
+  what's needed first, each package through Unity's import dialog.
 - **Know what it needs.** A product whose packages use a shader, a tool or a base avatar that isn't in this project
   says which (from Hoard 4.0), with **Get it** or **Show**, and **Import** asks before going ahead without it.
 - **Find where a file came from.** Right-click files in the Project window: **Hoard › Which Product Is This From?**

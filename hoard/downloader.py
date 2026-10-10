@@ -2437,8 +2437,11 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     # Version 4 says some products are in other library folders ("library"): older Hoard for Unity, which would look
     # for them in the downloads folder, asks to be updated instead (docs/DATA-FORMATS.md)
     form = {**CATALOG_FORMAT["catalog"], **({"version": 4} if any(e.get("library") for e in catalog) else {})}
-    write_file_safely(root / "catalog.json", json.dumps(seal({**form, "generated_at": now_iso(),
-                                                              "assets": catalog}), indent=2, ensure_ascii=False), root)
+    from .sets import for_catalog   # your sets (hoard/sets.py), by their products' folders: Import set in Unity
+    grouped = for_catalog(catalog) if catalog else []
+    write_file_safely(root / "catalog.json", json.dumps(seal({**form, "generated_at": now_iso(), "assets": catalog,
+                                                              **({"sets": grouped} if grouped else {})}),
+                                                        indent=2, ensure_ascii=False), root)
     yours: dict[str, list] = {}
     for entry in catalog:
         for t in entry["tags"]:

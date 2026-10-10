@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, space, themes, updater, vault
+from . import __version__, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -54,7 +54,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
-           "/api/previous/restore")
+           "/api/previous/restore", "/api/sets")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -717,13 +717,15 @@ class Handler(BaseHTTPRequestHandler):
                                    "stack_key": stacks.get(key, ""), "needs": needed.get(a["id"]),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
+            keys = {a["tag_key"] for a in assets}   # nor kept in a set while it's locked
+            grouped = [{**s, "items": [k for k in s["items"] if k in keys]} for s in sets.SetStore().load()["sets"]]
             for a in assets:
                 if a["needs"]:
                     a["needs"] = {**a["needs"], "products": [o for o in a["needs"]["products"] if o["id"] in shown]}
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}, "looks_wanted": looks[:500],
                      "libraries": srv.library_view(),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
-                     "needs_reading": dict(srv.needs_reader.state)}
+                     "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
@@ -1129,6 +1131,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e) if isinstance(e, ValueError) else "That version couldn't be put back."}, 400)
             srv.forget_index()
             return self._json({"ok": True})
+        if path == "/api/sets":   # Downloads: your sets (hoard/sets.py)
+            if body.get("action") in ("add", "remove", "create") and not self._unlocked():
+                hidden = MarkStore().keys("hidden")   # a hidden product isn't added or taken out while it's locked
+                body = {**body, "items": [k for k in body.get("items") or [] if k not in hidden]}
+            try:
+                data = sets.SetStore().change(body)
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
+            return self._json({"ok": True, "made": data.get("made")})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)
