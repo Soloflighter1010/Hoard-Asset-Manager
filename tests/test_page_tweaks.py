@@ -122,6 +122,21 @@ class Tweaks(unittest.TestCase):
         self.assertEqual(pre.evaluate("p => p.scrollTop"), 300, "scrolled up to read: it stays there")
         self.assertTrue(page.locator("#tasksBody .task.run details").evaluate("d => d.open"))
 
+    def test_the_name_box_looks_like_hoards(self):
+        """Naming a set showed the browser's own grey text box."""
+        page = self.downloads()
+        page.evaluate("() => { askName('Name the new set'); }")   # (not waited for: it ends when the dialog closes)
+        box = page.locator("dialog[open] #askName")
+        box.wait_for()
+        bg, ring = box.evaluate("e => [getComputedStyle(e).backgroundColor, getComputedStyle(e).boxShadow]")
+        dialog = page.locator("dialog[open]").evaluate("d => getComputedStyle(d).backgroundColor")
+        cave = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--cave').trim()")
+        probe = page.evaluate(f"(() => {{ const d = document.createElement('div'); d.style.color = '{cave}'; document.body.append(d);"
+                              f" const c = getComputedStyle(d).color; d.remove(); return c; }})()")
+        self.assertEqual(bg, probe, "Hoard's own colours")
+        self.assertNotEqual(bg, dialog, "set apart from the dialog it's in")
+        self.assertIn("inset", ring)
+
     def test_a_long_message_stays_longer(self):
         page = self.downloads()
         page.evaluate("toast('A short one.')")

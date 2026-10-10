@@ -30,6 +30,11 @@ FORMAT = {"format": "hoard-package-needs", "version": 1}
 KNOWN_FILE = Path(__file__).resolve().parent / "known_tools.json"
 MAX_FILES = 50_000
 MAX_LISTED = 5          # other products named as needed, the most needed first
+# A weak match isn't named (it's counted with what Hoard doesn't know): files this many other products carry too are a
+# creator's shared files, which say nothing about which product it needs; and a few files from another product by the
+# same creator are most often their own files used again (a texture a reused material still names), not a need.
+SHARED_BY = 3
+SAME_CREATOR_MIN = 5
 BUILT_IN = "0000000000000000"   # Unity's own resources (the default material, built-in shaders): never needed
 
 
@@ -217,12 +222,20 @@ def work_out(assets: list[dict], index: NeedsIndex) -> dict:
             else:
                 rest.add(g)
         counts: dict[int, set] = {}
+        holders: dict[str, set] = {}   # guid -> the products (as who made them and what they're called) that carry it
         for g in rest:
             for other in providers.get(g, ()):
-                if other != pid and by_id[other]["tag_key"] != a["tag_key"]:   # (a copy on another store isn't another product)
-                    counts.setdefault(other, set()).add(g)
-        listed = sorted(counts, key=lambda o: (-len(counts[o]), by_id[o]["name"].lower()))[:MAX_LISTED]
-        covered = set().union(*(counts[o] for o in counts)) if counts else set()
+                if other != pid and by_id[other]["tag_key"] != a["tag_key"] and _who(by_id[other]) != _who(a):
+                    counts.setdefault(other, set()).add(g)   # (a copy on another store isn't another product)
+                    holders.setdefault(g, set()).add(_who(by_id[other]))
+
+        def weak(o: int) -> bool:
+            shared = all(len(holders[g]) >= SHARED_BY for g in counts[o])
+            maker = _who(by_id[o])[0]
+            return shared or (bool(maker) and maker == _who(a)[0] and len(counts[o]) < SAME_CREATOR_MIN)
+        kept = [o for o in counts if not weak(o)]
+        listed = sorted(kept, key=lambda o: (-len(counts[o]), by_id[o]["name"].lower()))[:MAX_LISTED]
+        covered = set().union(*(counts[o] for o in kept)) if kept else set()
         out[pid] = {
             "tools": [{**t, "versions": sorted(t["versions"], key=_version_key), "guids": sorted(t["guids"])}
                       for t in sorted(found_tools.values(), key=lambda t: (t["common"], t["name"].lower()))],
@@ -232,6 +245,12 @@ def work_out(assets: list[dict], index: NeedsIndex) -> dict:
             "read": pid not in unread,
         }
     return out
+
+
+def _who(a: dict) -> tuple[str, str]:
+    """A product as who made it and what it's called, written plainly: the same product bought on two stores is one."""
+    plain = lambda s: re.sub(r"\W+", "", str(s or "").casefold())
+    return plain(a.get("creator")), plain(a.get("name"))
 
 
 MAX_CATALOG_GUIDS = 50   # GUIDs listed for one need in catalog.json: enough for Hoard for Unity to tell if it's there

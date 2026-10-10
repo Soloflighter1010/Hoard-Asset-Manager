@@ -170,6 +170,76 @@ class WorkingOut(unittest.TestCase):
                 self.assertNotEqual(downloader.validate_catalog_entry({**catalog[1], "needs": [bad]}), [])
 
 
+class WeakMatches(unittest.TestCase):
+    """What other products a product needs leaves out what's noise: a creator's shared files that many products carry,
+    and a few files from another product by the same creator (most often their own files used again)."""
+
+    class Index:   # what's been read of each package: {path: (own, refs)}
+        def __init__(self, read):
+            self.read = read
+
+        def get(self, path):
+            own, refs = self.read[os.path.basename(path)]
+            return {"packages": [{"own": sorted(own), "refs": sorted(refs)}]}
+
+        def fresh(self, path):
+            return True
+
+    @staticmethod
+    def g(n):
+        return f"{n:032x}"
+
+    def products(self, *rows):
+        """rows: (name, creator, own GUIDs, refs)"""
+        assets, read = [], {}
+        for i, (name, creator, own, refs) in enumerate(rows):
+            assets.append({"id": i, "name": name, "creator": creator, "store": "Booth", "tag_key": f"booth:{name.lower()}",
+                           "catalog_folder": f"Booth/{creator}/{name}", "abs_folder": f"/x/{i}",
+                           "files": [{"path": f"p{i}.unitypackage", "size": 1}]})
+            read[f"p{i}.unitypackage"] = ({self.g(n) for n in own}, {self.g(n) for n in refs})
+        return assets, self.Index(read)
+
+    def named(self, assets, index, pid=0):
+        got = needs.work_out(assets, index)[pid]
+        return [o["name"] for o in got["products"]], got["unknown"]
+
+    def test_files_many_products_carry_name_none_of_them(self):
+        shared = [1, 2, 3]
+        assets, index = self.products(("Nardo Necklace", "Loco", [10], shared),
+                                      *[(f"Free {n}", "Loco", [20 + n] + shared, []) for n in range(5)])
+        self.assertEqual(self.named(assets, index), ([], 3), "five products carrying the same files: noise, counted")
+
+    def test_the_one_that_has_more_is_still_named(self):
+        shared = [1, 2, 3]
+        assets, index = self.products(("Nardo Necklace", "Loco", [10], shared + [4, 5]),
+                                      *[(f"Free {n}", "Loco", [20 + n] + shared, []) for n in range(3)],
+                                      ("Nardo", "Loco", shared + [4, 5, 6, 7, 8], []))
+        self.assertEqual(self.named(assets, index), (["Nardo"], 0), "the base avatar has a file only it carries")
+
+    def test_a_few_files_from_the_same_creator_arent_a_need(self):
+        assets, index = self.products(("Stargazer", "Antistar", [10], [1, 2, 9]), ("Red Line", "Antistar", [1, 2], []))
+        self.assertEqual(self.named(assets, index), ([], 3))
+
+    def test_the_same_creators_base_avatar_is(self):
+        base = list(range(1, 9))
+        assets, index = self.products(("Hoodie for Nardo", "Loco", [10], base), ("Nardo", "Loco", base, []))
+        self.assertEqual(self.named(assets, index), (["Nardo"], 0), "many of its files: a real need")
+
+    def test_another_creators_avatar_is_named_for_one_file(self):
+        assets, index = self.products(("Hoodie for Rusk", "Mochi", [10], [1]), ("Rusk", "Kitsu", [1, 2], []))
+        self.assertEqual(self.named(assets, index), (["Rusk"], 0))
+
+    def test_copies_on_two_stores_are_one_product(self):
+        assets, index = self.products(("Hoodie for Rusk", "Mochi", [10], [1]), ("Rusk", "Kitsu", [1], []),
+                                      ("RUSK", "kitsu", [1], []), ("Rusk!", "Kitsu", [1], []))
+        names, unknown = self.named(assets, index)
+        self.assertTrue(names and unknown == 0, "three copies of Rusk aren't three products carrying it")
+
+    def test_no_creator_isnt_the_same_creator(self):
+        assets, index = self.products(("Hoodie", "", [10], [1]), ("Rusk", "", [1], []))
+        self.assertEqual(self.named(assets, index), (["Rusk"], 0))
+
+
 class KnownTools(unittest.TestCase):
     def test_the_table(self):
         k = needs.known()
