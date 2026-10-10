@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.0.1
+
+- **New set, in Select.** Making a set of the products you've selected was the last choice in the **Choose a set**
+  list, easy to miss. **Select** now has a **New set** button of its own; **Add to set** shows once you have sets.
+- **The set list in a product's details** looks like Hoard's other lists, at the height of **Add** beside it.
+- **Fixed: a task's progress jumped back to the top with every new line**, in Tasks. It stays where you've scrolled
+  to, and while you're at the end it follows the newest lines.
+- **Hoard for Unity 0.8.1** leaves Poiyomi's `OptimizedShaders` folders out of how much of a product is in a
+  project, and works that out again only when a change in the project can alter it.
+
 ## 4.0.0
 
 - **Look inside a download.** In Downloads, each `.unitypackage` and `.zip` in a product's files has **Look inside**:
@@ -23,8 +33,8 @@
   backup...** checks everything in it as Settings would, saves how things are now first so you can go back, and
   puts it in place: on a new computer, sign in to your stores and copy your downloads folder, and the rest is back.
 - **Sets.** Group products you use together, such as an avatar, its outfits and hair, and the shaders they need: in
-  Downloads, **Sets** in the sidebar (**New set**), **New set** or **Add to set** for the products you've selected,
-  or a product's details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import
+  Downloads, **Sets** in the sidebar (**New set**), **Add to set** for the products you've selected, or a product's
+  details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import
   set** imports its packages one after another through Unity's import dialog, what's needed first (an outfit's
   avatar before the outfit), leaving out packages already all in the project and saying which tools it still needs.
 - **Previous versions.** When an update replaces a file, the old one is kept in `_Previous versions` in the product's
@@ -39,8 +49,6 @@
   - Settings has a row of its parts at the top (Folders, Stores, Downloading, Look, Sign-ins, Updates, Backup,
     Troubleshooting), to jump to one.
   - A longer message stays up long enough to read.
-- **Fixed: a task's progress jumped back to the top with every new line**, in Tasks. It stays where you've scrolled
-  to, and while you're at the end it follows the newest lines.
 - **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
   without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
 
