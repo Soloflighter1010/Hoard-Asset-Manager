@@ -374,6 +374,9 @@ body.less-motion .slot:hover .art { transform: none; }
 .tagadd input, .bulk input, .newtag input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .tagadd input:focus, .bulk input:focus, .newtag input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.tagadd select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
+  background-color: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.tagadd select:focus, .bulkmove select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .headrow .ghost { flex: none; }
 .headrow .ghost[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); box-shadow: none; font-weight: 700; }
@@ -803,9 +806,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
 /* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
 .proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
-.settings select, .proj select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+.settings select, .proj select, .tagadd select, .bulkmove select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
+.bulkmove select { background-position: calc(100% - 16px) 13px, calc(100% - 11px) 13px; }   /* 30px tall: the arrow centred */
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
 .store-row .btns { grid-row: auto; grid-column: 1 / -1; max-width: none; justify-content: flex-start; margin-top: 6px; }
 .stores-go { display: flex; gap: 8px; margin-top: 14px; }

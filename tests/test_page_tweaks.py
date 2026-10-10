@@ -83,6 +83,18 @@ class Tweaks(unittest.TestCase):
         box, bar = page.locator("#part-help").bounding_box(), page.locator(".setjump").bounding_box()
         self.assertGreaterEqual(box["y"], bar["y"] + bar["height"] - 1, "not under the row")
 
+    def test_the_set_picker_looks_like_the_other_dropdowns(self):
+        """It was the browser's own grey dropdown, taller than the Add button beside it, in larger text."""
+        page = self.downloads()
+        page.click("#grid .slot")
+        pick, add = page.locator("#setPick"), page.locator("#detail [data-act='toset']")
+        pick.wait_for()
+        look = "e => { const c = getComputedStyle(e); return [c.appearance, c.height, c.fontSize]; }"
+        appearance, height, size = pick.evaluate(look)
+        self.assertEqual(appearance, "none", "the app's own arrow, not the system's")
+        self.assertEqual(height, add.evaluate(look)[1], "as tall as Add")
+        self.assertEqual(size, add.evaluate(look)[2], "the same size text as Add")
+
     def test_a_long_message_stays_longer(self):
         page = self.downloads()
         page.evaluate("toast('A short one.')")
