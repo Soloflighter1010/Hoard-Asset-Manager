@@ -20,7 +20,8 @@ namespace SoloFlighter.Hoard
         public string Key { get { return Store + "/" + Folder; } }
 
         // Worked out once when the catalog is loaded (in the background), so the window never touches the disk
-        // to draw a row: the .unitypackage files that are really there, the picture, and what search looks in.
+        // to draw a row: the .unitypackage files that are really there (those in its .zip files too: PackageFile), the
+        // picture, and what search looks in.
         public List<string> PackagePaths = new List<string>();
         public string ThumbPath;
         public string SearchText = "";
@@ -169,14 +170,17 @@ namespace SoloFlighter.Hoard
         {
             foreach (var a in Assets)
             {
-                a.HasPackages = a.Files.Exists(IsUnityPackage);
                 a.PackagePaths = new List<string>();
                 foreach (string f in a.Files)
                 {
-                    if (!IsUnityPackage(f)) continue;
+                    bool zip = f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+                    if (!IsUnityPackage(f) && !zip) continue;
                     string p = FilePath(a, f);
-                    if (p != null) a.PackagePaths.Add(p);
+                    if (p == null) continue;
+                    if (zip) a.PackagePaths.AddRange(PackageFile.PackagesIn(p));   // the packages it came zipped in
+                    else a.PackagePaths.Add(p);
                 }
+                a.HasPackages = a.Files.Exists(IsUnityPackage) || a.PackagePaths.Count > 0;
                 a.ThumbPath = Thumbnail(a);
                 a.SearchText = (a.Name + " " + a.Creator + " " + string.Join(" ", a.Tags)).ToLowerInvariant();
             }

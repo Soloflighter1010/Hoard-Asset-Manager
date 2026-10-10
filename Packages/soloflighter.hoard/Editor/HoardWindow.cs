@@ -284,7 +284,7 @@ namespace SoloFlighter.Hoard.Editor
                 var states = new List<PackageState>();
                 foreach (string p in a.PackagePaths)
                 {
-                    try { states.Add(new PackageState { Path = p, Written = File.GetLastWriteTimeUtc(p), AllHere = packages.Status(p) == InProject.Yes }); }
+                    try { states.Add(new PackageState { Path = p, Written = PackageFile.LastWriteUtc(p), AllHere = packages.Status(p) == InProject.Yes }); }
                     catch (Exception) { /* gone since the library was read */ }
                 }
                 DateTime? lastImport = null;
@@ -896,7 +896,16 @@ namespace SoloFlighter.Hoard.Editor
             if (filesFor != a)   // the chosen product's files are looked up once, not on every repaint
             {
                 filesFor = a;
-                files = a.Files.ConvertAll(f => new KeyValuePair<string, string>(f, catalog.FilePath(a, f)));
+                files = new List<KeyValuePair<string, string>>();
+                foreach (string f in a.Files)
+                {
+                    string path = catalog.FilePath(a, f);
+                    files.Add(new KeyValuePair<string, string>(f, path));
+                    if (path != null && f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))   // the packages it came zipped in
+                        foreach (string p in a.PackagePaths)
+                            if (PackageFile.IsZipped(p) && PackageFile.OnDisk(p) == path)
+                                files.Add(new KeyValuePair<string, string>(PackageFile.Label(p), p));
+                }
             }
             GUILayout.Space(12);
             GUILayout.Label(a.Name, Look.Style(Look.Styles.Title), GUILayout.Width(width));
@@ -917,7 +926,7 @@ namespace SoloFlighter.Hoard.Editor
             if (newer != null)
             {
                 GUILayout.BeginVertical(Look.Box("update", Look.Alpha(Look.Gold, 0.16f), Look.Alpha(Look.Gold, 0.6f)), GUILayout.Width(width));
-                GUILayout.Label("A newer download than the one in this project: " + Path.GetFileName(newer) + ".", Look.Style(Look.Styles.Wrapped));
+                GUILayout.Label("A newer download than the one in this project: " + PackageFile.Label(newer) + ".", Look.Style(Look.Styles.Wrapped));
                 GUILayout.Space(6);
                 EditorGUI.BeginDisabledGroup(paused);
                 if (Look.LayoutButton("Import update", Look.Kind.Primary)) Import(a, newer);
@@ -982,7 +991,8 @@ namespace SoloFlighter.Hoard.Editor
                     if (Look.LayoutButton("Select", Look.Kind.Ghost, "Select its files in the Project window")) SelectInProject(path);
                     GUILayout.Space(6);
                 }
-                if (Look.LayoutButton("Show", Look.Kind.Ghost, "Show the file in its folder")) EditorUtility.RevealInFinder(path);
+                if (Look.LayoutButton("Show", Look.Kind.Ghost, PackageFile.IsZipped(path) ? "Show the .zip it's in, in its folder" : "Show the file in its folder"))
+                    EditorUtility.RevealInFinder(PackageFile.OnDisk(path));
                 GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
             }
@@ -1057,8 +1067,21 @@ namespace SoloFlighter.Hoard.Editor
 
         void Import(HoardAsset a, string path)
         {
-            PendingImport.Start(a, path);
-            AssetDatabase.ImportPackage(path, true);   // Unity's own dialog: you choose what comes in
+            string file;
+            try
+            {
+                // a package in a .zip is unpacked first, into the project's Library folder (never into Assets)
+                if (PackageFile.IsZipped(path)) EditorUtility.DisplayProgressBar("Hoard", "Unpacking " + PackageFile.Name(path) + " from its .zip", 0.5f);
+                file = PackageFile.ForImport(path, Path.Combine("Library", "Hoard", "Unzipped"));
+            }
+            catch (Exception e)
+            {
+                EditorUtility.DisplayDialog("Hoard", PackageFile.Name(path) + " couldn't be unpacked from its .zip (" + e.Message + ").", "OK");
+                return;
+            }
+            finally { EditorUtility.ClearProgressBar(); }
+            PendingImport.Start(a, file);
+            AssetDatabase.ImportPackage(file, true);   // Unity's own dialog: you choose what comes in
         }
 
         /// <summary>The same folder, however it's written: the folder picker gives "C:/Users/..." where Hoard's own

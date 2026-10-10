@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.0
+
+- **Look inside a download.** In Downloads, each `.unitypackage` and `.zip` in a product's files has **Look inside**:
+  every file a Unity package holds, in its folders, with its size and the preview picture Unity keeps for it, and
+  **Search in it** to find one wherever it is. A `.zip` lists its files, and what each Unity package in it holds.
+  Nothing is extracted or imported, and a second look is instant.
+- **Hoard for Unity 0.8: packages that came in a .zip.** Many products, on Booth especially, come as a `.zip` with
+  the `.unitypackage` inside. Hoard for Unity now lists each such package under its `.zip`, counts it towards
+  **In this project**, and **Import** unpacks just that package (into the project's `Library` folder, checked as it's
+  unpacked) and opens Unity's import dialog as usual.
+
 ## 3.3.2
 
 - **Notifications are in Hoard's language.** When the routine check finds something while Hoard runs in the

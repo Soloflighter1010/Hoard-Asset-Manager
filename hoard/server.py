@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, i18n, itch, libraries, projects, space, themes, updater, vault
+from . import __version__, diagnostics, i18n, itch, libraries, packages, projects, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -52,7 +52,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
-           "/api/routine/seen", "/api/local/preview", "/api/picture-looks")
+           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -605,7 +605,7 @@ class Handler(BaseHTTPRequestHandler):
             if not font:
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
-        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/"))):
+        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/", "/inside/"))):
             return self._refused()
         srv.last_seen = time.time()
         if path == "/api/library":
@@ -709,6 +709,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
                                "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
+        if path.startswith("/inside/"):   # a preview from inside a package (Look inside: hoard/packages.py)
+            cid, _, name = path[len("/inside/"):].partition("/")
+            data = packages.preview(cid, name)
+            if data is None:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, data, "image/png", {"Cache-Control": "max-age=86400"})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), srv.lib)
             if not got:
@@ -1064,6 +1070,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "opened_in": reveal(target)})
             except OSError as e:
                 return self._json({"error": str(e)}, 500)
+        if path == "/api/look-inside":   # Downloads: what a .unitypackage or .zip holds, without extracting it
+            target = open_target(srv.cfg, str(body.get("path", "")))
+            if not target or not packages.can_look_inside(target.name) or not target.is_file():
+                return self._json({"error": "That file isn't on disk anymore."}, 404)
+            try:
+                return self._json(packages.look_inside(target), compress=True)
+            except (packages.NotAPackage, OSError):
+                return self._json({"error": "That file couldn't be read."}, 500)
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)

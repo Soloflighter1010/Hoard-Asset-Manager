@@ -11,7 +11,9 @@ Unity. Open **Hoard › Open Hoard** (Hoard's own menu in Unity's menu bar) to:
   product's own (a creator's shared shader in your project doesn't make all their products look imported). **Select** finds
   their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
-  downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
+  downloaded, so you choose exactly what comes in. A package that came in a `.zip` is listed under it, and
+  **Import** unpacks just that package (into the project's `Library` folder) first. Other files (textures, archives)
+  open in Explorer.
 - **Find where a file came from.** Right-click files in the Project window: **Hoard › Which Product Is This From?**
 - **Import updates.** Products in this project with a newer download show **Update to import**; ones whose creator
   updated them since Hoard last downloaded show **Update in Hoard**. **Updates** above the tiles lists just those.

@@ -267,6 +267,7 @@ a.ghost { height: 42px; }
 .files { list-style: none; margin: 0; padding: 0; }
 .files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
 .files .fn { overflow-wrap: anywhere; }
+.files .fb { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 30;
@@ -633,6 +634,27 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
 .tasks.win { width: min(880px, calc(var(--vw) - 48px)); }
+.inside.win { width: min(880px, calc(var(--vw) - 48px)); }
+.inside .file-name { margin: 0 0 4px; font-weight: 700; overflow-wrap: anywhere; }
+.inside .sum { margin: 0 0 10px; font-size: 13px; color: var(--dust); }
+.inside .note { margin: 6px 0; font-size: 13px; color: var(--warn); }
+.inside input[type=search] { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; margin: 0 0 10px; border-radius: 10px;
+  border: 0; background: var(--stone); color: var(--bone); font: inherit; }
+.inside ul { list-style: none; margin: 0; padding: 0 0 0 14px; }
+.inside > .win-body > div > ul, .inside .pkg > ul, .inside .found { padding-left: 0; }
+.inside details > summary { cursor: pointer; padding: 4px 0; overflow-wrap: anywhere; }
+.inside summary .n, .inside .sz { font-size: 12px; color: var(--dust); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.inside summary .n { margin-left: 6px; }
+.inside li.f { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 3px 0; font-size: 13px; }
+.inside li.f .nm { overflow-wrap: anywhere; }
+.inside li.f .nm small { display: block; color: var(--dust); }
+.inside .pv { width: 40px; height: 40px; border-radius: 6px; background: var(--stone); object-fit: contain; display: grid; place-items: center;
+  font-size: 10px; color: var(--dust); text-transform: uppercase; overflow: hidden; }
+.inside .pkg { margin: 8px 0; padding: 8px 12px; border-radius: 12px; background: var(--stone); }
+.inside .pkg .pv { background: var(--ledge); }
+.inside .zipfiles li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 4px 0; border-top: 1px solid var(--seam); font-size: 13px; }
+.inside .zipfiles .nm { overflow-wrap: anywhere; }
+.inside .more { font-size: 12px; color: var(--dust); margin: 6px 0; }
 
 /* Projects (issue #86): the Unity projects that use your assets, and their credits */
 .projects.win { width: min(960px, calc(var(--vw) - 48px)); }
@@ -1076,6 +1098,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
   <div id="projectsBody"></div>
+</section>
+<section id="insideWin" class="stores inside" hidden aria-labelledby="insideTitle">
+  <h2 id="insideTitle">Look inside</h2>
+  <div id="insideBody"></div>
 </section>
 <section id="newsWin" class="stores tasks news" hidden aria-labelledby="newsTitle">
   <h2 id="newsTitle">What's new</h2>
@@ -1653,7 +1679,9 @@ function showDetail(a, focus = true) {
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
     `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}</span>` +
       `<span class="fs">${f.missing ? "Missing on disk" : fmtSize(f.size)}</span>` +
-      (f.missing ? "<span></span>" : `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button>`) +
+      (f.missing ? "<span></span>" : `<span class="fb">` + (canLookInside(f.path)
+        ? `<button class="ghost sm" data-act="inside" data-path="${esc(a.folder + "/" + f.path)}">Look inside</button>` : "") +
+        `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button></span>`) +
       `</li>`).join("")}</ul>` +
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
   detail.classList.add("open"); document.body.classList.add("panel-open");
@@ -1684,6 +1712,131 @@ async function copyPath() {
     document.execCommand("copy"); sel.removeAllRanges();
   }
   toast("Path copied");
+}
+
+/* ---------- Look inside: what a .unitypackage or .zip holds, read without extracting it (hoard/packages.py) */
+const canLookInside = name => /\.(unitypackage|zip)$/i.test(name);
+let INSIDE = null;   // what's shown: {id, kind, items | files + packages, nodes: folders drawn when opened}
+function openInside(open) {
+  const w = $("#insideWin"), show = open ?? w.hidden;
+  w.hidden = !show;
+  if (!show) INSIDE = null;
+}
+async function lookInside(path) {
+  const body = $("#insideBody"), name = path.split("/").pop();
+  INSIDE = null;
+  body.innerHTML = `<p class="file-name" translate="no">${esc(name)}</p><p class="sum">${esc(tr("Reading it. A large package takes a few seconds."))}</p>`;
+  openInside(true);
+  const r = await apiPost("/api/look-inside", { path });
+  if (!$("#insideWin").hidden && body.querySelector(".file-name") && body.querySelector(".file-name").textContent === name) {
+    if (!r.ok || r.data.error) {
+      body.innerHTML = `<p class="file-name" translate="no">${esc(name)}</p><p class="note">${esc(tr((r.data && r.data.error) || "That file couldn't be read."))}</p>`;
+      return;
+    }
+    INSIDE = { ...r.data, name, nodes: [] };
+    drawInside();
+  }
+}
+// a package's assets as folders (each drawn when it's opened, so a package of thousands opens at once)
+function insideTree(items) {
+  const root = { dirs: new Map(), files: [], count: 0, size: 0 };
+  for (const it of items) {
+    const parts = it.path.split("/");
+    let node = root;
+    for (const part of parts.slice(0, it.size == null ? parts.length : -1)) {
+      if (!node.dirs.has(part)) node.dirs.set(part, { dirs: new Map(), files: [], count: 0, size: 0 });
+      node = node.dirs.get(part);
+    }
+    if (it.size != null) node.files.push({ ...it, name: parts[parts.length - 1] });
+  }
+  (function total(n) {
+    for (const d of n.dirs.values()) { total(d); n.count += d.count; n.size += d.size; }
+    n.count += n.files.length; n.size += n.files.reduce((t, f) => t + f.size, 0);
+  })(root);
+  return root;
+}
+function previewImg(it, n) {
+  const ext = (it.name || it.path).split(".").pop();
+  return it.preview ? `<img class="pv" loading="lazy" alt="" src="${keyed(`/inside/${INSIDE.id}/${n}-${it.guid}.png`)}">`
+    : `<span class="pv" aria-hidden="true">${esc(ext.length <= 6 ? ext : "")}</span>`;
+}
+function insideFolder(node, n) {   // one folder's contents: its folders (closed), then its files
+  const dirs = [...node.dirs.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  return `<ul>` + dirs.map(([name, d]) => {
+    INSIDE.nodes.push({ node: d, n });
+    return `<li><details data-node="${INSIDE.nodes.length - 1}"><summary><span translate="no">${esc(name)}</span>` +
+      `<span class="n">${esc(tr(d.count === 1 ? "{0} file, {1}" : "{0} files, {1}", d.count.toLocaleString(), sizeText(d.size)))}</span></summary></details></li>`;
+  }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
+    `<li class="f">${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
+}
+function insidePackage(items, n, open) {
+  const tree = insideTree(items);
+  if (!tree.count) return `<p class="sum">${esc(tr("No files in it."))}</p>`;
+  const sum = `<p class="sum">${esc(tr(tree.count === 1 ? "{0} file, {1}" : "{0} files, {1}", tree.count.toLocaleString(), sizeText(tree.size)))}</p>`;
+  return sum + (open ? insideFolder(tree, n) : (INSIDE.nodes.push({ node: tree, n }), `<div data-pkg-node="${INSIDE.nodes.length - 1}"></div>`));
+}
+function insideFound(q) {   // searching: every file whose path has these words, wherever it is
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean), found = [];
+  const look = (items, n, where) => {
+    for (const it of items) if (it.size != null && words.every(w => it.path.toLowerCase().includes(w))) found.push({ ...it, n, where });
+  };
+  if (INSIDE.kind === "zip") INSIDE.packages.forEach((p, n) => look(p.items, n, p.name));
+  else look(INSIDE.items, 0, "");
+  if (INSIDE.kind === "zip")
+    for (const f of INSIDE.files) if (words.every(w => f.name.toLowerCase().includes(w))) found.push({ path: f.name, size: f.size, zip: true });
+  if (!found.length) return `<p class="sum">${esc(tr("Nothing in it matches."))}</p>`;
+  return `<p class="sum">${esc(tr(found.length === 1 ? "{0} file matches." : "{0} files match.", found.length.toLocaleString()))}</p>` +
+    `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${f.zip ? `<span class="pv" aria-hidden="true">zip</span>` : previewImg(f, f.n)}` +
+      `<span class="nm" translate="no">${esc(f.path)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+    (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
+}
+function drawInside(q = "") {
+  const I = INSIDE, body = $("#insideBody");
+  I.nodes = [];
+  const head = `<p class="file-name" translate="no">${esc(I.name)}</p>`;
+  const search = `<input type="search" id="insideQ" placeholder="${esc(tr("Search in it"))}" aria-label="${esc(tr("Search in it"))}" value="${esc(q)}">`;
+  let html;
+  if (q.trim()) html = insideFound(q);
+  else if (I.kind === "zip") {
+    const total = I.files.reduce((t, f) => t + f.size, 0);
+    html = `<p class="sum">${esc(tr(I.files.length === 1 ? "This zip holds {0} file, {1}." : "This zip holds {0} files, {1}.", I.files.length.toLocaleString(), sizeText(total)))} ` +
+      esc(I.packages.length ? tr(I.packages.length === 1 ? "One of them is a Unity package: open it to see what's in it." : "{0} of them are Unity packages: open one to see what's in it.", I.packages.length) : "") + `</p>` +
+      (I.files.some(f => f.locked) ? `<p class="note">${esc(tr("This zip is locked with a password. The store page usually says what it is."))}</p>` : "") +
+      I.packages.map((p, n) => `<details class="pkg"${I.packages.length === 1 ? " open" : ""} data-pkg="${n}"><summary translate="no">${esc(p.name)}</summary>` +
+        (p.error ? `<p class="note">${esc(tr(p.error))}</p>` : insidePackage(p.items, n, false)) + `</details>`).join("") +
+      `<details><summary>${esc(tr("Every file in the zip"))}</summary><ul class="zipfiles">${I.files.map(f =>
+        `<li><span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+      (I.more ? `<p class="more">${esc(tr("And {0} more.", I.more.toLocaleString()))}</p>` : "") + `</details>`;
+  } else html = insidePackage(I.items, 0, true);
+  body.innerHTML = head + (I.kind === "zip" && !I.files.length ? html : search + html);
+  for (const d of body.querySelectorAll("details.pkg[open]")) fillPackage(d);
+}
+function fillPackage(d) {
+  const slot = d.querySelector("[data-pkg-node]");
+  if (slot && !slot.childElementCount) { const { node, n } = INSIDE.nodes[+slot.dataset.pkgNode]; slot.innerHTML = insideFolder(node, n); }
+}
+function wireInside() {
+  makeWindow($("#insideWin"));
+  WINDOWS.insideWin = () => openInside(false);
+  const w = $("#insideWin");
+  w.addEventListener("toggle", e => {   // a folder, or a package in a zip, is drawn as it's opened
+    const d = e.target;
+    if (!INSIDE || !d.open) return;
+    if (d.dataset.node != null && d.childElementCount === 1) {
+      const { node, n } = INSIDE.nodes[+d.dataset.node];
+      d.insertAdjacentHTML("beforeend", insideFolder(node, n));
+    } else if (d.classList.contains("pkg")) fillPackage(d);
+  }, true);
+  let t;
+  w.addEventListener("input", e => {
+    if (e.target.id !== "insideQ" || !INSIDE) return;
+    clearTimeout(t);
+    t = setTimeout(() => {
+      const q = e.target.value, at = e.target.selectionStart;
+      drawInside(q);
+      const box = $("#insideQ"); box.focus(); box.setSelectionRange(at, at);
+    }, 150);
+  });
 }
 
 /* ---------- URL state */
@@ -2013,6 +2166,7 @@ detail.addEventListener("click", e => {
   if (tagDetailAction(act, b, byId.get(openId))) return;
   if (act === "close") closeDetail();
   else if (act === "open") reveal(b.dataset.path);
+  else if (act === "inside") lookInside(b.dataset.path);
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
   else if (act === "update-one") updateItems([byId.get(openId)]);
@@ -2271,6 +2425,7 @@ function wireApp() {
   wireTasks();
   wireNews();
   wireProjects();
+  wireInside();
   wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);

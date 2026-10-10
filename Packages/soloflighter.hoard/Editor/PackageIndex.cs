@@ -38,18 +38,14 @@ namespace SoloFlighter.Hoard.Editor
 
         public PackageIndex() { LoadCache(); }
 
-        static string Stamp(string path)
-        {
-            var info = new FileInfo(path);
-            return path + "|" + info.Length + "|" + info.LastWriteTimeUtc.Ticks;
-        }
+        static string Stamp(string path) { return PackageFile.Stamp(path); }   // (a package in a .zip: the zip's)
 
         /// <summary>Queue packages to be read in the background (ones already known are skipped).</summary>
         public void Want(IEnumerable<string> paths)
         {
             foreach (string p in paths)
             {
-                if (p == null || !File.Exists(p) || guids.ContainsKey(Stamp(p))) continue;
+                if (p == null || !PackageFile.Exists(p) || guids.ContainsKey(Stamp(p))) continue;
                 waiting.Enqueue(p);
                 Interlocked.Increment(ref queued);
             }
@@ -101,7 +97,7 @@ namespace SoloFlighter.Hoard.Editor
             foreach (var kv in owners)
             {
                 string[] list;
-                if (File.Exists(kv.Key) && guids.TryGetValue(SafeStamp(kv.Key), out list)) shared.Add(kv.Value, list);
+                if (PackageFile.Exists(kv.Key) && guids.TryGetValue(SafeStamp(kv.Key), out list)) shared.Add(kv.Value, list);
             }
             status.Clear();
         }
@@ -152,7 +148,7 @@ namespace SoloFlighter.Hoard.Editor
         {
             var c = new Counted { Status = InProject.Unknown };
             string[] list;
-            if (!File.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return c;
+            if (!PackageFile.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return c;
             ProjectShare.Count(list, shared, AssetDatabase.GUIDToAssetPath, out c.Have, out c.Total);   // its own files, in Assets/ (issue #114)
             if (c.Total > 0) c.Status = c.Have == 0 ? InProject.No : c.Have == c.Total ? InProject.Yes : InProject.Partly;
             return c;
@@ -167,7 +163,7 @@ namespace SoloFlighter.Hoard.Editor
         public string[] Guids(string path)
         {
             string[] list;
-            return path != null && File.Exists(path) && guids.TryGetValue(Stamp(path), out list) ? list : new string[0];
+            return path != null && PackageFile.Exists(path) && guids.TryGetValue(Stamp(path), out list) ? list : new string[0];
         }
 
         /// <summary>Which products these files came from (main thread), most files first, from the packages read
@@ -178,7 +174,7 @@ namespace SoloFlighter.Hoard.Editor
             foreach (var kv in owners)
             {
                 string[] list;
-                if (File.Exists(kv.Key) && guids.TryGetValue(SafeStamp(kv.Key), out list))
+                if (PackageFile.Exists(kv.Key) && guids.TryGetValue(SafeStamp(kv.Key), out list))
                     read.Add(new KeyValuePair<string, string[]>(kv.Value, list));
             }
             return Origins.Of(fileGuids, read);

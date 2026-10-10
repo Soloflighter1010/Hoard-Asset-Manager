@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0
+
+- **Packages that came in a .zip.** Many products, on Booth especially, come as a `.zip` with the `.unitypackage`
+  inside, and weren't offered for importing. Each such package is now listed under its `.zip`
+  ("Hoodie.zip › Hoodie/Hoodie_v2.unitypackage"), counts towards **In this project**, **Which Product Is This From?**
+  and **Update to import** like any other, and **Import** unpacks just that package into the project's
+  `Library/Hoard/Unzipped` folder (never into `Assets`), checked against the zip's checksum as it's unpacked, then
+  opens Unity's import dialog. A `.zip` locked with a password is left out.
+- The `.zip` is read by the package's own reader (stored and deflated files, ZIP64, and Japanese file names), so it
+  works on every .NET profile a project can use.
+
 ## 0.7.0
 
 - **It looks like Hoard.** The window now has the app's colours (its dark ones, or its light ones with Unity's light

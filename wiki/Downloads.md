@@ -177,6 +177,13 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
   say after you've tidied it yourself.
+- **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without extracting or
+  importing anything. A Unity package's files are listed in their folders (each opens as you choose it), with
+  their sizes and the preview pictures Unity keeps inside the package; **Search in it** finds a file wherever it
+  is. A `.zip` lists its files, and what each Unity package in it holds. One locked with a password says so (the
+  store page usually gives the password), and one that isn't what its name says, or is damaged, says that. Hoard
+  keeps what it read (in its `cache` folder) for the 40 files you looked inside most recently, so a second look
+  is instant.
 
 ### Checking your downloads
 
