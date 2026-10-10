@@ -23,8 +23,8 @@
   backup...** checks everything in it as Settings would, saves how things are now first so you can go back, and
   puts it in place: on a new computer, sign in to your stores and copy your downloads folder, and the rest is back.
 - **Sets.** Group products you use together, such as an avatar, its outfits and hair, and the shaders they need: in
-  Downloads, **Sets** in the sidebar (**New set**), **Add to set** for the products you've selected, or a product's
-  details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import
+  Downloads, **Sets** in the sidebar (**New set**), **New set** or **Add to set** for the products you've selected,
+  or a product's details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import
   set** imports its packages one after another through Unity's import dialog, what's needed first (an outfit's
   avatar before the outfit), leaving out packages already all in the project and saying which tools it still needs.
 - **Previous versions.** When an update replaces a file, the old one is kept in `_Previous versions` in the product's

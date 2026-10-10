@@ -1231,7 +1231,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
   <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
     <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
-  <span class="bulkmove"><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
+  <button class="ghost sm" id="bulkNewSet" data-needs>New set</button>
+  <span class="bulkmove" id="bulkSetWrap" hidden><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
     <button class="ghost sm" id="bulkSet" data-needs>Add to set</button></span>
   <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
   <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
@@ -1381,10 +1382,10 @@ function updatesBar(n) {
 }
 // Sets (hoard/sets.py): products you group to use together; Hoard for Unity imports a set in one go
 const setById = id => (DATA.sets || []).find(s => s.id === id);
-function setOptions(first) {
+function setOptions(first, withNew = true) {
   return `<option value="">${esc(tr(first))}</option>` +
     (DATA.sets || []).map(s => `<option value="${esc(s.id)}" translate="no">${esc(s.name)}</option>`).join("") +
-    `<option value="new">${esc(tr("New set..."))}</option>`;
+    (withNew ? `<option value="new">${esc(tr("New set..."))}</option>` : "");
 }
 function renderSets(list) {
   const here = new Map((DATA.sets || []).map(s => [s.id, 0]));
@@ -1392,7 +1393,8 @@ function renderSets(list) {
   $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
     `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
     `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
-  $("#bulkSetTo").innerHTML = setOptions("Choose a set");
+  $("#bulkSetTo").innerHTML = setOptions("Choose a set", false);   // (New set is its own button beside it)
+  $("#bulkSetWrap").hidden = !(DATA.sets || []).length;
 }
 function setsSection(a) {
   const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
@@ -2439,6 +2441,7 @@ function wireTags() {
   if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
   if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
   $("#bulkSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), $("#bulkSetTo").value));
+  $("#bulkNewSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), "new"));
   document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
   if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
   $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
