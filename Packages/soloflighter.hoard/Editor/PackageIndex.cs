@@ -16,8 +16,9 @@ namespace SoloFlighter.Hoard.Editor
 
     public sealed class PackageIndex
     {
-        // -2: files only (the first kept folders' GUIDs too, which a product shares with others in the same folder)
-        static readonly string CacheFile = Path.Combine("Library", "Hoard", "package-guids-2.json");
+        // -2: files only (the first kept folders' GUIDs too, which a product shares with others in the same folder);
+        // -3: not the files a tool makes again (Poiyomi's OptimizedShaders), which say nothing about what was imported
+        static readonly string CacheFile = Path.Combine("Library", "Hoard", "package-guids-3.json");
         readonly ConcurrentDictionary<string, string[]> guids = new ConcurrentDictionary<string, string[]>();   // "path|size|time" -> GUIDs
         struct Counted { public InProject Status; public int Have, Total; }
         readonly Dictionary<string, Counted> status = new Dictionary<string, Counted>();   // path -> how much is here, until something changes
@@ -25,6 +26,7 @@ namespace SoloFlighter.Hoard.Editor
         readonly ConcurrentQueue<string> fresh = new ConcurrentQueue<string>();   // read since the last look
         readonly SharedFiles shared = new SharedFiles();   // files more than one product carries: main thread only
         Dictionary<string, string> owners = new Dictionary<string, string>();   // package path -> its product
+        HashSet<string> tracked;   // every GUID of every package read: made when first asked, again after more are read
         readonly CancellationTokenSource stop = new CancellationTokenSource();
         int queued, done;
         volatile bool changed, cacheDirty;
@@ -72,7 +74,9 @@ namespace SoloFlighter.Hoard.Editor
                             if (!guids.ContainsKey(stamp))
                             {
                                 var found = UnityPackageReader.ReadFiles(path);   // not its folders (shared with other products)
-                                guids[stamp] = new List<string>(found.Keys).ToArray();
+                                var kept = new List<string>();
+                                foreach (var kv in found) if (!ProjectShare.IsRegenerated(kv.Value)) kept.Add(kv.Key);
+                                guids[stamp] = kept.ToArray();
                                 cacheDirty = true;
                             }
                         }
@@ -93,6 +97,7 @@ namespace SoloFlighter.Hoard.Editor
         public void SetOwners(Dictionary<string, string> packageOwners)
         {
             owners = packageOwners ?? new Dictionary<string, string>();
+            tracked = null;
             shared.Clear();
             foreach (var kv in owners)
             {
@@ -111,6 +116,7 @@ namespace SoloFlighter.Hoard.Editor
             if (!changed) return false;
             changed = false;
             string path;
+            tracked = null;
             while (fresh.TryDequeue(out path))
             {
                 status.Remove(path);   // only what's new is looked at again (unless it shares files: below)
@@ -149,7 +155,7 @@ namespace SoloFlighter.Hoard.Editor
             var c = new Counted { Status = InProject.Unknown };
             string[] list;
             if (!PackageFile.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return c;
-            ProjectShare.Count(list, shared, AssetDatabase.GUIDToAssetPath, out c.Have, out c.Total);   // its own files, in Assets/ (issue #114)
+            ProjectShare.Count(list, shared, ProjectWatch.PathOf, out c.Have, out c.Total);   // its own files, in Assets/ (issue #114)
             if (c.Total > 0) c.Status = c.Have == 0 ? InProject.No : c.Have == c.Total ? InProject.Yes : InProject.Partly;
             return c;
         }
@@ -158,6 +164,17 @@ namespace SoloFlighter.Hoard.Editor
         {
             int have, total;
             return Status(path, out have, out total);
+        }
+
+        /// <summary>Is this file in any package read so far? (Main thread.) Only such files change what's shown.</summary>
+        public bool Tracks(string guid)
+        {
+            if (tracked == null)
+            {
+                tracked = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var list in guids.Values) tracked.UnionWith(list);
+            }
+            return tracked.Contains(guid);
         }
 
         public string[] Guids(string path)

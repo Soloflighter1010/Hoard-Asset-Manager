@@ -39,13 +39,13 @@ namespace SoloFlighter.Hoard.Editor
         {
             settings = CreditsFile.Load(SettingsFile);
             listTitle = settings.Title;
-            EditorApplication.projectChanged += Refresh;
+            EditorApplication.projectChanged += OnProjectChanged;
             EditorApplication.update += SaveWhenDue;
         }
 
         void OnDisable()
         {
-            EditorApplication.projectChanged -= Refresh;
+            EditorApplication.projectChanged -= OnProjectChanged;
             EditorApplication.update -= SaveWhenDue;
             if (saveAt >= 0) Save();
         }
@@ -53,6 +53,8 @@ namespace SoloFlighter.Hoard.Editor
         void SaveWhenDue() { if (saveAt >= 0 && EditorApplication.timeSinceStartup >= saveAt) Save(); }
 
         void OnFocus() { Refresh(); }
+
+        void OnProjectChanged() { if (ProjectWatch.LastChangeCounts()) Refresh(); }
 
         void Refresh()
         {

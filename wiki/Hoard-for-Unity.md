@@ -16,6 +16,8 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   count, not the folders a package puts them in, from 0.5.2: a creator's folder is all their products' folder.
   From 0.5.3, a product counts only by the files that are its own: a shader or texture several products carry
   (a creator's shared files, or a bundle and the product sold alone) doesn't make the others **Partly in project**.
+  From 0.8.0, Poiyomi's `OptimizedShaders` folders (written when a material is locked, deleted when it's unlocked)
+  don't count either, and the window works this out again only when a change can alter it.
   A product with nothing of its own (the same package from another store) still counts by all its files.
   **Select** finds their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already

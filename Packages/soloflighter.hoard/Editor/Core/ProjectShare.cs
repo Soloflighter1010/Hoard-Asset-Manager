@@ -29,6 +29,17 @@ namespace SoloFlighter.Hoard
             Count(shared == null ? guids : shared.OwnOf(guids), pathOf, out have, out total);
         }
 
+        /// <summary>Is this a file a tool makes again whenever it likes, so it says nothing about what you imported? Poiyomi
+        /// writes a material's locked shader into an OptimizedShaders folder each time the material is locked, and
+        /// deletes it when it's unlocked; some creators ship those folders in their packages too.</summary>
+        public static bool IsRegenerated(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            foreach (string part in path.Split('/', '\\'))
+                if (string.Equals(part, "OptimizedShaders", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         /// <summary>Is this project path inside Assets/?</summary>
         public static bool InAssets(string path)
         {
