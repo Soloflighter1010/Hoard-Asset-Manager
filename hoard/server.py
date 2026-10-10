@@ -20,12 +20,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, i18n, itch, libraries, projects, space, themes, updater, vault
+from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
+                         restore_previous,
                          last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
@@ -52,7 +53,9 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
-           "/api/routine/seen", "/api/local/preview", "/api/picture-looks")
+           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
+           "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
+           "/api/backup/show")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -211,6 +214,7 @@ def public_settings(cfg: dict) -> dict:
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
+        "keep_previous": keep_previous(cfg),
         "local_copy": cfg.get("local_copy", True) is not False,
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
@@ -223,6 +227,15 @@ def public_settings(cfg: dict) -> dict:
                        **({"skip_game_builds": bool(cfg[s].get("skip_game_builds", True))} if s == "itch" else {})}
                    for s in STORES},
     }
+
+
+KEEP_PREVIOUS = (0, 1, 2, 3, 5)
+
+
+def keep_previous(cfg: dict) -> int:
+    """How many previous versions of a replaced file to keep (Settings, Previous versions)."""
+    n = cfg.get("keep_previous", 1)
+    return n if n in KEEP_PREVIOUS and not isinstance(n, bool) else 1
 
 
 def apply_settings(cfg: dict, body: dict) -> dict:
@@ -259,6 +272,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if body["download_retries"] not in (0, 1, 2, 3) or isinstance(body["download_retries"], bool):
             raise ValueError("Choose how many times to try a failed download again from the list.")
         change["download_retries"] = body["download_retries"]
+    if "keep_previous" in body:   # previous versions (hoard/previous.py)
+        if body["keep_previous"] not in KEEP_PREVIOUS or isinstance(body["keep_previous"], bool):
+            raise ValueError("Choose how many previous versions to keep from the list.")
+        change["keep_previous"] = body["keep_previous"]
     if "new_days" in body:
         if body["new_days"] not in NEW_DAYS or isinstance(body["new_days"], bool):
             raise ValueError("Choose how long things are marked New from the list.")
@@ -386,6 +403,13 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
         self.schedule = Schedule(cfg, self.jobs)
+        previous.set_keep(keep_previous(cfg))
+        # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
+        self.needs_index = needs.NeedsIndex()
+        self.needs_reader = needs.NeedsReader(self.needs_index, lambda: self.index(stale_ok=True).get("assets", []),
+                                              lambda: bool(self.jobs.state.get("running")))
+        self.needs_reader.on_read = lambda: rebuild_catalog_quietly(self)
+        self._needs = (None, None)   # (what it was worked out from, {product id: what it needs})
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
 
     def start_schedule(self) -> threading.Event:
@@ -428,6 +452,15 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         (downloads call this after every file)."""
         with self._index_lock:
             self._wanted += 1
+        self.needs_reader.poke()   # (it waits for the job to finish before reading anything new)
+
+    def needs_view(self, index: dict) -> dict:
+        """What each product in the downloads index needs (hoard/needs.py), worked out again only when the index or
+        what's been read changes."""
+        key = (id(index), self.needs_index.changed_at)
+        if self._needs[0] != key:
+            self._needs = (key, needs.work_out(index.get("assets", []), self.needs_index))
+        return self._needs[1]
 
     def save_settings(self) -> None:
         """Write the settings to config.json (the ones it keeps), one writer at a time."""
@@ -605,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
             if not font:
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
-        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/"))):
+        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/", "/inside/"))):
             return self._refused()
         srv.last_seen = time.time()
         if path == "/api/library":
@@ -675,17 +708,25 @@ class Handler(BaseHTTPRequestHandler):
                 if i.get("look_for") and (unlocked or tag_key(i["store"], i["name"]) not in marks["hidden"]):
                     looks.append({"look_for": i["look_for"], "key": i["key"]})   # (its picture: /thumb/<key>)
             assets = []
+            needed = srv.needs_view(index)
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
-                                   "stack_key": stacks.get(key, ""),
+                                   "stack_key": stacks.get(key, ""), "needs": needed.get(a["id"]),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
+            shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
+            keys = {a["tag_key"] for a in assets}   # nor kept in a set while it's locked
+            grouped = [{**s, "items": [k for k in s["items"] if k in keys]} for s in sets.SetStore().load()["sets"]]
+            for a in assets:
+                if a["needs"]:
+                    a["needs"] = {**a["needs"], "products": [o for o in a["needs"]["products"] if o["id"] in shown]}
             index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}, "looks_wanted": looks[:500],
                      "libraries": srv.library_view(),
-                     "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg)}
+                     "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
+                     "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
@@ -709,6 +750,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
                                "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
+        if path.startswith("/inside/"):   # a preview from inside a package (Look inside: hoard/packages.py)
+            cid, _, name = path[len("/inside/"):].partition("/")
+            data = packages.preview(cid, name)
+            if data is None:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, data, "image/png", {"Cache-Control": "max-age=86400"})
         if path.startswith("/thumb/"):
             got = fetch_thumbnail(unquote(path[len("/thumb/"):]), srv.lib)
             if not got:
@@ -999,7 +1046,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Bad request."}, 400)
         if length < 0:   # (read(-1) would wait for the connection to close)
             return self._json({"error": "Bad request."}, 400)
-        if length > (80 * 1024 * 1024 if path == "/api/import" else 1024 * 1024):  # only imports are large
+        if length > (80 * 1024 * 1024 if path in ("/api/import", "/api/backup/check", "/api/backup/restore")
+                     else 1024 * 1024):  # only imports and backups are large
             return self._json({"error": "That's too large." if path != "/api/import"
                                else "That's too large to be library pages. Import fewer at a time."}, 413)
         try:
@@ -1034,6 +1082,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e)}, 400)
             deep_merge(srv.cfg, change)
             apply_store_sites(srv.cfg)   # added or removed Payhip shops count (or stop counting) straight away
+            previous.set_keep(keep_previous(srv.cfg))
             srv.save_settings()
             srv.forget_index()
             return self._json({"ok": True, "settings": {**public_settings(srv.cfg), "libraries": srv.library_view()}})
@@ -1064,6 +1113,83 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "opened_in": reveal(target)})
             except OSError as e:
                 return self._json({"error": str(e)}, 500)
+        if path == "/api/look-inside":   # Downloads: what a .unitypackage or .zip holds, without extracting it
+            target = open_target(srv.cfg, str(body.get("path", "")))
+            if not target or not packages.can_look_inside(target.name) or not target.is_file():
+                return self._json({"error": "That file isn't on disk anymore."}, 404)
+            try:
+                return self._json(packages.look_inside(target), compress=True)
+            except (packages.NotAPackage, OSError):
+                return self._json({"error": "That file couldn't be read."}, 500)
+        if path == "/api/previous/restore":   # Downloads: put a previous version of a file back (hoard/previous.py)
+            if srv.jobs.state.get("running"):
+                return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
+            folder = open_target(srv.cfg, str(body.get("folder", "")))
+            if not folder or not folder.is_dir():
+                return self._json({"error": "That product's folder isn't on disk anymore."}, 404)
+            try:
+                restore_previous(srv.cfg, root_dir(srv.cfg), folder, str(body.get("stamp", "")), str(body.get("file", "")))
+            except (ValueError, OSError) as e:
+                return self._json({"error": str(e) if isinstance(e, ValueError) else "That version couldn't be put back."}, 400)
+            srv.forget_index()
+            return self._json({"ok": True})
+        if path == "/api/backup/make":   # Settings, Backup (hoard/backup.py)
+            with srv.cfg_lock:
+                doc = backup.make(srv.cfg, public_settings(srv.cfg), srv.lib, self._unlocked())
+            try:
+                where = backup.save(doc)
+            except OSError as e:
+                return self._json({"error": f"The backup couldn't be saved ({e.strerror or e})."}, 500)
+            return self._json({"ok": True, "path": str(where), "hidden": "hidden" in doc["marks"],
+                               "pin_set": bool(MarkStore().view()["pin"])})
+        if path == "/api/backup/show":
+            backup.backups_dir().mkdir(parents=True, exist_ok=True)
+            try:
+                return self._json({"ok": True, "opened_in": reveal(backup.backups_dir())})
+            except OSError as e:
+                return self._json({"error": str(e)}, 500)
+        if path in ("/api/backup/check", "/api/backup/restore"):
+            try:
+                doc = backup.read(str(body.get("content") or ""))
+            except backup.BackupError as e:
+                return self._json({"error": str(e)}, 400)
+            if path == "/api/backup/check":
+                return self._json({"ok": True, **backup.summary(doc)})
+            if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+                return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
+            replaces_hidden = isinstance((doc.get("marks") or {}).get("pin"), dict) if isinstance(doc.get("marks"), dict) else False
+            if replaces_hidden and MarkStore().view()["pin"] and not self._unlocked():
+                return self._json({"error": "This backup has hidden items, which take the place of yours: unlock your "
+                                            "hidden library first, then restore it."}, 409)
+            try:   # how things are now, kept first, so a restore can be undone
+                with srv.cfg_lock:
+                    before = backup.save(backup.make(srv.cfg, public_settings(srv.cfg), srv.lib, self._unlocked()),
+                                         label=" (before restoring)")
+            except OSError as e:
+                return self._json({"error": f"A backup of how things are now couldn't be saved first ({e.strerror or e}), "
+                                            "so nothing was restored."}, 500)
+
+            def add_folder(value: str) -> None:
+                folder = str(libraries.check_new_folder(srv.cfg, value))
+                srv.cfg["library_folders"] = [str(f) for f in libraries.other_folders(srv.cfg)] + [folder]
+            with srv.cfg_lock:
+                done = backup.restore(doc, srv.cfg, srv.lib, apply_settings, add_folder)
+                apply_store_sites(srv.cfg)
+                previous.set_keep(keep_previous(srv.cfg))
+            srv.save_settings()
+            srv.forget_index()
+            threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()
+            return self._json({"ok": True, **done, "before": str(before)})
+        if path == "/api/sets":   # Downloads: your sets (hoard/sets.py)
+            if body.get("action") in ("add", "remove", "create") and not self._unlocked():
+                hidden = MarkStore().keys("hidden")   # a hidden product isn't added or taken out while it's locked
+                body = {**body, "items": [k for k in body.get("items") or [] if k not in hidden]}
+            try:
+                data = sets.SetStore().change(body)
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
+            return self._json({"ok": True, "made": data.get("made")})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)
@@ -1306,6 +1432,20 @@ def chosen_files(raw) -> dict[str, dict] | None:
     return out or None
 
 
+def rebuild_catalog_quietly(srv) -> None:
+    """After packages were read for What it needs: write catalog.json again, so Hoard for Unity knows what each
+    product needs. Skipped while a job runs: that job writes the catalog itself when it ends."""
+    if not srv.jobs.busy.acquire(blocking=False):
+        return
+    try:
+        build_catalog(srv.cfg, root_dir(srv.cfg))
+    except Exception as e:   # never stops Hoard
+        print(f"Couldn't write catalog.json: {e}")
+    finally:
+        srv.jobs.busy.release()
+        srv.jobs.kick()
+
+
 def reseal_in_background(srv, cfg: dict) -> None:
     """At startup: if the downloads folder's catalog.json isn't sealed with this install's key, rebuild and seal it
     (the Unity window reads it). Skipped when a job is already running: that job rebuilds the catalog anyway. The
@@ -1358,6 +1498,7 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
     if store_python():
         print(STORE_PYTHON_NOTE)
     threading.Thread(target=reseal_in_background, args=(srv, cfg), name="hoard-reseal", daemon=True).start()
+    threading.Thread(target=srv.needs_reader.run_forever, args=(threading.Event(),), name="hoard-needs", daemon=True).start()
     if on_ready:   # the desktop app: it opens its window with a one-time link, and never logs the key
         on_ready(url, srv)
     else:

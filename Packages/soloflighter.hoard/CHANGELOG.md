@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.0
+
+- **Packages that came in a .zip.** Many products, on Booth especially, come as a `.zip` with the `.unitypackage`
+  inside, and weren't offered for importing. Each such package is now listed under its `.zip`
+  ("Hoodie.zip › Hoodie/Hoodie_v2.unitypackage"), counts towards **In this project**, **Which Product Is This From?**
+  and **Update to import** like any other, and **Import** unpacks just that package into the project's
+  `Library/Hoard/Unzipped` folder (never into `Assets`), checked against the zip's checksum as it's unpacked, then
+  opens Unity's import dialog. A `.zip` locked with a password is left out.
+- **What it needs.** With Hoard 4.0, a product's details say what its packages use that isn't in this project: a
+  shader (lilToon, Poiyomi Toon, with the version its materials were made with), a tool (Modular Avatar, VRCFury, NDMF,
+  Avatar Optimizer, the VRChat SDK) or another product, such as the base avatar an outfit is made for. **Get it**
+  opens the tool's website, **Show** finds the product in this window, and **Import** asks first while something is
+  missing. A need is in the project when every asset ID Hoard listed for it is.
+- **Import set.** With Hoard 4.0's sets (made in Hoard's Downloads), the **Sets** pill shows one set's products, and
+  **Import set** imports their packages one after another, each through Unity's import dialog (Cancel skips one),
+  what's needed first: an outfit's avatar before the outfit. Packages already all in the project are left out, and it
+  says which tools the set still needs. It carries on after a package's scripts reload the editor; **Stop** ends it.
+- The `.zip` is read by the package's own reader (stored and deflated files, ZIP64, and Japanese file names), so it
+  works on every .NET profile a project can use.
+
 ## 0.7.0
 
 - **It looks like Hoard.** The window now has the app's colours (its dark ones, or its light ones with Unity's light

@@ -32,6 +32,7 @@ DEFAULT_CONFIG = {
     "auto_sync_hours": 0,          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
     "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
     "download_retries": 2,         # a file download that fails is tried again this many more times
+    "keep_previous": 1,            # previous versions kept of each file an update replaces (hoard/previous.py)
     "integrity_check_days": 7,     # check the downloads are as downloaded this often (issue #83); 0 = only when asked
     "routine_hours": None,         # issue #113: the routine check, every this many hours (0 = off); None: off, or Sync automatically's
     "download_skip": [],           # products to always skip when downloading, by tag key (issue #107)

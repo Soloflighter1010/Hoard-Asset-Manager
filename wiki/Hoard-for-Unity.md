@@ -20,6 +20,23 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   **Select** finds their assets in your Project window.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
+- **Packages that came in a .zip** (0.8.0). Many products, on Booth especially, come as a `.zip` with the
+  `.unitypackage` inside. Each such package is listed under its `.zip` ("Hoodie.zip › Hoodie/Hoodie_v2.unitypackage"),
+  counts towards **In this project** like any other, and **Import** unpacks just that package into the project's
+  `Library/Hoard/Unzipped` folder (never into `Assets`), checking it against the zip's checksum as it goes, then
+  opens Unity's import dialog. An unpacked copy is reused while the `.zip` is unchanged, and old ones go after a
+  day. A `.zip` locked with a password is left out: unzip it yourself.
+- **Import set** (0.8.0, with Hoard 4.0). The **Sets** pill (shown once you've made a set in Hoard's Downloads) shows
+  one set's products, with **Import set**: their packages are imported one after another, each through Unity's import
+  dialog (**Cancel** skips one), what's needed first, so an outfit's avatar comes before the outfit. Packages already
+  all in the project are left out, and it says which tools (lilToon, say) the set still needs. Importing carries on
+  when a package's scripts make the editor reload; **Stop** ends it.
+- **What it needs** (0.8.0, with Hoard 4.0). A product whose packages use something that isn't in this project (a
+  shader such as lilToon or Poiyomi Toon 8.1, Modular Avatar, VRCFury, or the base avatar an outfit is made for)
+  says so in its details, with **Get it** (the tool's own website) or **Show** (that product, in this window).
+  **Import** asks first when something is missing, as without it parts of the product may be pink or missing. Hoard
+  works out what each product needs (see [Downloads](Downloads#the-downloads-view)); the window checks whether this
+  project has it.
 - **Find which product a file came from** (0.6.0). Select files or folders in the Project window, right-click and
   choose **Hoard › Which Product Is This From?** (also in the **Assets** menu). The window lists the products
   whose packages carry them, most files first, with **Show** to find each in the list. It looks at up to 20,000
@@ -114,7 +131,8 @@ the window's bar.
   you listed where it is, and a product in another of Hoard's library folders, whose folder is used only when
   Hoard sealed the catalog on this computer.
 - **Checks every package it reads.** A `.unitypackage` whose headers claim impossible sizes is treated as not a
-  package, before anything is read into memory for it (0.1.2).
+  package, before anything is read into memory for it (0.1.2). A `.zip` is read with Hoard's own reader: every
+  size and place it claims must fall inside the file, and an unpacked package must match the zip's checksum.
 - **Editor only.** Nothing from this package is included in avatar or world uploads, and it contacts nobody.
 
 It keeps a cache of what's inside each package in the project's `Library` folder, so it doesn't read the same

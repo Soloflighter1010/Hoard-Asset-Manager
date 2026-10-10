@@ -31,6 +31,8 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
 - **Failed downloads:** a file download that fails (a dropped connection, a busy server) is tried again after a
   short wait: twice unless you choose otherwise, once, 3 times, or not at all. A store saying the file isn't
   there, or isn't yours, isn't tried again.
+- **Previous versions** (4.0): how many old copies of a file to keep when an update replaces it: the last one unless
+  you choose otherwise, none, or the last 2, 3 or 5. See [Downloads](Downloads#previous-versions).
 - **Routine check:** **Off** (only when you ask) unless you choose every 6 hours, every 12 hours, once a day, once a
   week or once a month, while Hoard is open. It reads your stores (not Payhip), checks your downloads and checks
   for updates, then asks which of what it found to download. It replaces **Sync automatically** and **Check your
@@ -82,6 +84,17 @@ job has finished. Everything else changes straight away.
 
 Also here:
 
+- **Backup** (4.0): **Make a backup** saves what you've set up in Hoard to one file in your Documents, in
+  `Hoard backups`: your settings (the downloads folder and other library folders as places), tags, sets, archive and
+  removed choices, and your library list without its download links. Hidden items, with the PIN and recovery words
+  that hide them (as their slow hashes, never the words or PIN themselves), go in only while your hidden library is
+  unlocked. It never holds your store sign-ins, your itch.io key, the key Hoard seals its records with, or anything
+  you downloaded: on a new computer, copy the downloads folder yourself and sign in to your stores again. **Restore a
+  backup...** asks what's in the file, saves a backup of how things are now first (marked "before restoring"), then
+  puts the file's settings, tags, sets and choices in place, each checked as if you'd made it here. A folder that
+  isn't on this computer is left as it is, and so is a downloads folder that's a whole drive, your home folder or
+  Hoard's own app-data folder. The library list fills in only stores that have nothing listed yet.
+  A backup with hidden items replaces yours only once your hidden library is unlocked.
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
   close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and the routine check
@@ -118,6 +131,7 @@ and keep it valid JSON.
 | `edits_root` | `""` | Where **Make an editable copy** puts copies; empty means **Hoard Edits** beside your downloads folder. Never inside the downloads folder. See [Changing a download](Downloads#changing-a-download-make-an-editable-copy) |
 | `request_delay` | `1.0` | Seconds between page loads on a store |
 | `new_days` | `7` | Days something new in your library is marked **New**: `0` (never), `1`, `3`, `7`, `14` or `30` (**New in your library** in Settings) |
+| `keep_previous` | `1` | How many previous versions of each file an update replaces are kept: `0`, `1`, `2`, `3` or `5` in Settings (**Previous versions**), up to `10` here |
 | `download_retries` | `2` | How many more times a failed file download is tried: `0` to `3` in Settings (**Failed downloads**), up to `5` here |
 | `payhip.bot_check_wait` | `180` | Seconds to wait for you to complete Payhip's bot check |
 | `jinxxy.item_link_pattern` | | Which links on Jinxxy's inventory page are your items |

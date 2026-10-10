@@ -769,6 +769,52 @@ async function createSupportReport() {
   result.hidden = false;
   button.disabled = false;
 }
+/* ---------- the details' picture: shorter, so the name and buttons show; full size when it's clicked. And Settings'
+   row of its parts: each scrolls to its part of the panel */
+document.addEventListener("click", e => {
+  const art = e.target.closest(".d-art");
+  if (art && art.querySelector("img")) art.classList.toggle("big");
+  const jump = e.target.closest("[data-jump]");
+  if (jump) { const h = document.getElementById(jump.dataset.jump); if (h) h.scrollIntoView({ block: "start", behavior: motionOk() ? "smooth" : "auto" }); }
+});
+/* ---------- Settings, Backup (hoard/backup.py): what you've set up, in one file; and putting one back */
+function wireBackup() {
+  const note = $("#backupNote");
+  $("#backupMake").addEventListener("click", async () => {
+    const r = await apiPost("/api/backup/make");
+    if (!r.ok) { toast(r.data.error || "The backup couldn't be made."); return; }
+    note.innerHTML = `${esc(tr("Saved {0}.", r.data.path))} ` +
+      (r.data.pin_set && !r.data.hidden ? esc(tr("Your hidden items were left out: unlock them first to include them.")) + " " : "") +
+      `<button class="linkish" id="backupShow">Show in folder</button>`;
+    toast("Backup saved.");
+  });
+  note.addEventListener("click", async e => {
+    if (!e.target.closest("#backupShow")) return;
+    const r = await apiPost("/api/backup/show");
+    if (!r.ok) toast(r.data.error || "Couldn't open the backups folder.");
+  });
+  $("#backupRestore").addEventListener("click", () => $("#backupFile").click());
+  $("#backupFile").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    let content;
+    try { content = await file.text(); } catch (err) { toast("That file couldn't be read."); return; }
+    const check = await apiPost("/api/backup/check", { content });
+    if (!check.ok) { toast(check.data.error || "That isn't a Hoard backup."); return; }
+    const b = check.data, when = b.made ? new Date(b.made).toLocaleString(document.documentElement.lang || undefined) : file.name;
+    const count = (n, one, many) => tr(n === 1 ? one : many, n.toLocaleString());
+    if (!await ask(tr("Restore the backup from {0}? It has {1}, {2} and {3}.", when, count(b.tags, "{0} tag", "{0} tags"),
+                      count(b.sets, "{0} set", "{0} sets"), count(b.items, "{0} product in its library list", "{0} products in its library list")) + "\n\n" +
+                   tr(b.hidden ? "Your settings, tags, sets and archive choices are replaced with the backup's, and so are your hidden items and PIN."
+                               : "Your settings, tags, sets and archive choices are replaced with the backup's.") + " " +
+                   tr("Hoard saves how things are now first, in the same folder, so you can put them back."), "Restore")) return;
+    const r = await apiPost("/api/backup/restore", { content });
+    if (!r.ok) { toast(r.data.error || "The backup couldn't be restored."); return; }
+    toast(r.data.skipped.length ? tr("Restored. Left as they are: {0}.", r.data.skipped.join("; ")) : "Restored.");
+    setTimeout(() => location.reload(), 1500);
+  });
+}
 async function openSupportFolder() {
   const r = await apiPost("/api/diagnostics/open-folder");
   if (!r.ok) { toast(r.data.error || "Couldn't open the report folder."); return; }
@@ -818,6 +864,7 @@ function fillSettings() {   // the controls, as the settings are now
   renderLibs(SETTINGS.libraries);
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
+  $("#setPrevious").value = String(SETTINGS.keep_previous ?? 1);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setUpdates").checked = SETTINGS.check_for_updates;
   $("#setBetas").checked = !!SETTINGS.beta_updates;
@@ -1129,6 +1176,7 @@ function settingsPart(el) {
     case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
+    case "setPrevious": return { keep_previous: Number(el.value) };
     case "setGlowOn": return { display: { glow: el.checked } };
     case "setColours": return { display: { colours: el.value } };
     case "setTextSize": case "setPause": case "setMotion":

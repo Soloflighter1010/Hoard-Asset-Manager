@@ -46,6 +46,14 @@ builds under their own licenses). The installer is made with [Inno Setup](https:
 project: Copyright (c) 2013-2016 Pavol Rusnak, under the MIT License. Hoard uses it only to make the
 recovery phrase for its hidden library.
 
+## The tools Hoard knows
+
+`hoard/known_tools.json` lists the asset IDs (GUIDs, from their `.meta` files) of the shaders and components that
+lilToon, Poiyomi Toon, Modular Avatar, VRCFury, NDMF and Avatar Optimizer publish in their own repositories, and that
+the VRChat SDK publishes through VRChat's package listing, with each one's name and website, so **What it needs** can
+name them. It holds nothing else of theirs: no code, shaders or other files. Each belongs to its makers, who don't
+endorse Hoard. `scripts/build_known_tools.py` makes the list from those sources.
+
 ## The Unity project and the listing page
 
 The Unity project layout, the release and listing workflows and the listing page (`Website/`) are adapted

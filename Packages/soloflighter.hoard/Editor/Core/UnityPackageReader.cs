@@ -42,7 +42,7 @@ namespace SoloFlighter.Hoard
         static Dictionary<string, string> ReadAssets(string packagePath, HashSet<string> withFile)
         {
             var result = new Dictionary<string, string>();
-            using (var file = File.OpenRead(packagePath))
+            using (var file = PackageFile.OpenRead(packagePath))   // a .unitypackage, or one in a .zip
             using (var gz = new GZipStream(file, CompressionMode.Decompress))
             {
                 var header = new byte[512];

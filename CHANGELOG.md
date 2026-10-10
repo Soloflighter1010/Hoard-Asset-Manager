@@ -1,5 +1,47 @@
 # Changelog
 
+## 4.0.0
+
+- **Look inside a download.** In Downloads, each `.unitypackage` and `.zip` in a product's files has **Look inside**:
+  every file a Unity package holds, in its folders, with its size and the preview picture Unity keeps for it, and
+  **Search in it** to find one wherever it is. A `.zip` lists its files, and what each Unity package in it holds.
+  Nothing is extracted or imported, and a second look is instant.
+- **Hoard for Unity 0.8: packages that came in a .zip.** Many products, on Booth especially, come as a `.zip` with
+  the `.unitypackage` inside. Hoard for Unity now lists each such package under its `.zip`, counts it towards
+  **In this project**, and **Import** unpacks just that package (into the project's `Library` folder, checked as it's
+  unpacked) and opens Unity's import dialog as usual.
+- **What it needs.** A product's details in Downloads list what its packages use that isn't in them: shaders and
+  tools (lilToon, Poiyomi Toon with the version its materials were made with, Modular Avatar, VRCFury, NDMF, Avatar
+  Optimizer, the VRChat SDK) with **Get it**, other products you've downloaded, such as the base avatar an outfit is
+  made for, with **View**, and a count of anything else. Hoard reads each package once, in the background while
+  nothing else is running: the IDs its materials and prefabs name, less its own, are what it needs from elsewhere.
+  It knows the tools' IDs from their own published releases. Hoard for Unity 0.8 says what's missing from the
+  project, and asks before importing without it.
+- **Backup and restore.** **Make a backup** (in Settings) saves what you've set up in one file, in Documents ›
+  Hoard backups: your settings, tags, sets, archive choices and library list (without its download links), and
+  your hidden items with their PIN while they're unlocked. Never your sign-ins, keys or downloads. **Restore a
+  backup...** checks everything in it as Settings would, saves how things are now first so you can go back, and
+  puts it in place: on a new computer, sign in to your stores and copy your downloads folder, and the rest is back.
+- **Sets.** Group products you use together, such as an avatar, its outfits and hair, and the shaders they need: in
+  Downloads, **Sets** in the sidebar (**New set**), **Add to set** for the products you've selected, or a product's
+  details. Choose a set to see just its products. In Hoard for Unity 0.8, the **Sets** pill shows one, and **Import
+  set** imports its packages one after another through Unity's import dialog, what's needed first (an outfit's
+  avatar before the outfit), leaving out packages already all in the project and saying which tools it still needs.
+- **Previous versions.** When an update replaces a file, the old one is kept in `_Previous versions` in the product's
+  folder, and a product's details in Downloads list it with **Restore**, which puts it back (and keeps the one it
+  replaces, so you can change your mind). Hoard keeps the last one of each file; choose none, or up to 5, in
+  Settings (**Previous versions**). Deleting a product's downloaded files deletes them too, and moving it takes
+  them along.
+- **Easier to get around.**
+  - A product's picture in its details is shorter, so its name and buttons show without scrolling; click it to
+    see it full size.
+  - In Downloads, a product's files come straight after what you can do with them.
+  - Settings has a row of its parts at the top (Folders, Stores, Downloading, Look, Sign-ins, Updates, Backup,
+    Troubleshooting), to jump to one.
+  - A longer message stays up long enough to read.
+- **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
+  without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
+
 ## 3.3.2
 
 - **Notifications are in Hoard's language.** When the routine check finds something while Hoard runs in the

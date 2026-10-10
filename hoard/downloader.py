@@ -1966,6 +1966,9 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
                 for parent in Path(rel).parents:
                     if str(parent) != ".":
                         dirs.add(folder / parent)
+            if not rec.get("location"):   # its previous versions (hoard/previous.py) were Hoard's too
+                from . import previous
+                done["files"] += previous.delete_all(folder)
             for d in sorted(dirs, key=lambda d: len(d.parts), reverse=True) + [folder, folder.parent]:
                 if d != sdir and sdir in d.parents:
                     try:
@@ -2040,6 +2043,8 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None, commit
     if dest.is_symlink() or (os.path.lexists(dest) and not dest.is_dir()):
         raise ValueError(f"{dest} is already there and isn't a folder. Move or rename it first.")
     extras = [p.name for p in src.glob("_thumbnail.*") if p.is_file() and not p.is_symlink()] if src.is_dir() else []
+    from . import previous   # its previous versions go with it
+    extras += [f"{previous.FOLDER}/{v['stamp']}/{v['file']}" for v in previous.listed(src)] if src.is_dir() else []
     made: list[Path] = []
     try:
         entries = [(f.get("path"), f) for f in rec["files"].values()] + [(name, None) for name in extras]
@@ -2101,6 +2106,47 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None, commit
     build_catalog(cfg, root)
     log(f"Moved {rec.get('name')} ({store}) to {dest}: {len(rec['files']):,} files, {amount(total)}")
     return {"name": rec.get("name"), "files": len(rec["files"]), "bytes": total, "to": str(dest)}
+
+
+def restore_previous(cfg: dict, root: Path, folder: Path, stamp: str, name: str) -> dict:
+    """Put a previous version of one of a product's files back (hoard/previous.py), keeping the current one as a
+    previous version. Its record then has the restored file's size and no fingerprint, so the next check of the
+    downloads takes the restored file's, rather than calling it changed. Raises ValueError when there's no such
+    version, or no product of Hoard's in that folder."""
+    from . import previous
+
+    def same(a: Path, b: Path) -> bool:   # as resolved: one may be written with Windows' short names (RUNNER~1)
+        try:
+            return a == b or a.resolve() == b.resolve()
+        except OSError:
+            return False
+    found = None
+    for _base, _store, sdir in library_store_dirs(cfg, root):
+        if not (sdir / "_manifest.json").is_file():
+            continue
+        man = Manifest(sdir)
+        for rec in man.assets.values():
+            try:
+                if not rec.get("location") and same(rel_to_path(sdir, rec["folder"]), folder):
+                    found = (man, rec)
+                    break
+            except (UnsafePath, KeyError, TypeError):
+                continue
+        if found:
+            break
+    if not found:
+        raise ValueError("That isn't a download of Hoard's.")
+    man, rec = found
+    done = previous.restore(folder, stamp, name)
+    for f in rec.get("files", {}).values():
+        if f.get("path") == name:
+            f["size"] = done["size"]
+            f.pop("sha256", None)
+            f.pop("mtime_ns", None)
+            f["restored_at"] = now_iso()
+    man.save()
+    log(f"Restored the previous version of {rec.get('name')}: {name} ({stamp})")
+    return done
 
 
 EDIT_NOTE = """This is an editable copy of a download, made by Hoard on {when}.
@@ -2343,6 +2389,10 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: note isn't clean text")
     if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
         problems.append(f"{label}: url isn't an https address on the store's own website")
+    if "needs" in entry:
+        from .needs import valid_needs
+        if not valid_needs(entry["needs"], set(STORE_DIRS.values())):
+            problems.append(f"{label}: needs isn't as Hoard writes it")
     for key in ("tags", "suggested_tags"):
         if not isinstance(entry.get(key), list) or any(not isinstance(t, str) or clean_tag(t) != t or not t for t in entry[key]):
             problems.append(f"{label}: {key} has a tag that isn't clean")
@@ -2352,6 +2402,12 @@ def validate_catalog_entry(entry: dict) -> list[str]:
 def build_catalog(cfg: dict, root: Path) -> None:
     """Write catalog.json, tags.json and each product's asset.json."""
     catalog, ordered = collect_catalog(cfg, root)
+    if catalog:   # what each product needs, as far as its packages have been read (hoard/needs.py)
+        from .needs import add_to_catalog
+        try:
+            add_to_catalog(root, catalog)
+        except Exception as e:   # the catalog is written without it rather than not at all
+            log(f"What the downloads need couldn't be added to catalog.json: {e}")
     if not catalog:
         stale = [name for name in ("catalog.json", "tags.json") if os.path.lexists(root / name)]
         if stale:   # an earlier catalog mustn't go on listing products that are no longer here
@@ -2387,8 +2443,11 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     # Version 4 says some products are in other library folders ("library"): older Hoard for Unity, which would look
     # for them in the downloads folder, asks to be updated instead (docs/DATA-FORMATS.md)
     form = {**CATALOG_FORMAT["catalog"], **({"version": 4} if any(e.get("library") for e in catalog) else {})}
-    write_file_safely(root / "catalog.json", json.dumps(seal({**form, "generated_at": now_iso(),
-                                                              "assets": catalog}), indent=2, ensure_ascii=False), root)
+    from .sets import for_catalog   # your sets (hoard/sets.py), by their products' folders: Import set in Unity
+    grouped = for_catalog(catalog) if catalog else []
+    write_file_safely(root / "catalog.json", json.dumps(seal({**form, "generated_at": now_iso(), "assets": catalog,
+                                                              **({"sets": grouped} if grouped else {})}),
+                                                        indent=2, ensure_ascii=False), root)
     yours: dict[str, list] = {}
     for entry in catalog:
         for t in entry["tags"]:
@@ -2481,6 +2540,8 @@ def cmd_sync(cfg: dict, args) -> None:
     root = root_dir(cfg)
     root.mkdir(parents=True, exist_ok=True)
     log(f"Downloading into {root}")
+    from . import previous
+    previous.set_keep(cfg.get("keep_previous", 1))   # what an update replaces is kept (hoard/previous.py)
     report = Report(retries=download_retries(cfg))
     asked = list(DOWNLOADABLE) if args.store == "all" else ([args.store] if isinstance(args.store, str) else list(args.store))
     stores = [s for s in asked if s in DOWNLOADABLE]   # Payhip is read, never downloaded from

@@ -76,8 +76,27 @@ An `<asset>`:
 | `note` | string, only on `Local` entries | Who or what it's for, as you wrote it |
 | `library` | string, only on some entries (version 4) | A product in another of your library folders (another drive, say): that folder, as a full path written as the system writes it. `folder` and `files` are relative to it instead of the download folder. Never on an entry with `location`. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
 
+| `needs` | list, only on some entries (4.0) | What the product's packages use that isn't in them (What it needs): see below |
+
+The catalog can also have `sets` (4.0): `[{"name": "Rusk, winter", "items": ["Booth/Kitsu Studio/Rusk", ...]}]`, your
+sets, each product by its `folder` (every copy of it), only products the catalog lists, and only sets with any. A
+reader that doesn't know it ignores it.
+
 `version` is 4 when any entry has `library`, and 3 otherwise, so a reader that doesn't know `library` (Hoard for
 Unity before 0.5.0) still reads a library that's all in one folder.
+
+Each of `needs` (at most 30) is one of:
+
+- **A tool:** `{"kind": "tool", "name": "Poiyomi Toon", "url": "https://www.poiyomi.com/", "versions": ["8.1"],
+  "guids": [...]}`. `url` is the tool's own website, one of those in `hoard/known_tools.json`; `versions` (each
+  `major.minor`) says which versions' files are named, when the tool's versions have files of their own.
+- **Another product you've downloaded:** `{"kind": "product", "name", "creator", "store", "folder", "guids"}`, where
+  `store` and `folder` are as in an `<asset>`: the entry it names.
+
+`guids` (1 to 50, each 32 lowercase hex digits) are GUIDs the product's materials, prefabs and other text assets name
+and the tool or product has. A need is met in a Unity project when every one of them is there. GUIDs nothing Hoard
+knows has aren't listed. A reader that doesn't know `needs` (Hoard for Unity before 0.8.0) ignores it, so the version
+doesn't change.
 
 ## `asset.json` (in each product's folder)
 
@@ -107,6 +126,11 @@ lockout after wrong guesses. If the file is changed outside Hoard, the choices a
 dropped. It's a private record, not a promise to other tools.
 
 ## Records Hoard keeps for itself
+
+`package-needs.json` in Hoard's app-data folder records, for each downloaded `.unitypackage` (and each one in a
+`.zip`), the GUIDs of its assets (`own`) and the other GUIDs its text assets name (`refs`), with the file's size and
+time, so it's read again only when it changes. It's sealed; one that isn't as Hoard sealed it is read again from
+the packages.
 
 `_manifest.json` in each store folder records what's downloaded and where. It's sealed the same way.
 Other programs shouldn't write to it: when the seal shows it was changed, Hoard keeps its
@@ -139,6 +163,7 @@ says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the pro
 
 ## Version history
 
+- **4** or **3**, still, in 4.0: `needs`, which readers that don't know it ignore.
 - **4** (3.0): `library`, for products in another library folder. Only written when there are some; otherwise
   the catalog is still version 3.
 - **3**, still, in 3.0: `Local` entries, with `location` and `note`. Readers that skip stores they don't know

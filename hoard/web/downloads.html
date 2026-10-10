@@ -253,7 +253,10 @@ body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* t
 }
 .detail.open { transform: none; visibility: visible; transition: transform .2s ease-out; }
 .x { position: sticky; top: 0; float: right; width: 38px; height: 38px; border-radius: 10px; border: 0; background: var(--stone); font-size: 20px; line-height: 1; z-index: 1; }
-.d-art { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--stone); clear: both; margin-top: 10px; }
+.d-art { position: relative; aspect-ratio: 16 / 11; max-height: 36vh; width: 100%; border-radius: 14px; overflow: hidden; background: var(--stone);
+  clear: both; margin-top: 10px; cursor: zoom-in; transition: aspect-ratio .2s, max-height .2s; }
+.d-art.big { aspect-ratio: 1; max-height: none; cursor: zoom-out; }
+.d-art:not(:has(img)) { cursor: default; }
 .d-art img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .d-art .ph b { font-size: 96px; }
 .d-name { font: 400 26px/1.2 var(--display); margin: 20px 0 6px; overflow-wrap: anywhere; }
@@ -267,6 +270,12 @@ a.ghost { height: 42px; }
 .files { list-style: none; margin: 0; padding: 0; }
 .files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
 .files .fn { overflow-wrap: anywhere; }
+.files .fb { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.files .fn .muted { font-size: 12px; color: var(--dust); }
+.needs { list-style: none; margin: 0; padding: 0; }
+.needs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+.needs .nm { overflow-wrap: anywhere; }
+.needs .muted { font-size: 12px; color: var(--dust); }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 30;
@@ -457,6 +466,13 @@ body.selecting .toast { bottom: 96px; }
 .apptabs a:hover { color: var(--bone); background: var(--stone); }
 .apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
 .settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }
+.setjump { position: sticky; top: -1px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; margin: -4px -4px 10px; padding: 6px 4px 8px;
+  background: var(--ledge); border-bottom: 1px solid var(--seam); box-shadow: 0 -24px 0 0 var(--ledge); }
+.setjump button { border: 0; border-radius: 999px; padding: 5px 11px; background: var(--stone); color: var(--bone);
+  font: 600 12.5px var(--body); cursor: pointer; }
+.setjump button:hover { background: var(--seam); }
+.setjump button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.settings h3[id] { scroll-margin-top: 64px; }
 .settings .field { display: flex; gap: 6px; }
 /* a tab for each library folder (hoard/libraries.py), after the stores' tabs, once there's more than one folder */
 .drives { display: contents; }
@@ -633,6 +649,27 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .win-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
 .win-body > p:first-child { margin-top: 6px; }
 .tasks.win { width: min(880px, calc(var(--vw) - 48px)); }
+.inside.win { width: min(880px, calc(var(--vw) - 48px)); }
+.inside .file-name { margin: 0 0 4px; font-weight: 700; overflow-wrap: anywhere; }
+.inside .sum { margin: 0 0 10px; font-size: 13px; color: var(--dust); }
+.inside .note { margin: 6px 0; font-size: 13px; color: var(--warn); }
+.inside input[type=search] { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; margin: 0 0 10px; border-radius: 10px;
+  border: 0; background: var(--stone); color: var(--bone); font: inherit; }
+.inside ul { list-style: none; margin: 0; padding: 0 0 0 14px; }
+.inside > .win-body > div > ul, .inside .pkg > ul, .inside .found { padding-left: 0; }
+.inside details > summary { cursor: pointer; padding: 4px 0; overflow-wrap: anywhere; }
+.inside summary .n, .inside .sz { font-size: 12px; color: var(--dust); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.inside summary .n { margin-left: 6px; }
+.inside li.f { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 3px 0; font-size: 13px; }
+.inside li.f .nm { overflow-wrap: anywhere; }
+.inside li.f .nm small { display: block; color: var(--dust); }
+.inside .pv { width: 40px; height: 40px; border-radius: 6px; background: var(--stone); object-fit: contain; display: grid; place-items: center;
+  font-size: 10px; color: var(--dust); text-transform: uppercase; overflow: hidden; }
+.inside .pkg { margin: 8px 0; padding: 8px 12px; border-radius: 12px; background: var(--stone); }
+.inside .pkg .pv { background: var(--ledge); }
+.inside .zipfiles li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 4px 0; border-top: 1px solid var(--seam); font-size: 13px; }
+.inside .zipfiles .nm { overflow-wrap: anywhere; }
+.inside .more { font-size: 12px; color: var(--dust); margin: 6px 0; }
 
 /* Projects (issue #86): the Unity projects that use your assets, and their credits */
 .projects.win { width: min(960px, calc(var(--vw) - 48px)); }
@@ -867,6 +904,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
     <h2 class="sidehead" data-sec="your-tags">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
+    <h2 class="sidehead" data-sec="sets">Sets <button class="linkish" id="newSet">New set</button></h2>
+    <div id="sets" class="chips"></div>
     <h2 data-sec="suggested">Suggested</h2>
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
@@ -945,8 +984,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 </section>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
+  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button></nav>
   <p>Changes are saved as you make them.</p>
-  <h3>Downloads folder</h3>
+  <h3 id="part-folders">Downloads folder</h3>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
@@ -963,7 +1003,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops
     Hoard reading it: its files stay where they are.</p>
   <p class="hint" id="libMsg" role="status"></p>
-  <h3>Stores</h3>
+  <h3 id="part-stores">Stores</h3>
   <div id="setStores"></div>
   <h3>Payhip shops</h3>
   <textarea id="setShops" rows="3" spellcheck="false" autocomplete="off" aria-label="Payhip shops"
@@ -971,7 +1011,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <p class="hint">Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's
     address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you. Hoard lists
     what you bought on Payhip; you download it from Payhip yourself.</p>
-  <h3>Offline</h3>
+  <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
   <h3>New in your library</h3>
   <select id="setNewDays" aria-label="Mark new things as New for">
@@ -993,6 +1033,16 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
+  <h3>Previous versions</h3>
+  <select id="setPrevious" aria-label="Previous versions to keep">
+    <option value="0">Don't keep them</option>
+    <option value="1">Keep the last one</option>
+    <option value="2">Keep the last 2</option>
+    <option value="3">Keep the last 3</option>
+    <option value="5">Keep the last 5</option>
+  </select>
+  <p class="hint">When an update replaces a file, the old one is kept in <strong>_Previous versions</strong> in the
+    product's folder, and <strong>Restore</strong> in Downloads puts it back.</p>
   <h3>Routine check</h3>
   <select id="setRoutine" aria-label="Routine check">
     <option value="0">Off: only when I ask (the default)</option>
@@ -1006,7 +1056,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
-  <h3>Appearance</h3>
+  <h3 id="part-look">Appearance</h3>
   <label class="check">Language
     <select id="setLanguage" aria-label="Language">
       <option value="system">Match my computer</option>
@@ -1038,7 +1088,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     </select></label>
   <div id="customColours" class="custom-colours" role="group" aria-label="Your store colours" hidden></div>
   <p class="hint">Motion is also reduced when your computer's settings ask for less of it.</p>
-  <h3>Browser for store sign-ins</h3>
+  <h3 id="part-signins">Browser for store sign-ins</h3>
   <select id="setBrowser" aria-label="Browser for store sign-ins">
     <option value="">Automatic (Microsoft Edge on Windows)</option>
     <option value="msedge">Microsoft Edge</option>
@@ -1053,7 +1103,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <p class="hint">Downloads, syncs and automatic syncs carry on with the window closed. Open Hoard again (from the
       Start menu) to bring the window back, and quit it here, with <strong>Quit Hoard</strong>.</p>
   </div>
-  <h3>Updates</h3>
+  <h3 id="part-updates">Updates</h3>
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
   <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
     version. GitHub sees your IP address, as with any website; nothing else is sent.</p>
@@ -1065,7 +1115,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
   <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button>: every change, version by version.</p>
-  <h3>Troubleshooting</h3>
+  <h3 id="part-backup">Backup</h3>
+  <div class="field"><button class="ghost sm" id="backupMake">Make a backup</button>
+    <button class="ghost sm" id="backupRestore">Restore a backup...</button>
+    <input type="file" id="backupFile" accept=".json,application/json" hidden></div>
+  <p class="hint" id="backupNote">Your settings, tags, sets, choices and library list in one file, in Documents ›
+    Hoard backups: to keep, or to move to another computer. Never your sign-ins, keys or downloads.</p>
+  <h3 id="part-help">Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
   <button class="ghost sm" id="openLogs">Open logs folder</button>
@@ -1076,6 +1132,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
   <div id="projectsBody"></div>
+</section>
+<section id="insideWin" class="stores inside" hidden aria-labelledby="insideTitle">
+  <h2 id="insideTitle">Look inside</h2>
+  <div id="insideBody"></div>
 </section>
 <section id="newsWin" class="stores tasks news" hidden aria-labelledby="newsTitle">
   <h2 id="newsTitle">What's new</h2>
@@ -1167,6 +1227,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
   <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
     <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
+  <span class="bulkmove"><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
+    <button class="ghost sm" id="bulkSet" data-needs>Add to set</button></span>
   <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
   <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
   <button class="ghost sm" id="bulkDone">Done</button>
@@ -1177,7 +1239,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 "use strict";   // first, or it applies to nothing
 //@include shared.js
 const grid = $("#grid"), detail = $("#detail");
-const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "" };
+const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 const storeName = folder => folder === "Itch" ? "itch.io" : folder;
@@ -1198,7 +1260,8 @@ const art = a => a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="" loading="lazy"
 /* ---------- highlights and accessibility */
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  clearTimeout(toastTimer);   // long enough to read: a longer message stays longer
+  toastTimer = setTimeout(() => t.classList.remove("show"), Math.min(10000, Math.max(2200, String(msg).length * 60)));
 }
 
 /* ---------- data */
@@ -1242,6 +1305,7 @@ function matches(a, skip) {
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const t of state.types) if (!a.types.includes(t)) return false;
+  if (state.set && !(setById(state.set) || { items: [] }).items.includes(a.tag_key)) return false;
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
 }
@@ -1256,7 +1320,7 @@ const countBy = (list, key) => {
   for (const a of list) for (const v of a[key]) m.set(v, (m.get(v) || 0) + 1);
   return m;
 };
-const filtersActive = () => state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size;
+const filtersActive = () => state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size || state.set;
 
 /* ---------- rendering */
 function render() {
@@ -1310,6 +1374,122 @@ function updatesBar(n) {
   return `<p>${say.map(esc).join(" ")}</p>` +
     `<button class="ghost sm" data-upd="check">Check for updates</button>` +
     (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
+}
+// Sets (hoard/sets.py): products you group to use together; Hoard for Unity imports a set in one go
+const setById = id => (DATA.sets || []).find(s => s.id === id);
+function setOptions(first) {
+  return `<option value="">${esc(tr(first))}</option>` +
+    (DATA.sets || []).map(s => `<option value="${esc(s.id)}" translate="no">${esc(s.name)}</option>`).join("") +
+    `<option value="new">${esc(tr("New set..."))}</option>`;
+}
+function renderSets(list) {
+  const here = new Map((DATA.sets || []).map(s => [s.id, 0]));
+  for (const a of list) for (const s of DATA.sets || []) if (s.items.includes(a.tag_key)) here.set(s.id, here.get(s.id) + 1);
+  $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
+    `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
+    `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
+  $("#bulkSetTo").innerHTML = setOptions("Choose a set");
+}
+function setsSection(a) {
+  const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
+  return `<h3>Sets</h3><div class="chips">${mine.map(s => `<span class="tagpill"><button class="chip" data-act="showset" data-set="${esc(s.id)}" translate="no">${esc(s.name)}</button>` +
+      `<button class="untag" data-act="unset" data-set="${esc(s.id)}" aria-label="${esc(tr("Take it out of {0}", s.name))}">×</button></span>`).join("") ||
+      `<span class="none">${esc(tr("In no set yet"))}</span>`}</div>` +
+    `<div class="tagadd"><select id="setPick" aria-label="Set to add it to">${setOptions("Add it to a set")}</select>` +
+    `<button class="ghost sm" data-act="toset">Add</button></div>`;
+}
+function askName(title, value = "") {
+  return new Promise(resolve => {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
+      `<p><input id="askName" maxlength="60" style="width:100%;box-sizing:border-box"></p>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
+    document.body.appendChild(d);
+    const input = d.querySelector("input");
+    input.value = value;
+    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
+    d.showModal();
+    input.select();
+  });
+}
+async function changeSets(body) {
+  const r = await apiPost("/api/sets", body);
+  if (!r.ok) { toast(r.data.error || "That set couldn't be changed."); return null; }
+  await load();
+  return r.data;
+}
+async function addToSet(list, id) {
+  const items = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!items.length) return;
+  if (!id) { toast("Choose a set first."); return; }
+  if (id === "new") {
+    const name = await askName("Name the new set");
+    if (!name) return;
+    const done = await changeSets({ action: "create", name, items });
+    if (done) toast(tr(items.length === 1 ? "Made the set {0}, with this in it." : "Made the set {0}, with {1} products in it.", name, items.length));
+    return;
+  }
+  const done = await changeSets({ action: "add", id, items });
+  if (done) toast(tr(items.length === 1 ? "Added it to {0}." : "Added {1} products to {0}.", (setById(id) || {}).name || "", items.length));
+}
+async function newSet() {
+  const name = await askName("Name the new set");
+  if (!name) return;
+  const done = await changeSets({ action: "create", name, items: [] });
+  if (done && done.made) { state.set = done.made; render(); toast("Add products to it from their details, or select several."); }
+}
+async function setAction(act) {
+  const s = setById(state.set); if (!s) return;
+  if (act === "rename") {
+    const name = await askName("Rename the set", s.name);
+    if (name && name !== s.name) changeSets({ action: "rename", id: s.id, name });
+  } else if (act === "delete" && await ask(tr("Delete the set {0}? The products in it stay as they are.", s.name), "Delete set", true)) {
+    state.set = "";
+    changeSets({ action: "delete", id: s.id });
+  }
+}
+// Previous versions (hoard/previous.py): what updates replaced, kept in the product's folder, to put back
+function previousSection(a) {
+  const list = a.previous || [];
+  if (!list.length) return "";
+  const when = s => { const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d)(\d\d)/.exec(s);
+    return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).toLocaleString(document.documentElement.lang || undefined,
+      { dateStyle: "medium", timeStyle: "short" }) : s; };
+  return `<h3>Previous versions<span class="muted">${esc(sizeText(list.reduce((t, v) => t + v.size, 0)))}</span></h3>` +
+    `<ul class="files">${list.map(v => `<li><span class="fn"><span translate="no">${esc(v.file)}</span>` +
+      `<br><span class="muted">${esc(tr("Replaced {0}", when(v.stamp)))}</span></span><span class="fs">${fmtSize(v.size)}</span>` +
+      `<button class="ghost sm" data-act="restore" data-stamp="${esc(v.stamp)}" data-file="${esc(v.file)}">Restore</button></li>`).join("")}</ul>` +
+    `<p class="sub">Restore puts it back, and keeps the one it replaces here, so you can change your mind.</p>`;
+}
+async function restorePrevious(a, b) {
+  if (!await ask(tr("Put back {0} from {1}? The current one is kept here as a previous version.", b.dataset.file, b.closest("li").querySelector(".muted").textContent),
+                 "Restore")) return;
+  const r = await apiPost("/api/previous/restore", { folder: a.folder, stamp: b.dataset.stamp, file: b.dataset.file });
+  if (!r.ok) { toast(r.data.error || "That version couldn't be put back."); return; }
+  toast(tr("Put back {0}.", b.dataset.file));
+  await load(true);
+}
+// What it needs (hoard/needs.py): the tools and other products its packages use, from what Hoard has read of them
+function needsSection(a) {
+  const n = a.needs, R = DATA.needs_reading || {};
+  if (!n) return "";
+  const head = `<h3>What it needs</h3>`;
+  if (!n.read) return head + `<p class="sub">${esc(R.reading && R.total
+    ? tr("Hoard is reading your packages to find out ({0} of {1}).", R.done.toLocaleString(), R.total.toLocaleString())
+    : tr("Hoard reads your packages to find out, while nothing else is running."))}</p>`;
+  const rows = [
+    ...n.tools.map(t => `<li><span class="nm"><span translate="no">${esc(t.name)}${t.versions.length ? " " + esc(t.versions.join(", ")) : ""}</span>` +
+      (t.common ? ` <span class="muted">${esc(tr("(every VRChat project has it)"))}</span>` : "") + `</span>` +
+      (t.common || !safeUrl(t.url) ? "<span></span>" : `<a class="ghost sm" href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener noreferrer">Get it</a>`) + `</li>`),
+    ...n.products.map(o => `<li><span class="nm"><span translate="no">${esc(o.name)}</span> <span class="muted" translate="no">${esc(tr("by {0}", o.creator))}</span></span>` +
+      `<button class="ghost sm" data-act="goto" data-id="${o.id}">View</button></li>`),
+  ];
+  const unknown = n.unknown ? `<p class="sub">${esc(tr(n.unknown === 1
+    ? "And 1 more thing Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard."
+    : "And {0} more things Hoard doesn't know: often a base avatar or a shader you didn't download with Hoard.", n.unknown.toLocaleString()))}</p>` : "";
+  if (!rows.length && !unknown) return head + `<p class="sub">${esc(tr("Nothing from elsewhere: everything it uses is in it."))}</p>`;
+  return head + (rows.length ? `<ul class="needs">${rows.join("")}</ul>` : "") + unknown;
 }
 function updateSection(a) {
   if (!canDownload(a)) return "";
@@ -1529,6 +1709,7 @@ function renderGrid(list) {
 
 function renderFacets(list) {
   renderTagFacets(list);
+  renderSets(DATA.assets.filter(inView));
 
   const typeCounts = countBy(list, "types");
   for (const t of state.types) if (!typeCounts.has(t)) typeCounts.set(t, 0);
@@ -1584,6 +1765,7 @@ function renderStatus(list) {
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
+  if (state.set && setById(state.set)) pills.push(["set", "", "Set", setById(state.set).name]);
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
   const local = state.store === "Local";
@@ -1600,7 +1782,8 @@ function renderStatus(list) {
     pills.map(([k, v, label, text]) =>
       `<button class="pill" data-clear="${k}" data-v="${esc(v)}" aria-label="Remove ${label.toLowerCase()} filter ${esc(text)}">` +
       `<b>${label}</b> ${esc(text)}<span aria-hidden="true">×</span></button>`).join("") +
-    (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
+    (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "") +
+    (state.set && setById(state.set) ? ` <button class="linkish" data-setact="rename">Rename set</button> <button class="linkish" data-setact="delete">Delete set</button>` : "");
 }
 
 function syncControls() {
@@ -1646,15 +1829,20 @@ function showDetail(a, focus = true) {
       (isLocal(a) ? localSection(a)
         : `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
         here, and replaces one that was changed.</p>`) +
-    spaceSection(a) +
-    updateSection(a) +
-    librarySection(a) +
-    tagSection(a) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
     `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}</span>` +
       `<span class="fs">${f.missing ? "Missing on disk" : fmtSize(f.size)}</span>` +
-      (f.missing ? "<span></span>" : `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button>`) +
+      (f.missing ? "<span></span>" : `<span class="fb">` + (canLookInside(f.path)
+        ? `<button class="ghost sm" data-act="inside" data-path="${esc(a.folder + "/" + f.path)}">Look inside</button>` : "") +
+        `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button></span>`) +
       `</li>`).join("")}</ul>` +
+    spaceSection(a) +
+    updateSection(a) +
+    needsSection(a) +
+    librarySection(a) +
+    tagSection(a) +
+    setsSection(a) +
+    previousSection(a) +
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
   detail.classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 820px)").matches;
@@ -1686,6 +1874,131 @@ async function copyPath() {
   toast("Path copied");
 }
 
+/* ---------- Look inside: what a .unitypackage or .zip holds, read without extracting it (hoard/packages.py) */
+const canLookInside = name => /\.(unitypackage|zip)$/i.test(name);
+let INSIDE = null;   // what's shown: {id, kind, items | files + packages, nodes: folders drawn when opened}
+function openInside(open) {
+  const w = $("#insideWin"), show = open ?? w.hidden;
+  w.hidden = !show;
+  if (!show) INSIDE = null;
+}
+async function lookInside(path) {
+  const body = $("#insideBody"), name = path.split("/").pop();
+  INSIDE = null;
+  body.innerHTML = `<p class="file-name" translate="no">${esc(name)}</p><p class="sum">${esc(tr("Reading it. A large package takes a few seconds."))}</p>`;
+  openInside(true);
+  const r = await apiPost("/api/look-inside", { path });
+  if (!$("#insideWin").hidden && body.querySelector(".file-name") && body.querySelector(".file-name").textContent === name) {
+    if (!r.ok || r.data.error) {
+      body.innerHTML = `<p class="file-name" translate="no">${esc(name)}</p><p class="note">${esc(tr((r.data && r.data.error) || "That file couldn't be read."))}</p>`;
+      return;
+    }
+    INSIDE = { ...r.data, name, nodes: [] };
+    drawInside();
+  }
+}
+// a package's assets as folders (each drawn when it's opened, so a package of thousands opens at once)
+function insideTree(items) {
+  const root = { dirs: new Map(), files: [], count: 0, size: 0 };
+  for (const it of items) {
+    const parts = it.path.split("/");
+    let node = root;
+    for (const part of parts.slice(0, it.size == null ? parts.length : -1)) {
+      if (!node.dirs.has(part)) node.dirs.set(part, { dirs: new Map(), files: [], count: 0, size: 0 });
+      node = node.dirs.get(part);
+    }
+    if (it.size != null) node.files.push({ ...it, name: parts[parts.length - 1] });
+  }
+  (function total(n) {
+    for (const d of n.dirs.values()) { total(d); n.count += d.count; n.size += d.size; }
+    n.count += n.files.length; n.size += n.files.reduce((t, f) => t + f.size, 0);
+  })(root);
+  return root;
+}
+function previewImg(it, n) {
+  const ext = (it.name || it.path).split(".").pop();
+  return it.preview ? `<img class="pv" loading="lazy" alt="" src="${keyed(`/inside/${INSIDE.id}/${n}-${it.guid}.png`)}">`
+    : `<span class="pv" aria-hidden="true">${esc(ext.length <= 6 ? ext : "")}</span>`;
+}
+function insideFolder(node, n) {   // one folder's contents: its folders (closed), then its files
+  const dirs = [...node.dirs.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  return `<ul>` + dirs.map(([name, d]) => {
+    INSIDE.nodes.push({ node: d, n });
+    return `<li><details data-node="${INSIDE.nodes.length - 1}"><summary><span translate="no">${esc(name)}</span>` +
+      `<span class="n">${esc(tr(d.count === 1 ? "{0} file, {1}" : "{0} files, {1}", d.count.toLocaleString(), sizeText(d.size)))}</span></summary></details></li>`;
+  }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
+    `<li class="f">${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
+}
+function insidePackage(items, n, open) {
+  const tree = insideTree(items);
+  if (!tree.count) return `<p class="sum">${esc(tr("No files in it."))}</p>`;
+  const sum = `<p class="sum">${esc(tr(tree.count === 1 ? "{0} file, {1}" : "{0} files, {1}", tree.count.toLocaleString(), sizeText(tree.size)))}</p>`;
+  return sum + (open ? insideFolder(tree, n) : (INSIDE.nodes.push({ node: tree, n }), `<div data-pkg-node="${INSIDE.nodes.length - 1}"></div>`));
+}
+function insideFound(q) {   // searching: every file whose path has these words, wherever it is
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean), found = [];
+  const look = (items, n, where) => {
+    for (const it of items) if (it.size != null && words.every(w => it.path.toLowerCase().includes(w))) found.push({ ...it, n, where });
+  };
+  if (INSIDE.kind === "zip") INSIDE.packages.forEach((p, n) => look(p.items, n, p.name));
+  else look(INSIDE.items, 0, "");
+  if (INSIDE.kind === "zip")
+    for (const f of INSIDE.files) if (words.every(w => f.name.toLowerCase().includes(w))) found.push({ path: f.name, size: f.size, zip: true });
+  if (!found.length) return `<p class="sum">${esc(tr("Nothing in it matches."))}</p>`;
+  return `<p class="sum">${esc(tr(found.length === 1 ? "{0} file matches." : "{0} files match.", found.length.toLocaleString()))}</p>` +
+    `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${f.zip ? `<span class="pv" aria-hidden="true">zip</span>` : previewImg(f, f.n)}` +
+      `<span class="nm" translate="no">${esc(f.path)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+    (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
+}
+function drawInside(q = "") {
+  const I = INSIDE, body = $("#insideBody");
+  I.nodes = [];
+  const head = `<p class="file-name" translate="no">${esc(I.name)}</p>`;
+  const search = `<input type="search" id="insideQ" placeholder="${esc(tr("Search in it"))}" aria-label="${esc(tr("Search in it"))}" value="${esc(q)}">`;
+  let html;
+  if (q.trim()) html = insideFound(q);
+  else if (I.kind === "zip") {
+    const total = I.files.reduce((t, f) => t + f.size, 0);
+    html = `<p class="sum">${esc(tr(I.files.length === 1 ? "This zip holds {0} file, {1}." : "This zip holds {0} files, {1}.", I.files.length.toLocaleString(), sizeText(total)))} ` +
+      esc(I.packages.length ? tr(I.packages.length === 1 ? "One of them is a Unity package: open it to see what's in it." : "{0} of them are Unity packages: open one to see what's in it.", I.packages.length) : "") + `</p>` +
+      (I.files.some(f => f.locked) ? `<p class="note">${esc(tr("This zip is locked with a password. The store page usually says what it is."))}</p>` : "") +
+      I.packages.map((p, n) => `<details class="pkg"${I.packages.length === 1 ? " open" : ""} data-pkg="${n}"><summary translate="no">${esc(p.name)}</summary>` +
+        (p.error ? `<p class="note">${esc(tr(p.error))}</p>` : insidePackage(p.items, n, false)) + `</details>`).join("") +
+      `<details><summary>${esc(tr("Every file in the zip"))}</summary><ul class="zipfiles">${I.files.map(f =>
+        `<li><span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+      (I.more ? `<p class="more">${esc(tr("And {0} more.", I.more.toLocaleString()))}</p>` : "") + `</details>`;
+  } else html = insidePackage(I.items, 0, true);
+  body.innerHTML = head + (I.kind === "zip" && !I.files.length ? html : search + html);
+  for (const d of body.querySelectorAll("details.pkg[open]")) fillPackage(d);
+}
+function fillPackage(d) {
+  const slot = d.querySelector("[data-pkg-node]");
+  if (slot && !slot.childElementCount) { const { node, n } = INSIDE.nodes[+slot.dataset.pkgNode]; slot.innerHTML = insideFolder(node, n); }
+}
+function wireInside() {
+  makeWindow($("#insideWin"));
+  WINDOWS.insideWin = () => openInside(false);
+  const w = $("#insideWin");
+  w.addEventListener("toggle", e => {   // a folder, or a package in a zip, is drawn as it's opened
+    const d = e.target;
+    if (!INSIDE || !d.open) return;
+    if (d.dataset.node != null && d.childElementCount === 1) {
+      const { node, n } = INSIDE.nodes[+d.dataset.node];
+      d.insertAdjacentHTML("beforeend", insideFolder(node, n));
+    } else if (d.classList.contains("pkg")) fillPackage(d);
+  }, true);
+  let t;
+  w.addEventListener("input", e => {
+    if (e.target.id !== "insideQ" || !INSIDE) return;
+    clearTimeout(t);
+    t = setTimeout(() => {
+      const q = e.target.value, at = e.target.selectionStart;
+      drawInside(q);
+      const box = $("#insideQ"); box.focus(); box.setSelectionRange(at, at);
+    }, 150);
+  });
+}
+
 /* ---------- URL state */
 function saveHash() {
   const p = new URLSearchParams();
@@ -1695,6 +2008,7 @@ function saveHash() {
   if (state.creator) p.set("creator", state.creator);
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.types.size) p.set("types", [...state.types].join(","));
+  if (state.set) p.set("set", state.set);
   if (state.sort !== "name") p.set("sort", state.sort);
   if (state.view !== "downloads") p.set("view", state.view);
   if (state.view === "space" && state.space) p.set("space", state.space);
@@ -1707,6 +2021,7 @@ function readHash() {
   state.lib = /^\d+$/.test(p.get("lib") || "") ? p.get("lib") : "";
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
+  state.set = /^[0-9a-f]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
@@ -1816,7 +2131,10 @@ try { const z = localStorage.getItem("hoard-dl-tile-size"); if (z) setZoom(z); }
 function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); }
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), ty = e.target.closest("[data-type]"), c = e.target.closest("[data-creator]");
-  if (t) toggle(state.tags, t.dataset.tag);
+  const st = e.target.closest("[data-set]");
+  if (e.target.closest("#newSet")) { newSet(); return; }
+  if (st) state.set = state.set === st.dataset.set ? "" : st.dataset.set;
+  else if (t) toggle(state.tags, t.dataset.tag);
   else if (ty) toggle(state.types, ty.dataset.type);
   else if (c) state.creator = state.creator === c.dataset.creator ? "" : c.dataset.creator;
   else return;
@@ -1825,7 +2143,8 @@ $("#filters").addEventListener("click", e => {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); }
+  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; }
+  else if (k === "set") state.set = "";
   else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v); else if (k === "type") state.types.delete(v);
   render();
@@ -2013,6 +2332,11 @@ detail.addEventListener("click", e => {
   if (tagDetailAction(act, b, byId.get(openId))) return;
   if (act === "close") closeDetail();
   else if (act === "open") reveal(b.dataset.path);
+  else if (act === "inside") lookInside(b.dataset.path);
+  else if (act === "restore") restorePrevious(byId.get(openId), b);
+  else if (act === "unset") changeSets({ action: "remove", id: b.dataset.set, items: [byId.get(openId).tag_key] });
+  else if (act === "toset") addToSet([byId.get(openId)], $("#setPick").value);
+  else if (act === "showset") { state.set = b.dataset.set; render(); }
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
   else if (act === "update-one") updateItems([byId.get(openId)]);
@@ -2110,6 +2434,8 @@ function wireTags() {
   $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
   if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
   if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
+  $("#bulkSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), $("#bulkSetTo").value));
+  document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
   if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
   $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
   document.addEventListener("keydown", e => {
@@ -2262,6 +2588,7 @@ function wireApp() {
   $("#syncBtn").addEventListener("click", startSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
   wireSupportReport();
+  wireBackup();
   for (const id of ["tagPanel", "settingsPanel"]) makeWindow($("#" + id));
   wireLocal();
   wireLibs();
@@ -2271,6 +2598,7 @@ function wireApp() {
   wireTasks();
   wireNews();
   wireProjects();
+  wireInside();
   wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);

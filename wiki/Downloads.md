@@ -146,6 +146,27 @@ Gumroad or Booth, the same file name under a new label on Jinxxy, or a new name 
 on itch.io. Updated files are downloaded again and listed as updated in the summary. (When the new version has
 a different name, the old file stays in the folder too; Hoard never deletes your files.)
 
+### Sets
+
+From 4.0, a set groups products you use together: an avatar, its outfits and hair, and the shaders they need, say.
+Make one with **New set** (under **Sets** in the sidebar), or choose **Select**, pick products and use **Add to set**
+(**New set...** makes one with them in it); a product's details list its sets, with **Add** and **×** to take it out.
+Choose a set in the sidebar to see just its products; **Rename set** and **Delete set** are beside its filter (deleting
+a set leaves its products as they are). Sets are kept in `sets.json` in Hoard's app-data folder, and listed in
+`catalog.json` for Hoard for Unity, whose **Import set** imports them in one go (see
+[Hoard for Unity](Hoard-for-Unity)).
+
+### Previous versions
+
+From 4.0, when an update replaces a file (the same name, new contents), the old one is kept: it goes to
+`_Previous versions/<date and time>/` in the product's own folder. A product's details in Downloads list them under
+**Previous versions**, with when each was replaced and **Restore**, which puts it back as the current file and keeps
+the one it replaces there in turn, so you can change your mind. Hoard keeps the last one of each file unless you
+choose otherwise in [Settings](Settings) (**Previous versions**: none, or the last 1, 2, 3 or 5); older ones are
+deleted. They stay out of everything else: the files Hoard checks, Disk space and Hoard for Unity only see the
+current files. **Delete downloaded files** deletes a product's previous versions too, and **Move to** takes them
+along.
+
 ### Checking for updates without downloading
 
 **Check for updates** (in Downloads, under **Updates** on the left) reads your stores the way a download
@@ -177,6 +198,21 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
   say after you've tidied it yourself.
+- **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without extracting or
+  importing anything. A Unity package's files are listed in their folders (each opens as you choose it), with
+  their sizes and the preview pictures Unity keeps inside the package; **Search in it** finds a file wherever it
+  is. A `.zip` lists its files, and what each Unity package in it holds. One locked with a password says so (the
+  store page usually gives the password), and one that isn't what its name says, or is damaged, says that. Hoard
+  keeps what it read (in its `cache` folder) for the 40 files you looked inside most recently, so a second look
+  is instant.
+- **What it needs** (from 4.0, in a product's details) lists what its packages use that isn't in them: tools such
+  as lilToon, Poiyomi Toon (with the version its materials were made with), Modular Avatar, VRCFury, NDMF, Avatar
+  Optimizer and the VRChat SDK, each with **Get it** (its own website); other products you've downloaded with Hoard,
+  such as the base avatar an outfit is made for, with **View**; and a count of anything else (often a base avatar or
+  a paid shader you didn't download with Hoard). Hoard works it out by reading each package once, in the background
+  while nothing else is running, and again only when it changes: Unity names everything an asset uses by an ID, so
+  the IDs a package's materials and prefabs name, less its own, are what it needs from elsewhere. Hoard knows the
+  tools' IDs from their own published releases. Hoard for Unity uses the same list to warn you before importing.
 
 ### Checking your downloads
 

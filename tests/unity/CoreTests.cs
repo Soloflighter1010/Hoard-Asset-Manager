@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using SoloFlighter.Hoard;
@@ -334,6 +335,33 @@ public static class CoreTests
         var itch = cat.Assets.Find(a => a.Name == "Paw Suit");
         Check("an itch.io asset, with its link", itch != null && itch.Store == "Itch" && itch.Url == "https://kitsu.itch.io/paw-suit"
               && cat.FilePath(itch, "PawSuit.unitypackage") != null, itch == null ? "missing" : itch.Url ?? "null");
+        // what it needs (Hoard 4.0): checked like the rest, a broken need left out (not the product)
+        Check("needs: the good ones read", itch != null && itch.Needs.Count == 3, itch == null ? "missing" : itch.Needs.Count.ToString());
+        if (itch != null && itch.Needs.Count == 3)
+        {
+            Check("needs: a tool, with its versions and link", itch.Needs[0].Kind == "tool" && itch.Needs[0].Label == "Poiyomi Toon 8.1"
+                  && itch.Needs[0].Url == "https://www.poiyomi.com/" && itch.Needs[0].Guids.Count == 1);
+            Check("needs: a link off the tool's own website dropped", itch.Needs[1].Name == "lilToon" && itch.Needs[1].Url == null);
+            Check("needs: another product, by its folder", itch.Needs[2].Kind == "product" && itch.Needs[2].Folder == "Booth/Kitsu Studio/Rusk Avatar Base"
+                  && itch.Needs[2].Store == "Booth" && itch.Needs[2].Guids.Count == 2);
+        }
+        // sets (Hoard 4.0): only products the catalog has; a set with none, or a name that isn't clean, left out
+        Check("sets read", cat.Sets.Count == 1 && cat.Sets[0].Name == "Kitsu, winter"
+              && string.Join("|", cat.Sets[0].Folders.ToArray()) == "Itch/Kitsu Studio/Paw Suit|Booth/Kitsu Studio/Rusk Avatar Base",
+              cat.Sets.Count + " sets");
+        if (itch != null && good != null)
+        {
+            // Paw Suit needs Rusk Avatar Base (its needs, above): the avatar comes first, then the rest by name
+            var extra = new HoardAsset { Name = "Aaa Hair", Folder = "Booth/x/Aaa Hair" };
+            var order = SetOrder.Order(new List<HoardAsset> { itch, extra, good });
+            Check("Import set: what's needed first", string.Join("|", order.ConvertAll(a => a.Name).ToArray()) == "Aaa Hair|Rusk Avatar Base|Paw Suit",
+                  string.Join("|", order.ConvertAll(a => a.Name).ToArray()));
+            var loop = new HoardAsset { Name = "Loop", Folder = "Booth/l" };
+            loop.Needs.Add(new HoardNeed { Kind = "product", Folder = "Booth/l2" });
+            var loop2 = new HoardAsset { Name = "Loop 2", Folder = "Booth/l2" };
+            loop2.Needs.Add(new HoardNeed { Kind = "product", Folder = "Booth/l" });
+            Check("Import set: a loop of needs is broken", SetOrder.Order(new List<HoardAsset> { loop, loop2 }).Count == 2);
+        }
         var badLink = cat.Assets.Find(a => a.Name == "Odd Link");
         Check("off-store link dropped", badLink != null && badLink.Url == null);
         Check("file found inside the folder", good != null && cat.FilePath(good, "Rusk.unitypackage") != null);
@@ -414,6 +442,51 @@ public static class CoreTests
             Check("a package larger than any real one refused", e is InvalidDataException && e.Message.Contains("larger"),
                   e.GetType().Name + ": " + e.Message);
         }
+
+        // packages a product came zipped in (PackageFile, ZipReader): found, read and unpacked straight from the zip
+        string packageLines = string.Join("\n", want);
+        Func<string, string> readBack = p =>
+        {
+            var lines = new List<string>();
+            foreach (var kv in UnityPackageReader.ReadAssets(p)) lines.Add(kv.Key + " " + kv.Value);
+            lines.Sort(StringComparer.Ordinal);
+            return string.Join("\n", lines);
+        };
+        string deflated = Path.Combine(dir, "deflated.zip");
+        var inZip = PackageFile.PackagesIn(deflated);
+        Check("zip: its package found, by its UTF-8 name", inZip.Count == 1 && inZip[0] == PackageFile.InZip(deflated, "衣装/ラスク.unitypackage"),
+              string.Join(" / ", inZip));
+        Check("zip: the package read from inside it", inZip.Count == 1 && readBack(inZip[0]) == packageLines);
+        Check("zip: names", inZip.Count == 1 && PackageFile.Name(inZip[0]) == "ラスク.unitypackage" && PackageFile.OnDisk(inZip[0]) == deflated
+              && PackageFile.Label(inZip[0]) == "deflated.zip \u203a 衣装/ラスク.unitypackage" && PackageFile.IsZipped(inZip[0])
+              && !PackageFile.IsZipped(deflated) && PackageFile.OnDisk(Path.Combine(dir, "test.unitypackage")) == Path.Combine(dir, "test.unitypackage"));
+        foreach (string kind in new[] { "stored", "zip64", "comment", "sjis" })
+        {
+            var inThis = PackageFile.PackagesIn(Path.Combine(dir, kind + ".zip"));
+            Check("zip (" + kind + "): its package found and read", inThis.Count == 1 && readBack(inThis[0]) == packageLines, string.Join(" / ", inThis));
+        }
+        var sjis = PackageFile.PackagesIn(Path.Combine(dir, "sjis.zip"));
+        bool cjk = true;
+        try { Encoding.GetEncoding(932); } catch (Exception) { cjk = false; }
+        Check("zip: a Shift-JIS name, where this runtime reads Shift-JIS", !cjk || (sjis.Count == 1 && sjis[0].EndsWith("|衣装/ラスク.unitypackage")),
+              string.Join(" / ", sjis));
+        Check("zip: a package locked with a password isn't offered", PackageFile.PackagesIn(Path.Combine(dir, "locked.zip")).Count == 0);
+        Check("zip: not a zip offers nothing", PackageFile.PackagesIn(Path.Combine(dir, "not_a_package.unitypackage")).Count == 0);
+        string unzipped = Path.Combine(dir, "Unzipped");
+        if (inZip.Count == 1)
+        {
+            string made = PackageFile.ForImport(inZip[0], unzipped);
+            Check("unpacked for importing: the very package, named as in the zip", Path.GetFileName(made) == "ラスク.unitypackage"
+                  && File.ReadAllBytes(made).SequenceEqual(File.ReadAllBytes(Path.Combine(dir, "test.unitypackage"))), made);
+            var when = File.GetLastWriteTimeUtc(made);
+            Check("unpacked once for each version of the zip", PackageFile.ForImport(inZip[0], unzipped) == made && File.GetLastWriteTimeUtc(made) == when);
+        }
+        Check("a plain package is imported as it is", PackageFile.ForImport(Path.Combine(dir, "test.unitypackage"), unzipped) == Path.Combine(dir, "test.unitypackage"));
+        string damagedRef = PackageFile.InZip(Path.Combine(dir, "damaged.zip"), "Rusk.unitypackage");
+        try { PackageFile.ForImport(damagedRef, unzipped); Check("a damaged package in a zip isn't unpacked", false, "no error"); }
+        catch (Exception e) { Check("a damaged package in a zip isn't unpacked", e is InvalidDataException, e.GetType().Name + ": " + e.Message); }
+        Check("nothing half unpacked is left", Directory.GetFiles(unzipped, "*", SearchOption.AllDirectories).Length == 1,
+              string.Join(" / ", Directory.GetFiles(unzipped, "*", SearchOption.AllDirectories)));
 
         // the release's own .unitypackage (built by scripts/build_vpm.py), read back by this reader
         string release = Path.Combine(dir, "release.unitypackage");

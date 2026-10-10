@@ -74,7 +74,14 @@ def build_material(d: Path) -> None:
     good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"]),
             asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
             asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"]),
-            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch"),
+            asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch",
+                  needs=[   # what it needs (Hoard 4.0, hoard/needs.py): two kept, one link dropped, two broken ones left out
+                      {"kind": "tool", "name": "Poiyomi Toon", "url": "https://www.poiyomi.com/", "versions": ["8.1"], "guids": ["a" * 32]},
+                      {"kind": "tool", "name": "lilToon", "url": "https://lilxyzw.github.io.evil.example/", "versions": [], "guids": ["b" * 32]},
+                      {"kind": "product", "name": "Rusk Avatar Base", "creator": "Kitsu Studio", "store": "Booth",
+                       "folder": "Booth/Kitsu Studio/Rusk Avatar Base", "guids": ["c" * 32, "d" * 32]},
+                      {"kind": "tool", "name": "Bad", "url": "https://www.poiyomi.com/", "versions": [], "guids": ["NOT A GUID"]},
+                      {"kind": "product", "name": "Escaping", "creator": "x", "store": "Booth", "folder": "../x", "guids": ["e" * 32]}]),
             # your own, listed where it is (issue #80): a folder outside the downloads, named by the sealed catalog
             asset("My Textures", "Local/_linked/local-1", None, ["Mine.unitypackage", "sub/skin.png"], store="Local",
                   location=os.path.normpath(str(d / "mine")), note="A commission")]
@@ -95,7 +102,11 @@ def build_material(d: Path) -> None:
            asset("Relative Library", "Booth/v", None, [], library="drive"),
            asset("Library And Place", "Local/_linked/local-3", None, [], store="Local", library=os.path.normpath(str(drive)),
                  location=os.path.normpath(str(d / "mine")))]
-    catalog = {"format": "hoard-catalog", "version": 4, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad}
+    catalog = {"format": "hoard-catalog", "version": 4, "generated_at": "2026-09-25T00:00:00+00:00", "assets": good + bad,
+               "sets": [   # your sets (Hoard 4.0): only products the catalog has, by their folders
+                   {"name": "Kitsu, winter", "items": ["Itch/Kitsu Studio/Paw Suit", "Booth/Kitsu Studio/Rusk Avatar Base",
+                                                       "Booth/Gone", "../outside", "Booth/Kitsu Studio/Rusk Avatar Base"]},
+                   {"name": "Nothing here", "items": ["Booth/Gone"]}, {"name": "\u202ebad", "items": ["Booth/Kitsu Studio/Anko"]}]}
     (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
     (d / "good_names.txt").write_text("|".join(a["name"] for a in good))
 
@@ -163,6 +174,7 @@ def build_material(d: Path) -> None:
     expected[folder_guid] = "Assets/Kitsu"
     (d / "package_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
     (d / "not_a_package.unitypackage").write_bytes(gzip.compress(b"hello, this is not a tar file" * 3))
+    build_zips(d, (d / "test.unitypackage").read_bytes())
     # what a check for updates found, written by the app's own code, for Hoard for Unity's "Update in Hoard" mark
     from hoard.asset_updates import AssetUpdates
     AssetUpdates(d / "asset-updates.json").record_check(["booth", "itch"], None, [
@@ -173,6 +185,37 @@ def build_material(d: Path) -> None:
     (d / "huge_name.unitypackage").write_bytes(gzip.compress(tar_header("././@LongLink", 8 ** 11 - 1, b"L") + b"x" * 100))
     (d / "too_big.unitypackage").write_bytes(gzip.compress(tar_header("0123456789abcdef0123456789abcdef/asset",
                                                                        8 ** 12 - 1, b"0") + b"x" * 100))
+
+
+def build_zips(d: Path, package: bytes) -> None:
+    """test.unitypackage zipped, as products come: deflated and stored, ZIP64, with a comment, with Shift-JIS names
+    and no flag saying so, locked with a password, and damaged."""
+    import zipfile
+    name = "衣装/ラスク.unitypackage"
+    with zipfile.ZipFile(d / "deflated.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("衣装/README.txt", "hi")
+        zf.writestr(name, package)
+    with zipfile.ZipFile(d / "stored.zip", "w", zipfile.ZIP_STORED) as zf:
+        zf.writestr("Rusk.unitypackage", package)
+    with zipfile.ZipFile(d / "zip64.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+        with zf.open("Rusk.unitypackage", "w", force_zip64=True) as f:
+            f.write(package)
+    with zipfile.ZipFile(d / "comment.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.comment = b"made by a store " * 100
+        zf.writestr("Rusk.unitypackage", package)
+    raw = name.encode("cp932")   # (Python writes a name it can't put in ASCII as UTF-8, flagged: swapped in after)
+    stand_in = ("x" * (len(raw) - len(".unitypackage")) + ".unitypackage").encode()
+    with zipfile.ZipFile(d / "sjis.zip", "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(stand_in.decode(), package)
+    (d / "sjis.zip").write_bytes((d / "sjis.zip").read_bytes().replace(stand_in, raw))
+    locked = bytearray((d / "stored.zip").read_bytes())   # the "encrypted" flag set, as a password-locked zip has it
+    for sig, at in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+        i = locked.index(sig)
+        locked[i + at] |= 1
+    (d / "locked.zip").write_bytes(bytes(locked))
+    damaged = bytearray((d / "stored.zip").read_bytes())
+    damaged[30 + len("Rusk.unitypackage") + 40] ^= 0xFF   # a byte of the package itself: its CRC no longer matches
+    (d / "damaged.zip").write_bytes(bytes(damaged))
 
 
 def tar_header(name: str, size: int, kind: bytes) -> bytes:
