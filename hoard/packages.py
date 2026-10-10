@@ -312,12 +312,16 @@ def preview(cid: str, name: str) -> bytes | None:
     """A preview kept with what was read (look_inside), by the names the page was given; None for anything else."""
     if not CACHE_ID.fullmatch(cid or "") or not PREVIEW_NAME.fullmatch(name or ""):
         return None
+    base = os.path.realpath(cache_dir())
+    path = os.path.realpath(os.path.join(base, cid, name))
+    if not path.startswith(base + os.sep):   # (and inside the cache, wherever a link might lead)
+        return None
     try:
-        p = cache_dir() / cid / name
-        st = os.stat(p, follow_symlinks=False)
+        st = os.stat(path, follow_symlinks=False)
         if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_PREVIEW:
             return None
-        data = p.read_bytes()
+        with open(path, "rb") as fh:
+            data = fh.read(MAX_PREVIEW + 1)
     except OSError:
         return None
-    return data if data.startswith(PNG) else None
+    return data if data.startswith(PNG) and len(data) <= MAX_PREVIEW else None
