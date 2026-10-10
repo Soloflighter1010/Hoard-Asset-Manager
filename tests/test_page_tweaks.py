@@ -97,6 +97,31 @@ class Tweaks(unittest.TestCase):
         self.assertEqual(height, add.evaluate(look)[1], "as tall as Add")
         self.assertEqual(size, add.evaluate(look)[2], "the same size text as Add")
 
+    def test_the_task_log_keeps_its_place(self):
+        """Every new line drew the Tasks panel again, and the log went back to the top."""
+        import json
+        page = self.downloads()
+        lines = [200]
+        page.route("**/api/tasks*", lambda route: route.fulfill(content_type="application/json", body=json.dumps(
+            {"current": {"id": "t1", "task": "sync", "label": "Sync", "message": "Working",
+                         "log": [f"line {i}" for i in range(lines[0])]}, "queue": [], "history": []})))
+        page.click("#tasksTab")
+        page.click("#tasksBody .task.run details summary")
+        pre = page.locator("#tasksBody .task.run details pre")
+        at_end = "p => p.scrollTop + p.clientHeight >= p.scrollHeight - 4"
+
+        def more():   # a new line, drawn by the panel's own refresh
+            lines[0] += 1
+            page.wait_for_function(f"() => (document.querySelector('#tasksBody .task.run details pre') || {{}}).textContent"
+                                   f"?.endsWith('line {lines[0] - 1}')")
+        self.assertTrue(pre.evaluate(at_end), "opened: its newest lines")
+        more()
+        self.assertTrue(pre.evaluate(at_end), "at the end, it follows what's new")
+        pre.evaluate("p => p.scrollTop = 300")
+        more()
+        self.assertEqual(pre.evaluate("p => p.scrollTop"), 300, "scrolled up to read: it stays there")
+        self.assertTrue(page.locator("#tasksBody .task.run details").evaluate("d => d.open"))
+
     def test_a_long_message_stays_longer(self):
         page = self.downloads()
         page.evaluate("toast('A short one.')")

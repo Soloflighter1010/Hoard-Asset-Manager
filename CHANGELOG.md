@@ -39,6 +39,8 @@
   - Settings has a row of its parts at the top (Folders, Stores, Downloading, Look, Sign-ins, Updates, Backup,
     Troubleshooting), to jump to one.
   - A longer message stays up long enough to read.
+- **Fixed: a task's progress jumped back to the top with every new line**, in Tasks. It stays where you've scrolled
+  to, and while you're at the end it follows the newest lines.
 - **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
   without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
 
