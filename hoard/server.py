@@ -20,12 +20,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, diagnostics, i18n, itch, libraries, needs, packages, projects, space, themes, updater, vault
+from . import __version__, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
+                         restore_previous,
                          last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
@@ -52,7 +53,8 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
-           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside")
+           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
+           "/api/previous/restore")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -211,6 +213,7 @@ def public_settings(cfg: dict) -> dict:
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
+        "keep_previous": keep_previous(cfg),
         "local_copy": cfg.get("local_copy", True) is not False,
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
@@ -223,6 +226,15 @@ def public_settings(cfg: dict) -> dict:
                        **({"skip_game_builds": bool(cfg[s].get("skip_game_builds", True))} if s == "itch" else {})}
                    for s in STORES},
     }
+
+
+KEEP_PREVIOUS = (0, 1, 2, 3, 5)
+
+
+def keep_previous(cfg: dict) -> int:
+    """How many previous versions of a replaced file to keep (Settings, Previous versions)."""
+    n = cfg.get("keep_previous", 1)
+    return n if n in KEEP_PREVIOUS and not isinstance(n, bool) else 1
 
 
 def apply_settings(cfg: dict, body: dict) -> dict:
@@ -259,6 +271,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if body["download_retries"] not in (0, 1, 2, 3) or isinstance(body["download_retries"], bool):
             raise ValueError("Choose how many times to try a failed download again from the list.")
         change["download_retries"] = body["download_retries"]
+    if "keep_previous" in body:   # previous versions (hoard/previous.py)
+        if body["keep_previous"] not in KEEP_PREVIOUS or isinstance(body["keep_previous"], bool):
+            raise ValueError("Choose how many previous versions to keep from the list.")
+        change["keep_previous"] = body["keep_previous"]
     if "new_days" in body:
         if body["new_days"] not in NEW_DAYS or isinstance(body["new_days"], bool):
             raise ValueError("Choose how long things are marked New from the list.")
@@ -386,6 +402,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
         self.schedule = Schedule(cfg, self.jobs)
+        previous.set_keep(keep_previous(cfg))
         # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
         self.needs_index = needs.NeedsIndex()
         self.needs_reader = needs.NeedsReader(self.needs_index, lambda: self.index(stale_ok=True).get("assets", []),
@@ -1061,6 +1078,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e)}, 400)
             deep_merge(srv.cfg, change)
             apply_store_sites(srv.cfg)   # added or removed Payhip shops count (or stop counting) straight away
+            previous.set_keep(keep_previous(srv.cfg))
             srv.save_settings()
             srv.forget_index()
             return self._json({"ok": True, "settings": {**public_settings(srv.cfg), "libraries": srv.library_view()}})
@@ -1099,6 +1117,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(packages.look_inside(target), compress=True)
             except (packages.NotAPackage, OSError):
                 return self._json({"error": "That file couldn't be read."}, 500)
+        if path == "/api/previous/restore":   # Downloads: put a previous version of a file back (hoard/previous.py)
+            if srv.jobs.state.get("running"):
+                return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
+            folder = open_target(srv.cfg, str(body.get("folder", "")))
+            if not folder or not folder.is_dir():
+                return self._json({"error": "That product's folder isn't on disk anymore."}, 404)
+            try:
+                restore_previous(srv.cfg, root_dir(srv.cfg), folder, str(body.get("stamp", "")), str(body.get("file", "")))
+            except (ValueError, OSError) as e:
+                return self._json({"error": str(e) if isinstance(e, ValueError) else "That version couldn't be put back."}, 400)
+            srv.forget_index()
+            return self._json({"ok": True})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)

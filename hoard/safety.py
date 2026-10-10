@@ -669,6 +669,8 @@ def move_into_place(part: Path, dest: Path, identity: tuple) -> None:
     here = os.stat(part, follow_symlinks=False)
     if _is_link(here) or (here.st_dev, here.st_ino) != identity:
         raise UnsafePath(f"{part.name} was replaced while downloading, so it wasn't used")
+    from . import previous
+    previous.keep(dest)   # the file an update replaces is kept, as a previous version (hoard/previous.py)
     os.replace(part, dest)
     now = os.stat(dest, follow_symlinks=False)
     if _is_link(now) or (now.st_dev, now.st_ino) != identity:

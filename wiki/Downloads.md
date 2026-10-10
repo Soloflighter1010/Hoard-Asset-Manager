@@ -146,6 +146,17 @@ Gumroad or Booth, the same file name under a new label on Jinxxy, or a new name 
 on itch.io. Updated files are downloaded again and listed as updated in the summary. (When the new version has
 a different name, the old file stays in the folder too; Hoard never deletes your files.)
 
+### Previous versions
+
+From 4.0, when an update replaces a file (the same name, new contents), the old one is kept: it goes to
+`_Previous versions/<date and time>/` in the product's own folder. A product's details in Downloads list them under
+**Previous versions**, with when each was replaced and **Restore**, which puts it back as the current file and keeps
+the one it replaces there in turn, so you can change your mind. Hoard keeps the last one of each file unless you
+choose otherwise in [Settings](Settings) (**Previous versions**: none, or the last 1, 2, 3 or 5); older ones are
+deleted. They stay out of everything else: the files Hoard checks, Disk space and Hoard for Unity only see the
+current files. **Delete downloaded files** deletes a product's previous versions too, and **Move to** takes them
+along.
+
 ### Checking for updates without downloading
 
 **Check for updates** (in Downloads, under **Updates** on the left) reads your stores the way a download

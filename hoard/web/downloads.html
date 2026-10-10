@@ -268,6 +268,7 @@ a.ghost { height: 42px; }
 .files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
 .files .fn { overflow-wrap: anywhere; }
 .files .fb { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.files .fn .muted { font-size: 12px; color: var(--dust); }
 .needs { list-style: none; margin: 0; padding: 0; }
 .needs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 14px; }
 .needs .nm { overflow-wrap: anywhere; }
@@ -1019,6 +1020,16 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
+  <h3>Previous versions</h3>
+  <select id="setPrevious" aria-label="Previous versions to keep">
+    <option value="0">Don't keep them</option>
+    <option value="1">Keep the last one</option>
+    <option value="2">Keep the last 2</option>
+    <option value="3">Keep the last 3</option>
+    <option value="5">Keep the last 5</option>
+  </select>
+  <p class="hint">When an update replaces a file, the old one is kept in <strong>_Previous versions</strong> in the
+    product's folder, and <strong>Restore</strong> in Downloads puts it back.</p>
   <h3>Routine check</h3>
   <select id="setRoutine" aria-label="Routine check">
     <option value="0">Off: only when I ask (the default)</option>
@@ -1340,6 +1351,27 @@ function updatesBar(n) {
   return `<p>${say.map(esc).join(" ")}</p>` +
     `<button class="ghost sm" data-upd="check">Check for updates</button>` +
     (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
+}
+// Previous versions (hoard/previous.py): what updates replaced, kept in the product's folder, to put back
+function previousSection(a) {
+  const list = a.previous || [];
+  if (!list.length) return "";
+  const when = s => { const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d)(\d\d)/.exec(s);
+    return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).toLocaleString(document.documentElement.lang || undefined,
+      { dateStyle: "medium", timeStyle: "short" }) : s; };
+  return `<h3>Previous versions<span class="muted">${esc(sizeText(list.reduce((t, v) => t + v.size, 0)))}</span></h3>` +
+    `<ul class="files">${list.map(v => `<li><span class="fn"><span translate="no">${esc(v.file)}</span>` +
+      `<br><span class="muted">${esc(tr("Replaced {0}", when(v.stamp)))}</span></span><span class="fs">${fmtSize(v.size)}</span>` +
+      `<button class="ghost sm" data-act="restore" data-stamp="${esc(v.stamp)}" data-file="${esc(v.file)}">Restore</button></li>`).join("")}</ul>` +
+    `<p class="sub">Restore puts it back, and keeps the one it replaces here, so you can change your mind.</p>`;
+}
+async function restorePrevious(a, b) {
+  if (!await ask(tr("Put back {0} from {1}? The current one is kept here as a previous version.", b.dataset.file, b.closest("li").querySelector(".muted").textContent),
+                 "Restore")) return;
+  const r = await apiPost("/api/previous/restore", { folder: a.folder, stamp: b.dataset.stamp, file: b.dataset.file });
+  if (!r.ok) { toast(r.data.error || "That version couldn't be put back."); return; }
+  toast(tr("Put back {0}.", b.dataset.file));
+  await load(true);
 }
 // What it needs (hoard/needs.py): the tools and other products its packages use, from what Hoard has read of them
 function needsSection(a) {
@@ -1709,6 +1741,7 @@ function showDetail(a, focus = true) {
         ? `<button class="ghost sm" data-act="inside" data-path="${esc(a.folder + "/" + f.path)}">Look inside</button>` : "") +
         `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button></span>`) +
       `</li>`).join("")}</ul>` +
+    previousSection(a) +
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
   detail.classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 820px)").matches;
@@ -2193,6 +2226,7 @@ detail.addEventListener("click", e => {
   if (act === "close") closeDetail();
   else if (act === "open") reveal(b.dataset.path);
   else if (act === "inside") lookInside(b.dataset.path);
+  else if (act === "restore") restorePrevious(byId.get(openId), b);
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
   else if (act === "update-one") updateItems([byId.get(openId)]);

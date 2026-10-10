@@ -1016,6 +1016,16 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
+  <h3>Previous versions</h3>
+  <select id="setPrevious" aria-label="Previous versions to keep">
+    <option value="0">Don't keep them</option>
+    <option value="1">Keep the last one</option>
+    <option value="2">Keep the last 2</option>
+    <option value="3">Keep the last 3</option>
+    <option value="5">Keep the last 5</option>
+  </select>
+  <p class="hint">When an update replaces a file, the old one is kept in <strong>_Previous versions</strong> in the
+    product's folder, and <strong>Restore</strong> in Downloads puts it back.</p>
   <h3>Routine check</h3>
   <select id="setRoutine" aria-label="Routine check">
     <option value="0">Off: only when I ask (the default)</option>

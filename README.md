@@ -152,7 +152,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   or `.zip` in a product's files) shows every file it holds, in its folders, with the previews Unity keeps for
   them, without extracting anything; for a `.zip`, what each Unity package in it holds too. **What it needs**
   (in a product's details) lists what its packages use that isn't in them: shaders and tools such as lilToon,
-  Poiyomi or Modular Avatar, and other products you have, such as the avatar an outfit is made for.
+  Poiyomi or Modular Avatar, and other products you have, such as the avatar an outfit is made for. When an update
+  replaces a file, the old one is kept (**Previous versions**, with **Restore**).
 - **Payhip** is listed, not downloaded: Hoard shows everything you bought there, with each product's
   download page, and you download the files from Payhip yourself. Payhip keeps your purchases under the
   shops you bought from, one library page per shop, so the easy way in is to save each shop's library

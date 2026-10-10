@@ -818,6 +818,7 @@ function fillSettings() {   // the controls, as the settings are now
   renderLibs(SETTINGS.libraries);
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
+  $("#setPrevious").value = String(SETTINGS.keep_previous ?? 1);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setUpdates").checked = SETTINGS.check_for_updates;
   $("#setBetas").checked = !!SETTINGS.beta_updates;
@@ -1129,6 +1130,7 @@ function settingsPart(el) {
     case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
+    case "setPrevious": return { keep_previous: Number(el.value) };
     case "setGlowOn": return { display: { glow: el.checked } };
     case "setColours": return { display: { colours: el.value } };
     case "setTextSize": case "setPause": case "setMotion":

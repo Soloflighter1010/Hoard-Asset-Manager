@@ -8,6 +8,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
+from . import previous
 from .paths import HERE
 from .safety import DataFileError, read_json_file, safe_join, store_link
 from .tags import TagMatcher, TagStore, tag_key, tag_overview
@@ -162,6 +163,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "modified": newest or None,
             "thumb": f"{place}/{thumb}" if thumb else None,
             "also_in": [],
+            "previous": [] if linked else previous.listed(folder),   # what updates replaced (hoard/previous.py)
         })
 
     # The same product bought on both stores: flag it, never merge it.

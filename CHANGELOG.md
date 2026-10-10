@@ -17,6 +17,11 @@
   nothing else is running: the IDs its materials and prefabs name, less its own, are what it needs from elsewhere.
   It knows the tools' IDs from their own published releases. Hoard for Unity 0.8 says what's missing from the
   project, and asks before importing without it.
+- **Previous versions.** When an update replaces a file, the old one is kept in `_Previous versions` in the product's
+  folder, and a product's details in Downloads list it with **Restore**, which puts it back (and keeps the one it
+  replaces, so you can change your mind). Hoard keeps the last one of each file; choose none, or up to 5, in
+  Settings (**Previous versions**). Deleting a product's downloaded files deletes them too, and moving it takes
+  them along.
 - **Fixed: Japanese and Korean were missing from the portable download** (`Hoard-<version>.zip`, for macOS and Linux
   without the installer) since 3.3.0, so it was always in English. Every build is now checked for all of Hoard's files.
 
