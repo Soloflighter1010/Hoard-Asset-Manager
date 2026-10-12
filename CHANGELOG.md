@@ -5,6 +5,8 @@
 - **Make a set from a project.** Each project in **Projects** has **Make a set**: a set of the products it uses (all of
   them or partly; not ones imported once and gone since), named for the project, so you can import them together in
   another project with Hoard for Unity's **Import set**.
+- **Fixed: What it needs could show what it said before your downloads changed**, until Hoard was restarted: what
+  it had worked out was kept by where the list of downloads was in memory, which a new list can be given.
 
 ## 4.0.3
 

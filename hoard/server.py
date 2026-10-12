@@ -409,7 +409,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.needs_reader = needs.NeedsReader(self.needs_index, lambda: self.index(stale_ok=True).get("assets", []),
                                               lambda: bool(self.jobs.state.get("running")))
         self.needs_reader.on_read = lambda: rebuild_catalog_quietly(self)
-        self._needs = (None, None)   # (what it was worked out from, {product id: what it needs})
+        self._needs = (None, None, None)   # (the index and the read packages' time it was worked out from, {product id: ...})
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
 
     def start_schedule(self) -> threading.Event:
@@ -457,10 +457,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
     def needs_view(self, index: dict) -> dict:
         """What each product in the downloads index needs (hoard/needs.py), worked out again only when the index or
         what's been read changes."""
-        key = (id(index), self.needs_index.changed_at)
-        if self._needs[0] != key:
-            self._needs = (key, needs.work_out(index.get("assets", []), self.needs_index))
-        return self._needs[1]
+        # the index itself is kept (not its id): a rebuilt index can be given a freed one's id, and take its answer
+        known, at, found = self._needs
+        if known is not index or at != self.needs_index.changed_at:
+            found = needs.work_out(index.get("assets", []), self.needs_index)
+            self._needs = (index, self.needs_index.changed_at, found)
+        return found
 
     def save_settings(self) -> None:
         """Write the settings to config.json (the ones it keeps), one writer at a time."""
