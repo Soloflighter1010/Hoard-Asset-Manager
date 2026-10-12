@@ -57,8 +57,27 @@ class RoundTrip(unittest.TestCase):
         self.assertIn("pin", doc["marks"])
         self.assertNotIn("downloadables", text, "never a link that downloads what you bought")
         self.assertNotIn("2468", text)
+        self.assertNotIn(self.phrase, text, "never the recovery words")
+
+        def values(v):   # every value the marks hold (a word can be part of anything else too: "midnight" is a theme)
+            if isinstance(v, dict):
+                return [x for item in v.values() for x in values(item)]
+            return [x for item in v for x in values(item)] if isinstance(v, list) else [v]
         for word in self.phrase.split():
-            self.assertNotIn(f'"{word}"', text, "never the recovery words")
+            self.assertNotIn(word, values(doc["marks"]), "only their slow hash")
+
+    def test_recovery_words_that_are_other_names_too(self):
+        """A recovery word can be a theme's name ("midnight", "frost"): the settings name it, the marks don't."""
+        from hoard import marks
+        MarkStore().path.unlink()   # as setUp leaves things, with a phrase made of these words
+        words = iter(["midnight", "frost", "abandon", "ability", "able", "about"])
+        with mock.patch.object(marks.secrets, "choice", lambda seq: next(words)):
+            self.phrase = MarkStore().set_pin("2468")
+        self.assertEqual(self.phrase, "midnight frost abandon ability able about")
+        MarkStore().change("archived", [RUSK], True)
+        MarkStore().change("hidden", [tag_key("Booth", "Secret Thing")], True)
+        self.assertIn('"midnight"', json.dumps(self.make(unlocked=True)), "a theme's name, in the settings")
+        self.test_what_goes_in()
 
     def test_locked_leaves_hidden_out(self):
         doc = self.make(unlocked=False)
