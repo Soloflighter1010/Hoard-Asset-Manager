@@ -1407,21 +1407,7 @@ function setsSection(a) {
     `<div class="tagadd"><select id="setPick" aria-label="Set to add it to">${setOptions("Add it to a set")}</select>` +
     `<button class="ghost sm" data-act="toset">Add</button></div>`;
 }
-function askName(title, value = "") {
-  return new Promise(resolve => {
-    const d = document.createElement("dialog");
-    d.className = "ask";
-    d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
-      `<p><input id="askName" maxlength="60" style="width:100%;box-sizing:border-box"></p>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
-    document.body.appendChild(d);
-    const input = d.querySelector("input");
-    input.value = value;
-    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
-    d.showModal();
-    input.select();
-  });
-}
+afterSetMade = () => load();   // (shared.js: a set made from a project shows in Sets)
 async function changeSets(body) {
   const r = await apiPost("/api/sets", body);
   if (!r.ok) { toast(r.data.error || "That set couldn't be changed."); return null; }

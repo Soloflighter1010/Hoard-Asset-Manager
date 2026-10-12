@@ -16,6 +16,7 @@ from pathlib import Path
 from .downloader import STORE_DIRS
 from .paths import data_dir
 from .safety import DataFileError, clean_text, read_json_file, store_link, valid_rel
+from .tags import tag_key
 
 MAX_PROJECTS = 200
 MAX_ASSETS = 5000
@@ -174,7 +175,8 @@ def view(projects: list[dict], index: dict, updates: dict) -> list[dict]:
         for a in p["assets"]:
             d = by_folder.get(a["folder"])
             assets.append({**a, "download": d["id"] if d else None,
-                           "update": bool(d and d.get("tag_key") in updates)})
+                           "update": bool(d and d.get("tag_key") in updates),
+                           "tag_key": (d or {}).get("tag_key") or tag_key(a["store"], a["name"])})   # (for Make a set)
         out.append({**p, "assets": assets, "credits_text": {s: credits_text(p, s) for s in STYLES},
                     "counts": {s: sum(1 for a in p["assets"] if a["status"] == s) for s in STATUSES}})
     return out

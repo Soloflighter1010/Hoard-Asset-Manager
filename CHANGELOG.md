@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.4
+
+- **Make a set from a project.** Each project in **Projects** has **Make a set**: a set of the products it uses (all of
+  them or partly; not ones imported once and gone since), named for the project, so you can import them together in
+  another project with Hoard for Unity's **Import set**.
+
 ## 4.0.3
 
 - **What it needs no longer names other products.** Telling the product another one really needs (an outfit's base

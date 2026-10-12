@@ -17,6 +17,7 @@ sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, projects, server  # noqa: E402
 from hoard.safety import ACCESS_HEADER  # noqa: E402
+from hoard.tags import tag_key as tags_key  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -134,6 +135,8 @@ class ProjectsServer(unittest.TestCase):
         self.assertIsNone(p["assets"][1]["download"], "not downloaded here")
         self.assertEqual(set(p["credits_text"]), {"List", "Markdown", "ByCreator"})
         self.assertEqual(p["counts"], {"yes": 1, "partly": 1, "imported": 0})
+        self.assertEqual([a["tag_key"] for a in p["assets"]], [tags_key("Booth", "Rusk"), tags_key("Gumroad", "Mochi")],
+                         "each as a set names it (Make a set)")
         _, assets = self.call("GET", "/api/assets")
         self.assertEqual(assets["assets"][0]["used_in"], ["My Avatar"], "Downloads says which projects use it")
         self.assertEqual(self.call("POST", "/api/projects/forget", {"id": p["id"]}), (200, {"ok": True}))
@@ -181,6 +184,49 @@ class ProjectsPage(unittest.TestCase):
             page.click("#projectsWin [data-proj='forget']")
             page.click("#askDialog[open] button[value=yes]")
             page.get_by_text("No projects yet").wait_for()
+            self.assertEqual(errors, [])
+            browser.close()
+
+
+    def test_make_a_set_of_a_project(self):
+        from hoard.sets import SetStore
+        shutil.rmtree(projects.projects_dir(), ignore_errors=True)
+        self.addCleanup(shutil.rmtree, projects.projects_dir(), True)
+        self.addCleanup(lambda: SetStore().path.unlink(missing_ok=True))
+        gone = {"store": "Booth", "name": "Old Hat", "creator": "Mia", "folder": "Booth/Mia/Old Hat", "url": None,
+                "status": "imported"}
+        write("0123456789abcdef", report(assets=report()["assets"] + [gone]))
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1300, "height": 860})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.click("nav.apptabs a[href='/downloads']")
+            page.click("#projectsTab")
+            page.click("#projectsWin [data-proj='set']")
+            name = page.locator("dialog[open] #askName")
+            self.assertEqual(name.input_value(), "My Avatar", "named for the project, to change if you like")
+            name.fill("My Avatar, as worn")
+            page.locator("dialog[open] button", has_text="OK").click()
+            page.get_by_text("Made the set My Avatar, as worn, with 2 products in it.").wait_for()
+            page.locator("#sets .chip", has_text="My Avatar, as worn").wait_for()   # Downloads shows it straight away
+            [made] = SetStore().load()["sets"]
+            self.assertEqual(made["items"], [tags_key("Booth", "Rusk"), tags_key("Gumroad", "Mochi")],
+                             "what's in it now: not what was imported once and is gone")
+            page.goto(page.url.split("/downloads")[0] + "/")   # and from the Library page
+            page.click("#projectsTab")
+            page.click("#projectsWin [data-proj='set']")
+            page.locator("dialog[open] button", has_text="OK").click()
+            page.get_by_text("Made the set My Avatar, with 2 products in it.").wait_for()
+            self.assertEqual(len(SetStore().load()["sets"]), 2)
             self.assertEqual(errors, [])
             browser.close()
 

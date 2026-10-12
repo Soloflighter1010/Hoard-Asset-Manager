@@ -86,7 +86,8 @@ Each project you open Hoard's window in shows up in Hoard under **Projects** (at
 In Downloads, a product says which projects use it. The window tells Hoard what a project uses a few seconds after
 anything changes (an import, a deleted folder, the credits settings), by writing a small report to `projects/` in
 Hoard's own folder. Hoard doesn't need to be running. **Forget this project** in Projects takes one out until you
-open its window again.
+open its window again. **Make a set** (from 4.0.4) makes a [set](Downloads#sets) of the products in the project, all of
+them or partly (not ones imported once and gone since), named for the project: to import them together in another.
 
 ## What it needs
 
