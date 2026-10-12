@@ -1358,6 +1358,8 @@ async function loadProjects() {
     body.innerHTML = renderProjects(PROJECTS, data.hidden_left_out);
   } catch (e) { body.innerHTML = `<p class="none">Projects couldn't be read just now.</p>`; }
 }
+// A project's products for a set: the ones in it now (all or partly), not ones imported once and gone since
+const inSet = p => [...new Set(p.assets.filter(a => a.tag_key && (a.status === "yes" || a.status === "partly")).map(a => a.tag_key))];
 function renderProjects(list, hiddenLeftOut) {
   if (!list.length) return `<p class="none">No projects yet. Open <strong>Hoard › Open Hoard</strong> in a Unity project
     (<strong>Window › Hoard</strong> before Hoard for Unity 0.7.0) and it appears here, with every asset it uses and its credits list.</p>`;
@@ -1377,9 +1379,27 @@ function renderProjects(list, hiddenLeftOut) {
         `<button class="ghost sm" data-proj="copy">Copy</button></div>` +
         `<textarea readonly aria-label="Credits for ${esc(p.name)}">${esc(p.credits_text[style])}</textarea>` +
         `<p class="hint">The same list as <strong>Create Credits List</strong> in Unity, with what you changed there.</p>` +
-        `<div class="row"><button class="ghost sm" data-proj="forget">Forget this project</button></div></details>`;
+        `<div class="row">${inSet(p).length ? `<button class="ghost sm" data-proj="set">Make a set</button>` : ""}` +
+        `<button class="ghost sm" data-proj="forget">Forget this project</button></div></details>`;
     }).join("");
 }
+// A name for something new (a set): Hoard's own dialog, the name chosen, or "" when it's cancelled
+function askName(title, value = "") {
+  return new Promise(resolve => {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
+      `<p><input id="askName" maxlength="60" style="width:100%;box-sizing:border-box"></p>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
+    document.body.appendChild(d);
+    const input = d.querySelector("input");
+    input.value = value;
+    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
+    d.showModal();
+    input.select();
+  });
+}
+let afterSetMade = null;   // set by a page that shows sets, to show the new one
 function wireProjects() {
   makeWindow($("#projectsWin"));
   WINDOWS.projectsWin = () => openProjects(false);
@@ -1397,6 +1417,14 @@ function wireProjects() {
       try { await navigator.clipboard.writeText(text); }
       catch (err) { box.querySelector("textarea").select(); document.execCommand("copy"); }
       toast("Copied the credits.");
+    } else if (b.dataset.proj === "set") {   // a set of what's in the project, to import together elsewhere
+      const items = inSet(p);
+      const name = await askName("Name the new set", p.name);
+      if (!name) return;
+      const r = await apiPost("/api/sets", { action: "create", name, items });
+      if (!r.ok) { toast(r.data.error || "That set couldn't be made."); return; }
+      toast(tr(items.length === 1 ? "Made the set {0}, with this in it." : "Made the set {0}, with {1} products in it.", name, items.length));
+      if (afterSetMade) afterSetMade();
     } else if (b.dataset.proj === "forget") {
       if (!await ask(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`, "Forget")) return;
       await apiPost("/api/projects/forget", { id: p.id });

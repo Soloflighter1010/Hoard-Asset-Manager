@@ -328,7 +328,24 @@ class Page(unittest.TestCase):
         self.assertEqual(page.locator("#detail [data-act='goto']").count(), 0)
 
     @mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
+    def test_a_rebuilt_index_is_worked_out_again(self):
+        """The server kept what each product needs by the index's id: a rebuilt index given a freed one's id (as
+        Python does) got the old one's answer."""
+        import copy
+        self.srv._needs = (None, None, None)
+        self.addCleanup(setattr, self.srv, "_needs", (None, None, None))
+        index = copy.deepcopy(self.srv.index())
+        self.assertTrue(self.srv.needs_view(index), "what the downloads need")
+        for _ in range(20):   # rebuilt with nothing in it, most often at the same id
+            old = id(index)
+            del index
+            index = {"assets": []}
+            self.assertEqual(self.srv.needs_view(index), {}, f"rebuilt at {'the same' if id(index) == old else 'another'} id")
+
     def test_a_hidden_product_isnt_named(self):
+        # what the server worked out with matching on mustn't be what the other tests see (it keeps it)
+        self.srv._needs = (None, None, None)
+        self.addCleanup(setattr, self.srv, "_needs", (None, None, None))
         from hoard.marks import MarkStore
         from hoard.tags import tag_key
         view = MarkStore.view
