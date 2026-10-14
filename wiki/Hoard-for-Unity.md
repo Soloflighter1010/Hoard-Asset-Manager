@@ -33,6 +33,10 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   dialog (**Cancel** skips one), in name order (with Hoard 4.0.0 to 4.0.2, what's needed first). Packages already
   all in the project are left out, and it says which tools (lilToon, say) the set still needs. Importing carries on
   when a package's scripts make the editor reload; **Stop** ends it.
+  From 0.8.2 it imports only the newest version of each of a product's packages (by the version in its name, or its
+  zip's, or else the latest download), and leaves out face tracking add-ons (named `FaceTracking`, `FT`, `VRCFT`,
+  `Unified Expressions` and the like), whose animations are named like the avatar's own, unless you choose **Import
+  with face tracking**. A product that's only face tracking keeps its packages.
 - **What it needs** (0.8.0, with Hoard 4.0). A product whose packages use something that isn't in this project (a
   shader such as lilToon or Poiyomi Toon 8.1, Modular Avatar or VRCFury) says so in its details, with **Get it** (the
   tool's own website).
