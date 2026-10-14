@@ -433,7 +433,10 @@ const zoom = $("#zoom");
 /* ---------- tags: your own tags, suggestions you can keep or hide, and tagging many items at once.
    Tags are saved by the tool (POST /api/tags) in a file both Hoard tools share. T (defined above)
    connects this code to the page it's in. */
-const sel = { on: false, ids: new Set() };
+// Selecting several items: tick a tile's box, Ctrl/Cmd-click it, or Shift-click to take in everything from the last
+// one; or choose Select (touch screens: there's no hover or Ctrl), where every tap ticks. sel.on is that Select mode.
+const sel = { on: false, ids: new Set(), anchor: null };
+const selecting = () => sel.on || sel.ids.size > 0;
 const keysOf = list => [...new Set(list.flatMap(a => [a.tag_key, ...(a.copy_keys || [])]))];
 
 async function changeTags(body, done) {
@@ -492,24 +495,162 @@ function tagDetailAction(act, b, a) {  // true when the click was a tag action
 }
 
 function markSelected() {
+  const on = selecting();
+  document.body.classList.toggle("selecting", on);
+  $("#bulk").hidden = !on;
   for (const s of document.querySelectorAll(".slot")) {
-    if (sel.on) s.setAttribute("aria-pressed", String(sel.ids.has(s.dataset[T.slotKey])));
+    if (on) s.setAttribute("aria-pressed", String(sel.ids.has(s.dataset[T.slotKey])));
     else s.removeAttribute("aria-pressed");
   }
-  if (!sel.on) return;
-  $("#bulkCount").textContent = `${sel.ids.size} selected`;
-  for (const b of $("#bulk").querySelectorAll("[data-needs]")) b.disabled = !sel.ids.size;
+  if (!on) { closeSelMenu(); return; }
+  $("#bulkCount").textContent = tr(sel.ids.size === 1 ? "1 selected" : "{0} selected", sel.ids.size.toLocaleString());
+  renderBulk();
 }
-function toggleSelected(id) { sel.ids.has(id) ? sel.ids.delete(id) : sel.ids.add(id); markSelected(); }
-async function bulkTag(mode) {
-  const t = $("#bulkTag").value.trim();
-  if (!t) { $("#bulkTag").focus(); toast("Type a tag first."); return; }
-  const chosen = [...sel.ids].map(T.byId).filter(Boolean);
+// a stacked tile stands for every copy in it: choosing it chooses them all
+const idsFor = id => (T.membersOf && T.membersOf(id)) || [id];
+function toggleSelected(id) {
+  const add = !sel.ids.has(id);
+  for (const i of idsFor(id)) add ? sel.ids.add(i) : sel.ids.delete(i);
+  sel.anchor = id;
+  markSelected();
+}
+function selectRange(id) {   // Shift-click: everything shown from the last one chosen to this one
+  const order = [...document.querySelectorAll("#grid .slot")].map(s => s.dataset[T.slotKey]);
+  const a = order.indexOf(sel.anchor), b = order.indexOf(id);
+  if (a < 0 || b < 0) return toggleSelected(id);
+  for (const i of order.slice(Math.min(a, b), Math.max(a, b) + 1)) for (const m of idsFor(i)) sel.ids.add(m);
+  markSelected();
+}
+/** A click on a tile: true when it chose the tile (or a range) rather than opening it. */
+function selectClick(e, slot) {
+  const id = slot.dataset[T.slotKey];
+  if (e.shiftKey && sel.anchor != null && selecting()) { selectRange(id); return true; }
+  if (e.ctrlKey || e.metaKey || sel.on || e.target.closest(".tick")) { toggleSelected(id); return true; }
+  return false;
+}
+function selectAllShown() { for (const a of T.shown()) sel.ids.add(T.id(a)); markSelected(); }
+function setSelecting(on) {   // the Select button: a mode where every tap ticks (and Done ends it, and the selection)
+  sel.on = on;
+  if (!on) { sel.ids.clear(); sel.anchor = null; }
+  $("#selectBtn").textContent = on ? tr("Done") : tr("Select");
+  $("#selectBtn").setAttribute("aria-pressed", String(on));
+  if (on) T.closeDetail();
+  T.render();   // (stacks open while in Select mode, so each copy can be chosen)
+  markSelected();
+}
+const clearSelection = () => setSelecting(false);
+const chosenItems = () => [...sel.ids].map(T.byId).filter(Boolean);
+
+/* what to do with the selection: the bar's buttons and menus, and the same menu on a right-click */
+function renderBulk() {
+  const { main = [], groups = [] } = T.actions();
+  const none = !sel.ids.size;
+  $("#bulkActs").innerHTML =
+    main.map((m, i) => `<button class="${m.primary ? "primary" : "ghost"} sm" data-main="${i}"${none ? " disabled" : ""}>${esc(tr(m.label))}</button>`).join("") +
+    groups.filter(g => g.items.length).map(g => `<button class="ghost sm menu-btn" data-group="${esc(g.name)}" aria-haspopup="menu" ` +
+      `aria-expanded="false"${none ? " disabled" : ""}>${esc(tr(g.name))}</button>`).join("");
+}
+function runAction(item) {
+  closeSelMenu();
+  const chosen = chosenItems();
   if (!chosen.length) { toast("Select some items first."); return; }
-  const n = chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
-  if (await changeTags({ action: "assign", keys: keysOf(chosen), [mode]: [t] },
-      mode === "add" ? `Added ${tag} to ${what}.` : `Removed ${tag} from ${what}.`)) $("#bulkTag").value = "";
+  item.run(chosen);
 }
+let selMenu = null;   // {el, groups, from}: the open menu
+function closeSelMenu(refocus = false) {
+  if (!selMenu) return;
+  const { el, from } = selMenu;
+  selMenu = null;
+  el.remove();
+  if (from && from.setAttribute) from.setAttribute("aria-expanded", "false");
+  if (refocus && from && from.focus) from.focus();
+}
+/** Open a menu of these groups' actions: under a bar button (from), or where the pointer is (at: {x, y}). */
+function openSelMenu(groups, from, at) {
+  closeSelMenu();
+  groups = groups.filter(g => g.items.length);
+  if (!groups.length) return;
+  const el = document.createElement("div");
+  el.className = "selmenu"; el.setAttribute("role", "menu");
+  const items = [];
+  el.innerHTML = groups.map((g, gi) => (groups.length > 1 && g.name ? `<p class="selmenu-h" role="presentation">${esc(tr(g.name))}</p>` : "") +
+    g.items.map(it => { items.push(it); return `<button role="menuitem" class="${it.danger ? "danger" : ""}" data-i="${items.length - 1}"` +
+      `${it.raw ? ' translate="no"' : ""}>${esc(it.raw ? it.label : tr(it.label))}</button>`; }).join("") +
+    (gi < groups.length - 1 ? `<hr role="separator">` : "")).join("");
+  document.body.appendChild(el);
+  selMenu = { el, from };
+  const r = from ? from.getBoundingClientRect() : { left: at.x, right: at.x, top: at.y, bottom: at.y };
+  const w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+  const below = from ? r.top - h - 6 >= 8 ? r.top - h - 6 : r.bottom + 6 : (r.bottom + h + 8 > vh ? r.top - h : r.bottom);   // the bar is low: open above it
+  el.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + "px";
+  el.style.top = Math.max(8, Math.min(below, vh - h - 8)) + "px";
+  if (from) from.setAttribute("aria-expanded", "true");
+  el.addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) runAction(items[+b.dataset.i]); });
+  el.addEventListener("keydown", e => {
+    const all = [...el.querySelectorAll("[role=menuitem]")], i = all.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1)) % all.length].focus(); }
+    else if (e.key === "Home" || e.key === "End") { e.preventDefault(); all[e.key === "Home" ? 0 : all.length - 1].focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSelMenu(true); }
+    else if (e.key === "Tab") closeSelMenu();
+  });
+  const first = el.querySelector("[role=menuitem]");
+  if (first) first.focus();
+}
+/** Everything there is to do with the selection, for a right-click: the bar's main actions, then its menus. */
+function allActions() {
+  const { main = [], groups = [] } = T.actions();
+  return [...(main.length ? [{ name: "", items: main }] : []), ...groups];
+}
+function wireSelection() {
+  $("#bulk").addEventListener("click", e => {
+    const m = e.target.closest("[data-main]"), g = e.target.closest("[data-group]");
+    if (m) runAction(T.actions().main[+m.dataset.main]);
+    else if (g) {
+      if (selMenu && selMenu.from === g) { closeSelMenu(); return; }
+      openSelMenu(T.actions().groups.filter(x => x.name === g.dataset.group), g);
+    }
+  });
+  $("#selectBtn").addEventListener("click", () => setSelecting(!sel.on));
+  $("#bulkDone").addEventListener("click", clearSelection);
+  $("#bulkAll").addEventListener("click", selectAllShown);
+  const grid = $("#grid");
+  const menuFor = (slot, at) => {   // a right-click on a tile not chosen chooses just it, as file managers do
+    const id = slot.dataset[T.slotKey];
+    if (!sel.ids.has(id)) { sel.ids.clear(); for (const i of idsFor(id)) sel.ids.add(i); sel.anchor = id; markSelected(); }
+    openSelMenu(allActions(), null, at);
+  };
+  grid.addEventListener("contextmenu", e => {
+    const slot = e.target.closest(".slot"); if (!slot) return;
+    e.preventDefault();
+    menuFor(slot, { x: e.clientX, y: e.clientY });
+  });
+  grid.addEventListener("keydown", e => {   // the menu key, or Shift+F10, on a tile
+    const slot = e.target.closest(".slot");
+    if (!slot || !(e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) return;
+    e.preventDefault();
+    const r = slot.getBoundingClientRect();
+    menuFor(slot, { x: r.left + 12, y: r.top + 12 });
+  });
+  document.addEventListener("pointerdown", e => { if (selMenu && !selMenu.el.contains(e.target) && e.target !== selMenu.from) closeSelMenu(); }, true);
+  window.addEventListener("resize", () => closeSelMenu());
+  document.addEventListener("scroll", () => closeSelMenu(), true);
+  document.addEventListener("keydown", e => {
+    const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) || document.querySelector("dialog[open]");
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !typing) { e.preventDefault(); selectAllShown(); }
+  });
+}
+async function bulkTag(mode) {   // a tag to add to, or take off, what's selected
+  const chosen = chosenItems();
+  if (!chosen.length) { toast("Select some items first."); return; }
+  const t = (await askName(mode === "add" ? "Add a tag to the selected" : "Take a tag off the selected", "",
+                           { list: "tagList", max: 40 })).trim();
+  if (!t) return;
+  const n = chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
+  await changeTags({ action: "assign", keys: keysOf(chosen), [mode]: [t] },
+                   mode === "add" ? `Added ${tag} to ${what}.` : `Removed ${tag} from ${what}.`);
+}
+const TAG_ACTIONS = { name: "Tags", items: [{ label: "Add a tag...", run: () => bulkTag("add") },
+                                            { label: "Remove a tag...", run: () => bulkTag("remove") }] };
 
 /* the tag manager */
 function openTagPanel(open) {
@@ -1384,12 +1525,12 @@ function renderProjects(list, hiddenLeftOut) {
     }).join("");
 }
 // A name for something new (a set): Hoard's own dialog, the name chosen, or "" when it's cancelled
-function askName(title, value = "") {
+function askName(title, value = "", opts = {}) {   // opts: {list: a datalist's id, max: longest}
   return new Promise(resolve => {
     const d = document.createElement("dialog");
     d.className = "ask";
     d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
-      `<p><input id="askName" maxlength="60" style="width:100%;box-sizing:border-box"></p>` +
+      `<p><input id="askName" maxlength="${opts.max || 60}"${opts.list ? ` list="${opts.list}"` : ""} style="width:100%;box-sizing:border-box"></p>` +
       `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
     document.body.appendChild(d);
     const input = d.querySelector("input");

@@ -395,6 +395,25 @@ body.selecting .toast { bottom: 96px; }
   align-items: center; gap: 8px 10px; width: min(820px, calc(var(--vw) - 24px)); padding: 10px 14px; background: var(--ledge);
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
+/* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
+.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
+.bulk .count-sel { white-space: nowrap; }
+.menu-btn::after { content: "\25BE"; margin-left: 6px; font-size: 11px; opacity: .75; }
+.menu-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.selmenu { position: fixed; z-index: 60; min-width: 210px; max-width: min(360px, calc(var(--vw) - 16px)); max-height: calc(var(--vh) - 16px);
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); color: var(--bone);
+  box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
+.selmenu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; text-align: left;
+  color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.selmenu button:hover, .selmenu button:focus-visible { background: var(--stone); outline: none; }
+.selmenu button.danger { color: var(--warn); }
+.selmenu .selmenu-h { margin: 6px 12px 2px; font: 700 12px var(--body); color: var(--dust); }
+.selmenu hr { border: 0; border-top: 1px solid var(--seam); margin: 6px 4px; }
+/* a tile's tick box: on hover (where there's a pointer to hover with), while choosing, and on the ones chosen */
+@media (hover: hover) { .slot:hover .tick, .slot:focus-visible .tick { display: grid; place-items: center; } }
+.slot .tick:hover { box-shadow: inset 0 0 0 2px var(--gold); }
 .bulk input { flex: 1 1 160px; }
 .primary.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 
@@ -1225,21 +1244,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </div>
 </dialog>
 
-<div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
+<div id="bulk" class="bulk" hidden role="region" aria-label="Selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
-  <button class="linkish" id="bulkAll">Select all shown</button>
-  <button class="linkish" id="bulkNone">Clear</button>
-  <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
-  <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
-  <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
-  <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
-    <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
-  <button class="ghost sm" id="bulkNewSet" data-needs>New set</button>
-  <span class="bulkmove" id="bulkSetWrap" hidden><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
-    <button class="ghost sm" id="bulkSet" data-needs>Add to set</button></span>
-  <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
-  <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
-  <button class="ghost sm" id="bulkDone">Done</button>
+  <span class="bulk-acts" id="bulkActs"></span>
+  <span class="bulk-end"><button class="linkish" id="bulkAll">Select all shown</button>
+    <button class="ghost sm" id="bulkDone">Done</button></span>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1396,8 +1405,6 @@ function renderSets(list) {
   $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
     `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
     `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
-  $("#bulkSetTo").innerHTML = setOptions("Choose a set", false);   // (New set is its own button beside it)
-  $("#bulkSetWrap").hidden = !(DATA.sets || []).length;
 }
 function setsSection(a) {
   const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
@@ -2031,13 +2038,8 @@ $("#stores").addEventListener("click", e => {
   if (b) { state.store = b.dataset.store; if (!b.dataset.store) state.lib = ""; render(); }
 });
 /* ---------- moving the selected downloads to another library folder, each as a job of its own (Tasks) */
-function fillBulkMove() {
-  const libs = (DATA.libraries || []).filter(l => l.available);
-  $("#bulkMoveWrap").hidden = (DATA.libraries || []).length < 2 || !libs.length;
-  $("#bulkMoveTo").innerHTML = libs.map(l => `<option value="${l.n}">${esc(l.free != null ? tr("{0}, {1} free", libText(l), sizeText(l.free)) : libText(l))}</option>`).join("");
-}
-async function bulkMove() {
-  const to = +$("#bulkMoveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
+async function bulkMove(to) {
+  const lib = (DATA.libraries || []).find(l => l.n === to);
   const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked && (a.library || 0) !== to);
   if (!lib) return;
   if (!chosen.length) { toast(tr("Those are already in {0}, or are your own packages (which stay in Local).", libText(lib))); return; }
@@ -2144,7 +2146,7 @@ document.addEventListener("click", e => {
 });
 grid.addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
-  if (sel.on) { toggleSelected(s.dataset.id); return; }
+  if (selectClick(e, s)) return;
   lastFocus = s; showDetail(byId.get(+s.dataset.id));
 });
 grid.addEventListener("error", e => {  // thumbnail missing or unreadable: fall back to the placeholder
@@ -2348,7 +2350,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;   // a dialog closes itself
     if (closeTopWindow()) return;
-    else if (sel.on) setSelecting(false);
+    else if (selecting()) clearSelection();
     else if (openId != null) closeDetail();
     else if (document.activeElement === $("#q")) { state.q = ""; render(); }
   }
@@ -2377,19 +2379,23 @@ const T = {
   reload: () => load(),
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
+  render: () => render(),
+  membersOf: id => {   // a stack's copies, all chosen together
+    const a = byId.get(+id);
+    return a && (stackSize.get(a.id) || 0) > 1 ? (stackMembers.get(a.stack_key) || [a]).map(o => String(o.id)) : null;
+  },
+  actions: () => {   // what the selection bar and right-click offer here
+    const groups = [TAG_ACTIONS,
+      { name: "Sets", items: [{ label: "New set from these...", run: list => addToSet(list, "new") },
+        ...(DATA.sets || []).map(s => ({ label: tr("Add to {0}", s.name), raw: true, run: list => addToSet(list, s.id) }))] }];
+    const libs = (DATA.libraries || []).filter(l => l.available);
+    if ((DATA.libraries || []).length > 1 && libs.length)
+      groups.push({ name: "Move", items: libs.map(l => ({ label: tr("Move to {0}", libText(l)), raw: true, run: () => bulkMove(l.n) })) });
+    groups.push({ name: "More", items: [{ label: "Archive", run: bulkArchive },
+                                        { label: "Delete downloaded files", run: bulkDelete, danger: true }] });
+    return { main: [], groups };
+  },
 };
-/* selecting several items */
-function setSelecting(on) {
-  sel.on = on;
-  if (!on) sel.ids.clear();
-  document.body.classList.toggle("selecting", on);
-  $("#selectBtn").textContent = on ? "Done" : "Select";
-  $("#selectBtn").setAttribute("aria-pressed", String(on));
-  $("#bulk").hidden = !on;
-  if (on) T.closeDetail();
-  if (typeof fillBulkMove === "function") fillBulkMove();
-  render();
-}
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2419,19 +2425,8 @@ function wireTags() {
   $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
-  $("#selectBtn").addEventListener("click", () => setSelecting(!sel.on));
-  $("#bulkDone").addEventListener("click", () => setSelecting(false));
-  $("#bulkAll").addEventListener("click", () => { for (const a of T.shown()) sel.ids.add(T.id(a)); markSelected(); });
-  $("#bulkNone").addEventListener("click", () => { sel.ids.clear(); markSelected(); });
-  $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
-  $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
-  if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
-  if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
-  $("#bulkSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), $("#bulkSetTo").value));
-  $("#bulkNewSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), "new"));
+  wireSelection();
   document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
-  if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
-  $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });

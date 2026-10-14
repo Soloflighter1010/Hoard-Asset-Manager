@@ -1263,5 +1263,17 @@
  "Sign-ins": "サインイン",
  "Parts of Settings": "設定の項目",
  "Make a set": "セットを作る",
- "That set couldn't be made.": "セットを作れませんでした。"
+ "That set couldn't be made.": "セットを作れませんでした。",
+ "Move": "移動",
+ "More": "その他",
+ "Add a tag...": "タグを追加...",
+ "Remove a tag...": "タグを外す...",
+ "New set from these...": "これで新しいセット...",
+ "Add to {0}": "{0}に追加",
+ "Move to {0}": "{0}へ移動",
+ "1 selected": "1件選択中",
+ "Selected items": "選択した項目",
+ "Add a tag to the selected": "選択したものにタグを追加",
+ "Take a tag off the selected": "選択したものからタグを外す",
+ "Unhide": "非表示を解除"
 }

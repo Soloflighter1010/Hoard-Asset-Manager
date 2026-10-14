@@ -368,6 +368,25 @@ body.selecting .toast { bottom: 96px; }
   align-items: center; gap: 8px 10px; width: min(820px, calc(var(--vw) - 24px)); padding: 10px 14px; background: var(--ledge);
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
+/* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
+.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
+.bulk .count-sel { white-space: nowrap; }
+.menu-btn::after { content: "\25BE"; margin-left: 6px; font-size: 11px; opacity: .75; }
+.menu-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.selmenu { position: fixed; z-index: 60; min-width: 210px; max-width: min(360px, calc(var(--vw) - 16px)); max-height: calc(var(--vh) - 16px);
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); color: var(--bone);
+  box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
+.selmenu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; text-align: left;
+  color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.selmenu button:hover, .selmenu button:focus-visible { background: var(--stone); outline: none; }
+.selmenu button.danger { color: var(--warn); }
+.selmenu .selmenu-h { margin: 6px 12px 2px; font: 700 12px var(--body); color: var(--dust); }
+.selmenu hr { border: 0; border-top: 1px solid var(--seam); margin: 6px 4px; }
+/* a tile's tick box: on hover (where there's a pointer to hover with), while choosing, and on the ones chosen */
+@media (hover: hover) { .slot:hover .tick, .slot:focus-visible .tick { display: grid; place-items: center; } }
+.slot .tick:hover { box-shadow: inset 0 0 0 2px var(--gold); }
 .bulk input { flex: 1 1 160px; }
 .primary.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 
@@ -1252,20 +1271,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     again. Signing out of itch.io in Hoard deletes it.</p>
   <div class="row"><span></span><span><button class="ghost" id="itchCancel">Cancel</button> <button class="primary" id="itchSave">Save key</button></span></div>
 </dialog>
-<div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
+<div id="bulk" class="bulk" hidden role="region" aria-label="Selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
-  <button class="linkish" id="bulkAll">Select all shown</button>
-  <button class="linkish" id="bulkNone">Clear</button>
-  <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
-  <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
-  <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
-  <button class="ghost sm" data-needs data-mark>Archive</button>
-  <button class="ghost sm" data-needs data-mark>Hide</button>
-  <button class="ghost sm" data-needs data-mark>Remove</button>
-  <button class="ghost sm" data-needs id="bulkPurge" hidden>Delete for good</button>
-  <button class="primary sm" data-needs id="bulkDownload">Download</button>
-  <button class="ghost sm" data-needs id="bulkDeleteFiles" hidden>Delete downloaded files</button>
-  <button class="ghost sm" id="bulkDone">Done</button>
+  <span class="bulk-acts" id="bulkActs"></span>
+  <span class="bulk-end"><button class="linkish" id="bulkAll">Select all shown</button>
+    <button class="ghost sm" id="bulkDone">Done</button></span>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1647,12 +1657,12 @@ $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStor
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
 $("#downloadAll").addEventListener("click", () => downloadNew(usedStores().filter(downloadable)));
 // issue #106: download what's selected, from every store it's on, as one job
-$("#bulkDownload").addEventListener("click", () => {
-  const chosen = [...sel.ids].map(k => byKey.get(k)).filter(a => a && downloadable(a.store));
+function downloadSelected(list) {
+  const chosen = list.filter(a => downloadable(a.store));
   if (!chosen.length) { toast("Hoard can't download those: Payhip's are listed, and you download them on Payhip."); return; }
   const keys = [...new Set(chosen.map(a => a.tag_key))];
   startDownload(storesOf(keys), null, null, keys);
-});
+}
 $("#signOutAll").addEventListener("click", async () => {
   if (await ask("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.", "Sign out of all", true)) runJob("/api/logout", ["all"]);
 });
@@ -1959,7 +1969,7 @@ document.addEventListener("click", e => {
 });
 $("#grid").addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
-  if (sel.on) { toggleSelected(s.dataset.key); return; }
+  if (selectClick(e, s)) return;
   if ((stackSize.get(s.dataset.key) || 0) > 1) { showCopies(byKey.get(s.dataset.key), "stack_key"); return; }   // a stack: every copy
   lastFocus = s; showDetail(byKey.get(s.dataset.key));
 });
@@ -1989,7 +1999,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;   // a dialog closes itself
     if (closeTopWindow()) return;
-    else if (sel.on) setSelecting(false);
+    else if (selecting()) clearSelection();
     else if (openKey) closeDetail();
     else if (document.activeElement === $("#q")) { state.q = ""; render(); }
   }
@@ -2017,18 +2027,18 @@ const T = {
   reload: () => load(),
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
+  render: () => render(),
+  membersOf: key => {   // a stack's copies, all chosen together (as many as "Copies of" shows)
+    const a = byKey.get(key), k = a && stackKey(a);
+    return k && (stackSize.get(key) || 0) > 1 ? DATA.items.filter(x => stackKey(x) === k && inView(x) && shown(x.store)).map(x => x.key) : null;
+  },
+  actions: () => ({   // what the selection bar and right-click offer here
+    main: [{ label: "Download", primary: true, run: downloadSelected }],
+    groups: [TAG_ACTIONS, { name: "More", items: [...markActions(state.view),
+      ...(state.view === "removed" ? [{ label: "Delete for good", danger: true, run: list => purgeItems(list) }] : []),
+      { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
+  }),
 };
-/* selecting several items */
-function setSelecting(on) {
-  sel.on = on;
-  if (!on) sel.ids.clear();
-  document.body.classList.toggle("selecting", on);
-  $("#selectBtn").textContent = on ? "Done" : "Select";
-  $("#selectBtn").setAttribute("aria-pressed", String(on));
-  $("#bulk").hidden = !on;
-  if (on) T.closeDetail();
-  render();
-}
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2061,13 +2071,7 @@ function wireTags() {
   $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
-  $("#selectBtn").addEventListener("click", () => setSelecting(!sel.on));
-  $("#bulkDone").addEventListener("click", () => setSelecting(false));
-  $("#bulkAll").addEventListener("click", () => { for (const a of T.shown()) sel.ids.add(T.id(a)); markSelected(); });
-  $("#bulkNone").addEventListener("click", () => { sel.ids.clear(); markSelected(); });
-  $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
-  $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
-  $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
+  wireSelection();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });
@@ -2542,7 +2546,7 @@ function renderViews() {
     : state.view === "hidden" ? `<p>Hidden items only show here, and only in this browser while it's unlocked. It's a privacy screen for Hoard, not encryption.</p>
         <button class="ghost sm" data-privacy="lock">Lock now</button><button class="ghost sm" data-privacy="change">Change PIN</button>
         <button class="ghost sm" data-privacy="phrase">${(DATA.privacy || {}).recovery_set ? "New recovery phrase" : "Create a recovery phrase"}</button>` : "";
-  updateBulkButtons();
+  if (selecting()) markSelected();   // (the selection's actions follow the view)
 }
 function markButtons(a) {
   const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
@@ -2553,17 +2557,11 @@ function markButtons(a) {
   return (a.mark === "archived" ? b("unarchived", true, "Unarchive") : b("archived", true, "Archive")) +
     b("hidden", true, "Hide") + b("removed", true, "Remove") + del;
 }
-function updateBulkButtons() {
-  const set = (el, kind, on, text, show = true) => { el.hidden = !show; el.dataset.kind = kind; el.dataset.on = on; el.textContent = text; };
-  const [one, two, three] = document.querySelectorAll("#bulk [data-mark]");
-  if (!one) return;
-  const v = state.view;
-  if (v === "removed") { set(one, "removed", false, "Restore"); set(two, "", "", "", false); set(three, "", "", "", false); }
-  else if (v === "hidden") { set(one, "hidden", false, "Unhide"); set(two, "removed", true, "Remove"); set(three, "", "", "", false); }
-  else { set(one, v === "archive" ? "unarchived" : "archived", true, v === "archive" ? "Unarchive" : "Archive");
-         set(two, "hidden", true, "Hide"); set(three, "removed", true, "Remove"); }
-  $("#bulkPurge").hidden = v !== "removed";
-  $("#bulkDeleteFiles").hidden = false;   // in every view: a product kept in your library can be downloaded again
+function markActions(v) {   // Archive, Hide and Remove, or their undoing, for the view you're in
+  const m = (kind, on, label) => ({ label, run: list => markItems(list, kind, on) });
+  if (v === "removed") return [m("removed", false, "Restore")];
+  if (v === "hidden") return [m("hidden", false, "Unhide"), m("removed", true, "Remove")];
+  return [v === "archive" ? m("unarchived", true, "Unarchive") : m("archived", true, "Archive"), m("hidden", true, "Hide"), m("removed", true, "Remove")];
 }
 const MARK_DONE = {   // [one, many]
   "archived true": ["Archived 1 item. It's in Archive.", "Archived {0} items. They're in Archive."],
@@ -2746,11 +2744,6 @@ function wirePrivacy() {
     toast(r.ok ? tr(r.data.deleted === 1 ? "Deleted {0} hidden item and removed the PIN." : "Deleted {0} hidden items and removed the PIN.", r.data.deleted)
                : (r.data.error || "That didn't work."));
   });
-  for (const b of document.querySelectorAll("#bulk [data-mark]")) {
-    b.addEventListener("click", () => markItems([...sel.ids].map(T.byId), b.dataset.kind, b.dataset.on === "true"));
-  }
-  $("#bulkPurge").addEventListener("click", () => purgeItems([...sel.ids].map(T.byId)));
-  $("#bulkDeleteFiles").addEventListener("click", () => deleteFiles([...sel.ids].map(T.byId)));
   $("#storeRows").addEventListener("click", async e => {
     if (!e.target.closest("[data-review-shops]")) return;
     const found = (DATA.stores.payhip || {}).found_shops || [];

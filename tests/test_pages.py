@@ -516,7 +516,8 @@ class DiskSpace(unittest.TestCase):
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
         page.click("#selectBtn")
         page.locator(".slot", has_text="Rusk Bundle").click()
-        page.click("#bulkDelete")
+        page.click("#bulkActs [data-group='More']")
+        page.locator(".selmenu [role=menuitem]", has_text="Delete downloaded files").click()
         page.wait_for_function("() => document.querySelector('#askDialog').open")
         self.assertIn("Rusk Bundle (2.0 MB)", page.locator("#askText").inner_text())
         page.click("#askDialog button.danger")
@@ -907,7 +908,7 @@ class LargeLibrary(unittest.TestCase):
         page = self.open()
         page.click("#selectBtn")
         page.click("#bulkAll")
-        self.assertEqual(page.locator("#bulkCount").inner_text(), "1000 selected")
+        self.assertEqual(page.locator("#bulkCount").inner_text(), "1,000 selected")
         self.scroll_until(page, 600)
         self.assertEqual(page.locator('#grid .slot:not([aria-pressed="true"])').count(), 0)
         page.close()
@@ -1125,7 +1126,7 @@ class CopiesAndActions(unittest.TestCase):
         page.click("#selectBtn")
         page.locator(".slot", has_text="Someone Else").click()
         page.locator(".slot", has_text="Mochi").click()   # Payhip's: listed, not downloaded
-        page.click("#bulkDownload")
+        page.click("#bulkActs [data-main='0']")   # Download, the bar's main button here
         page.wait_for_function("() => true")
         for _ in range(50):
             if seen:

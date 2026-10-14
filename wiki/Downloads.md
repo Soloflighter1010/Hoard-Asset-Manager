@@ -130,7 +130,8 @@ one library: Downloads, Hoard for Unity, the routine checks and syncing cover ev
 
 - **New downloads** go to the downloads folder. A product already in another folder is kept up to date there.
 - **Moving products:** open one in Downloads and, under **Library folder**, choose where and **Move here**; or
-  choose **Select**, pick several, and use **Move here** in the selection bar (each move is a task of its own). Hoard
+  choose several (as in the [Library](Library#choosing-several-at-once)) and use **Move** in the selection bar
+  (each move is a task of its own). Hoard
   copies its files, checks each one by size and fingerprint, and only then deletes them where they were; if
   anything goes wrong, it stays where it was. Anything of your own in its folder isn't moved. Follow it in Tasks.
 - **A drive that isn't connected:** its products are left out of Downloads until it's back, and a sync skips them
@@ -149,8 +150,8 @@ a different name, the old file stays in the folder too; Hoard never deletes your
 ### Sets
 
 From 4.0, a set groups products you use together: an avatar, its outfits and hair, and the shaders they need, say.
-Make one with **New set** (under **Sets** in the sidebar), or choose **Select**, pick products and use **New set** (a
-set of them) or **Add to set**; a product's details list its sets, with **Add** and **×** to take it out. From 4.0.4,
+Make one with **New set** (under **Sets** in the sidebar), or choose several products and use **Sets** in the
+selection bar (or right-click): **New set from these**, or add them to one; a product's details list its sets, with **Add** and **×** to take it out. From 4.0.4,
 **Make a set** in **Projects** makes one of the products a Unity project uses.
 Choose a set in the sidebar to see just its products; **Rename set** and **Delete set** are beside its filter (deleting
 a set leaves its products as they are). Sets are kept in `sets.json` in Hoard's app-data folder, and listed in
@@ -242,8 +243,9 @@ it takes, and how much they take in all. Two ways to narrow it down:
 - **Not in any Unity project:** downloads none of your projects use, as Hoard for Unity reports them (see
   [Projects](Hoard-for-Unity#projects-in-hoard)).
 
-Choose **Select** to pick several, then **Move here** (to another library folder), **Archive** (as in the
-Library; the files stay) or **Delete downloaded files** (after you confirm; anything of your own in their folders
+Choose several (tick their boxes, Ctrl- or Shift-click, or **Select** on a touch screen), then use the selection
+bar or right-click: **Tags**, **Sets**, **Move** (to another library folder), and under **More**, **Archive** (as in
+the Library; the files stay) or **Delete downloaded files** (after you confirm; anything of your own in their folders
 stays, and what's in your library can be downloaded again). Those work in every view, not just this one. Your
 own folders listed in Local where they are aren't counted: they aren't Hoard's to free.
 

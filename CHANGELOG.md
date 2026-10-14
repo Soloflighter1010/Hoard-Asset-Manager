@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.1.0
+
+- **Choosing several items, reworked** (Library and Downloads):
+  - **Without a mode:** tick a tile's box (it shows when you point at the tile), Ctrl-click (Cmd-click on a Mac), or
+    Shift-click to take in everything from the last one. **Ctrl+A** chooses everything shown, **Esc** lets go, and a
+    plain click still opens an item. **Select** stays, for touch screens: then every tap chooses.
+  - **A compact bar:** the count, the main thing to do (**Download** in the Library), then menus: **Tags** (add or
+    take off a tag), **Sets** (a new set of them, or add them to one), **Move** (to another library folder) and
+    **More** (archive, hide, remove, delete their downloaded files), with **Select all shown** and **Done**. It stays
+    on one line, where it used to run to two.
+  - **Right-click** a tile (or press the menu key) for the same, in one menu. Right-clicking one you haven't chosen
+    chooses just it.
+
 ## 4.0.4
 
 - **Make a set from a project.** Each project in **Projects** has **Make a set**: a set of the products it uses (all of

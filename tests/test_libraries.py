@@ -296,10 +296,9 @@ class Server(unittest.TestCase):
         page.click("#drives [data-lib='1']")
         # several at once, from the selection bar: back to the downloads folder
         page.click("#selectBtn")
-        page.locator("#bulkMoveWrap").wait_for()
         page.locator(".slot").first.click()
-        page.select_option("#bulkMoveTo", "0")
-        page.click("#bulkMove")
+        page.click("#bulkActs [data-group='Move']")   # Move ▾: the library folders, the downloads folder first
+        page.locator(".selmenu [role=menuitem]").first.click()
         page.click("#askDialog button[value=yes]")
         back = self.root / "Booth" / "Kitsu Studio" / "Rusk" / "rusk.unitypackage"
         for _ in range(100):

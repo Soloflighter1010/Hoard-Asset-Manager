@@ -1263,5 +1263,17 @@
  "Sign-ins": "로그인",
  "Parts of Settings": "설정 항목",
  "Make a set": "세트 만들기",
- "That set couldn't be made.": "세트를 만들 수 없었어요."
+ "That set couldn't be made.": "세트를 만들 수 없었어요.",
+ "Move": "이동",
+ "More": "더 보기",
+ "Add a tag...": "태그 추가...",
+ "Remove a tag...": "태그 빼기...",
+ "New set from these...": "이걸로 새 세트...",
+ "Add to {0}": "{0}에 추가",
+ "Move to {0}": "{0}(으)로 이동",
+ "1 selected": "1개 선택됨",
+ "Selected items": "선택한 항목",
+ "Add a tag to the selected": "선택한 것에 태그 추가",
+ "Take a tag off the selected": "선택한 것에서 태그 빼기",
+ "Unhide": "숨김 해제"
 }
