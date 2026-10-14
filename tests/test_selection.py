@@ -145,6 +145,42 @@ class Selecting(unittest.TestCase):
                          ["Archive", "Hide", "Remove", "Delete downloaded files"])
         page.close()
 
+    def test_menus_stay_on_screen_at_the_largest_text_size(self):
+        """Text size zooms the whole page: a menu placed by the window's pixels went off it at 130% and up (the
+        page's own pixels are bigger). Right-clicking the last tile, and the bar's last menu, at Largest."""
+        inside = """sel => { const r = document.querySelector(sel).getBoundingClientRect();
+            return r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1; }"""
+        page = self.open()
+        page.evaluate("applyDisplay({ ...DATA.display, text_size: 150 })")
+        page.wait_for_function("() => !document.getElementById('splash')")
+        x, y = page.evaluate("""() => { const s = [...document.querySelectorAll('#grid .slot')].pop(); s.scrollIntoView({ block: 'end' });
+            const r = s.getBoundingClientRect(); return [r.left + r.width * .8, r.top + r.height * .8]; }""")
+        page.mouse.click(x, y, button="right")
+        page.locator(".selmenu").wait_for()
+        self.assertTrue(page.evaluate(inside, ".selmenu"), "the right-click menu, on screen")
+        self.assertLess(abs(page.evaluate("document.querySelector('.selmenu').getBoundingClientRect().left") - x), 2,
+                        "at the pointer, as at any size")
+        page.keyboard.press("Escape")
+        page.evaluate("() => { if (!chosenItems().length) { toggleSelected(T.id(T.shown()[0])); markSelected(); } }")
+        page.locator("#bulkActs [data-group]").last.click()
+        self.assertTrue(page.evaluate(inside, ".selmenu"), "the bar's menu, on screen")
+        page.close()
+
+    def test_the_tick_and_the_downloaded_mark_side_by_side(self):
+        """The Library's downloaded mark and the selection tick both live in a tile's top-right corner: the tick
+        showed on top of the mark when pointing at a tile, as it does when one's chosen, the mark moves beside it."""
+        apart = """() => { const s = document.querySelector('#grid .slot'), a = s.querySelector('.tick').getBoundingClientRect(),
+            b = s.querySelector('.ondisk-mark').getBoundingClientRect();
+            return getComputedStyle(s.querySelector('.tick')).display !== 'none' && (a.left >= b.right || b.left >= a.right); }"""
+        page = self.open(downloads=False)
+        page.wait_for_function("() => !document.getElementById('splash')")
+        page.locator("#grid .slot").first.hover()
+        page.wait_for_function(apart)   # pointing at it
+        page.locator("#grid .slot").first.click(modifiers=["Control"])
+        page.mouse.move(2, 2)
+        page.wait_for_function(apart)   # chosen
+        page.close()
+
 
 if __name__ == "__main__":
     unittest.main()

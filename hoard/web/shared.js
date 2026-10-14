@@ -569,6 +569,11 @@ function closeSelMenu(refocus = false) {
   if (refocus && from && from.focus) from.focus();
 }
 /** Open a menu of these groups' actions: under a bar button (from), or where the pointer is (at: {x, y}). */
+// Text size (Settings) zooms the whole page. What the page reads of where things are (getBoundingClientRect, a click's
+// clientX) is in the window's own pixels, but a fixed element's left and top, and its offsetWidth, are in the page's
+// zoomed ones: positions are worked out in the window's pixels and divided by the zoom as they're set. (Without it,
+// at 130% a menu opened near the window's edge went off it.)
+const pageZoom = () => parseFloat(document.documentElement.style.zoom) || 1;
 function openSelMenu(groups, from, at) {
   closeSelMenu();
   groups = groups.filter(g => g.items.length);
@@ -581,12 +586,12 @@ function openSelMenu(groups, from, at) {
       `${it.raw ? ' translate="no"' : ""}>${esc(it.raw ? it.label : tr(it.label))}</button>`; }).join("") +
     (gi < groups.length - 1 ? `<hr role="separator">` : "")).join("");
   document.body.appendChild(el);
-  selMenu = { el, from };
+  selMenu = { el, from, since: performance.now() };
   const r = from ? from.getBoundingClientRect() : { left: at.x, right: at.x, top: at.y, bottom: at.y };
-  const w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+  const z = pageZoom(), w = el.offsetWidth * z, h = el.offsetHeight * z, vw = window.innerWidth, vh = window.innerHeight;
   const below = from ? r.top - h - 6 >= 8 ? r.top - h - 6 : r.bottom + 6 : (r.bottom + h + 8 > vh ? r.top - h : r.bottom);   // the bar is low: open above it
-  el.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + "px";
-  el.style.top = Math.max(8, Math.min(below, vh - h - 8)) + "px";
+  el.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) / z + "px";
+  el.style.top = Math.max(8, Math.min(below, vh - h - 8)) / z + "px";
   if (from) from.setAttribute("aria-expanded", "true");
   el.addEventListener("click", e => { const b = e.target.closest("[data-i]"); if (b) runAction(items[+b.dataset.i]); });
   el.addEventListener("keydown", e => {
@@ -597,7 +602,7 @@ function openSelMenu(groups, from, at) {
     else if (e.key === "Tab") closeSelMenu();
   });
   const first = el.querySelector("[role=menuitem]");
-  if (first) first.focus();
+  if (first) first.focus({ preventScroll: true });
 }
 /** Everything there is to do with the selection, for a right-click: the bar's main actions, then its menus. */
 function allActions() {
@@ -636,7 +641,9 @@ function wireSelection() {
   });
   document.addEventListener("pointerdown", e => { if (selMenu && !selMenu.el.contains(e.target) && e.target !== selMenu.from) closeSelMenu(); }, true);
   window.addEventListener("resize", () => closeSelMenu());
-  document.addEventListener("scroll", () => closeSelMenu(), true);
+  // scrolling closes the menu, but not the page settling as it opens: the bar appearing for a right-clicked tile can
+  // move the page a little, and that closed the menu as it opened (near the end of the grid, the menu never showed)
+  document.addEventListener("scroll", () => { if (selMenu && performance.now() - selMenu.since > 300) closeSelMenu(); }, true);
   document.addEventListener("keydown", e => {
     const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) || document.querySelector("dialog[open]");
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !typing) { e.preventDefault(); selectAllShown(); }
@@ -2012,12 +2019,12 @@ function tourPlace() {
                              right: Math.max(...rects.map(b => b.right)), bottom: Math.max(...rects.map(b => b.bottom)) } : null;
   if (r) { r.width = r.right - r.left; r.height = r.bottom - r.top; }
   const seen = r && r.bottom > 0 && r.top < innerHeight;
-  const pad = 6, gap = 14, m = 12, w = c.offsetWidth, h = c.offsetHeight;
+  const z = pageZoom(), pad = 6, gap = 14, m = 12, w = c.offsetWidth * z, h = c.offsetHeight * z;   // (the window's pixels: see pageZoom)
   ring.classList.toggle("none", !seen);
   c.classList.toggle("middle", !seen);
   if (!seen) { c.style.left = c.style.top = ""; c.classList.remove("docked"); ring.removeAttribute("style"); return; }
   const top = Math.max(r.top - pad, 0), bottom = Math.min(r.bottom + pad, innerHeight);
-  Object.assign(ring.style, { left: `${r.left - pad}px`, top: `${top}px`, width: `${r.width + pad * 2}px`, height: `${bottom - top}px` });
+  Object.assign(ring.style, { left: `${(r.left - pad) / z}px`, top: `${top / z}px`, width: `${(r.width + pad * 2) / z}px`, height: `${(bottom - top) / z}px` });
   if (innerWidth <= 560) { c.style.left = c.style.top = ""; c.classList.add("docked"); return; }
   c.classList.remove("docked");
   let x, y;
@@ -2026,8 +2033,8 @@ function tourPlace() {
   else if (innerWidth - r.right >= w + gap + m) { x = r.right + pad + gap; y = r.top; }
   else if (r.left >= w + gap + m) { x = r.left - pad - gap - w; y = r.top; }
   else { x = innerWidth - w - m; y = innerHeight - h - m; }   // a big part (the grid): in its corner
-  c.style.left = `${Math.max(m, Math.min(x, innerWidth - w - m))}px`;
-  c.style.top = `${Math.max(m, Math.min(y, innerHeight - h - m))}px`;
+  c.style.left = `${Math.max(m, Math.min(x, innerWidth - w - m)) / z}px`;
+  c.style.top = `${Math.max(m, Math.min(y, innerHeight - h - m)) / z}px`;
 }
 function tourTick() {
   const s = TOUR.steps[TOUR.i];
