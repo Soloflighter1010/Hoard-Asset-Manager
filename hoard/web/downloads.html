@@ -395,6 +395,20 @@ body.selecting .toast { bottom: 96px; }
   align-items: center; gap: 8px 10px; width: min(820px, calc(var(--vw) - 24px)); padding: 10px 14px; background: var(--ledge);
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
+/* Disk space, From more than one store: which copy each keeps */
+.dupes { margin: 10px 0 4px; }
+.dupes .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.dupes select { height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0; background-color: var(--stone); color: var(--bone);
+  box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
+.dupelist { list-style: none; margin: 8px 0 12px; padding: 0; max-height: 46vh; overflow: auto; border-top: 1px solid var(--seam); }
+.dupelist li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 8px 0; border-bottom: 1px solid var(--seam); }
+.dupelist .opts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.dupelist label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; white-space: nowrap; }
+.dupelist input { accent-color: var(--gold); }
+.dupes .primary.danger { background: var(--warn); color: var(--gold-ink); }
+.dupes .primary.danger:disabled { opacity: .5; }
 /* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
 .bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
 .bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -1532,7 +1546,67 @@ function inSpace(a) {
   if (!takesSpace(a)) return false;
   if (state.space === "copies") return !!copiesOf(a);
   if (state.space === "unused") return !isLocal(a) && !(a.used_in || []).length;
+  if (state.space === "dupes") return dupeIds().has(a.id);
   return true;
+}
+/* products you have from more than one store, each downloaded (the same product, as Hoard stacks copies): keep
+   one store's copy and remove the others. A copy removed leaves your library (Library, Removed, where Restore
+   brings it back), so syncing doesn't download it again, and its downloaded files are deleted. */
+const dupeKeep = new Map();   // stack_key -> the id of the copy to keep; none chosen: all of them stay
+function dupeGroups() {
+  const by = new Map();
+  for (const a of DATA.assets) if (a.stack_key && takesSpace(a) && !isLocal(a) && !a.mark) by.set(a.stack_key, [...(by.get(a.stack_key) || []), a]);
+  return [...by.values()].filter(g => new Set(g.map(a => a.store)).size > 1)
+    .map(g => g.sort((x, y) => coll.compare(storeName(x.store), storeName(y.store)) || y.size - x.size))
+    .sort((x, y) => coll.compare(x[0].name, y[0].name));
+}
+const dupeIds = () => new Set(dupeGroups().flat().map(a => a.id));
+function dupeRemovals(groups = dupeGroups()) {
+  return groups.flatMap(g => { const k = dupeKeep.get(g[0].stack_key); return k == null || !g.some(a => a.id === k) ? [] : g.filter(a => a.id !== k); });
+}
+function dupesPanel() {
+  const groups = dupeGroups();
+  if (!groups.length) return `<p class="muted">${esc(tr("Nothing here is downloaded from more than one store."))}</p>`;
+  const stores = [...new Set(groups.flat().map(a => a.store))].sort((x, y) => coll.compare(storeName(x), storeName(y)));
+  const going = dupeRemovals(groups), bytes = going.reduce((t, a) => t + a.size, 0);
+  return `<div class="dupes"><p>${esc(tr(groups.length === 1 ? "1 product is downloaded from more than one store." : "{0} products are downloaded from more than one store.", groups.length.toLocaleString()))} ` +
+    `${esc(tr("Choose the copy to keep: the others are removed from your library, so a sync doesn't download them again, and their files are deleted. Restore, under Removed in the Library, brings one back."))}</p>` +
+    `<div class="row"><label for="dupeStore">${esc(tr("Keep the copy from"))}</label> <select id="dupeStore">` +
+    stores.map(st => `<option value="${esc(st)}">${esc(storeName(st))}</option>`).join("") + `</select>` +
+    `<button class="ghost sm" data-dupe="apply">${esc(tr("In every one"))}</button>` +
+    `<button class="linkish" data-dupe="none">${esc(tr("Keep them all"))}</button></div>` +
+    `<ul class="dupelist">${groups.map(g => {
+      const k = g[0].stack_key, keep = dupeKeep.get(k), name = `dk-${g[0].id}`;
+      const opt = (v, label, on) => `<label><input type="radio" name="${name}" data-stack="${esc(k)}" value="${v}"${on ? " checked" : ""}> ${label}</label>`;
+      return `<li><span class="nm"><b translate="no">${esc(g[0].name)}</b> <span class="muted" translate="no">${esc(tr("by {0}", g[0].creator))}</span></span><span class="opts">` +
+        g.map(a => opt(a.id, esc(tr("Keep {0}", storeName(a.store))) + ` <span class="muted">(${sizeText(a.size)})</span>`, keep === a.id)).join("") +
+        opt("", esc(tr("Keep all")), keep == null || !g.some(a => a.id === keep)) + `</span></li>`;
+    }).join("")}</ul>` +
+    `<button class="primary sm danger" data-dupe="go"${going.length ? "" : " disabled"}>${dupeGoText(going, bytes)}</button></div>`;
+}
+function dupeGoText(going, bytes) {
+  return esc(going.length ? tr(going.length === 1 ? "Remove 1 copy ({1})" : "Remove {0} copies ({1})", going.length.toLocaleString(), sizeText(bytes))
+                          : tr("Choose the copies to keep"));
+}
+async function removeDupes() {
+  const going = dupeRemovals();
+  if (!going.length) return;
+  const bytes = going.reduce((t, a) => t + a.size, 0);
+  if (!await ask(tr(going.length === 1 ? "Remove 1 copy, and delete its downloaded files ({1})?" : "Remove {0} copies, and delete their downloaded files ({1})?",
+                    going.length.toLocaleString(), sizeText(bytes)) + "\n\n" +
+                 going.map(a => `${a.name} (${storeName(a.store)})`).slice(0, 12).join("\n") + (going.length > 12 ? "\n..." : "") + "\n\n" +
+                 tr("They leave your library, so syncing doesn't download them again; the copy you keep stays. Restore, under Removed in the Library, brings one back."),
+                 "Remove them", true)) return;
+  const keys = [...new Set(going.map(a => a.tag_key))];
+  const marked = await apiPost("/api/marks", { kind: "removed", keys, on: true });   // first: a sync never brings them back
+  if (!marked.ok) { toast(marked.data.error || "That didn't work."); return; }
+  const r = await apiPost("/api/delete-files", { keys, confirm: true });
+  dupeKeep.clear();
+  if (!r.ok) { await load(); toast(r.data.error || "They were removed from your library, but their files couldn't be deleted just now."); return; }
+  if (r.data.job) return afterQueuedJob(r, "delete-files", () => load(true).then(() => state.view === "space" && loadSpace()));
+  await load();
+  if (state.view === "space") loadSpace();
+  toast(tr(going.length === 1 ? "Removed 1 copy and deleted {1}." : "Removed {0} copies and deleted {1}.", going.length.toLocaleString(), sizeText(r.data.bytes)));
 }
 async function loadSpace() {
   let j;
@@ -1574,9 +1648,10 @@ function spaceBar() {
   if (state.space === "unused" && SPACE && !SPACE.projects)
     notes.push("Hoard hasn't found any Unity projects yet: open a project with Hoard for Unity, or add one in Projects.");
   return `<p>${esc(tr(here.length === 1 ? "1 download takes {1}." : "{0} downloads take {1}, biggest first.", here.length.toLocaleString(), sizeText(total)))} ` +
-    `<span>To free some, choose <b>Select</b>: move them to another library folder, archive them, or delete their files.</span></p>` +
-    `<div class="chips">${chip("", "Everything")}${copies}${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
-    notes.map(t => `<p class="muted">${t}</p>`).join("");
+    `<span>To free some, choose them (tick their boxes, or right-click): move them to another library folder, archive them, or delete their files.</span></p>` +
+    `<div class="chips">${chip("", "Everything")}${copies}${chip("dupes", "From more than one store", dupeGroups().length.toLocaleString())}` +
+    `${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
+    notes.map(t => `<p class="muted">${t}</p>`).join("") + (state.space === "dupes" ? dupesPanel() : "");
 }
 function spaceSection(a) {
   const e = copiesOf(a);
@@ -1587,7 +1662,21 @@ function spaceSection(a) {
       `${(DATA.libraries || []).length > 1 ? `, ${esc(libName(o.library || 0))}` : ""})</span> ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View</button></li>`).join("") + `</ul></div>`;
 }
+$("#viewBar").addEventListener("change", e => {   // Duplicates: which copy each keeps
+  const r = e.target.closest("input[data-stack]"); if (!r) return;
+  if (r.value === "") dupeKeep.delete(r.dataset.stack); else dupeKeep.set(r.dataset.stack, +r.value);
+  const going = dupeRemovals(), go = $("[data-dupe='go']");   // (just the button: the list keeps its place)
+  go.innerHTML = dupeGoText(going, going.reduce((t, a) => t + a.size, 0));
+  go.disabled = !going.length;
+});
 $("#viewBar").addEventListener("click", e => {
+  const d = e.target.closest("[data-dupe]");
+  if (d && d.dataset.dupe === "apply") {   // the chosen store's copy, in every one that has one
+    const st = $("#dupeStore").value;
+    for (const g of dupeGroups()) { const a = g.find(x => x.store === st); if (a) dupeKeep.set(g[0].stack_key, a.id); }
+    render();
+  } else if (d && d.dataset.dupe === "none") { dupeKeep.clear(); render(); }
+  else if (d && d.dataset.dupe === "go") removeDupes();
   const b = e.target.closest("[data-space]"); if (!b) return;
   state.space = state.space === b.dataset.space ? "" : b.dataset.space; sel.ids.clear(); render();
 });

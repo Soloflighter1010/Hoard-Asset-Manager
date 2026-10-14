@@ -12,6 +12,10 @@
     on one line, where it used to run to two.
   - **Right-click** a tile (or press the menu key) for the same, in one menu. Right-clicking one you haven't chosen
     chooses just it.
+- **Duplicates across stores** (Downloads, Disk space, **From more than one store**): products you have from several
+  stores, each downloaded. Choose which store's copy to keep, for each or for all at once (**Keep the copy from**
+  Booth, say, **In every one**), then **Remove** the others: they leave your library, so syncing never downloads them
+  again unless you **Restore** them (Library, Removed), and their downloaded files are deleted.
 
 ## 4.0.4
 

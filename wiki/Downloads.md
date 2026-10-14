@@ -240,6 +240,12 @@ it takes, and how much they take in all. Two ways to narrow it down:
   This uses the fingerprints [Checking your downloads](#checking-your-downloads) keeps, so it reads nothing
   itself: a file the check hasn't fingerprinted yet, or that changed since, isn't compared, and the view says how
   many there are, with **Check now**.
+- **From more than one store** (from 4.1): products you have from several stores, each downloaded (copies of one
+  product, as Hoard stacks them: the same name by the same creator, or the same picture). Choose which store's copy
+  each keeps, one by one or for all at once (**Keep the copy from** a store, **In every one**), then **Remove**: the
+  other copies leave your library, so a sync doesn't download them again, and their downloaded files are deleted
+  (anything of your own in their folders stays). **Restore**, under **Removed** in the [Library](Library), brings one
+  back, to be downloaded again. Nothing is removed until you've chosen and confirmed.
 - **Not in any Unity project:** downloads none of your projects use, as Hoard for Unity reports them (see
   [Projects](Hoard-for-Unity#projects-in-hoard)).
 
