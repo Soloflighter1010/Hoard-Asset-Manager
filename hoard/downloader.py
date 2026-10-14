@@ -2137,7 +2137,7 @@ def restore_previous(cfg: dict, root: Path, folder: Path, stamp: str, name: str)
     if not found:
         raise ValueError("That isn't a download of Hoard's.")
     man, rec = found
-    done = previous.restore(folder, stamp, name)
+    done = previous.restore(folder, stamp, name, [f.get("path") for f in rec.get("files", {}).values()])
     for f in rec.get("files", {}).values():
         if f.get("path") == name:
             f["size"] = done["size"]

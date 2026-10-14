@@ -80,9 +80,10 @@ def _places(folder: Path, files=()) -> list[str]:
     itself, and each subfolder a file is in: a Gumroad product's "Textures/body.png"), as paths from it ("" for it)."""
     out = {""}
     for f in files or ():
-        parent = PurePosixPath(str(f).replace("\\", "/")).parent.as_posix() if f else "."
-        if parent != "." and ".." not in parent.split("/") and FOLDER not in parent.split("/") and not parent.startswith("/"):
-            out.add(parent)
+        parts = PurePosixPath(str(f).replace("\\", "/")).parent.parts if f else ()
+        # plain folder names only: no "..", no drive or root ("C:", "/"), and never a previous versions folder
+        if parts and all(p not in ("", ".", "..", FOLDER) and ":" not in p and "/" not in p for p in parts):
+            out.add("/".join(parts))
     return sorted(out)
 
 
@@ -152,19 +153,16 @@ def tidy(folder: Path) -> None:
         pass
 
 
-def restore(folder: Path, stamp: str, name: str) -> dict:
-    """Put a previous version back as the current file. name: the file, as listed() names it (in a subfolder, its
-    path: "Textures/body.png"). The current one (if any) is kept as a previous version first, so this can be undone.
-    Returns {"size": the restored file's size, "kept": where the current one went}. Raises ValueError for a version
-    that isn't there."""
-    sub, _, base_name = (name or "").replace("\\", "/").rpartition("/")
-    if not STAMP.fullmatch(stamp or "") or not base_name or (sub and sub not in _places(folder, [name])):
-        raise ValueError("That version isn't there.")
-    here = _here(folder, sub)
-    base = here / FOLDER if here is not None else None
-    version = next((d for d in base.iterdir() if d.name == stamp and d.is_dir() and not d.is_symlink()), None) \
-        if base is not None and base.is_dir() and not base.is_symlink() else None
-    old = next((f for f in version.iterdir() if f.name == base_name), None) if version else None
+def restore(folder: Path, stamp: str, name: str, files=()) -> dict:
+    """Put a previous version back as the current file. stamp and name: one listed(folder, files) gives (in a
+    subfolder, name is its path: "Textures/body.png"); only one of those is ever touched, never a path made from
+    what was asked. The current one (if any) is kept as a previous version first, so this can be undone. Returns
+    {"size": the restored file's size, "kept": where the current one went}. Raises ValueError for a version that
+    isn't there."""
+    v = next((v for v in listed(folder, files) if v["stamp"] == stamp and v["file"] == name), None)
+    sub = v["file"].rpartition("/")[0] if v else ""
+    here = _here(folder, sub) if v else None
+    old = here / FOLDER / v["stamp"] / v["file"].rpartition("/")[2] if here is not None else None
     if old is None or _plain_file(old) is None:
         raise ValueError("That version isn't there.")
     current = here / old.name

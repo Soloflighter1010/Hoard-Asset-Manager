@@ -174,7 +174,8 @@ class WithTheRecords(unittest.TestCase):
         self.assertEqual((self.rusk / "Textures" / "body.png").read_bytes(), b"png v1")
         f = downloader.Manifest(self.root / "Booth").assets["111"]["files"]["tex"]
         self.assertEqual(f["size"], 6)
-        for bad in ("../Rusk/Textures/body.png", "/Textures/body.png", f"{previous.FOLDER}/x/body.png"):
+        for bad in ("../Rusk/Textures/body.png", "/Textures/body.png", f"{previous.FOLDER}/x/body.png", "C:/Textures/body.png",
+                    "Textures\\..\\..\\body.png"):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 previous.restore(self.rusk, stamp, bad)
 
