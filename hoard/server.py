@@ -713,6 +713,10 @@ class Handler(BaseHTTPRequestHandler):
             listed = [dict(i) for i in srv.lib.snapshot()[0]]
             stack_by_picture(listed)
             for i in listed:
+                # a download's stack is its own product's (by store and name), even one that stacks with nothing:
+                # "Hair Pack 1" and "Hair Pack 2" share a product key (tag_key leaves numbers out), but the Library
+                # keeps them apart, and so must Disk space's copies. The key is for downloads the library doesn't list
+                stacks.setdefault((str(i["store"]).lower(), i["name"]), i["stack_key"])
                 if i["stack_key"]:
                     stacks.setdefault(tag_key(i["store"], i["name"]), i["stack_key"])
                 if i.get("look_for") and (unlocked or tag_key(i["store"], i["name"]) not in marks["hidden"]):
@@ -725,7 +729,8 @@ class Handler(BaseHTTPRequestHandler):
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
-                                   "stack_key": stacks.get(key, ""), "needs": needed.get(a["id"]),
+                                   "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
+                                   "needs": needed.get(a["id"]),
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
             keys = {a["tag_key"] for a in assets}   # nor kept in a set while it's locked

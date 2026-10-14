@@ -1601,8 +1601,20 @@ function dupeGroups() {
     .sort((x, y) => coll.compare(x[0].name, y[0].name));
 }
 const dupeIds = () => new Set(dupeGroups().flat().map(a => a.id));
+/* A copy is removed (marked Removed, its files deleted) by its product key, the key tags use: a store and a name
+   without versions or (labels), so "Hair Pack 1" and "Hair Pack 2" from one store share one. So a copy goes only
+   when its key is neither the kept copy's nor any download's outside this group: else the copy you keep, or
+   another product, would go with it. */
 function dupeRemovals(groups = dupeGroups()) {
-  return groups.flatMap(g => { const k = dupeKeep.get(g[0].stack_key); return k == null || !g.some(a => a.id === k) ? [] : g.filter(a => a.id !== k); });
+  const count = new Map();
+  for (const a of DATA.assets) count.set(a.tag_key, (count.get(a.tag_key) || 0) + 1);
+  return groups.flatMap(g => {
+    const keep = g.find(a => a.id === dupeKeep.get(g[0].stack_key));
+    if (!keep) return [];
+    const here = new Map();
+    for (const a of g) here.set(a.tag_key, (here.get(a.tag_key) || 0) + 1);
+    return g.filter(a => a.tag_key !== keep.tag_key && here.get(a.tag_key) === count.get(a.tag_key));
+  });
 }
 function dupesPanel() {
   const groups = dupeGroups();
@@ -1618,8 +1630,10 @@ function dupesPanel() {
     `<ul class="dupelist">${groups.map(g => {
       const k = g[0].stack_key, keep = dupeKeep.get(k), name = `dk-${g[0].id}`;
       const opt = (v, label, on) => `<label><input type="radio" name="${name}" data-stack="${esc(k)}" value="${v}"${on ? " checked" : ""}> ${label}</label>`;
+      const twice = st => g.filter(a => a.store === st).length > 1;   // two from one store: which is which, by name
       return `<li><span class="nm"><b translate="no">${esc(g[0].name)}</b> <span class="muted" translate="no">${esc(tr("by {0}", g[0].creator))}</span></span><span class="opts">` +
-        g.map(a => opt(a.id, esc(tr("Keep {0}", storeName(a.store))) + ` <span class="muted">(${sizeText(a.size)})</span>`, keep === a.id)).join("") +
+        g.map(a => opt(a.id, esc(tr("Keep {0}", storeName(a.store))) + (twice(a.store) ? ` <span translate="no">${esc(a.name)}</span>` : "") +
+                             ` <span class="muted">(${sizeText(a.size)})</span>`, keep === a.id)).join("") +
         opt("", esc(tr("Keep all")), keep == null || !g.some(a => a.id === keep)) + `</span></li>`;
     }).join("")}</ul>` +
     `<button class="primary sm danger" data-dupe="go"${going.length ? "" : " disabled"}>${dupeGoText(going, bytes)}</button></div>`;

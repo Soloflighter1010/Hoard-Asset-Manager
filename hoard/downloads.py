@@ -163,7 +163,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "modified": newest or None,
             "thumb": f"{place}/{thumb}" if thumb else None,
             "also_in": [],
-            "previous": [] if linked else previous.listed(folder),   # what updates replaced (hoard/previous.py)
+            "previous": [] if linked else previous.listed(folder, e.get("files", [])),   # what updates replaced (hoard/previous.py)
         })
 
     # The same product bought on both stores: flag it, never merge it.

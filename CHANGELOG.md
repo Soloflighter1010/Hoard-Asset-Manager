@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.1.2
+
+Fixes from an audit of everything since 4.0 (docs/audit-2026-10-14.md).
+
+- **Fixed: Disk space's From more than one store could delete the copy you chose to keep.** A copy is removed by its
+  product key, which leaves numbers and (labels) out, so Booth's "Hair Pack 1" and "Hair Pack 2" share one; and
+  Downloads stacked them together, though the Library keeps them apart. With Gumroad's "Hair Pack 1" too, keeping
+  Booth's removed and deleted all three. Downloads now stacks each download as its own product, and a copy is offered
+  for removal only when nothing you keep, and no other product, shares its key. Where one store has two copies in a
+  product, each says its name.
+- **Fixed: a backup made while the hidden library was locked named the hidden products.** It left their hidden mark
+  out, but listed them in the library list (name, creator, link), the archive and removed choices, tags and sets.
+  They're left out of all of it now, and restoring a backup made while locked leaves the hidden products' tags, sets
+  and choices here as they are.
+- **Fixed: previous versions of a file in a subfolder** (a Gumroad product's "Textures/body.png", say) weren't listed,
+  so they couldn't be restored, and stayed behind when the product was deleted or moved to another library folder.
+  They're listed, restored, deleted and moved like the rest.
+- **Fixed: Look inside had no limit on the previews it keeps.** A small, made-up package could fill the disk with them
+  (a 1 MB one left a GB). A file's previews are kept up to 64 MB (past that, its other files show their kind), and
+  the cache to 512 MB in all.
+
 ## 4.1.1
 
 - **Fixed: menus and the tour could open off the screen** with a larger **Text size** (Settings, Accessibility).

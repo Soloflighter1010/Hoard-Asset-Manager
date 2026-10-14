@@ -200,6 +200,30 @@ class LookInside(unittest.TestCase):
         left = {p.name for p in packages.cache_dir().iterdir()}
         self.assertEqual(left, set(ids[1:]))
 
+    def test_previews_kept_up_to_a_limit(self):
+        """Previews have a size limit each, but none in all: a 1 MB package of compressed blank "previews" left a
+        GB of them in the cache. Past the limit the rest have none (and none is served)."""
+        guids = [f"{n:032x}" for n in range(4)]
+        self.file.write_bytes(unitypackage({g: (f"Assets/{n}.mat", b"m") for n, g in enumerate(guids)},
+                                           {g: PNG for g in guids}))
+        with mock.patch.object(packages, "MAX_PREVIEW_BYTES", len(PNG) * 2 + 1):
+            got = packages.look_inside(self.file)
+        shown = [i["guid"] for i in got["items"] if i["preview"]]
+        self.assertEqual(len(shown), 2)
+        for g in guids:
+            self.assertEqual(packages.preview(got["id"], f"0-{g}.png") is not None, g in shown, g)
+
+    def test_the_cache_kept_to_a_size(self):
+        ids = []
+        for n in range(3):
+            f = Path(self.tmp.name) / f"p{n}.unitypackage"
+            f.write_bytes(unitypackage({G1: (f"Assets/{n}.mat", b"m")}, {G1: PNG}))
+            ids.append(packages.look_inside(f)["id"])
+            time_ns = 10 ** 9 * (n + 1)
+            os.utime(packages.cache_dir() / ids[-1] / "inside.json", ns=(time_ns, time_ns))
+        packages._prune(40, 1)
+        self.assertEqual({p.name for p in packages.cache_dir().iterdir()}, {ids[-1]}, "the newest always stays")
+
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class LookInsidePage(unittest.TestCase):

@@ -152,6 +152,44 @@ class WithTheRecords(unittest.TestCase):
         self.assertEqual(done["files"], 3, "its file, its picture and its previous version")
         self.assertFalse(self.rusk.exists())
 
+    def in_a_subfolder(self) -> str:
+        """A file in a subfolder of the product's, as Gumroad's products have, replaced by an update. Its previous
+        version is kept beside it (Textures/_Previous versions/...): it wasn't listed, so it couldn't be put back, and
+        it stayed behind when the product was deleted or moved."""
+        (self.rusk / "Textures").mkdir()
+        (self.rusk / "Textures" / "body.png").write_bytes(b"png v1")
+        replace(self.rusk / "Textures" / "body.png", b"png v2")
+        man = downloader.Manifest(self.root / "Booth")
+        man.assets["111"]["files"]["tex"] = {"path": "Textures/body.png", "size": 6}
+        man.save()
+        return "Textures/body.png"
+
+    def test_in_a_subfolder_listed_and_put_back(self):
+        name = self.in_a_subfolder()
+        idx = downloads.build_index(self.root, self.catalog()["assets"], [self.root, self.drive])
+        rusk = next(a for a in idx["assets"] if a["name"] == "Rusk")
+        self.assertEqual(sorted(v["file"] for v in rusk["previous"]), ["Textures/body.png", "rusk.unitypackage"])
+        stamp = next(v["stamp"] for v in rusk["previous"] if v["file"] == name)
+        downloader.restore_previous(self.cfg, self.root, self.rusk, stamp, name)
+        self.assertEqual((self.rusk / "Textures" / "body.png").read_bytes(), b"png v1")
+        f = downloader.Manifest(self.root / "Booth").assets["111"]["files"]["tex"]
+        self.assertEqual(f["size"], 6)
+        for bad in ("../Rusk/Textures/body.png", "/Textures/body.png", f"{previous.FOLDER}/x/body.png"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                previous.restore(self.rusk, stamp, bad)
+
+    def test_in_a_subfolder_deleted_and_moved_with_it(self):
+        self.in_a_subfolder()
+        downloader.move_product(self.cfg, self.root, tag_key("Booth", "Rusk"), 1)
+        moved = self.drive / "Booth" / "Kitsu Studio" / "Rusk"
+        self.assertEqual(sorted(v["file"] for v in previous.listed(moved, ["Textures/body.png"])),
+                         ["Textures/body.png", "rusk.unitypackage"])
+        self.assertFalse(self.rusk.exists(), "nothing left behind")
+        cfg = {**self.cfg, "library_folders": [str(self.drive)]}
+        done = downloader.delete_downloaded_files(cfg, self.root, {tag_key("Booth", "Rusk")})
+        self.assertEqual(done["files"], 6, "its 2 files, its picture, asset.json and their 2 previous versions")
+        self.assertFalse(moved.exists())
+
 
 class Setting(unittest.TestCase):
     def test_choices(self):

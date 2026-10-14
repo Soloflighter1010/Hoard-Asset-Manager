@@ -161,7 +161,8 @@ a set leaves its products as they are). Sets are kept in `sets.json` in Hoard's 
 ### Previous versions
 
 From 4.0, when an update replaces a file (the same name, new contents), the old one is kept: it goes to
-`_Previous versions/<date and time>/` in the product's own folder. A product's details in Downloads list them under
+`_Previous versions/<date and time>/` beside it, in the product's own folder (or the subfolder of it the file is in,
+as some Gumroad products have; from 4.1.2 these are listed too). A product's details in Downloads list them under
 **Previous versions**, with when each was replaced and **Restore**, which puts it back as the current file and keeps
 the one it replaces there in turn, so you can change your mind. Hoard keeps the last one of each file unless you
 choose otherwise in [Settings](Settings) (**Previous versions**: none, or the last 1, 2, 3 or 5); older ones are
@@ -206,7 +207,7 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   is. A `.zip` lists its files, and what each Unity package in it holds. One locked with a password says so (the
   store page usually gives the password), and one that isn't what its name says, or is damaged, says that. Hoard
   keeps what it read (in its `cache` folder) for the 40 files you looked inside most recently, so a second look
-  is instant.
+  is instant: up to 64 MB of preview pictures for one file (past that, the rest show their kind), and 512 MB in all.
 - **What it needs** (from 4.0, in a product's details) lists what its packages use that isn't in them: tools such
   as lilToon, Poiyomi Toon (with the version its materials were made with), Modular Avatar, VRCFury, NDMF, Avatar
   Optimizer and the VRChat SDK, each with **Get it** (its own website); and whether it also uses files from other
@@ -245,7 +246,10 @@ it takes, and how much they take in all. Two ways to narrow it down:
   each keeps, one by one or for all at once (**Keep the copy from** a store, **In every one**), then **Remove**: the
   other copies leave your library, so a sync doesn't download them again, and their downloaded files are deleted
   (anything of your own in their folders stays). **Restore**, under **Removed** in the [Library](Library), brings one
-  back, to be downloaded again. Nothing is removed until you've chosen and confirmed.
+  back, to be downloaded again. Nothing is removed until you've chosen and confirmed. A copy is removed by its
+  product key (its store and name without versions or labels, as tags use), so one that shares its key with the copy
+  you keep, or with another of your products (Booth's "Hair Pack 1" and "Hair Pack 2"), isn't offered for removal:
+  it would take that with it.
 - **Not in any Unity project:** downloads none of your projects use, as Hoard for Unity reports them (see
   [Projects](Hoard-for-Unity#projects-in-hoard)).
 

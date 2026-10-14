@@ -40,6 +40,8 @@ MAX_ITEMS = 50_000               # assets listed for one package (a page can't s
 MAX_ZIP_MEMBERS = 50_000
 MAX_ZIP_PACKAGES = 50            # .unitypackage files read inside one .zip
 KEEP = 40                        # files whose insides are kept in the cache
+MAX_PREVIEW_BYTES = 64 << 20     # previews kept for one file (a big real package's are a few MB); past it, none
+MAX_CACHE = 512 << 20            # what's kept in the cache in all: the least recently looked at go first
 GUID = re.compile(r"[0-9a-f]{32}")
 CACHE_ID = re.compile(r"[0-9a-f]{32}")
 PREVIEW_NAME = re.compile(r"(\d{1,2})-([0-9a-f]{32})\.png")
@@ -121,7 +123,8 @@ def _scan(gz, size: int, refs: set) -> None:
 
 def read_unitypackage(stream, on_preview=None, refs: set | None = None) -> dict:
     """What a .unitypackage holds, from a stream of its (gzipped) bytes: {GUID: {"path", "size" (None for a folder),
-    "preview" (has one)}}. on_preview(guid, png bytes) gets each preview that's a real PNG of a sensible size. refs,
+    "preview" (has one)}}. on_preview(guid, png bytes) gets each preview that's a real PNG of a sensible size, and
+    returns False for one it doesn't keep (that asset then has no preview). refs,
     when given, gets every GUID the package's text assets name (its own among them). Raises NotAPackage for anything
     that isn't one."""
     assets: dict[str, dict] = {}
@@ -173,9 +176,8 @@ def read_unitypackage(stream, on_preview=None, refs: set | None = None) -> dict:
             elif part == "preview.png" and 8 <= size <= MAX_PREVIEW and on_preview is not None:
                 data = _read_exactly(gz, size)
                 _skip(gz, pad)
-                if data.startswith(PNG):
+                if data.startswith(PNG) and on_preview(guid, data) is not False:
                     assets.setdefault(guid, {"size": None, "preview": False})["preview"] = True
-                    on_preview(guid, data)
             else:
                 if part == "preview.png" and 8 <= size <= MAX_PREVIEW:
                     assets.setdefault(guid, {"size": None, "preview": False})["preview"] = True
@@ -291,7 +293,8 @@ def _load(folder: Path) -> dict | None:
     return data
 
 
-def _prune(keep: int = KEEP) -> None:
+def _prune(keep: int = KEEP, max_bytes: int = MAX_CACHE) -> None:
+    """Keep the KEEP files looked at most recently, and no more than max_bytes of them (the newest is always kept)."""
     try:
         folders = [f for f in cache_dir().iterdir() if f.is_dir() and not f.is_symlink() and CACHE_ID.fullmatch(f.name)]
     except OSError:
@@ -301,8 +304,16 @@ def _prune(keep: int = KEEP) -> None:
             return (f / "inside.json").stat().st_mtime
         except OSError:
             return 0.0
-    for f in sorted(folders, key=used, reverse=True)[keep:]:
-        shutil.rmtree(f, ignore_errors=True)
+    def size(f: Path) -> int:
+        try:
+            return sum(e.stat(follow_symlinks=False).st_size for e in os.scandir(f))
+        except OSError:
+            return 0
+    total = 0
+    for n, f in enumerate(sorted(folders, key=used, reverse=True)):
+        total += size(f) if n < keep else 0
+        if n >= keep or (n and total > max_bytes):
+            shutil.rmtree(f, ignore_errors=True)
 
 
 def look_inside(path: Path) -> dict:
@@ -320,8 +331,14 @@ def look_inside(path: Path) -> dict:
     cache_dir().mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix=".reading-", dir=cache_dir()))
     try:
-        def keep(n: int, guid: str, data: bytes) -> None:
+        kept = [0]
+
+        def keep(n: int, guid: str, data: bytes) -> bool:
+            if kept[0] + len(data) > MAX_PREVIEW_BYTES:
+                return False   # a package with far more previews than any real one: the rest go without
             (work / f"{n}-{guid}.png").write_bytes(data)
+            kept[0] += len(data)
+            return True
         kind = "zip" if path.name.lower().endswith(".zip") else "unitypackage"
         result: dict = {"format": FORMAT, "kind": kind, "read": time.strftime("%Y-%m-%dT%H:%M:%S")}
         try:
