@@ -42,7 +42,8 @@ from .setup import browser_problem, migrate_from, setup_status, signed_in
 from .tags import TagStore, tag_key, tag_overview
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
-FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2")
+FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2",
+              "OpenDyslexic-Regular.woff2", "OpenDyslexic-Bold.woff2")
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
            "/api/download", "/api/sync", "/api/cancel", "/api/force-stop", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
@@ -63,6 +64,7 @@ UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one brows
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
 TEXT_SIZES = (100, 115, 130, 150)   # percent
+FONTS = ("standard", "dyslexic")    # Settings, Accessibility: the pages' own, or OpenDyslexic
 JOB_SETTINGS = ("root", "browser_channel", "stores", "payhip_shops", "library_folders")   # read by a running job: not changed during one
 NEW_DAYS = (0, 1, 3, 7, 14, 30)     # how long something new in the library is marked New (0: never)
 
@@ -104,6 +106,8 @@ def display_settings(cfg: dict) -> dict:
     return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
             "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion")),
             "glow": d.get("glow") is not False,
+            # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
+            "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
             "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
             "custom_colours": custom_colours(d.get("custom_colours")),
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
@@ -153,7 +157,7 @@ def ui_settings(cfg: dict) -> dict:
     for name, open_ in list((ui.get("sections") or {}).items())[:30] if isinstance(ui.get("sections"), dict) else ():
         if isinstance(name, str) and len(name) <= 40 and isinstance(open_, bool):
             out["sections"][name] = open_
-    for k in ("side_folded", "stack"):   # the sidebar folded; copies stacked in the Library (issue #111)
+    for k in ("side_folded", "stack", "toured"):   # the sidebar folded; copies stacked (issue #111); the tour offered
         if isinstance(ui.get(k), bool):
             out[k] = ui[k]
     for k in ("tile_size", "dl_tile_size"):   # the Library's and the Downloads page's
@@ -290,7 +294,11 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow") if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing") if k in given})
+        if "font" in given:
+            if given["font"] not in FONTS:
+                raise ValueError("Choose a font from the list.")
+            display["font"] = given["font"]
         if "colours" in given:
             if given["colours"] not in COLOUR_SCHEMES:
                 raise ValueError("Choose store colours from the list.")
@@ -1413,9 +1421,13 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
     page = page.replace(b"</head>", style.encode() + b"</head>", 1)
+    # the font and spacing you chose (Settings, Accessibility), on the page from its first moment
+    marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
+    if marks:
+        page = page.replace(b'<html lang="en">', f'<html lang="en"{marks}>'.encode(), 1)
     lang = i18n.language(cfg, accept_language)
     if lang != "en":
-        page = page.replace(b'<html lang="en">', f'<html lang="{lang}" data-i18n>'.encode(), 1)
+        page = page.replace(f'<html lang="en"{marks}>'.encode(), f'<html lang="{lang}"{marks} data-i18n>'.encode(), 1)
         page = page.replace(b"\n<script>\n", b"\n" + i18n.page_script(lang).encode() + b"<script>\n", 1)
     return page
 

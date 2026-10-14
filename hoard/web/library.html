@@ -50,6 +50,17 @@ html[data-i18n] body { visibility: hidden; animation: i18n-show 0s 3s forwards; 
 }
 :lang(ko) body { word-break: keep-all; overflow-wrap: anywhere; }
 :lang(ja) body { line-break: strict; }
+/* Easier reading (Settings, Accessibility): OpenDyslexic for Latin letters (Japanese and Korean keep their fonts,
+   next in line), and more space between letters, words and lines */
+@font-face { font-family: "OpenDyslexic"; src: url("/fonts/OpenDyslexic-Regular.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "OpenDyslexic"; src: url("/fonts/OpenDyslexic-Bold.woff2") format("woff2"); font-weight: 600 900; font-display: swap; }
+:root[data-font="dyslexic"] {
+  --display: "OpenDyslexic", "Dela Gothic One", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --body: "OpenDyslexic", "Zen Maru Gothic", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+:root[data-font="dyslexic"] body { font-size: 14px; }
+:root[data-spacing="wide"] body { letter-spacing: .03em; word-spacing: .08em; }
+:root[data-spacing="wide"] :is(p, li, .hint, .sub, label) { line-height: 1.75; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -368,6 +379,25 @@ body.selecting .toast { bottom: 96px; }
   align-items: center; gap: 8px 10px; width: min(820px, calc(var(--vw) - 24px)); padding: 10px 14px; background: var(--ledge);
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
+/* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
+.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
+.bulk .count-sel { white-space: nowrap; }
+.menu-btn::after { content: "\25BE"; margin-left: 6px; font-size: 11px; opacity: .75; }
+.menu-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.selmenu { position: fixed; z-index: 60; min-width: 210px; max-width: min(360px, calc(var(--vw) - 16px)); max-height: calc(var(--vh) - 16px);
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); color: var(--bone);
+  box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
+.selmenu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; text-align: left;
+  color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.selmenu button:hover, .selmenu button:focus-visible { background: var(--stone); outline: none; }
+.selmenu button.danger { color: var(--warn); }
+.selmenu .selmenu-h { margin: 6px 12px 2px; font: 700 12px var(--body); color: var(--dust); }
+.selmenu hr { border: 0; border-top: 1px solid var(--seam); margin: 6px 4px; }
+/* a tile's tick box: on hover (where there's a pointer to hover with), while choosing, and on the ones chosen */
+@media (hover: hover) { .slot:hover .tick, .slot:focus-visible .tick { display: grid; place-items: center; } }
+.slot .tick:hover { box-shadow: inset 0 0 0 2px var(--gold); }
 .bulk input { flex: 1 1 160px; }
 .primary.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 
@@ -392,6 +422,7 @@ body.selecting .toast { bottom: 96px; }
 .routine-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 24px 12px; padding: 10px 14px;
   border-radius: 12px; background: var(--stone); border: 1px solid var(--gold); font-size: 14px; }
 .routine-note span { flex: 1; min-width: 220px; }
+.tour-note { margin: 0 0 14px; }   /* above the grid, so the sidebar's height is as it was */
 /* issue #107: what a download would get, to untick, and products always skipped */
 .pick-dialog { width: min(620px, calc(var(--vw) - 32px)); }
 .pick-tools { display: flex; gap: 14px; margin: 10px 0 6px; }
@@ -507,6 +538,17 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .setup .langpick label > span { display: grid; gap: 2px; }
 @media (max-width: 560px) { .setup .langpick { grid-template-columns: 1fr; } }
 .setup .closepick .muted { display: block; margin-top: 4px; font-weight: 500; }
+.setup .access-pick { display: grid; gap: 10px; margin: 16px 0; }
+.setup .access-pick label { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: var(--stone); font-weight: 700; }
+.setup .access-pick label > span { flex: 1; }
+.setup .access-pick select { min-width: 0; max-width: 60%; height: var(--btn-h-sm); padding: 0 30px 0 12px; border: 0; border-radius: 8px;
+  background-color: var(--ledge); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); cursor: pointer;
+  appearance: none; -webkit-appearance: none;   /* the arrow, as Settings' own */
+  background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+.setup .access-pick select:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.setup .access-pick label.tick { justify-content: flex-start; cursor: pointer; }
+.setup .access-pick input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--gold); }
 .setup .signrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--seam); }
 .setup .signrow .who { flex: 1; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .setup .signrow .state { font-size: 13px; color: var(--dust); }
@@ -830,6 +872,28 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
 .only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
+/* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
+.tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
+  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
+.tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
+.tour-card { position: fixed; z-index: 90; width: min(380px, calc(100vw - 32px)); padding: 18px 20px 16px; border-radius: 16px;
+  background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card:focus { outline: none; }
+.tour-card:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card.middle { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+.tour-card.docked { left: 16px; right: 16px; bottom: 16px; top: auto; width: auto; }
+.tour-card h2 { font: 400 22px var(--display); margin: 0 0 8px; }
+.tour-card p { margin: 6px 0; line-height: 1.5; font-size: 14px; }
+.tour-card .tour-n { margin: 0 0 4px; color: var(--dust); font-size: 12px; font-weight: 700; }
+.tour-try { display: flex; align-items: center; gap: 8px; color: var(--gold); font-weight: 700; }
+.tour-try::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: tourPulse 1.4s ease-in-out infinite; }
+.tour-try[hidden], .tour-go [hidden] { display: none; }
+@keyframes tourPulse { 50% { opacity: .3; } }
+.tour-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+.tour-go > span { display: flex; gap: 8px; margin-left: auto; }
+body.less-motion .tour-ring { transition: none; }
+body.less-motion .tour-try::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-try::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -952,6 +1016,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <main>
     <div class="headrow"><h2 id="count" class="count" aria-live="polite"></h2>
       <button id="selectBtn" class="ghost sm" aria-pressed="false" title="Select several items to tag them together">Select</button></div>
+    <div id="tourNote" class="routine-note tour-note" role="status" hidden>
+      <span>New to Hoard, or just updated? A short tour shows what it can do, with your own library.</span>
+      <button class="primary sm" data-tour-note="go">Take the tour</button>
+      <button class="ghost sm" data-tour-note="later">Not now</button>
+    </div>
     <div id="status" class="status"></div>
     <div id="viewBar" class="viewbar" hidden></div>
     <div id="grid" class="grid" aria-label="Your assets"></div>
@@ -1074,6 +1143,12 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
       <option value="100">Normal</option><option value="115">Larger</option>
       <option value="130">Large</option><option value="150">Largest</option>
     </select></label>
+  <label class="check">Font
+    <select id="setFont" aria-label="Font">
+      <option value="standard">Standard</option>
+      <option value="dyslexic">OpenDyslexic, for dyslexia</option>
+    </select></label>
+  <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
@@ -1124,6 +1199,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="openLogs">Open logs folder</button>
   <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
+  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
@@ -1252,20 +1328,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
     again. Signing out of itch.io in Hoard deletes it.</p>
   <div class="row"><span></span><span><button class="ghost" id="itchCancel">Cancel</button> <button class="primary" id="itchSave">Save key</button></span></div>
 </dialog>
-<div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
+<div id="bulk" class="bulk" hidden role="region" aria-label="Selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
-  <button class="linkish" id="bulkAll">Select all shown</button>
-  <button class="linkish" id="bulkNone">Clear</button>
-  <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
-  <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
-  <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
-  <button class="ghost sm" data-needs data-mark>Archive</button>
-  <button class="ghost sm" data-needs data-mark>Hide</button>
-  <button class="ghost sm" data-needs data-mark>Remove</button>
-  <button class="ghost sm" data-needs id="bulkPurge" hidden>Delete for good</button>
-  <button class="primary sm" data-needs id="bulkDownload">Download</button>
-  <button class="ghost sm" data-needs id="bulkDeleteFiles" hidden>Delete downloaded files</button>
-  <button class="ghost sm" id="bulkDone">Done</button>
+  <span class="bulk-acts" id="bulkActs"></span>
+  <span class="bulk-end"><button class="linkish" id="bulkAll">Select all shown</button>
+    <button class="ghost sm" id="bulkDone">Done</button></span>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1332,6 +1399,7 @@ async function load() {
   else if (openKey) forgetDetail();   // no longer shown (a hidden item, once locked): its details go too
   // copies on two stores whose pictures may be one picture saved twice: how they look decides (then read again)
   const wanted = DATA.items.filter(a => a.look_for && a.thumbnail).map(a => ({ look_for: a.look_for, src: keyed("/thumb/" + encodeURIComponent(a.key)) }));
+  tourOffer();   // (once there's something in the library)
   if (wanted.length && await lookAtPictures(wanted)) load();
 }
 
@@ -1647,12 +1715,12 @@ $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStor
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
 $("#downloadAll").addEventListener("click", () => downloadNew(usedStores().filter(downloadable)));
 // issue #106: download what's selected, from every store it's on, as one job
-$("#bulkDownload").addEventListener("click", () => {
-  const chosen = [...sel.ids].map(k => byKey.get(k)).filter(a => a && downloadable(a.store));
+function downloadSelected(list) {
+  const chosen = list.filter(a => downloadable(a.store));
   if (!chosen.length) { toast("Hoard can't download those: Payhip's are listed, and you download them on Payhip."); return; }
   const keys = [...new Set(chosen.map(a => a.tag_key))];
   startDownload(storesOf(keys), null, null, keys);
-});
+}
 $("#signOutAll").addEventListener("click", async () => {
   if (await ask("Sign out of every store? Hoard signs out on each store's side where it can, then deletes all its saved sign-ins. Your library list stays.", "Sign out of all", true)) runJob("/api/logout", ["all"]);
 });
@@ -1959,7 +2027,7 @@ document.addEventListener("click", e => {
 });
 $("#grid").addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
-  if (sel.on) { toggleSelected(s.dataset.key); return; }
+  if (selectClick(e, s)) return;
   if ((stackSize.get(s.dataset.key) || 0) > 1) { showCopies(byKey.get(s.dataset.key), "stack_key"); return; }   // a stack: every copy
   lastFocus = s; showDetail(byKey.get(s.dataset.key));
 });
@@ -1989,7 +2057,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;   // a dialog closes itself
     if (closeTopWindow()) return;
-    else if (sel.on) setSelecting(false);
+    else if (selecting()) clearSelection();
     else if (openKey) closeDetail();
     else if (document.activeElement === $("#q")) { state.q = ""; render(); }
   }
@@ -2017,18 +2085,18 @@ const T = {
   reload: () => load(),
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
+  render: () => render(),
+  membersOf: key => {   // a stack's copies, all chosen together (as many as "Copies of" shows)
+    const a = byKey.get(key), k = a && stackKey(a);
+    return k && (stackSize.get(key) || 0) > 1 ? DATA.items.filter(x => stackKey(x) === k && inView(x) && shown(x.store)).map(x => x.key) : null;
+  },
+  actions: () => ({   // what the selection bar and right-click offer here
+    main: [{ label: "Download", primary: true, run: downloadSelected }],
+    groups: [TAG_ACTIONS, { name: "More", items: [...markActions(state.view),
+      ...(state.view === "removed" ? [{ label: "Delete for good", danger: true, run: list => purgeItems(list) }] : []),
+      { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
+  }),
 };
-/* selecting several items */
-function setSelecting(on) {
-  sel.on = on;
-  if (!on) sel.ids.clear();
-  document.body.classList.toggle("selecting", on);
-  $("#selectBtn").textContent = on ? "Done" : "Select";
-  $("#selectBtn").setAttribute("aria-pressed", String(on));
-  $("#bulk").hidden = !on;
-  if (on) T.closeDetail();
-  render();
-}
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2061,13 +2129,7 @@ function wireTags() {
   $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
-  $("#selectBtn").addEventListener("click", () => setSelecting(!sel.on));
-  $("#bulkDone").addEventListener("click", () => setSelecting(false));
-  $("#bulkAll").addEventListener("click", () => { for (const a of T.shown()) sel.ids.add(T.id(a)); markSelected(); });
-  $("#bulkNone").addEventListener("click", () => { sel.ids.clear(); markSelected(); });
-  $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
-  $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
-  $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
+  wireSelection();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });
@@ -2266,7 +2328,7 @@ function setupPicked(st, s) {
   if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
   return !!((DATA.stores || {})[s] || {}).count;
 }
-const setupSteps = () => ["language", "welcome", "browser", "older", "stores",
+const setupSteps = () => ["language", "access", "welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
 async function setupStatus() {
@@ -2278,7 +2340,8 @@ async function openSetup() {
   closeSettings(); openStores(false); openTagPanel(false);
   SETUP.step = 0; SETUP.picked = false;
   try {   // back after choosing a language (the page comes again in it): on to the next step
-    if (sessionStorage.getItem("hoard-setup-step") === "welcome") SETUP.step = setupSteps().indexOf("welcome");
+    const at = setupSteps().indexOf(sessionStorage.getItem("hoard-setup-step"));
+    if (at > 0) SETUP.step = at;
     sessionStorage.removeItem("hoard-setup-step");
   } catch (e) { /* no storage: from the start */ }
   SETUP.firstRun = !SETUP.st.done;   // the first time, it's gone through to the end (issue #21); from Settings, it can be left
@@ -2322,6 +2385,22 @@ const SETUP_VIEWS = {
     </div>
     <p class="muted">The Japanese and Korean translations were made with AI help, so some wording may be off. <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml" target="_blank" rel="noopener noreferrer">Tell us what reads wrong</a>.</p>
     <p class="muted">You can change it later in Settings, under Appearance.</p>`;
+  },
+  // easier to read and use, from the start: each choice shows at once, and is saved as it's made
+  access: () => {
+    const d = DATA.display || {}, opt = (v, label, now) => `<option value="${v}"${String(now) === String(v) ? " selected" : ""}>${label}</option>`;
+    return `<h2 id="setupTitle">Make Hoard easier to use</h2>
+    <p>Choose whatever helps. You see each one as you choose it.</p>
+    <div class="access-pick">
+      <label><span>Text size</span><select id="setupTextSize">${opt(100, "Normal", d.text_size)}${opt(115, "Larger", d.text_size)}${opt(130, "Large", d.text_size)}${opt(150, "Largest", d.text_size)}</select></label>
+      <label><span>Font</span><select id="setupFont">${opt("standard", "Standard", d.font || "standard")}${opt("dyslexic", "OpenDyslexic, for dyslexia", d.font)}</select></label>
+      <label><span>Light or dark</span><select id="setupMode">${opt("system", "Match my computer", d.mode || "system")}${opt("light", "Light", d.mode)}${opt("dark", "Dark", d.mode)}</select></label>
+      <label><span>Store colours</span><select id="setupColours">${opt("standard", "Standard", d.colours === "custom" ? "standard" : d.colours)}${opt("colourblind", "Easier to tell apart (colour blindness)", d.colours)}</select></label>
+      <label class="tick"><input type="checkbox" id="setupSpacing"${d.spacing ? " checked" : ""}> More space between letters, words and lines</label>
+      <label class="tick"><input type="checkbox" id="setupMotion"${d.reduce_motion ? " checked" : ""}> Reduce motion</label>
+      <label class="tick"><input type="checkbox" id="setupPause"${d.pause_animations ? " checked" : ""}> Pause animated pictures</label>
+    </div>
+    <p class="muted">There's more, and you can change these later, in Settings, under Appearance and Accessibility.</p>`;
   },
   welcome: () => `<h2 id="setupTitle">Welcome to Hoard</h2>
     <p>Let's get Hoard ready: choose your stores, sign in to them, and pick where downloads go. It takes a few minutes, and you can run this again from Settings.</p>
@@ -2378,6 +2457,7 @@ const SETUP_VIEWS = {
     <p class="muted">New to Hoard? Skip this step.</p>`,
   done: () => `<h2 id="setupTitle">Hoard's ready</h2>
     <p>When you choose Finish, Hoard reads what you own from your stores. After that, choose <strong>Download everything new</strong> in Stores, or <strong>Download new</strong> in Downloads, whenever you want local copies.</p>
+    <p>Once Hoard has read your library, a short tour can show you what else it does.</p>
     <p class="muted">Run this again any time from Settings.</p>`,
 };
 
@@ -2394,6 +2474,20 @@ function pollSetup(onDone, show) {
   }, 1000);
 }
 const SETUP_WIRES = {
+  access: () => {
+    const read = () => ({ text_size: Number($("#setupTextSize").value), font: $("#setupFont").value, mode: $("#setupMode").value,
+                          colours: $("#setupColours").value, spacing: $("#setupSpacing").checked,
+                          reduce_motion: $("#setupMotion").checked, pause_animations: $("#setupPause").checked });
+    $("#setupBody .access-pick").addEventListener("change", async () => {
+      const display = read();
+      if ((DATA.display || {}).colours === "custom" && display.colours === "standard") delete display.colours;   // your own stay
+      const r = await apiPost("/api/settings", { display });
+      if (!r.ok) { toast(r.data.error || "That wasn't saved."); return; }
+      DATA.display = r.data.settings.display;
+      applyDisplay(DATA.display);
+      refitWindows();
+    });
+  },
   browser: () => {
     const b = $("#installBrowser");
     if (!b) return;
@@ -2455,7 +2549,7 @@ async function setupSave(name) {   // what leaving a step saves; false keeps you
     const r = await apiPost("/api/settings", { display: { language: chosen } });
     if (!r.ok) { toast(r.data.error || "That wasn't saved."); return false; }
     // the page comes again in the language chosen, and the assistant with it, one step on
-    try { sessionStorage.setItem("hoard-setup-step", "welcome"); } catch (e) { /* it starts at the language again */ }
+    try { sessionStorage.setItem("hoard-setup-step", "access"); } catch (e) { /* it starts at the language again */ }
     history.replaceState(null, "", location.pathname + "#setup");
     location.reload();
     return false;
@@ -2542,7 +2636,7 @@ function renderViews() {
     : state.view === "hidden" ? `<p>Hidden items only show here, and only in this browser while it's unlocked. It's a privacy screen for Hoard, not encryption.</p>
         <button class="ghost sm" data-privacy="lock">Lock now</button><button class="ghost sm" data-privacy="change">Change PIN</button>
         <button class="ghost sm" data-privacy="phrase">${(DATA.privacy || {}).recovery_set ? "New recovery phrase" : "Create a recovery phrase"}</button>` : "";
-  updateBulkButtons();
+  if (selecting()) markSelected();   // (the selection's actions follow the view)
 }
 function markButtons(a) {
   const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
@@ -2553,17 +2647,11 @@ function markButtons(a) {
   return (a.mark === "archived" ? b("unarchived", true, "Unarchive") : b("archived", true, "Archive")) +
     b("hidden", true, "Hide") + b("removed", true, "Remove") + del;
 }
-function updateBulkButtons() {
-  const set = (el, kind, on, text, show = true) => { el.hidden = !show; el.dataset.kind = kind; el.dataset.on = on; el.textContent = text; };
-  const [one, two, three] = document.querySelectorAll("#bulk [data-mark]");
-  if (!one) return;
-  const v = state.view;
-  if (v === "removed") { set(one, "removed", false, "Restore"); set(two, "", "", "", false); set(three, "", "", "", false); }
-  else if (v === "hidden") { set(one, "hidden", false, "Unhide"); set(two, "removed", true, "Remove"); set(three, "", "", "", false); }
-  else { set(one, v === "archive" ? "unarchived" : "archived", true, v === "archive" ? "Unarchive" : "Archive");
-         set(two, "hidden", true, "Hide"); set(three, "removed", true, "Remove"); }
-  $("#bulkPurge").hidden = v !== "removed";
-  $("#bulkDeleteFiles").hidden = false;   // in every view: a product kept in your library can be downloaded again
+function markActions(v) {   // Archive, Hide and Remove, or their undoing, for the view you're in
+  const m = (kind, on, label) => ({ label, run: list => markItems(list, kind, on) });
+  if (v === "removed") return [m("removed", false, "Restore")];
+  if (v === "hidden") return [m("hidden", false, "Unhide"), m("removed", true, "Remove")];
+  return [v === "archive" ? m("unarchived", true, "Unarchive") : m("archived", true, "Archive"), m("hidden", true, "Hide"), m("removed", true, "Remove")];
 }
 const MARK_DONE = {   // [one, many]
   "archived true": ["Archived 1 item. It's in Archive.", "Archived {0} items. They're in Archive."],
@@ -2746,11 +2834,6 @@ function wirePrivacy() {
     toast(r.ok ? tr(r.data.deleted === 1 ? "Deleted {0} hidden item and removed the PIN." : "Deleted {0} hidden items and removed the PIN.", r.data.deleted)
                : (r.data.error || "That didn't work."));
   });
-  for (const b of document.querySelectorAll("#bulk [data-mark]")) {
-    b.addEventListener("click", () => markItems([...sel.ids].map(T.byId), b.dataset.kind, b.dataset.on === "true"));
-  }
-  $("#bulkPurge").addEventListener("click", () => purgeItems([...sel.ids].map(T.byId)));
-  $("#bulkDeleteFiles").addEventListener("click", () => deleteFiles([...sel.ids].map(T.byId)));
   $("#storeRows").addEventListener("click", async e => {
     if (!e.target.closest("[data-review-shops]")) return;
     const found = (DATA.stores.payhip || {}).found_shops || [];
@@ -2778,10 +2861,12 @@ wireTags();
 wireApp();
 wireSetup();
 wirePrivacy();
+wireTour();
 const askedSetup = /(^|[#&])setup\b/.test(location.hash);   // read before the first render rewrites the address (saveHash)
 readHash();
 load().finally(() => hideSplash()).then(() => {   // someone new (nothing set up, nothing in the library) is walked through setting up
   if (askedSetup || (!DATA.setup_done && !DATA.items.length && !DATA.error)) openSetup();
+  else tourResume();   // the tour, carried on from the other page
 });
 </script>
 </body>

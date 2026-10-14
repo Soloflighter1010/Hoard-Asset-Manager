@@ -366,6 +366,42 @@ public static class CoreTests
             loop2.Needs.Add(new HoardNeed { Kind = "product", Folder = "Booth/l" });
             Check("Import set: a loop of needs is broken", SetOrder.Order(new List<HoardAsset> { loop, loop2 }).Count == 2);
         }
+
+        // Import set brings in the newest of each package, and not face tracking add-ons unless asked (0.8.2)
+        var written = new Dictionary<string, DateTime>();
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        Func<string, DateTime> at = p => written.ContainsKey(p) ? written[p] : t0;
+        Func<List<SetPicks.Pick>, SetPicks.Why, string> picked = (list, why) =>
+            string.Join("|", list.FindAll(x => x.Why == why).ConvertAll(x => PackageFile.Name(x.Path)).ToArray());
+        var rusk = new List<string> { "D:/h/Rusk_v1.0.unitypackage", "D:/h/Rusk_v1.10.unitypackage", "D:/h/Rusk_v1.9.unitypackage",
+                                      "D:/h/Rusk_FaceTracking_v1.10.unitypackage", "D:/h/Rusk_FaceTracking_v1.0.unitypackage",
+                                      "D:/h/Rusk_Quest.unitypackage", "D:/h/Rusk_v1.10 (1).unitypackage" };
+        var picks = SetPicks.Choose("Rusk", rusk, at);
+        Check("Import set: the newest version (1.10 after 1.9), and other packages", picked(picks, SetPicks.Why.Chosen) == "Rusk_v1.10.unitypackage|Rusk_Quest.unitypackage"
+              || picked(picks, SetPicks.Why.Chosen) == "Rusk_Quest.unitypackage|Rusk_v1.10.unitypackage", picked(picks, SetPicks.Why.Chosen));
+        Check("Import set: older versions left out", picked(picks, SetPicks.Why.Older).Split('|').Length == 4, picked(picks, SetPicks.Why.Older));
+        Check("Import set: face tracking, its newest, asked for", picked(picks, SetPicks.Why.FaceTracking) == "Rusk_FaceTracking_v1.10.unitypackage",
+              picked(picks, SetPicks.Why.FaceTracking));
+        written["D:/h/Hoodie.unitypackage"] = t0; written["D:/h/Hoodie_new.unitypackage"] = t0.AddDays(1);
+        written["D:/h/Hoodie_v2.unitypackage"] = t0.AddDays(30); written["D:/h/Hoodie_v3.unitypackage"] = t0.AddDays(2);
+        picks = SetPicks.Choose("Hoodie", new List<string> { "D:/h/Hoodie.unitypackage", "D:/h/Hoodie_v2.unitypackage", "D:/h/Hoodie_v3.unitypackage" }, at);
+        Check("Import set: versions in the name win over dates", picked(picks, SetPicks.Why.Chosen) == "Hoodie_v3.unitypackage", picked(picks, SetPicks.Why.Chosen));
+        picks = SetPicks.Choose("Hoodie", new List<string> { "D:/h/Hoodie.unitypackage", "D:/h/Hoodie_v2.unitypackage" }, at);
+        Check("Import set: with no version to compare, the latest download", picked(picks, SetPicks.Why.Chosen) == "Hoodie_v2.unitypackage", picked(picks, SetPicks.Why.Chosen));
+        var zipped = new List<string> { PackageFile.InZip("D:/h/Skirt_ver1.2.zip", "Skirt/Skirt.unitypackage"),
+                                        PackageFile.InZip("D:/h/Skirt_ver1.3.zip", "Skirt/Skirt.unitypackage") };
+        picks = SetPicks.Choose("Skirt", zipped, at);
+        Check("Import set: a zip's version, for the package in it", picks.Find(x => x.Why == SetPicks.Why.Chosen).Path == zipped[1]);
+        picks = SetPicks.Choose("Rusk Face Tracking", new List<string> { "D:/h/Rusk_FT.unitypackage", "D:/h/Rusk_FT_Animations.unitypackage" }, at);
+        Check("Import set: a face tracking product keeps its packages", picked(picks, SetPicks.Why.Chosen).Split('|').Length == 2, picked(picks, SetPicks.Why.Chosen));
+        picks = SetPicks.Choose("Gift Set", new List<string> { "D:/h/Soft_Gift.unitypackage", "D:/h/Lift.unitypackage", "D:/h/ラスク_フェイストラッキング.unitypackage" }, at);
+        Check("Import set: 'ft' inside a word isn't face tracking; Japanese is", picked(picks, SetPicks.Why.Chosen) == "Soft_Gift.unitypackage|Lift.unitypackage"
+              && picked(picks, SetPicks.Why.FaceTracking) == "ラスク_フェイストラッキング.unitypackage", picked(picks, SetPicks.Why.Chosen));
+        Check("Import set: FT, VRCFT and Unified Expressions are face tracking", SetPicks.IsFaceTracking("Rusk_FT_v1.0.unitypackage")
+              && SetPicks.IsFaceTracking("Rusk-VRCFT.unitypackage") && SetPicks.IsFaceTracking("Rusk UnifiedExpressions.unitypackage")
+              && !SetPicks.IsFaceTracking("Rusk_Gift.unitypackage") && !SetPicks.IsFaceTracking("Rusk_Face.unitypackage"));
+        Check("Import set: different packages stay apart", SetPicks.Stem("Rusk_Body_v1.2.unitypackage") != SetPicks.Stem("Rusk_Hair_v1.2.unitypackage")
+              && SetPicks.Stem("Rusk Ver.1.2.unitypackage") == SetPicks.Stem("rusk_2024-01-15.unitypackage"));
         var badLink = cat.Assets.Find(a => a.Name == "Odd Link");
         Check("off-store link dropped", badLink != null && badLink.Url == null);
         Check("file found inside the folder", good != null && cat.FilePath(good, "Rusk.unitypackage") != null);

@@ -49,6 +49,17 @@ html[data-i18n] body { visibility: hidden; animation: i18n-show 0s 3s forwards; 
 }
 :lang(ko) body { word-break: keep-all; overflow-wrap: anywhere; }
 :lang(ja) body { line-break: strict; }
+/* Easier reading (Settings, Accessibility): OpenDyslexic for Latin letters (Japanese and Korean keep their fonts,
+   next in line), and more space between letters, words and lines */
+@font-face { font-family: "OpenDyslexic"; src: url("/fonts/OpenDyslexic-Regular.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "OpenDyslexic"; src: url("/fonts/OpenDyslexic-Bold.woff2") format("woff2"); font-weight: 600 900; font-display: swap; }
+:root[data-font="dyslexic"] {
+  --display: "OpenDyslexic", "Dela Gothic One", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --body: "OpenDyslexic", "Zen Maru Gothic", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+:root[data-font="dyslexic"] body { font-size: 14px; }
+:root[data-spacing="wide"] body { letter-spacing: .03em; word-spacing: .08em; }
+:root[data-spacing="wide"] :is(p, li, .hint, .sub, label) { line-height: 1.75; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -395,6 +406,39 @@ body.selecting .toast { bottom: 96px; }
   align-items: center; gap: 8px 10px; width: min(820px, calc(var(--vw) - 24px)); padding: 10px 14px; background: var(--ledge);
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
+/* Disk space, From more than one store: which copy each keeps */
+.dupes { margin: 10px 0 4px; }
+.dupes .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.dupes select { height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0; background-color: var(--stone); color: var(--bone);
+  box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
+.dupelist { list-style: none; margin: 8px 0 12px; padding: 0; max-height: 46vh; overflow: auto; border-top: 1px solid var(--seam); }
+.dupelist li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 8px 0; border-bottom: 1px solid var(--seam); }
+.dupelist .opts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.dupelist label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; white-space: nowrap; }
+.dupelist input { accent-color: var(--gold); }
+.dupes .primary.danger { background: var(--warn); color: var(--gold-ink); }
+.dupes .primary.danger:disabled { opacity: .5; }
+/* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
+.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
+.bulk .count-sel { white-space: nowrap; }
+.menu-btn::after { content: "\25BE"; margin-left: 6px; font-size: 11px; opacity: .75; }
+.menu-btn[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.selmenu { position: fixed; z-index: 60; min-width: 210px; max-width: min(360px, calc(var(--vw) - 16px)); max-height: calc(var(--vh) - 16px);
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); color: var(--bone);
+  box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
+.selmenu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; text-align: left;
+  color: inherit; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.selmenu button:hover, .selmenu button:focus-visible { background: var(--stone); outline: none; }
+.selmenu button.danger { color: var(--warn); }
+.selmenu .selmenu-h { margin: 6px 12px 2px; font: 700 12px var(--body); color: var(--dust); }
+.selmenu hr { border: 0; border-top: 1px solid var(--seam); margin: 6px 4px; }
+/* a tile's tick box: on hover (where there's a pointer to hover with), while choosing, and on the ones chosen */
+@media (hover: hover) { .slot:hover .tick, .slot:focus-visible .tick { display: grid; place-items: center; } }
+.slot .tick:hover { box-shadow: inset 0 0 0 2px var(--gold); }
 .bulk input { flex: 1 1 160px; }
 .primary.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 
@@ -822,6 +866,28 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
 .only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
+/* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
+.tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
+  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
+.tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
+.tour-card { position: fixed; z-index: 90; width: min(380px, calc(100vw - 32px)); padding: 18px 20px 16px; border-radius: 16px;
+  background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card:focus { outline: none; }
+.tour-card:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card.middle { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+.tour-card.docked { left: 16px; right: 16px; bottom: 16px; top: auto; width: auto; }
+.tour-card h2 { font: 400 22px var(--display); margin: 0 0 8px; }
+.tour-card p { margin: 6px 0; line-height: 1.5; font-size: 14px; }
+.tour-card .tour-n { margin: 0 0 4px; color: var(--dust); font-size: 12px; font-weight: 700; }
+.tour-try { display: flex; align-items: center; gap: 8px; color: var(--gold); font-weight: 700; }
+.tour-try::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: tourPulse 1.4s ease-in-out infinite; }
+.tour-try[hidden], .tour-go [hidden] { display: none; }
+@keyframes tourPulse { 50% { opacity: .3; } }
+.tour-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+.tour-go > span { display: flex; gap: 8px; margin-left: auto; }
+body.less-motion .tour-ring { transition: none; }
+body.less-motion .tour-try::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-try::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -1084,6 +1150,12 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
       <option value="100">Normal</option><option value="115">Larger</option>
       <option value="130">Large</option><option value="150">Largest</option>
     </select></label>
+  <label class="check">Font
+    <select id="setFont" aria-label="Font">
+      <option value="standard">Standard</option>
+      <option value="dyslexic">OpenDyslexic, for dyslexia</option>
+    </select></label>
+  <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
@@ -1134,6 +1206,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="openLogs">Open logs folder</button>
   <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
+  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
@@ -1225,21 +1298,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   </div>
 </dialog>
 
-<div id="bulk" class="bulk" hidden role="region" aria-label="Tag the selected items">
+<div id="bulk" class="bulk" hidden role="region" aria-label="Selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>
-  <button class="linkish" id="bulkAll">Select all shown</button>
-  <button class="linkish" id="bulkNone">Clear</button>
-  <input id="bulkTag" list="tagList" maxlength="40" placeholder="Tag" aria-label="Tag to add or remove">
-  <button class="primary sm" id="bulkAdd" data-needs>Add tag</button>
-  <button class="ghost sm" id="bulkRemove" data-needs>Remove tag</button>
-  <span class="bulkmove" id="bulkMoveWrap" hidden><select id="bulkMoveTo" aria-label="Library folder to move the selected to"></select>
-    <button class="ghost sm" id="bulkMove" data-needs>Move here</button></span>
-  <button class="ghost sm" id="bulkNewSet" data-needs>New set</button>
-  <span class="bulkmove" id="bulkSetWrap" hidden><select id="bulkSetTo" aria-label="Set to add the selected to"></select>
-    <button class="ghost sm" id="bulkSet" data-needs>Add to set</button></span>
-  <button class="ghost sm" id="bulkArchive" data-needs>Archive</button>
-  <button class="ghost sm" id="bulkDelete" data-needs>Delete downloaded files</button>
-  <button class="ghost sm" id="bulkDone">Done</button>
+  <span class="bulk-acts" id="bulkActs"></span>
+  <span class="bulk-end"><button class="linkish" id="bulkAll">Select all shown</button>
+    <button class="ghost sm" id="bulkDone">Done</button></span>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1396,8 +1459,6 @@ function renderSets(list) {
   $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
     `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
     `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
-  $("#bulkSetTo").innerHTML = setOptions("Choose a set", false);   // (New set is its own button beside it)
-  $("#bulkSetWrap").hidden = !(DATA.sets || []).length;
 }
 function setsSection(a) {
   const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
@@ -1469,7 +1530,7 @@ async function restorePrevious(a, b) {
 function needsSection(a) {
   const n = a.needs, R = DATA.needs_reading || {};
   if (!n) return "";
-  const head = `<h3>What it needs</h3>`;
+  const head = `<h3 id="needsHead">What it needs</h3>`;
   if (!n.read) return head + `<p class="sub">${esc(R.reading && R.total
     ? tr("Hoard is reading your packages to find out ({0} of {1}).", R.done.toLocaleString(), R.total.toLocaleString())
     : tr("Hoard reads your packages to find out, while nothing else is running."))}</p>`;
@@ -1525,7 +1586,67 @@ function inSpace(a) {
   if (!takesSpace(a)) return false;
   if (state.space === "copies") return !!copiesOf(a);
   if (state.space === "unused") return !isLocal(a) && !(a.used_in || []).length;
+  if (state.space === "dupes") return dupeIds().has(a.id);
   return true;
+}
+/* products you have from more than one store, each downloaded (the same product, as Hoard stacks copies): keep
+   one store's copy and remove the others. A copy removed leaves your library (Library, Removed, where Restore
+   brings it back), so syncing doesn't download it again, and its downloaded files are deleted. */
+const dupeKeep = new Map();   // stack_key -> the id of the copy to keep; none chosen: all of them stay
+function dupeGroups() {
+  const by = new Map();
+  for (const a of DATA.assets) if (a.stack_key && takesSpace(a) && !isLocal(a) && !a.mark) by.set(a.stack_key, [...(by.get(a.stack_key) || []), a]);
+  return [...by.values()].filter(g => new Set(g.map(a => a.store)).size > 1)
+    .map(g => g.sort((x, y) => coll.compare(storeName(x.store), storeName(y.store)) || y.size - x.size))
+    .sort((x, y) => coll.compare(x[0].name, y[0].name));
+}
+const dupeIds = () => new Set(dupeGroups().flat().map(a => a.id));
+function dupeRemovals(groups = dupeGroups()) {
+  return groups.flatMap(g => { const k = dupeKeep.get(g[0].stack_key); return k == null || !g.some(a => a.id === k) ? [] : g.filter(a => a.id !== k); });
+}
+function dupesPanel() {
+  const groups = dupeGroups();
+  if (!groups.length) return `<p class="muted">${esc(tr("Nothing here is downloaded from more than one store."))}</p>`;
+  const stores = [...new Set(groups.flat().map(a => a.store))].sort((x, y) => coll.compare(storeName(x), storeName(y)));
+  const going = dupeRemovals(groups), bytes = going.reduce((t, a) => t + a.size, 0);
+  return `<div class="dupes"><p>${esc(tr(groups.length === 1 ? "1 product is downloaded from more than one store." : "{0} products are downloaded from more than one store.", groups.length.toLocaleString()))} ` +
+    `${esc(tr("Choose the copy to keep: the others are removed from your library, so a sync doesn't download them again, and their files are deleted. Restore, under Removed in the Library, brings one back."))}</p>` +
+    `<div class="row"><label for="dupeStore">${esc(tr("Keep the copy from"))}</label> <select id="dupeStore">` +
+    stores.map(st => `<option value="${esc(st)}">${esc(storeName(st))}</option>`).join("") + `</select>` +
+    `<button class="ghost sm" data-dupe="apply">${esc(tr("In every one"))}</button>` +
+    `<button class="linkish" data-dupe="none">${esc(tr("Keep them all"))}</button></div>` +
+    `<ul class="dupelist">${groups.map(g => {
+      const k = g[0].stack_key, keep = dupeKeep.get(k), name = `dk-${g[0].id}`;
+      const opt = (v, label, on) => `<label><input type="radio" name="${name}" data-stack="${esc(k)}" value="${v}"${on ? " checked" : ""}> ${label}</label>`;
+      return `<li><span class="nm"><b translate="no">${esc(g[0].name)}</b> <span class="muted" translate="no">${esc(tr("by {0}", g[0].creator))}</span></span><span class="opts">` +
+        g.map(a => opt(a.id, esc(tr("Keep {0}", storeName(a.store))) + ` <span class="muted">(${sizeText(a.size)})</span>`, keep === a.id)).join("") +
+        opt("", esc(tr("Keep all")), keep == null || !g.some(a => a.id === keep)) + `</span></li>`;
+    }).join("")}</ul>` +
+    `<button class="primary sm danger" data-dupe="go"${going.length ? "" : " disabled"}>${dupeGoText(going, bytes)}</button></div>`;
+}
+function dupeGoText(going, bytes) {
+  return esc(going.length ? tr(going.length === 1 ? "Remove 1 copy ({1})" : "Remove {0} copies ({1})", going.length.toLocaleString(), sizeText(bytes))
+                          : tr("Choose the copies to keep"));
+}
+async function removeDupes() {
+  const going = dupeRemovals();
+  if (!going.length) return;
+  const bytes = going.reduce((t, a) => t + a.size, 0);
+  if (!await ask(tr(going.length === 1 ? "Remove 1 copy, and delete its downloaded files ({1})?" : "Remove {0} copies, and delete their downloaded files ({1})?",
+                    going.length.toLocaleString(), sizeText(bytes)) + "\n\n" +
+                 going.map(a => `${a.name} (${storeName(a.store)})`).slice(0, 12).join("\n") + (going.length > 12 ? "\n..." : "") + "\n\n" +
+                 tr("They leave your library, so syncing doesn't download them again; the copy you keep stays. Restore, under Removed in the Library, brings one back."),
+                 "Remove them", true)) return;
+  const keys = [...new Set(going.map(a => a.tag_key))];
+  const marked = await apiPost("/api/marks", { kind: "removed", keys, on: true });   // first: a sync never brings them back
+  if (!marked.ok) { toast(marked.data.error || "That didn't work."); return; }
+  const r = await apiPost("/api/delete-files", { keys, confirm: true });
+  dupeKeep.clear();
+  if (!r.ok) { await load(); toast(r.data.error || "They were removed from your library, but their files couldn't be deleted just now."); return; }
+  if (r.data.job) return afterQueuedJob(r, "delete-files", () => load(true).then(() => state.view === "space" && loadSpace()));
+  await load();
+  if (state.view === "space") loadSpace();
+  toast(tr(going.length === 1 ? "Removed 1 copy and deleted {1}." : "Removed {0} copies and deleted {1}.", going.length.toLocaleString(), sizeText(r.data.bytes)));
 }
 async function loadSpace() {
   let j;
@@ -1567,9 +1688,10 @@ function spaceBar() {
   if (state.space === "unused" && SPACE && !SPACE.projects)
     notes.push("Hoard hasn't found any Unity projects yet: open a project with Hoard for Unity, or add one in Projects.");
   return `<p>${esc(tr(here.length === 1 ? "1 download takes {1}." : "{0} downloads take {1}, biggest first.", here.length.toLocaleString(), sizeText(total)))} ` +
-    `<span>To free some, choose <b>Select</b>: move them to another library folder, archive them, or delete their files.</span></p>` +
-    `<div class="chips">${chip("", "Everything")}${copies}${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
-    notes.map(t => `<p class="muted">${t}</p>`).join("");
+    `<span>To free some, choose them (tick their boxes, or right-click): move them to another library folder, archive them, or delete their files.</span></p>` +
+    `<div class="chips">${chip("", "Everything")}${copies}${chip("dupes", "From more than one store", dupeGroups().length.toLocaleString())}` +
+    `${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
+    notes.map(t => `<p class="muted">${t}</p>`).join("") + (state.space === "dupes" ? dupesPanel() : "");
 }
 function spaceSection(a) {
   const e = copiesOf(a);
@@ -1580,7 +1702,21 @@ function spaceSection(a) {
       `${(DATA.libraries || []).length > 1 ? `, ${esc(libName(o.library || 0))}` : ""})</span> ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View</button></li>`).join("") + `</ul></div>`;
 }
+$("#viewBar").addEventListener("change", e => {   // Duplicates: which copy each keeps
+  const r = e.target.closest("input[data-stack]"); if (!r) return;
+  if (r.value === "") dupeKeep.delete(r.dataset.stack); else dupeKeep.set(r.dataset.stack, +r.value);
+  const going = dupeRemovals(), go = $("[data-dupe='go']");   // (just the button: the list keeps its place)
+  go.innerHTML = dupeGoText(going, going.reduce((t, a) => t + a.size, 0));
+  go.disabled = !going.length;
+});
 $("#viewBar").addEventListener("click", e => {
+  const d = e.target.closest("[data-dupe]");
+  if (d && d.dataset.dupe === "apply") {   // the chosen store's copy, in every one that has one
+    const st = $("#dupeStore").value;
+    for (const g of dupeGroups()) { const a = g.find(x => x.store === st); if (a) dupeKeep.set(g[0].stack_key, a.id); }
+    render();
+  } else if (d && d.dataset.dupe === "none") { dupeKeep.clear(); render(); }
+  else if (d && d.dataset.dupe === "go") removeDupes();
   const b = e.target.closest("[data-space]"); if (!b) return;
   state.space = state.space === b.dataset.space ? "" : b.dataset.space; sel.ids.clear(); render();
 });
@@ -2031,13 +2167,8 @@ $("#stores").addEventListener("click", e => {
   if (b) { state.store = b.dataset.store; if (!b.dataset.store) state.lib = ""; render(); }
 });
 /* ---------- moving the selected downloads to another library folder, each as a job of its own (Tasks) */
-function fillBulkMove() {
-  const libs = (DATA.libraries || []).filter(l => l.available);
-  $("#bulkMoveWrap").hidden = (DATA.libraries || []).length < 2 || !libs.length;
-  $("#bulkMoveTo").innerHTML = libs.map(l => `<option value="${l.n}">${esc(l.free != null ? tr("{0}, {1} free", libText(l), sizeText(l.free)) : libText(l))}</option>`).join("");
-}
-async function bulkMove() {
-  const to = +$("#bulkMoveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
+async function bulkMove(to) {
+  const lib = (DATA.libraries || []).find(l => l.n === to);
   const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked && (a.library || 0) !== to);
   if (!lib) return;
   if (!chosen.length) { toast(tr("Those are already in {0}, or are your own packages (which stay in Local).", libText(lib))); return; }
@@ -2144,7 +2275,7 @@ document.addEventListener("click", e => {
 });
 grid.addEventListener("click", e => {
   const s = e.target.closest(".slot"); if (!s) return;
-  if (sel.on) { toggleSelected(s.dataset.id); return; }
+  if (selectClick(e, s)) return;
   lastFocus = s; showDetail(byId.get(+s.dataset.id));
 });
 grid.addEventListener("error", e => {  // thumbnail missing or unreadable: fall back to the placeholder
@@ -2348,7 +2479,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Escape") {
     if (document.querySelector("dialog[open]")) return;   // a dialog closes itself
     if (closeTopWindow()) return;
-    else if (sel.on) setSelecting(false);
+    else if (selecting()) clearSelection();
     else if (openId != null) closeDetail();
     else if (document.activeElement === $("#q")) { state.q = ""; render(); }
   }
@@ -2377,19 +2508,23 @@ const T = {
   reload: () => load(),
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
+  render: () => render(),
+  membersOf: id => {   // a stack's copies, all chosen together
+    const a = byId.get(+id);
+    return a && (stackSize.get(a.id) || 0) > 1 ? (stackMembers.get(a.stack_key) || [a]).map(o => String(o.id)) : null;
+  },
+  actions: () => {   // what the selection bar and right-click offer here
+    const groups = [TAG_ACTIONS,
+      { name: "Sets", items: [{ label: "New set from these...", run: list => addToSet(list, "new") },
+        ...(DATA.sets || []).map(s => ({ label: tr("Add to {0}", s.name), raw: true, run: list => addToSet(list, s.id) }))] }];
+    const libs = (DATA.libraries || []).filter(l => l.available);
+    if ((DATA.libraries || []).length > 1 && libs.length)
+      groups.push({ name: "Move", items: libs.map(l => ({ label: tr("Move to {0}", libText(l)), raw: true, run: () => bulkMove(l.n) })) });
+    groups.push({ name: "More", items: [{ label: "Archive", run: bulkArchive },
+                                        { label: "Delete downloaded files", run: bulkDelete, danger: true }] });
+    return { main: [], groups };
+  },
 };
-/* selecting several items */
-function setSelecting(on) {
-  sel.on = on;
-  if (!on) sel.ids.clear();
-  document.body.classList.toggle("selecting", on);
-  $("#selectBtn").textContent = on ? "Done" : "Select";
-  $("#selectBtn").setAttribute("aria-pressed", String(on));
-  $("#bulk").hidden = !on;
-  if (on) T.closeDetail();
-  if (typeof fillBulkMove === "function") fillBulkMove();
-  render();
-}
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2419,19 +2554,8 @@ function wireTags() {
   $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
-  $("#selectBtn").addEventListener("click", () => setSelecting(!sel.on));
-  $("#bulkDone").addEventListener("click", () => setSelecting(false));
-  $("#bulkAll").addEventListener("click", () => { for (const a of T.shown()) sel.ids.add(T.id(a)); markSelected(); });
-  $("#bulkNone").addEventListener("click", () => { sel.ids.clear(); markSelected(); });
-  $("#bulkAdd").addEventListener("click", () => bulkTag("add"));
-  $("#bulkRemove").addEventListener("click", () => bulkTag("remove"));
-  if ($("#bulkMove")) $("#bulkMove").addEventListener("click", bulkMove);
-  if ($("#bulkArchive")) $("#bulkArchive").addEventListener("click", bulkArchive);
-  $("#bulkSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), $("#bulkSetTo").value));
-  $("#bulkNewSet").addEventListener("click", () => addToSet([...sel.ids].map(T.byId), "new"));
+  wireSelection();
   document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
-  if ($("#bulkDelete")) $("#bulkDelete").addEventListener("click", bulkDelete);
-  $("#bulkTag").addEventListener("keydown", e => { if (e.key === "Enter") bulkTag("add"); });
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });
@@ -2629,8 +2753,9 @@ addEventListener("offline", showConnection);
 showConnection();
 wireTags();
 wireApp();
+wireTour();
 readHash();
-load().finally(() => hideSplash());
+load().finally(() => hideSplash()).then(() => tourResume());   // the tour, carried on from the Library
 </script>
 </body>
 </html>

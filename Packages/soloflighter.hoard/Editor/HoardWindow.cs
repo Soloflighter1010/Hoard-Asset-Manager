@@ -814,37 +814,68 @@ namespace SoloFlighter.Hoard.Editor
             return box.yMax;
         }
 
-        /// <summary>Import a set: each product's packages that aren't all in the project yet, what's needed first.</summary>
+        /// <summary>Import a set: each product's packages that aren't all in the project yet, what's needed first. Only
+        /// the newest version of each of a product's packages, and its face tracking add-ons only if you ask (SetPicks).</summary>
         void ImportSet(HoardSet set)
         {
             var members = catalog.Assets.FindAll(a => set.Folders.Contains(a.Folder));
             var items = new List<ImportQueue.Item>();
+            var faceTracking = new List<ImportQueue.Item>();
             var names = new List<string>();
             var tools = new List<string>();
+            int older = 0;
             foreach (var a in SetOrder.Order(members))
             {
                 bool any = false;
-                foreach (string p in a.PackagePaths)
-                    if (packages.Status(p) != InProject.Yes)
-                    {
-                        items.Add(new ImportQueue.Item { Path = p, Store = a.Store, Name = a.Name, Creator = a.Creator });
-                        any = true;
-                    }
+                foreach (var pick in SetPicks.Choose(a.Name, a.PackagePaths, PackageFile.LastWriteUtc))
+                {
+                    if (pick.Why == SetPicks.Why.Older) { older++; continue; }
+                    if (packages.Status(pick.Path) == InProject.Yes) continue;
+                    var item = new ImportQueue.Item { Path = pick.Path, Store = a.Store, Name = a.Name, Creator = a.Creator };
+                    if (pick.Why == SetPicks.Why.FaceTracking) { faceTracking.Add(item); continue; }
+                    items.Add(item);
+                    any = true;
+                }
                 if (any) names.Add(a.Name);
                 foreach (var n in Missing(a))
                     if (n.Kind == "tool" && !tools.Contains(n.Label)) tools.Add(n.Label);
             }
-            if (items.Count == 0)
+            if (items.Count == 0 && faceTracking.Count == 0)
             {
                 EditorUtility.DisplayDialog("Hoard", "Everything in " + set.Name + " is in this project already.", "OK");
                 return;
             }
-            string message = "Import " + items.Count + (items.Count == 1 ? " package" : " packages") + " from " + set.Name + ", in this order: " +
-                             string.Join(", ", names.ToArray()) + ".\n\nUnity's import dialog opens for each in turn: choose what comes in, or " +
-                             "Cancel to skip one. Packages already all in this project are left out." +
+            string message = (items.Count == 0 ? "The rest of " + set.Name + " is in this project already."
+                              : "Import " + items.Count + (items.Count == 1 ? " package" : " packages") + " from " + set.Name + ", in this order: " +
+                                string.Join(", ", names.ToArray()) + ".") +
+                             "\n\nUnity's import dialog opens for each in turn: choose what comes in, or Cancel to skip one. " +
+                             "Packages already all in this project are left out" +
+                             (older > 0 ? ", and so are older versions of a package (" + older + "): only the newest of each comes in." : ".") +
+                             (faceTracking.Count > 0 ? "\n\nFace tracking add-ons (" + string.Join(", ", faceTracking.ConvertAll(i => PackageFile.Name(i.Path)).ToArray()) +
+                                                       ") are left out: their animations are named like the avatar's own. Choose Import with face tracking to bring them in too." : "") +
                              (tools.Count > 0 ? "\n\nNot in this project yet, and not in the set: " + string.Join(", ", tools.ToArray()) +
                                                 ". Import " + (tools.Count == 1 ? "it" : "them") + " first, or parts may be pink or missing." : "");
-            if (EditorUtility.DisplayDialog("Hoard", message, "Import", "Cancel")) ImportQueue.Start(items);
+            if (faceTracking.Count == 0)
+            {
+                if (EditorUtility.DisplayDialog("Hoard", message, "Import", "Cancel")) ImportQueue.Start(items);
+                return;
+            }
+            // 0: Import (without face tracking), 1: Cancel, 2: Import with face tracking
+            int choice = EditorUtility.DisplayDialogComplex("Hoard", message, items.Count > 0 ? "Import" : "Import nothing", "Cancel", "Import with face tracking");
+            if (choice == 0) ImportQueue.Start(items);
+            else if (choice == 2) ImportQueue.Start(WithFaceTracking(items, faceTracking));
+        }
+
+        /// <summary>The set's packages with each product's face tracking add-ons after its own packages.</summary>
+        static List<ImportQueue.Item> WithFaceTracking(List<ImportQueue.Item> items, List<ImportQueue.Item> faceTracking)
+        {
+            var all = new List<ImportQueue.Item>(items);
+            foreach (var ft in faceTracking)
+            {
+                int at = all.FindLastIndex(i => i.Store == ft.Store && i.Name == ft.Name);
+                if (at < 0) all.Add(ft); else all.Insert(at + 1, ft);
+            }
+            return all;
         }
 
         float Notice(float y, string text, Color accent)

@@ -20,6 +20,10 @@ Hoard include the Dela Gothic One and Zen Maru Gothic typefaces (in `fonts/`), c
 without other changes. Both are licensed under the SIL Open Font License 1.1, and their license texts
 come with them: `fonts/DelaGothicOne-OFL.txt` and `fonts/ZenMaruGothic-OFL.txt`.
 
+For **Font: OpenDyslexic** (Settings, Accessibility), Hoard also includes the OpenDyslexic typeface by Abbie
+Gonzalez (Reserved Font Name OpenDyslexic), its Latin regular and bold, as WOFF2 from Fontsource without other
+changes. It's licensed under the SIL Open Font License 1.1: `fonts/OpenDyslexic-OFL.txt`.
+
 ## Software Hoard uses
 
 These aren't included in the release zip. Setup installs them from their official

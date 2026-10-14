@@ -57,9 +57,14 @@ In the details:
 
 ## Choosing several at once
 
-Choose **Select**, then click items, or **Select all shown** after filtering (say, by a creator). Then tag them,
-**Download** them (one job, across stores; Payhip's are left out, as Hoard doesn't download from Payhip), or
-archive, remove or hide them all at once.
+Tick an item's box (it shows when you point at a tile), or Ctrl-click it (Cmd-click on a Mac); Shift-click
+another to take in everything between. **Ctrl+A** chooses everything shown, and **Esc** lets go. On a touch screen,
+choose **Select**, then tap the items. A plain click still opens an item.
+
+What's chosen gets a bar at the bottom: **Download** (one job, across stores; Payhip's are left out, as Hoard
+doesn't download from Payhip), **Tags** (add or take off a tag), and **More** (archive, hide or remove them, or
+delete their downloaded files), with **Select all shown** and **Done**. Right-click a tile (or press the menu key)
+for the same in one menu; right-clicking one you haven't chosen chooses just it.
 
 ## Archive, Removed and Hidden
 

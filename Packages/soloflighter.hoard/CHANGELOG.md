@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.2
+
+- **Import set brings in only the newest version of each package.** A product's folder often holds every version
+  you've downloaded (`Rusk_v1.0`, `Rusk_v1.2`, a zip for each), and Import set imported them all, oldest and newest.
+  Now it imports the newest of each package a product comes as: by the version in its name (1.10 after 1.9; `v1.2`,
+  `Ver.1.2`, `1.2.3` or a date), or its zip's, and otherwise the latest download. Older ones are left out, and the
+  dialog says how many.
+- **Face tracking add-ons are left out of Import set unless you ask.** Their animations are named like the avatar's
+  own, and imported beside them they cluttered the project. A package named for face tracking (`FaceTracking`, `FT`,
+  `VRCFT`, `Unified Expressions`, `フェイストラッキング` and the like) is left out, and named in the dialog, with
+  **Import with face tracking** to bring them in too, each after its product. A product that's only face tracking
+  keeps its packages, and **Import** in a product's details imports whichever package you choose, as before.
+
 ## 0.8.1
 
 - **Poiyomi's OptimizedShaders are left alone.** Locking a Poiyomi material writes its shader into an

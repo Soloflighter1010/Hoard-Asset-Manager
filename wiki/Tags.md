@@ -11,8 +11,9 @@ tagged in the other. Filter by any tag from the sidebar; filters combine.
 
 - **One item:** open it, then type a tag under **Tags**, or click a suggestion to add it. Remove a tag with the
   **×** next to it. A tag you add applies to every copy of that product you own on other stores.
-- **Many items:** choose **Select**, click the items (or **Select all shown** after filtering, say by a
-  creator), type a tag, then **Add tag** or **Remove tag**.
+- **Many items:** choose them (tick their boxes, Ctrl- or Shift-click, or **Select** then click; or **Select all
+  shown** after filtering, say by a creator), then **Tags** in the selection bar, or right-click: **Add a tag** or
+  **Remove a tag**.
 
 ## The Tags panel
 

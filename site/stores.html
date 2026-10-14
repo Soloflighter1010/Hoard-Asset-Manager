@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hoard and your store</title>
+  <meta name="description" content="How Hoard works with Jinxxy, Gumroad, Payhip, itch.io and Booth: what it does on each store, what it never does, how it protects accounts and servers, and our request for a customer API.">
+  <meta property="og:site_name" content="Hoard">
+  <meta property="og:title" content="Hoard and your store">
+  <meta property="og:description" content="How Hoard works with Jinxxy, Gumroad, Payhip, itch.io and Booth: what it does on each store, what it never does, how it protects accounts and servers, and our request for a customer API.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hoard.furryup.link/stores.html">
+  <meta property="og:image" content="https://hoard.furryup.link/img/social-stores.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Hoard's logo and “Hoard and your store”, beside a shelf of tiles in each store's colour">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#F0B429">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
+  <a class="skip" href="#main">Skip to the page</a>
+  <header class="bar">
+    <a class="brand" href="./"><svg viewBox="0 0 226 64" role="img" aria-label="Hoard, home"><g class="boxes" transform="translate(0 0) scale(1.0)">
+  <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
+  <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
+  <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
+  <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
+</g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
+    <nav class="apptabs" aria-label="Site">
+      <a href="./">Home</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="trust.html">Trust</a>
+      <a href="./#unity">Unity</a>
+      <a href="docs/">Docs</a>
+      <a href="changelog.html">What's new</a>
+      <a href="testers.html">Testers</a>
+    </nav>
+    <div class="bar-tools">
+      <a class="ghost" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
+      <a class="primary" href="./#download">Download</a>
+    </div>
+  </header>
+
+  <main id="main" class="brief">
+    <section class="page-head">
+      <p class="eyebrow">For the teams behind the stores Hoard works with</p>
+      <h1>Hoard and your store</h1>
+      <p class="lede">How Hoard works with your store, and how it keeps your customers and your platform safe. Hoard is a free, open-source desktop app that VRChat creators use to keep their purchased avatars,
+      outfits and tools in one library on their own computer. This brief explains exactly what it does on your
+      store, what it never does, and how it protects accounts and your servers.</p>
+    <p class="meta">Current as of October 2026 (Hoard 4.x) · Source: <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">github.com/Soloflighter1010/Hoard-Asset-Manager</a></p>
+    <p class="meta">Each claim links to the code that does it, pinned to commit <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/tree/579ef926bd8ef5bd0613a60970eb69fc84578da0"><code>579ef92</code></a> on the main branch (Hoard 4.0.4), so the line numbers stay put.</p>
+
+    <div class="glance">
+      <div><b>It acts as your customer, on their own computer</b><p>No Hoard servers, no accounts, no analytics. Everything runs locally and talks only to the stores the person uses.</p></div>
+      <div><b>It never sees a password</b><p>People sign in on your own sign-in page. Hoard keeps only the session your site hands out, encrypted by the operating system.</p></div>
+      <div><b>Only what they already own</b><p>It reads the person's own library and downloads files their account can already download. Nothing else.</p></div>
+      <div><b>Gentle on your servers</b><p>A pause between page loads, one file at a time, and nothing downloaded twice. It doesn't get around bot checks.</p></div>
+    </div>
+    </section>
+
+  <nav class="toc" aria-labelledby="tocTitle">
+    <h2 id="tocTitle">Contents</h2>
+    <ol>
+      <li><a href="#what">What Hoard is</a></li>
+      <li><a href="#how">How Hoard uses your store</a></li>
+      <li><a href="#never">What Hoard never does</a></li>
+      <li><a href="#accounts">Protecting your customers' accounts</a></li>
+      <li><a href="#platform">Protecting your platform</a></li>
+      <li><a href="#software">Trustworthy software</a></li>
+      <li><a href="#api">Our request: a customer API</a></li>
+      <li><a href="#together">Working together</a></li>
+      <li><a href="#ai">AI disclosure</a></li>
+      <li><a href="#code">Code references</a></li>
+    </ol>
+  </nav>
+
+
+  <section id="what">
+    <h2>What Hoard is</h2>
+    <p>VRChat creators buy assets from several stores and often re-download them for each new Unity project. Hoard
+      gives them one library of everything they own, with local copies they can browse, tag, search and import into
+      Unity through a companion editor package, Hoard for Unity. It also builds a credits list of the creators whose
+      assets a project uses.</p>
+    <p>Hoard is MIT-licensed and developed in the open on GitHub. It isn't affiliated with, endorsed by or supported
+      by any store, and its documentation says so.</p>
+  </section>
+
+  <section id="how">
+    <h2>How Hoard uses your store</h2>
+    <p>Every store interaction is started by the person using Hoard, with their own account:</p>
+    <ol class="walk">
+      <li><div><strong>They sign in on your site.</strong><p>Hoard opens your normal sign-in page in a browser window
+        that belongs to Hoard alone, separate from their everyday browser. They sign in the usual way (including
+        Google, Discord or X where your site offers it). Hoard never sees or stores the password. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L60-L68" title="Each store's sign-in kept apart and encrypted by the operating system"><code>browser.py</code> L60–68</a></span></p></div></li>
+      <li><div><strong>Hoard reads their library.</strong><p>It opens the same library or inventory pages the
+        customer would, reads the product names, creators, links and pictures, and saves that list locally.
+        Refreshing reads only; it downloads nothing. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L604-L613" title="Reading Gumroad pages, with the pause between page loads"><code>downloader.py</code> L604–613</a></span></p></div></li>
+      <li><div><strong>They choose what to download.</strong><p>Hoard fetches the files from the product's own
+        download buttons or links, as the customer would. Each file is recorded once it's saved, so a later sync
+        only fetches what's new. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L375" title="The record of every file saved"><code>downloader.py</code> L375</a></span></p></div></li>
+      <li><div><strong>Optional checks for updates.</strong><p>On request, or on a schedule the person turns on
+        (off by default, at most every 6 hours), Hoard reads the store again to see whether anything is new or has
+        changed. It asks before downloading any of it. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L37" title="Off unless the person turns it on"><code>config.py</code> L37</a></span></p></div></li>
+    </ol>
+    <p>Because Hoard browses as the signed-in customer, its requests carry that session's browser identity: a
+      standard Chrome user agent, with Chrome's "HeadlessChrome" marker replaced by "Chrome". They don't name Hoard.
+      A customer API, with an identifiable client, would change that: see <a href="#api">our request</a> below. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L1397-L1400" title="A session carrying the sign-in browser's cookies and user agent"><code>downloader.py</code> L1397–1400</a></span></p>
+
+    <h3>Store by store</h3>
+    <div class="table-wrap" role="region" aria-label="How Hoard works with each store" tabindex="0">
+      <table>
+        <thead><tr><th scope="col">Store</th><th scope="col">Signing in</th><th scope="col">Reading the library</th><th scope="col">Getting files</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Jinxxy</th><td>Jinxxy's own sign-in page</td><td>The customer's inventory page</td>
+            <td>Clicks each product's download button in the browser, since that's how Jinxxy hands files out. One file at a time.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L1255" title="Reading and downloading from Jinxxy"><code>downloader.py</code> L1255</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L981" title="Only links on jinxxy.com count as Jinxxy's"><code>downloader.py</code> L981</a></td></tr>
+          <tr><th scope="row">Gumroad</th><td>Gumroad's own sign-in page</td><td>The customer's library, including purchases they archived</td>
+            <td>Each purchase's download page. Refunded or ended purchases, and files Gumroad only streams, are skipped.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L763" title="Reading and downloading from Gumroad"><code>downloader.py</code> L763</a></td></tr>
+          <tr><th scope="row">Payhip</th><td>Each shop's own library sign-in</td><td>Each shop's library page (<code>/b-account</code>), in a visible window. Customers can also save the pages in their own browser and import them.</td>
+            <td><strong>None.</strong> Hoard only lists Payhip purchases and links to them; customers download from Payhip themselves.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/library.py#L39" title="The stores Hoard downloads from: Payhip isn't one"><code>library.py</code> L39</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L2546-L2547"><code>downloader.py</code> L2546–2547</a></td></tr>
+          <tr><th scope="row">itch.io</th><td>An API key the customer creates in their itch.io settings</td><td>itch.io's official API, the same one its own app uses</td>
+            <td>Through the API, checked against itch.io's checksums. Game builds are skipped by default.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/itch.py#L1-L7" title="The API key, only ever sent to api.itch.io"><code>itch.py</code> L1–7</a></td></tr>
+          <tr><th scope="row">Booth</th><td>pixiv sign-in, on its own page</td><td>The customer's library, gifts and free downloads</td>
+            <td>Each item's own download buttons.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L1525" title="Reading and downloading from Booth"><code>downloader.py</code> L1525</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Where a customer would rather not sign in at all, or a refresh is blocked, they can save their library pages
+      from their usual browser and import them. Hoard reads those saved pages with scripts switched off and nothing
+      allowed to load. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/safety.py#L839-L842" title="Saved pages read with scripts off and no network"><code>safety.py</code> L839–842</a></span></p>
+  </section>
+
+  <section id="never">
+    <h2>What Hoard never does</h2>
+    <ul class="never">
+      <li>Touch anything outside the signed-in customer's own purchases, gifts and claimed free items.</li>
+      <li>Get around paywalls, license checks or anything a customer couldn't do in their own browser.</li>
+      <li>Solve or skip a bot check. Where one appears (Payhip shows them), the person completes it themselves in a
+        visible window, and Hoard waits. When Payhip's checks made automated downloading unreliable, Hoard stopped
+        downloading from Payhip altogether. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/TERMS.md#L28-L32" title="Hoard's terms: keep the delays, complete checks yourself"><code>TERMS.md</code> L28–32</a></span></li>
+      <li>Ask for, see, or store a password.</li>
+      <li>Send a store's sign-in anywhere but that store. File hosts and CDNs are fetched with a separate session that
+        carries no cookies. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L1-L11" title="The rules every request follows"><code>egress.py</code> L1–11</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L99" title="The cookieless session for other hosts"><code>egress.py</code> L99</a></span></li>
+      <li>Upload, share or redistribute files. Downloads stay on the customer's computer, and Hoard's terms tell
+        people to follow each creator's license and not to share, resell or redistribute. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/TERMS.md#L22-L26"><code>TERMS.md</code> L22–26</a></span></li>
+      <li>Collect data. There are no Hoard servers, accounts, analytics, tracking or ads, and nothing is sent to the
+        developer.</li>
+    </ul>
+  </section>
+
+  <section id="accounts">
+    <h2>Protecting your customers' accounts</h2>
+    <ul>
+      <li><strong>Sessions are encrypted by the operating system:</strong> Windows (the user's account), the macOS
+        Keychain, or a Linux keyring. On Linux, Hoard won't save a sign-in at all unless a keyring can protect it.
+        Copying Hoard's files to another computer gives no access. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L65-L68"><code>browser.py</code> L65–68</a></span></li>
+      <li><strong>Each store is kept apart.</strong> Every store has its own sign-in folder and browser profile; one
+        store's pages never share a browser with another store's session. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L73" title="Each store's own sites"><code>browser.py</code> L73</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L342"><code>browser.py</code> L342</a></span></li>
+      <li><strong>Signing out is real.</strong> Hoard asks the store to end the session where it can (your sign-out
+        button or address), deletes the saved session, checks no copy remains, and removes that store's items from
+        the library so the next person on the computer can't see them. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L814-L816" title="Signing out"><code>browser.py</code> L814–816</a></span></li>
+      <li><strong>Only Hoard can use Hoard.</strong> Its local interface needs a key that changes every time it starts,
+        so other programs or other people on a shared computer can't use a signed-in session through it. It's
+        reachable only from the same computer unless the person turns on access from their other devices, which
+        then needs an encrypted connection and the key. Even then, signing in to a store and reading it again only
+        work on the computer running Hoard. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/safety.py#L527" title="The access key check"><code>safety.py</code> L527</a></span></li>
+      <li><strong>Content from stores can't run code.</strong> Names, descriptions and pictures are shown as plain text
+        and images. Links labelled with a store only ever open that store's own domain. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/web/shared.js#L245" title="Text from stores escaped"><code>shared.js</code> L245</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/safety.py#L126-L127" title="Store links only to the store's own site"><code>safety.py</code> L126–127</a></span></li>
+    </ul>
+  </section>
+
+  <section id="platform">
+    <h2>Protecting your platform</h2>
+    <ul class="never yes">
+      <li><strong>Paced requests.</strong> One second between page loads by default. People can only set it between
+        0.3 and 10 seconds, and Hoard's terms ask them to keep the built-in delays. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L21"><code>config.py</code> L21</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/server.py#L321-L322"><code>server.py</code> L321–322</a></span></li>
+      <li><strong>One download at a time</strong>, resuming an interrupted file where it stopped rather than starting
+        over. A failed file is tried again twice by default, and three times at most, after a short wait. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L34"><code>config.py</code> L34</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L211"><code>downloader.py</code> L211</a></span></li>
+      <li><strong>Nothing fetched twice.</strong> Hoard keeps a record of every file it saved, so routine syncs only
+        download what's new or changed. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L375"><code>downloader.py</code> L375</a></span></li>
+      <li><strong>No background polling by default.</strong> Automatic checks are off unless the person turns them on,
+        and then run on the schedule they pick, from every 6 hours to once a month. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L37"><code>config.py</code> L37</a></span></li>
+      <li><strong>Strict network rules on every request</strong>, checked again on each redirect: HTTPS only, public
+        addresses only, and store sessions only sent to that store's own domains. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L1-L11"><code>egress.py</code> L1–11</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L122" title="Each hop checked"><code>egress.py</code> L122</a></span></li>
+      <li><strong>It stops when told no.</strong> If a store can't be reached or refuses a request, Hoard reports it and
+        leaves the library as it was. It doesn't hammer the store with retries.</li>
+    </ul>
+  </section>
+
+  <section id="software">
+    <h2>Trustworthy software</h2>
+    <ul>
+      <li><strong>Open source.</strong> Every line is public on GitHub under the MIT license, along with its security
+        policy, privacy policy and terms of use.</li>
+      <li><strong>Built in the open.</strong> Releases are built by GitHub Actions from tagged source code, with SHA-256
+        checksums and GitHub's signed build provenance. The Windows app is code-signed through Microsoft's Trusted
+        Signing. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L89-L93" title="Signed build provenance"><code>release.yml</code> L89–93</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L155-L157" title="Code signing"><code>release.yml</code> L155–157</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L231" title="SHA-256 checksums"><code>release.yml</code> L231</a></span></li>
+      <li><strong>Scanned before release.</strong> Every change runs automated tests and CodeQL security analysis, and
+        every release file is scanned by VirusTotal before it's published. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/check.yml#L39" title="The tests on every change"><code>check.yml</code> L39</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L11-L12" title="VirusTotal before publishing"><code>release.yml</code> L11–12</a></span></li>
+      <li><strong>Safe updates.</strong> Hoard only runs an update installer whose checksum matches the published one. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/updater.py#L9-L10"><code>updater.py</code> L9–10</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/updater.py#L200-L201"><code>updater.py</code> L200–201</a></span></li>
+      <li><strong>Private vulnerability reports.</strong> Security problems can be reported privately through GitHub's
+        Security tab, with a first reply within a week. Past reviews and fixes are published in the repository.</li>
+    </ul>
+    <div class="note">
+      <p><strong>What no app can prevent.</strong> Hoard can't protect a session from malware already running on the
+        customer's computer, or from someone with administrator access to it. It limits what's exposed: no passwords
+        are kept, each store's session is separate, and copied cookies live only in memory for the length of a
+        download.</p>
+    </div>
+  </section>
+
+  <section id="api">
+    <h2>Our request: a customer API</h2>
+    <p>Today Hoard has to work through your website as the customer: it reads pages built for people, and keeps a
+      copy of the customer's session to do it. That works, but it's more load on your servers than it needs to be,
+      it breaks when your pages change, and you can't tell Hoard apart from the customer. A small, read-only API
+      for customers would be better for your platform, your customers and the creators who sell with you.</p>
+    <p>itch.io already offers one, and Hoard uses it: customers make an API key in their itch.io settings, and Hoard
+      reads their library and files through it instead of the website. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/itch.py#L78" title="Reading the library through itch.io's API"><code>itch.py</code> L78</a></span></p>
+
+    <h3>What we're asking for</h3>
+    <ol class="ask">
+      <li><strong>A key the customer controls.</strong><p>A personal access token, or OAuth sign-in for apps, that the
+        customer creates in their account settings and can revoke at any time, limited to reading their own
+        purchases and downloading their own files.</p></li>
+      <li><strong>Their library.</strong><p>Each product they own: its ID, name, creator, store page, picture, and when
+        it was bought or last updated.</p></li>
+      <li><strong>A product's files.</strong><p>Each file's name, size, version or update date, and a checksum, so
+        apps download only what's new or changed.</p></li>
+      <li><strong>Download links.</strong><p>A short-lived link for each file, issued only to the owner's key.</p></li>
+      <li><strong>Published limits and identification.</strong><p>Documented rate limits, and a client ID or
+        user agent each app must send, so you can see which app is calling and block one that misbehaves without
+        affecting your customers.</p></li>
+    </ol>
+
+    <div class="two">
+      <div><h3>What your platform gets</h3><ul>
+        <li>No customer sessions copied into other apps</li>
+        <li>Far less load: no page rendering, and checksums stop repeat downloads</li>
+        <li>Control: revoke keys, rate-limit per app, see who's calling</li>
+        <li>Nothing breaks when you redesign your site</li>
+      </ul></div>
+      <div><h3>What Hoard would do</h3><ul>
+        <li>Switch to the API as soon as it exists, and stop reading your web pages</li>
+        <li>Ask only for read and download access</li>
+        <li>Identify itself on every request</li>
+        <li>Keep to your published limits</li>
+      </ul></div>
+    </div>
+    <p>For Jinxxy especially, this would replace the heaviest thing Hoard does today: opening a browser and
+      clicking each download button.</p>
+  </section>
+
+  <section id="together">
+    <h2>Working together</h2>
+    <p>Hoard aims to be a good citizen on every store it supports. If you'd like it to behave differently on yours,
+      the maintainer would welcome your guidance on:</p>
+    <ul>
+      <li>the customer API above, or any other way you'd prefer customers' apps to list their library and fetch
+        their files;</li>
+      <li>request pacing or quiet hours you'd like it to keep;</li>
+      <li>whether Hoard's requests should identify themselves, and how;</li>
+      <li>anything it does today that causes trouble on your side.</li>
+    </ul>
+    <p>Pacing, what Hoard reads and how it fetches files are settings and small code changes, so a request from a
+      store can usually be answered in the next release.</p>
+    <div class="contact">
+      <p><strong>Get in touch</strong></p>
+      <p>Project and issues: <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">github.com/Soloflighter1010/Hoard-Asset-Manager</a></p>
+      <p>Private security reports: <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/security">the repository's Security tab</a></p>
+      <p>Plain-language overview: <a href="https://hoard.furryup.link/trust.html">hoard.furryup.link/trust.html</a></p>
+    </div>
+  </section>
+
+  <section id="ai">
+    <h2>AI disclosure</h2>
+    <p>Hoard was made with a lot of help from AI. Claude, an AI assistant made by Anthropic, wrote most of the code,
+      the visual design and the documentation, working from the maintainer's direction. The maintainer decides what
+      Hoard does, tests it against real store accounts, reports what goes wrong, and publishes the releases.</p>
+    <ul>
+      <li><strong>Hoard doesn't use AI while it runs.</strong> Nothing about a customer, their library or your store
+        is ever sent to an AI service. AI was only used to build it.</li>
+      <li><strong>AI-written code can contain mistakes</strong>, including security mistakes. Every change is tested
+        automatically and scanned by CodeQL, and problems can be reported privately (see Get in touch, above).</li>
+      <li><strong>This document was drafted with Claude too</strong>, from Hoard's code and documentation. Each claim
+        links to the code that does it, so you can check it for yourself.</li>
+      <li>Hoard isn't affiliated with or endorsed by Anthropic.</li>
+    </ul>
+    <p>The project's full statement: <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/AI-DISCLOSURE.md">AI-DISCLOSURE.md</a>.</p>
+  </section>
+
+  <section id="code">
+    <h2>Code references</h2>
+    <p>Every code link in this document, by the section that cites it. All 37 point to commit
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/tree/579ef926bd8ef5bd0613a60970eb69fc84578da0"><code>579ef92</code></a> on the main
+      branch, so the lines shown stay the same as the code changes.</p>
+    <div class="table-wrap" role="region" aria-label="Code references" tabindex="0">
+      <table class="codetable">
+        <thead><tr><th scope="col">What the code does</th><th scope="col">Where</th></tr></thead>
+        <tbody>
+          <tr class="grp"><th colspan="2" scope="colgroup"><a href="#how">How Hoard uses your store</a></th></tr>
+          <tr><td>Each store's sign-in kept in its own browser profile, encrypted by the operating system</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L60-L68"><code>hoard/browser.py</code> L60–68</a></td></tr>
+          <tr><td>Reading store pages, with the pause between page loads (Gumroad's reader)</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L604-L613"><code>hoard/downloader.py</code> L604–613</a></td></tr>
+          <tr><td>The record of every file saved, so nothing is downloaded twice</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L375"><code>hoard/downloader.py</code> L375</a></td></tr>
+          <tr><td>Automatic checks off unless the customer turns them on</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L37"><code>hoard/config.py</code> L37</a></td></tr>
+          <tr><td>A session carrying the sign-in browser's cookies and user agent</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L1397-L1400"><code>hoard/downloader.py</code> L1397–1400</a></td></tr>
+          <tr><td>Jinxxy: reading the inventory and downloading</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L1255"><code>hoard/downloader.py</code> L1255</a></td></tr>
+          <tr><td>Jinxxy: only links on jinxxy.com count as Jinxxy's</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L981"><code>hoard/downloader.py</code> L981</a></td></tr>
+          <tr><td>Gumroad: reading the library and downloading</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L763"><code>hoard/downloader.py</code> L763</a></td></tr>
+          <tr><td>Payhip: listed, never downloaded from</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/library.py#L39"><code>hoard/library.py</code> L39</a><br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L2546-L2547"><code>hoard/downloader.py</code> L2546–2547</a></td></tr>
+          <tr><td>itch.io: the API key, only ever sent to api.itch.io</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/itch.py#L1-L7"><code>hoard/itch.py</code> L1–7</a></td></tr>
+          <tr><td>Booth: reading the library and downloading</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L1525"><code>hoard/downloader.py</code> L1525</a></td></tr>
+          <tr><td>Saved pages read with scripts off and no network</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/safety.py#L839-L842"><code>hoard/safety.py</code> L839–842</a></td></tr>
+          <tr class="grp"><th colspan="2" scope="colgroup"><a href="#never">What Hoard never does</a></th></tr>
+          <tr><td>Terms of use: keep the built-in delays, complete bot checks yourself</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/TERMS.md#L28-L32"><code>TERMS.md</code> L28–32</a></td></tr>
+          <tr><td>Terms of use: follow each creator's license, don't redistribute</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/TERMS.md#L22-L26"><code>TERMS.md</code> L22–26</a></td></tr>
+          <tr><td>The rules every request to the internet follows</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L1-L11"><code>hoard/egress.py</code> L1–11</a></td></tr>
+          <tr><td>File hosts and CDNs fetched with a session that carries no cookies</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L99"><code>hoard/egress.py</code> L99</a></td></tr>
+          <tr class="grp"><th colspan="2" scope="colgroup"><a href="#accounts">Protecting your customers' accounts</a></th></tr>
+          <tr><td>Saved sessions encrypted by the operating system</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L65-L68"><code>hoard/browser.py</code> L65–68</a></td></tr>
+          <tr><td>Each store's own sites, and matching a host to them</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L73"><code>hoard/browser.py</code> L73</a><br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L342"><code>hoard/browser.py</code> L342</a></td></tr>
+          <tr><td>Signing out</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/browser.py#L814-L816"><code>hoard/browser.py</code> L814–816</a></td></tr>
+          <tr><td>The access key every request to Hoard needs</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/safety.py#L527"><code>hoard/safety.py</code> L527</a></td></tr>
+          <tr><td>Text from stores escaped, never run</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/web/shared.js#L245"><code>hoard/web/shared.js</code> L245</a></td></tr>
+          <tr><td>Store links only open the store's own site</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/safety.py#L126-L127"><code>hoard/safety.py</code> L126–127</a></td></tr>
+          <tr class="grp"><th colspan="2" scope="colgroup"><a href="#platform">Protecting your platform</a></th></tr>
+          <tr><td>The pause between page loads: 1 second by default</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L21"><code>hoard/config.py</code> L21</a></td></tr>
+          <tr><td>The pause can only be set between 0.3 and 10 seconds</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/server.py#L321-L322"><code>hoard/server.py</code> L321–322</a></td></tr>
+          <tr><td>Retrying a failed download: twice by default, three times at most</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/config.py#L34"><code>hoard/config.py</code> L34</a><br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/downloader.py#L211"><code>hoard/downloader.py</code> L211</a></td></tr>
+          <tr><td>Each redirect checked against the rules</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/egress.py#L122"><code>hoard/egress.py</code> L122</a></td></tr>
+          <tr class="grp"><th colspan="2" scope="colgroup"><a href="#software">Trustworthy software</a></th></tr>
+          <tr><td>Signed build provenance for every release file</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L89-L93"><code>.github/workflows/release.yml</code> L89–93</a></td></tr>
+          <tr><td>Code signing the Windows app</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L155-L157"><code>.github/workflows/release.yml</code> L155–157</a></td></tr>
+          <tr><td>SHA-256 checksums published with each release</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L231"><code>.github/workflows/release.yml</code> L231</a></td></tr>
+          <tr><td>VirusTotal scan before a release is published</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/release.yml#L11-L12"><code>.github/workflows/release.yml</code> L11–12</a></td></tr>
+          <tr><td>The tests every change runs</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/.github/workflows/check.yml#L39"><code>.github/workflows/check.yml</code> L39</a></td></tr>
+          <tr><td>Updates only installed when the checksum matches</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/updater.py#L9-L10"><code>hoard/updater.py</code> L9–10</a><br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/updater.py#L200-L201"><code>hoard/updater.py</code> L200–201</a></td></tr>
+          <tr class="grp"><th colspan="2" scope="colgroup"><a href="#api">Our request: a customer API</a></th></tr>
+          <tr><td>Reading the library through itch.io's API</td><td><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/579ef926bd8ef5bd0613a60970eb69fc84578da0/hoard/itch.py#L78"><code>hoard/itch.py</code> L78</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+    <section class="page-foot">
+      <p>Hoard isn't affiliated with, endorsed by or supported by Booth or pixiv, Gumroad, Jinxxy, Payhip, itch.io or VRChat. Store names appear only to say which stores it works with. Details of every behavior described here are in the project's <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md">SECURITY.md</a>, <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md">PRIVACY.md</a>, <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/TERMS.md">TERMS.md</a> and <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Stores">the Stores page of its wiki</a>.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-brand"><svg viewBox="0 0 64 64" aria-hidden="true" width="22" height="22"><g transform="translate(0 0) scale(1.0)">
+  <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
+  <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
+  <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
+  <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
+</g></svg><span>Hoard</span></div>
+    <nav class="foot-links" aria-label="About Hoard">
+      <a href="docs/">Docs</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="changelog.html">What's new</a>
+      <a href="testers.html">Testers</a>
+      <a href="credits.html">Picture credits</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues">Report a problem</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md">Privacy</a>
+      <a href="vcc/">VCC listing</a>
+      <a href="trust.html">How you can trust Hoard</a>
+      <a href="stores.html">For stores</a>
+      <a href="ai.html">AI disclosure</a>
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">GitHub</a>
+    </nav>
+    <p class="foot-note">Free and open source under the MIT license. Made by <a href="https://x.com/SoloFlighter101" rel="noopener">@SoloFlighter101</a>.
+      Not affiliated with VRChat, Booth, Gumroad, Jinxxy, Payhip or itch.io.</p>
+  </footer>
+  <script src="site.js" defer></script>
+</body>
+</html>

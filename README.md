@@ -94,8 +94,11 @@ Guides for everything, from installing to fixing a problem, are in the
    see [CODE_SIGNING.md](CODE_SIGNING.md). Choose **Run anyway**. To check the download really came from
    this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
 3. Open **Hoard** from the Start menu. It opens in its own window. A short
-   setup assistant walks you through the rest: your language, which stores you use, signing in to each one, your Payhip
-   shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**.
+   setup assistant walks you through the rest: your language, what makes Hoard easier to use (text size, a
+   dyslexia-friendly font, spacing, colours, motion), which stores you use, signing in to each one, your Payhip
+   shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**. Once your
+   library is read, a short tour shows what else Hoard does, on your own things (again any time: **Settings**, **Take
+   the tour**).
 
 **Updating:** in **Settings**, **Updates**, choose **Check now**, then **Update to** the new version: Hoard
 downloads it, checks it against the release's checksums, closes, installs it and opens again. (Turn on **Check
@@ -309,8 +312,9 @@ Ways to tag:
 
 - **One item:** open it, then type a tag under **Tags**, or click a suggestion to add it. Remove a tag
   with the × next to it. A tag you add applies to every copy of that product you own on other stores.
-- **Many items:** choose **Select**, click the items (or **Select all shown** after filtering, say by a
-  creator), type a tag, then **Add tag** or **Remove tag**.
+- **Many items:** choose them (tick their boxes, Ctrl- or Shift-click, or **Select** then click; or **Select all
+  shown** after filtering, say by a creator), then **Tags** in the selection bar, or right-click: **Add a tag** or
+  **Remove a tag**.
 - **The Tags panel** (the **Tags** button) lists all your tags and the suggestions:
   - **Keep** a suggestion to make it your tag on every item whose name has that word, including items
     you buy later. **Hide** one to stop it being suggested.

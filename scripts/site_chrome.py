@@ -31,6 +31,7 @@ TABS = [("./", "Home"), ("how-it-works.html", "How it works"), ("trust.html", "T
 FOOT_LINKS = [("docs/", "Docs"), ("how-it-works.html", "How it works"), ("changelog.html", "What's new"),
               ("testers.html", "Testers"), ("credits.html", "Picture credits"), (f"{GITHUB}/issues", "Report a problem"),
               (f"{GITHUB}/blob/main/PRIVACY.md", "Privacy"), ("vcc/", "VCC listing"), ("trust.html", "How you can trust Hoard"),
+              ("stores.html", "For stores"),
               ("ai.html", "AI disclosure"), (GITHUB, "GitHub")]
 # which tab each page is (the rest are none, or are in docs/)
 CURRENT = {"index.html": "./", "how-it-works.html": "how-it-works.html", "trust.html": "trust.html",

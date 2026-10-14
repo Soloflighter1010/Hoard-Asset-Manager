@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.1.0
+
+- **Easier reading, from the start.** **Font: OpenDyslexic** (Settings, Accessibility), a typeface many people with
+  dyslexia find easier to read, bundled so it works offline (Latin letters; Japanese and Korean keep their fonts),
+  and **More space between letters, words and lines**. The page is served with them, so it never shows in the
+  other font first.
+- **Setup asks what makes Hoard easier to use**, right after the language: text size, font, light or dark, store
+  colours for colour blindness, more spacing, reduce motion and pause animated pictures. Each shows as you choose
+  it, and is saved at once.
+- **A tour of Hoard, on your own library.** Hoard does a lot more than download, and a short tour now shows it, one
+  thing at a time: a ring round the part of the page it's about, and a card beside it. It uses your own things (it
+  asks you to search for a word from one of your items, open it, choose two, look inside its package, tag it), and
+  each step that asks you to try something goes on by itself once you have. It goes from the Library on to
+  Downloads: stores, search, details, choosing several, Archive and the rest, Sync, Look inside, What it needs, tags,
+  sets, updates, Disk space, Local, Projects, Tasks and Settings. A step about something you don't have yet (nothing
+  downloaded, say) is passed by. The Library offers it once, after setup or after updating, and **Settings** has
+  **Take the tour** any time.
+- **Choosing several items, reworked** (Library and Downloads):
+  - **Without a mode:** tick a tile's box (it shows when you point at the tile), Ctrl-click (Cmd-click on a Mac), or
+    Shift-click to take in everything from the last one. **Ctrl+A** chooses everything shown, **Esc** lets go, and a
+    plain click still opens an item. **Select** stays, for touch screens: then every tap chooses.
+  - **A compact bar:** the count, the main thing to do (**Download** in the Library), then menus: **Tags** (add or
+    take off a tag), **Sets** (a new set of them, or add them to one), **Move** (to another library folder) and
+    **More** (archive, hide, remove, delete their downloaded files), with **Select all shown** and **Done**. It stays
+    on one line, where it used to run to two.
+  - **Right-click** a tile (or press the menu key) for the same, in one menu. Right-clicking one you haven't chosen
+    chooses just it.
+- **Duplicates across stores** (Downloads, Disk space, **From more than one store**): products you have from several
+  stores, each downloaded. Choose which store's copy to keep, for each or for all at once (**Keep the copy from**
+  Booth, say, **In every one**), then **Remove** the others: they leave your library, so syncing never downloads them
+  again unless you **Restore** them (Library, Removed), and their downloaded files are deleted.
+
 ## 4.0.4
 
 - **Make a set from a project.** Each project in **Projects** has **Make a set**: a set of the products it uses (all of

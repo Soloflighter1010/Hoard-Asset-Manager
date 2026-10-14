@@ -516,7 +516,8 @@ class DiskSpace(unittest.TestCase):
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
         page.click("#selectBtn")
         page.locator(".slot", has_text="Rusk Bundle").click()
-        page.click("#bulkDelete")
+        page.click("#bulkActs [data-group='More']")
+        page.locator(".selmenu [role=menuitem]", has_text="Delete downloaded files").click()
         page.wait_for_function("() => document.querySelector('#askDialog').open")
         self.assertIn("Rusk Bundle (2.0 MB)", page.locator("#askText").inner_text())
         page.click("#askDialog button.danger")
@@ -907,7 +908,7 @@ class LargeLibrary(unittest.TestCase):
         page = self.open()
         page.click("#selectBtn")
         page.click("#bulkAll")
-        self.assertEqual(page.locator("#bulkCount").inner_text(), "1000 selected")
+        self.assertEqual(page.locator("#bulkCount").inner_text(), "1,000 selected")
         self.scroll_until(page, 600)
         self.assertEqual(page.locator('#grid .slot:not([aria-pressed="true"])').count(), 0)
         page.close()
@@ -1125,7 +1126,7 @@ class CopiesAndActions(unittest.TestCase):
         page.click("#selectBtn")
         page.locator(".slot", has_text="Someone Else").click()
         page.locator(".slot", has_text="Mochi").click()   # Payhip's: listed, not downloaded
-        page.click("#bulkDownload")
+        page.click("#bulkActs [data-main='0']")   # Download, the bar's main button here
         page.wait_for_function("() => true")
         for _ in range(50):
             if seen:
@@ -1415,7 +1416,7 @@ class SetupAssistant(unittest.TestCase):
             page.wait_for_function("() => typeof openSetup === 'function' && document.readyState === 'complete'")
             page.evaluate("openSetup()")   # Set up Hoard, from Settings
             page.locator("#setup:not([hidden])").wait_for()
-            for _ in range(8):   # each step saves on the way out: wait for the next one before going on
+            for _ in range(9):   # each step saves on the way out: wait for the next one before going on
                 if page.locator('#setupBody [data-signin="gumroad"]').count():
                     break
                 title = page.locator("#setupTitle").inner_text()
@@ -1461,6 +1462,8 @@ class SetupAssistant(unittest.TestCase):
             self.assertTrue(page.locator("#setup").is_visible(), "and Escape doesn't close it")
             page.locator("#setupTitle", has_text="Choose your language").wait_for()
             page.click("#setupNext")   # the language, as it is: on without reloading
+            page.locator("#setupTitle", has_text="Make Hoard easier to use").wait_for()
+            page.click("#setupNext")   # nothing changed there
             page.locator("#setupTitle", has_text="Welcome to Hoard").wait_for()
             page.click("#setupNext")   # welcome
             page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()
