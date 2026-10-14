@@ -192,6 +192,24 @@ class Tour(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_on_screen_at_the_largest_text_size(self):
+        """Text size zooms the whole page: the card and its ring were placed by the window's pixels, so at 130% and up
+        they landed past the target, the card off the window's edge."""
+        inside = """sel => { const r = document.querySelector(sel).getBoundingClientRect();
+            return r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1; }"""
+        self.serve()
+        page = self.open()
+        page.evaluate("applyDisplay({ ...DATA.display, text_size: 150 })")
+        for step in ("stores", "search", "sync", "views"):
+            page.evaluate("id => TOUR.i < 0 ? tourStart(TOUR.steps.findIndex(s => s.id === id)) : tourShow(TOUR.steps.findIndex(s => s.id === id), 1)", step)
+            page.wait_for_timeout(400)   # (the ring moves there)
+            self.assertTrue(page.evaluate(inside, ".tour-card"), f"{step}: the card on screen")
+            ring, target = page.evaluate("""id => [document.querySelector('.tour-ring').getBoundingClientRect(),
+                tourTarget(TOUR.steps.find(s => s.id === id))[0].getBoundingClientRect()].map(r => [r.left, r.top])""", step)
+            self.assertLess(abs(ring[0] + 6 - target[0]), 3, f"{step}: the ring round its part")
+            self.assertLess(abs(ring[1] + 6 - target[1]), 4, step)
+        page.close()
+
 
 if __name__ == "__main__":
     unittest.main()

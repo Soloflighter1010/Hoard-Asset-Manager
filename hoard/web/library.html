@@ -249,7 +249,10 @@ body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* t
 .ondisk-mark { position: absolute; right: 7px; top: 7px; width: 24px; height: 24px; display: grid; place-items: center;
   border-radius: 7px; background: rgb(20 16 12 / .78); color: #F4EDE3; }
 .ondisk-mark svg { width: 14px; height: 14px; }
-body.selecting .ondisk-mark { display: none; }   /* the selection tick goes there */
+/* the selection tick takes the corner when it shows (choosing, or pointing at or tabbing to a tile): the mark moves
+   beside it, rather than under it */
+body.selecting .ondisk-mark, .slot:focus-visible .ondisk-mark { right: 38px; }
+@media (hover: hover) { .slot:hover .ondisk-mark { right: 38px; } }
 .ph { width: 100%; height: 100%; display: grid; place-content: center; background: hsl(var(--h) var(--ph-s) var(--ph-l)); }
 .ph b { font: 400 calc(var(--slot-size) * .26)/1 var(--display); opacity: .85; }
 .nm-t, .slot .nm { font-weight: 700; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -876,11 +879,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
   box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
 .tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
-.tour-card { position: fixed; z-index: 90; width: min(380px, calc(100vw - 32px)); padding: 18px 20px 16px; border-radius: 16px;
+.tour-card { position: fixed; z-index: 90; width: min(380px, calc(var(--vw) - 32px)); padding: 18px 20px 16px; border-radius: 16px;
   background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
 .tour-card:focus { outline: none; }
 .tour-card:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
-.tour-card.middle { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+.tour-card.middle { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); overflow: auto; }
 .tour-card.docked { left: 16px; right: 16px; bottom: 16px; top: auto; width: auto; }
 .tour-card h2 { font: 400 22px var(--display); margin: 0 0 8px; }
 .tour-card p { margin: 6px 0; line-height: 1.5; font-size: 14px; }

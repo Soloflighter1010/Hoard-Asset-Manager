@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.1.1
+
+- **Fixed: menus and the tour could open off the screen** with a larger **Text size** (Settings, Accessibility).
+  Text size enlarges the whole page, and the right-click menu, the selection bar's menus and the tour's card and ring
+  were placed by the window's own measurements, which the larger page scales again: at 130% a menu opened near the
+  window's edge, or the tour's card for Sync, landed partly or wholly past it. They're placed in the page's own scale
+  now, at every text size, and the tour's card is sized to the window too.
+- **Fixed: the selection tick covered the Library's downloaded mark** when pointing at a tile. The mark moves beside
+  the tick whenever the tick shows, as it does when you choose something.
+- **Fixed: right-clicking a tile near the end of the grid could open no menu.** Choosing the tile brings up the
+  selection bar, which can move the page a little, and that closed the menu as it opened. Only scrolling you do
+  closes it now.
+
 ## 4.1.0
 
 - **Easier reading, from the start.** **Font: OpenDyslexic** (Settings, Accessibility), a typeface many people with
