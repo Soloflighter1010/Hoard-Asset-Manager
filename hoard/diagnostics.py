@@ -262,7 +262,7 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
 
     def anon(mapping: dict[str, str], value: str, label: str) -> str:
         clean = value.strip()
-        if not clean or len(clean) > 240 or _PLACEHOLDERS.fullmatch(clean):   # (one the report already gave it)
+        if not clean or len(clean) > 240 or _placeholders_only(clean):   # (one the report already gave it)
             return value
         key = clean.casefold()
         if key not in mapping:
@@ -302,7 +302,13 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
 
 
 _LETTER = re.compile(r"[A-Za-z]")
-_PLACEHOLDERS = re.compile(r"(?:<[A-Z]+(?:_\d+)?>[\s/\\]*)+")
+_PLACEHOLDER = re.compile(r"(?:<[A-Z]+(?:_\d+)?>)+")
+
+
+def _placeholders_only(text: str) -> bool:
+    """Is this only the report's own placeholders ("<CREATOR_001>", "<ASSET_002> / <FILE_003>")?"""
+    words = [w for w in re.split(r"[\s/\\]+", text) if w]
+    return bool(words) and all(_PLACEHOLDER.fullmatch(w) for w in words)
 # what a path in the downloads folder or a library folder may say as it is: the store folders, Hoard's own files and
 # folders, and the report's placeholders; any other part of it (a creator, a product, a file) is hidden
 _STORE_FOLDERS = ("Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local")
