@@ -54,6 +54,11 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
     still apply in every theme.
 - **Accessibility:**
   - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
+  - **Font:** **Standard**, or **OpenDyslexic, for dyslexia** (4.1.0): a typeface whose letters are weighted at the
+    bottom and shaped apart (b, d, p and q), which many people with dyslexia find easier to read. It's for Latin
+    letters; Japanese and Korean keep Hoard's own fonts.
+  - **More space between letters, words and lines** (4.1.0): also easier to read for many, with or without
+    OpenDyslexic.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
     frame. Turn it off and they move again.
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
@@ -120,6 +125,8 @@ and keep it valid JSON.
 | `auto_sync_hours`, `integrity_check_days` | | Before 3.0: how often to sync by itself, and to check your downloads. `auto_sync_hours` is read only to set the routine check's first timing |
 | `display.text_size` | `100` | Text size in percent: `100`, `115`, `130` or `150` (**Accessibility** in Settings) |
 | `download_skip` | `[]` | Products to always skip when downloading, by tag key (**Always skip** in the list **Download new** shows; see [Downloads](Downloads)) |
+| `display.font` | `"standard"` | `"standard"` or `"dyslexic"` (OpenDyslexic; **Font** in Settings, **Accessibility**) |
+| `display.spacing` | `false` | More space between letters, words and lines (**Accessibility** in Settings) |
 | `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
 | `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |

@@ -28,7 +28,7 @@ STEPS = {
     "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab", "Escape", "#selectBtn", "#selectBtn",
           ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]',
           # the setup assistant, each step up to the last (not Finish, which would start reading the stores)
-          "#settingsBtn", "#setupAgain", *["#setupNext"] * 7, "Escape"],
+          "#settingsBtn", "#setupAgain", *["#setupNext"] * 8, "Escape"],
     "/downloads": ["", ".slot >> nth=0", "Escape", '[data-view="updates"]', '[data-view="archive"]', '[data-view="removed"]',
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
                    "Escape", "#settingsBtn"],

@@ -1416,7 +1416,7 @@ class SetupAssistant(unittest.TestCase):
             page.wait_for_function("() => typeof openSetup === 'function' && document.readyState === 'complete'")
             page.evaluate("openSetup()")   # Set up Hoard, from Settings
             page.locator("#setup:not([hidden])").wait_for()
-            for _ in range(8):   # each step saves on the way out: wait for the next one before going on
+            for _ in range(9):   # each step saves on the way out: wait for the next one before going on
                 if page.locator('#setupBody [data-signin="gumroad"]').count():
                     break
                 title = page.locator("#setupTitle").inner_text()
@@ -1462,6 +1462,8 @@ class SetupAssistant(unittest.TestCase):
             self.assertTrue(page.locator("#setup").is_visible(), "and Escape doesn't close it")
             page.locator("#setupTitle", has_text="Choose your language").wait_for()
             page.click("#setupNext")   # the language, as it is: on without reloading
+            page.locator("#setupTitle", has_text="Make Hoard easier to use").wait_for()
+            page.click("#setupNext")   # nothing changed there
             page.locator("#setupTitle", has_text="Welcome to Hoard").wait_for()
             page.click("#setupNext")   # welcome
             page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()

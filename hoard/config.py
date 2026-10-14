@@ -36,7 +36,7 @@ DEFAULT_CONFIG = {
     "integrity_check_days": 7,     # check the downloads are as downloaded this often (issue #83); 0 = only when asked
     "routine_hours": None,         # issue #113: the routine check, every this many hours (0 = off); None: off, or Sync automatically's
     "download_skip": [],           # products to always skip when downloading, by tag key (issue #107)
-    "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False,   # accessibility
+    "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False, "font": "standard", "spacing": False,   # accessibility
                 "glow": True, "colours": "standard", "custom_colours": {},   # issue #112: the glow, store colours
                 "theme": "hoard", "mode": "system",   # Settings, Appearance: hoard/themes.py, and Light or Dark
                 "language": "system"},   # and the pages' language (hoard/i18n.py): system follows the window's

@@ -338,6 +338,9 @@ function applyDisplay(d) {
   // what's sized to the window still fits it at a larger text size (issue #48)
   document.documentElement.style.setProperty("--zoom", String((d.text_size || 100) / 100));
   document.body.classList.toggle("less-motion", !!d.reduce_motion);
+  const html = document.documentElement;   // easier reading (the page is served with them: this is for a change)
+  if (d.font === "dyslexic") html.dataset.font = "dyslexic"; else delete html.dataset.font;
+  if (d.spacing) html.dataset.spacing = "wide"; else delete html.dataset.spacing;
   document.body.classList.toggle("no-glow", d.glow === false);
   const root = document.documentElement;
   if (d.colours === "standard" || !d.colours) delete root.dataset.colours; else root.dataset.colours = d.colours;
@@ -1020,6 +1023,8 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
+  $("#setFont").value = SETTINGS.display.font || "standard";
+  $("#setSpacing").checked = !!SETTINGS.display.spacing;
   $("#setGlowOn").checked = SETTINGS.display.glow;
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
@@ -1320,6 +1325,8 @@ function settingsPart(el) {
     case "setPrevious": return { keep_previous: Number(el.value) };
     case "setGlowOn": return { display: { glow: el.checked } };
     case "setColours": return { display: { colours: el.value } };
+    case "setFont": return { display: { font: el.value } };
+    case "setSpacing": return { display: { spacing: el.checked } };
     case "setTextSize": case "setPause": case "setMotion":
       return { display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
                           reduce_motion: $("#setMotion").checked } };

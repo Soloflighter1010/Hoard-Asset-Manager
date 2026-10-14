@@ -2,6 +2,13 @@
 
 ## 4.1.0
 
+- **Easier reading, from the start.** **Font: OpenDyslexic** (Settings, Accessibility), a typeface many people with
+  dyslexia find easier to read, bundled so it works offline (Latin letters; Japanese and Korean keep their fonts),
+  and **More space between letters, words and lines**. The page is served with them, so it never shows in the
+  other font first.
+- **Setup asks what makes Hoard easier to use**, right after the language: text size, font, light or dark, store
+  colours for colour blindness, more spacing, reduce motion and pause animated pictures. Each shows as you choose
+  it, and is saved at once.
 - **A tour of Hoard, on your own library.** Hoard does a lot more than download, and a short tour now shows it, one
   thing at a time: a ring round the part of the page it's about, and a card beside it. It uses your own things (it
   asks you to search for a word from one of your items, open it, choose two, look inside its package, tag it), and

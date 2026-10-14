@@ -1346,5 +1346,12 @@
  "Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.": "동기화나 다운로드처럼 Hoard가 하는 일은 실행되는 동안 여기에 나오고, 찾은 것도 보여요. 그동안 다른 일을 계속할 수 있어요.",
  "Your language, light or dark, themes and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.": "언어, 밝게·어둡게, 테마, 글자 크기. 정기 점검. 이전 버전. 라이브러리 폴더 추가. 태그·세트·설정 백업. 이 둘러보기도 여기 있어요.",
  "That's the tour": "둘러보기는 여기까지예요",
- "You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.": "주요 기능은 다 봤어요. 나머지는 Hoard 위키에, 모든 변경 사항은 설정의 '새로운 기능'에 있어요."
+ "You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.": "주요 기능은 다 봤어요. 나머지는 Hoard 위키에, 모든 변경 사항은 설정의 '새로운 기능'에 있어요.",
+ "Font": "글꼴",
+ "OpenDyslexic, for dyslexia": "OpenDyslexic(난독증용)",
+ "More space between letters, words and lines": "글자, 낱말, 줄 사이를 넓게",
+ "Make Hoard easier to use": "Hoard를 쓰기 쉽게",
+ "Choose whatever helps. You see each one as you choose it.": "도움이 되는 것을 고르세요. 고르는 대로 바로 보여요.",
+ "There's more, and you can change these later, in Settings, under Appearance and Accessibility.": "그 밖에도 더 있고, 나중에 설정의 '모양'과 '접근성'에서 바꿀 수 있어요.",
+ "Choose a font from the list.": "목록에서 글꼴을 고르세요."
 }

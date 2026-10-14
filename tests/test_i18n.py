@@ -231,7 +231,7 @@ class SetupAsks(unittest.TestCase):
             page.click("#setupNext")
             page.wait_for_function("() => document.documentElement.lang === 'ja'")
             page.locator("#setup:not([hidden])").wait_for()
-            self.assertEqual(page.locator("#setupTitle").inner_text(), "Hoardへようこそ")
+            self.assertEqual(page.locator("#setupTitle").inner_text(), "Hoardを使いやすくする")   # one step on
             self.assertEqual(srv.cfg["display"]["language"], "ja")
             page.click("#setupBack")
             self.assertTrue(page.locator('#setupBody input[value="ja"]').is_checked())

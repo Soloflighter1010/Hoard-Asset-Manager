@@ -49,6 +49,17 @@ html[data-i18n] body { visibility: hidden; animation: i18n-show 0s 3s forwards; 
 }
 :lang(ko) body { word-break: keep-all; overflow-wrap: anywhere; }
 :lang(ja) body { line-break: strict; }
+/* Easier reading (Settings, Accessibility): OpenDyslexic for Latin letters (Japanese and Korean keep their fonts,
+   next in line), and more space between letters, words and lines */
+@font-face { font-family: "OpenDyslexic"; src: url("/fonts/OpenDyslexic-Regular.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "OpenDyslexic"; src: url("/fonts/OpenDyslexic-Bold.woff2") format("woff2"); font-weight: 600 900; font-display: swap; }
+:root[data-font="dyslexic"] {
+  --display: "OpenDyslexic", "Dela Gothic One", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --body: "OpenDyslexic", "Zen Maru Gothic", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+:root[data-font="dyslexic"] body { font-size: 14px; }
+:root[data-spacing="wide"] body { letter-spacing: .03em; word-spacing: .08em; }
+:root[data-spacing="wide"] :is(p, li, .hint, .sub, label) { line-height: 1.75; }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { font: 500 15px/1.5 var(--body); background: var(--cave); color: var(--bone); -webkit-font-smoothing: antialiased; }
@@ -1139,6 +1150,12 @@ body.less-motion .tour-try::before { animation: none; }
       <option value="100">Normal</option><option value="115">Larger</option>
       <option value="130">Large</option><option value="150">Largest</option>
     </select></label>
+  <label class="check">Font
+    <select id="setFont" aria-label="Font">
+      <option value="standard">Standard</option>
+      <option value="dyslexic">OpenDyslexic, for dyslexia</option>
+    </select></label>
+  <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>

@@ -94,7 +94,8 @@ Guides for everything, from installing to fixing a problem, are in the
    see [CODE_SIGNING.md](CODE_SIGNING.md). Choose **Run anyway**. To check the download really came from
    this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
 3. Open **Hoard** from the Start menu. It opens in its own window. A short
-   setup assistant walks you through the rest: your language, which stores you use, signing in to each one, your Payhip
+   setup assistant walks you through the rest: your language, what makes Hoard easier to use (text size, a
+   dyslexia-friendly font, spacing, colours, motion), which stores you use, signing in to each one, your Payhip
    shops, and where downloads go. Run it again any time from **Settings**, then **Set up Hoard again**. Once your
    library is read, a short tour shows what else Hoard does, on your own things (again any time: **Settings**, **Take
    the tour**).
