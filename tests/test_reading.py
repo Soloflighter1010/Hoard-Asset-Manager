@@ -54,6 +54,8 @@ class InSetup(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(Path(tmp.name) / "dl"),
                                                   "setup_done": False, "display": {}}, lan=False)
+        with srv.lib.lock:   # someone new: nothing in the library yet (in memory only)
+            srv.lib.data["items"] = []
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
@@ -84,7 +86,7 @@ class InSetup(unittest.TestCase):
             page.goto(srv.entry_url().replace("/#", "/downloads#", 1))
             page.wait_for_function("() => document.documentElement.dataset.font === 'dyslexic'")
             page.click("#settingsBtn")
-            self.assertEqual(page.input_value("#setFont"), "dyslexic", "and in Settings")
+            page.wait_for_function("() => document.querySelector('#setFont').value === 'dyslexic'", timeout=5000)   # and in Settings
             page.select_option("#setFont", "standard")
             page.wait_for_function("() => !document.documentElement.dataset.font")
             self.assertEqual(errors, [])
