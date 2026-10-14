@@ -148,6 +148,77 @@ class Sanitizing(unittest.TestCase):
         self.assertIn(" - HTTP 500", log, "what went wrong stays")
         self.assertIn("  - Booth: not signed in, so skipped. Sign in from Stores to include it.", log, "not a name")
 
+    def test_every_line_that_names_a_product(self):
+        """Up to 4.1.1 a log's names were hidden only in a few kinds of line ("[Booth] creator / product", "saved:",
+        the summary). Moving, restoring, deleting, an editable copy, the integrity check's paths, Local, a job's
+        label and a path in another library folder went into reports as written; and Local's products (not in the
+        library list) weren't known by name at all, in the report itself too."""
+        from hoard import downloader
+        drive = Path(self.tmp.name) / "Drive E" / "Hoard"
+        cfg = {**self.cfg, "library_folders": [str(drive)]}
+        for store, creator, name, files in (("Booth", "Kitsu Studio", "Rusk Avatar", ["RuskAvatar_v2.unitypackage",
+                                                                                      "Textures/rusk_body.png"]),
+                                            ("Local", "", "Moonlit Shrine Props", ["shrine_lantern.fbx"])):
+            man = downloader.Manifest(self.root / store)
+            rec = man.record(name, creator, name)
+            rec.update(name=name, creator=creator)
+            for n, f in enumerate(files):
+                (self.root / store / rec["folder"] / f).parent.mkdir(parents=True, exist_ok=True)
+                (self.root / store / rec["folder"] / f).write_bytes(b"x")
+                rec["files"][str(n)] = {"path": f, "size": 1}
+            man.save()
+        downloader.build_catalog(cfg, self.root)
+        lib = library.Library(Path(self.tmp.name) / "library.json")
+        with lib.lock:
+            lib.data["items"] = [library.item("booth", "1", name="Rusk Avatar", creator="Kitsu Studio"),
+                                 library.item("gumroad", "g", name="Velvet Hoodie", creator="Mochi Works")]
+        (diagnostics.data_dir() / "logs" / "hoard.log").write_text("\n".join([
+            "[Booth] Kitsu Studio / Rusk Avatar",
+            "    saved: RuskAvatar_v2.unitypackage",
+            f"Moved Rusk Avatar (Booth) to {drive}/Booth/Kitsu Studio/Rusk Avatar: 2 files, 2 bytes",
+            "Restored the previous version of Rusk Avatar: Textures/rusk_body.png (2026-10-14 120000)",
+            "Couldn't delete Booth/Kitsu Studio/Rusk Avatar/RuskAvatar_v2.unitypackage: Permission denied",
+            "Made an editable copy of Booth/Kitsu Studio/Rusk Avatar in /x/Rusk Avatar (editable): 2 files",
+            "  Booth/Kitsu Studio/Rusk Avatar/Textures/rusk_body.png: changed since it was downloaded",
+            "  Booth/Deleted Maker/Gone Product/gone.zip: missing",   # (known to nothing: hidden as a path)
+            "Local: added Moonlit Shrine Props (1 file, copied in)",
+            "Local: left out Lanterns/shrine_lantern?.png (a name Windows can't use)",
+            'Download: Gumroad ("Velvet Hoodie")',
+            "Checked 3 files: 2 fine, 1 changed",
+            "Your hair and the chair stay as they are",
+        ]) + "\n", encoding="utf-8")
+        result = diagnostics.create_support_report(cfg, lib, {"message": "Added Moonlit Shrine Props to Local: 1 file"})
+        with zipfile.ZipFile(result["path"]) as archive:
+            files = {n: archive.read(n).decode("utf-8") for n in archive.namelist()}
+        everything = "\n".join(files.values())
+        for private in ("Rusk", "rusk", "Kitsu", "Velvet", "Mochi", "Moonlit", "Shrine", "shrine", "lantern",
+                        "Drive E", "Deleted Maker", "Gone Product", "gone.zip"):
+            self.assertNotIn(private, everything)
+        log = files["application-log.txt"]
+        self.assertIn("Moved <ASSET_001> (Booth) to <LIBRARY_1>/Booth/<CREATOR_001>/<ASSET_001>: 2 files", log)
+        self.assertIn("saved: <FILE_001>", log)
+        self.assertIn("Couldn't delete Booth/<CREATOR_001>/<ASSET_001>/<FILE_001>: Permission denied", log,
+                      "the same file, the same placeholder")
+        self.assertIn("Checked 3 files: 2 fine, 1 changed", log)
+        self.assertIn("Your hair and the chair stay as they are", log, "a name is hidden as a word, not inside one")
+
+    def test_a_big_library_is_quick(self):
+        import random
+        import string
+        import time
+        random.seed(1)
+        word = lambda: "".join(random.choice(string.ascii_letters) for _ in range(random.randint(4, 10)))  # noqa: E731
+        sanitizer = diagnostics._ReportSanitizer(self.cfg)
+        for n in range(3000):
+            sanitizer._add(f"{word()} {word()}", "ASSET")
+            sanitizer._add(f"{word()}_{word()}_v{n}.unitypackage", "FILE")
+        names = list(sanitizer.assets)[:100]
+        log = "\n".join(f"Moved {random.choice(names)} (Booth) to somewhere: 2 files" for _ in range(8000))
+        start = time.monotonic()
+        clean = sanitizer.text(log, asset_names=True)
+        self.assertLess(time.monotonic() - start, 20)
+        self.assertFalse(any(n in clean.casefold() for n in names))
+
     def test_this_launch_and_the_one_before(self):
         """2.9.2: a log for each launch. The report takes this launch's (the one Hoard is writing), and the one
         before it, not whichever log happens to be the newest file."""

@@ -17,6 +17,13 @@ Fixes from an audit of everything since 4.0 (docs/audit-2026-10-14.md).
 - **Fixed: previous versions of a file in a subfolder** (a Gumroad product's "Textures/body.png", say) weren't listed,
   so they couldn't be restored, and stayed behind when the product was deleted or moved to another library folder.
   They're listed, restored, deleted and moved like the rest.
+- **Fixed: support reports could still name your products.** A log's names were hidden only in a few kinds of line
+  (a store's "creator / product" line, "saved:", the summary a sync ends with). Moving, restoring and deleting a
+  product, an editable copy, the integrity check's paths, Local, a task's name and a path in another library folder
+  went in as written, and products the library list doesn't have (Local's, for one) weren't known by name at all.
+  Every name Hoard knows, products, creators and downloaded files, from the library list and every library folder, is
+  now hidden wherever it is in a report, the same name always with the same placeholder. What's left in a path in a
+  library folder (a product deleted since, say) is hidden too, and other library folders show as `<LIBRARY_1>`.
 - **Fixed: Look inside had no limit on the previews it keeps.** A small, made-up package could fill the disk with them
   (a 1 MB one left a GB). A file's previews are kept up to 64 MB (past that, its other files show their kind), and
   the cache to 512 MB in all.

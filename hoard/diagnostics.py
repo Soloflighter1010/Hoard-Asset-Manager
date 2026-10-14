@@ -36,7 +36,7 @@ MAX_OLD_LOG_BYTES = 175 * 1024
 MAX_INCIDENTS = 40
 MAX_EXPORTED_INCIDENTS = 10
 MAX_PREVIEW_CHARS = 20_000
-MAX_ANON_TERMS = 6_000
+MAX_ANON_TERMS = 60_000   # names a report hides (products, creators, file names): a big library's, with room
 
 
 def install_exception_hooks() -> None:
@@ -107,6 +107,15 @@ def _replace_paths(text: str, cfg: dict | None = None) -> str:
             for value in {resolved, literal}:
                 if value:
                     replacements.append((value, "<DOWNLOADS>"))
+        except Exception:
+            pass
+        try:   # the other library folders (hoard/libraries.py): "D:\\Avatars\\Hoard" names a drive and a folder of yours
+            from .libraries import other_folders
+            for n, folder in enumerate(other_folders(cfg), 1):
+                resolved, literal = _path_text(folder)
+                for value in {resolved, literal}:
+                    if value:
+                        replacements.append((value, f"<LIBRARY_{n}>"))
         except Exception:
             pass
 
@@ -220,6 +229,19 @@ def _asset_line(line: str) -> tuple[str, str] | None:
     return lead, body
 
 
+def _local_line(line: str) -> tuple[str, str, str] | None:
+    """Local's "Local: added <name> (3 files, ...)" and "Local: left out <path in your folder> (why)" split into
+    (lead, the name or path, the rest from its last " ("), or None."""
+    rest = line.lstrip()
+    prefix = next((p for p in ("Local: added ", "Local: left out ") if rest.startswith(p)), None)
+    if prefix is None:
+        return None
+    body = rest[len(prefix):]
+    cut = body.rfind(" (")
+    name, tail = (body[:cut], body[cut:]) if cut > 0 else (body, "")
+    return line[:len(line) - len(body)], name, tail
+
+
 def _progress_line(line: str) -> tuple[str, str] | None:
     """A download progress bar ("name.unitypackage:  82%|####  | 1.00M/1.22M ...") split into (name, the rest), or
     None. Found with string operations (see _store_line): the file name is whatever comes before ": " and a
@@ -240,7 +262,7 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
 
     def anon(mapping: dict[str, str], value: str, label: str) -> str:
         clean = value.strip()
-        if not clean or len(clean) > 240:
+        if not clean or len(clean) > 240 or _PLACEHOLDERS.fullmatch(clean):   # (one the report already gave it)
             return value
         key = clean.casefold()
         if key not in mapping:
@@ -259,6 +281,10 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
         if summary:
             lines.append(summary[0] + _anon_summary(summary[1], anon_either))
             continue
+        local = _local_line(line)
+        if local:
+            lines.append(local[0] + (anon(assets, local[1], "ASSET") if local[1].strip() else local[1]) + local[2])
+            continue
         bar = _progress_line(line)
         if bar:   # a download's progress bar starts with the file's name
             lines.append(f"{anon(assets, bar[0], 'ASSET') if bar[0].strip() else bar[0]}{bar[1]}")
@@ -275,6 +301,54 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
     return "\n".join(lines)
 
 
+_LETTER = re.compile(r"[A-Za-z]")
+_PLACEHOLDERS = re.compile(r"(?:<[A-Z]+(?:_\d+)?>[\s/\\]*)+")
+# what a path in the downloads folder or a library folder may say as it is: the store folders, Hoard's own files and
+# folders, and the report's placeholders; any other part of it (a creator, a product, a file) is hidden
+_STORE_FOLDERS = ("Booth", "Gumroad", "Jinxxy", "Payhip", "Itch", "Local")
+_PATH_KEEP = re.compile(r"(?:<[A-Z]+(?:_\d+)?>)+|_Previous versions|_manifest\.json|_manifest\.changed-[\w.-]+|"
+                        r"catalog\.json|asset\.json|_thumbnail\.\w+|_linked|\d{4}-\d{2}-\d{2} \d{6}(?:-\d+)?|" +
+                        "|".join(_STORE_FOLDERS))
+_IN_LIBRARY = re.compile(r"(?m)(<DOWNLOADS>|<LIBRARY_\d+>|(?<![\w<>/\\.-])(?:" + "|".join(_STORE_FOLDERS) + r")(?=[\\/]))"
+                         r"([\\/][^'\"\r\n]*?)(?=:\s|:$|['\"]|\s(?:in|to|from)\s|$)")
+
+
+def _anon_paths(text: str) -> str:
+    """Paths in the downloads folder and the other library folders (and the same paths written from a store's folder,
+    "Booth/creator/product/file"), with every part that isn't a store folder, one of Hoard's own or a placeholder
+    hidden: a product, file or creator the report doesn't know by name (deleted since, say) still isn't shown."""
+    def path(m: re.Match) -> str:
+        parts = re.split(r"([\\/]+)", m.group(2))
+        return m.group(1) + "".join(p if not p or p[0] in "\\/" or _PATH_KEEP.fullmatch(p) else "<NAME>" for p in parts)
+    return _IN_LIBRARY.sub(path, text)
+
+
+def _trie_pattern(words: Iterable[str]) -> str:
+    """One expression matching any of these words, longest first, as a tree of their letters: one pass over a log
+    whatever the number of words (an expression of thousands of alternatives tries each at every character)."""
+    root: dict = {}
+    for w in words:
+        node = root
+        for ch in w:
+            node = node.setdefault(ch, {})
+        node[""] = True
+
+    def build(node: dict) -> str:
+        end = node.get("") is True
+        branches = [re.escape(ch) + build(child) for ch, child in sorted((k, v) for k, v in node.items() if k)]
+        if not branches:
+            return ""
+        body = branches[0] if len(branches) == 1 else "(?:" + "|".join(branches) + ")"
+        return f"(?:{body})?" if end else body
+    import sys as _sys
+    limit = _sys.getrecursionlimit()
+    _sys.setrecursionlimit(max(limit, 2000))   # (a name is at most 240 characters: two frames each)
+    try:
+        return build(root)
+    finally:
+        _sys.setrecursionlimit(limit)
+
+
 class _ReportSanitizer:
     """Sanitizer used for one report, keeping the same anonymization mapping across all exported files."""
 
@@ -282,23 +356,31 @@ class _ReportSanitizer:
         self.cfg = cfg
         self.creators: dict[str, str] = {}
         self.assets: dict[str, str] = {}
-        self._known: dict[str, str] = {}
-        self._patterns: list[tuple[re.Pattern, dict[str, str]]] = []
-        self._dirty = False
+        self.files: dict[str, str] = {}
+        self._known: dict[str, str] = {}   # every name it hides -> its placeholder
+        # two expressions: the names known before reading anything (the library's and the downloads': built once,
+        # which takes a moment for a big library), and those the logs' own lines turn up (few, built again as found)
+        self._groups: dict[str, set[str]] = {"seeded": set(), "found": set()}
+        self._patterns: dict[str, re.Pattern | None] = {"seeded": None, "found": None}
+        self._dirty: set[str] = set()
 
     def _add(self, value: object, label: str) -> None:
         clean = str(value or "").strip()
-        if len(clean) < 3 or len(clean) > 240:
+        if len(clean) < 3 or len(clean) > 240 or len(self._known) >= MAX_ANON_TERMS:
             return
-        if clean.casefold() in {"unknown creator", "unknown", "asset", "product"}:
+        if clean.casefold() in {"unknown creator", "unknown", "asset", "product", "untitled"}:
             return
         key = clean.casefold()
-        mapping = self.creators if label == "CREATOR" else self.assets
-        if key not in mapping:
+        mapping = {"CREATOR": self.creators, "FILE": self.files}.get(label, self.assets)
+        if key not in mapping and key not in self._known:
             placeholder = f"<{label}_{len(mapping) + 1:03d}>"
             mapping[key] = placeholder
-            self._known[key] = placeholder
-            self._dirty = True
+            self._remember(key, placeholder, "seeded")
+
+    def _remember(self, key: str, placeholder: str, group: str) -> None:
+        self._known[key] = placeholder
+        self._groups[group].add(key)
+        self._dirty.add(group)
 
     def seed_library(self, lib) -> None:
         try:
@@ -311,44 +393,66 @@ class _ReportSanitizer:
             self._add(item.get("creator"), "CREATOR")
             self._add(item.get("name"), "ASSET")
 
-    def _rebuild_patterns(self) -> None:
-        if not self._dirty:
+    def seed_downloads(self) -> None:
+        """Every downloaded product's name, creator, folder and file names, from catalog.json (which lists every
+        library folder's): your own products in Local, and products the library list doesn't have, are named in
+        logs too, and so is each file."""
+        try:
+            from .config import root_dir
+            data = json.loads((root_dir(self.cfg) / "catalog.json").read_text("utf-8"))
+            entries = data.get("assets") if isinstance(data, dict) else None
+        except (OSError, ValueError, TypeError, AttributeError):
             return
-        self._patterns = []
-        for label, mapping_source in (("CREATOR", self.creators), ("ASSET", self.assets)):
-            terms = sorted(mapping_source.items(), key=lambda pair: len(pair[0]), reverse=True)
-            if not terms:
+        for e in entries if isinstance(entries, list) else []:
+            if not isinstance(e, dict):
                 continue
-            # One compiled expression per kind is much faster for large libraries than hundreds of small ones.
-            pattern = re.compile("|".join(re.escape(key) for key, _placeholder in terms), re.I)
-            self._patterns.append((pattern, dict(terms)))
-        self._dirty = False
+            self._add(e.get("creator"), "CREATOR")
+            self._add(e.get("name"), "ASSET")
+            parts = str(e.get("folder") or "").split("/")   # "Booth/creator/product": as saved, which may differ
+            if len(parts) >= 3:
+                self._add(parts[1], "CREATOR")
+            if len(parts) >= 2:
+                self._add(parts[-1], "ASSET")
+            if isinstance(e.get("location"), str):   # a folder of your own, listed where it is
+                self._add(e["location"], "FOLDER")
+        for e in entries if isinstance(entries, list) else []:   # (after every name: those matter most)
+            for f in e.get("files") if isinstance(e, dict) and isinstance(e.get("files"), list) else []:
+                self._add(str(f).replace("\\", "/").rsplit("/", 1)[-1], "FILE")
 
     def _replace_known(self, text: str) -> str:
-        self._rebuild_patterns()
-        for pattern, mapping in self._patterns:
-            text = pattern.sub(lambda m: mapping[m.group(0).casefold()], text)
+        for group in ("seeded", "found"):
+            if group in self._dirty:
+                keys = self._groups[group]
+                self._patterns[group] = re.compile(_trie_pattern(keys), re.I) if keys else None
+                self._dirty.discard(group)
+
+        def name(m: re.Match) -> str:
+            found, a, b = m.group(0), m.start(), m.end()
+            # a name is hidden where it stands as a name: "Hair" in "Hair_v2.zip", not in "chair"
+            if (_LETTER.match(found[0]) and a and _LETTER.match(text[a - 1])) or \
+                    (_LETTER.match(found[-1]) and b < len(text) and _LETTER.match(text[b])):
+                return found
+            return self._known.get(found.casefold(), "<NAME>")
+        for pattern in self._patterns.values():
+            if pattern is not None:
+                text = pattern.sub(name, text)
         return text
 
-    def text(self, value: object, *, asset_names: bool = False, limit: int | None = None,
-             replace_known: bool = True) -> str:
+    def text(self, value: object, *, asset_names: bool = False, limit: int | None = None) -> str:
         clean = sanitize_text(value, self.cfg, asset_names=False, limit=limit)
         if not asset_names:
             return clean
-        # Parse Hoard's structured log lines first; known library names already use the same mappings, and this
-        # avoids running a very large library regex over every log line.
-        before = len(self._known)
+        # every name the report knows, wherever it is; then Hoard's structured log lines (they name products it may
+        # not know, such as one since deleted: each such name gets its own placeholder, here and everywhere after);
+        # then what's left in paths.
+        clean = self._replace_known(clean)
         clean = _anon_assets(clean, self.creators, self.assets)
         for mapping in (self.creators, self.assets):
             for key, placeholder in mapping.items():
-                self._known.setdefault(key, placeholder)
-        if len(self._known) != before:
-            self._dirty = True
-        if replace_known:
-            clean = self._replace_known(clean)
-        else:   # a log: the library's names are looked for only in the sync summaries, which is quick
-            clean = "\n".join(self._replace_known(line) if _summary_line(line) else line for line in clean.split("\n"))
-        return _sanitize_urls(clean, asset_names=True)
+                if key not in self._known:
+                    self._remember(key, placeholder, "found")
+        clean = self._replace_known(clean)
+        return _anon_paths(_sanitize_urls(clean, asset_names=True))
 
 
 def _sanitize_urls(text: str, *, asset_names: bool = False) -> str:
@@ -649,13 +753,14 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
             effective_job["error"] = str(given_context.get("error"))[:4000]
         sanitizer = _ReportSanitizer(cfg)
         sanitizer.seed_library(lib)
+        sanitizer.seed_downloads()
         # this launch's log (or the newest, when Hoard has a console), and the one before it
         logs = log_files()
         current = paths.current_log if paths.current_log and paths.current_log.exists() else (logs[0] if logs else None)
         previous = next((p for p in logs if p != current), None)
-        application_log = (sanitizer.text(_read_tail(current, MAX_LOG_BYTES), asset_names=True, replace_known=False)
+        application_log = (sanitizer.text(_read_tail(current, MAX_LOG_BYTES), asset_names=True)
                            if current else "[no log yet]")
-        old_log_text = (sanitizer.text(_read_tail(previous, MAX_OLD_LOG_BYTES), asset_names=True, replace_known=False)
+        old_log_text = (sanitizer.text(_read_tail(previous, MAX_OLD_LOG_BYTES), asset_names=True)
                         if previous else None)
 
         report = {
