@@ -230,7 +230,9 @@ class Page(unittest.TestCase):
             page.click("nav.apptabs a[href='/downloads']")
             page.click("#settingsBtn")
             page.click("#backupMake")
-            page.get_by_text("Hoard backups").first.wait_for()
+            # "Show in folder" comes once the file is saved: the hint already names Documents › Hoard backups, so
+            # waiting for that text went on before the backup was written (seen on Windows)
+            page.locator("#backupShow").wait_for()
             [made] = (tmp / "home" / "Documents" / "Hoard backups").glob("*.json")
             TagStore().change({"action": "delete", "name": "avatars"})
             page.set_input_files("#backupFile", str(made))
