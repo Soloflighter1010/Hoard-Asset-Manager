@@ -34,7 +34,8 @@ def built_site() -> Path:
     return out
 
 
-PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html")
+PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
+         "stores.html")
 
 
 def every_page(site: Path) -> list[str]:
@@ -161,7 +162,7 @@ class TheSite(unittest.TestCase):
         site = built_site()
         cards = set()
         for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-                     "docs/index.html", "docs/Settings.html"):
+                     "stores.html", "docs/index.html", "docs/Settings.html"):
             html = (site / name).read_text("utf-8")
             image = re.search(r'<meta property="og:image" content="([^"]+)">', html)
             self.assertIsNotNone(image, f"{name}: no og:image")
@@ -175,7 +176,7 @@ class TheSite(unittest.TestCase):
             self.assertEqual(jpeg_size(picture.read_bytes()), (1200, 630), "a JPEG every site shows, at 1.91:1")
             self.assertIn('<meta name="theme-color" content="#F0B429">', html, f"{name}: the embed's edge in Hoard's gold")
             cards.add(image.group(1))
-        self.assertEqual(len(cards), 8, "each page its own card, with its name on it (the docs share one)")
+        self.assertEqual(len(cards), 9, "each page its own card, with its name on it (the docs share one)")
         self.assertEqual({p.name for p in SITE.glob("img/social*.jpg")}, {c.rsplit("/", 1)[1] for c in cards},
                          "scripts/make_social_cards.py draws just the cards the pages show")
 
@@ -202,7 +203,7 @@ class TheOtherPages(unittest.TestCase):
 
     def test_every_page_has_the_same_header_and_the_glow(self):
         site = built_site()
-        for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html"):
+        for name in PAGES:
             page = (site / name).read_text("utf-8")
             self.assertIn('<div class="glow" aria-hidden="true">', page, name)
             self.assertIn('href="changelog.html"', page, name)
@@ -307,6 +308,21 @@ class TheOtherPages(unittest.TestCase):
         trust = (SITE / "trust.html").read_text("utf-8")
         for doc in ("SECURITY.md", "PRIVACY.md", "release.yml", "check.yml", "LICENSE", "ai.html"):
             self.assertIn(doc, trust)
+
+    def test_the_page_for_stores_links_its_code(self):
+        """Hoard and your store (stores.html): each code link is pinned to one commit, so its lines don't move, and
+        every one is also in the table of code references; it asks for a customer API and has the AI disclosure."""
+        page = (SITE / "stores.html").read_text("utf-8")
+        code = r'https://github\.com/Soloflighter1010/Hoard-Asset-Manager/blob/([0-9a-f]+)/[^"#]+#L\d+(?:-L\d+)?'
+        links = re.findall(f'href="({code})"', page)
+        self.assertGreater(len(links), 30)
+        self.assertEqual({len(sha) for _, sha in links}, {40}, "pinned to a full commit ID, not a branch")
+        self.assertEqual(len({sha for _, sha in links}), 1, "all to the same commit")
+        table = re.search(r'<section id="code">.*?</section>', page, re.S).group(0)
+        in_table = {url for url, _ in re.findall(f'href="({code})"', table)}
+        self.assertEqual({url for url, _ in links}, in_table, "every code link is in the table")
+        for part in ('id="api"', 'id="ai"', 'href="#code"', "AI-DISCLOSURE.md"):
+            self.assertIn(part, page)
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")

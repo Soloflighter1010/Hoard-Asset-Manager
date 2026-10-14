@@ -367,3 +367,69 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .release::before { left: 0; }
   .release article { padding: 16px 18px; }
 }
+
+/* For stores (stores.html): a brief for the stores' own teams, in one reading column */
+.brief { --ok: #7ED67A; --no: #FF8A70; }
+@media (prefers-color-scheme: light) { .brief { --ok: #2B7F35; --no: #A3331F; } }
+.brief > section, .brief > .toc { max-width: 760px; margin-left: auto; margin-right: auto; }
+.brief > section:not(.page-head):not(.page-foot) { padding: 40px 0 0; border-top: 0; }
+.brief .page-head { max-width: 820px; }
+.brief .eyebrow { margin: 0 0 .6em; font-size: .8rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--dust); }
+.brief .meta { font-size: .85rem; color: var(--dust); max-width: 46em; margin: .4em auto; }
+.brief h2 { font-size: clamp(1.35rem, 3vw, 1.7rem); margin: 0 0 .6em; text-wrap: balance; }
+.brief h3 { font-size: 1.05rem; margin: 1.5em 0 .5em; }
+.brief section p, .brief section ul { max-width: 66ch; }
+.brief section li { margin: .35em 0; }
+.brief .glance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 26px; text-align: left; }
+.brief .glance div { background: var(--ledge); border: 1px solid var(--seam); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.brief .glance b { display: block; margin-bottom: 4px; }
+.brief .glance p { margin: 0; font-size: .93rem; color: var(--dust); }
+.brief .toc { margin-top: 28px; background: var(--ledge); border: 1px solid var(--seam); border-radius: 12px; padding: 18px 22px; }
+.brief .toc h2 { font-size: .8rem; letter-spacing: .09em; text-transform: uppercase; color: var(--dust); margin: 0 0 10px; font-family: var(--body); }
+.brief .toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+.brief .toc li { margin: 0 0 6px; break-inside: avoid; }
+.brief .toc a { text-decoration: none; }
+.brief .toc a:hover { text-decoration: underline; }
+.brief .walk { list-style: none; padding: 0; margin: 0 0 14px; counter-reset: step; display: grid; gap: 12px; max-width: none; }
+.brief .walk li { counter-increment: step; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; margin: 0; }
+.brief .walk li::before { content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
+  background: var(--gold); color: var(--gold-ink); font-weight: 700; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.brief .walk li p { margin: 2px 0 0; }
+.brief .table-wrap { overflow-x: auto; background: var(--ledge); border: 1px solid var(--seam); border-radius: 12px; margin: 6px 0 14px; }
+.brief table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: .92rem; line-height: 1.5; }
+.brief th, .brief td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--seam); }
+.brief thead th { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--dust); }
+.brief tbody tr:last-child td, .brief tbody tr:last-child th { border-bottom: 0; }
+.brief tbody th { white-space: nowrap; }
+.brief .never { list-style: none; padding: 0; max-width: none; display: grid; gap: 8px; }
+.brief .never li { position: relative; padding-left: 30px; margin: 0; }
+.brief .never li::before { content: ""; position: absolute; left: 2px; top: .75em; width: 14px; height: 2px; background: var(--no); border-radius: 2px; }
+.brief .yes li::before { left: 4px; top: .5em; width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.brief .note { background: var(--ledge); border: 1px solid var(--seam); border-left: 4px solid var(--gold); border-radius: 10px; padding: 14px 18px; margin: 4px 0 14px; }
+.brief .note p { margin: 0; }
+.brief .contact { display: grid; gap: 8px; background: var(--ledge); border: 1px solid var(--seam); border-radius: 12px; padding: 18px 20px; }
+.brief .contact p { margin: 0; }
+.brief .refs { font-size: .82rem; color: var(--dust); }
+.brief a.src { font-size: .82rem; text-decoration: none; border-bottom: 1px solid var(--seam); white-space: nowrap; }
+.brief a.src:hover { border-bottom-color: var(--gold-text); }
+.brief a.src code { font-size: .78rem; padding: 0 4px; }
+.brief .ask { list-style: none; padding: 0; margin: 0 0 14px; counter-reset: ask; display: grid; gap: 10px; max-width: none; }
+.brief .ask li { counter-increment: ask; position: relative; padding: 14px 16px 14px 52px; margin: 0; background: var(--ledge);
+  border: 1px solid var(--seam); border-radius: 10px; }
+.brief .ask li::before { content: counter(ask); position: absolute; left: 14px; top: 13px; width: 26px; height: 26px; border-radius: 7px;
+  display: grid; place-items: center; background: var(--gold); color: var(--gold-ink); font-weight: 700; font-size: .82rem; }
+.brief .ask li p { margin: 4px 0 0; color: var(--dust); font-size: .92rem; }
+.brief .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 14px; }
+.brief .two > div { background: var(--ledge); border: 1px solid var(--seam); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.brief .two h3 { margin: 0 0 6px; }
+.brief .two ul { margin: 0; padding-left: 20px; font-size: .92rem; }
+.brief .codetable { min-width: 560px; }
+.brief .codetable td:last-child { white-space: nowrap; }
+.brief .codetable tr.grp th { background: var(--stone); font-size: .82rem; padding-top: 10px; padding-bottom: 10px; }
+.brief .codetable tr.grp a { color: var(--bone); text-decoration: none; }
+.brief .codetable tr.grp a:hover { text-decoration: underline; }
+.brief .page-foot { max-width: 760px; margin-top: 48px; font-size: .85rem; }
+@media (max-width: 560px) {
+  .brief .glance, .brief .two { grid-template-columns: 1fr; }
+  .brief .toc ol { columns: 1; }
+}
