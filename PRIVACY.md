@@ -47,6 +47,12 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   Hoard does this by itself while it's open, as often as you chose, to see what's new or updated. It downloads
   nothing without you.
 - **The image hosts those stores use,** to fetch product images.
+- **No one, when you share a set.** **Share** in the Sets tab makes a link to the set viewer on Hoard's website
+  (`hoard.furryup.link`) with the set itself after the link's `#`: its name, note and photo links, and each
+  product's store, name, creator, store page and picture address. A browser never sends what's after `#`, so
+  the website never receives the set, and Hoard uploads nothing. Your own products (Local) and hidden ones are
+  never in a link. Whoever opens it loads each picture from its store's image host, and the photos from the
+  photo sites they're on, as any page with those pictures would.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
   day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A

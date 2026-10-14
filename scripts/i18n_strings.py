@@ -25,17 +25,19 @@ from hoard import common, config, downloader, i18n, library, server  # noqa: E40
 
 # what to do on each page, in turn: open a panel or a view, then read what it shows
 STEPS = {
-    "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab", "Escape", "#selectBtn", "#selectBtn",
+    "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab", "Escape", "#setsTab",
+          ".setbox summary >> nth=0", "Escape", "#selectBtn", "#selectBtn",
           ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]',
           # the setup assistant, each step up to the last (not Finish, which would start reading the stores)
           "#settingsBtn", "#setupAgain", *["#setupNext"] * 8, "Escape"],
     "/downloads": ["", ".slot >> nth=0", "Escape", '[data-view="updates"]', '[data-view="archive"]', '[data-view="removed"]',
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
-                   "Escape", "#settingsBtn"],
+                   "Escape", "#setsTab", "Escape", "#settingsBtn"],
 }
 
 
 def sample_server(root: Path, lang: str) -> server.AppServer:
+    """The sample library, served. It writes a set to Hoard's data folder (HOARD_DATA_DIR): give it one of its own."""
     srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True,
                                               "display": {"language": lang}}, lan=False)
     old = "2025-01-01T00:00:00+00:00"
@@ -55,6 +57,13 @@ def sample_server(root: Path, lang: str) -> server.AppServer:
     rec = man.record("1", "Kitsu Studio", "Rusk")
     rec["files"]["f"] = {"path": "rusk.unitypackage", "size": 3}
     man.save()
+    from hoard import sets   # a set: one product downloaded, one yours to download, one to buy (shared with you)
+    sets.SetStore().change({"action": "import", "code": sets.share_code({
+        "name": "Rusk, winter", "note": "Rusk(winter)", "photos": ["https://i.imgur.com/abc.png"],
+        "items": ["booth:rusk", "gumroad:mochi", "jinxxy:yuzu"],
+        "products": {"booth:rusk": {"store": "booth", "name": "Rusk", "creator": "Kitsu Studio"},
+                     "gumroad:mochi": {"store": "gumroad", "name": "Mochi", "creator": "Mochi Works"},
+                     "jinxxy:yuzu": {"store": "jinxxy", "name": "Yuzu", "creator": "Citrus", "url": "https://jinxxy.com/citrus/yuzu"}}})[0]})
     srv.jobs.history = [{"id": "j1", "task": "sync", "label": "Sync: Booth", "stores": ["booth"], "started": old, "ended": old,
                          "outcome": "failed", "message": "Stopped: Booth went away", "report": None, "log": ["Reading Booth"]}]
     return srv
@@ -64,8 +73,10 @@ def collect(lang: str) -> list[str]:
     from playwright.sync_api import sync_playwright
     found: dict[str, None] = {}
     from unittest import mock
-    # the setup assistant saves settings on its way through: kept in memory, so the sample's never become yours
-    with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server, "save_config"):
+    # the setup assistant saves settings on its way through: kept in memory, so the sample's never become yours; and
+    # the sample's own files (its set) go in a data folder of its own
+    with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server, "save_config"), \
+            mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(Path(tmp) / "data")}):
         srv = sample_server(Path(tmp), lang)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:

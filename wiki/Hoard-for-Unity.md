@@ -28,8 +28,8 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   `Library/Hoard/Unzipped` folder (never into `Assets`), checking it against the zip's checksum as it goes, then
   opens Unity's import dialog. An unpacked copy is reused while the `.zip` is unchanged, and old ones go after a
   day. A `.zip` locked with a password is left out: unzip it yourself.
-- **Import set** (0.8.0, with Hoard 4.0). The **Sets** pill (shown once you've made a set in Hoard's Downloads) shows
-  one set's products, with **Import set**: their packages are imported one after another, each through Unity's import
+- **Import set** (0.8.0, with Hoard 4.0). The **Sets** pill (shown once you've made a [set](Sets) in Hoard) shows
+  one set's downloaded products, with **Import set**: their packages are imported one after another, each through Unity's import
   dialog (**Cancel** skips one), in name order (with Hoard 4.0.0 to 4.0.2, what's needed first). Packages already
   all in the project are left out, and it says which tools (lilToon, say) the set still needs. Importing carries on
   when a package's scripts make the editor reload; **Stop** ends it.

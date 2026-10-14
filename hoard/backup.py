@@ -66,7 +66,9 @@ def make(cfg: dict, settings: dict, lib, unlocked: bool) -> dict:
         "settings": {**{k: settings[k] for k in SETTINGS if k in settings}, "root": str(root_dir(cfg)),
                      "library_folders": [str(f) for f in libraries.other_folders(cfg)]},
         "tags": tags,
-        "sets": [{**s, "items": [k for k in s["items"] if k not in out]} for s in SetStore().load()["sets"]],
+        "sets": [{**s, "items": [k for k in s["items"] if k not in out],
+                  **({"products": {k: p for k, p in s["products"].items() if k not in out}} if s.get("products") else {})}
+                 for s in SetStore().load()["sets"]],
         "marks": chosen,
         "library": {"items": [{k: i.get(k) for k in ITEM_FIELDS} for i in items],
                     "stores": {s: {**{k: v for k, v in info.items() if k in ("updated", "first_read", "source")},
@@ -168,7 +170,10 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
         with _sets._lock:
             given, had = SetStore.sanitize({"sets": doc["sets"]}), {s["id"]: s for s in SetStore().load()["sets"]}
             for s in given["sets"]:
-                s["items"] += [k for k in (had.get(s["id"]) or {"items": []})["items"] if k in keep and k not in s["items"]]
+                before = had.get(s["id"]) or {"items": []}
+                s["items"] += [k for k in before["items"] if k in keep and k not in s["items"]]
+                s["products"] = {**(s.get("products") or {}),
+                                 **{k: p for k, p in (before.get("products") or {}).items() if k in keep}}
             SetStore()._save(SetStore.sanitize(given))
     with MarkStore._lock:
         ms = MarkStore()

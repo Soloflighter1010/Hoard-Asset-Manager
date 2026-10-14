@@ -433,3 +433,33 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .brief .glance, .brief .two { grid-template-columns: 1fr; }
   .brief .toc ol { columns: 1; }
 }
+
+/* The set viewer (set.html): a set someone shared from Hoard, read from the page's link */
+.setviewer .sv { max-width: 880px; margin: 0 auto; padding: 40px 0 56px; border-top: 0; }
+.setviewer section.sv-photos, .setviewer section.sv-get { padding: 24px 0; border-top: 0; }
+.setviewer h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 .3em; overflow-wrap: anywhere; }
+.setviewer h2 { font-size: clamp(1.3rem, 2.6vw, 1.7rem); margin: 28px 0 .6em; }
+.setviewer .eyebrow { margin: 0 0 6px; color: var(--gold); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+.setviewer .lead { font-size: 1.15rem; color: var(--dust); margin: 0 0 1em; }
+.sv-note { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 14px 18px; }
+.sv-note p { margin: 0; overflow-wrap: anywhere; }
+.sv-photos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.sv-photos img, .sv-photos .none { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px;
+  border: 1px solid var(--seam); background: var(--stone); }
+.sv-items { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; }
+.sv-item { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px;
+  background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); }
+.sv-item .pic { width: 72px; height: 72px; border-radius: 10px; object-fit: cover; background: var(--stone); display: block; }
+.sv-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sv-text b { overflow-wrap: anywhere; }
+.sv-by { color: var(--dust); font-size: .9rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sv-by .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; }
+.sv-none { color: var(--dust); font-size: .9rem; }
+.sv-get input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 8px 12px; border-radius: 12px;
+  border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 .9rem var(--body); }
+.sv-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+@media (max-width: 560px) {
+  .sv-item { grid-template-columns: 56px minmax(0, 1fr); }
+  .sv-item .pic { width: 56px; height: 56px; }
+  .sv-item .button { grid-column: 1 / -1; }
+}

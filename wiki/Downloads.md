@@ -149,20 +149,19 @@ a different name, the old file stays in the folder too; Hoard never deletes your
 
 ### Sets
 
-From 4.0, a set groups products you use together: an avatar, its outfits and hair, and the shaders they need, say.
-Make one with **New set** (under **Sets** in the sidebar), or choose several products and use **Sets** in the
-selection bar (or right-click): **New set from these**, or add them to one; a product's details list its sets, with **Add** and **×** to take it out. From 4.0.4,
-**Make a set** in **Projects** makes one of the products a Unity project uses.
-Choose a set in the sidebar to see just its products; **Rename set** and **Delete set** are beside its filter (deleting
-a set leaves its products as they are). Sets are kept in `sets.json` in Hoard's app-data folder, and listed in
-`catalog.json` for Hoard for Unity, whose **Import set** imports them in one go (see
-[Hoard for Unity](Hoard-for-Unity)).
+A set groups products you use together: an avatar, its outfits and hair, and the shaders they need. They're in the
+**Sets** tab (in the bar at the top), where a set can hold products whether they're downloaded or not, and be
+shared as a link: see [Sets](Sets). Here, the sidebar's **Sets** filters Downloads to one set's downloaded
+products (with **Rename set** and **Delete set** beside its filter), **New set** makes one, and choosing several
+products then **Sets** in the selection bar (or right-click) makes a set of them or adds them to one; a product's
+details list its sets, with **Add** and **×**. Hoard for Unity's **Import set** imports a set's downloaded products
+in one go (see [Hoard for Unity](Hoard-for-Unity)).
 
 ### Previous versions
 
 From 4.0, when an update replaces a file (the same name, new contents), the old one is kept: it goes to
 `_Previous versions/<date and time>/` beside it, in the product's own folder (or the subfolder of it the file is in,
-as some Gumroad products have; from 4.1.2 these are listed too). A product's details in Downloads list them under
+as some Gumroad products have; from 4.2.0 these are listed too). A product's details in Downloads list them under
 **Previous versions**, with when each was replaced and **Restore**, which puts it back as the current file and keeps
 the one it replaces there in turn, so you can change your mind. Hoard keeps the last one of each file unless you
 choose otherwise in [Settings](Settings) (**Previous versions**: none, or the last 1, 2, 3 or 5); older ones are

@@ -1549,6 +1549,9 @@ function askName(title, value = "", opts = {}) {   // opts: {list: a datalist's 
     document.body.appendChild(d);
     const input = d.querySelector("input");
     input.value = value;
+    // Enter is OK (a form's Enter goes to its first button, which is Cancel), but not while an input method is
+    // still putting a word together (Japanese, Korean)
+    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); d.close("yes"); } });
     d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
     d.showModal();
     input.select();
@@ -1584,6 +1587,193 @@ function wireProjects() {
       if (!await ask(`Forget ${p.name}? It comes back next time you open it in Unity with Hoard's window.`, "Forget")) return;
       await apiPost("/api/projects/forget", { id: p.id });
       loadProjects();
+    }
+  });
+}
+/* Sets (the Sets tab; hoard/sets.py): products you use together, such as an avatar, its outfits and the shaders they
+   need, whether you've downloaded them or not, and whether they're yours yet: a set shared with you lists what to buy,
+   and where. A set is shared as a link to the set viewer on Hoard's website, with the set itself after its "#" (so
+   it's never sent anywhere): nothing is uploaded, and the same link pasted here adds the set. */
+const setById = id => (DATA.sets || []).find(s => s.id === id);
+function setOptions(first, withNew = true) {
+  return `<option value="">${esc(tr(first))}</option>` +
+    (DATA.sets || []).map(s => `<option value="${esc(s.id)}" translate="no">${esc(s.name)}</option>`).join("") +
+    (withNew ? `<option value="new">${esc(tr("New set..."))}</option>` : "");
+}
+function setsSection(a) {   // a product's details: the sets it's in, and Add it to one
+  const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
+  return `<h3>Sets</h3><div class="chips">${mine.map(s => `<span class="tagpill"><button class="chip" data-act="showset" data-set="${esc(s.id)}" translate="no">${esc(s.name)}</button>` +
+      `<button class="untag" data-act="unset" data-set="${esc(s.id)}" aria-label="${esc(tr("Take it out of {0}", s.name))}">×</button></span>`).join("") ||
+      `<span class="none">${esc(tr("In no set yet"))}</span>`}</div>` +
+    `<div class="tagadd"><select id="setPick" aria-label="Set to add it to">${setOptions("Add it to a set")}</select>` +
+    `<button class="ghost sm" data-act="toset">Add</button></div>`;
+}
+async function changeSets(body) {
+  const r = await apiPost("/api/sets", body);
+  if (!r.ok) { toast(r.data.error || "That set couldn't be changed."); return null; }
+  await T.reload();
+  if (!$("#setsWin").hidden) loadSetsWin();
+  return r.data;
+}
+async function addToSet(list, id) {
+  const items = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!items.length) return;
+  if (!id) { toast("Choose a set first."); return; }
+  if (id === "new") {
+    const name = await askName("Name the new set");
+    if (!name) return;
+    const done = await changeSets({ action: "create", name, items });
+    if (done) toast(tr(items.length === 1 ? "Made the set {0}, with this in it." : "Made the set {0}, with {1} products in it.", name, items.length));
+    return;
+  }
+  const done = await changeSets({ action: "add", id, items });
+  if (done) toast(tr(items.length === 1 ? "Added it to {0}." : "Added {1} products to {0}.", (setById(id) || {}).name || "", items.length));
+}
+// the selection bar's and right-click's Sets menu, on both pages
+const SET_ACTIONS = () => ({ name: "Sets", items: [{ label: "New set from these...", run: list => addToSet(list, "new") },
+  ...(DATA.sets || []).map(s => ({ label: tr("Add to {0}", s.name), raw: true, run: list => addToSet(list, s.id) }))] });
+
+let SETS = null;   // the Sets tab's sets (/api/sets), each product as it is here
+const setsOpen = new Set();   // the sets shown open in the Sets tab
+function openSetsWin(open, show) {   // show: a set's id, to open it there
+  const w = $("#setsWin"), on = open ?? w.hidden;
+  w.hidden = !on;
+  $("#setsTab").setAttribute("aria-expanded", String(on));
+  if (show) setsOpen.add(show);
+  if (on) loadSetsWin();
+}
+async function loadSetsWin() {
+  const body = $("#setsBody");
+  try {
+    const r = await api("/api/sets", { cache: "no-store" });
+    if (!r.ok) throw new Error(String(r.status));
+    SETS = await r.json();
+    body.innerHTML = renderSetsWin(SETS);
+  } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Your sets couldn't be read just now."))}</p>`; }
+}
+const setOf = el => (SETS && SETS.sets.find(s => s.id === el.closest("[data-setbox]").dataset.setbox)) || null;
+function setProduct(i, n) {
+  const store = STORE_NAMES[i.store] || "Local";
+  const pic = i.pic ? `<img src="${esc(keyed(i.pic))}" alt="" loading="lazy" decoding="async">` : `<span class="ph" aria-hidden="true"></span>`;
+  const buy = storeUrl(i.store, i.url);
+  const status = i.download != null ? `<a href="/downloads#open=${+i.download}">${esc(tr("Downloaded"))}</a>`
+    : i.owned ? `<span class="st owned">${esc(tr("Yours, not downloaded"))}</span>`
+    : i.local ? `<span class="st">${esc(tr("Your own, not here now"))}</span>`
+    : `<span class="st buy">${esc(tr("Not yours yet"))}</span>`;
+  return `<li class="sp${i.owned || i.download != null ? "" : " wanted"}">${pic}<span class="nm"><b translate="no">${esc(i.name)}</b>` +
+    `<span class="muted" translate="no">${i.creator ? esc(tr("by {0}", i.creator)) + " · " : ""}${esc(store)}</span>${status}</span>` +
+    (buy ? `<a class="ghost sm" href="${esc(storeUrl(i.store, i.url))}" target="_blank" rel="noopener noreferrer">${esc(tr(i.owned ? "On {0}" : "Buy on {0}", store))}` +
+      `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span></a>` : "") +
+    `<button class="untag" data-setx="out" data-n="${n}" aria-label="${esc(tr("Take {0} out of the set", i.name))}">×</button></li>`;
+}
+function renderSetsWin(data) {
+  const top = `<div class="row sets-top"><button class="primary sm" data-setx="new">New set</button>` +
+    `<button class="ghost sm" data-setx="import">Add a shared set...</button></div>` +
+    (data.hidden_left_out ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "");
+  if (!data.sets.length) return top + `<p class="none">No sets yet. A set groups products you use together, such as an avatar,
+    its outfits and the shaders they need, downloaded or not. Make one here, or choose products in the Library or Downloads and
+    use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`;
+  return top + data.sets.map(s => {
+    const got = s.items.filter(i => i.download != null).length, owned = s.items.filter(i => i.owned && i.download == null).length;
+    const buy = s.items.length - got - owned;
+    const counts = [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length),
+                    got && tr("{0} downloaded", got), owned && tr("{0} to download", owned), buy && tr("{0} to buy", buy)].filter(Boolean).join(", ");
+    return `<details class="proj setbox" data-setbox="${esc(s.id)}"${setsOpen.has(s.id) ? " open" : ""}><summary><b translate="no">${esc(s.name)}</b>` +
+      `<span class="n">${esc(counts)}</span>${s.note ? `<span class="meta" translate="no">${esc(s.note.split("\n")[0])}</span>` : ""}</summary>` +
+      `<div class="row">` +
+      `<button class="primary sm" data-setx="share">Share...</button>` +
+      (owned ? `<button class="ghost sm" data-setx="download">${esc(tr(owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", owned))}</button>` : "") +
+      (got ? `<a class="ghost sm" href="/downloads#set=${esc(s.id)}">Show in Downloads</a>` : "") +
+      `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div>` +
+      (s.items.length ? `<ul class="setprods">${s.items.map(setProduct).join("")}</ul>`
+        : `<p class="none">Nothing in it yet: choose products in the Library or Downloads, and use <strong>Sets</strong> in the selection bar.</p>`) +
+      `<h4>Note</h4><textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together (shared with the set)"))}" ` +
+      `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(s.note || "")}</textarea>` +
+      `<div class="row"><button class="ghost sm" data-setx="note">Save the note</button></div>` +
+      `<h4>Photos</h4>` +
+      (s.photos.length ? `<ul class="setphotos">${s.photos.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
+        `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a><button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button></li>`).join("")}</ul>` : "") +
+      `<p class="hint">${esc(tr("Your own photos of it, shown with the set where it's shared: links to pictures you've put on a photo site ({0} and others). Hoard keeps the links, not the pictures.",
+        (data.photo_hosts || []).slice(0, 3).join(", ")))}</p>` +
+      `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div></details>`;
+  }).join("");
+}
+// A set's link to share: copied, opened in the viewer, or shown to copy by hand
+function showShare(s, got) {
+  const d = document.createElement("dialog");
+  d.className = "ask share";
+  const left = got.left_out ? `<p class="hint">${esc(tr(got.left_out === 1 ? "1 product isn't in it: your own (Local) and hidden ones stay on this computer."
+    : "{0} products aren't in it: your own (Local) and hidden ones stay on this computer.", got.left_out))}</p>` : "";
+  d.innerHTML = `<form method="dialog"><p><b translate="no">${esc(s.name)}</b></p>` +
+    `<p>${esc(tr(got.count === 1 ? "Anyone with this link sees the set's 1 product, where to buy it, and your note and photos. Paste it into Hoard's Sets (Add a shared set) to add it there."
+      : "Anyone with this link sees the set's {0} products, where to buy each, and your note and photos. Paste it into Hoard's Sets (Add a shared set) to add it there.", got.count))}</p>` +
+    `<p><input readonly value="${esc(got.link)}" aria-label="${esc(tr("The set's link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` + left +
+    `<p class="hint">${esc(tr("The set is in the link itself, after its #: nothing is uploaded, and the page shows each product's picture from its store."))}</p>` +
+    `<div class="ask-row"><a class="ghost" href="${esc(safeUrl(got.link))}" target="_blank" rel="noopener noreferrer">Open it</a>` +
+    `<button class="ghost" value="code" type="button" data-copy="code">Copy the code</button>` +
+    `<button class="primary" value="link" type="button" data-copy="link">Copy the link</button>` +
+    `<button class="ghost" value="no">Close</button></div></form>`;
+  document.body.appendChild(d);
+  d.addEventListener("click", async e => {
+    const b = e.target.closest("[data-copy]"); if (!b) return;
+    const text = b.dataset.copy === "code" ? got.code : got.link;
+    try { await navigator.clipboard.writeText(text); toast(b.dataset.copy === "code" ? "Copied the set's code." : "Copied the set's link."); }
+    catch (err) { const i = d.querySelector("input"); i.value = text; i.select(); }
+  });
+  d.addEventListener("close", () => d.remove(), { once: true });
+  d.showModal();
+  d.querySelector("input").select();
+}
+function wireSets() {
+  makeWindow($("#setsWin"));
+  WINDOWS.setsWin = () => openSetsWin(false);
+  $("#setsTab").addEventListener("click", () => openSetsWin());
+  $("#setsWin").addEventListener("toggle", e => {   // which sets are open, kept as the list is drawn again
+    const box = e.target.closest && e.target.closest("[data-setbox]");
+    if (box) { if (box.open) setsOpen.add(box.dataset.setbox); else setsOpen.delete(box.dataset.setbox); }
+  }, true);
+  $("#setsWin").addEventListener("click", async e => {
+    const b = e.target.closest("[data-setx]"); if (!b) return;
+    const act = b.dataset.setx;
+    if (act === "new") {
+      const name = await askName("Name the new set");
+      if (!name) return;
+      const done = await changeSets({ action: "create", name, items: [] });
+      if (done && done.made) { setsOpen.add(done.made); loadSetsWin(); toast("Add products to it: choose them in the Library or Downloads, and use Sets in the selection bar."); }
+      return;
+    }
+    if (act === "import") {
+      const code = await askName("Paste the set's link or code", "", { max: 262144 });
+      if (!code) return;
+      const done = await changeSets({ action: "import", code });
+      if (done && done.made) { setsOpen.add(done.made); loadSetsWin(); toast("Added the shared set. What isn't yours yet says where to buy it."); }
+      return;
+    }
+    const s = setOf(b); if (!s) return;
+    if (act === "share") {
+      const r = await apiPost("/api/sets", { action: "share", id: s.id });
+      if (!r.ok) { toast(r.data.error || "That set couldn't be shared."); return; }
+      showShare(s, r.data);
+    } else if (act === "download") {
+      const keys = s.items.filter(i => i.owned && i.download == null).map(i => i.key);
+      if (keys.length) T.download(keys);
+    } else if (act === "rename") {
+      const name = await askName("Rename the set", s.name);
+      if (name && name !== s.name) changeSets({ action: "rename", id: s.id, name });
+    } else if (act === "delete") {
+      if (await ask(tr("Delete the set {0}? The products in it stay as they are.", s.name), "Delete set", true)) changeSets({ action: "delete", id: s.id });
+    } else if (act === "out") {
+      const i = s.items[+b.dataset.n];
+      if (i) changeSets({ action: "remove", id: s.id, items: [i.key] });
+    } else if (act === "note") {
+      const done = await changeSets({ action: "note", id: s.id, note: b.closest("[data-setbox]").querySelector("[data-setnote]").value });
+      if (done) toast("Saved the note.");
+    } else if (act === "photo") {
+      if (s.photos.length >= 8) { toast("A set has up to 8 photos."); return; }
+      const url = await askName("Paste a link to a photo on a photo site", "", { max: 600 });
+      if (url) changeSets({ action: "photos", id: s.id, photos: [...s.photos, url] });
+    } else if (act === "unphoto") {
+      changeSets({ action: "photos", id: s.id, photos: s.photos.filter((u, n) => n !== +b.dataset.n) });
     }
   });
 }
@@ -1876,10 +2066,10 @@ const TOUR_STEPS = [
     title: () => tr("Tags"),
     body: () => esc(tr("Tags are your own words for things: an outfit, a base, a style. Add one here, or to many at once from the selection bar. Suggested tags come from words in your items' names.")),
     done: () => ((tourOpen() || {}).tags || []).length > TOUR.tags },
-  { id: "sets", page: "downloads", at: () => $("#newSet"),
+  { id: "sets", page: "downloads", at: () => $("#setsTab"),
     enter: () => T.closeDetail(),
     title: () => tr("Sets"),
-    body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits. Make one here, from the selection bar, or from a project in Projects. Hoard for Unity imports a whole set at once.")) },
+    body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not. Make one in Sets, from the selection bar, or from a project in Projects; share it as a link that shows what's in it and where to buy each. Hoard for Unity imports a whole set at once.")) },
   { id: "updates", page: "downloads", at: () => $('#views [data-view="updates"]'),
     title: () => tr("Updates"),
     body: () => esc(tr("When a store has newer files for something you downloaded, it's listed here. Settings can keep the previous version too, so you can go back.")) },

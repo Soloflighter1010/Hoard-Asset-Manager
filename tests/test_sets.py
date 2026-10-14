@@ -42,6 +42,112 @@ class Store(unittest.TestCase):
         self.assertEqual(self.store.load(), {"sets": []})
 
 
+BOOTH_PIC = "https://booth.pximg.net/c/300x300_a2_g5/11d082f4/i/1/03e2fc69_base_resized.jpg"
+SHARED = {"name": "Rusk, winter", "note": "For snowy worlds.\nHair: the short one.", "photos": ["https://i.imgur.com/abc.png"],
+          "items": [RUSK, HOODIE, "local:mypants"],
+          "products": {RUSK: {"store": "booth", "id": "1", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1",
+                              "thumbnail": BOOTH_PIC},
+                       HOODIE: {"store": "booth", "name": "Hoodie for Rusk", "creator": "Mochi"},
+                       "local:mypants": {"store": "local", "name": "My Pants"}}}
+
+
+def packed(doc: dict) -> str:
+    """A code, packed by hand: what someone could make without Hoard."""
+    import base64
+    import zlib
+    c = zlib.compressobj(9, zlib.DEFLATED, -15)
+    raw = c.compress(json.dumps(doc).encode()) + c.flush()
+    return sets.CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+class Sharing(unittest.TestCase):
+    """A set shared as a code: the set itself, in a link to the viewer on Hoard's website, never uploaded."""
+
+    def test_there_and_back(self):
+        code, n = sets.share_code(SHARED)
+        self.assertEqual(n, 2, "your own (Local) products aren't shared")
+        self.assertNotIn("pants", json.dumps(sets.from_code(code)).lower())
+        for given in (code, sets.share_link(code), f"  {code[:20]}\n{code[20:]} ", "Look: " + sets.share_link(code)):
+            got = sets.from_code(given)
+            self.assertEqual((got["name"], got["note"], got["photos"], got["items"]),
+                             ("Rusk, winter", SHARED["note"], SHARED["photos"], [RUSK, HOODIE]))
+            self.assertEqual(got["products"][RUSK]["thumbnail"], BOOTH_PIC)
+            self.assertEqual(got["products"][RUSK]["url"], "https://booth.pm/ja/items/1")
+        self.assertTrue(sets.share_link(code).startswith("https://hoard.furryup.link/set.html#H1."))
+
+    def test_what_a_code_cant_bring(self):
+        """A code is from anyone: every part is checked as Hoard's own file is."""
+        got = sets.from_code(packed({"v": 1, "n": "\u202eevil", "p": ["https://evil.example/x.png", "http://i.imgur.com/a.png",
+                                                                       "https://i.imgur.com/ok.png"], "i": [
+            ["booth", "1", "Rusk", "Kitsu", "javascript:alert(1)", "https://evil.example/pic.jpg"],
+            ["booth", "2", "Hoodie", "Mochi", "https://booth.pm.evil.example/items/2", "https://public-files.gumroad.com/x"],
+            ["local", "", "Mine"], ["nowhere", "", "Thing"], ["booth", "3", ""], "not a row", [7, 8]]}))
+        self.assertEqual(got["name"], "evil")
+        self.assertEqual(got["photos"], ["https://i.imgur.com/ok.png"], "photos only from the photo sites, https only")
+        self.assertEqual(got["items"], [tag_key("booth", "Rusk"), tag_key("booth", "Hoodie")])
+        for p in got["products"].values():
+            self.assertNotIn("url", p, "a store page only on the store's own site")
+            self.assertNotIn("thumbnail", p, "a picture only from the store's own image host")
+        for bad in ("", "nonsense", "H1.", "H1.!!!!", "H1." + "A" * 400, packed({"v": 2, "i": []}), packed({"v": 1, "i": []}),
+                    sets.CODE_PREFIX + "x" * (sets.MAX_CODE + 1), None, 7):
+            with self.subTest(bad=str(bad)[:30]), self.assertRaises(ValueError):
+                sets.from_code(bad)
+
+    def test_a_code_that_unpacks_to_too_much(self):
+        """A small code that unpacks to gigabytes (a "zip bomb") is refused before it's all unpacked."""
+        import base64
+        import zlib
+        c = zlib.compressobj(9, zlib.DEFLATED, -15)
+        raw = c.compress(b'{"v":1,"i":[],"n":"' + b"a" * (64 << 20)) + c.flush()
+        code = sets.CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        self.assertLess(len(code), 200_000)
+        with self.assertRaises(ValueError):
+            sets.from_code(code)
+
+    def test_added_with_its_products(self):
+        store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
+        made = store.change({"action": "import", "code": sets.share_code(SHARED)[0]})["made"]
+        again = store.change({"action": "import", "code": sets.share_code(SHARED)[0]})["made"]
+        mine = {s["id"]: s for s in store.load()["sets"]}
+        self.assertEqual(mine[made]["name"], "Rusk, winter")
+        self.assertEqual(mine[again]["name"], "Rusk, winter (2)", "a set of yours keeps its name")
+        self.assertEqual(mine[made]["products"][RUSK]["creator"], "Kitsu")
+        self.assertEqual(mine[made]["photos"], ["https://i.imgur.com/abc.png"])
+
+    def test_note_and_photos(self):
+        store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
+        made = store.change({"action": "create", "name": "x", "items": [RUSK]},
+                            details=lambda k: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/1"})["made"]
+        self.assertEqual(store.load()["sets"][0]["products"][RUSK]["url"], "https://booth.pm/ja/items/1", "what it is, kept")
+        store.change({"action": "note", "id": made, "note": "line one\r\n\u202eline two"})
+        self.assertEqual(store.load()["sets"][0]["note"], "line one\nline two")
+        store.change({"action": "photos", "id": made, "photos": ["https://i.gyazo.com/a.png"]})
+        for bad in (["https://evil.example/a.png"], ["https://i.imgur.com/a.png"] * 9, ["javascript:alert(1)"]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                store.change({"action": "photos", "id": made, "photos": bad})
+        self.assertEqual(store.load()["sets"][0]["photos"], ["https://i.gyazo.com/a.png"])
+
+    def test_the_viewer_checks_as_hoard_does(self):
+        """The viewer (site/set.js) and its page's Content-Security-Policy allow the same hosts Hoard does."""
+        import re
+        site = Path(__file__).resolve().parent.parent / "site"
+        js = (site / "set.js").read_text("utf-8")
+        def js_list(name):
+            return set(re.findall(r'"([a-z0-9.-]+\.[a-z]+)"', re.search(name + r" = (.*?);", js, re.S).group(1)))
+        self.assertEqual(js_list("PHOTO_HOSTS"), set(sets.PHOTO_HOSTS))
+        self.assertEqual(js_list("STORE_IMAGE_HOSTS"), {h for hs in sets.STORE_IMAGE_HOSTS.values() for h in hs})
+        self.assertEqual(js_list("STORE_SITES"), {h for hs in sets.STORE_LINK_SITES.values() for h in hs})
+        self.assertIn('"H1."', js)
+        self.assertNotIn("innerHTML", js, "nothing from a code becomes page markup")
+        html = (site / "set.html").read_text("utf-8")
+        csp = re.search(r'http-equiv="Content-Security-Policy" content="([^"]+)"', html).group(1)
+        img = re.search(r"img-src ([^;]+)", csp).group(1).split()
+        self.assertEqual(set(img) - {"'self'"}, {"https://" + h for h in set(sets.PHOTO_HOSTS) |
+                                                 {h for hs in sets.STORE_IMAGE_HOSTS.values() for h in hs}})
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("default-src 'none'", csp)
+
+
 class InTheCatalog(unittest.TestCase):
     def test_sets_by_their_products_folders(self):
         tmp = Path(tempfile.mkdtemp())
@@ -128,6 +234,166 @@ class Page(unittest.TestCase):
         [s] = sets.SetStore().load()["sets"]
         self.assertEqual((s["name"], s["items"]), ("Rusk, winter", [RUSK]))
 
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class Tab(unittest.TestCase):
+    """The Sets tab: sets of any products, downloaded or not, yours or not yet; shared, and added from a share."""
+
+    def setUp(self):
+        import threading
+        from hoard import config, library, server
+        from hoard.marks import MarkStore
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})
+        env.start()
+        self.addCleanup(env.stop)
+        root = tmp / "dl"
+        folder = root / "Booth" / "Kitsu" / "Rusk"   # Rusk is downloaded; the hoodie only owned
+        folder.mkdir(parents=True)
+        (folder / "p.unitypackage").write_bytes(b"x")
+        man = downloader.Manifest(root / "Booth")
+        rec = man.record("1", "Kitsu", "Rusk")
+        rec.update(name="Rusk", creator="Kitsu")
+        rec["files"]["f"] = {"path": "p.unitypackage", "size": 1}
+        man.save()
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True,
+                                                      "ui": {"toured": True}}, lan=False)
+        with self.srv.lib.lock:   # (in memory only)
+            self.srv.lib.data["items"] = [
+                library.item("booth", "1", name="Rusk", creator="Kitsu", url="https://booth.pm/ja/items/1"),
+                library.item("booth", "2", name="Hoodie for Rusk", creator="Mochi", url="https://booth.pm/ja/items/2"),
+                library.item("booth", "3", name="Secret Thing", creator="Shy", url="https://booth.pm/ja/items/3")]
+        MarkStore().set_pin("2468")
+        MarkStore().change("hidden", [tag_key("booth", "Secret Thing")], True)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def api(self, path, body=None):
+        import urllib.error
+        import urllib.request
+        from hoard.safety import ACCESS_HEADER
+        req = urllib.request.Request(self.srv.entry_url().split("/#")[0] + path, method="POST" if body is not None else "GET",
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"Content-Type": "application/json", ACCESS_HEADER: self.srv.key})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return {"status": e.code, **json.loads(e.read() or b"{}")}
+
+    def test_hidden_products_stay_out_while_locked(self):
+        secret = tag_key("booth", "Secret Thing")
+        made = sets.SetStore().change({"action": "create", "name": "s", "items": [RUSK, secret]})["made"]
+        view = self.api("/api/sets")
+        self.assertEqual([i["key"] for i in view["sets"][0]["items"]], [RUSK])
+        self.assertTrue(view["hidden_left_out"])
+        self.assertNotIn("Secret", json.dumps(view))
+        shared = self.api("/api/sets", {"action": "share", "id": made})
+        self.assertEqual((shared["count"], shared["left_out"]), (1, 1))
+        self.assertNotIn("Secret", json.dumps(sets.from_code(shared["code"])), "never in a code, locked or not")
+        self.assertNotIn(secret, self.api("/api/library")["sets"][0]["items"])
+        self.assertEqual(self.api("/api/sets", {"action": "add", "id": made, "items": [secret]}).get("ok"), True)
+        self.assertEqual(sets.SetStore().load()["sets"][0]["items"], [RUSK, secret], "nor taken out, while locked")
+
+    def test_make_share_and_add_a_set(self):
+        from playwright.sync_api import sync_playwright
+        code = sets.share_code({"name": "Fox outfit", "items": ["jinxxy:foxears", RUSK], "products": {
+            "jinxxy:foxears": {"store": "jinxxy", "name": "Fox Ears", "creator": "Tails", "url": "https://jinxxy.com/tails/foxears"},
+            RUSK: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"}}})[0]
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.locator("#grid .slot").first.wait_for()
+            # in the Library: one downloaded and one not, made a set of, from the right-click menu; Enter names it
+            page.locator('#grid .slot[aria-label^="Rusk"]').click(modifiers=["Control"])
+            page.locator('#grid .slot[aria-label^="Hoodie for Rusk"]').click(modifiers=["Control"])
+            page.locator('#grid .slot[aria-label^="Rusk"]').click(button="right")
+            page.get_by_role("menuitem", name="New set from these...").click()
+            page.fill("dialog[open] #askName", "Rusk, winter")
+            page.keyboard.press("Enter")
+            page.get_by_text("Made the set Rusk, winter, with 2 products in it.").wait_for()
+            page.keyboard.press("Escape")
+            page.click("#setsTab")
+            box = page.locator(".setbox", has_text="Rusk, winter")
+            self.assertIn("2 products, 1 downloaded, 1 to download", box.locator("summary").inner_text())
+            box.locator("summary").click()
+            self.assertIn("Yours, not downloaded", box.locator(".sp", has_text="Hoodie for Rusk").inner_text())
+            self.assertEqual(box.locator(".sp", has_text="Rusk").first.locator("a").first.get_attribute("href"), "/downloads#open=0")
+            # shared: the link holds the set
+            box.locator('[data-setx="share"]').click()
+            link = page.locator("dialog.share input").input_value()
+            self.assertTrue(link.startswith("https://hoard.furryup.link/set.html#H1."))
+            self.assertEqual(sets.from_code(link)["items"], [RUSK, HOODIE])
+            page.locator("dialog.share button", has_text="Close").click()
+            # added from someone else's: what isn't yours says where to buy it
+            page.click('[data-setx="import"]')
+            page.fill("dialog[open] #askName", sets.share_link(code))
+            page.keyboard.press("Enter")
+            page.get_by_text("Added the shared set.").wait_for()
+            fox = page.locator(".setbox", has_text="Fox outfit")
+            self.assertIn("1 to buy", fox.locator("summary").inner_text())
+            ears = fox.locator(".sp", has_text="Fox Ears")
+            self.assertIn("Not yours yet", ears.inner_text())
+            self.assertEqual(ears.get_by_role("link", name="Buy on Jinxxy").get_attribute("href"), "https://jinxxy.com/tails/foxears")
+            # a note and a photo, kept with the set and shared with it
+            fox.locator("[data-setnote]").fill("Cozy fox look")
+            fox.locator('[data-setx="note"]').click()
+            page.get_by_text("Saved the note.").wait_for()
+            page.locator('.setbox', has_text="Fox outfit").locator('[data-setx="photo"]').click()
+            page.fill("dialog[open] #askName", "https://evil.example/a.png")
+            page.keyboard.press("Enter")
+            page.get_by_text("isn't a link to a picture on a photo site").wait_for()
+            self.assertEqual(errors, [])
+            browser.close()
+        fox = next(s for s in sets.SetStore().load()["sets"] if s["name"] == "Fox outfit")
+        self.assertEqual(fox.get("note"), "Cozy fox look")
+        self.assertNotIn("photos", fox)
+
+    def test_the_viewer(self):
+        """The set viewer (site/set.html), with its pictures served here: no network, no Hoard."""
+        from playwright.sync_api import sync_playwright
+        site = Path(__file__).resolve().parent.parent / "site"
+        png = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                            "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
+        code = sets.share_code({"name": "Rusk, winter", "note": "Snowy worlds", "photos": ["https://i.imgur.com/a.png"],
+                                "items": [RUSK, "booth:x"], "products": {
+            RUSK: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1", "thumbnail": BOOTH_PIC},
+            "booth:x": {"store": "booth", "name": "<b>x</b>", "creator": "Mochi"}}})[0]
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            asked = []
+
+            def serve(route):
+                url = route.request.url
+                asked.append(url)
+                if url.startswith("https://hoard.furryup.link/"):
+                    name = url.split("hoard.furryup.link/", 1)[1].split("#")[0].split("?")[0]
+                    kind = {"html": "text/html", "js": "text/javascript", "css": "text/css"}.get(name.rsplit(".", 1)[-1], "application/octet-stream")
+                    return route.fulfill(path=str(site / name), content_type=kind) if (site / name).is_file() else route.fulfill(status=404)
+                return route.fulfill(body=png, content_type="image/png")
+            page.route("**/*", serve)
+            page.goto(sets.share_link(code))
+            page.locator("#setView").wait_for()
+            self.assertEqual(page.locator("#setName").inner_text(), "Rusk, winter")
+            self.assertEqual(page.locator(".sv-item b").all_inner_texts(), ["Rusk", "<b>x</b>"], "names as text")
+            self.assertEqual(page.locator(".sv-item a").get_attribute("href"), "https://booth.pm/ja/items/1")
+            self.assertIn("Snowy worlds", page.locator("#setNote").inner_text())
+            page.wait_for_function("() => [...document.querySelectorAll('.sv-item img, #setPhotos img')].every(i => i.complete && i.naturalWidth)")
+            pictures = sorted(u for u in asked if not u.startswith("https://hoard.furryup.link/"))
+            self.assertEqual(pictures, sorted([BOOTH_PIC, "https://i.imgur.com/a.png"]), "only the store's and the photo site's")
+            self.assertFalse(any("#" in u or "H1." in u for u in asked), "the set never leaves the page")
+            page.goto("https://hoard.furryup.link/set.html#H1.broken")   # (a new code: the viewer reads it again)
+            page.locator("#setProblem").wait_for()
+            self.assertIn("damaged", page.locator("#setProblemWhy").inner_text())
+            browser.close()
 
 if __name__ == "__main__":
     unittest.main()

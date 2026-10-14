@@ -747,6 +747,23 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 12.5px/1.5 ui-monospace, monospace; }
 .proj .muted { font-size: 12px; color: var(--dust); }
 .projects .none { margin: 0; color: var(--dust); }
+/* Sets (the Sets tab): each set's products, downloaded, yours or still to buy */
+.setprods { list-style: none; margin: 10px 0 4px; padding: 0; display: grid; gap: 6px; }
+.setprods .sp { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+  padding: 6px; border-radius: 10px; background: var(--ledge); }
+.setprods .sp img, .setprods .sp .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--cave); }
+.setprods .nm { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 13px; }
+.setprods .nm b { overflow-wrap: anywhere; }
+.setprods .nm .st, .setprods .nm a { font-size: 12px; }
+.setprods .st.buy { color: var(--warn); }
+.setprods .wanted img { opacity: .85; }
+.setbox textarea { min-height: 52px; font: 13px/1.45 var(--body); }
+.setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
+.sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sets .row > button, .sets .row > a { width: auto; flex: none; margin: 0; }
+.sets-top { margin: 0 0 12px; }
+dialog.share { width: min(560px, calc(var(--vw) - 32px)); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); }
@@ -919,7 +936,7 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
+  <nav class="apptabs" aria-label="Views"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button><button id="setsTab" aria-expanded="false" aria-controls="setsWin">Sets</button></nav>
   <label class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search your hoard" aria-label="Search your hoard" autocomplete="off">
@@ -1204,6 +1221,10 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
+</section>
+<section id="setsWin" class="stores projects sets" hidden aria-labelledby="setsTitle">
+  <h2 id="setsTitle">Sets</h2>
+  <div id="setsBody"></div>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
@@ -1666,7 +1687,7 @@ function showDetail(a, focus = true) {
       : `<span class="muted">Hoard lists what you own on ${store}, and doesn't download it: get the files on ${store}.</span>`}</p>` +
     (links ? `<div class="actions links">${links}</div>` : "") +
     `<h3>Organise</h3><div class="marks">${markButtons(a)}</div>` +
-    tagSection(a) +
+    tagSection(a) + setsSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
@@ -2049,6 +2070,9 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "delete-files") { deleteFiles([a]); return; }
+  if (b.dataset.act === "unset") { changeSets({ action: "remove", id: b.dataset.set, items: [a.tag_key] }); return; }
+  if (b.dataset.act === "toset") { addToSet([a], $("#setPick").value); return; }
+  if (b.dataset.act === "showset") { openSetsWin(true, b.dataset.set); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") showCopies(a);
@@ -2093,9 +2117,10 @@ const T = {
     const a = byKey.get(key), k = a && stackKey(a);
     return k && (stackSize.get(key) || 0) > 1 ? DATA.items.filter(x => stackKey(x) === k && inView(x) && shown(x.store)).map(x => x.key) : null;
   },
+  download: keys => startDownload(storesOf(keys), null, null, keys),   // (the Sets tab)
   actions: () => ({   // what the selection bar and right-click offer here
     main: [{ label: "Download", primary: true, run: downloadSelected }],
-    groups: [TAG_ACTIONS, { name: "More", items: [...markActions(state.view),
+    groups: [TAG_ACTIONS, SET_ACTIONS(), { name: "More", items: [...markActions(state.view),
       ...(state.view === "removed" ? [{ label: "Delete for good", danger: true, run: list => purgeItems(list) }] : []),
       { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
   }),
@@ -2252,6 +2277,7 @@ function wireApp() {
   wireTasks();
   wireNews();
   wireProjects();
+  wireSets();
   wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);

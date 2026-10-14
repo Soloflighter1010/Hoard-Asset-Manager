@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -183,6 +184,9 @@ class Patterns(unittest.TestCase):
         import i18n_strings
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
+        env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(Path(tmp.name) / "data")})   # (the sample's set)
+        env.start()
+        self.addCleanup(env.stop)
         srv = i18n_strings.sample_server(Path(tmp.name), "ja")
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         self.addCleanup(srv.server_close)

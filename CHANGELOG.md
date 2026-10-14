@@ -1,8 +1,24 @@
 # Changelog
 
-## 4.1.2
+## 4.2.0
 
-Fixes from an audit of everything since 4.0 (docs/audit-2026-10-14.md).
+- **Sets, reworked: any products, downloaded or not, in a tab of their own.** **Sets** is in the bar at the top
+  of every page. It lists your sets, each product with its picture and where it is: downloaded (a link to it in
+  Downloads), yours but not downloaded (**Download the N not downloaded** gets them all), or not yours yet (with
+  **Buy on** its store). Make a set there, or choose products in the Library as well as in Downloads and use
+  **Sets** in the selection bar or right-click: a set no longer needs its products downloaded. A set remembers what
+  each product is (its name, creator, store page and picture), and has a **Note** and up to 8 **Photos**.
+- **Share a set as a link.** **Share...** makes a link to the set viewer on Hoard's website, which shows the set's
+  products with their pictures and a link to buy each, your note and your photos. The set is in the link itself,
+  after its `#`, which a browser never sends anywhere: nothing is uploaded, and Hoard keeps no copy. Each picture
+  loads from its store's own image host, and your photos from the photo site they're on (Imgur, Gyazo, X,
+  Bluesky, Reddit, Postimages, ImgBB or Discord), so Hoard hosts nothing. Your own products (Local) and hidden ones
+  are never in a link. **Add a shared set...** pastes one in: what you own already shows as yours, and the rest
+  says where to buy it.
+- **Fixed: Enter in the name box (New set, Rename set) cancelled instead of saving.** Enter now confirms (and
+  waits while a Japanese or Korean input method is still putting a word together).
+
+Fixes from an audit of everything since 4.0 (docs/audit-2026-10-14.md):
 
 - **Fixed: Disk space's From more than one store could delete the copy you chose to keep.** A copy is removed by its
   product key, which leaves numbers and (labels) out, so Booth's "Hair Pack 1" and "Hair Pack 2" share one; and

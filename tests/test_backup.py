@@ -92,7 +92,9 @@ class RoundTrip(unittest.TestCase):
         MarkStore().change("archived", [secret], True)
         TagStore().change({"action": "assign", "keys": [secret], "add": ["avatars"]})
         set_id = SetStore().load()["sets"][0]["id"]
-        SetStore().change({"action": "add", "id": set_id, "items": [secret]})
+        SetStore().change({"action": "add", "id": set_id, "items": [secret]},   # (a set remembers what each product is)
+                          details=lambda k: {"store": "booth", "name": "Secret Thing", "creator": "Shy Maker",
+                                             "url": "https://booth.pm/ja/items/2"})
         return secret
 
     def test_locked_names_them_nowhere(self):
@@ -113,6 +115,7 @@ class RoundTrip(unittest.TestCase):
         self.assertIn(secret, MarkStore().keys("archived"), "still archived")
         self.assertEqual(TagStore().load()["items"][secret], ["avatars"], "still tagged")
         self.assertIn(secret, SetStore().load()["sets"][0]["items"], "still in its set")
+        self.assertEqual(SetStore().load()["sets"][0]["products"][secret]["creator"], "Shy Maker", "and what it is")
         self.assertIn(RUSK, SetStore().load()["sets"][0]["items"])
 
     def test_never_sign_ins_or_keys(self):

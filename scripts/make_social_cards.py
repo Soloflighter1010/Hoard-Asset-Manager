@@ -30,6 +30,7 @@ CARDS = {
     "credits": ("Credits", "Picture credits", "The creators whose products appear in Hoard's screenshots."),
     "ai": ("AI", "AI disclosure", "How Hoard is built with the help of AI, and how it's checked."),
     "stores": ("For stores", "Hoard and your store", "What Hoard does on your store, and how it keeps customers and platforms safe."),
+    "set": ("Sets", "A shared set", "Everything in a set someone shared from Hoard, and where to buy each."),
 }
 
 STORES = [("Booth", "#FF6259"), ("Gumroad", "#FF8AD8"), ("Jinxxy", "#56D1DC"), ("Payhip", "#95A0FF"), ("itch.io", "#7ED67A")]
