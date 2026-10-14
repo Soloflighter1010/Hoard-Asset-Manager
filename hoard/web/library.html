@@ -411,6 +411,7 @@ body.selecting .toast { bottom: 96px; }
 .routine-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 24px 12px; padding: 10px 14px;
   border-radius: 12px; background: var(--stone); border: 1px solid var(--gold); font-size: 14px; }
 .routine-note span { flex: 1; min-width: 220px; }
+.tour-note { margin: 0 0 14px; }   /* above the grid, so the sidebar's height is as it was */
 /* issue #107: what a download would get, to untick, and products always skipped */
 .pick-dialog { width: min(620px, calc(var(--vw) - 32px)); }
 .pick-tools { display: flex; gap: 14px; margin: 10px 0 6px; }
@@ -849,6 +850,28 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
 .only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
+/* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
+.tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
+  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
+.tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
+.tour-card { position: fixed; z-index: 90; width: min(380px, calc(100vw - 32px)); padding: 18px 20px 16px; border-radius: 16px;
+  background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card:focus { outline: none; }
+.tour-card:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card.middle { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+.tour-card.docked { left: 16px; right: 16px; bottom: 16px; top: auto; width: auto; }
+.tour-card h2 { font: 400 22px var(--display); margin: 0 0 8px; }
+.tour-card p { margin: 6px 0; line-height: 1.5; font-size: 14px; }
+.tour-card .tour-n { margin: 0 0 4px; color: var(--dust); font-size: 12px; font-weight: 700; }
+.tour-try { display: flex; align-items: center; gap: 8px; color: var(--gold); font-weight: 700; }
+.tour-try::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: tourPulse 1.4s ease-in-out infinite; }
+.tour-try[hidden], .tour-go [hidden] { display: none; }
+@keyframes tourPulse { 50% { opacity: .3; } }
+.tour-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+.tour-go > span { display: flex; gap: 8px; margin-left: auto; }
+body.less-motion .tour-ring { transition: none; }
+body.less-motion .tour-try::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-try::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -971,6 +994,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <main>
     <div class="headrow"><h2 id="count" class="count" aria-live="polite"></h2>
       <button id="selectBtn" class="ghost sm" aria-pressed="false" title="Select several items to tag them together">Select</button></div>
+    <div id="tourNote" class="routine-note tour-note" role="status" hidden>
+      <span>New to Hoard, or just updated? A short tour shows what it can do, with your own library.</span>
+      <button class="primary sm" data-tour-note="go">Take the tour</button>
+      <button class="ghost sm" data-tour-note="later">Not now</button>
+    </div>
     <div id="status" class="status"></div>
     <div id="viewBar" class="viewbar" hidden></div>
     <div id="grid" class="grid" aria-label="Your assets"></div>
@@ -1143,6 +1171,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="openLogs">Open logs folder</button>
   <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
+  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
@@ -1342,6 +1371,7 @@ async function load() {
   else if (openKey) forgetDetail();   // no longer shown (a hidden item, once locked): its details go too
   // copies on two stores whose pictures may be one picture saved twice: how they look decides (then read again)
   const wanted = DATA.items.filter(a => a.look_for && a.thumbnail).map(a => ({ look_for: a.look_for, src: keyed("/thumb/" + encodeURIComponent(a.key)) }));
+  tourOffer();   // (once there's something in the library)
   if (wanted.length && await lookAtPictures(wanted)) load();
 }
 
@@ -2382,6 +2412,7 @@ const SETUP_VIEWS = {
     <p class="muted">New to Hoard? Skip this step.</p>`,
   done: () => `<h2 id="setupTitle">Hoard's ready</h2>
     <p>When you choose Finish, Hoard reads what you own from your stores. After that, choose <strong>Download everything new</strong> in Stores, or <strong>Download new</strong> in Downloads, whenever you want local copies.</p>
+    <p>Once Hoard has read your library, a short tour can show you what else it does.</p>
     <p class="muted">Run this again any time from Settings.</p>`,
 };
 
@@ -2771,10 +2802,12 @@ wireTags();
 wireApp();
 wireSetup();
 wirePrivacy();
+wireTour();
 const askedSetup = /(^|[#&])setup\b/.test(location.hash);   // read before the first render rewrites the address (saveHash)
 readHash();
 load().finally(() => hideSplash()).then(() => {   // someone new (nothing set up, nothing in the library) is walked through setting up
   if (askedSetup || (!DATA.setup_done && !DATA.items.length && !DATA.error)) openSetup();
+  else tourResume();   // the tour, carried on from the other page
 });
 </script>
 </body>

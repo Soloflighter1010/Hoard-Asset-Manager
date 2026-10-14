@@ -2,6 +2,14 @@
 
 ## 4.1.0
 
+- **A tour of Hoard, on your own library.** Hoard does a lot more than download, and a short tour now shows it, one
+  thing at a time: a ring round the part of the page it's about, and a card beside it. It uses your own things (it
+  asks you to search for a word from one of your items, open it, choose two, look inside its package, tag it), and
+  each step that asks you to try something goes on by itself once you have. It goes from the Library on to
+  Downloads: stores, search, details, choosing several, Archive and the rest, Sync, Look inside, What it needs, tags,
+  sets, updates, Disk space, Local, Projects, Tasks and Settings. A step about something you don't have yet (nothing
+  downloaded, say) is passed by. The Library offers it once, after setup or after updating, and **Settings** has
+  **Take the tour** any time.
 - **Choosing several items, reworked** (Library and Downloads):
   - **Without a mode:** tick a tile's box (it shows when you point at the tile), Ctrl-click (Cmd-click on a Mac), or
     Shift-click to take in everything from the last one. **Ctrl+A** chooses everything shown, **Esc** lets go, and a

@@ -855,6 +855,28 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
 .only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
+/* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
+.tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
+  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
+.tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
+.tour-card { position: fixed; z-index: 90; width: min(380px, calc(100vw - 32px)); padding: 18px 20px 16px; border-radius: 16px;
+  background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card:focus { outline: none; }
+.tour-card:focus-visible { box-shadow: 0 0 0 2px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
+.tour-card.middle { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+.tour-card.docked { left: 16px; right: 16px; bottom: 16px; top: auto; width: auto; }
+.tour-card h2 { font: 400 22px var(--display); margin: 0 0 8px; }
+.tour-card p { margin: 6px 0; line-height: 1.5; font-size: 14px; }
+.tour-card .tour-n { margin: 0 0 4px; color: var(--dust); font-size: 12px; font-weight: 700; }
+.tour-try { display: flex; align-items: center; gap: 8px; color: var(--gold); font-weight: 700; }
+.tour-try::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); animation: tourPulse 1.4s ease-in-out infinite; }
+.tour-try[hidden], .tour-go [hidden] { display: none; }
+@keyframes tourPulse { 50% { opacity: .3; } }
+.tour-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+.tour-go > span { display: flex; gap: 8px; margin-left: auto; }
+body.less-motion .tour-ring { transition: none; }
+body.less-motion .tour-try::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-try::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -1167,6 +1189,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
   <button class="ghost sm" id="openLogs">Open logs folder</button>
   <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
+  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
@@ -1490,7 +1513,7 @@ async function restorePrevious(a, b) {
 function needsSection(a) {
   const n = a.needs, R = DATA.needs_reading || {};
   if (!n) return "";
-  const head = `<h3>What it needs</h3>`;
+  const head = `<h3 id="needsHead">What it needs</h3>`;
   if (!n.read) return head + `<p class="sub">${esc(R.reading && R.total
     ? tr("Hoard is reading your packages to find out ({0} of {1}).", R.done.toLocaleString(), R.total.toLocaleString())
     : tr("Hoard reads your packages to find out, while nothing else is running."))}</p>`;
@@ -2713,8 +2736,9 @@ addEventListener("offline", showConnection);
 showConnection();
 wireTags();
 wireApp();
+wireTour();
 readHash();
-load().finally(() => hideSplash());
+load().finally(() => hideSplash()).then(() => tourResume());   // the tour, carried on from the Library
 </script>
 </body>
 </html>

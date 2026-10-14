@@ -153,7 +153,7 @@ def ui_settings(cfg: dict) -> dict:
     for name, open_ in list((ui.get("sections") or {}).items())[:30] if isinstance(ui.get("sections"), dict) else ():
         if isinstance(name, str) and len(name) <= 40 and isinstance(open_, bool):
             out["sections"][name] = open_
-    for k in ("side_folded", "stack"):   # the sidebar folded; copies stacked in the Library (issue #111)
+    for k in ("side_folded", "stack", "toured"):   # the sidebar folded; copies stacked (issue #111); the tour offered
         if isinstance(ui.get(k), bool):
             out[k] = ui[k]
     for k in ("tile_size", "dl_tile_size"):   # the Library's and the Downloads page's

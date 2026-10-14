@@ -96,6 +96,8 @@ Also here:
   Hoard's own app-data folder. The library list fills in only stores that have nothing listed yet.
   A backup with hidden items replaces yours only once your hidden library is unlocked.
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
+- **Take the tour:** what Hoard can do, shown on your own library (4.1.0). See
+  [Getting started](Getting-Started#the-tour).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
   close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and the routine check
   carry on. Click it there, or open Hoard again, to bring the window back. Turn it off and the close button quits

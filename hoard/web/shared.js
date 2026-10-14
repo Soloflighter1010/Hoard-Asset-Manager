@@ -1743,3 +1743,326 @@ document.addEventListener("input", e => {
 });
 // and on the 1st of April, the boxes have fallen over
 if (new Date().getMonth() === 3 && new Date().getDate() === 1) document.documentElement.classList.add("april");
+
+/* ---------- the tour: what Hoard can do, shown on your own library, one thing at a time. It's offered once, in the
+   Library (when there's something in it, after setup), and Settings starts it again. Each step points at the part of
+   the page it's about, the rest dimmed but still yours to use; a step that asks you to try something (open one of your
+   own items, choose two) goes on by itself once you have. It carries on from the Library to Downloads (in
+   sessionStorage), and a step about something you don't have yet (nothing downloaded, no updates) is passed by. */
+const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null, ready: 0, tags: 0, offered: false };
+const ON_DOWNLOADS = /downloads/.test(location.pathname);
+const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+const tourName = s => `<strong>${esc(s)}</strong>`;
+// the items the tour shows you: ones drawn near the top of the grid, not a stack of copies, one with a picture first
+function tourPick() {
+  const drawn = [...document.querySelectorAll("#grid .slot")].slice(0, 60)
+    .map(s => T.byId(s.dataset[T.slotKey])).filter(a => a && !T.membersOf(T.id(a)));
+  const pic = a => a.thumbnail || a.thumb;
+  const inside = a => (a.files || []).some(f => !f.missing && /\.(unitypackage|zip)$/i.test(f.path));
+  const item = (ON_DOWNLOADS ? drawn.find(a => inside(a) && pic(a)) || drawn.find(inside) : null) || drawn.find(pic) || drawn[0] || null;
+  const words = item ? String(item.name).split(/[\s\-_|/()[\]【】「」『』〔〕.,:;!?+&]+/).filter(w => w.length >= 3) : [];
+  return { item, word: words.sort((a, b) => b.length - a.length)[0] || (item ? String(item.name).slice(0, 12) : ""), inside: item && inside(item) };
+}
+const tourTile = () => TOUR.pick && TOUR.pick.item ? document.querySelector(`#grid .slot[data-${T.slotKey}="${CSS.escape(T.id(TOUR.pick.item))}"]`) : null;
+const tourOpen = () => { const o = T.open(); return o && TOUR.pick && TOUR.pick.item && T.id(o) === T.id(TOUR.pick.item) ? o : null; };
+// the stores your library is from, the one you have most from first, by name
+function tourStores() {
+  const n = {};
+  for (const a of DATA.items || []) n[a.store] = (n[a.store] || 0) + 1;
+  return Object.keys(n).sort((a, b) => n[b] - n[a]).map(s => (DATA.labels || {})[s] || s);
+}
+const tourCount = () => (ON_DOWNLOADS ? DATA.assets : DATA.items || []).length;
+function tourClearSearch() {
+  const q = $("#q");
+  if (q && q.value) { q.value = ""; q.dispatchEvent(new Event("input", { bubbles: true })); }
+}
+function tourEnsureDetail() {
+  if (!tourOpen() && TOUR.pick && TOUR.pick.item) showDetail(TOUR.pick.item, false);
+}
+// a section of the details: its heading and what's under it, up to the next heading
+function tourSection(el) {
+  if (!el) return null;
+  let h = el.closest("#detail > *");
+  while (h && h.tagName !== "H3" && h.previousElementSibling) h = h.previousElementSibling;
+  const out = [h];
+  for (let n = h.nextElementSibling; n && n.tagName !== "H3" && !n.classList.contains("path"); n = n.nextElementSibling) out.push(n);
+  return out;
+}
+const tourInsideOpen = () => { const w = $("#insideWin"); return !!w && !w.hidden; };
+
+const TOUR_STEPS = [
+  { id: "welcome", page: "library",
+    title: () => tr("A quick tour of Hoard"),
+    body: () => tourCount()
+      ? trHTML("Hoard does a lot more than download. This tour shows you around with your own library, {0} items from {1}, and you can try each thing as you go. It takes a few minutes.",
+               esc(tourCount().toLocaleString()), esc(listed(tourStores())))
+      : esc(tr("Hoard does a lot more than download. This tour shows you around, and you can try each thing as you go. It takes a few minutes.")),
+    next: () => tr("Start") },
+  { id: "stores", page: "library", at: () => $("#storeSeg"),
+    title: () => tr("Your stores"),
+    body: () => esc(tr("Everything you own, from every store you use, in one place. Choose a store to see only what you bought there.")) },
+  { id: "search", page: "library", at: () => $(".bar .search"), when: () => TOUR.pick.word,
+    title: () => tr("Search"),
+    body: () => trHTML("Search finds names, creators and tags as you type. Press / to come here from anywhere. Try it: type {0}.", tourName(TOUR.pick.word)),
+    done: () => ($("#q").value || "").trim().length >= 2,
+    leave: tourClearSearch },
+  { id: "open", page: "library", at: tourTile, when: () => TOUR.pick.item,
+    enter: () => { tourClearSearch(); T.closeDetail(); },
+    title: () => tr("Open one"),
+    body: () => trHTML("Click {0} to see everything about it.", tourName(TOUR.pick.item.name)),
+    done: () => !!T.open() },
+  { id: "detail", page: "library", at: () => $("#detail.open"), when: () => T.open(),
+    title: () => tr("Its details"),
+    body: () => esc(tr("Download it from here, or open its store page. Once you have it, Show in Downloads takes you to its files. Tag it to find it again, and if you own it on another store too, it says so.")),
+    leave: () => T.closeDetail() },
+  { id: "choose", page: "library", at: () => $("#grid"), when: () => TOUR.pick.item,
+    enter: () => T.closeDetail(),
+    title: () => tr("Choose several"),
+    body: () => esc(ON_MAC ? tr("⌘-click two or three items, or tick the box in a tile's corner. Shift-click chooses everything in between, and ⌘A everything shown.")
+                           : tr("Ctrl-click two or three items, or tick the box in a tile's corner. Shift-click chooses everything in between, and Ctrl+A everything shown.")),
+    done: () => chosenItems().length >= 2 },
+  { id: "bar", page: "library", at: () => $("#bulk:not([hidden])"), when: () => chosenItems().length,
+    title: () => tr("Do it to all of them"),
+    body: () => esc(tr("This bar works on everything you chose: download them, tag them, or archive, hide or remove them. Right-click a tile for the same menu, and Esc lets go of them.")),
+    leave: () => clearSelection() },
+  { id: "views", page: "library", at: () => $("#views"),
+    title: () => tr("Archive, Removed and Hidden"),
+    body: () => esc(tr("Archive puts away what you're done with, without losing it. Removed is for what doesn't belong: a sync never downloads it again. Hidden keeps things behind a PIN.")) },
+  { id: "sync", page: "library", at: () => $("#syncBtn"),
+    title: () => tr("Sync"),
+    body: () => esc(tr("Sync reads what you own from your stores, then downloads anything new. Stores is where you sign in, read one store again, or import saved pages instead. In Settings, a routine check can do this for you, and asks before it downloads anything.")) },
+  { id: "to-downloads", page: "library", go: "downloads", at: () => $('.apptabs a[href="/downloads"]'),
+    title: () => tr("On to your downloads"),
+    body: () => esc(tr("Downloads is what Hoard has saved on this computer, with a lot more to do with each one. Click Downloads, or Next.")) },
+
+  { id: "downloads", page: "downloads", at: () => (tourCount() ? $("#grid") : null),
+    title: () => tr("Your downloads"),
+    body: () => tourCount()
+      ? esc(tr("{0} products, {1} on this computer, in folders by store, creator and product.", tourCount().toLocaleString(), sizeText(DATA.assets.reduce((t, a) => t + (a.size || 0), 0))))
+      : esc(tr("Nothing's downloaded yet. Sync, or Download new, saves copies of what you own here. The rest of the tour shows what you can do with them then.")) },
+  { id: "dl-open", page: "downloads", at: tourTile, when: () => TOUR.pick.item,
+    title: () => tr("Open one"),
+    body: () => trHTML("Click {0} to see its files.", tourName(TOUR.pick.item.name)),
+    done: () => !!tourOpen() },
+  { id: "inside", page: "downloads", at: () => $('#detail.open [data-act="inside"]'), when: () => TOUR.pick.inside,
+    enter: tourEnsureDetail,
+    title: () => tr("Look inside"),
+    body: () => esc(tr("See what a Unity package or a zip holds, with pictures, without unpacking it or opening Unity. Try it: Look inside.")),
+    done: tourInsideOpen },
+  { id: "inside-win", page: "downloads", at: () => $("#insideWin:not([hidden])"), when: tourInsideOpen,
+    title: () => tr("Search inside"),
+    body: () => esc(tr("Open its folders, or search for a file by name. Hoard reads it where it is, and changes nothing.")),
+    leave: () => { if (tourInsideOpen()) WINDOWS.insideWin(); } },
+  { id: "needs", page: "downloads", at: () => tourSection($("#detail.open #needsHead")), when: () => TOUR.pick.item && TOUR.pick.item.needs,
+    enter: tourEnsureDetail,
+    title: () => tr("What it needs"),
+    body: () => esc(tr("Hoard reads each package for what else it uses, such as a shader or a tool, with a link to get it. Hoard for Unity checks it too, and asks before importing something your project is missing.")) },
+  { id: "tags", page: "downloads", at: () => tourSection($("#detail.open #tagInput")), when: () => TOUR.pick.item,
+    enter: () => { tourEnsureDetail(); TOUR.tags = ((tourOpen() || {}).tags || []).length; },
+    title: () => tr("Tags"),
+    body: () => esc(tr("Tags are your own words for things: an outfit, a base, a style. Add one here, or to many at once from the selection bar. Suggested tags come from words in your items' names.")),
+    done: () => ((tourOpen() || {}).tags || []).length > TOUR.tags },
+  { id: "sets", page: "downloads", at: () => $("#newSet"),
+    enter: () => T.closeDetail(),
+    title: () => tr("Sets"),
+    body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits. Make one here, from the selection bar, or from a project in Projects. Hoard for Unity imports a whole set at once.")) },
+  { id: "updates", page: "downloads", at: () => $('#views [data-view="updates"]'),
+    title: () => tr("Updates"),
+    body: () => esc(tr("When a store has newer files for something you downloaded, it's listed here. Settings can keep the previous version too, so you can go back.")) },
+  { id: "space", page: "downloads", at: () => $('#views [data-view="space"]'),
+    title: () => tr("Disk space"),
+    body: () => esc(tr("What takes the most room, files kept twice, what no project uses, and products you have from more than one store. Try it: Disk space.")),
+    done: () => state.view === "space" },
+  { id: "dupes", page: "downloads", at: () => $('[data-space="dupes"]') || $("#viewBar:not([hidden])"), when: () => state.view === "space",
+    title: () => tr("Free some room"),
+    body: () => esc(tr("Choose from any of these lists to move things to another library folder, archive them or delete their files. From more than one store keeps one store's copy, and the others won't download again.")),
+    leave: () => showView("downloads") },
+  { id: "local", page: "downloads", at: () => $('.apptabs a[href="/downloads#store=Local"]'),
+    title: () => tr("Local"),
+    body: () => esc(tr("Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest. Add your own, in Local, brings them in.")) },
+  { id: "projects", page: "downloads", at: () => $("#projectsTab"),
+    title: () => tr("Projects"),
+    body: () => esc(tr("With Hoard for Unity in your Unity projects, Projects lists what each one uses, which of it has updates, and a credits list for each.")) },
+  { id: "tasks", page: "downloads", at: () => $("#tasksTab"),
+    title: () => tr("Tasks"),
+    body: () => esc(tr("Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.")) },
+  { id: "settings", page: "downloads", at: () => $("#settingsBtn"),
+    title: () => tr("Settings"),
+    body: () => esc(tr("Your language, light or dark, themes and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.")) },
+  { id: "end", page: "downloads",
+    title: () => tr("That's the tour"),
+    body: () => esc(tr("You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.")),
+    next: () => tr("Finish") },
+];
+TOUR.steps = TOUR_STEPS;
+
+function tourSave(id) { try { if (id) sessionStorage.setItem("hoard-tour", id); else sessionStorage.removeItem("hoard-tour"); } catch (e) { /* this page only */ } }
+function tourBuild() {
+  if (TOUR.card) return;
+  TOUR.ring = document.createElement("div");
+  TOUR.ring.className = "tour-ring";
+  TOUR.ring.setAttribute("aria-hidden", "true");
+  TOUR.card = document.createElement("div");
+  TOUR.card.className = "tour-card";
+  TOUR.card.setAttribute("role", "dialog");
+  TOUR.card.setAttribute("aria-labelledby", "tourTitle");
+  TOUR.card.setAttribute("aria-describedby", "tourBody");
+  TOUR.card.setAttribute("translate", "no");   // (in your language already: tr())
+  TOUR.card.tabIndex = -1;
+  TOUR.card.innerHTML = `<p class="tour-n" id="tourN"></p><h2 id="tourTitle"></h2><p id="tourBody"></p>` +
+    `<p class="tour-try" id="tourTry" hidden></p>` +
+    `<div class="tour-go"><button class="linkish" data-tour="end"></button>` +
+    `<span><button class="ghost sm" data-tour="back"></button> <button class="primary sm" data-tour="next"></button></span></div>`;
+  TOUR.card.addEventListener("click", e => {
+    const b = e.target.closest("[data-tour]");
+    if (b) tourMove(b.dataset.tour);
+  });
+  document.body.append(TOUR.ring, TOUR.card);
+}
+function tourStart(at = 0) {
+  tourBuild();
+  if ($("#tourNote")) $("#tourNote").hidden = true;
+  for (const w of document.querySelectorAll(".win:not([hidden])")) if (WINDOWS[w.id]) WINDOWS[w.id]();   // (Settings, where it was started)
+  uiSave({ toured: true });   // offered no more, however it ends
+  TOUR.pick = tourPick();
+  TOUR.i = -1;
+  tourShow(at, 1);
+  clearInterval(TOUR.timer);
+  TOUR.timer = setInterval(tourTick, 250);
+}
+function tourEnd(finished) {
+  clearInterval(TOUR.timer);
+  const step = TOUR.steps[TOUR.i];
+  if (step && step.leave) try { step.leave(); } catch (e) { /* gone already */ }
+  TOUR.i = -1;
+  if (TOUR.card) { TOUR.card.remove(); TOUR.ring.remove(); TOUR.card = TOUR.ring = null; }
+  tourSave(null);
+  if (finished) toast("Take the tour again any time, from Settings.");
+}
+// to step n, or the next one there's something to show for, going the way you went (dir 1 or -1)
+function tourShow(n, dir) {
+  const here = ON_DOWNLOADS ? "downloads" : "library";
+  for (; n >= 0 && n < TOUR.steps.length; n += dir) {
+    const s = TOUR.steps[n];
+    if (s.page !== here) break;
+    let ok = true;
+    try { ok = !s.when || !!s.when(); } catch (e) { ok = false; }
+    if (ok) break;
+  }
+  if (n < 0) n = TOUR.steps.findIndex(s => s.page === here);
+  if (n >= TOUR.steps.length) { tourEnd(true); return; }
+  const s = TOUR.steps[n];
+  if (s.page !== here) {   // the next step is on the other page: off there
+    tourSave(s.id);
+    location.href = s.page === "downloads" ? "/downloads" : "/";
+    return;
+  }
+  TOUR.i = n; TOUR.ready = Date.now() + 600;   // (what you did just before doesn't count for this step)
+  tourSave(s.id);
+  try { if (s.enter) s.enter(); } catch (e) { /* the page changed under it */ }
+  const el = tourTarget(s)[0];
+  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
+  tourDraw();
+}
+function tourMove(how) {
+  const s = TOUR.steps[TOUR.i];
+  if (how === "end") { tourEnd(false); return; }
+  if (s && s.leave) try { s.leave(); } catch (e) { /* gone already */ }
+  if (how === "next" && s && s.go) { tourSave(s.id); location.href = s.go === "downloads" ? "/downloads" : "/"; return; }
+  tourShow(TOUR.i + (how === "back" ? -1 : 1), how === "back" ? -1 : 1);
+}
+function tourDraw() {
+  const s = TOUR.steps[TOUR.i], c = TOUR.card;
+  if (!s || !c) return;
+  const last = TOUR.i === TOUR.steps.length - 1;
+  c.querySelector("#tourN").textContent = tr("{0} of {1}", TOUR.i + 1, TOUR.steps.length);
+  c.querySelector("#tourTitle").textContent = s.title();
+  c.querySelector("#tourBody").innerHTML = s.body();
+  c.querySelector("#tourTry").hidden = !s.done;
+  c.querySelector("#tourTry").textContent = tr("Try it, and the tour goes on by itself.");
+  c.querySelector('[data-tour="end"]').textContent = last ? "" : tr("End the tour");
+  c.querySelector('[data-tour="end"]').hidden = last;
+  const back = c.querySelector('[data-tour="back"]');
+  back.textContent = tr("Back");
+  back.hidden = TOUR.i === 0 || TOUR.steps[TOUR.i - 1].page !== s.page;
+  c.querySelector('[data-tour="next"]').textContent = s.next ? s.next() : s.done ? tr("Skip") : tr("Next");
+  tourPlace();
+  // the card has the focus, so its words are read out and Next is a Tab away, unless you're typing (the search)
+  if (!document.activeElement || !document.activeElement.matches("input, textarea, select")) c.focus({ preventScroll: true });
+}
+// what a step points at: one element, or a few together (a section of the details), as they are on the page now
+function tourTarget(s) {
+  let got = null;
+  try { got = s.at ? s.at() : null; } catch (e) { got = null; }
+  return (Array.isArray(got) ? got : [got]).filter(e => e && e.isConnected);
+}
+// the ring round the part the step is about (the rest dimmed), and the card beside it where there's room
+function tourPlace() {
+  const s = TOUR.steps[TOUR.i], c = TOUR.card, ring = TOUR.ring;
+  if (!s || !c) return;
+  const rects = tourTarget(s).map(e => e.getBoundingClientRect()).filter(b => b.width > 0 && b.height > 0);
+  const r = rects.length ? { left: Math.min(...rects.map(b => b.left)), top: Math.min(...rects.map(b => b.top)),
+                             right: Math.max(...rects.map(b => b.right)), bottom: Math.max(...rects.map(b => b.bottom)) } : null;
+  if (r) { r.width = r.right - r.left; r.height = r.bottom - r.top; }
+  const seen = r && r.bottom > 0 && r.top < innerHeight;
+  const pad = 6, gap = 14, m = 12, w = c.offsetWidth, h = c.offsetHeight;
+  ring.classList.toggle("none", !seen);
+  c.classList.toggle("middle", !seen);
+  if (!seen) { c.style.left = c.style.top = ""; c.classList.remove("docked"); ring.removeAttribute("style"); return; }
+  const top = Math.max(r.top - pad, 0), bottom = Math.min(r.bottom + pad, innerHeight);
+  Object.assign(ring.style, { left: `${r.left - pad}px`, top: `${top}px`, width: `${r.width + pad * 2}px`, height: `${bottom - top}px` });
+  if (innerWidth <= 560) { c.style.left = c.style.top = ""; c.classList.add("docked"); return; }
+  c.classList.remove("docked");
+  let x, y;
+  if (innerHeight - bottom >= h + gap + m) { y = bottom + gap; x = r.left; }
+  else if (top >= h + gap + m) { y = top - gap - h; x = r.left; }
+  else if (innerWidth - r.right >= w + gap + m) { x = r.right + pad + gap; y = r.top; }
+  else if (r.left >= w + gap + m) { x = r.left - pad - gap - w; y = r.top; }
+  else { x = innerWidth - w - m; y = innerHeight - h - m; }   // a big part (the grid): in its corner
+  c.style.left = `${Math.max(m, Math.min(x, innerWidth - w - m))}px`;
+  c.style.top = `${Math.max(m, Math.min(y, innerHeight - h - m))}px`;
+}
+function tourTick() {
+  const s = TOUR.steps[TOUR.i];
+  if (!s || !TOUR.card) return;
+  tourPlace();
+  let done = false;
+  try { done = !!(s.done && Date.now() > TOUR.ready && s.done()); } catch (e) { done = false; }
+  if (done) { TOUR.ready = Infinity; setTimeout(() => { if (TOUR.steps[TOUR.i] === s) tourMove("next"); }, 700); }
+}
+// on each page: carry on where the tour was (from the Library to Downloads), and the Library offers it, once
+function tourResume() {
+  let id = null;
+  try { id = sessionStorage.getItem("hoard-tour"); } catch (e) { id = null; }
+  if (!id) return false;
+  const n = TOUR.steps.findIndex(s => s.id === id), here = ON_DOWNLOADS ? "downloads" : "library";
+  if (n < 0) { tourSave(null); return false; }
+  const s = TOUR.steps[n];
+  if (s.page === here) tourStart(n);
+  else if (s.go === here) tourStart(n + 1);
+  else tourSave(null);   // somewhere else since: it ends there
+  return true;
+}
+function tourOffer() {
+  const note = $("#tourNote");
+  let going = null;
+  try { going = sessionStorage.getItem("hoard-tour"); } catch (e) { going = null; }
+  if (!note || going || TOUR.offered || TOUR.i >= 0 || (UI && UI.toured) || !DATA.setup_done || !tourCount() || ($("#setup") && !$("#setup").hidden)) return;
+  TOUR.offered = true;
+  note.hidden = false;
+}
+function wireTour() {
+  const again = $("#tourAgain");
+  if (again) again.addEventListener("click", () => {
+    if (ON_DOWNLOADS) { tourSave(TOUR.steps[0].id); location.href = "/"; } else tourStart(0);
+  });
+  const note = $("#tourNote");
+  if (note) note.addEventListener("click", e => {
+    const b = e.target.closest("[data-tour-note]");
+    if (!b) return;
+    note.hidden = true;
+    if (b.dataset.tourNote === "go") tourStart(0); else { uiSave({ toured: true }); toast("Take the tour any time, from Settings."); }
+  });
+  addEventListener("resize", () => { if (TOUR.i >= 0) tourPlace(); });
+  document.addEventListener("scroll", () => { if (TOUR.i >= 0) tourPlace(); }, { capture: true, passive: true });
+}

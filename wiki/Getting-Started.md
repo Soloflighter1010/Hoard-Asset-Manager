@@ -35,6 +35,17 @@ store, or without a Payhip shop, asks first. Run again from Settings, it can be 
    browser doesn't ask: closing the tab is the browser's.
 10. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
 
+## The tour
+
+Once Hoard has read your library, the Library offers a short tour (4.1.0): **Take the tour**, or **Not now**. It
+shows what Hoard can do with your own things, one part of the page at a time, with a card beside it. Some steps ask
+you to try something (search for a word from one of your items, open it, choose two, look inside its package, give it
+a tag), and the tour goes on by itself once you have; **Skip** goes on without. It carries on from the Library to
+Downloads, and passes by what you don't have yet: with nothing downloaded, it says what Downloads will hold.
+
+It's offered once. Take it again any time from **Settings**, then **Take the tour**, and leave it with **End the
+tour**.
+
 ## Signing in without your saved passwords
 
 Hoard's window is its own browser, so it doesn't have the passwords your usual browser saved. Copy yours from
