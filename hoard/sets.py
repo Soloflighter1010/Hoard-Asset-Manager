@@ -4,7 +4,7 @@ shared with you lists what to buy, and where).
 
 Kept in sets.json in Hoard's app-data folder: {"sets": [{"id", "name", "items": [product key, ...], "note"?,
 "photos"?: [address, ...], "picture"?: "<version>.<png|jpg|webp>", "products"?: {product key: {"store", "id", "name",
-"creator", "url", "thumbnail"}}}]}. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
+"creator", "url", "thumbnail"}}, "short"?: {"id", "key", "token", "expires", "made"}}]}. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
 "<set id>-<picture>" (a new name each time, so a page never shows the one it replaced). A
 product is known by the same key your tags use (tags.tag_key), so a set keeps its products whichever store or library
 folder they're in; "products" remembers what each was when it was added (its store page and picture), so a set can be
@@ -15,6 +15,11 @@ A set is shared as a code (share_code): the set itself, packed into a link to th
 (VIEWER), after its "#", which a browser never sends anywhere. Nothing is uploaded: the viewer reads the code in the
 page, and shows each product's picture from its store's own image host, and the sharer's photos from the photo sites
 in PHOTO_HOSTS (links they made there). The same code, pasted into Hoard, adds the set (from_code).
+
+A set can also have a short link (shortlinks.py): its code kept on Hoard's share server for 14 days, locked with a
+key that's only in the link. "short" is that link's id and key, the token that lets this Hoard update or delete it,
+when it runs out, and "made", which code it holds (code_mark), so the page can say when the set has changed since.
+A short link that has run out is dropped when the file is read.
 """
 from __future__ import annotations
 
@@ -22,13 +27,16 @@ import base64
 import json
 import re
 import secrets
+import hashlib
 import threading
+import time
 import zlib
 from pathlib import Path
 from urllib.parse import urlparse
 
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
+from .shortlinks import CODE as SHORT_CODE, ID as SHORT_ID, KEY as SHORT_KEY, PREFIX as SHORT_PREFIX, TOKEN as SHORT_TOKEN
 from .tags import TAG_KEY_RX
 
 MAX_SETS = 200
@@ -44,13 +52,14 @@ MAX_CODE_JSON = 1024 * 1024       # what a code may unpack to: a bomb stops here
 STORES = tuple(STORE_LINK_SITES)  # the stores a shared product can be from (not Local: your own files stay yours)
 # where store pictures come from: a shared product's picture is shown only from its store's own image host
 STORE_IMAGE_HOSTS = {"booth": ("booth.pximg.net",), "gumroad": ("public-files.gumroad.com",),
-                     "jinxxy": ("cdn.jinxxy.com",), "payhip": ("images.payhip.com",), "itch": ("img.itch.zone",)}
+                     "jinxxy": ("jinxxy-c.jinxxy-cdn.com",), "payhip": ("images.payhip.com",), "itch": ("img.itch.zone",)}
 # the photo sites a sharer's own photos can be on (Hoard hosts nothing): links to pictures, https only
 PHOTO_HOSTS = ("i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i.redd.it", "i.postimg.cc", "i.ibb.co",
                "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
                "public-files.gumroad.com")
 
 PICTURE_NAME = re.compile(r"[0-9a-f]{8}\.(?:png|jpg|webp)")   # a set's "picture"
+CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's "made"
 _lock = threading.Lock()
 
 
@@ -120,9 +129,22 @@ def clean_note(value) -> str:
     return "\n".join(lines).strip()[:NOTE_LENGTH].strip()
 
 
+# Store sites' own parts, never a creator's: a library, an account, a checkout (Booth's accounts.booth.pm, Gumroad's
+# app.gumroad.com, where your purchases are) and the like
+_NOT_A_SHOP = {"www", "app", "accounts", "manage", "api", "assets", "help", "support", "checkout", "auth", "login"}
+_JINXXY_NOT_A_CREATOR = {"my", "market", "api", "auth", "cart", "checkout", "about", "login", "signup", "settings",
+                         "search", "help", "support", "feedback", "terms-of-service", "privacy-policy", "refund-policy",
+                         "_next", "static", "admin"}
+_SEGMENT = re.compile(r"[A-Za-z0-9_.~-]{1,120}")
+_BOOTH_ITEM = re.compile(r"/(?:[a-z]{2}(?:-[a-z]+)?/)?items/\d{1,12}")
+
+
 def product_link(store, value) -> str | None:
-    """A product's store page: an https address on the store's own website (not a site added on one computer, so
-    a link shared from one is the same everywhere), or None."""
+    """A product's public page on its store, or its creator's (https, without its query or anything after #), or
+    None. Never a page of the buyer's own: a Gumroad purchase's link is its download page (gumroad.com/d/...),
+    which opens its files for whoever has it; Jinxxy's is the buyer's inventory; an itch.io download page carries
+    its key. Only the stores' own websites (not a site added on one computer), so a shared link is the same
+    everywhere. site/set.js checks the same way."""
     if not isinstance(store, str) or store not in STORE_LINK_SITES or not isinstance(value, str) or len(value) > MAX_URL:
         return None
     try:
@@ -133,7 +155,25 @@ def product_link(store, value) -> str | None:
     host = (u.hostname or "").rstrip(".").lower()
     if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii():
         return None
-    return value.strip() if any(host == s or host.endswith("." + s) for s in STORE_LINK_SITES[store]) else None
+    path = u.path.rstrip("/")
+
+    def shop(site: str) -> bool:   # <creator>.site, one level down, not one of the site's own
+        name, _, rest = host.partition(".")
+        return rest == site and re.fullmatch(r"[a-z0-9-]{1,63}", name) is not None and name not in _NOT_A_SHOP
+    on = lambda site: host in (site, "www." + site)   # noqa: E731
+    segs = path.split("/")[1:] if path else []
+    if store == "booth":
+        ok = (on("booth.pm") and _BOOTH_ITEM.fullmatch(path)) or (shop("booth.pm") and (not path or _BOOTH_ITEM.fullmatch(path)))
+    elif store == "gumroad":
+        ok = (on("gumroad.com") or shop("gumroad.com")) and re.fullmatch(r"/l/[A-Za-z0-9_-]{1,80}", path) or (shop("gumroad.com") and not path)
+    elif store == "jinxxy":
+        ok = (on("jinxxy.com") and 1 <= len(segs) <= 2 and all(_SEGMENT.fullmatch(x) for x in segs)
+              and segs[0].lower() not in _JINXXY_NOT_A_CREATOR and (len(segs) == 1 or segs[1].lower() not in ("products", "lists", "posts")))
+    elif store == "payhip":
+        ok = on("payhip.com") and re.fullmatch(r"/b/[A-Za-z0-9]{1,20}", path)
+    else:   # itch.io: a project's page, or its creator's
+        ok = shop("itch.io") and (not path or re.fullmatch(r"/[A-Za-z0-9_-]{1,120}", path))
+    return f"https://{host}{path}" if ok else None
 
 
 def clean_product(p) -> dict | None:
@@ -158,6 +198,23 @@ def clean_product(p) -> dict | None:
     if picture:
         out["thumbnail"] = picture
     return out
+
+
+def clean_short(rec) -> dict | None:
+    """A set's short link as sets.json keeps it, every part checked; None for one that's damaged or has run out."""
+    if not isinstance(rec, dict):
+        return None
+    sid, key, token, made, expires = (rec.get(k) for k in ("id", "key", "token", "made", "expires"))
+    if not (isinstance(sid, str) and SHORT_ID.fullmatch(sid) and isinstance(key, str) and SHORT_KEY.fullmatch(key)
+            and isinstance(token, str) and SHORT_TOKEN.fullmatch(token) and isinstance(made, str)
+            and CODE_MARK.fullmatch(made) and isinstance(expires, int) and not isinstance(expires, bool)):
+        return None
+    return {"id": sid, "key": key, "token": token, "expires": expires, "made": made} if expires > time.time() else None
+
+
+def code_mark(code: str) -> str:
+    """Which code a short link holds, to tell whether the set has changed since (not the code itself)."""
+    return hashlib.sha256(code.encode()).hexdigest()[:16]
 
 
 class SetStore:
@@ -193,6 +250,9 @@ class SetStore:
             products = {k: p for k, p in ((k, clean_product(given.get(k))) for k in one["items"]) if p}
             if products:
                 one["products"] = products
+            short = clean_short(s.get("short"))
+            if short:
+                one["short"] = short
             out["sets"].append(one)
         return out
 
@@ -293,6 +353,21 @@ class SetStore:
                 _tidy_pictures(data["sets"])
         return {**data, **({"made": made} if made else {})}
 
+    def set_short(self, sid: str, rec: dict | None) -> None:
+        """Keep a set's short link (clean_short's shape), or forget it (None). Not one of change()'s: only Hoard's
+        server, which made the link, sets it."""
+        with _lock:
+            data = self.load()
+            s = next((x for x in data["sets"] if x["id"] == sid), None)
+            if s is None:
+                raise ValueError("That set isn't there anymore.")
+            s.pop("short", None)
+            if rec is not None:
+                s["short"] = clean_short(rec)
+                if not s["short"]:
+                    raise ValueError("That short link can't be kept.")
+            self._save(data)
+
 
 # ----------------------------------------------------------------------------- sharing a set
 
@@ -309,9 +384,12 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
     known = s.get("products") or {}
     rows = []
     for k in s.get("items", []):
-        p = clean_product(known.get(k)) or clean_product(details(k))
-        if not p or p["store"] not in STORES:
+        remembered, now = clean_product(known.get(k)), clean_product(details(k))
+        p = {**(now or {}), **(remembered or {})} if remembered or now else None   # (a link remembered from 4.2.0
+        if not p or p["store"] not in STORES:                                        # was dropped: Hoard's, now)
             continue
+        if now and now.get("url"):   # its page as Hoard knows it now: its own, once a refresh has found it, not
+            p["url"] = now["url"]    # the creator's page remembered before then
         row = [p["store"], p.get("id", ""), p["name"], p.get("creator", ""), p.get("url", ""), p.get("thumbnail", "")]
         while row and row[-1] == "":   # (what's left out at the end costs nothing)
             row.pop()
@@ -341,6 +419,10 @@ def from_code(text) -> dict:
     if "#" in text:
         text = text.split("#", 1)[1]
     text = re.sub(r"\s+", "", text)
+    if text.startswith(SHORT_PREFIX):   # (Hoard's page opens a whole one itself, before it gets here)
+        raise ValueError("That's a short link: open it with Add a shared set, in Hoard 4.3 or later."
+                         if SHORT_CODE.fullmatch(text) else
+                         "That short link is cut short, or has been changed: copy all of it, and try again.")
     if not text.startswith(CODE_PREFIX) or len(text) > MAX_CODE:
         raise ValueError("That isn't a Hoard set code. A set's code starts with H1.")
     body = text[len(CODE_PREFIX):]

@@ -107,6 +107,30 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(self.make(unlocked=False)["library"]["stores"]["booth"].get("count", 1), 1, "nor counted")
         self.assertIn("Secret Thing", json.dumps(self.make(unlocked=True)), "unlocked: they go in")
 
+    def test_short_links_stay_on_this_computer(self):
+        """A set's short link (its key, and the token that deletes it) is never in a backup; a restore keeps this
+        computer's."""
+        import time
+        sid = SetStore().load()["sets"][0]["id"]
+        short = {"id": "abcDEF0123", "key": "k" * 22, "token": "t" * 43, "expires": int(time.time()) + 3600,
+                 "made": "0123456789abcdef"}
+        SetStore().set_short(sid, short)
+        doc = json.loads(json.dumps(self.make(unlocked=True)))
+        text = json.dumps(doc)
+        for part in ("short", short["key"], short["token"], short["id"]):
+            self.assertNotIn(part, text)
+        doc["sets"][0]["short"] = {**short, "id": "zzzzzzzzzz"}   # (one put in by hand isn't taken either)
+        dropped = []
+        backup.restore(doc, self.cfg, self.lib, server.apply_settings, lambda p: None, dropped.append)
+        self.assertEqual(SetStore().load()["sets"][0]["short"], short)
+        self.assertEqual(dropped, [])
+        # a set the backup doesn't have goes, and its short link with it: given back, to be deleted
+        made = SetStore().change({"action": "create", "name": "Newer"})["made"]
+        SetStore().set_short(made, {**short, "id": "newerABCDE"})
+        backup.restore(doc, self.cfg, self.lib, server.apply_settings, lambda p: None, dropped.append)
+        self.assertEqual([s["name"] for s in SetStore().load()["sets"]], ["Rusk, winter"])
+        self.assertEqual(dropped, [{**short, "id": "newerABCDE"}])
+
     def test_a_locked_backup_restored_keeps_the_hidden_ones_as_they_are(self):
         secret = self.hide_one_in_use()
         doc = json.loads(json.dumps(self.make(unlocked=False)))

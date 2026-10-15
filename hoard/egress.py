@@ -162,6 +162,21 @@ def get(store_sess: requests.Session, url: str, sites, *, stay_on_sites: bool = 
     raise UnsafeRequest("too many redirects")
 
 
+def send(method: str, url: str, user_agent: str = "", **kwargs) -> requests.Response:
+    """One request to a site that isn't a store's (Hoard's share server: shortlinks.py), of any method: https to a
+    public address only, with no cookies, and no redirect followed. The answer is read in full."""
+    check_hop(url)
+    if _test_origin(url):   # tests only: a stand-in server on this computer, plain http
+        sess = requests.Session()
+        sess.trust_env = False
+    else:
+        sess = session(user_agent)
+    with sess:
+        r = sess.request(method, url, allow_redirects=False, **kwargs)
+        r.content   # (read now: the session closes)
+        return r
+
+
 def _content_range(r: requests.Response) -> tuple[int, int, int | None] | None:
     """A 206 answer's Content-Range, as (first byte, last byte, the whole file's size or None), or None when it has
     none that makes sense."""

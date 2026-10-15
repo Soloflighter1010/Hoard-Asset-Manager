@@ -1,0 +1,24 @@
+# Hoard's share server: short links for shared sets (worker.mjs). How to set it up and deploy it: README.md here.
+name = "hoard-share"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+
+# Only at its own address (no workers.dev one): Cloudflare makes the DNS record and the certificate for it
+workers_dev = false
+routes = [{ pattern = "hoard-share.furryup.link", custom_domain = true }]
+
+# Where the locked sets are kept: the hoard-share namespace, made by `npx wrangler kv namespace create hoard-share`
+# (README.md, step 3). The id isn't a secret.
+[[kv_namespaces]]
+binding = "SETS"
+id = "27820f89401948c2adeeea6a1c3fa661"
+
+# At most 10 short links made, updated or deleted a minute from one address
+[[ratelimits]]
+name = "WRITES"
+namespace_id = "4021"
+simple = { limit = 10, period = 60 }
+
+# Nothing is logged
+[observability]
+enabled = false

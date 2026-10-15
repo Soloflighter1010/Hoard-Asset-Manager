@@ -1,5 +1,38 @@
 # Changelog
 
+## 4.3.0
+
+- **Short links for shared sets.** A set's link holds the set itself, so a big set's is thousands of characters
+  long. **Make a short link**, in **Share...**, makes one of about 70 characters that works for 14 days. Hoard
+  locks the set on your computer (AES-GCM, with a new random key) and sends only the locked copy to Hoard's share
+  server, `hoard-share.furryup.link`; the key is only in the link, after its `#`, which a browser never sends
+  anywhere, so the server can't read the set. **Update the link** puts the set as it is now behind the same link,
+  for 14 days from then (the dialog says when the set has changed since), and **Delete the short link** deletes it
+  from the server at once, as deleting the set does. The set viewer opens short links, and says when one has run
+  out or been deleted; **Add a shared set...** takes them too. Nothing is uploaded unless you make a short link:
+  the long link works as before. The share server is `share/` in the repository (a Cloudflare Worker, with its own
+  tests); `PRIVACY.md` says what it keeps, and `TERMS.md` has a section on using it.
+
+## 4.2.1
+
+- **Fixed: a shared set could include your own Gumroad download pages.** A set links each product to its page on its
+  store, and for Gumroad, Hoard used your purchase's own link: its download page (`gumroad.com/d/...`), which opens
+  the files for whoever has it. For Jinxxy it was your inventory page. A set now links only a product's public page
+  on its store, or its creator's page, never one of yours, and the set viewer on Hoard's website shows no other, so
+  links shared from 4.2.0 don't show them either. A link already shared still holds what was in it, so if you shared
+  a set with Gumroad products, delete those posts and share the set again. Gumroad products get their own page from
+  your next Gumroad refresh (until then, their creator's page).
+- **Fixed: Jinxxy products had no pictures in shared sets.** Their pictures are on Jinxxy's image host,
+  `jinxxy-c.jinxxy-cdn.com`, which a set now takes, and the viewer shows.
+- **Sets:**
+  - The tiles are square.
+  - Sets are chosen as products are, with **Select**, Ctrl or Shift. Right-click one for **Open**, **Share...**,
+    **Download the N not downloaded**, **Choose a picture...**, **Rename** and **Delete**. With several chosen, you
+    can download what's not downloaded, or delete them.
+  - **Select** stays on the right in a set, **Note and photos** is open to begin with, and the share dialog's buttons
+    wrap at large text sizes instead of running off its edge. The wording is plainer throughout.
+- **The set viewer** shows a set's products as tiles, in as many columns as fit.
+
 ## 4.2.0
 
 - **Sets, reworked: any products, downloaded or not, in a tab like a store's.** **Sets** is a tab beside the stores,

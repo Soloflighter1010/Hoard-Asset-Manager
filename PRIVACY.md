@@ -1,14 +1,17 @@
 # Privacy Policy
 
-Last updated: 23 September 2026 (version 1.4.0)
+Last updated: 15 October 2026 (version 1.5.0)
 
-**The short version:** Hoard runs entirely on your own computer. They don't send
-anything to me or to anyone else. There are no accounts, no analytics, no tracking and no ads.
+**The short version:** Hoard runs entirely on your own computer, and sends nothing to me or to anyone else. There
+are no accounts, no analytics, no tracking and no ads. The one exception is a short link for a set, if you choose to
+make one: then a copy of that set, locked so that only someone with the link can read it, is kept on Hoard's share
+server for 14 days, or until you delete it.
 
 ## Who this is from
 
-Hoard is an open-source project maintained by Soloflighter1010 ("I" below). I don't run any servers for
-Hoard, and I never receive any of your information.
+Hoard is an open-source project maintained by Soloflighter1010 ("I" below). The only server I run for Hoard
+is its share server, for short links (see below), and it can't read what it keeps. I never receive any of your
+information.
 
 ## What Hoard keeps on your computer
 
@@ -18,6 +21,7 @@ Hoard, and I never receive any of your information.
 | Your library list: names, creators, links and image links for the items you own | To show your library | `library.json` in Hoard's app-data folder |
 | Product images, saved after each refresh (turn off in Settings) | So the library loads quickly and works offline | `cache/thumbs` in Hoard's app-data folder |
 | Pictures you choose for your sets' and your own packages' tiles (4.2.0) | To show them on those tiles | `set-pictures` and `local-pictures` in Hoard's app-data folder, and a copy of a package's beside it in `Local`. Never in a set's shared link |
+| Each set's short link, if you made one (4.3.0): its address, the key that unlocks it, and a token that lets your Hoard update or delete it | So Hoard can show the link again, update it or delete it | `sets.json` in Hoard's app-data folder, until the link runs out or you delete it |
 | Downloaded files and their records (`_manifest.json`, `catalog.json`, `tags.json`, `asset.json`) | So nothing is downloaded twice, and for search and tags | The download folder you choose |
 | Your tags | So you can sort and find things your way, in Hoard | `tags.json` in the same private `Hoard` folder as your sign-ins |
 | What Hoard would print: which stores it read, what it downloaded, and any errors (no passwords, cookies or page contents) | So there's something to look at if Hoard misbehaves | `logs\\hoard-<date>_<time>.log` in Hoard's app-data folder, one for each time Hoard starts, each deleted after 30 days (the newest 10 are kept) |
@@ -54,6 +58,17 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   the website never receives the set, and Hoard uploads nothing. Your own products (Local) and hidden ones are
   never in a link. Whoever opens it loads each picture from its store's image host, and the photos from the
   photo sites they're on, as any page with those pictures would.
+- **Hoard's share server, only when you make a short link for a set** (4.3.0, **Make a short link** in
+  **Share...**), and when you or someone else opens one. Hoard locks the set on your computer first (AES-GCM,
+  with a new random key) and sends only the locked copy to `hoard-share.furryup.link`. The key is only in the
+  link, after its `#`, which a browser never sends anywhere, so the server can't read the set, and neither can I.
+  The server keeps the locked copy, when it runs out, and a fingerprint (SHA-256) of the token your Hoard keeps to
+  update or delete it, for 14 days from when you make or last update the link, and nothing else. It keeps no logs.
+  **Delete the short link** (or deleting the set) deletes it from the server straight away. I may delete a short
+  link that's reported for abuse, by its id, without being able to read it (see [TERMS.md](TERMS.md)). Opening a short link
+  (in the set viewer, or in **Add a shared set**) fetches the locked copy by its id. The server runs on
+  Cloudflare, which sees the IP address of whoever makes or opens a short link, as with any website, under
+  [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link never involves it.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
   day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A
@@ -62,8 +77,8 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   downloads the new installer from GitHub.
 
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
-has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading
-and checking for updates.
+has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading,
+checking for updates and short links.
 
 ## Using Hoard on your network
 
@@ -81,6 +96,8 @@ The command-line `debug` and `probe` files are still available for deeper troubl
 ## Deleting your information
 
 - **Sign-ins and library list:** choose **Sign out of every store** in the Stores panel. It also removes every store's items from your library.
+- **Short links:** **Delete the short link** in a set's **Share...**, or delete the set. Any you don't delete are
+  deleted from the share server 14 days after you made or last updated them.
 - **Everything else:** delete the Hoard program folder, your downloads folder, and the `Hoard` folder in your
   app-data folder (see the table above).
 

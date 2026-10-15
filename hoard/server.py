@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, space, themes, updater, vault
+from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, shortlinks, space, themes, updater, vault
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -921,15 +921,19 @@ class Handler(BaseHTTPRequestHandler):
         for a in srv.index(stale_ok=True)["assets"]:
             dl.setdefault(a["tag_key"], a)
 
+        def public(store: str, *links) -> str | None:   # its own public page, else its creator's: never one of yours
+            return next((u for u in (sets.product_link(store, x) for x in links) if u), None)
+
         def details(key: str) -> dict | None:
             i = lib.get(key)
             if i:
                 return {"store": i["store"], "id": i.get("id"), "name": i["name"], "creator": i.get("creator"),
-                        "url": i.get("url"), "thumbnail": i.get("thumbnail")}
+                        "url": public(i["store"], i.get("page"), i.get("url"), i.get("creator_url")),
+                        "thumbnail": i.get("thumbnail")}
             a = dl.get(key)
             if a:
-                return {"store": str(a["store"]).lower(), "name": a["name"], "creator": a.get("creator"),
-                        "url": a.get("url")}
+                store = str(a["store"]).lower()
+                return {"store": store, "name": a["name"], "creator": a.get("creator"), "url": public(store, a.get("url"))}
             return None
         return details
 
@@ -973,22 +977,99 @@ class Handler(BaseHTTPRequestHandler):
                              "local": store == "local", "mark": mark})
             out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                         "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
-                        "items": rows})
+                        "short": (s.get("short") or {}).get("expires"), "items": rows})
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 
-    def _share_set(self, sid: str):
-        """A set's share code and link (hoard/sets.py). Hidden products and your own (Local) are never in one."""
+    def _set_code(self, sid: str):
+        """A set and its share code: (set, code, how many products are in it), or a Response saying why not. Hidden
+        products and your own (Local) are never in one."""
         s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
         if s is None:
             return self._json({"error": "That set isn't there anymore."}, 400)
         hidden = MarkStore().keys("hidden")
-        shared = {**s, "items": [k for k in s["items"] if k not in hidden]}
-        code, count = sets.share_code(shared, self._product_details())
+        code, count = sets.share_code({**s, "items": [k for k in s["items"] if k not in hidden]}, self._product_details())
         if not count:
             return self._json({"error": "There's nothing in this set to share: products of your own (Local) and "
                                         "hidden ones stay on this computer."}, 400)
+        return s, code, count
+
+    @staticmethod
+    def _short_view(rec: dict | None, code: str) -> dict | None:
+        """What the share dialog shows of a set's short link: its link and code, when it runs out, and whether the set
+        has changed since."""
+        if not rec:
+            return None
+        short = shortlinks.code(rec["id"], rec["key"])
+        return {"link": sets.share_link(short), "code": short, "expires": rec["expires"],
+                "changed": rec["made"] != sets.code_mark(code), "days": shortlinks.LIFETIME_DAYS}
+
+    def _share_set(self, sid: str):
+        """A set's share code and link (hoard/sets.py), and its short link, if it has one."""
+        got = self._set_code(sid)
+        if not isinstance(got, tuple):
+            return got
+        s, code, count = got
         return self._json({"ok": True, "code": code, "link": sets.share_link(code), "count": count,
-                           "left_out": len(s["items"]) - count})
+                           "left_out": len(s["items"]) - count, "short": self._short_view(s.get("short"), code),
+                           "short_days": shortlinks.LIFETIME_DAYS})
+
+    def _shorten_set(self, body: dict):
+        """Make a set's short link, or update the set behind the one it has (hoard/shortlinks.py): {"id", "code" (the
+        code the page locked: it has to be the set's code now), "key" (what it locked it with), "data" (the locked
+        set)}. A set with a short link keeps it, with its key: the page locks the set with that key again."""
+        sid = str(body.get("id", ""))
+        got = self._set_code(sid)
+        if not isinstance(got, tuple):
+            return got
+        s, code, _ = got
+        if body.get("code") != code:
+            return self._json({"error": "The set changed while it was being shared. Try again."}, 409)
+        key, data, old = body.get("key"), body.get("data"), s.get("short")
+        if not isinstance(key, str) or not shortlinks.KEY.fullmatch(key):
+            return self._json({"error": "That short link can't be kept."}, 400)
+        rec = None
+        try:
+            if old and old["key"] == key:
+                try:
+                    rec = {**old, "expires": shortlinks.replace(old["id"], old["token"], data)}
+                except shortlinks.Gone:
+                    pass   # (it ran out on the server first: a new one, with the same key)
+            if rec is None:
+                made = shortlinks.make(data)
+                rec = {"id": made["id"], "key": key, "token": made["token"], "expires": made["expires"]}
+        except shortlinks.ShortLinkError as e:
+            return self._json({"error": str(e)}, 502)
+        rec["made"] = sets.code_mark(code)
+        try:
+            sets.SetStore().set_short(sid, rec)
+        except ValueError as e:   # (the set was deleted meanwhile: its new link goes too)
+            try:
+                shortlinks.delete(rec["id"], rec["token"])
+            except shortlinks.ShortLinkError:
+                pass
+            return self._json({"error": str(e)}, 400)
+        if old and old["id"] != rec["id"]:   # (a key that wasn't its link's: the old link goes)
+            try:
+                shortlinks.delete(old["id"], old["token"])
+            except shortlinks.ShortLinkError:
+                pass
+        return self._json({"ok": True, "short": self._short_view(rec, code)})
+
+    def _unshorten_set(self, sid: str):
+        """Delete a set's short link now: from the server, then from the set."""
+        s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+        if s is None:
+            return self._json({"error": "That set isn't there anymore."}, 400)
+        if s.get("short"):
+            try:
+                shortlinks.delete(s["short"]["id"], s["short"]["token"])
+            except shortlinks.ShortLinkError as e:
+                return self._json({"error": str(e)}, 502)
+            try:
+                sets.SetStore().set_short(sid, None)
+            except ValueError:   # (the set was deleted meanwhile: its link is gone either way)
+                pass
+        return self._json({"ok": True})
 
     def _visible_projects(self) -> list[dict]:
         """Projects' reports, without hidden products while the hidden library is locked (their names never leave
@@ -1310,10 +1391,13 @@ class Handler(BaseHTTPRequestHandler):
             def add_folder(value: str) -> None:
                 folder = str(libraries.check_new_folder(srv.cfg, value))
                 srv.cfg["library_folders"] = [str(f) for f in libraries.other_folders(srv.cfg)] + [folder]
+            dropped = []
             with srv.cfg_lock:
-                done = backup.restore(doc, srv.cfg, srv.lib, apply_settings, add_folder)
+                done = backup.restore(doc, srv.cfg, srv.lib, apply_settings, add_folder, dropped.append)
                 apply_store_sites(srv.cfg)
                 previous.set_keep(keep_previous(srv.cfg))
+            if dropped:   # sets the backup doesn't have: their short links go too (else they'd run out by themselves)
+                threading.Thread(target=forget_short_links, args=(dropped,), daemon=True).start()
             srv.save_settings()
             srv.forget_index()
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()
@@ -1324,14 +1408,32 @@ class Handler(BaseHTTPRequestHandler):
                 body = {**body, "items": [k for k in body.get("items") or [] if k not in hidden]}
             if body.get("action") == "share":
                 return self._share_set(str(body.get("id", "")))
+            if body.get("action") == "short":   # Make a short link, or update the one it has
+                return self._shorten_set(body)
+            if body.get("action") == "unshort":
+                return self._unshorten_set(str(body.get("id", "")))
+            if body.get("action") == "open-short":   # Add a shared set, from a short link: the page unlocks it
+                try:
+                    return self._json({"ok": True, **shortlinks.fetch(body.get("short"))})
+                except shortlinks.ShortLinkError as e:
+                    return self._json({"error": str(e)}, 404 if isinstance(e, shortlinks.Gone) else 502)
+            gone = None
+            if body.get("action") == "delete":   # its short link goes with it, once the set has
+                gone = next((x for x in sets.SetStore().load()["sets"] if x["id"] == body.get("id")), None)
             try:
                 data = sets.SetStore().change(body, self._product_details())
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
             except OSError as e:   # (a set's picture that couldn't be saved)
                 return self._json({"error": f"Couldn't save that: {e.strerror or e}."}, 500)
+            kept_short = None
+            if gone and gone.get("short"):   # (if the share server can be reached)
+                try:
+                    shortlinks.delete(gone["short"]["id"], gone["short"]["token"])
+                except shortlinks.ShortLinkError:
+                    kept_short = gone["short"]["expires"]   # (it runs out by itself)
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
-            return self._json({"ok": True, "made": data.get("made")})
+            return self._json({"ok": True, "made": data.get("made"), **({"kept_short": kept_short} if kept_short else {})})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)
@@ -1576,6 +1678,16 @@ def chosen_files(raw) -> dict[str, dict] | None:
         if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
+
+
+def forget_short_links(records: list[dict]) -> None:
+    """Delete short links whose sets are gone (a restore of a backup without them), as well as the share server can
+    be reached: one it can't delete runs out by itself."""
+    for rec in records:
+        try:
+            shortlinks.delete(rec["id"], rec["token"])
+        except shortlinks.ShortLinkError:
+            pass
 
 
 def rebuild_catalog_quietly(srv) -> None:

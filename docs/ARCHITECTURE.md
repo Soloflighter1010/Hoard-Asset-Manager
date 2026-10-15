@@ -25,6 +25,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   needs.py             What it needs: the GUIDs each package names and has, read in the background; known_tools.json
   previous.py          Previous versions: the file an update replaces, kept in the product's folder, and Restore
   sets.py              Sets: products grouped to use together (sets.json), listed in catalog.json for Import set
+  shortlinks.py        short links for shared sets: Hoard's share server (share/), through egress.send
   backup.py            Backup and restore: settings, tags, sets, choices and the library list in one file
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
                        browser; Schedule, the routine check
@@ -55,6 +56,9 @@ Packages/, ProjectSettings/, Assets/, source.json, Website/   VRChat's template-
                        is also a Unity 2022.3 project. unity-release.yml ("Build Release") publishes the
                        package; build-listing.yml builds the VCC listing and its page (Website/) with VRChat's
                        package-list-action, pinned, from every release
+share/                 Hoard's share server, for short links: a Cloudflare Worker (worker.mjs) with Workers KV,
+                       its wrangler.toml, and a stand-in KV and server for the tests; deployed by hand
+                       (share/README.md), not by a workflow
 tests/                 security tests, run on every change
 .github/workflows/     check.yml runs the tests and the build; release.yml publishes tagged versions; wiki.yml
                        publishes wiki/ to the repository's GitHub wiki
@@ -252,6 +256,27 @@ Both servers share the rules in their "web safety" section:
 - With `--host 0.0.0.0`, `network_tls` requires `--tls-cert`/`--tls-key` (served through
   `TLSServerMixin`, handshake in each request's thread) or an explicit `--plain-http`.
 
+## Short links (`shortlinks.py`, `share/`)
+
+A shared set's long link holds the set itself. A short link (`set.html#S1.<id>.<key>`) holds only an id and a key:
+
+- **Making one:** the page locks the set's code with AES-GCM under a new random 128-bit key (`lockSet` in
+  `shared.js`) and posts the locked set, with the key and the code it locked, to `/api/sets` (`short`). The
+  server checks that the code is the set's code now, then sends only the locked set to the share server
+  (`shortlinks.make`, through `egress.send`), which answers with an id and a token. `sets.json` keeps the id, key,
+  token, expiry and which code it holds (`code_mark`), so the dialog can say when the set has changed since.
+- **The share server** (`share/worker.mjs`) keeps a locked set in Workers KV for 14 days, with the token's
+  SHA-256 as its metadata. Only that token updates (`PUT`) or deletes (`DELETE`) it; anyone may read it, but only
+  the set viewer's origin in a browser (CORS), and a write that carries an `Origin` header is refused. It never
+  sees a key, logs nothing, caps a set at 48 KB and limits writes per address.
+- **Opening one:** the set viewer (`site/set.js`) fetches the locked set by its id (its Content-Security-Policy
+  allows only that `connect-src`) and unlocks it in the page; **Add a shared set** asks Hoard's server to fetch it
+  (`open-short`), unlocks it in the page, and adds the code as any other.
+- **Deleting one:** **Delete the short link** (`unshort`), and deleting the set, delete it from the server with
+  the token. Backups leave short links out; a restore keeps this computer's.
+
+A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
+
 ## Data files
 
 Each Python file carries the same "data files" section (a test checks the copies match):
@@ -298,6 +323,8 @@ Nothing a page needs comes from outside the computer:
 - Before refreshing, signing in or syncing, `reachable(store)` opens a connection to that store only. An
   unreachable store gets `unreachable_message()`, and its saved data is left alone. Browser errors that
   mean the connection dropped part-way (`is_network_error`, `NETWORK_ERRORS`) are reported the same way.
+- Short links (Sets, **Share...**) need Hoard's share server: without it, Hoard says so, and the long link
+  works offline as ever.
 - The pages show a notice while the browser reports being offline, and Hoard's Refresh and Sign in
   buttons explain instead of trying. Sign out works offline because it only touches local files.
 

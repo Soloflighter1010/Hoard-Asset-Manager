@@ -13,6 +13,12 @@ __pycache__/
 *.pyc
 dist/
 
+# The share server's working files (Wrangler's, and anything secret it's given)
+share/.wrangler/
+share/node_modules/
+share/.dev.vars*
+share/.env*
+
 # ---- The Unity project (VRChat's template-package layout: open this folder in Unity to work on
 # Packages/soloflighter.hoard). From the template's .gitignore:
 /[Ll]ibrary/
