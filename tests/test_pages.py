@@ -1751,17 +1751,18 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.close()
 
     def test_the_save_for_hoard_bookmark_is_offered(self):
-        """Stores offers the bookmark to drag to your usual browser; clicking it in Hoard only says how."""
+        """Stores offers the bookmark: its page on the website, opened in your usual browser (a link can't be dragged
+        out of Hoard's window into another browser), or copied from here, as Hoard makes it."""
         from urllib.parse import unquote
         page = self.open()
         page.click("#storesBtn")
         link = page.locator("#payhipSaver")
         link.wait_for()
-        href = link.get_attribute("href")
+        self.assertEqual(link.get_attribute("href"), "https://hoard.furryup.link/save-for-hoard.html")
+        self.assertEqual(link.get_attribute("target"), "_blank", "in your usual browser, not Hoard's window")
+        href = page.evaluate("payhipSaverUrl()")   # what copy it copies
         self.assertTrue(href.startswith("javascript:void "))
         self.assertEqual(unquote(href[len("javascript:void "):]), payhip_saver())
-        link.click()
-        page.get_by_text("bookmarks bar").first.wait_for()
         self.assertTrue(page.url.startswith(self.srv.url), "nothing ran in Hoard's page")
         self.assertEqual(self.errors, [])
         page.close()

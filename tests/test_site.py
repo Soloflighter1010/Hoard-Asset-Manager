@@ -84,6 +84,9 @@ class TheSite(unittest.TestCase):
             for tag, key, value in page.refs:
                 if re.match(r"(https?|vcc|mailto):", value):
                     continue
+                if value.startswith("javascript:"):   # the Save for Hoard bookmark: a page of its own's, to drag
+                    self.assertEqual((name, tag), ("save-for-hoard.html", "a"), f"{name}: a javascript: link")
+                    continue
                 if value.startswith("#"):
                     self.assertIn(value[1:], page.ids, f"{name}: {value}")
                     continue
@@ -333,7 +336,7 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(save_for_hoard.main([]), 0, "run python3 scripts/save_for_hoard.py --write")
         page = (SITE / "save-for-hoard.html").read_text("utf-8")
         href = re.search(r'<a class="bookmarklet" id="saver" href="([^"]+)"', page).group(1)
-        self.assertTrue(href.startswith("javascript:void %28async"), href[:40])
+        self.assertTrue(href.startswith("javascript:void (async"), href[:40])
         self.assertIn("b-account", unquote(href), "the Payhip saver itself")
         app = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
         self.assertIn('href="https://hoard.furryup.link/save-for-hoard.html" target="_blank"', app, "Hoard opens it in the browser")
