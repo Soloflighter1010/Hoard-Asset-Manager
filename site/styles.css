@@ -280,6 +280,24 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .slot .nm { font-weight: 700; font-size: 1.05rem; margin: 0; }
 .slot .cr { margin: -4px 0 0; color: var(--dust); font-size: .95rem; }
 .features .langs { margin: 28px 0 0; }
+/* the home page's features: three across, three down, each picture beside its words (square pictures three across
+   would be a third of the page wide) */
+.features .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px 28px; }
+.features .slot { display: grid; grid-template-columns: 132px minmax(0, 1fr); grid-template-rows: auto 1fr;
+                  gap: 8px 18px; align-content: start; }
+.features .slot .art { grid-row: span 2; }
+.features .ph { padding-top: 12px; }   /* clear of the badges */
+.features .ph b { font-size: 2.6rem; }
+.features .ph small { font-size: 11px; }
+@media (max-width: 1000px) {
+  .features .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .features .tiles { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .features .slot { grid-template-columns: 104px minmax(0, 1fr); column-gap: 14px; }
+  .features .ph b { font-size: 2rem; }
+  .features .ph small { font-size: 10px; }
+}
 
 /* ---------- the docs (docs/, built from the wiki by scripts/build_site_docs.py): the app's sidebar, the page, and
    its headings beside it */
