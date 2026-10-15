@@ -1725,7 +1725,7 @@ function setHead(s) {
       `<div class="row"><button class="ghost sm" data-setx="note">Save the note</button></div>` +
       (s.photos.length ? `<ul class="setphotos">${s.photos.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
         `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a><button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button></li>`).join("")}</ul>` : "") +
-      `<p class="hint">${esc(tr("Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add the link to the picture. Hoard saves the link, not the picture."))}</p>` +
+      `<p class="hint">${esc(tr("Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture."))}</p>` +
       `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div></details>`;
 }
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
@@ -1973,7 +1973,7 @@ async function setAct(e) {
     if (done) toast("Saved the note.");
   } else if (act === "photo") {
     if (s.photos.length >= 8) { toast("A set has up to 8 photos."); return; }
-    const url = await askName("Paste the link to a picture on a photo site", "", { max: 600 });
+    const url = await askName("Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)", "", { max: 600 });
     if (url) changeSets({ action: "photos", id: s.id, photos: [...s.photos, url] });
   } else if (act === "unphoto") {
     changeSets({ action: "photos", id: s.id, photos: s.photos.filter((u, n) => n !== +b.dataset.n) });

@@ -1438,10 +1438,8 @@
  "Delete these {0} sets? The products in them stay as they are.": "この{0}個のセットを削除しますか?中の商品はそのまま残ります。",
  "In your library, not downloaded": "ライブラリにあり、未ダウンロード",
  "Not in Local now": "今はローカルにありません",
- "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add the link to the picture. Hoard saves the link, not the picture.": "セットの写真(着用したアバターなど)は共有ページに表示されます。写真をImgurやGyazoなどの写真サイトに置いてから、その画像へのリンクを追加してください。Hoardが保存するのはリンクで、画像ではありません。",
  "What it's for, or how to put it together. It's shared with the set.": "何のためのセットか、または組み立て方。セットと一緒に共有されます。",
  "Your own packages (Local)": "自分のパッケージ(ローカル)",
- "Paste the link to a picture on a photo site": "写真サイト上の画像へのリンクを貼り付けてください",
  "Now add products: select them in the Library or Downloads, then choose Sets in the selection bar.": "次に商品を追加しましょう。ライブラリかダウンロードで選び、選択バーの「セット」を選んでください。",
  "Added the shared set. Products you don't own yet show where to buy them.": "共有されたセットを追加しました。まだ持っていない商品には購入先が表示されます。",
  "Delete these sets": "これらのセットを削除",
@@ -1483,5 +1481,9 @@
  "This browser can't open a short link here. Ask for the set's long link instead.": "このブラウザーでは、ここで短縮リンクを開けません。代わりにセットの長いリンクを頼んでください。",
  "One of them has a short link: it's deleted too.": "そのうち1つには短縮リンクがあり、それも削除されます。",
  "A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a link that shows what's in it and where to buy each, or as a short link that lasts 14 days. Hoard for Unity imports a whole set at once.": "セットは、アバターとその衣装のように一緒に使う商品をまとめたものです。ダウンロード済みかどうかは問わず、好きな画像を付けられます。「セット」、選択バー、または「プロジェクト」のプロジェクトから作れます。中身とそれぞれの購入先がわかるリンクとして、または14日間使える短縮リンクとして共有できます。Hoard for Unityはセットをまとめてインポートします。",
- "Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest, each with a picture of your choosing. Add your own, in Local, brings them in.": "自作のパッケージ・テクスチャ・マテリアルも、買ったものと並べてここに置けます。ほかと同じようにタグを付け、検索し、Unityにインポートでき、それぞれに好きな画像を付けられます。「ローカル」の「自分のものを追加」で取り込みます。"
+ "Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest, each with a picture of your choosing. Add your own, in Local, brings them in.": "自作のパッケージ・テクスチャ・マテリアルも、買ったものと並べてここに置けます。ほかと同じようにタグを付け、検索し、Unityにインポートでき、それぞれに好きな画像を付けられます。「ローカル」の「自分のものを追加」で取り込みます。",
+ "Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)": "画像のリンク、または写真サイト(Imgur、Gyazo、ImgBB、Blueskyなど)の画像ページのリンクを貼り付けてください",
+ "Paste a link to a picture on a photo site Hoard knows, or to its page there.": "Hoardが対応している写真サイト上の画像、またはその画像ページへのリンクを貼り付けてください。",
+ "Hoard couldn't find a picture on that page. Open the picture itself, then copy its own link (right-click it, Copy image address).": "そのページに画像が見つかりませんでした。画像そのものを開き、その画像のリンクをコピーしてください(右クリックして「画像アドレスをコピー」)。",
+ "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture.": "セットの写真(着用したアバターなど)は共有ページに表示されます。写真をImgurやGyazoなどの写真サイトに置いてから、その画像のリンク、またはそのサイトの画像ページのリンクを追加してください。Hoardが保存するのはリンクで、画像ではありません。"
 }

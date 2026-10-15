@@ -24,10 +24,11 @@ A short link that has run out is dropped when the file is read.
 from __future__ import annotations
 
 import base64
+import hashlib
+import html
 import json
 import re
 import secrets
-import hashlib
 import threading
 import time
 import zlib
@@ -58,6 +59,11 @@ PHOTO_HOSTS = ("i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i
                "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
                "public-files.gumroad.com")
 
+# photo sites' own pages for a picture (imgur.com/<id>, a Bluesky post...), as people copy them: Hoard reads the page
+# for the picture it shows (photo_from_page), from that site only
+PHOTO_PAGES = ("imgur.com", "gyazo.com", "ibb.co", "postimg.cc", "postimages.org", "bsky.app", "reddit.com", "x.com",
+               "twitter.com")
+MAX_PHOTO_PAGE = 2 * 1024 * 1024
 PICTURE_NAME = re.compile(r"[0-9a-f]{8}\.(?:png|jpg|webp)")   # a set's "picture"
 CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's "made"
 _lock = threading.Lock()
@@ -114,6 +120,57 @@ def _https_on(value, hosts) -> str | None:
 def photo_url(value) -> str | None:
     """A sharer's photo: an https link on one of the photo sites (PHOTO_HOSTS), or None."""
     return _https_on(value, PHOTO_HOSTS)
+
+
+def photo_page(value) -> str | None:
+    """value if it's a page on one of the photo sites (PHOTO_PAGES, or www., old., m. of one) rather than a picture."""
+    u = _https_on(value, {p for site in PHOTO_PAGES for p in (site, "www." + site, "old." + site, "m." + site)})
+    return u if u and not photo_url(u) else None
+
+
+def _tidy_picture(value: str) -> str:
+    """A page's picture as the photo site serves it in full: Imgur's "?fb" is a crop of it for link previews, and
+    Reddit's preview.redd.it is i.redd.it's picture, resized."""
+    u = urlparse(value)
+    if u.hostname == "i.imgur.com":
+        return f"https://i.imgur.com{u.path}"
+    if u.hostname == "preview.redd.it" and re.fullmatch(r"/[\w-]+\.(?:jpe?g|png|gif|webp)", u.path, re.I):
+        return f"https://i.redd.it{u.path}"
+    return value
+
+
+_META = re.compile(r"<meta\b[^>]*>", re.I)
+_CONTENT = re.compile(r"""\bcontent\s*=\s*(["'])(.*?)\1""", re.I | re.S)
+
+
+def picture_on_page(text: str) -> str | None:
+    """The picture a photo site's page shows (its og:image, else twitter:image), as a photo link Hoard takes."""
+    tags = _META.findall(text[:MAX_PHOTO_PAGE]) if isinstance(text, str) else []
+    for name in ("og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"):
+        said = re.compile(r"""\b(?:property|name)\s*=\s*["']""" + re.escape(name) + r"""["']""", re.I)
+        for tag in tags:
+            m = _CONTENT.search(tag) if said.search(tag) else None
+            found = photo_url(_tidy_picture(html.unescape(m.group(2)).strip())) if m else None
+            if found:
+                return found
+    return None
+
+
+def photo_from_page(value, fetch) -> str:
+    """The picture behind a photo site's page link (photo_page), read from the page: fetch(url) gives the page's
+    text, or None. An Imgur picture's page that can't be read is still Imgur's picture. Raises ValueError, saying
+    what to paste instead."""
+    page = photo_page(value)
+    if not page:
+        raise ValueError("Paste a link to a picture on a photo site Hoard knows, or to its page there.")
+    found = picture_on_page(fetch(page))
+    single = re.fullmatch(r"https://(?:www\.|m\.)?imgur\.com/([A-Za-z0-9]{5,8})/?", page)
+    if not found and single:
+        found = f"https://i.imgur.com/{single.group(1)}.jpeg"
+    if not found:
+        raise ValueError("Hoard couldn't find a picture on that page. Open the picture itself, then copy its own "
+                         "link (right-click it, Copy image address).")
+    return found
 
 
 def product_picture(store, value) -> str | None:

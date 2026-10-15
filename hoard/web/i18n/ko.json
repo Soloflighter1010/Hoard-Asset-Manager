@@ -1438,10 +1438,8 @@
  "Delete these {0} sets? The products in them stay as they are.": "이 세트 {0}개를 삭제할까요? 안에 있는 상품은 그대로 남아요.",
  "In your library, not downloaded": "라이브러리에 있음, 다운로드 안 함",
  "Not in Local now": "지금은 로컬에 없음",
- "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add the link to the picture. Hoard saves the link, not the picture.": "세트 사진(입혀 본 아바타 등)은 공유 페이지에 보여요. 사진을 Imgur나 Gyazo 같은 사진 사이트에 올린 뒤 그 이미지 링크를 추가하세요. Hoard는 이미지가 아니라 링크를 저장해요.",
  "What it's for, or how to put it together. It's shared with the set.": "무엇을 위한 세트인지, 또는 조합하는 방법. 세트와 함께 공유돼요.",
  "Your own packages (Local)": "내 패키지(로컬)",
- "Paste the link to a picture on a photo site": "사진 사이트에 있는 이미지 링크를 붙여 넣으세요",
  "Now add products: select them in the Library or Downloads, then choose Sets in the selection bar.": "이제 상품을 추가하세요. 라이브러리나 다운로드에서 고른 뒤 선택 막대에서 “세트”를 고르세요.",
  "Added the shared set. Products you don't own yet show where to buy them.": "공유된 세트를 추가했어요. 아직 없는 상품에는 살 수 있는 곳이 보여요.",
  "Delete these sets": "이 세트들 삭제",
@@ -1483,5 +1481,9 @@
  "This browser can't open a short link here. Ask for the set's long link instead.": "이 브라우저에서는 여기서 짧은 링크를 열 수 없어요. 대신 세트의 긴 링크를 부탁하세요.",
  "One of them has a short link: it's deleted too.": "그중 하나에 짧은 링크가 있어요. 그것도 함께 삭제돼요.",
  "A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a link that shows what's in it and where to buy each, or as a short link that lasts 14 days. Hoard for Unity imports a whole set at once.": "세트는 아바타와 그 의상처럼 함께 쓰는 상품을 모은 거예요. 다운로드했든 안 했든 상관없고, 원하는 이미지를 달 수 있어요. '세트', 선택 막대, 또는 '프로젝트'의 프로젝트에서 만들 수 있어요. 들어 있는 것과 각각 어디서 사는지 보여 주는 링크로, 또는 14일 동안 쓸 수 있는 짧은 링크로 공유할 수 있어요. Hoard for Unity는 세트를 한 번에 가져와요.",
- "Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest, each with a picture of your choosing. Add your own, in Local, brings them in.": "내가 만든 패키지, 텍스처, 머티리얼도 산 것과 나란히 여기에 둘 수 있어요. 다른 것처럼 태그를 달고, 검색하고, Unity로 가져올 수 있고, 각각 원하는 이미지를 달 수 있어요. '로컬'의 '내 것 추가'로 가져와요."
+ "Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest, each with a picture of your choosing. Add your own, in Local, brings them in.": "내가 만든 패키지, 텍스처, 머티리얼도 산 것과 나란히 여기에 둘 수 있어요. 다른 것처럼 태그를 달고, 검색하고, Unity로 가져올 수 있고, 각각 원하는 이미지를 달 수 있어요. '로컬'의 '내 것 추가'로 가져와요.",
+ "Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)": "이미지 링크나 사진 사이트(Imgur, Gyazo, ImgBB, Bluesky 등)의 이미지 페이지 링크를 붙여 넣으세요",
+ "Paste a link to a picture on a photo site Hoard knows, or to its page there.": "Hoard가 아는 사진 사이트에 있는 이미지나 그 이미지 페이지의 링크를 붙여 넣으세요.",
+ "Hoard couldn't find a picture on that page. Open the picture itself, then copy its own link (right-click it, Copy image address).": "그 페이지에서 이미지를 찾지 못했어요. 이미지를 직접 열고 그 이미지의 링크를 복사하세요(오른쪽 클릭 후 “이미지 주소 복사”).",
+ "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture.": "세트 사진(입혀 본 아바타 등)은 공유 페이지에 보여요. 사진을 Imgur나 Gyazo 같은 사진 사이트에 올린 뒤 그 이미지 링크나 그 사이트의 이미지 페이지 링크를 추가하세요. Hoard는 이미지가 아니라 링크를 저장해요."
 }

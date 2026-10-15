@@ -263,7 +263,7 @@ In plain words, here's what protects you. [SECURITY.md](SECURITY.md) has the tec
 **Your privacy**
 - **Nothing is sent to the developer.** No accounts, no tracking, no analytics, no ads. Hoard only talks
   to the stores you use (and, if you make a short link for a set, Hoard's share server, which keeps it locked
-  so it can't read it). [PRIVACY.md](PRIVACY.md) lists everything it keeps and how to delete it.
+  so it can't read it; and a photo site, when you add a set's photo by its page there). [PRIVACY.md](PRIVACY.md) lists everything it keeps and how to delete it.
 - **It works offline** for everything except refreshing, signing in and downloading.
 
 **What no app can protect you from**
