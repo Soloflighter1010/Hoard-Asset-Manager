@@ -1480,5 +1480,8 @@
  "That short link's set is damaged. Ask for the long link instead.": "그 짧은 링크의 세트가 손상되었어요. 대신 긴 링크를 부탁하세요.",
  "The set changed while it was being shared. Try again.": "공유하는 동안 세트가 바뀌었어요. 다시 해 보세요.",
  "That short link can't be kept.": "그 짧은 링크는 저장할 수 없어요.",
- "That's a short link: paste it into Add a shared set, in the Sets tab.": "그건 짧은 링크예요. 세트 탭의 “공유된 세트 추가”에 붙여 넣으세요."
+ "That's a short link: open it with Add a shared set, in Hoard 4.3 or later.": "그건 짧은 링크예요. Hoard 4.3 이상에서 “공유된 세트 추가”로 여세요.",
+ "That short link is cut short, or has been changed: copy all of it, and try again.": "그 짧은 링크는 잘렸거나 바뀌었어요. 링크 전체를 복사해서 다시 해 보세요.",
+ "This browser can't open a short link here. Ask for the set's long link instead.": "이 브라우저에서는 여기서 짧은 링크를 열 수 없어요. 대신 세트의 긴 링크를 부탁하세요.",
+ "One of them has a short link: it's deleted too.": "그중 하나에 짧은 링크가 있어요. 그것도 함께 삭제돼요."
 }

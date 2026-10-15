@@ -1818,11 +1818,12 @@ async function unlockSet(data, key) {
 }
 const canLock = () => !!(window.crypto && crypto.subtle);   // (a page on 127.0.0.1 has it; one opened by its LAN address over http doesn't)
 const NO_LOCK = "This browser can't lock a set for a short link here. Share the long link instead.";
+const NO_UNLOCK = "This browser can't open a short link here. Ask for the set's long link instead.";
 const day = seconds => new Date(seconds * 1000).toLocaleDateString(document.documentElement.lang || "en", { year: "numeric", month: "long", day: "numeric" });
 // The set behind a short link someone shared (Add a shared set): its code, or "" when it can't be had (said why)
 async function openShortLink(text) {
   const m = text.replace(/\s+/g, "").match(SHORT_LINK);
-  if (!canLock()) { toast(NO_LOCK); return ""; }
+  if (!canLock()) { toast(NO_UNLOCK); return ""; }
   const r = await apiPost("/api/sets", { action: "open-short", short: m[1] });
   if (!r.ok) { toast(r.data.error || "That short link couldn't be opened."); return ""; }
   try { return await unlockSet(r.data.data, m[2]); }
@@ -1912,7 +1913,8 @@ async function deleteSets(list) {
   const shorts = list.filter(s => s.short).length;
   if (!list.length || !await ask((list.length === 1 ? tr("Delete the set {0}? The products in it stay as they are.", list[0].name)
                                   : tr("Delete these {0} sets? The products in them stay as they are.", list.length)) +
-                                 (shorts ? " " + tr(shorts === 1 && list.length === 1 ? "Its short link is deleted too." : "Their short links are deleted too.") : ""),
+                                 (shorts ? " " + tr(shorts > 1 ? "Their short links are deleted too." : list.length === 1 ? "Its short link is deleted too."
+                                                     : "One of them has a short link: it's deleted too.") : ""),
                                  "Delete", true)) return;
   let kept = 0;
   for (const s of list) {

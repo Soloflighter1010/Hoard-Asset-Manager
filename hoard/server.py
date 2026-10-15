@@ -1065,7 +1065,10 @@ class Handler(BaseHTTPRequestHandler):
                 shortlinks.delete(s["short"]["id"], s["short"]["token"])
             except shortlinks.ShortLinkError as e:
                 return self._json({"error": str(e)}, 502)
-            sets.SetStore().set_short(sid, None)
+            try:
+                sets.SetStore().set_short(sid, None)
+            except ValueError:   # (the set was deleted meanwhile: its link is gone either way)
+                pass
         return self._json({"ok": True})
 
     def _visible_projects(self) -> list[dict]:
@@ -1388,10 +1391,13 @@ class Handler(BaseHTTPRequestHandler):
             def add_folder(value: str) -> None:
                 folder = str(libraries.check_new_folder(srv.cfg, value))
                 srv.cfg["library_folders"] = [str(f) for f in libraries.other_folders(srv.cfg)] + [folder]
+            dropped = []
             with srv.cfg_lock:
-                done = backup.restore(doc, srv.cfg, srv.lib, apply_settings, add_folder)
+                done = backup.restore(doc, srv.cfg, srv.lib, apply_settings, add_folder, dropped.append)
                 apply_store_sites(srv.cfg)
                 previous.set_keep(keep_previous(srv.cfg))
+            if dropped:   # sets the backup doesn't have: their short links go too (else they'd run out by themselves)
+                threading.Thread(target=forget_short_links, args=(dropped,), daemon=True).start()
             srv.save_settings()
             srv.forget_index()
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()
@@ -1411,20 +1417,21 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": True, **shortlinks.fetch(body.get("short"))})
                 except shortlinks.ShortLinkError as e:
                     return self._json({"error": str(e)}, 404 if isinstance(e, shortlinks.Gone) else 502)
-            kept_short = None
-            if body.get("action") == "delete":   # a set's short link goes with it, if the share server can be reached
+            gone = None
+            if body.get("action") == "delete":   # its short link goes with it, once the set has
                 gone = next((x for x in sets.SetStore().load()["sets"] if x["id"] == body.get("id")), None)
-                if gone and gone.get("short"):
-                    try:
-                        shortlinks.delete(gone["short"]["id"], gone["short"]["token"])
-                    except shortlinks.ShortLinkError:
-                        kept_short = gone["short"]["expires"]   # (it runs out by itself)
             try:
                 data = sets.SetStore().change(body, self._product_details())
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
             except OSError as e:   # (a set's picture that couldn't be saved)
                 return self._json({"error": f"Couldn't save that: {e.strerror or e}."}, 500)
+            kept_short = None
+            if gone and gone.get("short"):   # (if the share server can be reached)
+                try:
+                    shortlinks.delete(gone["short"]["id"], gone["short"]["token"])
+                except shortlinks.ShortLinkError:
+                    kept_short = gone["short"]["expires"]   # (it runs out by itself)
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
             return self._json({"ok": True, "made": data.get("made"), **({"kept_short": kept_short} if kept_short else {})})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
@@ -1671,6 +1678,16 @@ def chosen_files(raw) -> dict[str, dict] | None:
         if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
+
+
+def forget_short_links(records: list[dict]) -> None:
+    """Delete short links whose sets are gone (a restore of a backup without them), as well as the share server can
+    be reached: one it can't delete runs out by itself."""
+    for rec in records:
+        try:
+            shortlinks.delete(rec["id"], rec["token"])
+        except shortlinks.ShortLinkError:
+            pass
 
 
 def rebuild_catalog_quietly(srv) -> None:

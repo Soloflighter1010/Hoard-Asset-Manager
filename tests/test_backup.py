@@ -120,8 +120,16 @@ class RoundTrip(unittest.TestCase):
         for part in ("short", short["key"], short["token"], short["id"]):
             self.assertNotIn(part, text)
         doc["sets"][0]["short"] = {**short, "id": "zzzzzzzzzz"}   # (one put in by hand isn't taken either)
-        backup.restore(doc, self.cfg, self.lib, server.apply_settings, lambda p: None)
+        dropped = []
+        backup.restore(doc, self.cfg, self.lib, server.apply_settings, lambda p: None, dropped.append)
         self.assertEqual(SetStore().load()["sets"][0]["short"], short)
+        self.assertEqual(dropped, [])
+        # a set the backup doesn't have goes, and its short link with it: given back, to be deleted
+        made = SetStore().change({"action": "create", "name": "Newer"})["made"]
+        SetStore().set_short(made, {**short, "id": "newerABCDE"})
+        backup.restore(doc, self.cfg, self.lib, server.apply_settings, lambda p: None, dropped.append)
+        self.assertEqual([s["name"] for s in SetStore().load()["sets"]], ["Rusk, winter"])
+        self.assertEqual(dropped, [{**short, "id": "newerABCDE"}])
 
     def test_a_locked_backup_restored_keeps_the_hidden_ones_as_they_are(self):
         secret = self.hide_one_in_use()

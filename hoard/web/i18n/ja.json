@@ -1480,5 +1480,8 @@
  "That short link's set is damaged. Ask for the long link instead.": "その短縮リンクのセットは壊れています。代わりに長いリンクを頼んでください。",
  "The set changed while it was being shared. Try again.": "共有している間にセットが変わりました。もう一度お試しください。",
  "That short link can't be kept.": "その短縮リンクは保存できません。",
- "That's a short link: paste it into Add a shared set, in the Sets tab.": "それは短縮リンクです。セットタブの「共有されたセットを追加」に貼り付けてください。"
+ "That's a short link: open it with Add a shared set, in Hoard 4.3 or later.": "それは短縮リンクです。Hoard 4.3以降の「共有されたセットを追加」で開いてください。",
+ "That short link is cut short, or has been changed: copy all of it, and try again.": "その短縮リンクは途中で切れているか、変更されています。リンク全体をコピーして、もう一度お試しください。",
+ "This browser can't open a short link here. Ask for the set's long link instead.": "このブラウザーでは、ここで短縮リンクを開けません。代わりにセットの長いリンクを頼んでください。",
+ "One of them has a short link: it's deleted too.": "そのうち1つには短縮リンクがあり、それも削除されます。"
 }

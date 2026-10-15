@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
-from .shortlinks import ID as SHORT_ID, KEY as SHORT_KEY, TOKEN as SHORT_TOKEN
+from .shortlinks import CODE as SHORT_CODE, ID as SHORT_ID, KEY as SHORT_KEY, PREFIX as SHORT_PREFIX, TOKEN as SHORT_TOKEN
 from .tags import TAG_KEY_RX
 
 MAX_SETS = 200
@@ -388,6 +388,8 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
         p = {**(now or {}), **(remembered or {})} if remembered or now else None   # (a link remembered from 4.2.0
         if not p or p["store"] not in STORES:                                        # was dropped: Hoard's, now)
             continue
+        if now and now.get("url"):   # its page as Hoard knows it now: its own, once a refresh has found it, not
+            p["url"] = now["url"]    # the creator's page remembered before then
         row = [p["store"], p.get("id", ""), p["name"], p.get("creator", ""), p.get("url", ""), p.get("thumbnail", "")]
         while row and row[-1] == "":   # (what's left out at the end costs nothing)
             row.pop()
@@ -417,8 +419,10 @@ def from_code(text) -> dict:
     if "#" in text:
         text = text.split("#", 1)[1]
     text = re.sub(r"\s+", "", text)
-    if text.startswith("S1."):
-        raise ValueError("That's a short link: paste it into Add a shared set, in the Sets tab.")
+    if text.startswith(SHORT_PREFIX):   # (Hoard's page opens a whole one itself, before it gets here)
+        raise ValueError("That's a short link: open it with Add a shared set, in Hoard 4.3 or later."
+                         if SHORT_CODE.fullmatch(text) else
+                         "That short link is cut short, or has been changed: copy all of it, and try again.")
     if not text.startswith(CODE_PREFIX) or len(text) > MAX_CODE:
         raise ValueError("That isn't a Hoard set code. A set's code starts with H1.")
     body = text[len(CODE_PREFIX):]

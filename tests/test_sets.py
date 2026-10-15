@@ -262,6 +262,18 @@ class PublicPagesOnly(unittest.TestCase):
         self.assertNotIn("/d/", json.dumps(sets.from_code(code)))
         self.assertEqual(sets.from_code(code)["products"]["gumroad:ears"]["url"], "https://kitsu.gumroad.com/l/ears")
 
+    def test_its_own_page_once_known(self):
+        """A product added before a refresh found its own page is remembered with its creator's; shared after it,
+        it has its own."""
+        s = {"name": "s", "items": ["gumroad:ears"], "products": {"gumroad:ears": {
+            "store": "gumroad", "name": "Ears", "creator": "Kitsu", "url": "https://kitsu.gumroad.com"}}}
+        code = sets.share_code(s)[0]
+        self.assertEqual(sets.from_code(code)["products"]["gumroad:ears"]["url"], "https://kitsu.gumroad.com")
+        now = {"gumroad:ears": {"store": "gumroad", "name": "Ears", "url": "https://kitsu.gumroad.com/l/ears"}}
+        code = sets.share_code(s, now.get)[0]
+        got = sets.from_code(code)["products"]["gumroad:ears"]
+        self.assertEqual((got["url"], got["creator"]), ("https://kitsu.gumroad.com/l/ears", "Kitsu"))
+
 
 class InTheCatalog(unittest.TestCase):
     def test_sets_by_their_products_folders(self):

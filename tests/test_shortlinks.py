@@ -165,8 +165,10 @@ class Kept(unittest.TestCase):
         self.assertNotIn("short", json.dumps(sets.from_code(code)))
         for part in (self.rec["token"], self.rec["key"], self.rec["id"]):
             self.assertNotIn(part, json.dumps(sets.from_code(code)))
-        with self.assertRaisesRegex(ValueError, "short link"):
+        with self.assertRaisesRegex(ValueError, "Add a shared set, in Hoard 4.3"):
             sets.from_code(f"https://hoard.furryup.link/set.html#S1.{self.rec['id']}.{self.rec['key']}")
+        with self.assertRaisesRegex(ValueError, "cut short"):
+            sets.from_code(f"https://hoard.furryup.link/set.html#S1.{self.rec['id']}.{self.rec['key'][:-3]}")
 
     def test_the_mark_of_a_code(self):
         self.assertEqual(sets.code_mark(a_code()), sets.code_mark(a_code()))
@@ -354,6 +356,24 @@ class EndToEnd(unittest.TestCase):
             view.locator("#setProblem").wait_for()
             self.assertIn("run out", view.locator("#setProblemWhy").inner_text())
             self.assertEqual(errors, [])
+            browser.close()
+
+    def test_the_viewer_says_what_went_wrong(self):
+        """An error page on the way (Cloudflare's own, say) is the server being busy, and no answer at all is the
+        connection."""
+        from playwright.sync_api import sync_playwright
+        link = "https://hoard.furryup.link/set.html#S1.abcDEF0123." + "k" * 22
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            for answer, said in ((lambda r: r.fulfill(status=503, body="<html>Error 1027</html>", content_type="text/html",
+                                                      headers={"Access-Control-Allow-Origin": "https://hoard.furryup.link"}), "busy"),
+                                 (lambda r: r.abort(), "Couldn't reach Hoard's share server")):
+                page = self.viewer(browser, [])
+                page.route("https://hoard-share.furryup.link/**", answer)
+                page.goto(link)
+                page.locator("#setProblem").wait_for()
+                self.assertIn(said, page.locator("#setProblemWhy").inner_text())
+                page.close()
             browser.close()
 
     def test_a_deleted_set_takes_its_short_link_with_it(self):

@@ -67,7 +67,7 @@ def _request(method: str, path: str, *, token: str | None = None, data: str | No
         raise ShortLinkError("That short link was made by another copy of Hoard, so this one can't change it.")
     if r.status_code == 413:
         raise ShortLinkError("This set is too big for a short link. Share the long link.")
-    if r.status_code in (429, 503) or r.status_code >= 500:
+    if r.status_code == 429 or r.status_code >= 500:
         raise ShortLinkError("Hoard's share server is busy. Share the long link, or try again later.")
     if not 200 <= r.status_code < 300 or not isinstance(body, dict):
         raise ShortLinkError(f"Hoard's share server didn't take that ({r.status_code}). Share the long link.")

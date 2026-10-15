@@ -123,10 +123,12 @@ def summary(doc: dict) -> dict:
     }
 
 
-def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
+def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder, dropped_short=None) -> dict:
     """Put a backup's contents in place. apply_settings(cfg, change) checks settings as Settings does (raising
-    ValueError), returning the change to make; add_folder(path) adds a library folder (raising ValueError). Returns
-    {"settings": [what was taken], "skipped": [what wasn't, and why], "items": library items added}."""
+    ValueError), returning the change to make; add_folder(path) adds a library folder (raising ValueError);
+    dropped_short(record) is given the short link of each set here that the backup doesn't have, which the restore
+    takes away (so its link can be deleted: nothing else could). Returns {"settings": [what was taken], "skipped":
+    [what wasn't, and why], "items": library items added}."""
     from . import libraries
     from .config import deep_merge
     from .marks import KINDS, MarkStore, _SCRYPT
@@ -170,6 +172,9 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
     if isinstance(doc.get("sets"), list):
         with _sets._lock:
             given, had = SetStore.sanitize({"sets": doc["sets"]}), {s["id"]: s for s in SetStore().load()["sets"]}
+            for gone in set(had) - {s["id"] for s in given["sets"]}:
+                if had[gone].get("short") and dropped_short:
+                    dropped_short(had[gone]["short"])
             for s in given["sets"]:
                 before = had.get(s["id"]) or {"items": []}
                 s["items"] += [k for k in before["items"] if k in keep and k not in s["items"]]

@@ -104,15 +104,15 @@
   }
   // The code behind a short link, and when the link runs out: {code, expires}, or {why} it can't be had
   async function fromServer(id, key) {
-    let r, got;
+    let r, got = null;
     try {
       r = await fetch(`${SHARE_SERVER}/v1/sets/${id}`, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" });
-      got = await r.json();
     } catch (e) {
       return { why: "Couldn't reach Hoard's share server, where this short link's set is kept. Check your connection, and try again." };
     }
     if (r.status === 404) return { why: "This short link has run out (short links last 14 days), or whoever shared it deleted it. Ask them for the set again." };
-    if (!r.ok || typeof got.data !== "string" || !Number.isInteger(got.expires)) return { why: "Hoard's share server is busy. Try again in a while." };
+    try { if (r.ok) got = await r.json(); } catch (e) { /* (not the server's answer: an error page on the way) */ }
+    if (!got || typeof got.data !== "string" || !Number.isInteger(got.expires)) return { why: "Hoard's share server is busy. Try again in a while." };
     try { return { code: await unlockSet(got.data, key), expires: got.expires }; }
     catch (e) { return { why: "This link's key doesn't open its set: part of the link is missing or changed. Ask for it again, and copy all of it." }; }
   }
