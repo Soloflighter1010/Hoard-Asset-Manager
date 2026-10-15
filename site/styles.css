@@ -268,6 +268,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .ph b { font: 400 clamp(3rem, 7vw, 4.6rem)/1 var(--display); opacity: .85; }
 .ph small { font-size: 13px; font-weight: 700; opacity: .7; }
 .ph.h1 { --h: 14; } .ph.h2 { --h: 320; } .ph.h3 { --h: 186; } .ph.h4 { --h: 232; } .ph.h5 { --h: 110; } .ph.h6 { --h: 40; }
+.ph.h7 { --h: 275; } .ph.h8 { --h: 150; } .ph.h9 { --h: 350; }
 .badge { position: absolute; left: 8px; top: 8px; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
          background: rgb(20 16 12 / .78); color: #F4EDE3; }
 .badge.count { background: var(--bone); color: var(--cave); }
@@ -278,6 +279,25 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .ondisk-mark svg { width: 15px; height: 15px; }
 .slot .nm { font-weight: 700; font-size: 1.05rem; margin: 0; }
 .slot .cr { margin: -4px 0 0; color: var(--dust); font-size: .95rem; }
+.features .langs { margin: 28px 0 0; }
+/* the home page's features: three across, three down, each picture beside its words (square pictures three across
+   would be a third of the page wide) */
+.features .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px 28px; }
+.features .slot { display: grid; grid-template-columns: 132px minmax(0, 1fr); grid-template-rows: auto 1fr;
+                  gap: 8px 18px; align-content: start; }
+.features .slot .art { grid-row: span 2; }
+.features .ph { padding-top: 12px; }   /* clear of the badges */
+.features .ph b { font-size: 2.6rem; }
+.features .ph small { font-size: 11px; }
+@media (max-width: 1000px) {
+  .features .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .features .tiles { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .features .slot { grid-template-columns: 104px minmax(0, 1fr); column-gap: 14px; }
+  .features .ph b { font-size: 2rem; }
+  .features .ph small { font-size: 10px; }
+}
 
 /* ---------- the docs (docs/, built from the wiki by scripts/build_site_docs.py): the app's sidebar, the page, and
    its headings beside it */
@@ -374,7 +394,8 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
    of the page's own colour, feathered at its edges, so the glow shows beside it but never runs under its text (small
    grey text and gold links fell under 3:1 where the glow is brightest). Prose, lists, cards and tables share its
    width. */
-.brief { --ok: #7ED67A; --no: #FF8A70; --col: 700px; position: relative; isolation: isolate; max-width: calc(var(--col) + 80px); }
+.brief { --ok: #7ED67A; --no: #FF8A70; --col: 700px; position: relative; isolation: isolate; max-width: calc(var(--col) + 80px);
+  padding-bottom: 56px; }   /* (room below the last line, whatever the page ends with) */
 @media (prefers-color-scheme: light) { .brief { --ok: #2B7F35; --no: #A3331F; } }
 .brief::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 40px; background: var(--cave);
   box-shadow: 0 0 56px 36px var(--cave); }
@@ -437,7 +458,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .brief .codetable tr.grp th { background: var(--stone); font-size: .82rem; padding-top: 10px; padding-bottom: 10px; }
 .brief .codetable tr.grp a { color: var(--bone); text-decoration: none; }
 .brief .codetable tr.grp a:hover { text-decoration: underline; }
-.brief .page-foot { max-width: var(--col); margin-top: 48px; padding-bottom: 40px; font-size: .85rem; }
+.brief .page-foot { max-width: var(--col); margin-top: 48px; padding-bottom: 0; font-size: .85rem; }
 @media (max-width: 560px) {
   .brief .glance, .brief .two { grid-template-columns: 1fr; }
   .brief .toc ol { columns: 1; }
@@ -457,6 +478,12 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .brief .codetable { min-width: 0; }
   .brief .codetable td:last-child { white-space: normal; width: 46%; }
 }
+
+/* Not found (404.html): a tile of its own, as the app shows a product without a picture */
+.lost .hero { padding: 64px 0 40px; }
+.lost-tile { width: min(220px, 60vw); margin: 0 auto 28px; }
+.lost-tile .art { box-shadow: 0 18px 50px rgb(0 0 0 / .3); transform: rotate(-3deg); }
+.lost .small code { overflow-wrap: anywhere; }
 
 /* Save for Hoard (save-for-hoard.html): the bookmark itself, to drag to the browser's bookmarks bar */
 .saver-get { margin: 24px 0 8px; }
