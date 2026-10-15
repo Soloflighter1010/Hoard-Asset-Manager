@@ -37,6 +37,9 @@ Cloudflare: sign in if it asks, then choose **Allow**. The terminal then says yo
 
 ### Step 3: Make the storage for the sets
 
+`wrangler.toml` already names the storage of Hoard's own share server (its `id`). Skip steps 3 and 4 if you're
+deploying to that same Cloudflare account; to set it up on another account, do them, and use your new id instead.
+
     npx wrangler kv namespace create hoard-share
 
 It prints a few lines ending like this:
@@ -50,12 +53,9 @@ say no: step 4 puts it in the right place.
 
 ### Step 4: Put that id in `wrangler.toml`
 
-Open `wrangler.toml` (in this folder) in any text editor. Find this line:
-
-    id = "PUT-THE-NAMESPACE-ID-HERE"
-
-Replace `PUT-THE-NAMESPACE-ID-HERE` with the id you copied, keeping the quotes, and save the file. The id isn't a
-secret, so it's fine to commit it.
+Open `wrangler.toml` (in this folder) in any text editor. Find the `id = "..."` line under `[[kv_namespaces]]`,
+replace what's between the quotes with the id you copied, and save the file. The id isn't a secret, so it's fine to
+commit it.
 
 ### Step 5: Make sure the address is free
 

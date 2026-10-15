@@ -7,11 +7,11 @@ compatibility_date = "2026-09-01"
 workers_dev = false
 routes = [{ pattern = "hoard-share.furryup.link", custom_domain = true }]
 
-# Where the locked sets are kept. The id isn't a secret: it's what `npx wrangler kv namespace create hoard-share`
-# printed (README.md, step 2).
+# Where the locked sets are kept: the hoard-share namespace, made by `npx wrangler kv namespace create hoard-share`
+# (README.md, step 3). The id isn't a secret.
 [[kv_namespaces]]
 binding = "SETS"
-id = "PUT-THE-NAMESPACE-ID-HERE"
+id = "27820f89401948c2adeeea6a1c3fa661"
 
 # At most 10 short links made, updated or deleted a minute from one address
 [[ratelimits]]
