@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from html.parser import HTMLParser
+from urllib.parse import unquote
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -35,7 +36,7 @@ def built_site() -> Path:
 
 
 PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-         "stores.html", "set.html")
+         "stores.html", "set.html", "save-for-hoard.html")
 
 
 def every_page(site: Path) -> list[str]:
@@ -323,6 +324,20 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual({url for url, _ in links}, in_table, "every code link is in the table")
         for part in ('id="api"', 'id="ai"', 'href="#code"', "AI-DISCLOSURE.md"):
             self.assertIn(part, page)
+
+    def test_the_save_for_hoard_page_carries_hoards_own_bookmark(self):
+        """A link can't be dragged out of Hoard's window into another browser, so the Payhip bookmark has a page on the
+        website to drag it from (Hoard links to it): the same bookmark as Hoard copies, never a copy of its own."""
+        sys.path.insert(0, str(REPO / "scripts"))
+        import save_for_hoard
+        self.assertEqual(save_for_hoard.main([]), 0, "run python3 scripts/save_for_hoard.py --write")
+        page = (SITE / "save-for-hoard.html").read_text("utf-8")
+        href = re.search(r'<a class="bookmarklet" id="saver" href="([^"]+)"', page).group(1)
+        self.assertTrue(href.startswith("javascript:void %28async"), href[:40])
+        self.assertIn("b-account", unquote(href), "the Payhip saver itself")
+        app = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
+        self.assertIn('href="https://hoard.furryup.link/save-for-hoard.html" target="_blank"', app, "Hoard opens it in the browser")
+        self.assertNotIn('draggable="true"', app.split('id="payhipSaver"', 1)[1][:200], "nothing to drag in Hoard's window")
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")

@@ -94,9 +94,11 @@ Payhip has no single library: your purchases live in each shop you bought from, 
 
 - **Import the pages** (the easy way). In your usual browser, open each shop's library page (the shop's
   address followed by `/b-account`, such as `myshop.store/b-account`), sign in there if it asks, and save it:
-  - **With the Save for Hoard bookmark** (quickest). In **Stores**, under **Import saved pages**, drag **Save
-    for Hoard** to your browser's bookmarks bar (or choose **copy it**, make a new bookmark, and paste it as the
-    bookmark's address). On a shop's library page, choose the bookmark: it reads every page of that shop's
+  - **With the Save for Hoard bookmark** (quickest). Add it to your usual browser from
+    [its page](https://hoard.furryup.link/save-for-hoard.html), by dragging it to the bookmarks bar there. In
+    **Stores**, under **Import saved pages**, **get it from its page** opens that page in your browser (a link can't
+    be dragged out of Hoard's own window); or choose **copy it**, make a new bookmark, and paste it as the
+    bookmark's address. On a shop's library page, choose the bookmark: it reads every page of that shop's
     library, as you, and saves them as one file, `Payhip library - <shop>.html`, in your downloads. It only
     reads that shop's own library pages, and sends nothing anywhere. Do the same on each shop.
   - **By hand:** press **Ctrl+S** and save it as **Webpage, Single File**, and each of its pages if it has

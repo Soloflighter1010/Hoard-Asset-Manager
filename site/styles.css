@@ -458,6 +458,12 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .brief .codetable td:last-child { white-space: normal; width: 46%; }
 }
 
+/* Save for Hoard (save-for-hoard.html): the bookmark itself, to drag to the browser's bookmarks bar */
+.saver-get { margin: 24px 0 8px; }
+.bookmarklet { display: inline-flex; align-items: center; min-height: 48px; padding: 0 24px; border-radius: 999px;
+  background: var(--gold); color: var(--gold-ink); font: 700 1.05rem var(--body); text-decoration: none; cursor: grab; }
+.bookmarklet:active { cursor: grabbing; }
+
 /* The set viewer (set.html): a set someone shared from Hoard, read from the page's link */
 .setviewer .sv { max-width: 1180px; margin: 0 auto; padding: 40px 0 56px; border-top: 0; }
 .setviewer .sv > p, .setviewer .sv-note, .setviewer .sv-get { max-width: 760px; }
