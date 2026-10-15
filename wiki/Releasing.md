@@ -174,6 +174,14 @@ Once, when setting the repository up: add the repository variable `PACKAGE_NAME`
 (**Settings › Secrets and variables › Actions › Variables**), and set **Settings › Pages › Source** to **GitHub
 Actions**. Pages only deploys from `main`, so a listing build started by a release event is re-run on `main`.
 
+## The share server
+
+[Short links](Sets#short-links) need Hoard's share server, the Cloudflare Worker in `share/`, at
+`https://hoard-share.furryup.link`. No workflow deploys it: set it up once, and deploy a change to
+`share/worker.mjs`, with `npx wrangler deploy` from that folder, as [share/README.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/share/README.md)
+says. It runs on Cloudflare, so nothing has to stay running on your computer. Deploy it before releasing a version
+of Hoard that needs a change to it: a Hoard that can't reach it says so, and the long link still works.
+
 ## The website
 
 Hoard's website (https://hoard.furryup.link/, its own address for GitHub Pages) is the `site/` folder, deployed by
