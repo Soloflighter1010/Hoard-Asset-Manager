@@ -182,8 +182,7 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .saver { margin-top: 14px; padding: 10px 14px; border-radius: 12px; background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); }
 .saver .hint { margin: 0; }
 .bookmarklet { display: inline-block; padding: 1px 10px; border-radius: 999px; background: var(--gold); color: var(--gold-ink);
-  font-weight: 700; text-decoration: none; cursor: grab; white-space: nowrap; }
-.bookmarklet:active { cursor: grabbing; }
+  font-weight: 700; text-decoration: none; white-space: nowrap; }
 .drop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgb(20 16 12 / .7);
   font: 400 26px var(--display); color: #F4EDE3; pointer-events: none; }
 
@@ -1026,9 +1025,10 @@ body.less-motion .tour-try::before { animation: none; }
   <div class="importbtns"><button class="ghost sm" id="importPages">Import pages</button>
     <button class="ghost sm" id="importFolder">Import a folder</button></div>
   <div class="saver">
-    <p class="hint"><strong>Payhip: every page of a shop in one go.</strong> Add this bookmark to your usual browser:
-      drag <a id="payhipSaver" class="bookmarklet" href="#" draggable="true">Save for Hoard</a> to its bookmarks bar, or
-      <button class="linkish" id="payhipSaverCopy">copy it</button> and make a bookmark with it as the address. Then open
+    <p class="hint"><strong>Payhip: every page of a shop in one go.</strong> Add the Save for Hoard bookmark to your usual
+      browser: <a id="payhipSaver" class="bookmarklet" href="https://hoard.furryup.link/save-for-hoard.html" target="_blank" rel="noopener noreferrer">get it from its page</a>,
+      where you drag it to the bookmarks bar, or <button class="linkish" id="payhipSaverCopy">copy it</button> and make a
+      bookmark with it as the address. Then open
       a shop's library page (its address followed by <code>/b-account</code>) and choose the bookmark: it saves all
       that shop's pages as one file. Do the same on each shop, and import the files together.</p>
   </div>
@@ -1886,13 +1886,13 @@ const PAYHIP_SAVER = String.raw`(async () => {
   }
   setTimeout(() => note.remove(), 12000);
 })()`;
+// It runs in your usual browser, on a Payhip shop. A link can't be dragged out of Hoard's own window into another
+// browser, so "get it from its page" opens the website's page for it there (site/save-for-hoard.html, the same
+// bookmark: scripts/save_for_hoard.py), where it can; or it's copied from here.
 const payhipSaverUrl = () => "javascript:void " + encodeURIComponent(PAYHIP_SAVER);
-$("#payhipSaver").href = payhipSaverUrl();
-// It runs in your usual browser, on a Payhip shop: here, clicking it only says how to keep it
-$("#payhipSaver").addEventListener("click", e => { e.preventDefault(); toast("Drag it to your usual browser's bookmarks bar, or choose copy it."); });
 $("#payhipSaverCopy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(payhipSaverUrl()); toast("Copied. Make a bookmark in your usual browser, and paste it as its address."); }
-  catch (e) { toast("Couldn't copy it here. Drag Save for Hoard to your browser's bookmarks bar instead."); }
+  catch (e) { toast("Couldn't copy it here. Get it from its page instead, and drag it to your bookmarks bar there."); }
 });
 
 /* ---------- importing saved pages: any number at once, from the file picker, a folder, or dropped on the window.

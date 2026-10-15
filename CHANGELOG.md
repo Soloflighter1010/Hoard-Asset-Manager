@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.3.4
+
+- **The Save for Hoard bookmark can be added again.** Hoard asked you to drag it from its window to your browser's
+  bookmarks bar, but a link can't be dragged out of Hoard's own window into another browser. Now **get it from its
+  page** (in **Stores**, under **Import saved pages**) opens the bookmark's own page on Hoard's website in your usual
+  browser, where you drag it to the bookmarks bar. **Copy it** still copies it, to paste as a new bookmark's
+  address. It's the same bookmark, for saving every page of your library on a Payhip shop as one file to import.
+
 ## 4.3.3
 
 - **Credits lists link each product's public page.** Hoard for Unity's **Create Credits List**, and the credits list
