@@ -1,7 +1,7 @@
 """The release's VirusTotal gate (scripts/scan_release_virustotal.py, the virustotal job in release.yml), against a
 stand-in VirusTotal: files it knows are only looked up, new ones are uploaded and waited for, the public API's rate
-is kept, a flagged file keeps the release a draft unless a person chose to publish anyway, and the key stays out
-of everything but the scan."""
+is kept, a flagged file keeps the release a draft unless a person chose to publish anyway (and then only with the
+flags they were shown), and the key stays out of everything but the scan."""
 from __future__ import annotations
 
 import contextlib
@@ -77,9 +77,14 @@ def release_folder(files: dict[str, bytes]) -> Path:
     return d
 
 
-def run(fake: FakeVirusTotal, folder: Path, allow: bool = False) -> int:
+def run(fake: FakeVirusTotal, folder: Path, allow: bool = False, checked: str | None = None) -> int:
+    """The scan, as the workflow runs it; checked is the draft's notes when publishing anyway was chosen."""
     client = vt.VirusTotal(KEY, opener=fake.opener, sleep=fake.sleep, clock=fake.clock)
-    return vt.main(folder, client, env={"VT_ALLOW_DETECTIONS": "true" if allow else "false"})
+    env = {"VT_ALLOW_DETECTIONS": "true" if allow else "false"}
+    if checked is not None:
+        (folder / "CHECKED_NOTES.md").write_text(checked, "utf-8")
+        env["VT_CHECKED_NOTES"] = str(folder / "CHECKED_NOTES.md")
+    return vt.main(folder, client, env=env)
 
 
 class Scanning(unittest.TestCase):
@@ -215,10 +220,53 @@ class TheGate(unittest.TestCase):
         run(FakeVirusTotal(), clean)
         self.assertFalse((clean / "VT_FLAGGED.txt").exists(), "nothing flagged, nothing kept")
 
-    def test_publishing_anyway_is_a_persons_choice(self):
+    def shown(self):
+        """A flagged draft, and its notes as the person who chose to publish anyway saw them."""
         folder, fake = self.flagged()
-        self.assertEqual(run(fake, folder, allow=True), 0)
+        self.assertEqual(run(fake, folder), 1)
+        notes = vt.with_results("## What's new\n\n- Things.\n", (folder / "VT_REPORT.md").read_text("utf-8"))
+        (folder / "VT_REPORT.md").unlink()
+        return folder, notes
+
+    def again(self, folder, stats):
+        """The draft's files as VirusTotal knows them now."""
+        return FakeVirusTotal(known={vt.VirusTotal(KEY).digest(p): stats.get(p.name, {"malicious": 0, "suspicious": 0})
+                                     for p in vt.files_to_scan(folder)})
+
+    def test_publishing_anyway_is_a_persons_choice(self):
+        folder, notes = self.shown()
+        fake = self.again(folder, {"Hoard-Setup-2.11.0.exe": {"malicious": 1, "suspicious": 2, "undetected": 67}})
+        self.assertEqual(run(fake, folder, allow=True, checked=notes), 0)
         self.assertIn("checked by hand and published anyway", (folder / "VT_REPORT.md").read_text("utf-8"))
+        self.assertFalse(any(m == "POST" for m, *_ in fake.requests), "the checked files, only looked up again")
+
+    def test_publishing_anyway_covers_only_the_flags_shown(self):
+        """A file built again is a file nobody checked, and more engines' flags are flags nobody saw."""
+        folder, notes = self.shown()
+        more = self.again(folder, {"Hoard-Setup-2.11.0.exe": {"malicious": 2, "suspicious": 2, "undetected": 66}})
+        self.assertEqual(run(more, folder, allow=True, checked=notes), 1)
+        self.assertNotIn("checked by hand", (folder / "VT_REPORT.md").read_text("utf-8"))
+        newly = self.again(folder, {"Hoard-2.11.0.zip": {"malicious": 1, "suspicious": 0, "undetected": 69}})
+        self.assertEqual(run(newly, folder, allow=True, checked=notes), 1, "a file that was clean when checked")
+        (folder / "Hoard-Setup-2.11.0.exe").write_bytes(b"MZ built again")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rebuilt = run(FakeVirusTotal(verdicts={"Hoard-Setup-2.11.0.exe": {"malicious": 1, "suspicious": 2}}),
+                          folder, allow=True, checked=notes)
+        self.assertEqual(rebuilt, 1)
+        self.assertIn("::error::VirusTotal flagged Hoard-Setup-2.11.0.exe, and not as the draft's notes showed", out.getvalue())
+        folder, fake = self.flagged()
+        self.assertEqual(run(fake, folder, allow=True), 1, "no notes: nothing was shown")
+        folder, fake = self.flagged()
+        self.assertEqual(run(fake, folder, allow=True, checked="## What's new\n"), 1, "notes without results")
+
+    def test_the_flags_a_draft_showed(self):
+        digest = "ab" * 32
+        notes = (f"## What's new\n\n- [x](https://www.virustotal.com/gui/file/{'cd' * 32}): 9 malicious, 0 suspicious\n\n"
+                 f"{vt.HEADING}\n\n- [Hoard.exe](https://www.virustotal.com/gui/file/{digest}): 1 malicious, 2 suspicious"
+                 f" (of 70 engines)\n- [Hoard.zip](https://www.virustotal.com/gui/file/{'ef' * 32}): 0 malicious, 0 suspicious\n")
+        self.assertEqual(vt.flags_shown(notes), {digest: 3, "ef" * 32: 0}, "only the scan results' section counts")
+        self.assertEqual(vt.flags_shown("## What's new\n"), {})
 
     def test_results_replace_an_earlier_runs_in_the_notes(self):
         first = vt.with_results("## What's new\n\n- Things.\n", "## VirusTotal scan results\n\n- old\n")
@@ -266,6 +314,23 @@ class TheWorkflow(unittest.TestCase):
     def test_publish_anyway_is_only_by_hand(self):
         self.assertRegex(self.text, r"allow_detections:\n\s+description: .+\n\s+type: boolean\n\s+default: false")
         self.assertIn("VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}", self.text)
+
+    def test_publish_anyway_publishes_the_draft_that_was_checked(self):
+        """No build runs (a build is never the same file twice), the scan and publish still do, and the scan is given
+        the draft's notes from before it, with the results the person was shown."""
+        self.assertIn("if: ${{ !inputs.allow_detections }}", self.jobs["release"].split("steps:", 1)[0])
+        for job in ("windows", "macos", "flatpak"):
+            self.assertIn("needs: release", self.jobs[job], f"{job} is skipped with the release job")
+        self.assertIn("needs: flatpak", self.jobs["flatpak-release"])
+        for job in ("virustotal", "publish"):
+            self.assertIn("if: ${{ !failure() && !cancelled() }}", self.jobs[job].split("steps:", 1)[0],
+                          f"{job} runs after skipped builds, never after a failed one")
+        get = self.jobs["virustotal"].split("- name: Get the draft's files", 1)[1].split("- name:", 1)[0]
+        self.assertIn('if [ "$draft" != "true" ]; then', get, "only a draft, never a build or a published release")
+        self.assertIn("> dist/CHECKED_NOTES.md", get)
+        scan = self.jobs["virustotal"].split("- name: Scan them with VirusTotal", 1)[1].split("- name:", 1)[0]
+        self.assertIn("VT_CHECKED_NOTES: dist/CHECKED_NOTES.md", scan)
+        self.assertNotIn(".md", "".join(vt.SCANNED), "the saved notes aren't scanned as a release file")
 
     def test_the_results_reach_the_notes_even_when_flagged(self):
         step = self.jobs["virustotal"].split("- name: Add the results to the release notes", 1)[1]

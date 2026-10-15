@@ -991,6 +991,13 @@ class Jobs:
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
             cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
+        if refreshed:   # the public pages a refresh finds (Jinxxy's) reach catalog.json, for Hoard for Unity's credits
+            from .config import root_dir
+            from .downloader import build_catalog
+            try:
+                build_catalog(self.cfg, root_dir(self.cfg))
+            except Exception as e:   # never fails the refresh
+                print(f"Couldn't write catalog.json: {e}", flush=True)
         if unread and not refreshed:
             why = f"Couldn't read {_names(unread)}. Each store's row in Stores says why."
             self._set(message=why, error=why)

@@ -11,6 +11,7 @@ from pathlib import Path
 from . import previous
 from .paths import HERE
 from .safety import DataFileError, read_json_file, safe_join, store_link
+from .sets import product_link
 from .tags import TagMatcher, TagStore, tag_key, tag_overview
 
 
@@ -152,6 +153,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "creator": e["creator"],
             "variants": e.get("variants"),
             "url": store_link(e["store"], e.get("url")),
+            "page": product_link(e["store"].lower(), e.get("page")),   # its public page (catalog.json), for credits
             "folder": place,
             "catalog_folder": e["folder"],   # as catalog.json (and Hoard for Unity's project reports) name it
             "library": lib,

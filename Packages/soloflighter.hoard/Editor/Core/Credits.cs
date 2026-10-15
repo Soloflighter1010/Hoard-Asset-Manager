@@ -109,15 +109,16 @@ namespace SoloFlighter.Hoard
             return t;
         }
 
-        /// <summary>A link worth printing: the product's own store page (as the catalog checks it), or, for an entry
-        /// written in by hand, any plain https address. Null otherwise.</summary>
+        /// <summary>A link worth printing: the product's public page on its store (HoardCatalog.PublicPage: never the
+        /// buyer's own, such as a Gumroad download page), or, for an entry written in by hand, any plain https address.
+        /// Null otherwise.</summary>
         public static string Link(string store, string url, bool added)
         {
             if (string.IsNullOrEmpty(url) || url.Length > 500) return null;
             // every link, the catalog's too, is one plain address: nothing in it could end the link early and start
             // another one in what you paste (a ")" or a space in a Markdown link), or break a line in the list
             foreach (char c in url) if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '(' || c == ')' || c == '<' || c == '>') return null;
-            if (!added) return HoardCatalog.StoreLink(store, url) ? url : null;
+            if (!added) return HoardCatalog.PublicPage(store, url);
             Uri u;
             if (!Uri.TryCreate(url, UriKind.Absolute, out u) || u.Scheme != "https" || !string.IsNullOrEmpty(u.UserInfo)) return null;
             return url;

@@ -69,6 +69,10 @@ Hoard assets this project uses, ready to paste into an avatar or world descripti
   hand, with a link if you like.
 - **Styles:** a list (name, creator, store and store link), Markdown (names linked to their store pages), or
   grouped by creator (one line a creator, however their name's case differs between stores).
+- **Links:** each product's public page on its store, the one anyone can open to see it and buy it (0.8.3 and
+  newer, with Hoard 4.3.3). Never a page of your own as its buyer: your Jinxxy inventory, or a Gumroad download page,
+  which opens the files for whoever has the link. Where Hoard knows no public page for a product, its creator's shop
+  page is linked instead, or no link at all.
 - **Copy** puts it on the clipboard. **Save as...** writes a text file, in the project's own folder unless you
   choose otherwise; outside `Assets`, it's never part of an upload.
 

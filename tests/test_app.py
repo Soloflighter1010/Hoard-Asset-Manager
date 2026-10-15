@@ -457,6 +457,19 @@ class RealJobs(unittest.TestCase):
         self.assertIn("Couldn't read Gumroad", done["message"])
         self.assertNotIn("Booth", done["message"].split("Couldn't read")[1])
 
+    def test_a_refresh_writes_the_catalog_again(self):
+        """The public pages a refresh finds (Jinxxy's, from 4.3.1) reach catalog.json straight away, for Hoard for
+        Unity's credits lists, not only after the next download."""
+        from unittest import mock
+        item = {"key": "booth:1", "store": "booth", "name": "Hat", "creator": "Someone", "url": "https://booth.pm/en/items/1"}
+        built = []
+        with mock.patch.object(downloader, "build_catalog", lambda cfg, root: built.append(root)):
+            self.sync_with({"booth": lambda ctx, cfg, say: [item]})
+            self.assertEqual(len(built), 1)
+            built.clear()
+            self.sync_with({})
+        self.assertEqual(built, [], "nothing read, nothing changed")
+
     def test_a_sync_offline_failed(self):
         done, downloaded = self.sync_with({}, online=False)
         self.assertEqual(done["outcome"], "failed")

@@ -66,7 +66,8 @@ An `<asset>`:
 | `name` | string | Product name |
 | `creator` | string | Creator or shop name |
 | `folder` | string | The product's folder, e.g. `Booth/Kitsu Studio/Rusk Avatar Base` |
-| `url` | string or null | The product's store page |
+| `url` | string or null | The product's store page, as Hoard opens it for you: often a page of yours as its buyer (your Jinxxy inventory, a Gumroad download page), so never share it |
+| `page` | string, only on some entries (4.3.3) | The product's public page on its store (its creator's, when Hoard knows no other): never a page of the buyer's own. What to share, as a credits list does. A reader that doesn't know it ignores it |
 | `variants` | string or null | The variant bought, when the store has variants |
 | `added` | string or null | When it was first downloaded (ISO 8601) |
 | `files` | list of strings | Downloaded files, relative to `folder` |
@@ -192,6 +193,7 @@ says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the pro
 
 ## Version history
 
+- **4** or **3**, still, in 4.3.3: `page`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.0: `needs`, which readers that don't know it ignore.
 - **4** (3.0): `library`, for products in another library folder. Only written when there are some; otherwise
   the catalog is still version 3.

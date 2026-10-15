@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.3
+
+- **Credits link each product's public page.** **Create Credits List** linked each product with the link Hoard keeps
+  for you as its buyer: your Jinxxy inventory, which nobody else can open, or a Gumroad download page, which lets
+  whoever has the link download the files. Now it links the product's public page on its store, which Hoard 4.3.3
+  lists in its catalog (with an older Hoard, a product's link only when it's a public page), else the creator's shop
+  page, else nothing. A list you've already copied or saved keeps its old links: make it again and replace it.
+
 ## 0.8.2
 
 - **Import set brings in only the newest version of each package.** A product's folder often holds every version

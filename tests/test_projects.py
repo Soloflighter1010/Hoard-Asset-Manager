@@ -233,3 +233,96 @@ class ProjectsPage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublicPages(unittest.TestCase):
+    """A credits list is for sharing, so each product in it links to its public page: never the link Hoard keeps for
+    you as its buyer (Jinxxy's inventory, or a Gumroad download page, which opens its files for whoever has it)."""
+
+    INVENTORY = "https://jinxxy.com/my/inventory/3988217771405083873"
+    PAGE = "https://jinxxy.com/antistar/RedLine"
+    DOWNLOAD = "https://app.gumroad.com/d/0123456789abcdef"
+
+    def setUp(self):
+        shutil.rmtree(projects.projects_dir(), ignore_errors=True)
+        self.addCleanup(shutil.rmtree, projects.projects_dir(), True)
+
+    def library(self) -> Path:
+        """library.json, with the Jinxxy product's public page that a refresh found (4.3.1)."""
+        from hoard import library
+        path = Path(tempfile.mkdtemp()) / "library.json"
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        lib = library.Library(path)
+        lib.data["items"] = [library.item("jinxxy", "3988217771405083873", name="Red Line", creator="Antistar",
+                                          url=self.INVENTORY, page=self.PAGE),
+                             library.item("gumroad", "g1", name="Mochi", creator="Mochi Works", url=self.DOWNLOAD,
+                                          creator_url="https://mochi.gumroad.com")]
+        lib.save()
+        return path
+
+    def downloads(self) -> Path:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, True)
+        for store, key, creator, name, url in (("Jinxxy", "3988217771405083873", "Antistar", "Red Line", self.INVENTORY),
+                                               ("Gumroad", "g1", "Mochi Works", "Mochi", self.DOWNLOAD),
+                                               ("Gumroad", "g2", "Kitsu", "Ears", "https://app.gumroad.com/d/fedcba9876543210"),
+                                               ("Booth", "111", "Kitsu Studio", "Rusk", "https://booth.pm/ja/items/111")):
+            man = downloader.Manifest(root / store)
+            rec = man.record(key, creator, name)
+            rec.update(name=name, creator=creator, url=url)
+            (root / store / rec["folder"]).mkdir(parents=True, exist_ok=True)
+            (root / store / rec["folder"] / "a.unitypackage").write_bytes(b"x")
+            rec["files"]["f1"] = {"path": "a.unitypackage", "size": 1}
+            man.save()
+        return root
+
+    def test_the_catalog_gives_each_download_its_public_page(self):
+        from unittest import mock
+        from hoard import paths
+        root = self.downloads()
+        with mock.patch.object(paths, "LIBRARY_FILE", self.library()):
+            catalog, _tags = downloader.collect_catalog(config.load_config(), root)
+        pages = {e["name"]: e.get("page") for e in catalog}
+        self.assertEqual(pages, {"Red Line": self.PAGE, "Mochi": "https://mochi.gumroad.com", "Ears": None,
+                                 "Rusk": "https://booth.pm/ja/items/111"},
+                         "the library's page; its creator's when it has none; never a download page; a public link as it is")
+        self.assertEqual([downloader.validate_catalog_entry(e) for e in catalog], [[]] * 4)
+        self.assertEqual(next(e for e in catalog if e["name"] == "Red Line")["url"], self.INVENTORY, "url is still yours")
+        rusk = next(e for e in catalog if e["name"] == "Rusk")
+        self.assertTrue(downloader.validate_catalog_entry({**rusk, "page": self.DOWNLOAD.replace("app.", "")}),
+                        "a catalog never says a download page is public")
+
+    def test_a_list_hoard_didnt_write_here_gives_no_pages(self):
+        from hoard import library
+        path = self.library()
+        self.assertEqual(library.public_pages(path)[self.INVENTORY], self.PAGE)
+        raw = json.loads(path.read_text("utf-8"))
+        raw["items"][0]["page"] = "https://jinxxy.com/someone/else"
+        path.write_text(json.dumps(raw), "utf-8")
+        self.assertEqual(library.public_pages(path), {}, "edited after Hoard saved it")
+        path.write_text("{not json", "utf-8")
+        self.assertEqual(library.public_pages(path), {})
+        self.assertTrue(path.exists(), "left for Library to set aside")
+
+    def test_credits_link_each_products_public_page(self):
+        assets = [{"store": "Jinxxy", "name": "Red Line", "creator": "Antistar", "folder": "Jinxxy/Antistar/Red Line",
+                   "url": self.INVENTORY, "status": "yes"},
+                  {"store": "Gumroad", "name": "Ears", "creator": "Kitsu", "folder": "Gumroad/Kitsu/Ears",
+                   "url": self.DOWNLOAD, "status": "yes"},
+                  {"store": "Booth", "name": "Rusk", "creator": "Kitsu Studio", "folder": "Booth/Kitsu Studio/Rusk",
+                   "url": "https://booth.pm/ja/items/111", "status": "yes"}]
+        write("0123456789abcdef", report(assets=assets, credits={"title": "Assets used", "style": "Markdown", "left_out": [],
+                                                                  "added": [{"name": "Hair", "creator": "Mia", "url": "https://mia.example/hair"}]}))
+        [p] = projects.read_all()
+        index = {"assets": [{"id": 1, "folder": "Jinxxy/Antistar/Red Line", "catalog_folder": "Jinxxy/Antistar/Red Line",
+                             "tag_key": "jinxxy:redline", "page": self.PAGE}]}
+        [shown] = projects.view([p], index, set())
+        md = shown["credits_text"]["Markdown"]
+        self.assertIn(f"[Red Line]({self.PAGE})", md, "its public page, from the catalog")
+        self.assertIn("- Ears by Kitsu (Gumroad)", md, "no link rather than its download page")
+        self.assertIn("[Rusk](https://booth.pm/ja/items/111)", md, "a public link as it is")
+        self.assertIn("[Hair](https://mia.example/hair)", md, "one written in by hand as it was")
+        for text in shown["credits_text"].values():
+            self.assertNotIn("/my/inventory", text)
+            self.assertNotIn("/d/", text)
+        self.assertNotIn("/my/inventory", projects.credits_text(p), "without a download here, still never yours")

@@ -1478,3 +1478,28 @@ def cache_images(lib: "Library", keys: list[str], progress, stop=lambda: False) 
             if done % 10 == 0 or done == len(keys):
                 progress(f"Saving images for offline use: {done} of {len(keys)}")
     return saved
+
+
+def public_pages(path: Path | None = None) -> dict[str, str]:
+    """Each product in library.json that has a public page (its own, else its link when that's public, else its
+    creator's, as a set links it: hoard/sets.py), by its link and by its tag key: for the catalog's downloads
+    (hoard/downloader.py), whose own link is often the buyer's (Jinxxy's inventory, a Gumroad download page). A
+    list Hoard didn't write here (edited, or another computer's) gives none, as Library hides its links; so does one
+    that can't be read, which is left as it is for Library to deal with."""
+    from .paths import LIBRARY_FILE
+    from .sets import product_link
+    path = path or LIBRARY_FILE
+    try:
+        raw = read_json_file(path, 256 * 1024 * 1024)
+    except (DataFileError, OSError, ValueError):
+        return {}
+    if check_seal(raw, path) in ("changed", "foreign"):
+        return {}
+    found: dict[str, str] = {}
+    for i in Library.sanitize(raw)["items"]:
+        page = next((u for u in (product_link(i["store"], i.get(k)) for k in ("page", "url", "creator_url")) if u), None)
+        if page:
+            if i.get("url"):
+                found.setdefault(i["url"], page)
+            found.setdefault(tag_key(i["store"], i["name"]), page)
+    return found
