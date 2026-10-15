@@ -107,6 +107,18 @@ the viewer should say it's gone.
   can run `wrangler deploy` with a Cloudflare API token kept as a repository secret. Never put a token in a file
   here.
 
+## In a fork
+
+A fork can't change or deploy this server: the namespace id in `wrangler.toml` only works for whoever is signed in
+to the Cloudflare account that has it, and only the owner of `furryup.link` can put a Worker at
+`hoard-share.furryup.link`. Nothing in this folder is a secret; your Cloudflare sign-in stays on your own computer.
+
+A fork's own builds of Hoard still use this server, as every copy of Hoard does (that's what the limits below are
+for). To run your own instead, deploy this folder to your own Cloudflare account and domain (steps 3 to 7, with
+your own `routes` pattern in `wrangler.toml`), then change the address in `hoard/shortlinks.py` (`SERVER`),
+`site/set.js` (`SHARE_SERVER`) and `site/set.html` (its Content-Security-Policy's `connect-src`), and, if your
+set viewer isn't at `hoard.furryup.link`, `VIEWER` in `worker.mjs`.
+
 ## Limits
 
 On Cloudflare's free plan, every day (resetting at midnight UTC), across everyone using Hoard:
