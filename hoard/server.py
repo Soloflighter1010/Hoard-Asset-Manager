@@ -1688,10 +1688,11 @@ def chosen_files(raw) -> dict[str, dict] | None:
 
 def read_photo_page(url: str) -> str | None:
     """A photo site's page, read once for the picture it shows (sets.photo_from_page), as a browser would ask for
-    it: public addresses only, 2 MB at most. Its text, or None."""
+    it: from the photo sites only (sets.PAGE_HOSTS, redirects included), at public addresses, 2 MB at most. Its text,
+    or None."""
     got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
                                            "like Gecko) Chrome/140.0 Safari/537.36", "Accept": "text/html"},
-                       sets.MAX_PHOTO_PAGE)
+                       sets.MAX_PHOTO_PAGE, hosts=sets.PAGE_HOSTS)
     return got[0].decode("utf-8", "replace") if got and got[1] in ("text/html", "application/xhtml+xml") else None
 
 

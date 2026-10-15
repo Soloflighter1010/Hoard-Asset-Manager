@@ -71,7 +71,8 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link never involves it.
 - **A photo site, when you add a photo to a set by its page link** (an Imgur, Gyazo, ImgBB, Postimages, Bluesky,
   Reddit or X page rather than the picture itself): Hoard reads that page once, as a browser would, for the
-  picture it shows, and keeps only the picture's link. The site sees your IP address, as with any website.
+  picture it shows, and keeps only the picture's link. It reads it from that site only, following no redirect to
+  anywhere else. The site sees your IP address, as with any website.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
   day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A

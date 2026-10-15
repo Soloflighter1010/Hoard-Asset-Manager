@@ -299,6 +299,22 @@ class PhotoPages(unittest.TestCase):
                           ("http://imgur.com/fOJAk3L", False), ("https://imgur.com.evil.example/x", False)):
             self.assertEqual(bool(sets.photo_page(url)), want, url)
 
+    def test_a_page_link_is_read_only_from_its_photo_site(self):
+        """A page's address is put back together from Hoard's own list of photo sites (code scanning: a request whose
+        whole address came from what was pasted), so its host is always one of those, whatever the link said."""
+        for url, want in (("https://imgur.com/fOJAk3L", "https://imgur.com/fOJAk3L"),
+                          ("https://WWW.Reddit.com./r/vrchat/comments/x/y/?utm=a b#top", "https://www.reddit.com/r/vrchat/comments/x/y/?utm=a%20b"),
+                          ("https://gyazo.com", "https://gyazo.com/"), ("https://x.com/a/status/1;x=1", "https://x.com/a/status/1;x=1"),
+                          ("https://bsky.app/profile/a.bsky.social/post/3k\\@evil.example", "https://bsky.app/profile/a.bsky.social/post/3k%5C@evil.example")):
+            self.assertEqual(sets.photo_page(url), want, url)
+        for url in ("https://user@imgur.com/x", "https://imgur.com:8443/x", "https://imgur.com@evil.example/x",
+                    "https://evil.example/imgur.com/x", "https://imgur.com%2eevil.example/x"):
+            self.assertIsNone(sets.photo_page(url), url)
+        from hoard import server
+        with mock.patch.object(server, "fetch_public", return_value=None) as fetch:
+            server.read_photo_page("https://imgur.com/fOJAk3L")
+        self.assertEqual(fetch.call_args.kwargs.get("hosts"), sets.PAGE_HOSTS, "nor anywhere else after a redirect")
+
     def test_from_a_page(self):
         asked = []
 
