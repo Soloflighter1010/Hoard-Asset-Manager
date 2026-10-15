@@ -11,6 +11,7 @@ namespace SoloFlighter.Hoard
     public sealed class HoardAsset
     {
         public string Store, Name, Creator, Folder, Url, Variants, Added;
+        public string Page;       // its public page (Hoard 4.3.3), for a credits list: Url is often the buyer's own
         public string Location;   // a Local item listed where it is (Hoard's issue #80): its own folder; else null
         public string Note;       // a Local item: who or what it's for
         public string Library;    // a product in another of Hoard's library folders (on another drive): that folder; else null
@@ -126,6 +127,7 @@ namespace SoloFlighter.Hoard
             a.Tags = a.Tags.FindAll(t => CleanText(t, 40));
             a.SuggestedTags = a.SuggestedTags.FindAll(t => CleanText(t, 40));
             if (!trustLinks || !StoreLink(a.Store, a.Url)) a.Url = null;
+            a.Page = trustLinks ? PublicPage(a.Store, e.Str("page")) : null;
             string location = e.Str("location");
             if (location != null)
             {
@@ -239,6 +241,64 @@ namespace SoloFlighter.Hoard
             if (u.Scheme != "https" || !string.IsNullOrEmpty(u.UserInfo) || !u.IsDefaultPort) return false;
             string host = u.Host.ToLowerInvariant().TrimEnd('.'), site = StoreSites[store];
             return host == site || host.EndsWith("." + site);
+        }
+
+        // A product's public page, checked as Hoard checks it (sets.product_link, and the set viewer's site/set.js)
+        static readonly Regex BoothItem = new Regex("^/(?:[a-z]{2}(?:-[a-z]+)?/)?items/[0-9]{1,12}$");
+        static readonly Regex GumroadProduct = new Regex("^/l/[A-Za-z0-9_-]{1,80}$");
+        static readonly Regex PayhipProduct = new Regex("^/b/[A-Za-z0-9]{1,20}$");
+        static readonly Regex ItchProject = new Regex("^/[A-Za-z0-9_-]{1,120}$");
+        static readonly Regex PageSegment = new Regex("^[A-Za-z0-9_.~-]{1,120}$");
+        static readonly Regex ShopName = new Regex("^[a-z0-9-]{1,63}$");
+        static readonly string[] NotAShop = { "www", "app", "accounts", "manage", "api", "assets", "help", "support", "checkout",
+                                              "auth", "login" };
+        static readonly string[] NotAJinxxyCreator = { "my", "market", "api", "auth", "cart", "checkout", "about", "login", "signup",
+                                                       "settings", "search", "help", "support", "feedback", "terms-of-service",
+                                                       "privacy-policy", "refund-policy", "_next", "static", "admin" };
+
+        /// <summary>A product's public page on its store, or its creator's (https, without its query or anything after
+        /// #), or null. Never a page of the buyer's own, which a credits list mustn't share: a Gumroad purchase's link
+        /// is its download page (which opens its files for whoever has it), Jinxxy's is the buyer's inventory, and an
+        /// itch.io download page carries its key.</summary>
+        public static string PublicPage(string store, string url)
+        {
+            Uri u;
+            if (string.IsNullOrEmpty(url) || url.Length > 500) return null;
+            url = url.Trim();
+            if (!StoreLink(store, url) || !Uri.TryCreate(url, UriKind.Absolute, out u)) return null;
+            string host = u.Host.ToLowerInvariant().TrimEnd('.'), path = u.AbsolutePath.TrimEnd('/');
+            foreach (char c in host) if (c > 127) return null;
+            string[] segs = path.Length > 0 ? path.Substring(1).Split('/') : new string[0];
+            bool ok;
+            switch (store)
+            {
+                case "Booth":
+                    ok = (On(host, "booth.pm") && BoothItem.IsMatch(path)) || (Shop(host, "booth.pm") && (path.Length == 0 || BoothItem.IsMatch(path)));
+                    break;
+                case "Gumroad":
+                    ok = ((On(host, "gumroad.com") || Shop(host, "gumroad.com")) && GumroadProduct.IsMatch(path)) || (Shop(host, "gumroad.com") && path.Length == 0);
+                    break;
+                case "Jinxxy":
+                    ok = On(host, "jinxxy.com") && segs.Length >= 1 && segs.Length <= 2 && Array.TrueForAll(segs, s => PageSegment.IsMatch(s))
+                         && Array.IndexOf(NotAJinxxyCreator, segs[0].ToLowerInvariant()) < 0
+                         && (segs.Length == 1 || Array.IndexOf(new[] { "products", "lists", "posts" }, segs[1].ToLowerInvariant()) < 0);
+                    break;
+                case "Payhip": ok = On(host, "payhip.com") && PayhipProduct.IsMatch(path); break;
+                case "Itch": ok = Shop(host, "itch.io") && (path.Length == 0 || ItchProject.IsMatch(path)); break;
+                default: ok = false; break;
+            }
+            return ok ? "https://" + host + path : null;
+        }
+
+        static bool On(string host, string site) { return host == site || host == "www." + site; }
+
+        /// <summary>A creator's shop: one level below the store's site, and not one of the site's own.</summary>
+        static bool Shop(string host, string site)
+        {
+            int dot = host.IndexOf('.');
+            if (dot < 0 || host.Substring(dot + 1) != site) return false;
+            string name = host.Substring(0, dot);
+            return ShopName.IsMatch(name) && Array.IndexOf(NotAShop, name) < 0;
         }
 
         /// <summary>Work out each product's files, picture and search text (see HoardAsset).</summary>

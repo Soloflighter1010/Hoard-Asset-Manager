@@ -130,6 +130,14 @@ public static class CoreTests
               list.Find(e => e.Name == "Hair Pack").Url == "https://example.com/hair");
         Check("credits: odd links refused", Credits.Link(null, "javascript:alert(1)", true) == null &&
               Credits.Link(null, "https://a.example/x)(y", true) == null && Credits.Link(null, "https://u:p@a.example/", true) == null);
+        // a list is for sharing: never a page of the buyer's own (the Jinxxy inventory, a Gumroad download page, which
+        // opens its files for whoever has it, an itch.io download page), only a product's public page, or its creator's
+        Check("credits: never the buyer's own page", Credits.Link("Jinxxy", "https://jinxxy.com/my/inventory/3988217771405083873", false) == null &&
+              Credits.Link("Gumroad", "https://app.gumroad.com/d/0123456789abcdef", false) == null &&
+              Credits.Link("Itch", "https://kitsu.itch.io/paw-suit/download/KEY", false) == null);
+        Check("credits: a product's public page, without its query", Credits.Link("Jinxxy", "https://jinxxy.com/foxipso/StayPutVR", false) ==
+              "https://jinxxy.com/foxipso/StayPutVR" && Credits.Link("Gumroad", "https://kitsu.gumroad.com/l/ears?layout=profile", false) ==
+              "https://kitsu.gumroad.com/l/ears");
         Check("credits: a store link can't carry a second link", Credits.Link("Booth", "https://booth.pm/x) [Free](https://evil.example", false) == null &&
               Credits.Link("Booth", "https://booth.pm/ja/items/1 x", false) == null && Credits.Link("Booth", "https://booth.pm/ja/items/1", false) != null);
 
@@ -436,6 +444,17 @@ public static class CoreTests
         foreach (string u in new[] { "https://itch.io.evil.example/x", "https://evil-itch.io/x", "https://kitsu.booth.pm/items/1" })
             Check("itch.io link refused: " + u, !HoardCatalog.StoreLink("Itch", u));
         Check("itch.io named as people write it", HoardCatalog.StoreLabel("Itch") == "itch.io" && HoardCatalog.StoreLabel("Booth") == "Booth");
+
+        // a product's public page (Hoard 4.3.3), for credits: as Hoard decides it, link for link, never the buyer's own
+        foreach (var c in Json.Parse(File.ReadAllText(Path.Combine(dir, "public_pages.json"), Encoding.UTF8)).Items)
+        {
+            string store = c.Items[0].Text, url = c.Items[1].Text, hoards = c.Items[2].Kind == JsonKind.Null ? null : c.Items[2].Text;
+            string got = HoardCatalog.PublicPage(store, url);
+            Check("public page, as Hoard decides it: " + store + " " + url, got == hoards, got ?? "null");
+        }
+        Check("the catalog's public page read", good != null && good.Page == "https://booth.pm/ja/items/1", good == null ? "missing" : good.Page ?? "null");
+        Check("a page of the buyer's own isn't one", itch != null && itch.Page == null, itch == null ? "missing" : itch.Page ?? "null");
+        Check("edited catalog: no public pages trusted", edited.Assets.TrueForAll(a => a.Page == null));
 
         // U11: a \\u escape is exactly four hex digits
         try { Json.Parse("\"\\u 41 \""); Check("a \\u escape with spaces refused", false, "read"); }

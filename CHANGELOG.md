@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.3.3
+
+- **Credits lists link each product's public page.** Hoard for Unity's **Create Credits List**, and the credits list
+  in **Projects**, linked each product with the link Hoard keeps for you as its buyer. For Jinxxy that's your own
+  inventory, which nobody else can open. For Gumroad it can be your download page, which lets whoever has the link
+  download the files. Now they link the product's public page on its store, the one anyone can open to see and buy
+  it, else the creator's shop page, else nothing. Hoard's catalog lists that page for Hoard for Unity, which uses it
+  from 0.8.3, and a refresh now updates the catalog too, so pages a refresh finds reach Unity straight away. A list
+  you've already copied or saved keeps its old links: refresh your library, make the list again, and paste the new
+  one where the old one is.
+
 ## 4.3.2
 
 - **A set's photos can be added by their page link.** **Add a photo link...** took only the picture's own address

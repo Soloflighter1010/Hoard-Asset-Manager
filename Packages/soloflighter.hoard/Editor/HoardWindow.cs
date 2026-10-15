@@ -491,7 +491,8 @@ namespace SoloFlighter.Hoard.Editor
             Forget();   // the project may have changed since the list was drawn
             foreach (var a in catalog.Assets)
                 if (ProjectStatus(a) == InProject.Yes)
-                    found.Add(new CreditEntry { Store = a.Store, Name = a.Name, Creator = a.Creator, Url = a.Url });
+                    // its public page (a catalog from before Hoard 4.3.3 has none: Credits keeps Url only if it's public)
+                    found.Add(new CreditEntry { Store = a.Store, Name = a.Name, Creator = a.Creator, Url = a.Page ?? a.Url });
             return found;
         }
 

@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import safety  # noqa: E402
+from hoard import safety, sets  # noqa: E402
 
 PACKAGE = REPO / "Packages" / "soloflighter.hoard"
 CORE = PACKAGE / "Editor" / "Core"
@@ -71,10 +71,12 @@ def build_material(d: Path) -> None:
     (root / "Booth" / "Kitsu Studio" / "Linked Away").symlink_to(outside, target_is_directory=True)
     (root / "Itch" / "Kitsu Studio" / "Paw Suit").mkdir(parents=True)
     (root / "Itch" / "Kitsu Studio" / "Paw Suit" / "PawSuit.unitypackage").write_bytes(b"x")
-    good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"]),
+    good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"],
+                  page="https://booth.pm/ja/items/1"),
             asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
             asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"]),
             asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch",
+                  page="https://kitsu.itch.io/paw-suit/download/SECRETKEY",   # a page of the buyer's own: never read as its page
                   needs=[   # what it needs (Hoard 4.0, hoard/needs.py): two kept, one link dropped, two broken ones left out
                       {"kind": "tool", "name": "Poiyomi Toon", "url": "https://www.poiyomi.com/", "versions": ["8.1"], "guids": ["a" * 32]},
                       {"kind": "tool", "name": "lilToon", "url": "https://lilxyzw.github.io.evil.example/", "versions": [], "guids": ["b" * 32]},
@@ -109,6 +111,22 @@ def build_material(d: Path) -> None:
                    {"name": "Nothing here", "items": ["Booth/Gone"]}, {"name": "\u202ebad", "items": ["Booth/Kitsu Studio/Anko"]}]}
     (root / "catalog.json").write_text(json.dumps(safety.seal(catalog), ensure_ascii=False, indent=1), "utf-8")
     (d / "good_names.txt").write_text("|".join(a["name"] for a in good))
+
+    # a product's public page, as Hoard decides it (sets.product_link), for HoardCatalog.PublicPage to agree with
+    pages = [("Jinxxy", "https://jinxxy.com/my/inventory/3988217771405083873"), ("Jinxxy", "https://jinxxy.com/foxipso/StayPutVR"),
+             ("Jinxxy", "https://jinxxy.com/foxipso"), ("Jinxxy", "https://jinxxy.com/foxipso/products"), ("Jinxxy", "https://jinxxy.com/my"),
+             ("Jinxxy", "https://www.jinxxy.com/a/b?x=1#y"), ("Jinxxy", "https://jinxxy.com/a/b/c"), ("Jinxxy", "https://cdn.jinxxy.com/a"),
+             ("Jinxxy", "https://jinxxy.com/MY/inventory"), ("Gumroad", "https://app.gumroad.com/d/0123456789abcdef"),
+             ("Gumroad", "https://gumroad.com/d/0123"), ("Gumroad", "https://kitsu.gumroad.com/l/ears?layout=profile"),
+             ("Gumroad", "https://gumroad.com/l/ears"), ("Gumroad", "https://kitsu.gumroad.com"), ("Gumroad", "https://app.gumroad.com/l/x"),
+             ("Gumroad", "https://kitsu.gumroad.com/library"), ("Booth", "https://booth.pm/ja/items/1234"), ("Booth", "https://booth.pm/items/1"),
+             ("Booth", "https://kitsu.booth.pm/"), ("Booth", "https://kitsu.booth.pm/items/5"), ("Booth", "https://accounts.booth.pm/library"),
+             ("Booth", "https://booth.pm/ja/items/1/download"), ("Booth", "https://booth.pm/zh-cn/items/12"), ("Payhip", "https://payhip.com/b/AbC12"),
+             ("Payhip", "https://payhip.com/order/x"), ("Itch", "https://kitsu.itch.io/paw-suit"), ("Itch", "https://kitsu.itch.io/paw-suit/download/KEY"),
+             ("Itch", "https://kitsu.itch.io"), ("Itch", "https://itch.io/my-purchases"), ("Itch", "https://www.itch.io/x"),
+             ("Booth", "http://booth.pm/items/1"), ("Booth", "https://u:p@booth.pm/items/1"), ("Booth", "https://booth.pm:8443/items/1"),
+             ("Booth", "https://booth.pm.evil.example/items/1"), ("Local", "https://booth.pm/items/1"), ("Booth", "")]
+    (d / "public_pages.json").write_text(json.dumps([[s, u, sets.product_link(s.lower(), u)] for s, u in pages]))
 
     # a second key: a catalog sealed with it, and one edited after sealing
     other = bytes(range(32))

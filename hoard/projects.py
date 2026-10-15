@@ -16,6 +16,7 @@ from pathlib import Path
 from .downloader import STORE_DIRS
 from .paths import data_dir
 from .safety import DataFileError, clean_text, read_json_file, store_link, valid_rel
+from .sets import product_link
 from .tags import tag_key
 
 MAX_PROJECTS = 200
@@ -121,7 +122,9 @@ def _md(s: str) -> str:
 
 def credit_entries(project: dict) -> list[dict]:
     """What the list credits: the products all in the project (issue #79), and the ones written in by hand, without
-    the ones left out, one per product, sorted by creator then name."""
+    the ones left out, one per product, sorted by creator then name. Each product links to its public page ("page",
+    from catalog.json, else its own link when that's public), never the buyer's own: a list is for sharing, and a
+    Gumroad download page opens its files for whoever has the link."""
     left = {k.casefold() for k in project["credits"]["left_out"]}
     seen, out = set(), []
     found = [a for a in project["assets"] if a["status"] == "yes"] + project["credits"]["added"]
@@ -130,7 +133,7 @@ def credit_entries(project: dict) -> list[dict]:
         if key in seen or key in left:
             continue
         seen.add(key)
-        out.append(e)
+        out.append(e if e.get("added") else {**e, "url": e.get("page") or product_link(e["store"].lower(), e.get("url"))})
     out.sort(key=lambda e: (_who(e).casefold(), e["name"].casefold()))
     return out
 
@@ -176,8 +179,10 @@ def view(projects: list[dict], index: dict, updates: dict) -> list[dict]:
             d = by_folder.get(a["folder"])
             assets.append({**a, "download": d["id"] if d else None,
                            "update": bool(d and d.get("tag_key") in updates),
-                           "tag_key": (d or {}).get("tag_key") or tag_key(a["store"], a["name"])})   # (for Make a set)
-        out.append({**p, "assets": assets, "credits_text": {s: credits_text(p, s) for s in STYLES},
+                           "tag_key": (d or {}).get("tag_key") or tag_key(a["store"], a["name"]),   # (for Make a set)
+                           "page": (d or {}).get("page")})   # its public page, for the credits list
+        p = {**p, "assets": assets}
+        out.append({**p, "credits_text": {s: credits_text(p, s) for s in STYLES},
                     "counts": {s: sum(1 for a in p["assets"] if a["status"] == s) for s in STATUSES}})
     return out
 

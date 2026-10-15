@@ -1887,6 +1887,9 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     assets = read_library(cfg, root)
     if not assets:
         return [], {}
+    from .library import public_pages
+    from .sets import product_link
+    pages = public_pages()
 
     toks = [name_tokens(a["name"], int(tcfg.get("min_length", 2)), stop) for a in assets]
     df = Counter(t for ts in toks for t in ts)
@@ -1907,8 +1910,13 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
         mine = TagStore.tags_for(tagdata, tag_key(a["store"], a["name"]), a["name"], matcher)
         a_tags = sorted((ts & tags) - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
+        url = store_link(a["store"], a.get("url"))
+        # its public page, for a credits list: the download's own link is often the buyer's (Jinxxy's inventory, a
+        # Gumroad download page), so the library's page for it, else that link when it's public
+        page = None if a["store"] == "Local" else (pages.get(url or "") or pages.get(tag_key(a["store"], a["name"]))
+                                                   or product_link(a["store"].lower(), url))
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,
-                        "url": store_link(a["store"], a.get("url")), "variants": a.get("variants"), "added": added,
+                        "url": url, **({"page": page} if page else {}), "variants": a.get("variants"), "added": added,
                         "files": sorted(f["path"] for f in a["files"].values()),
                         "tags": mine, "suggested_tags": a_tags,
                         **({"location": a["location"]} if a.get("location") else {}),
@@ -2389,6 +2397,10 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: note isn't clean text")
     if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
         problems.append(f"{label}: url isn't an https address on the store's own website")
+    if "page" in entry:
+        from .sets import product_link
+        if product_link(str(entry.get("store")).lower(), entry["page"]) != entry["page"]:
+            problems.append(f"{label}: page isn't a public page on the store's own website")
     if "needs" in entry:
         from .needs import valid_needs
         if not valid_needs(entry["needs"], set(STORE_DIRS.values())):
