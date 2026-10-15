@@ -275,6 +275,47 @@ class PublicPagesOnly(unittest.TestCase):
         self.assertEqual((got["url"], got["creator"]), ("https://kitsu.gumroad.com/l/ears", "Kitsu"))
 
 
+class PhotoPages(unittest.TestCase):
+    """A photo's page on a photo site (imgur.com/<id>, as people copy it) is read for the picture it shows."""
+
+    def test_the_picture_a_page_shows(self):
+        page = ('<head><meta name="twitter:image" content="https://i.imgur.com/fOJAk3Lh.jpg">'
+                '<meta property="og:image:width" content="600">'
+                '<meta data-react-helmet="true" property="og:image" content="https://i.imgur.com/fOJAk3L.jpeg?fb"></head>')
+        self.assertEqual(sets.picture_on_page(page), "https://i.imgur.com/fOJAk3L.jpeg", "og:image, in full: not ?fb's crop")
+        self.assertEqual(sets.picture_on_page(page.replace('property="og:image"', 'property="og:title"')),
+                         "https://i.imgur.com/fOJAk3Lh.jpg", "else twitter:image")
+        self.assertEqual(sets.picture_on_page("<meta content='https://preview.redd.it/abc123.jpeg?width=640&amp;s=x' "
+                                              "property='og:image'>"), "https://i.redd.it/abc123.jpeg", "Reddit's own picture")
+        self.assertIsNone(sets.picture_on_page('<meta property="og:image" content="https://evil.example/a.png">'),
+                          "only from the photo sites the viewer shows")
+        self.assertIsNone(sets.picture_on_page("<p>no picture</p>"))
+        self.assertIsNone(sets.picture_on_page(None))
+
+    def test_which_links_are_pages(self):
+        for url, want in (("https://imgur.com/fOJAk3L", True), ("https://www.reddit.com/r/vrchat/comments/x/y/", True),
+                          ("https://bsky.app/profile/a.bsky.social/post/3k", True), ("https://gyazo.com/abc", True),
+                          ("https://i.imgur.com/fOJAk3L.jpeg", False), ("https://evil.example/a", False),
+                          ("http://imgur.com/fOJAk3L", False), ("https://imgur.com.evil.example/x", False)):
+            self.assertEqual(bool(sets.photo_page(url)), want, url)
+
+    def test_from_a_page(self):
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            return {"https://gyazo.com/abc": '<meta property="og:image" content="https://i.gyazo.com/abc.png">'}.get(url)
+        self.assertEqual(sets.photo_from_page("https://gyazo.com/abc", fetch), "https://i.gyazo.com/abc.png")
+        self.assertEqual(sets.photo_from_page("https://imgur.com/fOJAk3L", fetch), "https://i.imgur.com/fOJAk3L.jpeg",
+                         "an Imgur picture's page that can't be read is still its picture")
+        with self.assertRaisesRegex(ValueError, "couldn't find a picture"):
+            sets.photo_from_page("https://imgur.com/a/album", fetch)
+        with self.assertRaisesRegex(ValueError, "photo site Hoard knows"):
+            sets.photo_from_page("https://evil.example/a", fetch)
+        self.assertEqual(asked, ["https://gyazo.com/abc", "https://imgur.com/fOJAk3L", "https://imgur.com/a/album"],
+                         "only the photo site's own page is asked for")
+
+
 class InTheCatalog(unittest.TestCase):
     def test_sets_by_their_products_folders(self):
         tmp = Path(tempfile.mkdtemp())
@@ -425,6 +466,19 @@ class Tab(unittest.TestCase):
         self.assertNotIn(secret, self.api("/api/library")["sets"][0]["items"])
         self.assertEqual(self.api("/api/sets", {"action": "add", "id": made, "items": [secret]}).get("ok"), True)
         self.assertEqual(sets.SetStore().load()["sets"][0]["items"], [RUSK, secret], "nor taken out, while locked")
+
+    def test_a_photo_from_its_page(self):
+        made = self.api("/api/sets", {"action": "create", "name": "Rusk", "items": [RUSK]})["made"]
+        page = '<meta property="og:image" content="https://i.imgur.com/fOJAk3L.jpeg?fb">'
+        from hoard import server
+        with mock.patch.object(server, "read_photo_page", lambda url: page if url == "https://imgur.com/fOJAk3L" else None):
+            self.assertEqual(self.api("/api/sets", {"action": "photos", "id": made, "photos": ["https://imgur.com/fOJAk3L"]}).get("ok"), True)
+            self.assertEqual(sets.SetStore().load()["sets"][0]["photos"], ["https://i.imgur.com/fOJAk3L.jpeg"], "its picture")
+            bad = self.api("/api/sets", {"action": "photos", "id": made, "photos": ["https://i.imgur.com/fOJAk3L.jpeg",
+                                                                                   "https://gyazo.com/nothing"]})
+        self.assertEqual(bad["status"], 400)
+        self.assertIn("couldn't find a picture", bad["error"])
+        self.assertEqual(sets.SetStore().load()["sets"][0]["photos"], ["https://i.imgur.com/fOJAk3L.jpeg"], "unchanged")
 
     def test_make_share_and_add_a_set(self):
         from playwright.sync_api import sync_playwright

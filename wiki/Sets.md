@@ -100,11 +100,14 @@ packages can have a picture of your choosing too: see [Your own packages](Your-O
 
 A set can have up to 8 of your own photos of it (an avatar wearing the outfit, say), shown in the viewer with the
 set. Hoard doesn't host pictures: put them on a photo site, then **Add a photo link...** with the link to the
-picture itself. Links from these sites are accepted: Imgur (`i.imgur.com`), Gyazo (`i.gyazo.com`), X
-(`pbs.twimg.com`), Bluesky (`cdn.bsky.app`), Reddit (`i.redd.it`), Postimages (`i.postimg.cc`), ImgBB
-(`i.ibb.co`), Discord (`cdn.discordapp.com`, `media.discordapp.net`), and the stores' own image hosts. The
-viewer shows pictures only from those sites. Discord's links stop working after a while, so for a set you'll
-share for long, use another site.
+picture, or to its page there, as the site's Share or Copy link gives it (`https://imgur.com/fOJAk3L`, a Bluesky
+post, a Gyazo or ImgBB page): Hoard reads that page once for the picture it shows, and keeps the picture's own link.
+Pictures from these sites are accepted: Imgur (`i.imgur.com`), Gyazo (`i.gyazo.com`), X (`pbs.twimg.com`),
+Bluesky (`cdn.bsky.app`), Reddit (`i.redd.it`), Postimages (`i.postimg.cc`), ImgBB (`i.ibb.co`), Discord
+(`cdn.discordapp.com`, `media.discordapp.net`), and the stores' own image hosts. The viewer shows pictures only
+from those sites. Where a page's picture can't be found (an album, or a post with several), open the picture
+itself and copy its own link (right-click it, **Copy image address**). Discord's links stop working after a while,
+so for a set you'll share for long, use another site.
 
 ## In Hoard for Unity
 

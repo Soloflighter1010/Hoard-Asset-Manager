@@ -31,5 +31,6 @@ Changes from anyone else reach `main` only as pull requests reviewed and merged 
 
 This program will not transfer any information to other networked systems unless specifically requested by the
 user or the person installing or operating it. Hoard connects only to the stores you choose and sign in to (and
-their image hosts), and to GitHub's list of Hoard releases when you check for updates (automatic checks are off
-unless you turn them on). [PRIVACY.md](PRIVACY.md) has the details.
+their image hosts), to GitHub's list of Hoard releases when you check for updates (automatic checks are off
+unless you turn them on), to a photo site when you add a set's photo by its page there, and to Hoard's share
+server when you make or open a short link for a set, which it can't read. [PRIVACY.md](PRIVACY.md) has the details.

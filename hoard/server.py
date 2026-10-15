@@ -35,7 +35,7 @@ from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, e
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
-                     header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
+                     fetch_public, header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
@@ -1406,6 +1406,12 @@ class Handler(BaseHTTPRequestHandler):
             if body.get("action") in ("add", "remove", "create") and not self._unlocked():
                 hidden = MarkStore().keys("hidden")   # a hidden product isn't added or taken out while it's locked
                 body = {**body, "items": [k for k in body.get("items") or [] if k not in hidden]}
+            if body.get("action") == "photos" and isinstance(body.get("photos"), list):   # a photo site's page: its picture
+                try:
+                    body = {**body, "photos": [sets.photo_from_page(u, read_photo_page) if sets.photo_page(u) else u
+                                               for u in body["photos"][:sets.MAX_PHOTOS + 1]]}
+                except ValueError as e:
+                    return self._json({"error": str(e)}, 400)
             if body.get("action") == "share":
                 return self._share_set(str(body.get("id", "")))
             if body.get("action") == "short":   # Make a short link, or update the one it has
@@ -1678,6 +1684,15 @@ def chosen_files(raw) -> dict[str, dict] | None:
         if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
+
+
+def read_photo_page(url: str) -> str | None:
+    """A photo site's page, read once for the picture it shows (sets.photo_from_page), as a browser would ask for
+    it: public addresses only, 2 MB at most. Its text, or None."""
+    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
+                                           "like Gecko) Chrome/140.0 Safari/537.36", "Accept": "text/html"},
+                       sets.MAX_PHOTO_PAGE)
+    return got[0].decode("utf-8", "replace") if got and got[1] in ("text/html", "application/xhtml+xml") else None
 
 
 def forget_short_links(records: list[dict]) -> None:

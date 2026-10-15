@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.3.2
+
+- **A set's photos can be added by their page link.** **Add a photo link...** took only the picture's own address
+  (`https://i.imgur.com/fOJAk3L.jpeg`), not the link a photo site's Share or Copy button gives
+  (`https://imgur.com/fOJAk3L`). Now it takes either: for a page on Imgur, Gyazo, ImgBB, Postimages, Bluesky, Reddit
+  or X, Hoard reads the page once for the picture it shows and keeps that picture's own link (Imgur's in full, not
+  its link-preview crop). Where a page's picture can't be found, it says to copy the picture's own link.
+  [PRIVACY.md](PRIVACY.md), the website and the wiki list the photo site among what Hoard talks to.
+
 ## 4.3.1
 
 - **Shared sets link each product's own page on every store.** A set links each product to its store, and for
