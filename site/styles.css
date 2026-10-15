@@ -268,6 +268,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .ph b { font: 400 clamp(3rem, 7vw, 4.6rem)/1 var(--display); opacity: .85; }
 .ph small { font-size: 13px; font-weight: 700; opacity: .7; }
 .ph.h1 { --h: 14; } .ph.h2 { --h: 320; } .ph.h3 { --h: 186; } .ph.h4 { --h: 232; } .ph.h5 { --h: 110; } .ph.h6 { --h: 40; }
+.ph.h7 { --h: 275; } .ph.h8 { --h: 150; } .ph.h9 { --h: 350; }
 .badge { position: absolute; left: 8px; top: 8px; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
          background: rgb(20 16 12 / .78); color: #F4EDE3; }
 .badge.count { background: var(--bone); color: var(--cave); }
@@ -278,6 +279,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .ondisk-mark svg { width: 15px; height: 15px; }
 .slot .nm { font-weight: 700; font-size: 1.05rem; margin: 0; }
 .slot .cr { margin: -4px 0 0; color: var(--dust); font-size: .95rem; }
+.features .langs { margin: 28px 0 0; }
 
 /* ---------- the docs (docs/, built from the wiki by scripts/build_site_docs.py): the app's sidebar, the page, and
    its headings beside it */
@@ -458,6 +460,12 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .brief .codetable { min-width: 0; }
   .brief .codetable td:last-child { white-space: normal; width: 46%; }
 }
+
+/* Not found (404.html): a tile of its own, as the app shows a product without a picture */
+.lost .hero { padding: 64px 0 40px; }
+.lost-tile { width: min(220px, 60vw); margin: 0 auto 28px; }
+.lost-tile .art { box-shadow: 0 18px 50px rgb(0 0 0 / .3); transform: rotate(-3deg); }
+.lost .small code { overflow-wrap: anywhere; }
 
 /* Save for Hoard (save-for-hoard.html): the bookmark itself, to drag to the browser's bookmarks bar */
 .saver-get { margin: 24px 0 8px; }

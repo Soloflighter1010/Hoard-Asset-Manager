@@ -36,7 +36,7 @@ def built_site() -> Path:
 
 
 PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-         "stores.html", "set.html", "save-for-hoard.html")
+         "stores.html", "set.html", "save-for-hoard.html", "404.html")
 
 
 def every_page(site: Path) -> list[str]:
@@ -83,6 +83,9 @@ class TheSite(unittest.TestCase):
             page.feed((site / name).read_text("utf-8"))
             for tag, key, value in page.refs:
                 if re.match(r"(https?|vcc|mailto):", value):
+                    continue
+                if tag == "base":   # 404.html, shown at any address: its links from the site's root
+                    self.assertEqual((name, value), ("404.html", "/"))
                     continue
                 if value.startswith("javascript:"):   # the Save for Hoard bookmark: a page of its own's, to drag
                     self.assertEqual((name, tag), ("save-for-hoard.html", "a"), f"{name}: a javascript: link")
@@ -327,6 +330,14 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual({url for url, _ in links}, in_table, "every code link is in the table")
         for part in ('id="api"', 'id="ai"', 'href="#code"', "AI-DISCLOSURE.md"):
             self.assertIn(part, page)
+
+    def test_a_missing_page_finds_its_way_home(self):
+        """GitHub Pages shows 404.html for any address the site doesn't have, at that address (docs/gone, say): its
+        links and styles come from the site's root, and search engines leave it out."""
+        page = (SITE / "404.html").read_text("utf-8")
+        self.assertIn('<base href="/">', page)
+        self.assertIn('<meta name="robots" content="noindex">', page)
+        self.assertIn('<a class="button primary" href="./">', page, "the way home")
 
     def test_the_save_for_hoard_page_carries_hoards_own_bookmark(self):
         """A link can't be dragged out of Hoard's window into another browser, so the Payhip bookmark has a page on the
