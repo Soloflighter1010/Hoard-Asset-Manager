@@ -921,15 +921,19 @@ class Handler(BaseHTTPRequestHandler):
         for a in srv.index(stale_ok=True)["assets"]:
             dl.setdefault(a["tag_key"], a)
 
+        def public(store: str, *links) -> str | None:   # its own public page, else its creator's: never one of yours
+            return next((u for u in (sets.product_link(store, x) for x in links) if u), None)
+
         def details(key: str) -> dict | None:
             i = lib.get(key)
             if i:
                 return {"store": i["store"], "id": i.get("id"), "name": i["name"], "creator": i.get("creator"),
-                        "url": i.get("url"), "thumbnail": i.get("thumbnail")}
+                        "url": public(i["store"], i.get("page"), i.get("url"), i.get("creator_url")),
+                        "thumbnail": i.get("thumbnail")}
             a = dl.get(key)
             if a:
-                return {"store": str(a["store"]).lower(), "name": a["name"], "creator": a.get("creator"),
-                        "url": a.get("url")}
+                store = str(a["store"]).lower()
+                return {"store": store, "name": a["name"], "creator": a.get("creator"), "url": public(store, a.get("url"))}
             return None
         return details
 

@@ -435,7 +435,8 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 }
 
 /* The set viewer (set.html): a set someone shared from Hoard, read from the page's link */
-.setviewer .sv { max-width: 880px; margin: 0 auto; padding: 40px 0 56px; border-top: 0; }
+.setviewer .sv { max-width: 1180px; margin: 0 auto; padding: 40px 0 56px; border-top: 0; }
+.setviewer .sv > p, .setviewer .sv-note, .setviewer .sv-get { max-width: 760px; }
 .setviewer section.sv-photos, .setviewer section.sv-get { padding: 24px 0; border-top: 0; }
 .setviewer h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 .3em; overflow-wrap: anywhere; }
 .setviewer h2 { font-size: clamp(1.3rem, 2.6vw, 1.7rem); margin: 28px 0 .6em; }
@@ -446,11 +447,14 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .sv-photos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .sv-photos img, .sv-photos .none { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px;
   border: 1px solid var(--seam); background: var(--stone); }
-.sv-items { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; }
-.sv-item { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 10px;
+/* the products as tiles, as many to a row as fit */
+.sv-items { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }
+.sv-item { display: flex; flex-direction: column; gap: 10px; padding: 10px; min-width: 0;
   background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); }
-.sv-item .pic { width: 72px; height: 72px; border-radius: 10px; object-fit: cover; background: var(--stone); display: block; }
-.sv-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sv-item .pic { width: 100%; aspect-ratio: 1; border-radius: 10px; object-fit: cover; background: var(--stone); display: block; }
+.sv-item .button { text-align: center; }
+.sv-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .sv-text b { overflow-wrap: anywhere; }
 .sv-by { color: var(--dust); font-size: .9rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .sv-by .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; }
@@ -458,8 +462,4 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .sv-get input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 8px 12px; border-radius: 12px;
   border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 .9rem var(--body); }
 .sv-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-@media (max-width: 560px) {
-  .sv-item { grid-template-columns: 56px minmax(0, 1fr); }
-  .sv-item .pic { width: 56px; height: 56px; }
-  .sv-item .button { grid-column: 1 / -1; }
-}
+@media (max-width: 460px) { .sv-items { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }

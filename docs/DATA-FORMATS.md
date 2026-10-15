@@ -84,7 +84,9 @@ A set's products are kept in `sets.json` in the app-data folder (4.0; 4.2.0 adde
 "thumbnail"?}}}]}`. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
 `sets.json` (a new name each time it changes). A product key is
 the one tags use (`booth:rusk`). `products` is what each was when it was added, so a set can list products that
-aren't in your library; `url` is only ever on the store's own website, `thumbnail` only on its image host, and
+aren't in your library; `url` is only ever a public page on the store's own website, the product's or its creator's
+(never the buyer's own: not a Gumroad purchase's download page, `gumroad.com/d/...`, or Jinxxy's inventory, from
+4.2.1), `thumbnail` only on its image host, and
 `photos` only on the photo sites `hoard/sets.py` names.
 
 A **share code** is `H1.` and then that set as JSON, compressed with raw DEFLATE and written in URL-safe base64

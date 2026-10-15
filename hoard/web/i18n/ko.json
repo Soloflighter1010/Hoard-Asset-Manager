@@ -1431,5 +1431,21 @@
  "That picture is too large.": "그 이미지는 너무 커요.",
  "That isn't a picture.": "그건 이미지가 아니에요.",
  "Wait for Hoard to finish with Local, then try again.": "Hoard가 로컬 작업을 끝낸 뒤 다시 해 보세요.",
- "It has a _thumbnail picture of its own, which is the one shown. Change that file instead.": "자체 _thumbnail 이미지가 있어서 그게 보이고 있어요. 대신 그 파일을 바꾸세요."
+ "It has a _thumbnail picture of its own, which is the one shown. Change that file instead.": "자체 _thumbnail 이미지가 있어서 그게 보이고 있어요. 대신 그 파일을 바꾸세요.",
+ "1 product isn't included: your own packages (Local) and hidden products stay on this computer.": "상품 1개는 포함되지 않았어요. 내 패키지(로컬)와 숨긴 상품은 이 컴퓨터에만 있어요.",
+ "{0} products aren't included: your own packages (Local) and hidden products stay on this computer.": "상품 {0}개는 포함되지 않았어요. 내 패키지(로컬)와 숨긴 상품은 이 컴퓨터에만 있어요.",
+ "Anyone with this link can see the product in this set, where to buy it, and your note and photos.": "이 링크가 있는 사람은 누구나 이 세트의 상품과 살 수 있는 곳, 메모와 사진을 볼 수 있어요.",
+ "Anyone with this link can see the {0} products in this set, where to buy each one, and your note and photos.": "이 링크가 있는 사람은 누구나 이 세트의 상품 {0}개와 각각 살 수 있는 곳, 메모와 사진을 볼 수 있어요.",
+ "To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link.": "자기 Hoard에 추가하려면 세트에서 “공유된 세트 추가”를 고르고 링크를 붙여 넣으면 돼요.",
+ "The set is saved inside the link, so nothing is uploaded. Each product's picture loads from its store.": "세트는 링크 안에 저장되므로 아무것도 업로드되지 않아요. 상품 이미지는 각 스토어에서 불러와요.",
+ "Delete these {0} sets? The products in them stay as they are.": "이 세트 {0}개를 삭제할까요? 안에 있는 상품은 그대로 남아요.",
+ "In your library, not downloaded": "라이브러리에 있음, 다운로드 안 함",
+ "Not in Local now": "지금은 로컬에 없음",
+ "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add the link to the picture. Hoard saves the link, not the picture.": "세트 사진(입혀 본 아바타 등)은 공유 페이지에 보여요. 사진을 Imgur나 Gyazo 같은 사진 사이트에 올린 뒤 그 이미지 링크를 추가하세요. Hoard는 이미지가 아니라 링크를 저장해요.",
+ "What it's for, or how to put it together. It's shared with the set.": "무엇을 위한 세트인지, 또는 조합하는 방법. 세트와 함께 공유돼요.",
+ "Your own packages (Local)": "내 패키지(로컬)",
+ "Paste the link to a picture on a photo site": "사진 사이트에 있는 이미지 링크를 붙여 넣으세요",
+ "Now add products: select them in the Library or Downloads, then choose Sets in the selection bar.": "이제 상품을 추가하세요. 라이브러리나 다운로드에서 고른 뒤 선택 막대에서 “세트”를 고르세요.",
+ "Added the shared set. Products you don't own yet show where to buy them.": "공유된 세트를 추가했어요. 아직 없는 상품에는 살 수 있는 곳이 보여요.",
+ "Delete these sets": "이 세트들 삭제"
 }

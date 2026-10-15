@@ -1431,5 +1431,21 @@
  "That picture is too large.": "その画像は大きすぎます。",
  "That isn't a picture.": "それは画像ではありません。",
  "Wait for Hoard to finish with Local, then try again.": "Hoardがローカルの処理を終えてから、もう一度お試しください。",
- "It has a _thumbnail picture of its own, which is the one shown. Change that file instead.": "それ自体に_thumbnail画像があり、それが表示されています。代わりにそのファイルを変更してください。"
+ "It has a _thumbnail picture of its own, which is the one shown. Change that file instead.": "それ自体に_thumbnail画像があり、それが表示されています。代わりにそのファイルを変更してください。",
+ "1 product isn't included: your own packages (Local) and hidden products stay on this computer.": "1個の商品は含まれていません。自分のパッケージ(ローカル)と非表示の商品は、このコンピューターから出ません。",
+ "{0} products aren't included: your own packages (Local) and hidden products stay on this computer.": "{0}個の商品は含まれていません。自分のパッケージ(ローカル)と非表示の商品は、このコンピューターから出ません。",
+ "Anyone with this link can see the product in this set, where to buy it, and your note and photos.": "このリンクを知っている人は誰でも、このセットの商品とその購入先、メモと写真を見られます。",
+ "Anyone with this link can see the {0} products in this set, where to buy each one, and your note and photos.": "このリンクを知っている人は誰でも、このセットの{0}個の商品とそれぞれの購入先、メモと写真を見られます。",
+ "To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link.": "自分のHoardに追加するには、セットで「共有されたセットを追加」を選び、リンクを貼り付けます。",
+ "The set is saved inside the link, so nothing is uploaded. Each product's picture loads from its store.": "セットはリンクの中に保存されるので、何もアップロードされません。各商品の画像はそのストアから読み込まれます。",
+ "Delete these {0} sets? The products in them stay as they are.": "この{0}個のセットを削除しますか?中の商品はそのまま残ります。",
+ "In your library, not downloaded": "ライブラリにあり、未ダウンロード",
+ "Not in Local now": "今はローカルにありません",
+ "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add the link to the picture. Hoard saves the link, not the picture.": "セットの写真(着用したアバターなど)は共有ページに表示されます。写真をImgurやGyazoなどの写真サイトに置いてから、その画像へのリンクを追加してください。Hoardが保存するのはリンクで、画像ではありません。",
+ "What it's for, or how to put it together. It's shared with the set.": "何のためのセットか、または組み立て方。セットと一緒に共有されます。",
+ "Your own packages (Local)": "自分のパッケージ(ローカル)",
+ "Paste the link to a picture on a photo site": "写真サイト上の画像へのリンクを貼り付けてください",
+ "Now add products: select them in the Library or Downloads, then choose Sets in the selection bar.": "次に商品を追加しましょう。ライブラリかダウンロードで選び、選択バーの「セット」を選んでください。",
+ "Added the shared set. Products you don't own yet show where to buy them.": "共有されたセットを追加しました。まだ持っていない商品には購入先が表示されます。",
+ "Delete these sets": "これらのセットを削除"
 }

@@ -6,9 +6,7 @@
 "use strict";
 (function () {
   const STORES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io" };
-  const STORE_SITES = { booth: ["booth.pm"], gumroad: ["gumroad.com"], jinxxy: ["jinxxy.com"], payhip: ["payhip.com"],
-                        itch: ["itch.io"] };
-  const STORE_IMAGE_HOSTS = { booth: ["booth.pximg.net"], gumroad: ["public-files.gumroad.com"], jinxxy: ["cdn.jinxxy.com"],
+  const STORE_IMAGE_HOSTS = { booth: ["booth.pximg.net"], gumroad: ["public-files.gumroad.com"], jinxxy: ["jinxxy-c.jinxxy-cdn.com"],
                               payhip: ["images.payhip.com"], itch: ["img.itch.zone"] };
   const PHOTO_HOSTS = ["i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i.redd.it", "i.postimg.cc", "i.ibb.co",
                        "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
@@ -30,6 +28,32 @@
     const host = u.hostname.replace(/\.$/, "").toLowerCase();
     if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443")) return "";
     return hosts.some(h => host === h || (subdomains && host.endsWith("." + h))) ? u.href : "";
+  }
+  // A product's public page on its store, or its creator's, as hoard/sets.py's product_link checks it: never a page
+  // of the buyer's own (a Gumroad purchase's download page, gumroad.com/d/..., which opens its files for whoever has
+  // it; Jinxxy's inventory; an itch.io download page and its key). A set shared from Hoard 4.2.0 can carry those:
+  // they're not shown.
+  const NOT_A_SHOP = new Set(["www", "app", "accounts", "manage", "api", "assets", "help", "support", "checkout", "auth", "login"]);
+  const JINXXY_NOT_A_CREATOR = new Set(["my", "market", "api", "auth", "cart", "checkout", "about", "login", "signup", "settings",
+    "search", "help", "support", "feedback", "terms-of-service", "privacy-policy", "refund-policy", "_next", "static", "admin"]);
+  const BOOTH_ITEM = /^\/(?:[a-z]{2}(?:-[a-z]+)?\/)?items\/\d{1,12}$/;
+  function storePage(store, value) {
+    if (typeof value !== "string" || value.length > 600) return "";
+    let u;
+    try { u = new URL(value); } catch (e) { return ""; }
+    const host = u.hostname.replace(/\.$/, "").toLowerCase(), path = u.pathname.replace(/\/+$/, "");
+    if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443") || !/^[\x00-\x7f]*$/.test(host)) return "";
+    const dot = host.indexOf("."), name = host.slice(0, dot), rest = host.slice(dot + 1);
+    const shop = site => rest === site && /^[a-z0-9-]{1,63}$/.test(name) && !NOT_A_SHOP.has(name);
+    const on = site => host === site || host === "www." + site;
+    const segs = path ? path.split("/").slice(1) : [];
+    const ok = store === "booth" ? (on("booth.pm") && BOOTH_ITEM.test(path)) || (shop("booth.pm") && (!path || BOOTH_ITEM.test(path)))
+      : store === "gumroad" ? ((on("gumroad.com") || shop("gumroad.com")) && /^\/l\/[A-Za-z0-9_-]{1,80}$/.test(path)) || (shop("gumroad.com") && !path)
+      : store === "jinxxy" ? on("jinxxy.com") && segs.length >= 1 && segs.length <= 2 && segs.every(x => /^[A-Za-z0-9_.~-]{1,120}$/.test(x))
+          && !JINXXY_NOT_A_CREATOR.has(segs[0].toLowerCase()) && (segs.length === 1 || !["products", "lists", "posts"].includes(segs[1].toLowerCase()))
+      : store === "payhip" ? on("payhip.com") && /^\/b\/[A-Za-z0-9]{1,20}$/.test(path)
+      : store === "itch" ? shop("itch.io") && (!path || /^\/[A-Za-z0-9_-]{1,120}$/.test(path)) : false;
+    return ok ? `https://${host}${path}` : "";
   }
   const text = (v, n) => typeof v === "string" ? v.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
   const note = v => typeof v === "string" ? v.split(/\r?\n/).slice(0, 20).map(l => text(l, 1000)).join("\n").trim().slice(0, 1000) : "";
@@ -59,7 +83,7 @@
       const store = typeof row[0] === "string" ? row[0].toLowerCase() : "";
       const name = text(row[2], 300);
       if (!STORES[store] || !name) continue;
-      items.push({ store, name, creator: text(row[3], 200), url: https(row[4], STORE_SITES[store], true),
+      items.push({ store, name, creator: text(row[3], 200), url: storePage(store, row[4]),
                    picture: https(row[5], STORE_IMAGE_HOSTS[store], false) });
     }
     if (!items.length) throw new Error("empty");

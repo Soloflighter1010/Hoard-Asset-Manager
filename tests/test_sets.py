@@ -189,7 +189,6 @@ class Sharing(unittest.TestCase):
             return set(re.findall(r'"([a-z0-9.-]+\.[a-z]+)"', re.search(name + r" = (.*?);", js, re.S).group(1)))
         self.assertEqual(js_list("PHOTO_HOSTS"), set(sets.PHOTO_HOSTS))
         self.assertEqual(js_list("STORE_IMAGE_HOSTS"), {h for hs in sets.STORE_IMAGE_HOSTS.values() for h in hs})
-        self.assertEqual(js_list("STORE_SITES"), {h for hs in sets.STORE_LINK_SITES.values() for h in hs})
         self.assertIn('"H1."', js)
         self.assertNotIn("innerHTML", js, "nothing from a code becomes page markup")
         html = (site / "set.html").read_text("utf-8")
@@ -199,6 +198,69 @@ class Sharing(unittest.TestCase):
                                                  {h for hs in sets.STORE_IMAGE_HOSTS.values() for h in hs}})
         self.assertIn("script-src 'self'", csp)
         self.assertIn("default-src 'none'", csp)
+
+
+# Links a product in a set can have: its public page, or its creator's. Never one of the buyer's own (a Gumroad
+# purchase's download page opens its files for whoever has the link). Hoard 4.2.0 shared those: here, none is kept.
+LINKS = [("gumroad", "https://gumroad.com/d/38f42c7471ed9fd07cfad9261e7fce75", None),
+         ("gumroad", "https://app.gumroad.com/d/abc", None), ("gumroad", "https://app.gumroad.com/library", None),
+         ("gumroad", "https://kitsu.gumroad.com/l/rusk?ref=1#x", "https://kitsu.gumroad.com/l/rusk"),
+         ("gumroad", "https://gumroad.com/l/rusk", "https://gumroad.com/l/rusk"),
+         ("gumroad", "https://kitsu.gumroad.com/", "https://kitsu.gumroad.com"), ("gumroad", "https://kitsu.gumroad.com/p/x", None),
+         ("jinxxy", "https://jinxxy.com/my/inventory/3973499687230506857", None),
+         ("jinxxy", "https://jinxxy.com/Kitsu/rusk", "https://jinxxy.com/Kitsu/rusk"),
+         ("jinxxy", "https://jinxxy.com/Kitsu", "https://jinxxy.com/Kitsu"), ("jinxxy", "https://jinxxy.com/Kitsu/products", None),
+         ("jinxxy", "https://jinxxy.com/market/browse", None), ("jinxxy", "https://jinxxy.com/a/b/c", None),
+         ("booth", "https://booth.pm/ja/items/12345", "https://booth.pm/ja/items/12345"),
+         ("booth", "https://kitsu.booth.pm/items/12345", "https://kitsu.booth.pm/items/12345"),
+         ("booth", "https://kitsu.booth.pm/", "https://kitsu.booth.pm"),
+         ("booth", "https://accounts.booth.pm/library", None), ("booth", "https://accounts.booth.pm/orders/1", None),
+         ("payhip", "https://payhip.com/b/AbC12", "https://payhip.com/b/AbC12"), ("payhip", "https://payhip.com/b-account", None),
+         ("itch", "https://kitsu.itch.io/rusk", "https://kitsu.itch.io/rusk"),
+         ("itch", "https://kitsu.itch.io/rusk/download/SECRETKEY", None), ("itch", "https://itch.io/my-purchases", None),
+         ("booth", "https://booth.pm.evil.example/items/1", None), ("gumroad", "http://kitsu.gumroad.com/l/a", None),
+         ("gumroad", "https://user@kitsu.gumroad.com/l/a", None), ("local", "https://kitsu.gumroad.com/l/a", None)]
+
+
+class PublicPagesOnly(unittest.TestCase):
+    def test_only_a_public_page(self):
+        for store, url, want in LINKS:
+            with self.subTest(url=url):
+                self.assertEqual(sets.product_link(store, url), want)
+
+    def test_the_viewer_agrees(self):
+        """site/set.js checks a link as product_link does, so a link shared from 4.2.0 doesn't show one of the
+        sharer's own pages."""
+        import re
+        import shutil
+        import subprocess
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("needs Node.js")
+        js = (Path(__file__).resolve().parent.parent / "site" / "set.js").read_text("utf-8")
+        fn = re.search(r"  const NOT_A_SHOP.*?\n  }\n", js, re.S).group(0)
+        script = fn + "\nconst cases = " + json.dumps([[s, u] for s, u, _ in LINKS]) + \
+            ";\nprocess.stdout.write(JSON.stringify(cases.map(([s, u]) => storePage(s, u) || null)));"
+        got = json.loads(subprocess.run([node, "-e", script], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got, [want for _, _, want in LINKS])
+
+    def test_a_set_never_shares_your_own_pages(self):
+        """What a set remembers from 4.2.0 is checked again: a Gumroad download page goes, and what Hoard knows of the
+        product now (its public page, else its creator's) is shared instead."""
+        store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
+        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK, "gumroad:ears", "jinxxy:tail"],
+            "products": {"gumroad:ears": {"store": "gumroad", "name": "Ears", "url": "https://gumroad.com/d/38f42c7471ed9fd07cfad9261e7fce75"},
+                         "jinxxy:tail": {"store": "jinxxy", "name": "Tail", "url": "https://jinxxy.com/my/inventory/123",
+                                         "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/width=512/a/1.png"}}}]}))
+        s = store.load()["sets"][0]
+        self.assertNotIn("url", s["products"]["gumroad:ears"])
+        self.assertNotIn("url", s["products"]["jinxxy:tail"])
+        self.assertTrue(s["products"]["jinxxy:tail"]["thumbnail"].startswith("https://jinxxy-c.jinxxy-cdn.com/"), "Jinxxy's pictures")
+        now = {"gumroad:ears": {"store": "gumroad", "name": "Ears", "url": "https://kitsu.gumroad.com/l/ears"}}
+        code, n = sets.share_code(s, now.get)
+        self.assertEqual(n, 2, "(Rusk: nothing known of it, so it isn't in it)")
+        self.assertNotIn("/d/", json.dumps(sets.from_code(code)))
+        self.assertEqual(sets.from_code(code)["products"]["gumroad:ears"]["url"], "https://kitsu.gumroad.com/l/ears")
 
 
 class InTheCatalog(unittest.TestCase):
@@ -410,7 +472,7 @@ class Tab(unittest.TestCase):
             self.assertEqual(ears.locator("a").get_attribute("href"), "https://jinxxy.com/tails/foxears")
             self.assertIn("Buy on Jinxxy", ears.inner_text())
             # a note and a photo, kept with the set and shared with it
-            page.click("#setView .setextra summary")
+            self.assertIsNotNone(page.locator("#setView details.setextra").get_attribute("open"), "open to begin with")
             page.fill("#setView [data-setnote]", "Cozy fox look")
             page.click('#setView [data-setx="note"]')
             page.get_by_text("Saved the note.").wait_for()
@@ -424,14 +486,25 @@ class Tab(unittest.TestCase):
             page.locator("#setView .settile", has_text="Rusk, winter").click()
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
             hoodie = page.locator("#setMore .slot", has_text="Hoodie for Rusk")
-            self.assertIn("Yours, not downloaded", page.locator("#setMore").inner_text())
+            self.assertIn("In your library, not downloaded", page.locator("#setMore").inner_text())
             hoodie.locator("a").click()   # to it in the Library
             page.locator("#detail.open", has_text="Hoodie for Rusk").wait_for()
+            # sets are chosen and right-clicked as products are: Select, Ctrl, and what can be done to them
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Rusk, winter").click(button="right")
+            self.assertEqual(page.locator(".selmenu [role=menuitem]").all_inner_texts(),
+                             ["Open", "Share...", "Download the 1 not downloaded", "Choose a picture...", "Rename", "Delete"])
+            page.keyboard.press("Escape")
+            page.locator("#setView .settile", has_text="Fox outfit").click(modifiers=["Control"])
+            self.assertEqual(page.locator("#bulkCount").inner_text(), "2 selected")
+            self.assertEqual(page.locator("#grid .slot").count(), 0, "still every set's tile: none opened")
+            page.click("#bulkActs [data-group='Sets']")
+            page.get_by_role("menuitem", name="Delete these sets").click()
+            page.click("#askDialog[open] button[value=yes]")
+            page.locator("#setView .settile").first.wait_for(state="detached")
             self.assertEqual(errors, [])
             browser.close()
-        fox = next(s for s in sets.SetStore().load()["sets"] if s["name"] == "Fox outfit")
-        self.assertEqual(fox.get("note"), "Cozy fox look")
-        self.assertNotIn("photos", fox)
+        self.assertEqual(sets.SetStore().load()["sets"], [], "both deleted, from the menu")
 
     def test_the_viewer(self):
         """The set viewer (site/set.html), with its pictures served here: no network, no Hoard."""

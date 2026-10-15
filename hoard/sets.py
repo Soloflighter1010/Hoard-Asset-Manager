@@ -44,7 +44,7 @@ MAX_CODE_JSON = 1024 * 1024       # what a code may unpack to: a bomb stops here
 STORES = tuple(STORE_LINK_SITES)  # the stores a shared product can be from (not Local: your own files stay yours)
 # where store pictures come from: a shared product's picture is shown only from its store's own image host
 STORE_IMAGE_HOSTS = {"booth": ("booth.pximg.net",), "gumroad": ("public-files.gumroad.com",),
-                     "jinxxy": ("cdn.jinxxy.com",), "payhip": ("images.payhip.com",), "itch": ("img.itch.zone",)}
+                     "jinxxy": ("jinxxy-c.jinxxy-cdn.com",), "payhip": ("images.payhip.com",), "itch": ("img.itch.zone",)}
 # the photo sites a sharer's own photos can be on (Hoard hosts nothing): links to pictures, https only
 PHOTO_HOSTS = ("i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i.redd.it", "i.postimg.cc", "i.ibb.co",
                "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
@@ -120,9 +120,22 @@ def clean_note(value) -> str:
     return "\n".join(lines).strip()[:NOTE_LENGTH].strip()
 
 
+# Store sites' own parts, never a creator's: a library, an account, a checkout (Booth's accounts.booth.pm, Gumroad's
+# app.gumroad.com, where your purchases are) and the like
+_NOT_A_SHOP = {"www", "app", "accounts", "manage", "api", "assets", "help", "support", "checkout", "auth", "login"}
+_JINXXY_NOT_A_CREATOR = {"my", "market", "api", "auth", "cart", "checkout", "about", "login", "signup", "settings",
+                         "search", "help", "support", "feedback", "terms-of-service", "privacy-policy", "refund-policy",
+                         "_next", "static", "admin"}
+_SEGMENT = re.compile(r"[A-Za-z0-9_.~-]{1,120}")
+_BOOTH_ITEM = re.compile(r"/(?:[a-z]{2}(?:-[a-z]+)?/)?items/\d{1,12}")
+
+
 def product_link(store, value) -> str | None:
-    """A product's store page: an https address on the store's own website (not a site added on one computer, so
-    a link shared from one is the same everywhere), or None."""
+    """A product's public page on its store, or its creator's (https, without its query or anything after #), or
+    None. Never a page of the buyer's own: a Gumroad purchase's link is its download page (gumroad.com/d/...),
+    which opens its files for whoever has it; Jinxxy's is the buyer's inventory; an itch.io download page carries
+    its key. Only the stores' own websites (not a site added on one computer), so a shared link is the same
+    everywhere. site/set.js checks the same way."""
     if not isinstance(store, str) or store not in STORE_LINK_SITES or not isinstance(value, str) or len(value) > MAX_URL:
         return None
     try:
@@ -133,7 +146,25 @@ def product_link(store, value) -> str | None:
     host = (u.hostname or "").rstrip(".").lower()
     if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii():
         return None
-    return value.strip() if any(host == s or host.endswith("." + s) for s in STORE_LINK_SITES[store]) else None
+    path = u.path.rstrip("/")
+
+    def shop(site: str) -> bool:   # <creator>.site, one level down, not one of the site's own
+        name, _, rest = host.partition(".")
+        return rest == site and re.fullmatch(r"[a-z0-9-]{1,63}", name) is not None and name not in _NOT_A_SHOP
+    on = lambda site: host in (site, "www." + site)   # noqa: E731
+    segs = path.split("/")[1:] if path else []
+    if store == "booth":
+        ok = (on("booth.pm") and _BOOTH_ITEM.fullmatch(path)) or (shop("booth.pm") and (not path or _BOOTH_ITEM.fullmatch(path)))
+    elif store == "gumroad":
+        ok = (on("gumroad.com") or shop("gumroad.com")) and re.fullmatch(r"/l/[A-Za-z0-9_-]{1,80}", path) or (shop("gumroad.com") and not path)
+    elif store == "jinxxy":
+        ok = (on("jinxxy.com") and 1 <= len(segs) <= 2 and all(_SEGMENT.fullmatch(x) for x in segs)
+              and segs[0].lower() not in _JINXXY_NOT_A_CREATOR and (len(segs) == 1 or segs[1].lower() not in ("products", "lists", "posts")))
+    elif store == "payhip":
+        ok = on("payhip.com") and re.fullmatch(r"/b/[A-Za-z0-9]{1,20}", path)
+    else:   # itch.io: a project's page, or its creator's
+        ok = shop("itch.io") and (not path or re.fullmatch(r"/[A-Za-z0-9_-]{1,120}", path))
+    return f"https://{host}{path}" if ok else None
 
 
 def clean_product(p) -> dict | None:
@@ -309,8 +340,9 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
     known = s.get("products") or {}
     rows = []
     for k in s.get("items", []):
-        p = clean_product(known.get(k)) or clean_product(details(k))
-        if not p or p["store"] not in STORES:
+        remembered, now = clean_product(known.get(k)), clean_product(details(k))
+        p = {**(now or {}), **(remembered or {})} if remembered or now else None   # (a link remembered from 4.2.0
+        if not p or p["store"] not in STORES:                                        # was dropped: Hoard's, now)
             continue
         row = [p["store"], p.get("id", ""), p["name"], p.get("creator", ""), p.get("url", ""), p.get("thumbnail", "")]
         while row and row[-1] == "":   # (what's left out at the end costs nothing)

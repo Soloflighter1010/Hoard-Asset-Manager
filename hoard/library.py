@@ -46,9 +46,11 @@ def item(store: str, id_, **fields) -> dict:
     """One library item in the shape every store reader produces. Links that aren't http(s) are dropped."""
     d = {"key": f"{store}:{id_}", "store": store, "id": str(id_), "name": "", "creator": "",
          "creator_url": None, "thumbnail": None, "url": None, "download_url": None, "files": [],
-         "variants": None, "archived": False, "gift": False}
+         "variants": None, "archived": False, "gift": False, "page": None}
     d.update({k: v for k, v in fields.items() if v not in (None, "")})
-    for k in ("creator_url", "url", "download_url"):  # links you can open: only to this store's own website
+    # page: the product's public page on its store, where a store's "url" is a page of yours (a Gumroad
+    # purchase's download page): what a set you share links to (hoard/sets.py), never your own
+    for k in ("creator_url", "url", "download_url", "page"):  # links you can open: only to this store's own website
         d[k] = store_link(store, d[k])
     d["thumbnail"] = safe_url(d["thumbnail"])       # images come from the stores' image hosts
     d["files"] = [{"name": clean_text(f.get("name"), 200) or "File", "url": store_link(store, f.get("url"))}
@@ -106,6 +108,14 @@ def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_pag
             time.sleep(delay)
 
 
+def gumroad_page(profile_url, permalink) -> str | None:
+    """A Gumroad product's public page (<creator>.gumroad.com/l/<permalink>): the purchase's own link is your
+    download page, which is never shared."""
+    if not (isinstance(profile_url, str) and isinstance(permalink, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", permalink)):
+        return None
+    return store_link("gumroad", profile_url.split("?", 1)[0].rstrip("/") + "/l/" + permalink)
+
+
 def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
     """Every purchase in your Gumroad library, archived ones included when configured."""
     items, seen = [], set()
@@ -135,6 +145,7 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
                           creator=creator.get("name"), creator_url=creator.get("profile_url"),
                           thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
+                          page=gumroad_page(creator.get("profile_url"), prod.get("permalink")),
                           download_url=pur.get("download_url"), variants=variants,
                           archived=bool(pur.get("is_archived"))))
     return items
@@ -952,7 +963,7 @@ class Library:
                 # something other than this Hoard wrote the list: keep the items, but none of their links or
                 # images, until a refresh reads them from the stores again
                 for i in self.data["items"]:
-                    i.update(creator_url=None, thumbnail=None, url=None, download_url=None, files=[])
+                    i.update(creator_url=None, thumbnail=None, url=None, download_url=None, files=[], page=None)
                 why = ("was changed by something other than Hoard" if status == "changed"
                        else "was saved by Hoard on another computer")
                 note = f"Hoard's saved list {why}, so its links and images are hidden until you refresh."
@@ -971,7 +982,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift", "added")}
+                                             "variants", "archived", "gift", "added", "page")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:
@@ -1129,7 +1140,7 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted((ts & keep) - set(mine)),
              "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": ""}
-        for k in ("creator_url", "url", "download_url"):  # also covers lists saved by older versions
+        for k in ("creator_url", "url", "download_url", "page"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))
         e["files"] = [f for f in e.get("files", []) if store_link(e["store"], f.get("url"))]
