@@ -59,7 +59,7 @@ ITEM = f'''<html>{HEAD}<body>{TOP}<div>{SIDE}<main>
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class Jinxxy(unittest.TestCase):
 
-    def page(self, html):
+    def page(self, html, at=None):
         self.pw = sync_playwright().start()
         self.addCleanup(self.pw.stop)
         browser = self.pw.chromium.launch()
@@ -68,7 +68,7 @@ class Jinxxy(unittest.TestCase):
         pg.route("**/*", lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8", body=html)
                  if "cdn." not in r.request.url and not r.request.url.endswith(".png")
                  else r.fulfill(status=200, content_type="image/png", body=b"\x89PNG\r\n\x1a\n"))
-        pg.goto("https://jinxxy.com/my/inventory/item1" if html is ITEM else "https://jinxxy.com/my/inventory")
+        pg.goto(at or ("https://jinxxy.com/my/inventory/item1" if html is ITEM else "https://jinxxy.com/my/inventory"))
         return pg
 
     def cards(self, cards):
@@ -85,11 +85,76 @@ class Jinxxy(unittest.TestCase):
         self.assertEqual([(c["name"], c["creator"]) for c in got],
                          [("Paw Suit", "Hyroe"), ("Protogen Visor", "Kitsu Studio"), ("Cozy Hoodie", "Nova")])
 
+    def test_a_cards_link_to_its_products_page(self):
+        """Where an inventory card links the product's public page, a set links that, not the creator's shop."""
+        linked = card(1, "Paw Suit", "Hyroe").replace("</div>", '<a href="/hyroe/PawSuit">View product</a></div>')
+        got = self.cards([linked, card(2, "Protogen Visor", "Kitsu Studio")])
+        self.assertEqual([(c["name"], c["page"]) for c in got],
+                         [("Paw Suit", "https://jinxxy.com/hyroe/PawSuit"), ("Protogen Visor", "")])
+
+    def test_the_products_page_from_its_item_page(self):
+        """Jinxxy's item page (October 2026) links the product's public page around its title; its review link, the
+        sidebar's /my/ pages and another creator's product aren't it."""
+        html = ITEM.replace('<div><h2>Paw Suit - Furality Ultra</h2>',
+                            '<div><a href="/hyroe/PawSuit"><h1>Paw Suit - Furality Ultra</h1></a>'
+                            '<a href="/hyroe/PawSuit/review/new">Write a review</a><a href="/other/Thing">Also by</a>')
+        hrefs = self.page(html, "https://jinxxy.com/my/inventory/item1").evaluate(library.JX_PRODUCT_JS)
+        self.assertEqual(hrefs[0], "https://jinxxy.com/hyroe/PawSuit")
+        self.assertEqual(library.jinxxy_product_page(hrefs, "https://jinxxy.com/hyroe"), "https://jinxxy.com/hyroe/PawSuit")
+        self.assertEqual(library.jinxxy_product_page(hrefs[1:], "https://jinxxy.com/hyroe"), None, "only its creator's")
+        self.assertEqual(library.jinxxy_product_page(["https://jinxxy.com/my/likes", "https://evil.example/a/b"]), None)
+
     def test_product_page(self):
         """The downloader's reader: the product's own title, creator and picture, not the page's share banner."""
         info = self.page(ITEM).evaluate(downloader.JX_INFO_JS)
         self.assertEqual((info["name"], info["creator"]), ("Paw Suit - Furality Ultra", "Hyroe"))
         self.assertTrue(info["thumbnail"].endswith("/paw.png"), info["thumbnail"])
+
+
+class ProductPages(unittest.TestCase):
+    """Each product's public page, which a shared set links to (never a page of the buyer's own)."""
+
+    def test_gumroad(self):
+        self.assertEqual(library.gumroad_page("https://kitsu.gumroad.com", "rusk"), "https://kitsu.gumroad.com/l/rusk")
+        self.assertEqual(library.gumroad_page("https://shop.kitsu.example", "rusk"), "https://gumroad.com/l/rusk",
+                         "a creator on a domain of their own: Gumroad's own address for it")
+        self.assertEqual(library.gumroad_page(None, "rusk"), "https://gumroad.com/l/rusk")
+        self.assertIsNone(library.gumroad_page("https://kitsu.gumroad.com", "../d/abc"))
+        for prod, want in (({"permalink": "rusk"}, "rusk"), ({"custom_permalink": "rusk"}, "rusk"),
+                           ({"unique_permalink": "abc"}, "abc"), ({"url": "https://kitsu.gumroad.com/l/rusk"}, "rusk"),
+                           ({"url": "https://app.gumroad.com/d/abc"}, None), ({}, None)):
+            self.assertEqual(library.gumroad_permalink(prod), want, prod)
+
+    def test_jinxxy_reads_each_items_page_once(self):
+        """A page a refresh found before isn't read again; at most JX_PAGE_VISITS are read in one refresh; one that
+        won't open is passed by."""
+        found = {f"/my/inventory/{n}": {"key": f"/my/inventory/{n}", "url": f"https://jinxxy.com/my/inventory/{n}",
+                                        "name": f"Item {n}", "creator_url": "https://jinxxy.com/kitsu"} for n in range(1, 6)}
+        found["/my/inventory/1"]["page"] = "https://jinxxy.com/kitsu/one"   # (its card linked it)
+        visited = []
+
+        class Page:
+            def evaluate(self, js):
+                n = visited[-1].rsplit("/", 1)[-1]
+                if n == "3":
+                    raise RuntimeError("page crashed")
+                return [f"https://jinxxy.com/kitsu/item-{n}"]
+        cfg = {"request_delay": 0, "_known_pages": {"jinxxy:2": "https://jinxxy.com/kitsu/two"}}
+        with mock.patch.object(library, "goto", lambda page, url: visited.append(url)), \
+                mock.patch.object(library, "settle", lambda page, ms=0: None), mock.patch.object(library, "JX_PAGE_VISITS", 2):
+            library.jinxxy_product_pages(Page(), found, cfg, lambda m: None)
+        self.assertEqual(visited, ["https://jinxxy.com/my/inventory/3", "https://jinxxy.com/my/inventory/4"], "2 at most")
+        self.assertEqual([c.get("page") for c in found.values()],
+                         ["https://jinxxy.com/kitsu/one", "https://jinxxy.com/kitsu/two", None, "https://jinxxy.com/kitsu/item-4", None])
+        self.assertNotIn("_known_pages", cfg)
+        items = [library.jinxxy_item({**c, "creator": "Kitsu", "thumbnail": None}) for c in found.values()]
+        self.assertEqual(items[3]["page"], "https://jinxxy.com/kitsu/item-4")
+
+    def test_a_page_found_once_is_kept(self):
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("jinxxy", [library.item("jinxxy", "1", name="Paw", page="https://jinxxy.com/kitsu/paw")])
+        lib.replace_store("jinxxy", [library.item("jinxxy", "1", name="Paw"), library.item("jinxxy", "2", name="New")])
+        self.assertEqual([i["page"] for i in lib.data["items"]], ["https://jinxxy.com/kitsu/paw", None])
 
 
 # Booth's library, as served in September 2026: each file's buttons are drawn from placeholders with the address in
