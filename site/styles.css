@@ -374,7 +374,8 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
    of the page's own colour, feathered at its edges, so the glow shows beside it but never runs under its text (small
    grey text and gold links fell under 3:1 where the glow is brightest). Prose, lists, cards and tables share its
    width. */
-.brief { --ok: #7ED67A; --no: #FF8A70; --col: 700px; position: relative; isolation: isolate; max-width: calc(var(--col) + 80px); }
+.brief { --ok: #7ED67A; --no: #FF8A70; --col: 700px; position: relative; isolation: isolate; max-width: calc(var(--col) + 80px);
+  padding-bottom: 56px; }   /* (room below the last line, whatever the page ends with) */
 @media (prefers-color-scheme: light) { .brief { --ok: #2B7F35; --no: #A3331F; } }
 .brief::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 40px; background: var(--cave);
   box-shadow: 0 0 56px 36px var(--cave); }
@@ -437,7 +438,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .brief .codetable tr.grp th { background: var(--stone); font-size: .82rem; padding-top: 10px; padding-bottom: 10px; }
 .brief .codetable tr.grp a { color: var(--bone); text-decoration: none; }
 .brief .codetable tr.grp a:hover { text-decoration: underline; }
-.brief .page-foot { max-width: var(--col); margin-top: 48px; padding-bottom: 40px; font-size: .85rem; }
+.brief .page-foot { max-width: var(--col); margin-top: 48px; padding-bottom: 0; font-size: .85rem; }
 @media (max-width: 560px) {
   .brief .glance, .brief .two { grid-template-columns: 1fr; }
   .brief .toc ol { columns: 1; }
