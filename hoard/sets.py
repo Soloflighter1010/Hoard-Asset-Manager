@@ -33,7 +33,7 @@ import threading
 import time
 import zlib
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlsplit
 
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
@@ -63,6 +63,8 @@ PHOTO_HOSTS = ("i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i
 # for the picture it shows (photo_from_page), from that site only
 PHOTO_PAGES = ("imgur.com", "gyazo.com", "ibb.co", "postimg.cc", "postimages.org", "bsky.app", "reddit.com", "x.com",
                "twitter.com")
+PAGE_HOSTS = tuple(p for site in PHOTO_PAGES for p in (site, "www." + site, "old." + site, "m." + site))
+_URL_SAFE = "/%:@!$&'()*+,;=-._~"   # what stays as it is in a page link's path and query; anything else is %-escaped
 MAX_PHOTO_PAGE = 2 * 1024 * 1024
 PICTURE_NAME = re.compile(r"[0-9a-f]{8}\.(?:png|jpg|webp)")   # a set's "picture"
 CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's "made"
@@ -123,9 +125,16 @@ def photo_url(value) -> str | None:
 
 
 def photo_page(value) -> str | None:
-    """value if it's a page on one of the photo sites (PHOTO_PAGES, or www., old., m. of one) rather than a picture."""
-    u = _https_on(value, {p for site in PHOTO_PAGES for p in (site, "www." + site, "old." + site, "m." + site)})
-    return u if u and not photo_url(u) else None
+    """A page on one of the photo sites (PHOTO_PAGES, or www., old., m. of one) rather than a picture, or None. Its
+    address is put back together from Hoard's own list of those sites (the host) and the link's path and query, so
+    reading the page only ever asks one of those sites, whatever was pasted."""
+    u = _https_on(value, PAGE_HOSTS)
+    if not u or photo_url(u):
+        return None
+    parts = urlsplit(u)   # (not urlparse: that takes a last ;part off the path)
+    host = next(h for h in PAGE_HOSTS if h == (parts.hostname or "").rstrip(".").lower())
+    query = quote(parts.query, safe=_URL_SAFE + "?")
+    return f"https://{host}{quote(parts.path or '/', safe=_URL_SAFE)}" + (f"?{query}" if query else "")
 
 
 def _tidy_picture(value: str) -> str:

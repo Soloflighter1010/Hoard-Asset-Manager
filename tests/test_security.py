@@ -188,6 +188,21 @@ class PublicOnlyFetching(unittest.TestCase):
                 m._PublicRedirects().redirect_request(urllib.request.Request("https://a.example/"), None, 302, "Found",
                                                       {}, "file:///etc/passwd")
 
+    def test_kept_to_its_sites_when_given_them(self):
+        """A photo site's page is read from that site only: not a link elsewhere, and not after a redirect elsewhere."""
+        for m in WEB_SAFETY:
+            follow = m._PublicRedirects(("imgur.com", "www.imgur.com"))
+            ask = urllib.request.Request("https://imgur.com/a")
+            self.assertIsNotNone(follow.redirect_request(ask, None, 302, "Found", {}, "https://www.imgur.com/a"))
+            for elsewhere in ("https://evil.example/a", "http://imgur.com/a", "https://imgur.com.evil.example/a"):
+                with self.assertRaises(urllib.error.URLError, msg=elsewhere):
+                    follow.redirect_request(ask, None, 302, "Found", {}, elsewhere)
+            opened = mock.Mock()
+            with mock.patch.object(m.urllib.request.OpenerDirector, "open", opened):
+                self.assertIsNone(m.fetch_public("https://evil.example/a", {}, 1000, hosts=("imgur.com",)))
+                self.assertIsNone(m.fetch_public("http://imgur.com/a", {}, 1000, hosts=("imgur.com",)))
+            opened.assert_not_called()
+
 
 class Pages(unittest.TestCase):
     """The pages run only their own script, and nothing else from the server runs as a page."""

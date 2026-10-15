@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.3.5
+
+- **Reading a photo site's page stays on that site.** When you add a set's photo by its page link, Hoard reads the
+  page once for the picture it shows. It already went only to addresses on the public internet, never to your
+  computer or your network. Now the address it reads is put back together from Hoard's own list of photo sites,
+  rather than taken as pasted, and a redirect is followed only to another page on those sites, over HTTPS. GitHub's
+  code scanning had flagged that the address came straight from what was pasted.
+
 ## 4.3.4
 
 - **The Save for Hoard bookmark can be added again.** Hoard asked you to drag it from its window to your browser's

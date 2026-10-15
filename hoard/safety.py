@@ -415,24 +415,39 @@ class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
 
 
 class _PublicRedirects(urllib.request.HTTPRedirectHandler):
-    """Follows a redirect only to another http(s) address; the connection itself then checks it's public."""
+    """Follows a redirect only to another http(s) address (and, given hosts, only to an https one on those hosts); the
+    connection itself then checks it's public."""
+
+    def __init__(self, hosts: "tuple[str, ...] | None" = None):
+        super().__init__()
+        self.hosts = hosts
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        """Refuse redirects to anything but http(s)."""
-        if urlparse(newurl).scheme not in ("http", "https"):
-            raise urllib.error.URLError(f"refused a redirect to {urlparse(newurl).scheme}:")
+        """Refuse redirects to anything but http(s), or, given hosts, to anywhere else."""
+        u = urlparse(newurl)
+        if u.scheme not in ("http", "https"):
+            raise urllib.error.URLError(f"refused a redirect to {u.scheme}:")
+        if self.hosts is not None and not _on_hosts(u, self.hosts):
+            raise urllib.error.URLError(f"refused a redirect to {u.hostname}")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20) -> tuple[bytes, str] | None:
+def _on_hosts(u, hosts: "tuple[str, ...]") -> bool:
+    """True when the parsed address u is https on one of these hosts."""
+    return u.scheme == "https" and (u.hostname or "").rstrip(".").lower() in hosts
+
+
+def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20,
+                 hosts: "tuple[str, ...] | None" = None) -> tuple[bytes, str] | None:
     """Download a small file from a public http(s) address. Returns (data, content type) or None.
 
-    Every connection, including each redirect, goes only to an address that was checked to be public.
+    Every connection, including each redirect, goes only to an address that was checked to be public. Given hosts,
+    it also goes only to those (https), redirects included.
     """
-    if urlparse(url).scheme not in ("http", "https"):
+    if urlparse(url).scheme not in ("http", "https") or (hosts is not None and not _on_hosts(urlparse(url), hosts)):
         return None
     opener = urllib.request.OpenerDirector()  # http(s) only: no file://, ftp:// or data: handlers, no proxies
-    for handler in (_PublicHTTPHandler(), _PublicHTTPSHandler(), _PublicRedirects(),
+    for handler in (_PublicHTTPHandler(), _PublicHTTPSHandler(), _PublicRedirects(hosts),
                     urllib.request.HTTPErrorProcessor(), urllib.request.HTTPDefaultErrorHandler()):
         opener.add_handler(handler)
     try:
