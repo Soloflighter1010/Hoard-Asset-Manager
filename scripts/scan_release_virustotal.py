@@ -10,7 +10,9 @@ scanned are only looked up.
 The results go in dist/VT_REPORT.md (added to the release notes) and the job summary. When any engine flags a
 file as malicious or suspicious, this fails, so the release stays a draft for a person to look at; a run with
 VT_ALLOW_DETECTIONS=true (the workflow's "publish anyway" choice, after checking the report) reports the same
-results but lets it through.
+results but lets through the flags that person was shown: the ones the draft's notes (VT_CHECKED_NOTES) already
+list, on the same file (its SHA-256) and by no more engines. A file built again since, or flagged by more engines,
+still keeps it a draft, for its own report to be checked.
 
 Uses VirusTotal's public API: 4 requests a minute (so one every 16 seconds) and 500 a day, enough for a release.
 Needs VT_API_KEY (a repository secret), TAG, and GITHUB_REPOSITORY. Standard library only.
@@ -23,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -152,6 +155,18 @@ def report(results: list[tuple[str, str, dict, bool]], allowed: bool) -> tuple[s
 
 
 HEADING = "## VirusTotal scan results"
+_LISTED = re.compile(r"\(https://www\.virustotal\.com/gui/file/([0-9a-f]{64})\): (\d+) malicious, (\d+) suspicious")
+
+
+def flags_shown(notes: str) -> dict[str, int]:
+    """The results an earlier scan put in a draft's notes (report), as {SHA-256: engines that flagged it}: what the
+    person who chose to publish anyway was shown."""
+    section = notes.split(HEADING, 1)[1] if HEADING in notes else ""
+    return {m.group(1): int(m.group(2)) + int(m.group(3)) for m in _LISTED.finditer(section)}
+
+
+def flags(stats: dict) -> int:
+    return int(stats.get("malicious", 0)) + int(stats.get("suspicious", 0))
 
 
 def with_results(notes: str, results: str) -> str:
@@ -166,6 +181,8 @@ def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.envir
         raise RuntimeError("VT_API_KEY isn't set: add it as a repository secret (Settings > Secrets and variables > Actions)")
     vt = vt or VirusTotal(key)
     allowed = env.get("VT_ALLOW_DETECTIONS", "").lower() == "true"
+    checked = Path(env.get("VT_CHECKED_NOTES") or folder / "no-notes")
+    shown = flags_shown(checked.read_text("utf-8")) if allowed and checked.is_file() else {}
     files = files_to_scan(folder)
     if not files:
         raise RuntimeError(f"No release files in {folder}/ to scan, so the release isn't published")
@@ -187,16 +204,24 @@ def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.envir
         say(f"{name}: {st.get('malicious', 0)} malicious, {st.get('suspicious', 0)} suspicious"
             + ("" if name in pending else " (already known to VirusTotal)"))
         results.append((name, digests[name], st, name not in pending))
-    text, flagged = report(results, allowed)
+    # publishing anyway covers only the flags the person was shown: not a file built since, or more engines' flags
+    unchecked = [n for n, d, st, _k in results if flags(st) > shown.get(d, 0)] if allowed else []
+    text, flagged = report(results, allowed and not unchecked)
     (folder / "VT_REPORT.md").write_text(text, encoding="utf-8")
     # The flagged files, by name, for the workflow to hand over for a false-positive report (see release.yml): a
     # browser on Windows won't download a file Defender flags, so the draft's own copy can't be sent to Microsoft.
-    names = [n for n, _d, st, _k in results if int(st.get("malicious", 0)) or int(st.get("suspicious", 0))]
+    names = [n for n, _d, st, _k in results if flags(st)]
     if names:
         (folder / "VT_FLAGGED.txt").write_text("\n".join(names) + "\n", encoding="utf-8")
     if env.get("GITHUB_STEP_SUMMARY"):
         with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
             summary.write(text)
+    if unchecked:
+        print(f"::error::VirusTotal flagged {', '.join(unchecked)}, and not as the draft's notes showed when you chose "
+              "to publish anyway (a file built again since, or flagged by more engines), so the release stays a "
+              "draft. Check the new report; if it's a false positive, run the workflow again for this tag with "
+              "\"Publish even if VirusTotal flags a file\" ticked.", flush=True)
+        return 1
     if flagged and not allowed:
         print("::error::VirusTotal flagged a release file, so the release stays a draft. Check each report; if they're "
               "false positives, run the workflow again for this tag with \"Publish even if VirusTotal flags a "

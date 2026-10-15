@@ -83,11 +83,14 @@ the release stays a draft until every file is attached.
 - **VirusTotal flagged a file?** The release stays a draft, and its notes list each file's result with a link to
   VirusTotal's report. Unsigned apps built with PyInstaller are sometimes flagged by one or two engines by
   mistake. Open the report: if it's a false positive (a generic or heuristic name, from an engine or two), run the
-  workflow again for the tag with **Publish even if VirusTotal flags a file** ticked; it scans again, notes that
-  it was checked by hand, and publishes. If it looks real, don't publish: find out why first. Report a false
-  positive to the engine's maker, which clears it: Windows won't let a browser download a file Microsoft's engine
-  flags, so the run keeps the flagged files under **Artifacts** (`virustotal-flagged-files`), in a zip with the
-  password `infected`. Upload that zip as it is (for Microsoft, at
+  workflow again for the tag with **Publish even if VirusTotal flags a file** ticked. That builds nothing: it
+  publishes the draft as it is, the files whose reports you checked (a build is never the same file twice, so a
+  new one would be a file nobody checked). It looks them up on VirusTotal again, notes that they were checked by
+  hand, and publishes, but only with the flags the draft's notes showed you: a file flagged by more engines since,
+  or one that was clean, keeps it a draft for you to check that report too. If it looks real, don't publish: find
+  out why first. Report a false positive to the engine's maker, which clears it: Windows won't let a browser
+  download a file Microsoft's engine flags, so the run keeps the flagged files under **Artifacts**
+  (`virustotal-flagged-files`), in a zip with the password `infected`. Upload that zip as it is (for Microsoft, at
   [microsoft.com/wdsi/filesubmission](https://www.microsoft.com/en-us/wdsi/filesubmission), as a software
   developer), and give the password where it asks.
 
@@ -166,7 +169,7 @@ the release's tag and commit.
    and `.unitypackage` (adding each result to the notes, as for the app), then publishes it, tagging
    `unity-v<version>`. If VirusTotal flags a file, the release stays a draft: check the reports as for the app (see
    **VirusTotal flagged a file?** above), then run **Build Release** again with **Publish even if VirusTotal flags
-   a file** ticked.
+   a file** ticked, which publishes the draft as it is, without building it again.
 4. **Build Repo Listing** runs after it, rebuilding the VCC listing from every release and publishing it to GitHub
    Pages (https://hoard.furryup.link/index.json, the website's own address: the github.io one only forwards there).
 

@@ -214,6 +214,20 @@ class UnityNotes(unittest.TestCase):
         self.assertIn("timeout-minutes: 60", jobs["virustotal"])
         self.assertNotIn("${{ env.", wf.split("steps:", 1)[0], "a job's outputs can't read env")
 
+    def test_publishing_a_unity_release_anyway_builds_nothing(self):
+        """As for the app: it publishes the draft whose reports were checked, not a new build of it. The version
+        step still runs (the scan and publish jobs take the tag from it)."""
+        wf = (REPO / ".github/workflows/unity-release.yml").read_text("utf-8")
+        steps = {m.group(1): m.group(2) for m in re.finditer(r"- name: ([^\n]+)\n(.*?)(?=\n      - |\n  [a-z-]+:\n|\Z)", wf, re.S)}
+        for name in ("Test the package's core (C#, against Hoard's own sealed files)", "Build the .zip and .unitypackage",
+                     "Sign build provenance", "Make the release, as a draft"):
+            self.assertIn("!inputs.allow_detections", steps[name].split("run:", 1)[0].split("with:", 1)[0], name)
+        self.assertNotIn("allow_detections", steps["The version, from package.json"])
+        get = steps["Get the draft's files"]
+        self.assertIn('if [ "$draft" != "true" ]; then', get, "only a draft, never a published release")
+        self.assertIn("> dist/CHECKED_NOTES.md", get)
+        self.assertIn("VT_CHECKED_NOTES: dist/CHECKED_NOTES.md", steps["Scan them with VirusTotal"])
+
 
 class Notes(unittest.TestCase):
 

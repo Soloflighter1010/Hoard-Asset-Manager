@@ -10,7 +10,9 @@ name: Release
 # Releases here are immutable: once published, nothing can be added to them. So the release is made as a
 # draft, every job attaches its files to the draft, VirusTotal scans them, and the last job publishes it. A
 # failed build, or a file VirusTotal flags, leaves only a draft, which a re-run (or Run workflow) fills in and
-# publishes.
+# publishes. Run workflow with "Publish even if VirusTotal flags a file" builds nothing: it publishes the draft as it
+# is, the files whose reports a person checked (a build is never the same file twice, so one built again would be
+# a file nobody checked).
 #
 # Every action is pinned to an exact commit (the version tag is in the comment), so a changed or
 # compromised tag upstream can't alter what runs here. Update them deliberately.
@@ -39,6 +41,7 @@ concurrency:
 
 jobs:
   release:
+    if: ${{ !inputs.allow_detections }}   # publishing anyway builds nothing (and so neither do the jobs after this)
     runs-on: ubuntu-latest
     permissions:
       contents: write        # the tag (Run workflow), the release and its zips
@@ -372,10 +375,12 @@ jobs:
 
   # Every file people download is checked by VirusTotal (scripts/scan_release_virustotal.py) once all are
   # attached, and the results are added to the release notes. If any engine flags one, this fails and the release
-  # stays a draft; Run workflow with "Publish even if VirusTotal flags a file" publishes it after a person has
-  # checked the report. Needs the VT_API_KEY repository secret (a free VirusTotal account's API key).
+  # stays a draft; Run workflow with "Publish even if VirusTotal flags a file" publishes that draft after a person
+  # has checked the reports, and only with the flags its notes showed them. Needs the VT_API_KEY repository secret
+  # (a free VirusTotal account's API key).
   virustotal:
     needs: [release, windows, macos, flatpak-release]
+    if: ${{ !failure() && !cancelled() }}   # after the builds, or with none (publishing anyway)
     runs-on: ubuntu-latest
     timeout-minutes: 60      # the scans are waited for up to 40 minutes (VT_WAIT_MINUTES); never GitHub's 6 hours
     permissions:
@@ -392,14 +397,25 @@ jobs:
       - name: Get the draft's files
         env:
           GH_TOKEN: ${{ github.token }}
+          ALLOW: ${{ inputs.allow_detections && 'true' || 'false' }}
         run: |
+          if [ "$ALLOW" = "true" ]; then
+            draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+            if [ "$draft" != "true" ]; then
+              case "$draft" in false) why="it's already published" ;; *) why="there's no release for it" ;; esac
+              echo "::error::\"Publish even if VirusTotal flags a file\" publishes the draft whose reports you checked, as it is, and $TAG has no draft: $why. Run the workflow without it to build the release."
+              exit 1
+            fi
+          fi
           mkdir -p dist
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > dist/CHECKED_NOTES.md   # the results a person was shown
 
       - name: Scan them with VirusTotal
         env:
           VT_API_KEY: ${{ secrets.VT_API_KEY }}   # only this step sees the key
           VT_ALLOW_DETECTIONS: ${{ inputs.allow_detections && 'true' || 'false' }}
+          VT_CHECKED_NOTES: dist/CHECKED_NOTES.md
         run: python3 scripts/scan_release_virustotal.py
 
       # A file an engine flags can't be downloaded from the release on Windows (Defender stops the browser), so it
@@ -432,6 +448,7 @@ jobs:
   # Last: publishing makes the release immutable, so it waits until every file is attached and scanned.
   publish:
     needs: [release, windows, macos, flatpak-release, virustotal]
+    if: ${{ !failure() && !cancelled() }}   # the builds and the scan passed (or, publishing anyway, the scan)
     runs-on: ubuntu-latest
     permissions:
       contents: write        # publish the draft
