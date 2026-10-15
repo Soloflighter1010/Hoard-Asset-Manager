@@ -314,7 +314,7 @@ class EndToEnd(unittest.TestCase):
             view.goto(link)
             view.locator("#setView").wait_for()
             self.assertEqual(view.locator("#setName").inner_text(), "Rusk, winter")
-            self.assertEqual(view.locator(".sv-item b").all_inner_texts(), ["Rusk", "Hoodie for Rusk"])
+            self.assertEqual(view.locator(".sv-text b").all_inner_texts(), ["Rusk", "Hoodie for Rusk"])
             self.assertIn("This short link works until", view.locator("#setWhere").inner_text())
             self.assertIn(f"https://hoard-share.furryup.link/v1/sets/{sid}", asked)
             self.assertFalse(any(key in u or "#" in u for u in asked), "the key never leaves the page")

@@ -59,13 +59,14 @@ tab adds the set to their Hoard: what they own already shows as theirs, and what
   page and picture address. Not your library, your downloads, your tags or anything else of yours.
 - **Only public pages:** a product's store page in a link is its public page on the store (or, where Hoard doesn't
   know it, its creator's page), never one of yours, such as a Gumroad purchase's download page or your Jinxxy
-  inventory. Gumroad products get their own page from your next Gumroad refresh. (Hoard 4.2.0 put your Gumroad
+  inventory. Gumroad and Jinxxy products get their own page from your next refresh of that store. (Hoard 4.2.0 put your Gumroad
   download pages in shared links: the viewer no longer shows them, but if you shared a set with Gumroad products
   from 4.2.0, delete those posts and share it again.)
 - **What's never in one:** your own products (**Local**) and hidden products, whether the hidden library is
   locked or not. Sharing says how many were left out.
 - **Pictures:** each product's picture loads from its store's own image host (Booth's, Gumroad's, Jinxxy's and so
-  on), so Hoard hosts nothing. Store pages are only links to the stores' own websites.
+  on), so Hoard hosts nothing; one without a picture shows its initials, as in Hoard. Store pages are only links to
+  the stores' own websites.
 - A set of 20 products makes a link of about 2,000 characters. Links that long work in browsers and most chat
   apps; for a shorter one, make a [short link](#short-links).
 

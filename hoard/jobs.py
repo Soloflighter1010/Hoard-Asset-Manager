@@ -951,7 +951,12 @@ class Jobs:
                     continue
                 try:
                     try:
-                        items = FETCHERS[store](ctx, self.cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                        # the reader gets its own copy of the settings, with the product pages a refresh found
+                        # before (not read again), and hands back what it found besides: none of it is a setting
+                        with self.lib.lock:
+                            run_cfg = {**self.cfg, "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
+                                                                    if i["store"] == store and i.get("page")}}
+                        items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
                         if not items and before:
                             self.lib.set_error(store, f"Found no items this time (last time: {before}), so the old list was kept. "
@@ -960,7 +965,7 @@ class Jobs:
                             self.lib.replace_store(store, items)
                             if store == "payhip":   # shops on their own domains, found in your library, to review
                                 with self.lib.lock:
-                                    self.lib.data["stores"]["payhip"]["found_shops"] = self.cfg.pop("_found_payhip_shops", [])[:200]
+                                    self.lib.data["stores"]["payhip"]["found_shops"] = run_cfg.pop("_found_payhip_shops", [])[:200]
                                     self.lib.save()
                             refreshed.append(store)
                     except NotLoggedIn as e:

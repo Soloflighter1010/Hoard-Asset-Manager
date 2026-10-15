@@ -77,6 +77,9 @@ person to sign in on this computer never sees what you bought. Your downloaded f
 
 - Hoard reads your inventory, then downloads each file by clicking its download button in the browser,
   because that's the only way Jinxxy hands files out.
+- Your inventory only links each product's creator, so a refresh also opens each item's own page once, to find
+  the product's public page (what a [set you share](Sets#sharing-a-set) links to). A page it found is kept, so
+  only new items are opened later, at most 150 in one refresh, with the usual pause between pages.
 - Jinxxy shows its own banner where a product has no picture. Hoard doesn't keep that banner as the
   product's picture.
 

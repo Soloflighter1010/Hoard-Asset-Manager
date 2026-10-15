@@ -118,7 +118,7 @@
       <table>
         <thead><tr><th scope="col">Store</th><th scope="col">Signing in</th><th scope="col">Reading the library</th><th scope="col">Getting files</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Jinxxy</th><td>Jinxxy's own sign-in page</td><td>The customer's inventory page</td>
+          <tr><th scope="row">Jinxxy</th><td>Jinxxy's own sign-in page</td><td>The customer's inventory page, and each item's own page once (for the link to its public product page)</td>
             <td>Clicks each product's download button in the browser, since that's how Jinxxy hands files out. One file at a time.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/19ac1061584d0476de98304ecf58591397922769/hoard/downloader.py#L1255" title="Reading and downloading from Jinxxy"><code>downloader.py</code> L1255</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/19ac1061584d0476de98304ecf58591397922769/hoard/downloader.py#L981" title="Only links on jinxxy.com count as Jinxxy's"><code>downloader.py</code> L981</a></td></tr>
           <tr><th scope="row">Gumroad</th><td>Gumroad's own sign-in page</td><td>The customer's library, including purchases they archived</td>
             <td>Each purchase's download page. Refunded or ended purchases, and files Gumroad only streams, are skipped.<br><a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/19ac1061584d0476de98304ecf58591397922769/hoard/downloader.py#L763" title="Reading and downloading from Gumroad"><code>downloader.py</code> L763</a></td></tr>

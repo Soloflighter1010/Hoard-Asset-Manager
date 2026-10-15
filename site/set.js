@@ -117,9 +117,14 @@
     catch (e) { return { why: "This link's key doesn't open its set: part of the link is missing or changed. Ask for it again, and copy all of it." }; }
   }
 
-  function picture(src, alt, cls) {
+  // A product with no picture, or one that won't load, gets the tile Hoard's own pages draw: its initials on a
+  // colour worked out from its creator's name (hoard/web/shared.js: hue, initials)
+  const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
+  const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
+  const lettered = i => el("span", { class: "ph", style: `--h:${hue(i.creator || i.name)}`, "aria-hidden": "true" }, el("b", {}, initials(i.name)));
+  function picture(src, alt, cls, instead) {
     const img = el("img", { src, alt, loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", class: cls });
-    img.addEventListener("error", () => img.replaceWith(el("span", { class: cls + " none", "aria-hidden": "true" })), { once: true });
+    img.addEventListener("error", () => img.replaceWith(instead ? instead() : el("span", { class: cls + " none", "aria-hidden": "true" })), { once: true });
     return img;
   }
   function show(set, code, expires) {
@@ -140,7 +145,8 @@
     for (const i of set.items) {
       const store = STORES[i.store];
       grid.append(el("li", { class: "sv-item" },
-        i.picture ? picture(i.picture, "", "pic") : el("span", { class: "pic none", "aria-hidden": "true" }),
+        el("span", { class: "art" }, i.picture ? picture(i.picture, "", "pic", () => lettered(i)) : lettered(i),
+           el("i", { class: `notch ${i.store}`, "aria-hidden": "true" })),
         el("span", { class: "sv-text" }, el("b", {}, i.name),
           el("span", { class: "sv-by" }, (i.creator ? "by " + i.creator + " · " : ""), el("span", { class: `dot ${i.store}`, "aria-hidden": "true" }), store)),
         i.url ? el("a", { class: "button ghost", href: i.url, target: "_blank", rel: "noopener noreferrer" }, "On " + store)

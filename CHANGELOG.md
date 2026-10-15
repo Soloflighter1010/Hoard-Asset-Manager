@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.3.1
+
+- **Shared sets link each product's own page on every store.** A set links each product to its store, and for
+  Gumroad and Jinxxy that was often the creator's shop rather than the product. Gumroad products now get their own
+  page from your next Gumroad refresh, from every name Gumroad gives it (and Gumroad's own address for a creator on
+  a domain of their own). Jinxxy's inventory only links the creator, so a refresh now opens each item's own page
+  once to find its product page, then keeps it, so only new items are opened later (at most 150 in one refresh,
+  with the usual pause). A page found once is kept across refreshes, for every store. Share a set again, or
+  **Update the link** of its short link, after refreshing.
+- **A product with no picture shows its initials in the set viewer,** on a colour from its creator's name, as
+  Hoard's own tiles do, and every product there has its store's colour along its foot.
+
 ## 4.3.0
 
 - **Short links for shared sets.** A set's link holds the set itself, so a big set's is thousands of characters

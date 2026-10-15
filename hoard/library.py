@@ -109,11 +109,25 @@ def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_pag
 
 
 def gumroad_page(profile_url, permalink) -> str | None:
-    """A Gumroad product's public page (<creator>.gumroad.com/l/<permalink>): the purchase's own link is your
-    download page, which is never shared."""
-    if not (isinstance(profile_url, str) and isinstance(permalink, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", permalink)):
+    """A Gumroad product's public page (<creator>.gumroad.com/l/<permalink>, or gumroad.com/l/<permalink> for a
+    creator on a domain of their own): the purchase's own link is your download page, which is never shared."""
+    if not (isinstance(permalink, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", permalink)):
         return None
-    return store_link("gumroad", profile_url.split("?", 1)[0].rstrip("/") + "/l/" + permalink)
+    own = store_link("gumroad", profile_url.split("?", 1)[0].rstrip("/") + "/l/" + permalink) \
+        if isinstance(profile_url, str) else None
+    return own or store_link("gumroad", "https://gumroad.com/l/" + permalink)
+
+
+def gumroad_permalink(prod: dict):
+    """A Gumroad library card's product permalink, under whichever name the card has it, or from its own page."""
+    for k in ("permalink", "custom_permalink", "unique_permalink"):
+        if isinstance(prod.get(k), str) and prod[k]:
+            return prod[k]
+    for k in ("url", "long_url", "short_url"):
+        m = re.search(r"/l/([A-Za-z0-9_-]{1,80})/?$", prod.get(k) or "") if isinstance(prod.get(k), str) else None
+        if m:
+            return m.group(1)
+    return None
 
 
 def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
@@ -145,7 +159,7 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
                           creator=creator.get("name"), creator_url=creator.get("profile_url"),
                           thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
-                          page=gumroad_page(creator.get("profile_url"), prod.get("permalink")),
+                          page=gumroad_page(creator.get("profile_url"), gumroad_permalink(prod)),
                           download_url=pur.get("download_url"), variants=variants,
                           archived=bool(pur.get("is_archived"))))
     return items
@@ -343,6 +357,15 @@ JX_CARDS_JS = r"""
         creator = linesOf(s)[0] || segs[0]; creatorUrl = u.origin + '/' + segs[0]; break;
       }
     }
+    // The product's own page (jinxxy.com/<creator>/<product>), where the card links it
+    let productUrl = '';
+    for (const s of c.querySelectorAll('a[href]')) {
+      if (set.has(s) || s.closest(LANDMARKS)) continue;
+      let u; try { u = new URL(s.href); } catch (e) { continue; }
+      const segs = u.pathname.split('/').filter(Boolean);
+      if (onJinxxy(u) && segs.length === 2 && !RESERVED.has(segs[0].toLowerCase()) && !own.has(segs[0].toLowerCase())
+          && !['products', 'lists', 'posts'].includes(segs[1].toLowerCase())) { productUrl = u.origin + u.pathname.replace(/\/$/, ''); break; }
+    }
     const lines = linesOf(c).filter(s => !GENERIC.test(s));
     const byLine = lines.find(s => /^by\s+/i.test(s));
     if (!creator && byLine) creator = byLine.replace(/^by\s+/i, '');
@@ -351,12 +374,38 @@ JX_CARDS_JS = r"""
     const img = c.querySelector('img');
     const name = heading || lines.find(s => s !== byLine && s !== creator) || (img && img.alt) || '';
     if (!creator) creator = lines.find(s => s !== name && s !== byLine) || '';
-    out.push({ key: keyOf(a), url: a.href.split(/[?#]/)[0], name, creator, creator_url: creatorUrl,
+    out.push({ key: keyOf(a), url: a.href.split(/[?#]/)[0], name, creator, creator_url: creatorUrl, page: productUrl,
                thumbnail: img ? (img.currentSrc || img.src || '') : '', lines });
   }
   return out;
 }
 """
+
+
+# An inventory item's own page (/my/inventory/<id>): the links on it to a product's page on Jinxxy
+# (jinxxy.com/<creator>/<product>), the one around its title first
+JX_PRODUCT_JS = r"""
+() => {
+  const two = a => { try { const u = new URL(a.href); return /(^|\.)jinxxy\.com$/.test(u.hostname)
+    && u.pathname.split('/').filter(Boolean).length === 2 ? u.origin + u.pathname.replace(/\/$/, '') : ''; } catch (e) { return ''; } };
+  const titled = [...document.querySelectorAll('h1, h2, h3')].map(h => h.closest('a[href]') || h.querySelector('a[href]'));
+  const out = [...titled, ...document.querySelectorAll('main a[href]')].filter(Boolean).map(two).filter(Boolean);
+  return [...new Set(out)];
+}
+"""
+JX_PAGE_VISITS = 150   # items whose own page is read for their product's page, at most, in one refresh
+
+
+def jinxxy_product_page(hrefs, creator_url=None) -> str | None:
+    """The product's public page among an inventory item page's links (JX_PRODUCT_JS): on its creator's shop when
+    Hoard knows the creator, never one of yours."""
+    from .sets import product_link
+    shop = (creator_url or "").rstrip("/").lower()
+    for h in hrefs if isinstance(hrefs, list) else []:
+        u = product_link("jinxxy", h) if isinstance(h, str) else None
+        if u and u.count("/") == 4 and (not shop or u.lower().startswith(shop + "/")):
+            return u
+    return None
 
 
 def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300) -> None:
@@ -396,7 +445,7 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
                 for c in page.evaluate(JX_CARDS_JS, pattern):
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
-                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail")}
+                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail", "page")}
                 for href in jinxxy_inventory_pages(page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")):
                     if href not in visited and href not in pending:
                         pending.append(href)
@@ -409,6 +458,8 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
             visited.add(nxt)
             goto(page, nxt)
             settle(page)
+        if found:
+            jinxxy_product_pages(page, found, cfg, progress)
     finally:
         page.close()
     if not found:
@@ -416,10 +467,37 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
     return [jinxxy_item(c) for c in found.values()]
 
 
+def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
+    """Each item's public product page (what a set you share links to), where the inventory didn't show it: one a
+    refresh found before (cfg["_known_pages"], from the library), else read from the item's own page, at most
+    JX_PAGE_VISITS in one refresh, with the usual pause between pages. An item whose page can't be read keeps its
+    creator's page."""
+    known = cfg.pop("_known_pages", None) or {}
+    for c in found.values():
+        c["page"] = c.get("page") or known.get(jinxxy_key(c))
+    todo = [c for c in found.values() if not c.get("page") and store_link("jinxxy", c.get("url"))][:JX_PAGE_VISITS]
+    delay = float(cfg.get("request_delay", 0.8))
+    for n, c in enumerate(todo, 1):
+        progress(f"Product pages, {n} of {len(todo)}")
+        try:
+            goto(page, c["url"])
+            settle(page)
+            c["page"] = jinxxy_product_page(page.evaluate(JX_PRODUCT_JS), c.get("creator_url"))
+        except Exception as e:   # (one page that won't open never stops the refresh)
+            print(f"Jinxxy: couldn't read the product page of {c.get('name')!r}: {str(e)[:200]}", flush=True)
+        time.sleep(delay)
+
+
+def jinxxy_key(c: dict) -> str:
+    return "jinxxy:" + c["key"].rsplit("/", 1)[-1]
+
+
 def jinxxy_item(c: dict) -> dict:
     """Turn a card read from Jinxxy's inventory page into a library item."""
+    page = c.get("page")
     return item("jinxxy", c["key"].rsplit("/", 1)[-1], name=c["name"], creator=c["creator"],
-                creator_url=c.get("creator_url"), thumbnail=c["thumbnail"], url=c["url"], download_url=c["url"])
+                creator_url=c.get("creator_url"), thumbnail=c["thumbnail"], url=c["url"], download_url=c["url"],
+                page=page if isinstance(page, str) and jinxxy_product_page([page], c.get("creator_url")) else None)
 
 
 # ----------------------------------------------------------------------------- Payhip
@@ -1017,6 +1095,8 @@ class Library:
         first = info.get("first_read") if isinstance(info.get("first_read"), str) else ("" if before else now)
         for i in items:
             i["added"] = before[i["key"]].get("added") if i["key"] in before else now
+            if not i.get("page") and i["key"] in before:   # (its public page, found by an earlier refresh)
+                i["page"] = before[i["key"]].get("page")
         return first
 
     def replace_store(self, store: str, items: list[dict]) -> None:
