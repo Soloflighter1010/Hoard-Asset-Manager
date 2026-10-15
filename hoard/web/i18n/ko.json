@@ -1341,7 +1341,6 @@
  "What takes the most room, files kept twice, what no project uses, and products you have from more than one store. Try it: Disk space.": "가장 많이 차지하는 것, 두 번 저장된 파일, 어느 프로젝트도 쓰지 않는 것, 여러 스토어에서 가진 상품을 볼 수 있어요. 해 보세요: '디스크 공간'.",
  "Free some room": "공간 비우기",
  "Choose from any of these lists to move things to another library folder, archive them or delete their files. From more than one store keeps one store's copy, and the others won't download again.": "어느 목록에서든 골라 다른 라이브러리 폴더로 옮기거나, 보관하거나, 파일을 삭제할 수 있어요. '여러 스토어에서'는 한 스토어의 것을 남기고, 나머지는 다시 다운로드되지 않아요.",
- "Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest. Add your own, in Local, brings them in.": "내가 만든 패키지, 텍스처, 머티리얼도 산 것과 나란히 여기에 둘 수 있어요. 다른 것처럼 태그를 달고, 검색하고, Unity로 가져올 수 있어요. '로컬'의 '내 것 추가'로 가져와요.",
  "With Hoard for Unity in your Unity projects, Projects lists what each one uses, which of it has updates, and a credits list for each.": "Unity 프로젝트에 Hoard for Unity를 넣으면 '프로젝트'에 각 프로젝트가 쓰는 것, 업데이트가 있는 것, 각각의 크레딧 목록이 나와요.",
  "Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.": "동기화나 다운로드처럼 Hoard가 하는 일은 실행되는 동안 여기에 나오고, 찾은 것도 보여요. 그동안 다른 일을 계속할 수 있어요.",
  "Your language, light or dark, themes and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.": "언어, 밝게·어둡게, 테마, 글자 크기. 정기 점검. 이전 버전. 라이브러리 폴더 추가. 태그·세트·설정 백업. 이 둘러보기도 여기 있어요.",
@@ -1358,7 +1357,6 @@
  "1 product": "상품 1개",
  "1 product isn't in it: your own (Local) and hidden ones stay on this computer.": "상품 1개는 빠져요. 내 것(로컬)과 숨긴 상품은 이 컴퓨터 밖으로 나가지 않아요.",
  "{0} products aren't in it: your own (Local) and hidden ones stay on this computer.": "상품 {0}개는 빠져요. 내 것(로컬)과 숨긴 상품은 이 컴퓨터 밖으로 나가지 않아요.",
- "A set gathers products that go together, such as an avatar and its outfits, downloaded or not. Make one in Sets, from the selection bar, or from a project in Projects; share it as a link that shows what's in it and where to buy each. Hoard for Unity imports a whole set at once.": "세트는 아바타와 그 의상처럼 함께 쓰는 상품을 모은 거예요. 다운로드했든 안 했든 상관없어요. '세트', 선택 막대, 또는 '프로젝트'의 프로젝트에서 만들 수 있고, 들어 있는 것과 각각 어디서 사는지 보여 주는 링크로 공유할 수 있어요. Hoard for Unity는 세트를 한 번에 가져와요.",
  "Anyone with this link sees the set's 1 product, where to buy it, and your note and photos. Paste it into Hoard's Sets (Add a shared set) to add it there.": "이 링크가 있으면 누구나 세트의 상품 1개와 사는 곳, 메모와 사진을 볼 수 있어요. Hoard의 '세트'('공유된 세트 추가')에 붙여 넣으면 거기에 추가돼요.",
  "Anyone with this link sees the set's {0} products, where to buy each, and your note and photos. Paste it into Hoard's Sets (Add a shared set) to add it there.": "이 링크가 있으면 누구나 세트의 상품 {0}개와 각각 사는 곳, 메모와 사진을 볼 수 있어요. Hoard의 '세트'('공유된 세트 추가')에 붙여 넣으면 거기에 추가돼요.",
  "Buy on {0}": "{0}에서 구매",
@@ -1483,5 +1481,7 @@
  "That's a short link: open it with Add a shared set, in Hoard 4.3 or later.": "그건 짧은 링크예요. Hoard 4.3 이상에서 “공유된 세트 추가”로 여세요.",
  "That short link is cut short, or has been changed: copy all of it, and try again.": "그 짧은 링크는 잘렸거나 바뀌었어요. 링크 전체를 복사해서 다시 해 보세요.",
  "This browser can't open a short link here. Ask for the set's long link instead.": "이 브라우저에서는 여기서 짧은 링크를 열 수 없어요. 대신 세트의 긴 링크를 부탁하세요.",
- "One of them has a short link: it's deleted too.": "그중 하나에 짧은 링크가 있어요. 그것도 함께 삭제돼요."
+ "One of them has a short link: it's deleted too.": "그중 하나에 짧은 링크가 있어요. 그것도 함께 삭제돼요.",
+ "A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a link that shows what's in it and where to buy each, or as a short link that lasts 14 days. Hoard for Unity imports a whole set at once.": "세트는 아바타와 그 의상처럼 함께 쓰는 상품을 모은 거예요. 다운로드했든 안 했든 상관없고, 원하는 이미지를 달 수 있어요. '세트', 선택 막대, 또는 '프로젝트'의 프로젝트에서 만들 수 있어요. 들어 있는 것과 각각 어디서 사는지 보여 주는 링크로, 또는 14일 동안 쓸 수 있는 짧은 링크로 공유할 수 있어요. Hoard for Unity는 세트를 한 번에 가져와요.",
+ "Your own packages, textures and materials can live here beside what you bought: tagged, searched and imported into Unity like the rest, each with a picture of your choosing. Add your own, in Local, brings them in.": "내가 만든 패키지, 텍스처, 머티리얼도 산 것과 나란히 여기에 둘 수 있어요. 다른 것처럼 태그를 달고, 검색하고, Unity로 가져올 수 있고, 각각 원하는 이미지를 달 수 있어요. '로컬'의 '내 것 추가'로 가져와요."
 }
