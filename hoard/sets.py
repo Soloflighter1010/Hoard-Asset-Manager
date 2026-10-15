@@ -4,7 +4,7 @@ shared with you lists what to buy, and where).
 
 Kept in sets.json in Hoard's app-data folder: {"sets": [{"id", "name", "items": [product key, ...], "note"?,
 "photos"?: [address, ...], "picture"?: "<version>.<png|jpg|webp>", "products"?: {product key: {"store", "id", "name",
-"creator", "url", "thumbnail"}}}]}. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
+"creator", "url", "thumbnail"}}, "short"?: {"id", "key", "token", "expires", "made"}}]}. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
 "<set id>-<picture>" (a new name each time, so a page never shows the one it replaced). A
 product is known by the same key your tags use (tags.tag_key), so a set keeps its products whichever store or library
 folder they're in; "products" remembers what each was when it was added (its store page and picture), so a set can be
@@ -15,6 +15,11 @@ A set is shared as a code (share_code): the set itself, packed into a link to th
 (VIEWER), after its "#", which a browser never sends anywhere. Nothing is uploaded: the viewer reads the code in the
 page, and shows each product's picture from its store's own image host, and the sharer's photos from the photo sites
 in PHOTO_HOSTS (links they made there). The same code, pasted into Hoard, adds the set (from_code).
+
+A set can also have a short link (shortlinks.py): its code kept on Hoard's share server for 14 days, locked with a
+key that's only in the link. "short" is that link's id and key, the token that lets this Hoard update or delete it,
+when it runs out, and "made", which code it holds (code_mark), so the page can say when the set has changed since.
+A short link that has run out is dropped when the file is read.
 """
 from __future__ import annotations
 
@@ -22,13 +27,16 @@ import base64
 import json
 import re
 import secrets
+import hashlib
 import threading
+import time
 import zlib
 from pathlib import Path
 from urllib.parse import urlparse
 
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
+from .shortlinks import ID as SHORT_ID, KEY as SHORT_KEY, TOKEN as SHORT_TOKEN
 from .tags import TAG_KEY_RX
 
 MAX_SETS = 200
@@ -51,6 +59,7 @@ PHOTO_HOSTS = ("i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i
                "public-files.gumroad.com")
 
 PICTURE_NAME = re.compile(r"[0-9a-f]{8}\.(?:png|jpg|webp)")   # a set's "picture"
+CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's "made"
 _lock = threading.Lock()
 
 
@@ -191,6 +200,23 @@ def clean_product(p) -> dict | None:
     return out
 
 
+def clean_short(rec) -> dict | None:
+    """A set's short link as sets.json keeps it, every part checked; None for one that's damaged or has run out."""
+    if not isinstance(rec, dict):
+        return None
+    sid, key, token, made, expires = (rec.get(k) for k in ("id", "key", "token", "made", "expires"))
+    if not (isinstance(sid, str) and SHORT_ID.fullmatch(sid) and isinstance(key, str) and SHORT_KEY.fullmatch(key)
+            and isinstance(token, str) and SHORT_TOKEN.fullmatch(token) and isinstance(made, str)
+            and CODE_MARK.fullmatch(made) and isinstance(expires, int) and not isinstance(expires, bool)):
+        return None
+    return {"id": sid, "key": key, "token": token, "expires": expires, "made": made} if expires > time.time() else None
+
+
+def code_mark(code: str) -> str:
+    """Which code a short link holds, to tell whether the set has changed since (not the code itself)."""
+    return hashlib.sha256(code.encode()).hexdigest()[:16]
+
+
 class SetStore:
     def __init__(self, path: Path | None = None):
         self.path = path or sets_file()
@@ -224,6 +250,9 @@ class SetStore:
             products = {k: p for k, p in ((k, clean_product(given.get(k))) for k in one["items"]) if p}
             if products:
                 one["products"] = products
+            short = clean_short(s.get("short"))
+            if short:
+                one["short"] = short
             out["sets"].append(one)
         return out
 
@@ -324,6 +353,21 @@ class SetStore:
                 _tidy_pictures(data["sets"])
         return {**data, **({"made": made} if made else {})}
 
+    def set_short(self, sid: str, rec: dict | None) -> None:
+        """Keep a set's short link (clean_short's shape), or forget it (None). Not one of change()'s: only Hoard's
+        server, which made the link, sets it."""
+        with _lock:
+            data = self.load()
+            s = next((x for x in data["sets"] if x["id"] == sid), None)
+            if s is None:
+                raise ValueError("That set isn't there anymore.")
+            s.pop("short", None)
+            if rec is not None:
+                s["short"] = clean_short(rec)
+                if not s["short"]:
+                    raise ValueError("That short link can't be kept.")
+            self._save(data)
+
 
 # ----------------------------------------------------------------------------- sharing a set
 
@@ -373,6 +417,8 @@ def from_code(text) -> dict:
     if "#" in text:
         text = text.split("#", 1)[1]
     text = re.sub(r"\s+", "", text)
+    if text.startswith("S1."):
+        raise ValueError("That's a short link: paste it into Add a shared set, in the Sets tab.")
     if not text.startswith(CODE_PREFIX) or len(text) > MAX_CODE:
         raise ValueError("That isn't a Hoard set code. A set's code starts with H1.")
     body = text[len(CODE_PREFIX):]

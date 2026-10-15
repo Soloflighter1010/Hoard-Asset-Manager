@@ -81,19 +81,31 @@ An `<asset>`:
 A set's products are kept in `sets.json` in the app-data folder (4.0; 4.2.0 added the rest):
 `{"version": 1, "sets": [{"id", "name", "items": [<product key>, ...], "note"?, "photos"?: [<https link>, ...],
 "picture"?: "<8 hex digits>.<png|jpg|webp>", "products"?: {<product key>: {"store", "id"?, "name", "creator"?, "url"?,
-"thumbnail"?}}}]}`. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
+"thumbnail"?}}, "short"?: {"id", "key", "token", "expires", "made"}}]}`. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
 `sets.json` (a new name each time it changes). A product key is
 the one tags use (`booth:rusk`). `products` is what each was when it was added, so a set can list products that
 aren't in your library; `url` is only ever a public page on the store's own website, the product's or its creator's
 (never the buyer's own: not a Gumroad purchase's download page, `gumroad.com/d/...`, or Jinxxy's inventory, from
 4.2.1), `thumbnail` only on its image host, and
-`photos` only on the photo sites `hoard/sets.py` names.
+`photos` only on the photo sites `hoard/sets.py` names. `short` is the set's short link (4.3.0, below): its `id` on the
+share server, the `key` it's locked with, the `token` that lets this Hoard update or delete it, when it `expires`
+(Unix seconds; one that has is dropped when the file is read) and `made`, the first 16 hex digits of the SHA-256 of
+the code it holds, to tell whether the set has changed since.
 
 A **share code** is `H1.` and then that set as JSON, compressed with raw DEFLATE and written in URL-safe base64
 without padding: `{"v": 1, "n": name, "d"?: note, "p"?: [photo links], "i": [[store, id, name, creator, url,
 thumbnail], ...]}` (a row's empty parts at its end are left out; Local and hidden products never are in it). The
 set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. It's shared as
 `https://hoard.furryup.link/set.html#<code>`.
+
+A **short link** (4.3.0) is `https://hoard.furryup.link/set.html#S1.<id>.<key>`: `<id>` is 10 letters and digits,
+and `<key>` 16 random bytes in URL-safe base64 without padding (22 characters). The share code, as UTF-8, is locked
+with AES-GCM under that key, with a new random 12-byte nonce each time and `Hoard set S1` as additional data; the
+locked set is the nonce, then the ciphertext and its 16-byte tag, at most 48 KiB. Hoard's share server
+(`share/worker.mjs`, at `https://hoard-share.furryup.link`) keeps it for 14 days: `POST /v1/sets {"data"}` (the
+locked set in URL-safe base64) answers `{"id", "token", "expires"}`; `GET /v1/sets/<id>` answers `{"data",
+"expires"}`; `PUT` (new data, 14 days from now) and `DELETE` take `Authorization: Bearer <token>`. The key never
+reaches the server, and the server keeps only the token's SHA-256. See `share/README.md`.
 
 The catalog can also have `sets` (4.0): `[{"name": "Rusk, winter", "items": ["Booth/Kitsu Studio/Rusk", ...]}]`, your
 sets, each product by its `folder` (every copy of it), only products the catalog lists, and only sets with any. A

@@ -1793,7 +1793,43 @@ async function choosePicture() {
   if (url.length > 600000) url = c.toDataURL("image/jpeg", 0.8);   // (a big see-through picture)
   return url;
 }
-// A set's link to share: copied, opened in the viewer, or shown to copy by hand
+/* Short links (hoard/shortlinks.py): a set's code, locked here with AES-GCM and a random 128-bit key before Hoard
+   sends it to its share server, which keeps it 14 days. The key is only ever in the link, after its "#"; the server
+   can't read the set. site/set.js unlocks it the same way (a test checks the two agree). */
+const SHORT_LINK = /(?:^|#)S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})$/;
+const LOCKED_AS = new TextEncoder().encode("Hoard set S1");   // (what it's locked as: a key opens only a set)
+const b64u = bytes => {
+  let t = "";
+  for (let n = 0; n < bytes.length; n += 0x8000) t += String.fromCharCode(...bytes.subarray(n, n + 0x8000));
+  return btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+const unb64u = t => Uint8Array.from(atob(t.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0));
+async function lockSet(code, key) {
+  const k = await crypto.subtle.importKey("raw", unb64u(key), "AES-GCM", false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: LOCKED_AS }, k, new TextEncoder().encode(code)));
+  const out = new Uint8Array(12 + sealed.length);
+  out.set(iv); out.set(sealed, 12);
+  return b64u(out);
+}
+async function unlockSet(data, key) {
+  const bytes = unb64u(data), k = await crypto.subtle.importKey("raw", unb64u(key), "AES-GCM", false, ["decrypt"]);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: LOCKED_AS }, k, bytes.subarray(12)));
+}
+const canLock = () => !!(window.crypto && crypto.subtle);   // (a page on 127.0.0.1 has it; one opened by its LAN address over http doesn't)
+const NO_LOCK = "This browser can't lock a set for a short link here. Share the long link instead.";
+const day = seconds => new Date(seconds * 1000).toLocaleDateString(document.documentElement.lang || "en", { year: "numeric", month: "long", day: "numeric" });
+// The set behind a short link someone shared (Add a shared set): its code, or "" when it can't be had (said why)
+async function openShortLink(text) {
+  const m = text.replace(/\s+/g, "").match(SHORT_LINK);
+  if (!canLock()) { toast(NO_LOCK); return ""; }
+  const r = await apiPost("/api/sets", { action: "open-short", short: m[1] });
+  if (!r.ok) { toast(r.data.error || "That short link couldn't be opened."); return ""; }
+  try { return await unlockSet(r.data.data, m[2]); }
+  catch (e) { toast("That short link's key doesn't open its set. Copy all of the link, and try again."); return ""; }
+}
+// A set's link to share: copied, opened in the viewer, or shown to copy by hand; and its short link, made, updated
+// or deleted here
 function showShare(s, got) {
   const d = document.createElement("dialog");
   d.className = "ask share";
@@ -1804,17 +1840,55 @@ function showShare(s, got) {
       : "Anyone with this link can see the {0} products in this set, where to buy each one, and your note and photos.", got.count))} ` +
     `${esc(tr("To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link."))}</p>` +
     `<p><input readonly value="${esc(got.link)}" aria-label="${esc(tr("The set's link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` + left +
-    `<p class="hint">${esc(tr("The set is saved inside the link, so nothing is uploaded. Each product's picture loads from its store."))}</p>` +
+    `<p class="hint">${esc(tr("This link holds the set itself, so nothing is uploaded. Each product's picture loads from its store."))}</p>` +
     `<div class="ask-row"><a class="ghost" href="${esc(safeUrl(got.link))}" target="_blank" rel="noopener noreferrer">Open it</a>` +
     `<button class="ghost" value="code" type="button" data-copy="code">Copy the code</button>` +
-    `<button class="primary" value="link" type="button" data-copy="link">Copy the link</button>` +
-    `<button class="ghost" value="no">Close</button></div></form>`;
+    `<button class="ghost" value="link" type="button" data-copy="link">Copy the link</button></div>` +
+    `<section class="shortlink" aria-labelledby="shortTitle"></section>` +
+    `<div class="ask-row"><button class="ghost" value="no">Close</button></div></form>`;
+  const box = d.querySelector(".shortlink");
+  const drawShort = () => {
+    const sh = got.short, days = got.short_days || 14;
+    box.innerHTML = `<p id="shortTitle"><b>${esc(tr("Short link"))}</b></p>` + (sh
+      ? `<p><input readonly value="${esc(sh.link)}" aria-label="${esc(tr("The set's short link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` +
+        `<p class="hint">${esc(tr("It works until {0}.", day(sh.expires)))} ${esc(tr(sh.changed
+          ? "The set has changed since: update the link to share it as it is now." : "Updating it keeps it {0} days from today.", days))}</p>` +
+        `<div class="ask-row"><button class="ghost danger" type="button" data-short="delete">Delete the short link</button>` +
+        `<button class="${sh.changed ? "primary" : "ghost"}" type="button" data-short="update">Update the link</button>` +
+        `<button class="${sh.changed ? "ghost" : "primary"}" type="button" data-copy="short">Copy the short link</button></div>`
+      : `<p class="hint">${esc(tr("A short link keeps a locked copy of the set on Hoard's share server for {0} days. Only the link opens it: the key is in the link, and never sent to the server. You can delete it whenever you like.", days))}</p>` +
+        `<div class="ask-row"><button class="primary" type="button" data-short="make">Make a short link</button></div>`);
+  };
+  drawShort();
   document.body.appendChild(d);
   d.addEventListener("click", async e => {
-    const b = e.target.closest("[data-copy]"); if (!b) return;
-    const text = b.dataset.copy === "code" ? got.code : got.link;
-    try { await navigator.clipboard.writeText(text); toast(b.dataset.copy === "code" ? "Copied the set's code." : "Copied the set's link."); }
-    catch (err) { const i = d.querySelector("input"); i.value = text; i.select(); }
+    const c = e.target.closest("[data-copy]"), act = e.target.closest("[data-short]");
+    if (c) {
+      const text = { code: got.code, link: got.link, short: got.short && got.short.link }[c.dataset.copy];
+      try { await navigator.clipboard.writeText(text); toast({ code: "Copied the set's code.", link: "Copied the set's link.", short: "Copied the short link." }[c.dataset.copy]); }
+      catch (err) { const i = c.closest(".shortlink, form").querySelector("input"); i.value = text; i.select(); }
+      return;
+    }
+    if (!act || act.disabled) return;
+    if (act.dataset.short === "delete") {
+      if (!await ask("Delete this set's short link? Anyone who opens it will see that it's gone. The long link still works.", "Delete", true)) return;
+      act.disabled = true;
+      const r = await apiPost("/api/sets", { action: "unshort", id: s.id });
+      act.disabled = false;
+      if (!r.ok) { toast(r.data.error || "The short link couldn't be deleted."); return; }
+      got.short = null; drawShort(); toast("Deleted the short link.");
+      return;
+    }
+    if (!canLock()) { toast(NO_LOCK); return; }
+    act.disabled = true;
+    const key = got.short ? got.short.code.split(".")[2] : b64u(crypto.getRandomValues(new Uint8Array(16)));
+    const r = await apiPost("/api/sets", { action: "short", id: s.id, code: got.code, key, data: await lockSet(got.code, key) });
+    act.disabled = false;
+    if (!r.ok) { toast(r.data.error || "The short link couldn't be made."); return; }
+    const was = got.short;
+    got.short = r.data.short; drawShort();
+    toast(tr(was ? "Updated the short link. It works until {0}." : "Made a short link. It works until {0}.", day(got.short.expires)));
+    box.querySelector("input").select();
   });
   d.addEventListener("close", () => d.remove(), { once: true });
   d.showModal();
@@ -1835,12 +1909,18 @@ async function renameSet(s) {
   if (name && name !== s.name) changeSets({ action: "rename", id: s.id, name });
 }
 async function deleteSets(list) {
-  if (!list.length || !await ask(list.length === 1 ? tr("Delete the set {0}? The products in it stay as they are.", list[0].name)
-                                  : tr("Delete these {0} sets? The products in them stay as they are.", list.length), "Delete", true)) return;
+  const shorts = list.filter(s => s.short).length;
+  if (!list.length || !await ask((list.length === 1 ? tr("Delete the set {0}? The products in it stay as they are.", list[0].name)
+                                  : tr("Delete these {0} sets? The products in them stay as they are.", list.length)) +
+                                 (shorts ? " " + tr(shorts === 1 && list.length === 1 ? "Its short link is deleted too." : "Their short links are deleted too.") : ""),
+                                 "Delete", true)) return;
+  let kept = 0;
   for (const s of list) {
     const r = await apiPost("/api/sets", { action: "delete", id: s.id });
     if (!r.ok) { toast(r.data.error || "That set couldn't be changed."); break; }
+    kept = Math.max(kept, r.data.kept_short || 0);
   }
+  if (kept) toast(tr("Hoard's share server couldn't be reached, so a short link wasn't deleted. It stops working on {0}.", day(kept)));
   sel.ids.clear();
   if (list.some(s => s.id === state.set)) state.set = "";
   await T.reload();
@@ -1870,7 +1950,8 @@ async function setAct(e) {
     return;
   }
   if (act === "import") {
-    const code = await askName("Paste the set's link or code", "", { max: 262144 });
+    let code = await askName("Paste the set's link or code", "", { max: 262144 });
+    if (code && SHORT_LINK.test(code.replace(/\s+/g, ""))) code = await openShortLink(code);
     if (!code) return;
     const done = await changeSets({ action: "import", code });
     if (done && done.made) { showSet(done.made); toast("Added the shared set. Products you don't own yet show where to buy them."); }

@@ -57,7 +57,7 @@
     <p class="meta">Each claim links to the code that does it, pinned to commit <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/tree/51a8001ea89e023e4abe280e2538fc6001d22f5a"><code>51a8001</code></a> on the main branch (Hoard 4.2.1), so the line numbers stay put.</p>
 
     <div class="glance">
-      <div><b>It acts as your customer, on their own computer</b><p>No Hoard servers, no accounts, no analytics. Everything runs locally and talks only to the stores the person uses.</p></div>
+      <div><b>It acts as your customer, on their own computer</b><p>No accounts, no analytics. Everything runs locally and talks only to the stores the person uses (and, for a set they share as a short link, Hoard's share server, which can't read it).</p></div>
       <div><b>It never sees a password</b><p>People sign in on your own sign-in page. Hoard keeps only the session your site hands out, encrypted by the operating system.</p></div>
       <div><b>Only what they already own</b><p>It reads the person's own library and downloads files their account can already download. Nothing else.</p></div>
       <div><b>Gentle on your servers</b><p>A pause between page loads, one file at a time, and nothing downloaded twice. It doesn't get around bot checks.</p></div>
@@ -154,9 +154,12 @@
         <code>public-files.gumroad.com</code>, <code>jinxxy-c.jinxxy-cdn.com</code>, <code>images.payhip.com</code>,
         <code>img.itch.zone</code>). Anything else is dropped, when the set is shared and again when it's opened. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/hoard/sets.py#L44-L47" title="Each store's own image host"><code>sets.py</code> L44–47</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/hoard/sets.py#L133-L167" title="Only a public page on the store's own website"><code>sets.py</code> L133–167</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/site/set.js#L40-L58" title="The viewer takes only a public page, as Hoard does"><code>set.js</code> L40–58</a></span></li>
       <li><strong>Nothing hosted, nothing collected.</strong> The set travels inside the link, after its
-        <code>#</code>, which browsers never send to a server. Hoard's website never receives it, and there's no Hoard
-        server to keep a copy. The viewer page can load only its own files, product pictures from the image hosts
-        above, and photos from a short list of photo sites, and its Content-Security-Policy enforces that. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/site/set.js#L1-L5" title="The set read in the page, from after the #"><code>set.js</code> L1–5</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/site/set.html#L6" title="The viewer's Content-Security-Policy"><code>set.html</code> L6</a></span></li>
+        <code>#</code>, which browsers never send to a server, so Hoard's website never receives it. A customer can
+        instead make a short link (Hoard 4.3), which keeps the set on Hoard's share server for 14 days, locked on
+        their computer first with a key that's only in the link: the server can't read it, and the customer can
+        delete it whenever they like. The viewer page can load only its own files, product pictures from the image hosts
+        above, photos from a short list of photo sites and a short link's locked set from the share server, and its
+        Content-Security-Policy enforces that. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/site/set.js#L1-L5" title="The set read in the page, from after the #"><code>set.js</code> L1–5</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/51a8001ea89e023e4abe280e2538fc6001d22f5a/site/set.html#L6" title="The viewer's Content-Security-Policy"><code>set.html</code> L6</a></span></li>
       <li><strong>Pictures come straight from your image host.</strong> The viewer loads each product's picture from
         your image host, as any page that shows it would, and sends no referrer. In Hoard itself, the picture of a
         product the customer doesn't own is fetched once, with your store as the referrer, and kept on their

@@ -27,7 +27,7 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `sealed-files.json` | Which records this install has sealed, so a removed seal is noticed |
 | `cache/thumbs/` | Product pictures, saved so the library works offline |
 | `cache/inside/` | What **Look inside** read from a package or zip, with its previews, for the 40 you looked inside most recently (4.0). See [Downloads](Downloads#the-downloads-view) |
-| `sets.json` | Your sets: their names, notes and photo links, and the products in each, by the same keys your tags use, with what each is (4.0; 4.2.0). See [Sets](Sets) |
+| `sets.json` | Your sets: their names, notes and photo links, and the products in each, by the same keys your tags use, with what each is (4.0; 4.2.0), and each one's short link, if you made one: its key, and the token that lets your Hoard update or delete it (4.3.0). See [Sets](Sets#short-links) |
 | `set-pictures/` | The pictures you chose for your sets' tiles (4.2.0). Not in backups. See [Sets](Sets#its-picture) |
 | `local-pictures/` | The pictures you chose for your own packages' tiles, which Hoard also copies beside them (4.2.0). See [Your own packages](Your-Own-Packages#its-picture) |
 | `package-needs.json` | For each package you've downloaded, the IDs of what's in it and of what it uses, so **What it needs** knows without reading it again (4.0) |

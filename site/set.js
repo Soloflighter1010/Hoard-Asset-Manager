@@ -3,6 +3,8 @@
 // here, in the page, and nothing about it reaches this site. Each product's picture comes from its store's own
 // image host, and the sharer's photos from the photo sites they're on: only those hosts, checked here as Hoard
 // checks them, and allowed by this page's Content-Security-Policy. Nothing from the code becomes page markup.
+// A short link ("S1.<id>.<key>", hoard/shortlinks.py) is a set kept locked on Hoard's share server for 14 days:
+// it's fetched from there by its id, and unlocked here with its key, which is never sent anywhere.
 "use strict";
 (function () {
   const STORES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io" };
@@ -12,6 +14,8 @@
                        "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
                        "public-files.gumroad.com"];
   const PREFIX = "H1.", MAX_CODE = 256 * 1024, MAX_JSON = 1024 * 1024, MAX_ITEMS = 500, MAX_PHOTOS = 8;
+  const SHARE_SERVER = "https://hoard-share.furryup.link";
+  const SHORT = /^S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})$/;
 
   const $ = s => document.querySelector(s);
   function el(tag, attrs, ...kids) {
@@ -91,12 +95,34 @@
     return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), photos: [...new Set(photos)], items };
   }
 
+  // A short link's set, unlocked as Hoard's page locks it (hoard/web/shared.js: lockSet)
+  const LOCKED_AS = new TextEncoder().encode("Hoard set S1");
+  const unb64u = t => Uint8Array.from(atob(t.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0));
+  async function unlockSet(data, key) {
+    const bytes = unb64u(data), k = await crypto.subtle.importKey("raw", unb64u(key), "AES-GCM", false, ["decrypt"]);
+    return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: LOCKED_AS }, k, bytes.subarray(12)));
+  }
+  // The code behind a short link, and when the link runs out: {code, expires}, or {why} it can't be had
+  async function fromServer(id, key) {
+    let r, got;
+    try {
+      r = await fetch(`${SHARE_SERVER}/v1/sets/${id}`, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" });
+      got = await r.json();
+    } catch (e) {
+      return { why: "Couldn't reach Hoard's share server, where this short link's set is kept. Check your connection, and try again." };
+    }
+    if (r.status === 404) return { why: "This short link has run out (short links last 14 days), or whoever shared it deleted it. Ask them for the set again." };
+    if (!r.ok || typeof got.data !== "string" || !Number.isInteger(got.expires)) return { why: "Hoard's share server is busy. Try again in a while." };
+    try { return { code: await unlockSet(got.data, key), expires: got.expires }; }
+    catch (e) { return { why: "This link's key doesn't open its set: part of the link is missing or changed. Ask for it again, and copy all of it." }; }
+  }
+
   function picture(src, alt, cls) {
     const img = el("img", { src, alt, loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", class: cls });
     img.addEventListener("error", () => img.replaceWith(el("span", { class: cls + " none", "aria-hidden": "true" })), { once: true });
     return img;
   }
-  function show(set, code) {
+  function show(set, code, expires) {
     document.title = set.name + " · a set shared from Hoard";
     $("#setName").textContent = set.name;
     const stores = [...new Set(set.items.map(i => STORES[i.store]))];
@@ -121,6 +147,12 @@
               : el("span", { class: "sv-none" }, "No store link")));
     }
     $("#setCode").value = location.href;
+    if (expires) {   // (a short link: the code to copy is the set's own, which every Hoard reads)
+      const until = new Date(expires * 1000).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      $("#setWhere").textContent = `This short link works until ${until}. Its set is kept on Hoard's share server until then, ` +
+        "locked: the key that opens it is in this page's link, after the “#”, which your browser never sends anywhere, so " +
+        "neither the server nor this site can read the set.";
+    }
     $("#setView").hidden = false;
     $("#setCopy").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(location.href); $("#setCopied").textContent = "Copied."; }
@@ -136,13 +168,21 @@
     $("#setProblemWhy").textContent = why;
   }
   async function start() {
-    const code = decodeURIComponent(location.hash.slice(1));
+    let code = decodeURIComponent(location.hash.slice(1)).replace(/\s+/g, ""), expires = 0;
     if (!code) { problem("This page shows a set someone shared from Hoard. Open the link they sent you: the set is in it."); return; }
-    if (typeof DecompressionStream !== "function") { problem("This browser is too old to read the set. Open the link in a current Chrome, Edge, Firefox or Safari."); return; }
+    if (typeof DecompressionStream !== "function" || !(window.crypto && crypto.subtle)) {
+      problem("This browser is too old to read the set. Open the link in a current Chrome, Edge, Firefox or Safari."); return;
+    }
+    const short = code.match(SHORT);
+    if (short) {
+      const got = await fromServer(short[1], short[2]);
+      if (got.why) { problem(got.why); return; }
+      ({ code, expires } = got);
+    }
     let set;
     try { set = check(await unpack(code)); }
     catch (e) { problem("This link's set is damaged, or the link was cut short. Ask for it again, and copy all of it."); return; }
-    show(set, code);
+    show(set, code, expires);
   }
   window.addEventListener("hashchange", () => location.reload());
   start();

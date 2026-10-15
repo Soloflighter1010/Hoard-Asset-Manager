@@ -93,8 +93,8 @@ Also here:
   `Hoard backups`: your settings (the downloads folder and other library folders as places), tags, sets, archive and
   removed choices, and your library list without its download links. Hidden items, with the PIN and recovery words
   that hide them (as their slow hashes, never the words or PIN themselves), go in only while your hidden library is
-  unlocked. It never holds your store sign-ins, your itch.io key, the key Hoard seals its records with, or anything
-  you downloaded: on a new computer, copy the downloads folder yourself and sign in to your stores again. **Restore a
+  unlocked. It never holds your store sign-ins, your itch.io key, the key Hoard seals its records with, your sets'
+  [short links](Sets#short-links) (a restore keeps this computer's), or anything you downloaded: on a new computer, copy the downloads folder yourself and sign in to your stores again. **Restore a
   backup...** asks what's in the file, saves a backup of how things are now first (marked "before restoring"), then
   puts the file's settings, tags, sets and choices in place, each checked as if you'd made it here. A folder that
   isn't on this computer is left as it is, and so is a downloads folder that's a whole drive, your home folder or

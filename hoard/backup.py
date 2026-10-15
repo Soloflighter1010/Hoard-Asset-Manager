@@ -6,8 +6,9 @@ your tags, sets, archive and removed choices, and your library list, without its
 with the PIN and recovery words that hide them (as their slow hashes, never the words), go in only while the hidden
 library is unlocked: a backup made while it's locked leaves them out, so the file never names them.
 
-It never holds your store sign-ins, your itch.io key, the key Hoard seals its records with, or anything downloaded:
-sign in to your stores again on the new computer, and copy the downloads folder yourself.
+It never holds your store sign-ins, your itch.io key, the key Hoard seals its records with, your sets' short links
+(their keys, and the tokens that delete them, stay on this computer: a restore keeps this computer's), or anything
+downloaded: sign in to your stores again on the new computer, and copy the downloads folder yourself.
 
 Restoring checks everything in the file the way Hoard checks what you change in Settings, saves a backup of how
 things were first (so a restore can be undone), and replaces your settings, tags, sets and choices with the
@@ -66,7 +67,7 @@ def make(cfg: dict, settings: dict, lib, unlocked: bool) -> dict:
         "settings": {**{k: settings[k] for k in SETTINGS if k in settings}, "root": str(root_dir(cfg)),
                      "library_folders": [str(f) for f in libraries.other_folders(cfg)]},
         "tags": tags,
-        "sets": [{**s, "items": [k for k in s["items"] if k not in out],
+        "sets": [{**{k: v for k, v in s.items() if k != "short"}, "items": [k for k in s["items"] if k not in out],
                   **({"products": {k: p for k, p in s["products"].items() if k not in out}} if s.get("products") else {})}
                  for s in SetStore().load()["sets"]],
         "marks": chosen,
@@ -174,6 +175,9 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
                 s["items"] += [k for k in before["items"] if k in keep and k not in s["items"]]
                 s["products"] = {**(s.get("products") or {}),
                                  **{k: p for k, p in (before.get("products") or {}).items() if k in keep}}
+                s.pop("short", None)   # (short links aren't in backups: this computer's own stay with their sets)
+                if before.get("short"):
+                    s["short"] = before["short"]
             SetStore()._save(SetStore.sanitize(given))
     with MarkStore._lock:
         ms = MarkStore()

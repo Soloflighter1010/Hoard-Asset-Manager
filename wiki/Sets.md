@@ -54,7 +54,7 @@ tab adds the set to their Hoard: what they own already shows as theirs, and what
 
 - **Nothing is uploaded.** The set is in the link itself, after the `#`, which a browser never sends anywhere:
   the viewer reads it in the page, and Hoard's website never sees it. Hoard keeps no copy of shared sets, and
-  there's no account.
+  there's no account. (A [short link](#short-links) is the one exception, and only if you make one.)
 - **What's in a link:** the set's name, note and photo links, and each product's store, name, creator, public store
   page and picture address. Not your library, your downloads, your tags or anything else of yours.
 - **Only public pages:** a product's store page in a link is its public page on the store (or, where Hoard doesn't
@@ -67,7 +67,26 @@ tab adds the set to their Hoard: what they own already shows as theirs, and what
 - **Pictures:** each product's picture loads from its store's own image host (Booth's, Gumroad's, Jinxxy's and so
   on), so Hoard hosts nothing. Store pages are only links to the stores' own websites.
 - A set of 20 products makes a link of about 2,000 characters. Links that long work in browsers and most chat
-  apps; a very big set may be too long for a single Discord message, so share it in a file, or in two sets.
+  apps; for a shorter one, make a [short link](#short-links).
+
+### Short links
+
+**Make a short link**, in **Share...**, makes a link of about 70 characters, such as
+`https://hoard.furryup.link/set.html#S1.Xq3vT9bKa2.Rk2Lw0pY7cHq-4nZsV1aEg`, that works for 14 days.
+
+- **What's uploaded:** a locked copy of the set (the same set a long link holds), kept on Hoard's share server
+  (`hoard-share.furryup.link`) for 14 days. Hoard locks it on your computer first (AES-GCM, with a new random
+  key), and the key is only in the link, after the `#`, which a browser never sends anywhere. So the share
+  server can't read the set, and neither can anyone who runs it: only someone with the link can.
+- **Yours to change:** Hoard keeps a private token for each short link, which only it has. **Update the link**
+  puts the set as it is now behind the same link and keeps it 14 days from today; the dialog says when the set
+  has changed since. **Delete the short link** deletes it from the server at once, and deleting the set deletes
+  its short link too. Whoever opens a deleted or run-out link is told it's gone.
+- **Opening one:** the viewer fetches the locked set from the share server by the link's id, and unlocks it in
+  the page. **Add a shared set...** takes a short link too. The viewer's **Copy just the code** copies the set's
+  whole code, which Hoard 4.2 can add as well.
+- **Limits:** a short link holds a set of up to about 500 products. The share server can make a limited number
+  a day: if it can't, or can't be reached, Hoard says so, and the long link still works.
 
 ## Its picture
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.3.0
+
+- **Short links for shared sets.** A set's link holds the set itself, so a big set's is thousands of characters
+  long. **Make a short link**, in **Share...**, makes one of about 70 characters that works for 14 days. Hoard
+  locks the set on your computer (AES-GCM, with a new random key) and sends only the locked copy to Hoard's share
+  server, `hoard-share.furryup.link`; the key is only in the link, after its `#`, which a browser never sends
+  anywhere, so the server can't read the set. **Update the link** puts the set as it is now behind the same link,
+  for 14 days from then (the dialog says when the set has changed since), and **Delete the short link** deletes it
+  from the server at once, as deleting the set does. The set viewer opens short links, and says when one has run
+  out or been deleted; **Add a shared set...** takes them too. Nothing is uploaded unless you make a short link:
+  the long link works as before. The share server is `share/` in the repository (a Cloudflare Worker, with its own
+  tests); `PRIVACY.md` says what it keeps.
+
 ## 4.2.1
 
 - **Fixed: a shared set could include your own Gumroad download pages.** A set links each product to its page on its
