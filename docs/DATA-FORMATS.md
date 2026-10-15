@@ -80,7 +80,9 @@ An `<asset>`:
 
 A set's products are kept in `sets.json` in the app-data folder (4.0; 4.2.0 added the rest):
 `{"version": 1, "sets": [{"id", "name", "items": [<product key>, ...], "note"?, "photos"?: [<https link>, ...],
-"products"?: {<product key>: {"store", "id"?, "name", "creator"?, "url"?, "thumbnail"?}}}]}`. A product key is
+"picture"?: "<8 hex digits>.<png|jpg|webp>", "products"?: {<product key>: {"store", "id"?, "name", "creator"?, "url"?,
+"thumbnail"?}}}]}`. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
+`sets.json` (a new name each time it changes). A product key is
 the one tags use (`booth:rusk`). `products` is what each was when it was added, so a set can list products that
 aren't in your library; `url` is only ever on the store's own website, `thumbnail` only on its image host, and
 `photos` only on the photo sites `hoard/sets.py` names.

@@ -9,6 +9,9 @@ it into its own Local folder (inside the downloads folder) or lists it where it 
   For its tile, a copy of one of its pictures is kept in Hoard's own Local folder (see keep_picture).
   Only a manifest Hoard sealed on this computer can name such a folder (see clean_manifest).
 
+You can choose an item's picture (choose_picture): it's kept in Hoard's app-data folder (local-pictures/) and copied
+as the item's _thumbnail.<ext> in Hoard's own folder for it, which the pages and Hoard for Unity show first.
+
 Either way it's in Downloads (the Local tab), tagged and searched like the rest, and in catalog.json, so Hoard for
 Unity can import it. Records are kept in Local/_manifest.json, as each store's are.
 """
@@ -16,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import secrets
 import stat
 from pathlib import Path
@@ -23,7 +27,8 @@ from pathlib import Path
 from .common import log
 from .downloader import Manifest, STORE_DIRS, build_catalog, record_folder, valid_location
 from .downloads import IMAGE_EXT, PREVIEW_HINT
-from .safety import UnsafePath, _is_link, clean_text, open_under, rel_to_path, write_file_safely
+from .paths import data_dir
+from .safety import UnsafePath, _is_link, chosen_picture, clean_text, open_under, rel_to_path, write_file_safely
 
 LOCAL = STORE_DIRS["local"]
 MAX_FILES = 20000
@@ -33,6 +38,32 @@ SKIP = {".ds_store", "thumbs.db", "desktop.ini", "_manifest.json", "asset.json"}
 
 def local_dir(root: Path) -> Path:
     return root / LOCAL
+
+
+def pictures_dir() -> Path:
+    return data_dir() / "local-pictures"
+
+
+def chosen_folders(root: Path) -> set[str]:
+    """The catalog folders ("Local/...") of the items you chose a picture for."""
+    try:
+        keys = {f.stem for f in pictures_dir().iterdir()} if pictures_dir().is_dir() else set()
+    except OSError:
+        return set()
+    if not keys or not (local_dir(root) / "_manifest.json").is_file():
+        return set()
+    return {f"{LOCAL}/{rec.get('folder')}" for key, rec in Manifest(local_dir(root)).assets.items() if key in keys}
+
+
+def _chosen(key: str) -> Path | None:
+    """The picture you chose for an item, if you did."""
+    if not re.fullmatch(r"local-[0-9a-f]{12}", key or ""):
+        return None
+    for ext in (".png", ".jpg", ".webp"):
+        f = pictures_dir() / (key + ext)
+        if f.is_file() and not f.is_symlink():
+            return f
+    return None
 
 
 def walk(source: Path) -> list[str]:
@@ -188,7 +219,7 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     else:
         rec["folder"], rec["location"] = f"_linked/{key}", str(source)
         rec["files"] = _listing(source, files)
-        keep_picture(sdir, rec, source)
+        keep_picture(sdir, rec, source, key)
     if not rec["files"]:
         manifest.assets.pop(key, None)
         raise ValueError("None of those files could be read.")
@@ -200,14 +231,22 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     return rec
 
 
-def keep_picture(sdir: Path, rec: dict, source: Path) -> None:
+def keep_picture(sdir: Path, rec: dict, source: Path, key: str = "") -> None:
     """An item listed where it is: a copy of one of its pictures in Hoard's Local folder, as _thumbnail.<ext>, for its
     tile. Pictures are only shown from inside the downloads folder, so the folder itself (yours, anywhere on this
-    computer) is never served. A picture named like a preview comes first, then any. Nothing in your folder is
-    written; a picture that can't be read is skipped."""
+    computer) is never served. The one you chose comes first (choose_picture), then one named like a preview, then
+    any. Nothing in your folder is written; a picture that can't be read is skipped."""
     try:
         dest = rel_to_path(sdir, rec["folder"])
     except UnsafePath:
+        return
+    chosen = _chosen(key)
+    if chosen:   # (choose_picture put it there: put back if it's gone)
+        if not any(dest.glob("_thumbnail.*")):
+            try:
+                write_file_safely(dest / ("_thumbnail" + chosen.suffix), chosen.read_bytes(), root=sdir)
+            except OSError:
+                pass
         return
     images = [f["path"] for f in rec.get("files", {}).values() if Path(f["path"]).suffix.lower() in IMAGE_EXT
               and (f.get("size") or 0) <= MAX_PICTURE]
@@ -225,6 +264,51 @@ def keep_picture(sdir: Path, rec: dict, source: Path) -> None:
         dest.mkdir(parents=True, exist_ok=True)
         write_file_safely(dest / ("_thumbnail" + Path(rel).suffix.lower()), data, root=sdir)
         return
+
+
+def _own_thumbnails(dest: Path, rec: dict) -> list[Path]:
+    """The _thumbnail.* files Hoard keeps in an item's folder: never one of the item's own files."""
+    mine = {str(f.get("path", "")).lower() for f in rec.get("files", {}).values()} if not rec.get("location") else set()
+    try:
+        found = list(dest.glob("_thumbnail.*")) if dest.is_dir() and not dest.is_symlink() else []
+    except OSError:
+        return []
+    return [f for f in found if f.name.lower() not in mine and f.is_file() and not f.is_symlink()]
+
+
+def choose_picture(cfg: dict, root: Path, key: str, image) -> None:
+    """Your own picture for an item's tile (safety.chosen_picture's image), or None to go back to one of its own.
+    Copied as _thumbnail.<ext> into Hoard's folder for it: an item's copy in Local, or Local/_linked/... for one listed
+    where it is, so nothing of yours is written. Raises ValueError with a plain explanation."""
+    sdir = local_dir(root)
+    rec = find(Manifest(sdir), key)
+    if not re.fullmatch(r"local-[0-9a-f]{12}", key):
+        raise ValueError("That isn't in Local any more.")
+    try:
+        dest = rel_to_path(sdir, rec["folder"])
+    except UnsafePath:
+        raise ValueError("Its folder can't be used any more.") from None
+    if not rec.get("location") and not dest.is_dir():
+        raise ValueError("Its folder isn't there any more.")
+    if not rec.get("location") and any(str(f.get("path", "")).lower().startswith("_thumbnail.")
+                                       for f in rec.get("files", {}).values()):
+        raise ValueError("It has a _thumbnail picture of its own, which is the one shown. Change that file instead.")
+    picture = chosen_picture(image) if image is not None else None
+    if picture and picture[1] == "webp":   # (Hoard for Unity shows PNG and JPEG pictures)
+        raise ValueError("Choose a PNG or JPEG picture.")
+    for old in [*pictures_dir().glob(key + ".*"), *_own_thumbnails(dest, rec)]:
+        old.unlink(missing_ok=True)
+    if picture:
+        data, kind = picture
+        pictures_dir().mkdir(parents=True, exist_ok=True)
+        write_file_safely(pictures_dir() / f"{key}.{kind}", data)
+        write_file_safely(dest / f"_thumbnail.{kind}", data, root=sdir)
+    elif rec.get("location"):   # one of its own pictures again, as when it was added
+        try:
+            keep_picture(sdir, rec, record_folder(sdir, rec), key)
+        except UnsafePath:
+            pass
+    log(f"Local: {'chose a picture for' if picture else 'took the chosen picture off'} {rec.get('name')}")
 
 
 def _forget_picture(sdir: Path, rec: dict) -> None:
@@ -275,7 +359,7 @@ def rescan(cfg: dict, root: Path, key: str) -> dict:
     if not folder.is_dir():
         raise ValueError(f"Its folder isn't there any more: {folder}")
     rec["files"] = _listing(folder, walk(folder))
-    keep_picture(local_dir(root), rec, folder)
+    keep_picture(local_dir(root), rec, folder, key)
     manifest.save()
     build_catalog(cfg, root)
     return rec
@@ -295,6 +379,8 @@ def remove(cfg: dict, root: Path, key: str) -> dict:
             folder = None
         if folder is not None:
             dirs = set()
+            for old in _own_thumbnails(folder, rec):   # a picture you chose for it
+                old.unlink(missing_ok=True)
             for rel in [f.get("path") for f in rec.get("files", {}).values()] + ["asset.json"]:   # (Hoard's, beside them)
                 try:
                     target = rel_to_path(folder, rel)
@@ -317,6 +403,8 @@ def remove(cfg: dict, root: Path, key: str) -> dict:
                     pass
     else:
         _forget_picture(sdir, rec)
+    for old in pictures_dir().glob(key + ".*") if re.fullmatch(r"local-[0-9a-f]{12}", key) else []:
+        old.unlink(missing_ok=True)
     manifest.assets.pop(key)
     manifest.save()
     build_catalog(cfg, root)

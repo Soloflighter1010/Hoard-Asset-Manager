@@ -149,13 +149,13 @@ a different name, the old file stays in the folder too; Hoard never deletes your
 
 ### Sets
 
-A set groups products you use together: an avatar, its outfits and hair, and the shaders they need. They're in the
-**Sets** tab (in the bar at the top), where a set can hold products whether they're downloaded or not, and be
-shared as a link: see [Sets](Sets). Here, the sidebar's **Sets** filters Downloads to one set's downloaded
-products (with **Rename set** and **Delete set** beside its filter), **New set** makes one, and choosing several
-products then **Sets** in the selection bar (or right-click) makes a set of them or adds them to one; a product's
-details list its sets, with **Add** and **×**. Hoard for Unity's **Import set** imports a set's downloaded products
-in one go (see [Hoard for Unity](Hoard-for-Unity)).
+A set groups products you use together: an avatar, its outfits and hair, and the shaders they need. **Sets** is a
+tab beside the stores, here as in the Library: each set is a big tile, and opening one shows its downloaded products
+as their usual tiles, then the rest (not downloaded, or not yours yet). A set can hold products whether they're
+downloaded or not, and be shared as a link: see [Sets](Sets). Choosing several products then **Sets** in the
+selection bar (or right-click) makes a set of them or adds them to one; a product's details list its sets, with
+**Add** and **×**. Hoard for Unity's **Import set** imports a set's downloaded products in one go (see
+[Hoard for Unity](Hoard-for-Unity)).
 
 ### Previous versions
 

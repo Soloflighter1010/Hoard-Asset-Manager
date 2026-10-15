@@ -43,6 +43,20 @@ class Store(unittest.TestCase):
 
 
 BOOTH_PIC = "https://booth.pximg.net/c/300x300_a2_g5/11d082f4/i/1/03e2fc69_base_resized.jpg"
+
+
+def _png(w: int, h: int) -> bytes:
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\0" + b"\xc8\x78\x3c" * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+PNG_4x3 = _png(40, 30)
 SHARED = {"name": "Rusk, winter", "note": "For snowy worlds.\nHair: the short one.", "photos": ["https://i.imgur.com/abc.png"],
           "items": [RUSK, HOODIE, "local:mypants"],
           "products": {RUSK: {"store": "booth", "id": "1", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1",
@@ -58,6 +72,45 @@ def packed(doc: dict) -> str:
     c = zlib.compressobj(9, zlib.DEFLATED, -15)
     raw = c.compress(json.dumps(doc).encode()) + c.flush()
     return sets.CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+class Pictures(unittest.TestCase):
+    """A picture you choose for a set's tile: checked by what it is, a new file each time, gone with its set."""
+
+    def setUp(self):
+        self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
+        __import__("shutil").rmtree(sets.pictures_dir(), True)
+
+    def test_choose_change_and_take_off(self):
+        import base64
+        png = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 30).decode()
+        made = self.store.change({"action": "create", "name": "Rusk"})["made"]
+        self.store.change({"action": "picture", "id": made, "image": png})
+        first = sets.picture_file(self.store.load()["sets"][0])
+        self.assertEqual((first.parent, first.suffix), (sets.pictures_dir(), ".png"))
+        self.store.change({"action": "picture", "id": made, "image": png})
+        second = sets.picture_file(self.store.load()["sets"][0])
+        self.assertNotEqual(first, second, "a new name, so a page never shows the old one")
+        self.assertEqual(list(sets.pictures_dir().iterdir()), [second], "the one it replaced is gone")
+        for bad in ("data:image/svg+xml;base64," + base64.b64encode(b"<svg onload=alert(1)>").decode(),
+                    "data:image/png;base64,!!!", "x" * (800 * 1024), 12):
+            with self.assertRaises(ValueError):
+                self.store.change({"action": "picture", "id": made, "image": bad})
+        self.assertEqual(sets.picture_file(self.store.load()["sets"][0]), second, "a picture refused changes nothing")
+        self.store.change({"action": "picture", "id": made, "image": None})
+        self.assertNotIn("picture", self.store.load()["sets"][0])
+        self.assertEqual(list(sets.pictures_dir().iterdir()), [])
+        self.store.change({"action": "picture", "id": made, "image": png})
+        self.store.change({"action": "delete", "id": made})
+        self.assertEqual(list(sets.pictures_dir().iterdir()), [], "deleting a set deletes its picture")
+
+    def test_a_picture_name_from_a_file_is_checked(self):
+        raw = {"sets": [{"id": "a1", "name": "x", "items": [], "picture": "../../etc/passwd"},
+                        {"id": "b2", "name": "y", "items": [], "picture": "0123abcd.png"}]}
+        clean = sets.SetStore.sanitize(raw)["sets"]
+        self.assertNotIn("picture", clean[0])
+        self.assertEqual(clean[1]["picture"], "0123abcd.png")
+        self.assertIsNone(sets.picture_file(clean[1]), "named, but not there: none (a backup brings the set, not its picture)")
 
 
 class Sharing(unittest.TestCase):
@@ -223,7 +276,8 @@ class Page(unittest.TestCase):
                              ["New set from these...", "Add to Rusk, winter"])
             page.keyboard.press("Escape")
             page.click("#bulkDone")
-            page.locator("#sets .chip", has_text="Rusk, winter").click()
+            page.click('#stores [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Rusk, winter").click()
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")
             self.assertIn("set=", page.url)
             page.locator('#grid .slot[aria-label^="Hoodie for Rusk"]').click()
@@ -320,36 +374,59 @@ class Tab(unittest.TestCase):
             page.keyboard.press("Enter")
             page.get_by_text("Made the set Rusk, winter, with 2 products in it.").wait_for()
             page.keyboard.press("Escape")
-            page.click("#setsTab")
-            box = page.locator(".setbox", has_text="Rusk, winter")
-            self.assertIn("2 products, 1 downloaded, 1 to download", box.locator("summary").inner_text())
-            box.locator("summary").click()
-            self.assertIn("Yours, not downloaded", box.locator(".sp", has_text="Hoodie for Rusk").inner_text())
-            self.assertEqual(box.locator(".sp", has_text="Rusk").first.locator("a").first.get_attribute("href"), "/downloads#open=0")
+            # the Sets tab, beside the stores: each set a big tile; opened, a folder of its products
+            page.click('#storeSeg [data-store="Sets"]')
+            tile = page.locator("#setView .settile", has_text="Rusk, winter")
+            self.assertIn("2 products, 1 downloaded, 1 to download", tile.inner_text())
+            self.assertEqual(page.locator("#grid .slot").count(), 0, "every set's tile, and nothing else")
+            tile.click()
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")   # both are yours
+            self.assertIn("store=Sets&set=", page.url)
+            self.assertEqual(page.locator("#setMore .slot").count(), 0)
             # shared: the link holds the set
-            box.locator('[data-setx="share"]').click()
+            page.click('#setView [data-setx="share"]')
             link = page.locator("dialog.share input").input_value()
             self.assertTrue(link.startswith("https://hoard.furryup.link/set.html#H1."))
             self.assertEqual(sets.from_code(link)["items"], [RUSK, HOODIE])
             page.locator("dialog.share button", has_text="Close").click()
-            # added from someone else's: what isn't yours says where to buy it
-            page.click('[data-setx="import"]')
+            # its own picture, on its tile and in its folder
+            with page.expect_file_chooser() as chosen:
+                page.click('#setView [data-setx="picture"]')
+            chosen.value.set_files(files=[{"name": "fox.png", "mimeType": "image/png", "buffer": PNG_4x3}])
+            page.get_by_text("Its tile shows that picture now.").wait_for()
+            cover = page.locator("#setView .sethead .art img")
+            self.assertRegex(cover.get_attribute("src"), r"^/setcover/[0-9a-f]+/[0-9a-f]{8}\.(png|jpg)\?k=")
+            page.wait_for_function("() => document.querySelector('#setView .sethead .art img').naturalWidth === 40")
+            # added from someone else's: it opens, and what isn't yours says where to buy it
+            page.click('#setView [data-setx="back"]')
+            page.click('#setView [data-setx="import"]')
             page.fill("dialog[open] #askName", sets.share_link(code))
             page.keyboard.press("Enter")
             page.get_by_text("Added the shared set.").wait_for()
-            fox = page.locator(".setbox", has_text="Fox outfit")
-            self.assertIn("1 to buy", fox.locator("summary").inner_text())
-            ears = fox.locator(".sp", has_text="Fox Ears")
-            self.assertIn("Not yours yet", ears.inner_text())
-            self.assertEqual(ears.get_by_role("link", name="Buy on Jinxxy").get_attribute("href"), "https://jinxxy.com/tails/foxears")
+            page.locator("#setView h2", has_text="Fox outfit").wait_for()
+            self.assertIn("1 to buy", page.locator("#setView .sethead").inner_text())
+            ears = page.locator("#setMore .slot", has_text="Fox Ears")
+            self.assertIn("Not yours yet", page.locator("#setMore").inner_text())
+            self.assertEqual(ears.locator("a").get_attribute("href"), "https://jinxxy.com/tails/foxears")
+            self.assertIn("Buy on Jinxxy", ears.inner_text())
             # a note and a photo, kept with the set and shared with it
-            fox.locator("[data-setnote]").fill("Cozy fox look")
-            fox.locator('[data-setx="note"]').click()
+            page.click("#setView .setextra summary")
+            page.fill("#setView [data-setnote]", "Cozy fox look")
+            page.click('#setView [data-setx="note"]')
             page.get_by_text("Saved the note.").wait_for()
-            page.locator('.setbox', has_text="Fox outfit").locator('[data-setx="photo"]').click()
+            page.click('#setView [data-setx="photo"]')
             page.fill("dialog[open] #askName", "https://evil.example/a.png")
             page.keyboard.press("Enter")
             page.get_by_text("isn't a link to a picture on a photo site").wait_for()
+            # in Downloads, the same set: what's downloaded as its tiles, the rest after them
+            page.click("nav.apptabs a[href='/downloads']")
+            page.click('#stores [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Rusk, winter").click()
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            hoodie = page.locator("#setMore .slot", has_text="Hoodie for Rusk")
+            self.assertIn("Yours, not downloaded", page.locator("#setMore").inner_text())
+            hoodie.locator("a").click()   # to it in the Library
+            page.locator("#detail.open", has_text="Hoodie for Rusk").wait_for()
             self.assertEqual(errors, [])
             browser.close()
         fox = next(s for s in sets.SetStore().load()["sets"] if s["name"] == "Fox outfit")

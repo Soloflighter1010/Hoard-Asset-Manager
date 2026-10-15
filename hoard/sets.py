@@ -3,7 +3,9 @@ avatar, its outfits and hair, and the shaders they need: downloaded or not, and 
 shared with you lists what to buy, and where).
 
 Kept in sets.json in Hoard's app-data folder: {"sets": [{"id", "name", "items": [product key, ...], "note"?,
-"photos"?: [address, ...], "products"?: {product key: {"store", "id", "name", "creator", "url", "thumbnail"}}}]}. A
+"photos"?: [address, ...], "picture"?: "<version>.<png|jpg|webp>", "products"?: {product key: {"store", "id", "name",
+"creator", "url", "thumbnail"}}}]}. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
+"<set id>-<picture>" (a new name each time, so a page never shows the one it replaced). A
 product is known by the same key your tags use (tags.tag_key), so a set keeps its products whichever store or library
 folder they're in; "products" remembers what each was when it was added (its store page and picture), so a set can be
 shown and shared whether or not it's in your library. catalog.json lists each set by its downloaded products' folders,
@@ -26,7 +28,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .paths import data_dir
-from .safety import STORE_LINK_SITES, DataFileError, clean_text, read_json_file, write_file_safely
+from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
 from .tags import TAG_KEY_RX
 
 MAX_SETS = 200
@@ -48,11 +50,37 @@ PHOTO_HOSTS = ("i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i
                "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
                "public-files.gumroad.com")
 
+PICTURE_NAME = re.compile(r"[0-9a-f]{8}\.(?:png|jpg|webp)")   # a set's "picture"
 _lock = threading.Lock()
 
 
 def sets_file() -> Path:
     return data_dir() / "sets.json"
+
+
+def pictures_dir() -> Path:
+    return data_dir() / "set-pictures"
+
+
+def picture_file(s: dict) -> Path | None:
+    """Where a set's own picture is, if it has one and it's there (a backup brings the set, not its picture)."""
+    name = s.get("picture")
+    if not (isinstance(name, str) and PICTURE_NAME.fullmatch(name)):
+        return None
+    f = pictures_dir() / f"{s['id']}-{name}"
+    return f if f.is_file() and not f.is_symlink() else None
+
+
+def _tidy_pictures(sets: list[dict]) -> None:
+    """Delete the pictures no set has any more (replaced, taken off, or their set deleted)."""
+    keep = {f"{s['id']}-{s['picture']}" for s in sets if s.get("picture")}
+    try:
+        found = list(pictures_dir().iterdir()) if pictures_dir().is_dir() else []
+    except OSError:
+        return
+    for f in found:
+        if f.name not in keep and re.fullmatch(r"[0-9A-Za-z]{1,16}-" + PICTURE_NAME.pattern, f.name) and f.is_file():
+            f.unlink(missing_ok=True)
 
 
 def clean_name(value) -> str:
@@ -159,6 +187,8 @@ class SetStore:
                                                     if isinstance(s.get("photos"), list)) if u))
             if photos:
                 one["photos"] = photos
+            if isinstance(s.get("picture"), str) and PICTURE_NAME.fullmatch(s["picture"]):
+                one["picture"] = s["picture"]
             given = s.get("products") if isinstance(s.get("products"), dict) else {}
             products = {k: p for k, p in ((k, clean_product(given.get(k))) for k in one["items"]) if p}
             if products:
@@ -179,8 +209,9 @@ class SetStore:
     def change(self, body: dict, details=None) -> dict:
         """One change, from the page: {"action": "create", "name", "items"?, "note"?, "photos"?},
         {"action": "rename", "id", "name"}, {"action": "delete", "id"}, {"action": "add" or "remove", "id", "items"},
-        {"action": "note", "id", "note"}, {"action": "photos", "id", "photos"}, {"action": "import", "code"} (a set
-        someone shared). details(key) gives what Hoard knows of a product added (clean_product's shape, or None), to
+        {"action": "note", "id", "note"}, {"action": "photos", "id", "photos"}, {"action": "picture", "id", "image"}
+        (a picture for its tile, as safety.chosen_picture takes it, or null to go back to its products' pictures),
+        {"action": "import", "code"} (a set someone shared). details(key) gives what Hoard knows of a product added (clean_product's shape, or None), to
         keep with it. Returns the sets after it, and the new set's id for "create" and "import". Raises ValueError
         for one that can't be made."""
         action = body.get("action")
@@ -247,10 +278,19 @@ class SetStore:
                         raise ValueError(f"{bad[0]} isn't a link to a picture on a photo site Hoard knows "
                                          f"({', '.join(PHOTO_HOSTS[:6])} and others).")
                     s["photos"] = given
+                elif action == "picture":
+                    s.pop("picture", None)
+                    if body.get("image") is not None:
+                        picture, kind = chosen_picture(body.get("image"))
+                        s["picture"] = f"{secrets.token_hex(4)}.{kind}"
+                        pictures_dir().mkdir(parents=True, exist_ok=True)
+                        write_file_safely(pictures_dir() / f"{s['id']}-{s['picture']}", picture)
                 else:
                     raise ValueError("Unknown change.")
             data = self.sanitize(data)   # (what was added, checked as a file read is: products of other keys go)
             self._save(data)
+            if action in ("picture", "delete"):
+                _tidy_pictures(data["sets"])
         return {**data, **({"made": made} if made else {})}
 
 

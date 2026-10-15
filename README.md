@@ -157,7 +157,8 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   (in a product's details) lists what its packages use that isn't in them: shaders and tools such as lilToon,
   Poiyomi or Modular Avatar, and whether it also uses files from other products (a base avatar, say). When an update
   replaces a file, the old one is kept (**Previous versions**, with **Restore**). **Sets** group products you use
-  together (an avatar, its outfits, its shaders), downloaded or not, in their own tab; share one as a link that
+  together (an avatar, its outfits, its shaders), downloaded or not, in a tab beside the stores: each set a big tile
+  (with a picture of your choosing, if you like), opening to a folder of its products; share one as a link that
   shows what's in it and where to buy each (nothing uploaded), and Hoard for Unity imports a set in one go.
 - **Backup** (in **Settings**) saves what you've set up (settings, tags, sets, choices and your library list, never
   sign-ins or keys) in one file, to keep or to move to another computer, and restores it.

@@ -2,12 +2,19 @@
 
 ## 4.2.0
 
-- **Sets, reworked: any products, downloaded or not, in a tab of their own.** **Sets** is in the bar at the top
-  of every page. It lists your sets, each product with its picture and where it is: downloaded (a link to it in
-  Downloads), yours but not downloaded (**Download the N not downloaded** gets them all), or not yours yet (with
-  **Buy on** its store). Make a set there, or choose products in the Library as well as in Downloads and use
-  **Sets** in the selection bar or right-click: a set no longer needs its products downloaded. A set remembers what
-  each product is (its name, creator, store page and picture), and has a **Note** and up to 8 **Photos**.
+- **Sets, reworked: any products, downloaded or not, in a tab like a store's.** **Sets** is a tab beside the stores,
+  in the Library and in Downloads (and in the bar at the top of every page). Each set is a big tile, with its own
+  picture or four of its products'; open one and it's a folder of its products: the ones there as their usual tiles
+  (to open, select and right-click as anywhere), then the rest, yours but not downloaded (**Download the N not
+  downloaded** gets them all) or not yours yet (with **Buy on** its store). Make a set there, or choose products in
+  the Library as well as in Downloads and use **Sets** in the selection bar or right-click (**Take out of** the set
+  that's open, too): a set no longer needs its products downloaded. A set remembers what each product is (its name,
+  creator, store page and picture), and has a **Note** and up to 8 **Photos**. Downloads' Sets list in the sidebar is
+  now the tab.
+- **Your own pictures for sets and Local items.** **Choose a picture...** on a set, or in a Local item's details,
+  takes a picture from your computer for its tile (made at most 640 pixels across). A set's is kept in Hoard's
+  app-data folder; a Local item's in Hoard's own folder for it, as its `_thumbnail`, so Hoard for Unity shows it too,
+  and nothing in a folder of yours listed where it is is written. **Take the picture off** goes back to its own.
 - **Share a set as a link.** **Share...** makes a link to the set viewer on Hoard's website, which shows the set's
   products with their pictures and a link to buy each, your note and your photos. The set is in the link itself,
   after its `#`, which a browser never sends anywhere: nothing is uploaded, and Hoard keeps no copy. Each picture

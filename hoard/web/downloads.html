@@ -737,22 +737,40 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 12.5px/1.5 ui-monospace, monospace; }
 .proj .muted { font-size: 12px; color: var(--dust); }
 .projects .none { margin: 0; color: var(--dust); }
-/* Sets (the Sets tab): each set's products, downloaded, yours or still to buy */
-.setprods { list-style: none; margin: 10px 0 4px; padding: 0; display: grid; gap: 6px; }
-.setprods .sp { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
-  padding: 6px; border-radius: 10px; background: var(--ledge); }
-.setprods .sp img, .setprods .sp .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--cave); }
-.setprods .nm { display: flex; flex-direction: column; gap: 1px; min-width: 0; font-size: 13px; }
-.setprods .nm b { overflow-wrap: anywhere; }
-.setprods .nm .st, .setprods .nm a { font-size: 12px; }
-.setprods .st.buy { color: var(--warn); }
-.setprods .wanted img { opacity: .85; }
-.setbox textarea { min-height: 52px; font: 13px/1.45 var(--body); }
+/* Sets, a tab beside the stores: each set a big tile, its own picture or four of its products'; a set open is a folder
+   of its products, the ones here as the usual tiles, then the rest (not downloaded, or not yours yet) */
+.setview { margin: 0 0 18px; }
+.setgrid { grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--slot-size) * 1.55)), 1fr)); gap: 26px 18px; }
+.setgrid .art, .sethead > .art { aspect-ratio: 4 / 3; }
+.settile .nm-t { font-size: 16px; }
+.collage { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; width: 100%; height: 100%; background: var(--cave); }
+.collage img { width: 100%; height: 100%; min-height: 0; object-fit: cover; }
+.collage.n1 img { grid-area: 1 / 1 / 3 / 3; }
+.collage.n2 img, .collage.n3 img:first-child { grid-row: 1 / 3; }
+.crumbs { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 14px; color: var(--dust); }
+.sethead { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.sethead h2 { font: 400 26px/1.2 var(--display); margin: 0 0 4px; overflow-wrap: anywhere; }
+.sethead .muted { margin: 0 0 8px; color: var(--dust); font-size: 13.5px; }
+.setnote { margin: 0 0 12px; white-space: pre-line; font-size: 14px; max-height: 7.5em; overflow: auto; }
+.setextra { margin: 16px 0 0; }
+.setextra summary { cursor: pointer; font-weight: 700; color: var(--dust); }
+.setextra textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; margin: 10px 0 8px; padding: 8px; border: 0;
+  border-radius: 8px; resize: vertical; background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 13px/1.45 var(--body); }
+@media (max-width: 640px) { .sethead { grid-template-columns: minmax(0, 1fr); } .sethead > .art { max-width: 240px; } }
+.setmore h3 { margin: 30px 0 14px; font: 700 15px var(--body); color: var(--dust); }
+.setmore h3 .n { margin-left: 4px; font-weight: 400; }
+.slot.ext .ext-main { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
+.slot.ext a.ext-main:focus-visible { outline: none; }
+.slot.ext a.ext-main:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 3px; }
+.slot.ext.wanted .art img { opacity: .82; }
+.ext-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: -3px; font-size: 12.5px; }
+.ext-what { color: var(--dust); }
+.slot.ext.wanted .ext-what { color: var(--warn); }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
 .sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sets .row > button, .sets .row > a { width: auto; flex: none; margin: 0; }
-.sets-top { margin: 0 0 12px; }
+.sets-top { margin: 0 0 16px; }
 dialog.share { width: min(560px, calc(var(--vw) - 32px)); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
@@ -927,7 +945,7 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button><button id="setsTab" aria-expanded="false" aria-controls="setsWin">Sets</button></nav>
+  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <label class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search downloads" aria-label="Search your downloads: names, creators, tags and files" autocomplete="off">
@@ -957,6 +975,7 @@ body.less-motion .tour-try::before { animation: none; }
     <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip<span class="n"></span></button>
     <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io<span class="n"></span></button>
     <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local<span class="n"></span></button>
+    <button role="radio" class="sets" data-store="Sets" aria-checked="false" title="Products you use together">Sets<span class="n"></span></button>
     <span id="drives" class="drives" role="radiogroup" aria-label="Library folder" hidden></span>
   </div>
   <div class="shelf-tools">
@@ -994,8 +1013,6 @@ body.less-motion .tour-try::before { animation: none; }
     <div class="views" id="views" role="radiogroup" aria-label="Show"></div>
     <h2 class="sidehead" data-sec="your-tags">Your tags <button class="linkish" id="manageTags">Manage</button></h2>
     <div id="myTags" class="chips"></div>
-    <h2 class="sidehead" data-sec="sets">Sets <button class="linkish" id="newSet">New set</button></h2>
-    <div id="sets" class="chips"></div>
     <h2 data-sec="suggested">Suggested</h2>
     <div id="tags" class="chips"></div>
     <button id="moreTags" class="linkish" hidden></button>
@@ -1013,7 +1030,9 @@ body.less-motion .tour-try::before { animation: none; }
       <button id="selectBtn" class="ghost sm" aria-pressed="false" title="Select several items to tag them together">Select</button></div>
     <div id="status" class="status"></div>
     <div id="viewBar" class="viewbar" hidden></div>
+    <div id="setView" class="setview sets" hidden></div>
     <div id="grid" class="grid" aria-label="Assets"></div>
+    <div id="setMore" class="setmore" hidden></div>
     <div id="empty" class="empty" hidden></div>
     <footer class="foot">
       <div class="foot-brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0 0) scale(1.0)">
@@ -1226,10 +1245,6 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
 </section>
-<section id="setsWin" class="stores projects sets" hidden aria-labelledby="setsTitle">
-  <h2 id="setsTitle">Sets</h2>
-  <div id="setsBody"></div>
-</section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
   <div id="projectsBody"></div>
@@ -1336,7 +1351,7 @@ let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 const storeName = folder => folder === "Itch" ? "itch.io" : folder;
 const isLocal = a => a.store === "Local";   // your own (issue #80)   // a store as people write it, from its folder's name
-const fileUrl = p => keyed("/files/" + p.split("/").map(encodeURIComponent).join("/"));
+const fileUrl = (p, v) => keyed("/files/" + p.split("/").map(encodeURIComponent).join("/") + (v ? `?v=${+v}` : ""));
 function fmtSize(n) {
   if (n == null) return "";
   const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
@@ -1347,7 +1362,7 @@ function placeholder(a) {
   return `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b>` +
          `<small>${a.types[0] ? "." + esc(a.types[0]) : ""}</small></span>`;
 }
-const art = a => a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="" loading="lazy" decoding="async">` : placeholder(a);
+const art = a => a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="" loading="lazy" decoding="async">` : placeholder(a);
 
 /* ---------- highlights and accessibility */
 function toast(msg) {
@@ -1391,13 +1406,14 @@ async function load(rescan = false) {
 
 /* ---------- filtering */
 function matches(a, skip) {
-  if (!inView(a)) return false;   // Downloads, Archive, Removed or Hidden, as in the Library
-  if (state.store && a.store !== state.store) return false;
+  // Downloads, Archive, Removed or Hidden, as in the Library; a set's folder: all of it, archived or not
+  if (inSets() && !state.set) return false;   // (every set's tile: no product's)
+  if (!(inSets() ? setHas(a) : inView(a))) return false;
+  if (state.store && !inSets() && a.store !== state.store) return false;   // (Sets: every set's tile, or the one open)
   if (state.lib !== "" && String(a.library || 0) !== state.lib) return false;   // a library folder's tab
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const t of state.types) if (!a.types.includes(t)) return false;
-  if (state.set && !(setById(state.set) || { items: [] }).items.includes(a.tag_key)) return false;
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
 }
@@ -1417,8 +1433,10 @@ const filtersActive = () => state.q || state.store || state.lib !== "" || state.
 /* ---------- rendering */
 function render() {
   if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
+  if (!inSets()) state.set = "";
   const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  drawSets();
 }
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
@@ -1467,31 +1485,7 @@ function updatesBar(n) {
     `<button class="ghost sm" data-upd="check">Check for updates</button>` +
     (n ? `<button class="primary sm" data-upd="all">Update all</button>` : "");
 }
-// Sets (hoard/sets.py): products you group to use together; Hoard for Unity imports a set in one go
-function renderSets(list) {
-  const here = new Map((DATA.sets || []).map(s => [s.id, 0]));
-  for (const a of list) for (const s of DATA.sets || []) if (s.items.includes(a.tag_key)) here.set(s.id, here.get(s.id) + 1);
-  $("#sets").innerHTML = (DATA.sets || []).map(s => `<button class="chip set" data-set="${esc(s.id)}" aria-pressed="${state.set === s.id}" translate="no">` +
-    `${esc(s.name)}<span class="n">${here.get(s.id)}</span></button>`).join("") ||
-    `<span class="none">${esc(tr("Group products you use together, such as an avatar and its outfits: then import them together in Unity."))}</span>`;
-}
 afterSetMade = () => load();   // (shared.js: a set made from a project shows in Sets)
-async function newSet() {
-  const name = await askName("Name the new set");
-  if (!name) return;
-  const done = await changeSets({ action: "create", name, items: [] });
-  if (done && done.made) { state.set = done.made; render(); toast("Add products to it from their details, or select several."); }
-}
-async function setAction(act) {
-  const s = setById(state.set); if (!s) return;
-  if (act === "rename") {
-    const name = await askName("Rename the set", s.name);
-    if (name && name !== s.name) changeSets({ action: "rename", id: s.id, name });
-  } else if (act === "delete" && await ask(tr("Delete the set {0}? The products in it stay as they are.", s.name), "Delete set", true)) {
-    state.set = "";
-    changeSets({ action: "delete", id: s.id });
-  }
-}
 // Previous versions (hoard/previous.py): what updates replaced, kept in the product's folder, to put back
 function previousSection(a) {
   const list = a.previous || [];
@@ -1834,12 +1828,11 @@ function renderGrid(list) {
   } else if (!list.length) {
     empty.innerHTML = `<h2>Nothing in your downloads matches that</h2><p><button class="linkish" data-clear="all">Clear filters</button></p>`;
   }
-  empty.hidden = list.length > 0;
+  empty.hidden = list.length > 0 || (inSets() && !DATA.error && DATA.assets.length > 0);   // (Sets says what it has)
 }
 
 function renderFacets(list) {
   renderTagFacets(list);
-  renderSets(DATA.assets.filter(inView));
 
   const typeCounts = countBy(list, "types");
   for (const t of state.types) if (!typeCounts.has(t)) typeCounts.set(t, 0);
@@ -1890,20 +1883,19 @@ function renderStatus(list) {
   const total = DATA.assets.filter(inView).length;   // this view: Downloads, Archive, ...
   const pills = [];
   if (state.q) pills.push(["q", "", `Search`, state.q]);
-  if (state.store) pills.push(["store", "", "Store", storeName(state.store)]);
+  if (state.store && !inSets()) pills.push(["store", "", "Store", storeName(state.store)]);   // (Sets says where you are)
   if (state.lib !== "") pills.push(["lib", "", "Folder", libName(state.lib)]);
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
-  if (state.set && setById(state.set)) pills.push(["set", "", "Set", setById(state.set).name]);
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
   const local = state.store === "Local";
   for (const [a, here] of [[$('.apptabs a[href="/downloads"]'), !local], [$('.apptabs a[href="/downloads#store=Local"]'), local]])
     if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
   document.title = local ? tr("Hoard: Local") : tr("Hoard: Downloads");
-  $("#count").hidden = !total;
-  $("#count").innerHTML = local && pills.length === 1 && state.view === "downloads"
+  $("#count").hidden = !total || (inSets() && !!state.set);   // (a set open has its own heading)
+  $("#count").innerHTML = inSets() ? esc(setsCountText()) : local && pills.length === 1 && state.view === "downloads"
     ? esc(tr(list.length === 1 ? "1 package of your own" : "{0} packages of your own", list.length))
     : filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
     : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}` +
@@ -1912,8 +1904,7 @@ function renderStatus(list) {
     pills.map(([k, v, label, text]) =>
       `<button class="pill" data-clear="${k}" data-v="${esc(v)}" aria-label="Remove ${label.toLowerCase()} filter ${esc(text)}">` +
       `<b>${label}</b> ${esc(text)}<span aria-hidden="true">×</span></button>`).join("") +
-    (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "") +
-    (state.set && setById(state.set) ? ` <button class="linkish" data-setact="rename">Rename set</button> <button class="linkish" data-setact="delete">Delete set</button>` : "");
+    (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
 }
 
 function syncControls() {
@@ -1923,15 +1914,16 @@ function syncControls() {
   // (the Local link in the bar, with nothing in Local yet)
   const here = DATA.assets.filter(inView), have = {};
   for (const a of here) have[a.store] = (have[a.store] || 0) + 1;
+  have.Sets = (DATA.sets || []).length || 0.5;   // (Sets is always there: its count is how many sets)
   for (const b of $("#stores").querySelectorAll("[data-store]")) {   // Everything: every store, on every drive
     b.hidden = b.dataset.store !== "" && !have[b.dataset.store] && b.dataset.store !== state.store;
-    const n = (b.dataset.store === "" ? here.length : have[b.dataset.store] || 0).toLocaleString();   // as in the Library
+    const n = (b.dataset.store === "" ? here.length : Math.floor(have[b.dataset.store] || 0)).toLocaleString();   // as in the Library
     if (b.lastChild.textContent !== n) b.lastChild.textContent = n;
     b.setAttribute("aria-checked", String(b.dataset.store === state.store && (b.dataset.store !== "" || state.lib === "")));
   }
   for (const b of $("#drives").querySelectorAll("[data-lib]")) b.setAttribute("aria-checked", String(b.dataset.lib === state.lib));
   // the stores you have downloads from, for Everything's glow
-  setGlow(state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));
+  setGlow(inSets() ? "" : state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));
   $("#sort").value = state.sort;
 }
 
@@ -1942,7 +1934,7 @@ function showDetail(a, focus = true) {
   const storeLink = storeUrl(a.store, a.url) ? `<a href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer" title="${esc(storeUrl(a.store, a.url))}">Open on ${storeName(a.store)}</a>` : "";
   detail.innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
-    `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb)}" alt="">` : placeholder(a)}</div>` +
+    `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="">` : placeholder(a)}</div>` +
     `<h2 class="d-name" translate="no">${esc(a.name)}</h2>` +
     `<p class="d-by" translate="no">${esc(tr("by {0}", a.creator))}${a.variants ? esc(tr(", {0}", a.variants)) : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)} ${storeLink}</p>` +
@@ -2151,7 +2143,8 @@ function readHash() {
   state.lib = /^\d+$/.test(p.get("lib") || "") ? p.get("lib") : "";
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
-  state.set = /^[0-9a-f]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
+  state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
+  if (state.set) state.store = "Sets";   // (a set's folder; and "Show in Downloads" from 4.1)
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
@@ -2165,7 +2158,7 @@ $("#stores").addEventListener("click", e => {
   const d = e.target.closest("[data-lib]");   // a library folder's tab: chosen again, it goes back to every folder
   if (d) { state.lib = state.lib === d.dataset.lib ? "" : d.dataset.lib; render(); return; }
   const b = e.target.closest("[data-store]");
-  if (b) { state.store = b.dataset.store; if (!b.dataset.store) state.lib = ""; render(); }
+  if (b) { state.store = b.dataset.store; state.set = ""; if (!b.dataset.store) state.lib = ""; render(); }   // (Sets: every set)
 });
 /* ---------- moving the selected downloads to another library folder, each as a job of its own (Tasks) */
 async function bulkMove(to) {
@@ -2256,10 +2249,7 @@ try { const z = localStorage.getItem("hoard-dl-tile-size"); if (z) setZoom(z); }
 function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); }
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), ty = e.target.closest("[data-type]"), c = e.target.closest("[data-creator]");
-  const st = e.target.closest("[data-set]");
-  if (e.target.closest("#newSet")) { newSet(); return; }
-  if (st) state.set = state.set === st.dataset.set ? "" : st.dataset.set;
-  else if (t) toggle(state.tags, t.dataset.tag);
+  if (t) toggle(state.tags, t.dataset.tag);
   else if (ty) toggle(state.types, ty.dataset.type);
   else if (c) state.creator = state.creator === c.dataset.creator ? "" : c.dataset.creator;
   else return;
@@ -2269,7 +2259,6 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
   if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; }
-  else if (k === "set") state.set = "";
   else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v); else if (k === "type") state.types.delete(v);
   render();
@@ -2290,10 +2279,23 @@ function localSection(a) {
       ? "Listed where it is: Hoard never changes anything in this folder."
       : "A copy in Hoard, checked like your downloads."}</p>` +
     `<div class="actions">${a.linked ? `<button class="ghost" data-act="local-rescan">Rescan</button>` : ""}` +
+    `<button class="ghost" data-act="local-picture">${esc(tr(a.own_picture ? "Change its picture..." : "Choose a picture..."))}</button>` +
+    (a.own_picture ? `<button class="ghost" data-act="local-unpicture">${esc(tr(a.linked ? "Use one of its own pictures" : "Take the picture off"))}</button>` : "") +
     `<button class="ghost" data-act="local-remove">Remove from Local</button></div>`;
 }
 async function localAction(act, a) {
   if (!a) return;
+  if (act === "local-picture" || act === "local-unpicture") {   // (kept in Hoard's own folder for it: see local.py)
+    const image = act === "local-picture" ? await choosePicture() : null;
+    if (act === "local-picture" && !image) return;
+    const r = await apiPost("/api/local/picture", { folder: a.folder, image });
+    if (!r.ok) { toast(r.data.error || "That picture couldn't be kept."); return; }
+    await load();
+    const again = DATA.assets.find(x => x.folder === a.folder);
+    if (again && openId === a.id) showDetail(again, false);
+    toast(image ? "Its tile shows that picture now." : "Took the picture off.");
+    return;
+  }
   if (act === "local-remove" && !await ask(a.linked
       ? tr("Take {0} out of Local? Nothing in its folder is touched.", a.name)
       : tr("Take {0} out of Local, and delete Hoard's copy of it? Your original isn't touched.", a.name), "Take it out")) return;
@@ -2461,7 +2463,7 @@ detail.addEventListener("click", e => {
   else if (act === "restore") restorePrevious(byId.get(openId), b);
   else if (act === "unset") changeSets({ action: "remove", id: b.dataset.set, items: [byId.get(openId).tag_key] });
   else if (act === "toset") addToSet([byId.get(openId)], $("#setPick").value);
-  else if (act === "showset") { state.set = b.dataset.set; render(); }
+  else if (act === "showset") showSet(b.dataset.set);
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
   else if (act === "update-one") updateItems([byId.get(openId)]);
@@ -2470,7 +2472,7 @@ detail.addEventListener("click", e => {
   else if (act === "edit-copy") editableCopy(byId.get(openId), b);
   else if (act === "move") moveProduct(byId.get(openId), b);
   else if (act === "projects") openProjects(true);
-  else if (act === "local-rescan" || act === "local-remove") localAction(act, byId.get(openId));
+  else if (act.startsWith("local-")) localAction(act, byId.get(openId));
   else if (act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
 });
 $("#scrim").addEventListener("click", closeDetail);
@@ -2510,6 +2512,7 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  all: () => DATA.assets,
   download: keys => startDownload(storesOf(keys), null, keys),   // (the Sets tab)
   membersOf: id => {   // a stack's copies, all chosen together
     const a = byId.get(+id);
@@ -2555,7 +2558,6 @@ function wireTags() {
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
   wireSelection();
-  document.addEventListener("click", e => { const b = e.target.closest("[data-setact]"); if (b) setAction(b.dataset.setact); });
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });

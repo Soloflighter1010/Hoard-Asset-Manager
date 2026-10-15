@@ -6,19 +6,23 @@ someone shared with you lists what it needs, and where to buy each.
 
 ## The Sets tab
 
-**Sets** is in the bar at the top of every page, beside **Projects**. It lists your sets, each with how many
-products are in it and how many are downloaded, yours to download, or still to buy. Open one to see its
-products, each with its picture and where it is:
+**Sets** is a tab beside the stores, in the [Library](Library) and in [Downloads](Downloads) (and **Sets** in the bar
+at the top of every page opens it in the Library). Each set is a big tile: the picture you chose for it (see
+[Its picture](#its-picture)), or four of its products' pictures, with how many products it has and how many are
+downloaded, yours to download, or still to buy.
 
-- **Downloaded:** a link to it in [Downloads](Downloads).
-- **Yours, not downloaded:** in your library; **Download the N not downloaded** downloads every one of them at
-  once (as **Download** does in the [Library](Library)).
-- **Not yours yet:** from a set someone shared, with **Buy on** its store, which opens the product's page in your
-  browser.
+Open a set and it's a folder of its products. **Sets** above its name goes back to every set.
 
-Each product has **×** to take it out of the set, and **On** (or **Buy on**) its store. A set also has
-**Share...**, **Show in Downloads** (just its downloaded products, filtered in Downloads), **Rename** and
-**Delete** (deleting a set leaves its products as they are), a **Note** (what it's for, or how to put it
+- **The ones on this page** are their usual tiles: open one for its details, or select several and use the
+  selection bar or right-click as anywhere (**Sets**, **Take out of** this set, takes them out). In a set, these
+  are all of its products here, whichever view (Library, Archive...) they're in.
+- **The rest** come after them, each with its picture and where it is. In the Library: **Not yours yet**, with
+  **Buy on** its store (opens the product's page in your browser), and **Your own, in Local**. In Downloads, also
+  **Yours, not downloaded**, which opens it in the Library. **×** takes one out of the set.
+
+A set also has **Share...**, **Download the N not downloaded** (every product of it that's yours and not downloaded,
+at once, as **Download** does in the Library), **Choose a picture...**, **Rename** and **Delete** (deleting a set
+leaves its products as they are), and under **Note and photos** a **Note** (what it's for, or how to put it
 together) and **Photos** (below).
 
 ## Making a set
@@ -28,7 +32,7 @@ together) and **Photos** (below).
   on a touch screen), then **Sets** in the selection bar (or right-click): **New set from these...**, or **Add to**
   a set you have. In the Library that works whether they're downloaded or not.
 - A product's details, in the Library or in Downloads, list its sets: **Add** puts it in another, **×** takes it
-  out, and a set's name opens it (in the Sets tab from the Library, as a filter in Downloads).
+  out, and a set's name opens it in the Sets tab.
 - **Make a set** in **Projects** makes one of the products a Unity project uses.
 
 A set remembers what each product is when it's added (its name, creator, store page and picture), so it can be
@@ -55,6 +59,13 @@ tab adds the set to their Hoard: what they own already shows as theirs, and what
   Hoard hosts nothing. Store pages are only links to the stores' own websites.
 - A set of 20 products makes a link of about 2,000 characters. Links that long work in browsers and most chat
   apps; a very big set may be too long for a single Discord message, so share it in a file, or in two sets.
+
+## Its picture
+
+**Choose a picture...** in a set takes a picture from your computer for its tile: a PNG, JPEG, WebP or GIF, made at
+most 640 pixels across. Hoard keeps it in `set-pictures` in its app-data folder; it isn't shared with the set (a
+link holds no pictures) or kept in backups. **Take the picture off** goes back to its products' pictures. Your own
+packages can have a picture of your choosing too: see [Your own packages](Your-Own-Packages#its-picture).
 
 ## Photos
 

@@ -56,7 +56,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
-           "/api/backup/show")
+           "/api/backup/show", "/api/local/picture")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -648,7 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             if not font:
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
-        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/", "/inside/", "/setpic/"))):
+        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/", "/inside/", "/setpic/", "/setcover/"))):
             return self._refused()
         srv.last_seen = time.time()
         if path == "/api/library":
@@ -727,6 +727,8 @@ class Handler(BaseHTTPRequestHandler):
                     looks.append({"look_for": i["look_for"], "key": i["key"]})   # (its picture: /thumb/<key>)
             assets = []
             needed = srv.needs_view(index)
+            from . import local
+            chosen = local.chosen_folders(root_dir(srv.cfg))   # Local items with a picture you chose
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
@@ -735,6 +737,7 @@ class Handler(BaseHTTPRequestHandler):
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
                                    "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
                                    "needs": needed.get(a["id"]),
+                                   "own_picture": a.get("catalog_folder") in chosen,
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
             keys = {a["tag_key"] for a in assets}   # nor kept in a set while it's locked
@@ -782,6 +785,18 @@ class Handler(BaseHTTPRequestHandler):
             if not got:
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
+        if path.startswith("/setcover/"):   # the picture you chose for a set's tile
+            sid, _, name = path[len("/setcover/"):].partition("/")
+            s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+            f = sets.picture_file(s) if s and s.get("picture") == name else None
+            try:
+                data = f.read_bytes() if f else None
+            except OSError:
+                data = None
+            if not data:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, data, SERVED_IMAGE_TYPES["." + name.rsplit(".", 1)[1]],
+                              {"Cache-Control": "max-age=86400"})
         if path.startswith("/inside/"):   # a preview from inside a package (Look inside: hoard/packages.py)
             cid, _, name = path[len("/inside/"):].partition("/")
             data = packages.preview(cid, name)
@@ -943,7 +958,7 @@ class Handler(BaseHTTPRequestHandler):
                 if i and i.get("thumbnail"):
                     pic = "/thumb/" + quote(i["key"], safe=":")
                 elif a and a.get("thumb"):
-                    pic = "/files/" + quote(a["thumb"])
+                    pic = "/files/" + quote(a["thumb"]) + (f"?v={a['thumb_v']}" if a.get("thumb_v") else "")
                 elif p.get("thumbnail"):
                     pic = f"/setpic/{s['id']}/{n}"
                 else:
@@ -954,9 +969,10 @@ class Handler(BaseHTTPRequestHandler):
                              "name": (i or a or p).get("name") or key.split(":", 1)[-1],
                              "creator": (i or a or p).get("creator") or "",
                              "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
-                             "pic": pic, "owned": bool(i), "download": a["id"] if a else None,
+                             "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
                              "local": store == "local", "mark": mark})
             out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
+                        "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
                         "items": rows})
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 
@@ -1021,6 +1037,18 @@ class Handler(BaseHTTPRequestHandler):
         found = local.by_folder(root_dir(srv.cfg), str(body.get("folder") or "")[:1000])
         if not found:
             return self._json({"error": "That isn't in Local any more."}, 404)
+        if path == "/api/local/picture":   # a picture of your choosing for its tile, or back to one of its own
+            if srv.jobs.state["running"] and srv.jobs.state.get("task") in ("add-local", "rescan-local", "remove-local",
+                                                                            "move"):
+                return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
+            try:
+                local.choose_picture(srv.cfg, root_dir(srv.cfg), found[0], body.get("image"))
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": f"Couldn't save the picture: {e.strerror or e}."}, 500)
+            srv.forget_index()
+            return self._json({"ok": True})
         if path == "/api/local/remove" and body.get("confirm") is not True:
             return self._json({"error": "Confirm first."}, 400)
         if not srv.jobs.busy.acquire(blocking=False):   # a job is running: this waits its turn after it
@@ -1300,6 +1328,8 @@ class Handler(BaseHTTPRequestHandler):
                 data = sets.SetStore().change(body, self._product_details())
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
+            except OSError as e:   # (a set's picture that couldn't be saved)
+                return self._json({"error": f"Couldn't save that: {e.strerror or e}."}, 500)
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
             return self._json({"ok": True, "made": data.get("made")})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth

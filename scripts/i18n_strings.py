@@ -25,14 +25,14 @@ from hoard import common, config, downloader, i18n, library, server  # noqa: E40
 
 # what to do on each page, in turn: open a panel or a view, then read what it shows
 STEPS = {
-    "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab", "Escape", "#setsTab",
-          ".setbox summary >> nth=0", "Escape", "#selectBtn", "#selectBtn",
+    "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab", "Escape", '#storeSeg [data-store="Sets"]',
+          "[data-setopen] >> nth=0", ".setextra summary", '#storeSeg [data-store=""]', "#selectBtn", "#selectBtn",
           ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]',
           # the setup assistant, each step up to the last (not Finish, which would start reading the stores)
           "#settingsBtn", "#setupAgain", *["#setupNext"] * 8, "Escape"],
     "/downloads": ["", ".slot >> nth=0", "Escape", '[data-view="updates"]', '[data-view="archive"]', '[data-view="removed"]',
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
-                   "Escape", "#setsTab", "Escape", "#settingsBtn"],
+                   "Escape", '#stores [data-store="Sets"]', "[data-setopen] >> nth=0", '#stores [data-store=""]', "#settingsBtn"],
 }
 
 

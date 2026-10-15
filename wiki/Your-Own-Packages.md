@@ -19,7 +19,7 @@ Open **Local** (in the bar at the top, or the **Local** tab in Downloads) and ch
 | Routine checks ([Checking your downloads](Downloads#checking-your-downloads)) | Checked like a download | Left alone: it's your working folder |
 | What Hoard writes there | Its copy, and `asset.json` beside it | Nothing, ever |
 | **Remove from Local** | Deletes Hoard's copy (only the files it copied) | Only forgets it; nothing in the folder is touched |
-| Its picture | One of its images (one named like a preview first) | A copy of one of its images in `Local`, made again on **Rescan** |
+| Its picture | One you choose, else one of its images (one named like a preview first) | One you choose, else a copy of one of its images in `Local`, made again on **Rescan** |
 | Disk space | Takes as much again | Only that picture |
 
 A single file can only be copied in; to list something where it is, choose its folder. Links (shortcuts) inside
@@ -39,6 +39,16 @@ Files in the folders above are left out (the list says how many), Hoard's own do
 them, and up to 500 can be added at once. They're copied or listed together, as you choose, and **For** applies
 to them all. Adding the same folder again later only adds the folders that are new: those already in Local are
 marked in the list and left as they are. (Packages added with a beta of 3.0, before beta 6, aren't recognised this way.)
+
+## Its picture
+
+An item's tile shows one of its own images to begin with. To show another, open it and choose **Choose a
+picture...**: any PNG, JPEG, WebP or GIF on your computer, made at most 640 pixels across (a still picture, saved as a
+PNG or JPEG). Hoard keeps it in `local-pictures` in its app-data folder and copies it, as `_thumbnail.png` or
+`.jpg`, into its own folder for the item: beside its copy, or in `Local/_linked/...` for one listed where it is, so
+nothing in your folder is written. Hoard for Unity shows it too. **Rescan** keeps it. **Take the picture off** (or,
+for an item listed where it is, **Use one of its own pictures**) goes back to one of its own. An item with a
+`_thumbnail` image of its own shows that one: change that file instead.
 
 ## Using it
 
