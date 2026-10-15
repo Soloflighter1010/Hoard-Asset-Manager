@@ -6,6 +6,7 @@
 - [Stores](Stores)
 - [Your library](Library)
 - [Downloads](Downloads)
+- [Sets](Sets)
 - [Your own packages](Your-Own-Packages)
 - [Tags](Tags)
 - [Hoard for Unity](Hoard-for-Unity)

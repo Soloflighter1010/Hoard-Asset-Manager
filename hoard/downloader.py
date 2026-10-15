@@ -1968,7 +1968,7 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
                         dirs.add(folder / parent)
             if not rec.get("location"):   # its previous versions (hoard/previous.py) were Hoard's too
                 from . import previous
-                done["files"] += previous.delete_all(folder)
+                done["files"] += previous.delete_all(folder, [f.get("path") for f in rec["files"].values()])
             for d in sorted(dirs, key=lambda d: len(d.parts), reverse=True) + [folder, folder.parent]:
                 if d != sdir and sdir in d.parents:
                     try:
@@ -2044,7 +2044,7 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None, commit
         raise ValueError(f"{dest} is already there and isn't a folder. Move or rename it first.")
     extras = [p.name for p in src.glob("_thumbnail.*") if p.is_file() and not p.is_symlink()] if src.is_dir() else []
     from . import previous   # its previous versions go with it
-    extras += [f"{previous.FOLDER}/{v['stamp']}/{v['file']}" for v in previous.listed(src)] if src.is_dir() else []
+    extras += [v["path"] for v in previous.listed(src, [f.get("path") for f in rec["files"].values()])] if src.is_dir() else []
     made: list[Path] = []
     try:
         entries = [(f.get("path"), f) for f in rec["files"].values()] + [(name, None) for name in extras]
@@ -2137,7 +2137,7 @@ def restore_previous(cfg: dict, root: Path, folder: Path, stamp: str, name: str)
     if not found:
         raise ValueError("That isn't a download of Hoard's.")
     man, rec = found
-    done = previous.restore(folder, stamp, name)
+    done = previous.restore(folder, stamp, name, [f.get("path") for f in rec.get("files", {}).values()])
     for f in rec.get("files", {}).values():
         if f.get("path") == name:
             f["size"] = done["size"]

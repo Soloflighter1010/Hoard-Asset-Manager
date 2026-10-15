@@ -18,7 +18,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, space, themes, updater, vault
 from .changelog import whats_new
@@ -31,7 +31,7 @@ from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_do
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import is_network_error
-from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_thumbnail, import_saved_pages,
+from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
@@ -56,7 +56,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
-           "/api/backup/show")
+           "/api/backup/show", "/api/local/picture")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -648,7 +648,7 @@ class Handler(BaseHTTPRequestHandler):
             if not font:
                 return self._send(404, b"Not found", "text/plain")
             return self._send(200, font.read_bytes(), "font/woff2", {"Cache-Control": "max-age=31536000, immutable"})
-        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/", "/inside/"))):
+        if not check_access(self, srv.key, in_address=path.startswith(("/thumb/", "/files/", "/inside/", "/setpic/", "/setcover/"))):
             return self._refused()
         srv.last_seen = time.time()
         if path == "/api/library":
@@ -675,8 +675,12 @@ class Handler(BaseHTTPRequestHandler):
             counted = [i for i in shown if i["mark"] not in ("removed", "hidden")]
             privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "recovery_set": bool(marks["recovery"]),
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
+            keys = {i["tag_key"] for i in shown}
+            hidden_now = set() if unlocked else set(marks["hidden"])
+            mine = [{"id": x["id"], "name": x["name"], "items": [k for k in x["items"] if k not in hidden_now],
+                     "owned": len([k for k in x["items"] if k in keys])} for x in sets.SetStore().load()["sets"]]
             return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": stores,
-                               "privacy": privacy,
+                               "privacy": privacy, "sets": mine,
                                "labels": {k: v["label"] for k, v in STORES.items()}, "job": public_job(srv.jobs.state, self._hidden_names()),
                                "downloadable": list(DOWNLOADABLE), "importable": list(IMPORTABLE),
                                "itch_key": vault.has_key(srv.cfg, "itch"),
@@ -713,19 +717,27 @@ class Handler(BaseHTTPRequestHandler):
             listed = [dict(i) for i in srv.lib.snapshot()[0]]
             stack_by_picture(listed)
             for i in listed:
+                # a download's stack is its own product's (by store and name), even one that stacks with nothing:
+                # "Hair Pack 1" and "Hair Pack 2" share a product key (tag_key leaves numbers out), but the Library
+                # keeps them apart, and so must Disk space's copies. The key is for downloads the library doesn't list
+                stacks.setdefault((str(i["store"]).lower(), i["name"]), i["stack_key"])
                 if i["stack_key"]:
                     stacks.setdefault(tag_key(i["store"], i["name"]), i["stack_key"])
                 if i.get("look_for") and (unlocked or tag_key(i["store"], i["name"]) not in marks["hidden"]):
                     looks.append({"look_for": i["look_for"], "key": i["key"]})   # (its picture: /thumb/<key>)
             assets = []
             needed = srv.needs_view(index)
+            from . import local
+            chosen = local.chosen_folders(root_dir(srv.cfg))   # Local items with a picture you chose
             for a in index["assets"]:
                 key = a.get("tag_key")
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
-                                   "stack_key": stacks.get(key, ""), "needs": needed.get(a["id"]),
+                                   "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
+                                   "needs": needed.get(a["id"]),
+                                   "own_picture": a.get("catalog_folder") in chosen,
                                    "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
             shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
             keys = {a["tag_key"] for a in assets}   # nor kept in a set while it's locked
@@ -760,6 +772,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
                                "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
+        if path == "/api/sets":   # the Sets tab: every set, each product as it is here (hoard/sets.py)
+            return self._json(self._sets_view(), compress=True)
+        if path.startswith("/setpic/"):   # a set's product's picture, from its store, when it isn't in your library
+            sid, _, n = path[len("/setpic/"):].partition("/")
+            s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+            key = s["items"][int(n)] if s and n.isdigit() and int(n) < len(s["items"]) else None
+            p = (s.get("products") or {}).get(key) if key else None
+            hidden = key in MarkStore().keys("hidden") and not self._unlocked()
+            url = sets.product_picture(p["store"], p.get("thumbnail")) if p and not hidden else None
+            got = fetch_picture(url, STORES[p["store"]]["referer"]) if url and p["store"] in STORES else None
+            if not got:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
+        if path.startswith("/setcover/"):   # the picture you chose for a set's tile
+            sid, _, name = path[len("/setcover/"):].partition("/")
+            s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+            f = sets.picture_file(s) if s and s.get("picture") == name else None
+            try:
+                data = f.read_bytes() if f else None
+            except OSError:
+                data = None
+            if not data:
+                return self._send(404, b"Not found", "text/plain")
+            return self._send(200, data, SERVED_IMAGE_TYPES["." + name.rsplit(".", 1)[1]],
+                              {"Cache-Control": "max-age=86400"})
         if path.startswith("/inside/"):   # a preview from inside a package (Look inside: hoard/packages.py)
             cid, _, name = path[len("/inside/"):].partition("/")
             data = packages.preview(cid, name)
@@ -874,6 +911,85 @@ class Handler(BaseHTTPRequestHandler):
         srv.forget_index()
         return self._json({"ok": True})
 
+    def _product_details(self):
+        """details(key): what Hoard knows of a product, for a set to remember (hoard/sets.py): from the library
+        list (its store page and picture), else from your downloads (a product of your own in Local, say)."""
+        srv = self.server
+        lib, dl = {}, {}
+        for i in srv.lib.snapshot()[0]:
+            lib.setdefault(tag_key(i["store"], i["name"]), i)
+        for a in srv.index(stale_ok=True)["assets"]:
+            dl.setdefault(a["tag_key"], a)
+
+        def details(key: str) -> dict | None:
+            i = lib.get(key)
+            if i:
+                return {"store": i["store"], "id": i.get("id"), "name": i["name"], "creator": i.get("creator"),
+                        "url": i.get("url"), "thumbnail": i.get("thumbnail")}
+            a = dl.get(key)
+            if a:
+                return {"store": str(a["store"]).lower(), "name": a["name"], "creator": a.get("creator"),
+                        "url": a.get("url")}
+            return None
+        return details
+
+    def _sets_view(self) -> dict:
+        """Every set, for the Sets tab: each product with what it is here: in your library (owned), downloaded (its
+        download's id), or neither (where to buy it), with a picture to show for it. Hidden products are left out
+        while the hidden library is locked."""
+        srv = self.server
+        marks, unlocked = MarkStore().view(), self._unlocked()
+        hidden = set() if unlocked else set(marks["hidden"])
+        lib = {}
+        for i in srv.lib.snapshot()[0]:
+            lib.setdefault(tag_key(i["store"], i["name"]), i)
+        dl = {}
+        for a in srv.index(stale_ok=True)["assets"]:
+            dl.setdefault(a["tag_key"], a)
+        out, left_out = [], False
+        for s in sets.SetStore().load()["sets"]:
+            known, rows = s.get("products") or {}, []
+            for n, key in enumerate(s["items"]):
+                if key in hidden:
+                    left_out = True
+                    continue
+                i, a, p = lib.get(key), dl.get(key), known.get(key) or {}
+                store = (i or {}).get("store") or p.get("store") or (str(a["store"]).lower() if a else "")
+                if i and i.get("thumbnail"):
+                    pic = "/thumb/" + quote(i["key"], safe=":")
+                elif a and a.get("thumb"):
+                    pic = "/files/" + quote(a["thumb"]) + (f"?v={a['thumb_v']}" if a.get("thumb_v") else "")
+                elif p.get("thumbnail"):
+                    pic = f"/setpic/{s['id']}/{n}"
+                else:
+                    pic = None
+                mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
+                        else "archived" if key in marks["archived"] else None)
+                rows.append({"key": key, "store": store,
+                             "name": (i or a or p).get("name") or key.split(":", 1)[-1],
+                             "creator": (i or a or p).get("creator") or "",
+                             "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
+                             "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
+                             "local": store == "local", "mark": mark})
+            out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
+                        "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
+                        "items": rows})
+        return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
+
+    def _share_set(self, sid: str):
+        """A set's share code and link (hoard/sets.py). Hidden products and your own (Local) are never in one."""
+        s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+        if s is None:
+            return self._json({"error": "That set isn't there anymore."}, 400)
+        hidden = MarkStore().keys("hidden")
+        shared = {**s, "items": [k for k in s["items"] if k not in hidden]}
+        code, count = sets.share_code(shared, self._product_details())
+        if not count:
+            return self._json({"error": "There's nothing in this set to share: products of your own (Local) and "
+                                        "hidden ones stay on this computer."}, 400)
+        return self._json({"ok": True, "code": code, "link": sets.share_link(code), "count": count,
+                           "left_out": len(s["items"]) - count})
+
     def _visible_projects(self) -> list[dict]:
         """Projects' reports, without hidden products while the hidden library is locked (their names never leave
         the server then, here as everywhere)."""
@@ -921,6 +1037,18 @@ class Handler(BaseHTTPRequestHandler):
         found = local.by_folder(root_dir(srv.cfg), str(body.get("folder") or "")[:1000])
         if not found:
             return self._json({"error": "That isn't in Local any more."}, 404)
+        if path == "/api/local/picture":   # a picture of your choosing for its tile, or back to one of its own
+            if srv.jobs.state["running"] and srv.jobs.state.get("task") in ("add-local", "rescan-local", "remove-local",
+                                                                            "move"):
+                return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
+            try:
+                local.choose_picture(srv.cfg, root_dir(srv.cfg), found[0], body.get("image"))
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": f"Couldn't save the picture: {e.strerror or e}."}, 500)
+            srv.forget_index()
+            return self._json({"ok": True})
         if path == "/api/local/remove" and body.get("confirm") is not True:
             return self._json({"error": "Confirm first."}, 400)
         if not srv.jobs.busy.acquire(blocking=False):   # a job is running: this waits its turn after it
@@ -1190,14 +1318,18 @@ class Handler(BaseHTTPRequestHandler):
             srv.forget_index()
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()
             return self._json({"ok": True, **done, "before": str(before)})
-        if path == "/api/sets":   # Downloads: your sets (hoard/sets.py)
+        if path == "/api/sets":   # the Sets tab, Library and Downloads: your sets (hoard/sets.py)
             if body.get("action") in ("add", "remove", "create") and not self._unlocked():
                 hidden = MarkStore().keys("hidden")   # a hidden product isn't added or taken out while it's locked
                 body = {**body, "items": [k for k in body.get("items") or [] if k not in hidden]}
+            if body.get("action") == "share":
+                return self._share_set(str(body.get("id", "")))
             try:
-                data = sets.SetStore().change(body)
+                data = sets.SetStore().change(body, self._product_details())
             except ValueError as e:
                 return self._json({"error": str(e)}, 400)
+            except OSError as e:   # (a set's picture that couldn't be saved)
+                return self._json({"error": f"Couldn't save that: {e.strerror or e}."}, 500)
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
             return self._json({"ok": True, "made": data.get("made")})
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth

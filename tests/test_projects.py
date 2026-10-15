@@ -217,7 +217,7 @@ class ProjectsPage(unittest.TestCase):
             name.fill("My Avatar, as worn")
             page.locator("dialog[open] button", has_text="OK").click()
             page.get_by_text("Made the set My Avatar, as worn, with 2 products in it.").wait_for()
-            page.locator("#sets .chip", has_text="My Avatar, as worn").wait_for()   # Downloads shows it straight away
+            page.locator('#stores [data-store="Sets"] .n', has_text="1").wait_for()   # Downloads shows it straight away
             [made] = SetStore().load()["sets"]
             self.assertEqual(made["items"], [tags_key("Booth", "Rusk"), tags_key("Gumroad", "Mochi")],
                              "what's in it now: not what was imported once and is gone")

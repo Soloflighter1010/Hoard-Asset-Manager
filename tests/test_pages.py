@@ -133,7 +133,8 @@ class AccessKey(unittest.TestCase):
     def test_without_the_key_nothing_is_shown(self):
         for url in (self.srv.url, f"{self.srv.url}downloads", f"{self.srv.url}#key=guess"):
             page, refused = self.open(url)
-            page.get_by_text(NEEDS_KEY).wait_for()
+            page.locator("#empty:not([hidden])").wait_for()   # what the page says, whatever it is (not a wait for one text)
+            self.assertIn(NEEDS_KEY, page.locator("#empty").inner_text(), url)
             self.assertEqual(page.get_by_text("Rusk").count(), 0, url)
             self.assertTrue(refused, url)
             page.close()
@@ -255,6 +256,7 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(started, [("download", ["booth"], [rusk]), ("check-updates", ["booth"], [rusk]),
                                    ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
+        page.close()   # (left open, it carried on beside the tests after it)
 
     def test_downloaded_or_not_yet(self):
         """Issue #17: in the Library, what's on disk is marked on its card and in its label, and Downloaded / Not
@@ -338,12 +340,12 @@ class AccessKey(unittest.TestCase):
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         shown = "() => [...document.querySelectorAll('#stores [data-store]')].filter(b => !b.hidden).map(b => b.dataset.store)"
-        self.assertEqual(page.evaluate(shown), ["", "Booth"], "Everything, and the one store with a download")
+        self.assertEqual(page.evaluate(shown), ["", "Booth", "Sets"], "Everything, the one store with a download, and Sets")
         page.click("nav.apptabs a[href='/downloads#store=Local']")   # Local, with nothing in it yet
         page.wait_for_function(shown + ".includes('Local')")
-        self.assertEqual(page.evaluate(shown), ["", "Booth", "Local"])
+        self.assertEqual(page.evaluate(shown), ["", "Booth", "Local", "Sets"])
         counts = "() => [...document.querySelectorAll('#stores [data-store]')].filter(b => !b.hidden).map(b => b.querySelector('.n').textContent)"
-        self.assertEqual(page.evaluate(counts), ["1", "1", "0"], "counted, as the Library's tabs are")
+        self.assertEqual(page.evaluate(counts), ["1", "1", "0", "0"], "counted, as the Library's tabs are (Sets: how many sets)")
         page.close()
 
     def test_downloads_unlocks_hidden_with_the_pin(self):

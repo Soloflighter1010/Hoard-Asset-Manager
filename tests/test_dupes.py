@@ -26,6 +26,8 @@ OWNED = (("Booth", "1", "Rusk"), ("Gumroad", "g1", "Rusk"), ("Booth", "2", "Hood
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class Duplicates(unittest.TestCase):
+    owned = OWNED
+
     def setUp(self):
         from playwright.sync_api import sync_playwright
         self.tmp = tempfile.TemporaryDirectory()
@@ -36,7 +38,7 @@ class Duplicates(unittest.TestCase):
         self.root = root = Path(self.tmp.name) / "dl"
         self.files = {}
         items = []
-        for store, key, name in OWNED:
+        for store, key, name in self.owned:
             man = downloader.Manifest(root / store)
             rec = man.record(key, "Kitsu", name)
             rec.update(name=name, creator="Kitsu")
@@ -105,6 +107,39 @@ class Duplicates(unittest.TestCase):
         self.assertIn("removed from your library, so not downloaded", report.skipped[0])
         MarkStore().change("removed", [tag_key("Gumroad", "Rusk")], False)   # Restore, in the Library
         self.assertFalse(downloader.removed_product("gumroad", "Rusk", downloader.Report()), "added back: downloaded again")
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class OneKeyTwoProducts(Duplicates):
+    """Removing goes by product key, which leaves numbers and (labels) out: Booth's "Hair Pack 1" and "Hair Pack 2"
+    share one. Choosing to keep Booth's Hair Pack 1 deleted both of Booth's, the one kept included, with Gumroad's."""
+    owned = (("Booth", "1", "Hair Pack 1"), ("Booth", "2", "Hair Pack 2"), ("Gumroad", "g1", "Hair Pack 1"))
+
+    test_keep_one_stores_copy = test_a_removed_copy_isnt_downloaded_again = None
+
+    def test_the_copy_kept_and_another_product_stay(self):
+        page = self.open()
+        page.click("[data-space=dupes]")
+        rows = page.locator(".dupelist li")
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.locator("input[type=radio]").count(), 3, "Booth's and Gumroad's Hair Pack 1, and Keep all")
+        self.assertNotIn("Hair Pack 2", rows.inner_text(), "not a copy: the Library keeps them apart too")
+        go = page.locator("[data-dupe='go']")
+        page.select_option("#dupeStore", "Gumroad")
+        page.click("[data-dupe='apply']")
+        self.assertTrue(go.is_disabled(), "Booth's would take Hair Pack 2 with it: it isn't offered")
+        page.select_option("#dupeStore", "Booth")
+        page.click("[data-dupe='apply']")
+        self.assertIn("Remove 1 copy", go.inner_text())
+        go.click()
+        page.click("#askDialog button.danger")
+        page.get_by_text("Removed 1 copy and deleted").wait_for()
+        self.assertFalse(self.files[("Gumroad", "Hair Pack 1")].exists())
+        self.assertTrue(self.files[("Booth", "Hair Pack 1")].exists(), "the copy kept")
+        self.assertTrue(self.files[("Booth", "Hair Pack 2")].exists(), "another product")
+        self.assertEqual(MarkStore().keys("removed"), {tag_key("Gumroad", "Hair Pack 1")})
+        self.assertEqual(self.errors, [])
+        page.close()
 
 
 if __name__ == "__main__":

@@ -56,6 +56,39 @@ def clean_text(value, limit: int = 300) -> str:
     return re.sub(r"\s+", " ", s).strip()[:limit].strip()
 
 
+MAX_CHOSEN_PICTURE = 512 * 1024   # bytes: a picture you choose for a set or a Local item (the page makes it smaller)
+
+
+def picture_kind(data: bytes) -> str | None:
+    """"png", "jpg" or "webp", from a picture's first bytes; None for anything else."""
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    return "jpg" if data.startswith(b"\xff\xd8\xff") else None
+
+
+def chosen_picture(value, limit: int = MAX_CHOSEN_PICTURE) -> tuple[bytes, str]:
+    """A picture a page sends (a data: address, or just its base64): its bytes and kind, worked out from the bytes,
+    never from what the page says it is. Raises ValueError with a plain explanation."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("That isn't a picture.")
+    if len(value) > limit * 4 // 3 + 200:
+        raise ValueError("That picture is too large.")
+    if value.startswith("data:"):
+        value = value.partition(",")[2]
+    try:
+        data = base64.b64decode(value, validate=True)
+    except ValueError:
+        raise ValueError("That isn't a picture.") from None
+    if len(data) > limit:
+        raise ValueError("That picture is too large.")
+    kind = picture_kind(data)
+    if not kind:
+        raise ValueError("Choose a PNG, JPEG or WebP picture.")
+    return data, kind
+
+
 def read_json_file(path: Path, max_bytes: int = MAX_DATA_FILE):
     """Read a JSON data file defensively, raising DataFileError when it's too big or damaged."""
     size = path.stat().st_size

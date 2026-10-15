@@ -99,7 +99,9 @@ Also here:
   puts the file's settings, tags, sets and choices in place, each checked as if you'd made it here. A folder that
   isn't on this computer is left as it is, and so is a downloads folder that's a whole drive, your home folder or
   Hoard's own app-data folder. The library list fills in only stores that have nothing listed yet.
-  A backup with hidden items replaces yours only once your hidden library is unlocked.
+  A backup with hidden items replaces yours only once your hidden library is unlocked. A backup made while it's
+  locked names no hidden product anywhere (from 4.2.0), and restoring one leaves your hidden products' tags, sets
+  and choices as they are.
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Take the tour:** what Hoard can do, shown on your own library (4.1.0). See
   [Getting started](Getting-Started#the-tour).

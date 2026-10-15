@@ -2398,8 +2398,9 @@ class StoreTables(unittest.TestCase):
                 self.assertIn(f".{s} {{ --c: var(--{s}); }}", html, page)
         order = re.search(r"const STORE_ORDER = \[(.*?)\];", (web / "library.html").read_text("utf-8")).group(1)
         self.assertEqual(re.findall(r'"(\w+)"', order), list(library.STORES))
-        self.assertEqual(set(re.findall(r'data-store="(\w+)"', (web / "downloads.html").read_text("utf-8"))),
-                         set(downloader.STORE_DIRS.values()))
+        tabs = set(re.findall(r'data-store="(\w+)"', (web / "downloads.html").read_text("utf-8")))
+        self.assertIn("Sets", tabs, "Sets: a tab beside the stores, not a store")
+        self.assertEqual(tabs - {"Sets"}, set(downloader.STORE_DIRS.values()))
         unity = REPO / "Packages" / "soloflighter.hoard" / "Editor"
         catalog = (unity / "Core" / "Catalog.cs").read_text("utf-8")
         self.assertEqual(set(re.findall(r'"(\w+)"', re.search(r"Stores = \{(.*?)\};", catalog).group(1))),

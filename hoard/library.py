@@ -1155,9 +1155,12 @@ IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "i
 def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     """Store images, fetched once with the right referrer and cached on disk."""
     found = lib.thumbnail_for(key)
-    if not found:
-        return None
-    url, referer = found
+    return fetch_picture(*found) if found else None
+
+
+def fetch_picture(url: str, referer: str) -> tuple[bytes, str] | None:
+    """A picture from a store's image host (an item's, or one a set remembers), fetched once with the store's
+    referrer and cached on disk: (its bytes, its type), or None."""
     h = hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()
     for p in THUMB_DIR.glob(h + ".*"):
         ctype = next((t for t, e in IMAGE_TYPES.items() if e == p.suffix.lstrip(".")), None)

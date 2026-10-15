@@ -139,6 +139,12 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
         # (Local/_linked/..., see local.keep_picture), never one from its own folder
         own = safe_join(base, e["folder"]) if linked else None
         thumb = (_thumbnail(own, []) if own is not None else None) if linked else _thumbnail(folder, e.get("files", []))
+        thumb_v = None
+        if thumb and thumb.startswith("_thumbnail.") and e["store"] == "Local":   # a picture you can choose (local.py):
+            try:                                                              # a new one is a new address
+                thumb_v = (own if linked else folder).joinpath(thumb).stat().st_mtime_ns // 1000000
+            except OSError:
+                pass
         assets.append({
             "id": i,
             "store": e["store"],
@@ -162,8 +168,9 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "added": e.get("added"),
             "modified": newest or None,
             "thumb": f"{place}/{thumb}" if thumb else None,
+            "thumb_v": thumb_v,
             "also_in": [],
-            "previous": [] if linked else previous.listed(folder),   # what updates replaced (hoard/previous.py)
+            "previous": [] if linked else previous.listed(folder, e.get("files", [])),   # what updates replaced (hoard/previous.py)
         })
 
     # The same product bought on both stores: flag it, never merge it.

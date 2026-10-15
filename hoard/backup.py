@@ -44,24 +44,35 @@ def make(cfg: dict, settings: dict, lib, unlocked: bool) -> dict:
     """The backup, as a document. settings: what Settings shows (server.public_settings)."""
     from .marks import MarkStore
     from .sets import SetStore
-    from .tags import TagStore
+    from .tags import TagStore, tag_key
     from . import libraries
     from .config import root_dir
     marks = MarkStore().load()
     items, stores = lib.snapshot()
-    chosen = {"archived": sorted(marks["archived"]), "unarchived": sorted(marks["unarchived"]),
-              "removed": sorted(marks["removed"])}
+    # locked: hidden products are left out of everything, not just the marks (their keys are their names)
+    out = set() if unlocked else set(marks["hidden"])
+    chosen = {k: sorted(marks[k] - out) for k in ("archived", "unarchived", "removed")}
     if unlocked and marks.get("pin"):
         chosen.update(hidden=sorted(marks["hidden"]), pin=marks["pin"], recovery=marks["recovery"])
+    tags = TagStore().load()
+    for field in ("items", "excluded"):
+        tags[field] = {k: v for k, v in tags[field].items() if k not in out}
+    items = [i for i in items if tag_key(i["store"], i["name"]) not in out]
+    counts = {}
+    for i in items:
+        counts[i["store"]] = counts.get(i["store"], 0) + 1
     return {
         **FORMAT, "made": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "hoard": __version__,
         "settings": {**{k: settings[k] for k in SETTINGS if k in settings}, "root": str(root_dir(cfg)),
                      "library_folders": [str(f) for f in libraries.other_folders(cfg)]},
-        "tags": TagStore().load(),
-        "sets": SetStore().load()["sets"],
+        "tags": tags,
+        "sets": [{**s, "items": [k for k in s["items"] if k not in out],
+                  **({"products": {k: p for k, p in s["products"].items() if k not in out}} if s.get("products") else {})}
+                 for s in SetStore().load()["sets"]],
         "marks": chosen,
         "library": {"items": [{k: i.get(k) for k in ITEM_FIELDS} for i in items],
-                    "stores": {s: {k: v for k, v in info.items() if k in ("count", "updated", "first_read", "source")}
+                    "stores": {s: {**{k: v for k, v in info.items() if k in ("updated", "first_read", "source")},
+                                   **({"count": counts.get(s, 0)} if "count" in info else {})}
                                for s, info in stores.items()}},
     }
 
@@ -143,13 +154,27 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
         except ValueError as e:
             report["skipped"].append(f"the library folder {str(folder)[:200]} ({e})")
     from . import sets as _sets, tags as _tags
+    marks = doc.get("marks") if isinstance(doc.get("marks"), dict) else {}
+    # a backup made while locked has nothing of the hidden products here: their tags, sets and choices stay as they are
+    keep = set() if isinstance(marks.get("pin"), dict) else set(MarkStore().keys("hidden"))
     if isinstance(doc.get("tags"), dict):
         with _tags._tag_lock:
-            TagStore()._save(TagStore.sanitize(doc["tags"]))
+            given, had = TagStore.sanitize(doc["tags"]), TagStore().load()
+            for field in ("items", "excluded"):
+                for k in keep & set(had[field]):
+                    given[field][k] = had[field][k]
+                    for t in had[field][k]:
+                        given["tags"].setdefault(t, had["tags"].get(t) or {"match": None})
+            TagStore()._save(TagStore.sanitize(given))
     if isinstance(doc.get("sets"), list):
         with _sets._lock:
-            SetStore()._save(SetStore.sanitize({"sets": doc["sets"]}))
-    marks = doc.get("marks") if isinstance(doc.get("marks"), dict) else {}
+            given, had = SetStore.sanitize({"sets": doc["sets"]}), {s["id"]: s for s in SetStore().load()["sets"]}
+            for s in given["sets"]:
+                before = had.get(s["id"]) or {"items": []}
+                s["items"] += [k for k in before["items"] if k in keep and k not in s["items"]]
+                s["products"] = {**(s.get("products") or {}),
+                                 **{k: p for k, p in (before.get("products") or {}).items() if k in keep}}
+            SetStore()._save(SetStore.sanitize(given))
     with MarkStore._lock:
         ms = MarkStore()
         now = ms.load()
@@ -157,7 +182,7 @@ def restore(doc: dict, cfg: dict, lib, apply_settings, add_folder) -> dict:
             if kind == "hidden" and not isinstance(marks.get("pin"), dict):
                 continue   # a backup made while locked: the hidden library here stays as it is
             values = marks.get(kind) if isinstance(marks.get(kind), list) else []
-            now[kind] = {v for v in values if isinstance(v, str) and TAG_KEY_RX.match(v)}
+            now[kind] = {v for v in values if isinstance(v, str) and TAG_KEY_RX.match(v)} | (now[kind] & keep)
         for field in ("pin", "recovery"):
             h = marks.get(field)
             if (isinstance(h, dict) and isinstance(h.get("salt"), str) and isinstance(h.get("hash"), str)

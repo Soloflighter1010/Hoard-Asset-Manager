@@ -78,6 +78,21 @@ An `<asset>`:
 
 | `needs` | list, only on some entries (4.0) | What the product's packages use that isn't in them (What it needs): see below |
 
+A set's products are kept in `sets.json` in the app-data folder (4.0; 4.2.0 added the rest):
+`{"version": 1, "sets": [{"id", "name", "items": [<product key>, ...], "note"?, "photos"?: [<https link>, ...],
+"picture"?: "<8 hex digits>.<png|jpg|webp>", "products"?: {<product key>: {"store", "id"?, "name", "creator"?, "url"?,
+"thumbnail"?}}}]}`. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
+`sets.json` (a new name each time it changes). A product key is
+the one tags use (`booth:rusk`). `products` is what each was when it was added, so a set can list products that
+aren't in your library; `url` is only ever on the store's own website, `thumbnail` only on its image host, and
+`photos` only on the photo sites `hoard/sets.py` names.
+
+A **share code** is `H1.` and then that set as JSON, compressed with raw DEFLATE and written in URL-safe base64
+without padding: `{"v": 1, "n": name, "d"?: note, "p"?: [photo links], "i": [[store, id, name, creator, url,
+thumbnail], ...]}` (a row's empty parts at its end are left out; Local and hidden products never are in it). The
+set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. It's shared as
+`https://hoard.furryup.link/set.html#<code>`.
+
 The catalog can also have `sets` (4.0): `[{"name": "Rusk, winter", "items": ["Booth/Kitsu Studio/Rusk", ...]}]`, your
 sets, each product by its `folder` (every copy of it), only products the catalog lists, and only sets with any. A
 reader that doesn't know it ignores it.

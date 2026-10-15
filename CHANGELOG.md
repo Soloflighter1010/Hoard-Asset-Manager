@@ -1,5 +1,56 @@
 # Changelog
 
+## 4.2.0
+
+- **Sets, reworked: any products, downloaded or not, in a tab like a store's.** **Sets** is a tab beside the stores,
+  in the Library and in Downloads (and in the bar at the top of every page). Each set is a big tile, with its own
+  picture or four of its products'; open one and it's a folder of its products: the ones there as their usual tiles
+  (to open, select and right-click as anywhere), then the rest, yours but not downloaded (**Download the N not
+  downloaded** gets them all) or not yours yet (with **Buy on** its store). Make a set there, or choose products in
+  the Library as well as in Downloads and use **Sets** in the selection bar or right-click (**Take out of** the set
+  that's open, too): a set no longer needs its products downloaded. A set remembers what each product is (its name,
+  creator, store page and picture), and has a **Note** and up to 8 **Photos**. Downloads' Sets list in the sidebar is
+  now the tab.
+- **Your own pictures for sets and Local items.** **Choose a picture...** on a set, or in a Local item's details,
+  takes a picture from your computer for its tile (made at most 640 pixels across). A set's is kept in Hoard's
+  app-data folder; a Local item's in Hoard's own folder for it, as its `_thumbnail`, so Hoard for Unity shows it too,
+  and nothing in a folder of yours listed where it is is written. **Take the picture off** goes back to its own.
+- **Share a set as a link.** **Share...** makes a link to the set viewer on Hoard's website, which shows the set's
+  products with their pictures and a link to buy each, your note and your photos. The set is in the link itself,
+  after its `#`, which a browser never sends anywhere: nothing is uploaded, and Hoard keeps no copy. Each picture
+  loads from its store's own image host, and your photos from the photo site they're on (Imgur, Gyazo, X,
+  Bluesky, Reddit, Postimages, ImgBB or Discord), so Hoard hosts nothing. Your own products (Local) and hidden ones
+  are never in a link. **Add a shared set...** pastes one in: what you own already shows as yours, and the rest
+  says where to buy it.
+- **Fixed: Enter in the name box (New set, Rename set) cancelled instead of saving.** Enter now confirms (and
+  waits while a Japanese or Korean input method is still putting a word together).
+
+Fixes from an audit of everything since 4.0 (docs/audit-2026-10-14.md):
+
+- **Fixed: Disk space's From more than one store could delete the copy you chose to keep.** A copy is removed by its
+  product key, which leaves numbers and (labels) out, so Booth's "Hair Pack 1" and "Hair Pack 2" share one; and
+  Downloads stacked them together, though the Library keeps them apart. With Gumroad's "Hair Pack 1" too, keeping
+  Booth's removed and deleted all three. Downloads now stacks each download as its own product, and a copy is offered
+  for removal only when nothing you keep, and no other product, shares its key. Where one store has two copies in a
+  product, each says its name.
+- **Fixed: a backup made while the hidden library was locked named the hidden products.** It left their hidden mark
+  out, but listed them in the library list (name, creator, link), the archive and removed choices, tags and sets.
+  They're left out of all of it now, and restoring a backup made while locked leaves the hidden products' tags, sets
+  and choices here as they are.
+- **Fixed: previous versions of a file in a subfolder** (a Gumroad product's "Textures/body.png", say) weren't listed,
+  so they couldn't be restored, and stayed behind when the product was deleted or moved to another library folder.
+  They're listed, restored, deleted and moved like the rest.
+- **Fixed: support reports could still name your products.** A log's names were hidden only in a few kinds of line
+  (a store's "creator / product" line, "saved:", the summary a sync ends with). Moving, restoring and deleting a
+  product, an editable copy, the integrity check's paths, Local, a task's name and a path in another library folder
+  went in as written, and products the library list doesn't have (Local's, for one) weren't known by name at all.
+  Every name Hoard knows, products, creators and downloaded files, from the library list and every library folder, is
+  now hidden wherever it is in a report, the same name always with the same placeholder. What's left in a path in a
+  library folder (a product deleted since, say) is hidden too, and other library folders show as `<LIBRARY_1>`.
+- **Fixed: Look inside had no limit on the previews it keeps.** A small, made-up package could fill the disk with them
+  (a 1 MB one left a GB). A file's previews are kept up to 64 MB (past that, its other files show their kind), and
+  the cache to 512 MB in all.
+
 ## 4.1.1
 
 - **Fixed: menus and the tour could open off the screen** with a larger **Text size** (Settings, Accessibility).

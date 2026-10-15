@@ -35,7 +35,7 @@ def built_site() -> Path:
 
 
 PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-         "stores.html")
+         "stores.html", "set.html")
 
 
 def every_page(site: Path) -> list[str]:
@@ -162,7 +162,7 @@ class TheSite(unittest.TestCase):
         site = built_site()
         cards = set()
         for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-                     "stores.html", "docs/index.html", "docs/Settings.html"):
+                     "stores.html", "set.html", "docs/index.html", "docs/Settings.html"):
             html = (site / name).read_text("utf-8")
             image = re.search(r'<meta property="og:image" content="([^"]+)">', html)
             self.assertIsNotNone(image, f"{name}: no og:image")
@@ -176,7 +176,7 @@ class TheSite(unittest.TestCase):
             self.assertEqual(jpeg_size(picture.read_bytes()), (1200, 630), "a JPEG every site shows, at 1.91:1")
             self.assertIn('<meta name="theme-color" content="#F0B429">', html, f"{name}: the embed's edge in Hoard's gold")
             cards.add(image.group(1))
-        self.assertEqual(len(cards), 9, "each page its own card, with its name on it (the docs share one)")
+        self.assertEqual(len(cards), 10, "each page its own card, with its name on it (the docs share one)")
         self.assertEqual({p.name for p in SITE.glob("img/social*.jpg")}, {c.rsplit("/", 1)[1] for c in cards},
                          "scripts/make_social_cards.py draws just the cards the pages show")
 

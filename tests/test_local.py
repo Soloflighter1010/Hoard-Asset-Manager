@@ -33,6 +33,25 @@ def tree(folder: Path) -> dict:
     return {str(p.relative_to(folder)): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
+def _png(w: int, h: int) -> bytes:
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\0" + b"\x3c\x78\xc8" * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+def http_get(srv, path: str) -> bytes:
+    c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+    c.request("GET", path, headers={ACCESS_HEADER: srv.key})
+    data = c.getresponse().read()
+    c.close()
+    return data
+
+
 class LocalItems(unittest.TestCase):
 
     def setUp(self):
@@ -107,6 +126,45 @@ class LocalItems(unittest.TestCase):
         local.rescan(self.cfg, self.root, key)
         self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.png"], "the picture it had is gone, so another")
 
+    def test_a_picture_of_your_choosing(self):
+        """Your own picture for an item's tile: kept in Hoard's own folder for it, never in yours; a rescan keeps it,
+        taking it off brings back one of its own, and it goes with the item."""
+        import base64
+        self.addCleanup(shutil.rmtree, local.pictures_dir(), True)
+        jpeg = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0" + b"0" * 40).decode()
+        before = tree(self.src)
+        listed = local.add(self.cfg, self.root, str(self.src), name="Working Folder", copy=False)
+        key = next(iter(downloader.Manifest(self.root / "Local").assets))
+        own = self.root / "Local" / listed["folder"]
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.png"], "one of its own, to begin with")
+        local.choose_picture(self.cfg, self.root, key, jpeg)
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.jpg"])
+        local.rescan(self.cfg, self.root, key)
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.jpg"], "a rescan keeps the one you chose")
+        self.assertEqual(local.chosen_folders(self.root), {"Local/" + listed["folder"]})
+        [a] = downloads.build_index(self.root, self.catalog())["assets"]
+        self.assertTrue(a["thumb"].endswith("/_thumbnail.jpg") and a["thumb_v"], "a new picture is a new address")
+        local.choose_picture(self.cfg, self.root, key, None)
+        self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.png"], "one of its own again")
+        self.assertEqual(local.chosen_folders(self.root), set())
+        self.assertEqual(tree(self.src), before, "nothing of yours is written")
+        # a copy in Hoard: the picture beside it, never taken for a changed file, and gone with it
+        copy = local.add(self.cfg, self.root, str(self.src), copy=True)
+        key = next(k for k in downloader.Manifest(self.root / "Local").assets if k != own.name)
+        for bad, why in (("data:image/webp;base64," + base64.b64encode(b"RIFF0000WEBPVP8 ").decode(), "PNG or JPEG"),
+                         ("data:image/svg+xml;base64," + base64.b64encode(b"<svg/>").decode(), "PNG, JPEG or WebP"),
+                         ("not a picture", "isn't a picture")):
+            with self.assertRaises(ValueError) as e:
+                local.choose_picture(self.cfg, self.root, key, bad)
+            self.assertIn(why, str(e.exception))
+        local.choose_picture(self.cfg, self.root, key, jpeg)
+        folder = self.root / "Local" / copy["folder"]
+        self.assertTrue((folder / "_thumbnail.jpg").is_file())
+        self.assertEqual(downloader.check_integrity(self.root)["changed"], [])
+        local.remove(self.cfg, self.root, key)
+        self.assertFalse(folder.exists(), "its picture went with it")
+        self.assertEqual(list(local.pictures_dir().glob(key + ".*")), [])
+
     def test_only_a_manifest_hoard_sealed_names_a_folder(self):
         local.add(self.cfg, self.root, str(self.src), copy=False)
         mpath = self.root / "Local" / "_manifest.json"
@@ -163,6 +221,13 @@ class LocalItems(unittest.TestCase):
             time.sleep(0.1)
         [entry] = self.catalog()
         self.assertIs(srv.cfg["local_copy"], False, "the choice is offered next time")
+        self.addCleanup(shutil.rmtree, local.pictures_dir(), True)
+        jpeg = "data:image/jpeg;base64,/9j/4AAQ"   # (its first bytes are all that's checked)
+        self.assertEqual(call("/api/local/picture", {"folder": entry["folder"], "image": jpeg}), (200, {"ok": True}))
+        [a] = [a for a in json.loads(http_get(srv, "/api/assets"))["assets"] if a["store"] == "Local"]
+        self.assertTrue(a["own_picture"] and a["thumb"].endswith("_thumbnail.jpg"))
+        self.assertEqual(call("/api/local/picture", {"folder": "Local/nope", "image": jpeg})[0], 404)
+        self.assertEqual(call("/api/local/picture", {"folder": entry["folder"], "image": "<svg/>"})[0], 400)
         self.assertEqual(call("/api/local/remove", {"folder": entry["folder"]})[0], 400, "not without confirming")
         self.assertEqual(call("/api/local/remove", {"folder": "Booth/x", "confirm": True})[0], 404)
         self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # a job is running: these wait their turn
@@ -325,6 +390,18 @@ class LocalPage(unittest.TestCase):
             page.locator("#grid .slot", has_text="Commission Kit").click()
             page.get_by_text("Listed where it is").wait_for()
             page.get_by_text("For A commission.").wait_for()
+            # a picture of your choosing for its tile (in Hoard's own folder for it: nothing of yours is written)
+            self.addCleanup(shutil.rmtree, local.pictures_dir(), True)
+            with page.expect_file_chooser() as chosen:
+                page.click("[data-act='local-picture']")
+            chosen.value.set_files(files=[{"name": "kit.png", "mimeType": "image/png", "buffer": _png(48, 32)}])
+            page.get_by_text("Its tile shows that picture now.").wait_for()
+            page.wait_for_function("() => (document.querySelector('#grid .slot img') || {}).naturalWidth === 48")
+            self.assertRegex(page.locator("#grid .slot img").get_attribute("src"), r"/_thumbnail\.(png|jpg)\?v=\d+&k=")
+            self.assertEqual(sorted(p.name for p in src.iterdir()), ["Kit.unitypackage"])
+            page.locator("[data-act='local-unpicture']").click()
+            page.get_by_text("Took the picture off.").wait_for()
+            page.locator("#grid .slot .ph").wait_for()   # (it has no picture of its own)
             self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # something is running: taking it out waits its turn
             try:
                 page.locator("[data-act='local-remove']").click()

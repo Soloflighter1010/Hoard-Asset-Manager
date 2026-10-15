@@ -747,6 +747,41 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 12.5px/1.5 ui-monospace, monospace; }
 .proj .muted { font-size: 12px; color: var(--dust); }
 .projects .none { margin: 0; color: var(--dust); }
+/* Sets, a tab beside the stores: each set a big tile, its own picture or four of its products'; a set open is a folder
+   of its products, the ones here as the usual tiles, then the rest (not downloaded, or not yours yet) */
+.setview { margin: 0 0 18px; }
+.setgrid { grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--slot-size) * 1.55)), 1fr)); gap: 26px 18px; }
+.setgrid .art, .sethead > .art { aspect-ratio: 4 / 3; }
+.settile .nm-t { font-size: 16px; }
+.collage { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; width: 100%; height: 100%; background: var(--cave); }
+.collage img { width: 100%; height: 100%; min-height: 0; object-fit: cover; }
+.collage.n1 img { grid-area: 1 / 1 / 3 / 3; }
+.collage.n2 img, .collage.n3 img:first-child { grid-row: 1 / 3; }
+.crumbs { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 14px; color: var(--dust); }
+.sethead { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.sethead h2 { font: 400 26px/1.2 var(--display); margin: 0 0 4px; overflow-wrap: anywhere; }
+.sethead .muted { margin: 0 0 8px; color: var(--dust); font-size: 13.5px; }
+.setnote { margin: 0 0 12px; white-space: pre-line; font-size: 14px; max-height: 7.5em; overflow: auto; }
+.setextra { margin: 16px 0 0; }
+.setextra summary { cursor: pointer; font-weight: 700; color: var(--dust); }
+.setextra textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; margin: 10px 0 8px; padding: 8px; border: 0;
+  border-radius: 8px; resize: vertical; background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 13px/1.45 var(--body); }
+@media (max-width: 640px) { .sethead { grid-template-columns: minmax(0, 1fr); } .sethead > .art { max-width: 240px; } }
+.setmore h3 { margin: 30px 0 14px; font: 700 15px var(--body); color: var(--dust); }
+.setmore h3 .n { margin-left: 4px; font-weight: 400; }
+.slot.ext .ext-main { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
+.slot.ext a.ext-main:focus-visible { outline: none; }
+.slot.ext a.ext-main:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 3px; }
+.slot.ext.wanted .art img { opacity: .82; }
+.ext-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: -3px; font-size: 12.5px; }
+.ext-what { color: var(--dust); }
+.slot.ext.wanted .ext-what { color: var(--warn); }
+.setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
+.sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sets .row > button, .sets .row > a { width: auto; flex: none; margin: 0; }
+.sets-top { margin: 0 0 16px; }
+dialog.share { width: min(560px, calc(var(--vw) - 32px)); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); }
@@ -919,7 +954,7 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
+  <nav class="apptabs" aria-label="Views"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <label class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search your hoard" aria-label="Search your hoard" autocomplete="off">
@@ -1026,7 +1061,9 @@ body.less-motion .tour-try::before { animation: none; }
     </div>
     <div id="status" class="status"></div>
     <div id="viewBar" class="viewbar" hidden></div>
+    <div id="setView" class="setview sets" hidden></div>
     <div id="grid" class="grid" aria-label="Your assets"></div>
+    <div id="setMore" class="setmore" hidden></div>
     <div id="empty" class="empty" hidden></div>
     <footer class="foot">
       <div class="foot-brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(0 0) scale(1.0)">
@@ -1350,7 +1387,7 @@ const usedStores = () => STORE_ORDER.filter(shown);
 const importable = s => (DATA.importable || ["booth", "jinxxy", "payhip", "itch"]).includes(s);
 const downloadable = s => (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).includes(s);
 let importStore = null, importing = null;
-const state = { view: "library", q: "", store: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false };
+const state = { view: "library", q: "", store: "", set: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false };
 // Downloaded, or not yet (issue #17): "yes", "no", or "" for both
 const DISK = { yes: "Downloaded", no: "Not downloaded yet" };
 const onDisk = a => a.on_disk != null;
@@ -1408,11 +1445,12 @@ async function load() {
 
 /* ---------- filtering */
 function matches(a, skip) {
-  if (!inView(a)) return false;
+  if (inSets() && !state.set) return false;   // (every set's tile: no product's)
+  if (!(inSets() ? setHas(a) : inView(a))) return false;   // a set's folder: all of it, archived or not
   if (state.copies && (a[state.copies.field] !== state.copies.key || (state.copies.store && a.store !== state.copies.store))) return false;
   if (skip !== "disk" && state.disk && (state.disk === "yes") !== onDisk(a)) return false;
   if (skip !== "fresh" && state.fresh && !a.new) return false;
-  if (state.store && a.store !== state.store) return false;
+  if (state.store && !inSets() && a.store !== state.store) return false;   // (Sets: every set's tile, or the one open)
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   if (!shown(a.store)) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
@@ -1455,8 +1493,10 @@ function showCopies(a, field = "match_key") {
   state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.fresh = false; state.tags.clear(); render();
 }
 function render() {
+  if (!inSets()) state.set = "";
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderStoreSeg(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
+  drawSets();
 }
 // The store tabs count what's in the view you're in (Library, Archive...), so they're drawn with everything else: drawn
 // only as the library loaded, a load while you were in another view (a routine check finishing, say) left them
@@ -1469,7 +1509,8 @@ function renderStoreSeg() {
   const html = `<button role="radio" data-store="" aria-checked="${!state.store}">Everything<span class="n">${here.length.toLocaleString()}</span></button>` +
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
-      `<span class="dot ${s}"></span>${label(s)}<span class="n">${(counts[s] || 0).toLocaleString()}</span></button>`).join("");
+      `<span class="dot ${s}"></span>${label(s)}<span class="n">${(counts[s] || 0).toLocaleString()}</span></button>`).join("") +
+    `<button role="radio" class="sets" data-store="Sets" aria-checked="${inSets()}">${esc(tr("Sets"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
   if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
 function renderStores() {
@@ -1536,7 +1577,7 @@ function renderGrid(list) {
   } else if (!list.length) {
     empty.innerHTML = `<h2>Nothing in your hoard matches that</h2><p><button class="linkish" data-clear="all">Clear filters</button></p>`;
   }
-  empty.hidden = list.length > 0;
+  empty.hidden = list.length > 0 || (inSets() && !DATA.error && DATA.items.length > 0);   // (Sets says what it has)
 }
 function renderFacets(list) {
   renderTagFacets(list);
@@ -1563,15 +1604,18 @@ function renderStatus(list) {
   const pills = [];
   if (state.copies) pills.push(["copies", "", "Copies of", state.copies.name]);
   if (state.q) pills.push(["q", "", "Search", state.q]);
-  if (state.store) pills.push(["store", "", "Store", label(state.store)]);
+  if (state.store && !inSets()) pills.push(["store", "", "Store", label(state.store)]);   // (Sets says where you are)
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   if (state.disk) pills.push(["disk", "", "Show", DISK[state.disk]]);
   if (state.fresh) pills.push(["fresh", "", "Show", "New"]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   const total = DATA.items.filter(a => inView(a) && shown(a.store)).length;   // this view: Library, Archive, ...
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
-  $("#count").hidden = !total;
-  $("#count").innerHTML = filtersActive()
+  for (const [a, here] of [[$('.apptabs a[href="/"]'), !inSets()], [$('.apptabs a[href="/#store=Sets"]'), inSets()]])
+    if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
+  document.title = inSets() ? tr("Hoard: Sets") : "Hoard";
+  $("#count").hidden = !total || (inSets() && !!state.set);   // (a set open has its own heading)
+  $("#count").innerHTML = inSets() ? esc(setsCountText()) : filtersActive()
     ? `${list.length} <span class="of">of ${things(total)}</span>`
     : `${things(total)} ${{ archive: "in your archive", removed: "removed", hidden: "hidden" }[state.view] || "in your hoard"}`;
   $("#status").innerHTML =
@@ -1583,7 +1627,7 @@ function syncControls() {
   if ($("#q").value !== state.q) $("#q").value = state.q;
   for (const b of $("#storeSeg").children) b.setAttribute("aria-checked", String(b.dataset.store === state.store));
   // the stores you're signed in to (read, and not signed out since), for Everything's glow
-  setGlow(state.store, usedStores().filter(s => { const i = DATA.stores[s] || {};
+  setGlow(inSets() ? "" : state.store, usedStores().filter(s => { const i = DATA.stores[s] || {};
     return i.updated && !/^(Not signed in|Signed out)/.test(i.error || ""); }));
   $("#sort").value = state.sort;
 }
@@ -1666,7 +1710,7 @@ function showDetail(a, focus = true) {
       : `<span class="muted">Hoard lists what you own on ${store}, and doesn't download it: get the files on ${store}.</span>`}</p>` +
     (links ? `<div class="actions links">${links}</div>` : "") +
     `<h3>Organise</h3><div class="marks">${markButtons(a)}</div>` +
-    tagSection(a) +
+    tagSection(a) + setsSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
@@ -1690,6 +1734,7 @@ function saveHash() {
   const p = new URLSearchParams();
   if (state.q) p.set("q", state.q);
   if (state.store) p.set("store", state.store);
+  if (state.set) p.set("set", state.set);
   if (state.creator) p.set("creator", state.creator);
   if (state.disk) p.set("downloaded", state.disk);
   if (state.fresh) p.set("new", "1");
@@ -1704,12 +1749,21 @@ function readHash() {
   state.disk = DISK[p.get("downloaded")] ? p.get("downloaded") : "";
   state.fresh = p.get("new") === "1";
   state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
+  state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
+  if (state.set) state.store = "Sets";
+  if (p.get("open")) openKey = p.get("open").slice(0, 400);   // a product, from a set's folder in Downloads
 }
+addEventListener("hashchange", () => {   // the bar's Sets, from here
+  if (/(^|[#&])setup\b/.test(location.hash)) { if (typeof openSetup === "function") openSetup(); return; }
+  const was = openKey;
+  readHash(); render();
+  if (openKey && openKey !== was && byKey.has(openKey)) showDetail(byKey.get(openKey), true);
+});
 
 /* ---------- events */
 let qTimer;
 $("#q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = e.target.value; render(); }, 90); });
-$("#storeSeg").addEventListener("click", e => { const b = e.target.closest("[data-store]"); if (b) { state.store = b.dataset.store; render(); } });
+$("#storeSeg").addEventListener("click", e => { const b = e.target.closest("[data-store]"); if (b) { state.store = b.dataset.store; state.set = ""; render(); } });
 $("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
@@ -2049,6 +2103,9 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "delete-files") { deleteFiles([a]); return; }
+  if (b.dataset.act === "unset") { changeSets({ action: "remove", id: b.dataset.set, items: [a.tag_key] }); return; }
+  if (b.dataset.act === "toset") { addToSet([a], $("#setPick").value); return; }
+  if (b.dataset.act === "showset") { showSet(b.dataset.set); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") showCopies(a);
@@ -2079,6 +2136,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-
   seg.addEventListener("focusin", e => e.target.scrollIntoView({ block: "nearest", inline: "nearest" }));
 }
 /* ---------- how the tag code below finds its way around this page */
+afterSetMade = () => load();   // (shared.js: a set made from a project shows in Sets)
 const T = {
   slotKey: "key",
   id: a => a.key,
@@ -2089,13 +2147,15 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  all: () => DATA.items,
   membersOf: key => {   // a stack's copies, all chosen together (as many as "Copies of" shows)
     const a = byKey.get(key), k = a && stackKey(a);
     return k && (stackSize.get(key) || 0) > 1 ? DATA.items.filter(x => stackKey(x) === k && inView(x) && shown(x.store)).map(x => x.key) : null;
   },
+  download: keys => startDownload(storesOf(keys), null, null, keys),   // (the Sets tab)
   actions: () => ({   // what the selection bar and right-click offer here
     main: [{ label: "Download", primary: true, run: downloadSelected }],
-    groups: [TAG_ACTIONS, { name: "More", items: [...markActions(state.view),
+    groups: [TAG_ACTIONS, SET_ACTIONS(), { name: "More", items: [...markActions(state.view),
       ...(state.view === "removed" ? [{ label: "Delete for good", danger: true, run: list => purgeItems(list) }] : []),
       { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
   }),
@@ -2252,6 +2312,7 @@ function wireApp() {
   wireTasks();
   wireNews();
   wireProjects();
+  wireSets();
   wireClose();
   $("#updCheck").addEventListener("click", checkUpdate);
   $("#updInstall").addEventListener("click", installUpdate);

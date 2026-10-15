@@ -84,6 +84,40 @@ class RoundTrip(unittest.TestCase):
         self.assertNotIn("secretthing", json.dumps(doc))
         self.assertEqual(set(doc["marks"]), {"archived", "unarchived", "removed"})
 
+    def hide_one_in_use(self) -> str:
+        """A hidden product as one really is: in the library, archived, tagged and in a set (setUp's isn't any)."""
+        secret = tag_key("Booth", "Secret Thing")
+        self.lib.replace_store("booth", [*self.lib.snapshot()[0], library.item(
+            "booth", "2", name="Secret Thing", creator="Shy Maker", url="https://booth.pm/ja/items/2")])
+        MarkStore().change("archived", [secret], True)
+        TagStore().change({"action": "assign", "keys": [secret], "add": ["avatars"]})
+        set_id = SetStore().load()["sets"][0]["id"]
+        SetStore().change({"action": "add", "id": set_id, "items": [secret]},   # (a set remembers what each product is)
+                          details=lambda k: {"store": "booth", "name": "Secret Thing", "creator": "Shy Maker",
+                                             "url": "https://booth.pm/ja/items/2"})
+        return secret
+
+    def test_locked_names_them_nowhere(self):
+        """It left them out of the marks, but listed them in the library list (name, creator, link), the archive,
+        tags and sets: a backup made while locked named every hidden product."""
+        secret = self.hide_one_in_use()
+        text = json.dumps(self.make(unlocked=False))
+        for said in ("Secret Thing", "Shy Maker", "booth.pm/ja/items/2", secret):
+            self.assertNotIn(said, text)
+        self.assertEqual(self.make(unlocked=False)["library"]["stores"]["booth"].get("count", 1), 1, "nor counted")
+        self.assertIn("Secret Thing", json.dumps(self.make(unlocked=True)), "unlocked: they go in")
+
+    def test_a_locked_backup_restored_keeps_the_hidden_ones_as_they_are(self):
+        secret = self.hide_one_in_use()
+        doc = json.loads(json.dumps(self.make(unlocked=False)))
+        backup.restore(doc, self.cfg, self.lib, server.apply_settings, lambda p: None)
+        self.assertEqual(MarkStore().keys("hidden"), {secret})
+        self.assertIn(secret, MarkStore().keys("archived"), "still archived")
+        self.assertEqual(TagStore().load()["items"][secret], ["avatars"], "still tagged")
+        self.assertIn(secret, SetStore().load()["sets"][0]["items"], "still in its set")
+        self.assertEqual(SetStore().load()["sets"][0]["products"][secret]["creator"], "Shy Maker", "and what it is")
+        self.assertIn(RUSK, SetStore().load()["sets"][0]["items"])
+
     def test_never_sign_ins_or_keys(self):
         text = json.dumps(self.make(unlocked=True))
         for word in ("sign-ins", "integrity", "api_key", "cookie", "password"):
@@ -196,7 +230,9 @@ class Page(unittest.TestCase):
             page.click("nav.apptabs a[href='/downloads']")
             page.click("#settingsBtn")
             page.click("#backupMake")
-            page.get_by_text("Hoard backups").first.wait_for()
+            # "Show in folder" comes once the file is saved: the hint already names Documents › Hoard backups, so
+            # waiting for that text went on before the backup was written (seen on Windows)
+            page.locator("#backupShow").wait_for()
             [made] = (tmp / "home" / "Documents" / "Hoard backups").glob("*.json")
             TagStore().change({"action": "delete", "name": "avatars"})
             page.set_input_files("#backupFile", str(made))
