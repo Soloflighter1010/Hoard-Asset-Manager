@@ -11,7 +11,7 @@
   from the server at once, as deleting the set does. The set viewer opens short links, and says when one has run
   out or been deleted; **Add a shared set...** takes them too. Nothing is uploaded unless you make a short link:
   the long link works as before. The share server is `share/` in the repository (a Cloudflare Worker, with its own
-  tests); `PRIVACY.md` says what it keeps.
+  tests); `PRIVACY.md` says what it keeps, and `TERMS.md` has a section on using it.
 
 ## 4.2.1
 

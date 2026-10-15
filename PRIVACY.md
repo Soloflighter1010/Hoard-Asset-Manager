@@ -64,7 +64,8 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   link, after its `#`, which a browser never sends anywhere, so the server can't read the set, and neither can I.
   The server keeps the locked copy, when it runs out, and a fingerprint (SHA-256) of the token your Hoard keeps to
   update or delete it, for 14 days from when you make or last update the link, and nothing else. It keeps no logs.
-  **Delete the short link** (or deleting the set) deletes it from the server straight away. Opening a short link
+  **Delete the short link** (or deleting the set) deletes it from the server straight away. I may delete a short
+  link that's reported for abuse, by its id, without being able to read it (see [TERMS.md](TERMS.md)). Opening a short link
   (in the set viewer, or in **Add a shared set**) fetches the locked copy by its id. The server runs on
   Cloudflare, which sees the IP address of whoever makes or opens a short link, as with any website, under
   [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link never involves it.
