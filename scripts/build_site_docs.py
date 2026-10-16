@@ -24,7 +24,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 WIKI = REPO / "wiki"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from site_chrome import GITHUB, footer, header  # noqa: E402
+from site_chrome import GITHUB, footer, header, preloads  # noqa: E402
 
 LIST = re.compile(r"^( *)([-*]|\d+\.) +(.*)$")
 FENCE = re.compile(r"^ *```")
@@ -151,9 +151,12 @@ class Renderer:
                 while i < n and lines[i].lstrip().startswith("|"):
                     rows.append(cells(lines[i]))
                     i += 1
+                # each cell names its column (data-label): on a phone, a row is a card with its values under them
+                labels = [html.escape(plain(self.inline(c)), quote=True) for c in head]
                 out.append('<div class="table"><table><thead><tr>' + "".join(f"<th>{self.inline(c)}</th>" for c in head)
                            + "</tr></thead><tbody>" + "".join(
-                               "<tr>" + "".join(f"<td>{self.inline(c)}</td>" for c in r) + "</tr>" for r in rows)
+                               "<tr>" + "".join((f'<td data-label="{labels[k]}">' if k < len(labels) and labels[k] else "<td>")
+                                                + f"{self.inline(c)}</td>" for k, c in enumerate(r)) + "</tr>" for r in rows)
                            + "</tbody></table></div>")
                 continue
             m = LIST.match(line)
@@ -258,7 +261,7 @@ PAGE = """<!doctype html>
   <meta name="theme-color" content="#F0B429">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="../favicon.ico">
-  <link rel="stylesheet" href="../styles.css">
+{preloads}  <link rel="stylesheet" href="../styles.css">
 </head>
 <body>
   <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
@@ -315,6 +318,7 @@ def build(out: Path, folder: Path = WIKI) -> list[str]:
                       for lvl, a, t in r.headings if lvl <= 3)
         toc = f"<h2>On this page</h2>{toc}" if toc else ""
         page = (PAGE.replace("{header}", header("docs/", up="../")).replace("{footer}", footer(up="../"))
+                .replace("{preloads}", preloads("../"))
                 .replace("{sidebar}", side).replace("{toc}", toc).replace("{GITHUB}", GITHUB)
                 .replace("{name}", name).replace("{file}", page_file(name))
                 .replace("{description}", html.escape(intro, quote=True))

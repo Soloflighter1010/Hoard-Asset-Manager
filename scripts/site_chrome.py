@@ -4,7 +4,8 @@ has them: the logo, the pages as tabs, GitHub and a gold Download; the mark, the
     python3 scripts/site_chrome.py          checks site/*.html carry them as written here
     python3 scripts/site_chrome.py --write  writes them into site/*.html
 
-A page in a folder (the docs, in docs/) gets the same, its links one folder up. Standard library only.
+A page in a folder (the docs, in docs/) gets the same, its links one folder up. Every page also asks for the
+site's fonts with its stylesheet (preloads). Standard library only.
 """
 from __future__ import annotations
 
@@ -37,6 +38,17 @@ FOOT_LINKS = [("docs/", "Docs"), ("how-it-works.html", "How it works"), ("change
 # which tab each page is (the rest are none, or are in docs/)
 CURRENT = {"index.html": "./", "how-it-works.html": "how-it-works.html", "trust.html": "trust.html",
            "testers.html": "testers.html", "changelog.html": "changelog.html"}
+
+
+# The fonts every page uses, asked for with the page instead of once its stylesheet has arrived (Lighthouse, on a
+# phone: the page, then styles.css, then each font, 0.7 s before any text could show in them).
+FONTS = ("DelaGothicOne-Regular", "ZenMaruGothic-Medium", "ZenMaruGothic-Bold")
+
+
+def preloads(up: str = "") -> str:
+    """The <link rel="preload"> lines for the fonts, for a page that many folders down (up: "" or "../")."""
+    return "".join(f'  <link rel="preload" href="{up}fonts/{f}.woff2" as="font" type="font/woff2" crossorigin>\n'
+                   for f in FONTS)
 
 
 def _href(h: str, up: str) -> str:
@@ -76,11 +88,13 @@ def footer(extra: str = "", up: str = "") -> str:
 
 
 def apply(page: str, name: str) -> str:
-    """A page of site/ with the bar and footer as written here."""
+    """A page of site/ with the bar, footer and font preloads as written here."""
     page, n1 = re.subn(r'<header class="bar">.*?</header>', lambda m: header(CURRENT.get(name)), page, count=1, flags=re.S)
     page, n2 = re.subn(r'<footer class="foot">.*?</footer>', lambda m: footer(), page, count=1, flags=re.S)
-    if n1 != 1 or n2 != 1:
-        raise ValueError(f"{name}: no bar or footer to replace")
+    page, n3 = re.subn(r'(?:  <link rel="preload" href="[^"]*" as="font"[^>]*>\n)*(  <link rel="stylesheet" href="styles\.css">)',
+                       lambda m: preloads() + m.group(1), page, count=1)
+    if n1 != 1 or n2 != 1 or n3 != 1:
+        raise ValueError(f"{name}: no bar, footer or stylesheet to place them by")
     return page
 
 

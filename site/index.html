@@ -19,6 +19,9 @@
   <meta name="theme-color" content="#F0B429">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="favicon.ico">
+  <link rel="preload" href="fonts/DelaGothicOne-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/ZenMaruGothic-Medium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/ZenMaruGothic-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -86,8 +89,8 @@
             their files.</p>
         </div>
         <picture class="shot">
-          <source srcset="img/library-light.webp" media="(prefers-color-scheme: light)">
-          <img src="img/library-dark.webp" width="1600" height="950"
+          <source srcset="img/library-light-800.webp 800w, img/library-light-1200.webp 1200w, img/library-light.webp 1600w" sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1160px) calc(100vw - 48px), 1112px" media="(prefers-color-scheme: light)">
+          <img fetchpriority="high" src="img/library-dark.webp" srcset="img/library-dark-800.webp 800w, img/library-dark-1200.webp 1200w, img/library-dark.webp 1600w" sizes="(max-width: 760px) calc(100vw - 32px), (max-width: 1160px) calc(100vw - 48px), 1112px" width="1600" height="950"
                alt="Hoard's library: products from five stores as picture tiles, with store tabs, search, tags and creators down the side.">
         </picture>
       </div>
@@ -162,29 +165,29 @@
       <div class="gallery">
         <figure>
           <div class="art wide"><picture>
-            <source srcset="img/downloads-details-light.webp" media="(prefers-color-scheme: light)">
-            <img src="img/downloads-details-dark.webp" width="1600" height="950" loading="lazy" alt="Hoard's Downloads page, with a product's details open beside the tiles: its store, the Unity project that uses it, and buttons to open its folder or make an editable copy.">
+            <source srcset="img/downloads-details-light-800.webp 800w, img/downloads-details-light-1200.webp 1200w, img/downloads-details-light.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" media="(prefers-color-scheme: light)">
+            <img src="img/downloads-details-dark.webp" srcset="img/downloads-details-dark-800.webp 800w, img/downloads-details-dark-1200.webp 1200w, img/downloads-details-dark.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" width="1600" height="950" loading="lazy" alt="Hoard's Downloads page, with a product's details open beside the tiles: its store, the Unity project that uses it, and buttons to open its folder or make an editable copy.">
           </picture><i class="notch booth"></i></div>
           <figcaption><strong>Downloads.</strong> Every file you've downloaded, in tidy folders. Open one to see its files, which of your Unity projects use it, and make an editable copy.</figcaption>
         </figure>
         <figure>
           <div class="art wide"><picture>
-            <source srcset="img/projects-light.webp" media="(prefers-color-scheme: light)">
-            <img src="img/projects-dark.webp" width="1600" height="950" loading="lazy" alt="Hoard's Projects panel: a Unity project's assets, each marked in the project or partly in it, and its credits list.">
+            <source srcset="img/projects-light-800.webp 800w, img/projects-light-1200.webp 1200w, img/projects-light.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" media="(prefers-color-scheme: light)">
+            <img src="img/projects-dark.webp" srcset="img/projects-dark-800.webp 800w, img/projects-dark-1200.webp 1200w, img/projects-dark.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" width="1600" height="950" loading="lazy" alt="Hoard's Projects panel: a Unity project's assets, each marked in the project or partly in it, and its credits list.">
           </picture><i class="notch gumroad"></i></div>
           <figcaption><strong>Projects.</strong> Every Unity project you open Hoard's window in: the assets it uses, which have updates, and its credits list, ready to copy.</figcaption>
         </figure>
         <figure>
           <div class="art wide"><picture>
-            <source srcset="img/local-add-light.webp" media="(prefers-color-scheme: light)">
-            <img src="img/local-add-dark.webp" width="1600" height="950" loading="lazy" alt="The Add to Local panel: a folder or file, its name, who made it and who it's for, and a choice to copy it into Hoard or list it where it is.">
+            <source srcset="img/local-add-light-800.webp 800w, img/local-add-light-1200.webp 1200w, img/local-add-light.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" media="(prefers-color-scheme: light)">
+            <img src="img/local-add-dark.webp" srcset="img/local-add-dark-800.webp 800w, img/local-add-dark-1200.webp 1200w, img/local-add-dark.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" width="1600" height="950" loading="lazy" alt="The Add to Local panel: a folder or file, its name, who made it and who it's for, and a choice to copy it into Hoard or list it where it is.">
           </picture><i class="notch jinxxy"></i></div>
           <figcaption><strong>Your own packages.</strong> Keep what you make beside what you buy. Copy it into Hoard, or list it where it already is.</figcaption>
         </figure>
         <figure>
           <div class="art wide"><picture>
-            <source srcset="img/stores-light.webp" media="(prefers-color-scheme: light)">
-            <img src="img/stores-dark.webp" width="1600" height="950" loading="lazy" alt="Hoard's Stores panel: Booth, Gumroad, Jinxxy, Payhip and itch.io, each with sign in, refresh and download.">
+            <source srcset="img/stores-light-800.webp 800w, img/stores-light-1200.webp 1200w, img/stores-light.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" media="(prefers-color-scheme: light)">
+            <img src="img/stores-dark.webp" srcset="img/stores-dark-800.webp 800w, img/stores-dark-1200.webp 1200w, img/stores-dark.webp 1600w" sizes="(max-width: 760px) calc(100vw - 34px), (max-width: 1160px) calc(50vw - 38px), 540px" width="1600" height="950" loading="lazy" alt="Hoard's Stores panel: Booth, Gumroad, Jinxxy, Payhip and itch.io, each with sign in, refresh and download.">
           </picture><i class="notch itch"></i></div>
           <figcaption><strong>Stores.</strong> Sign in to each store once, then refresh and download from one place.</figcaption>
         </figure>

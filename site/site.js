@@ -1,6 +1,7 @@
 // Hoard's website. Everything works without this; it only helps:
 // - the main button names your system and goes to its download,
-// - each download button gets its file's own address from the latest release (else it opens the releases page),
+// - each download button gets its file's own address from the latest release (latest.json, written when the site is
+//   deployed; else it opens the releases page),
 // - Copy copies the VCC listing's address,
 // - the store tabs on the front page tint the glow and say what Hoard does on each store, as the app's tabs do,
 // - the docs' search box finds any section of the docs (docs/search.json),
@@ -9,6 +10,7 @@
   "use strict";
   document.documentElement.classList.add("js");
   const REPO = "Soloflighter1010/Hoard-Asset-Manager";
+  const HERE = document.currentScript ? document.currentScript.src : location.href;   // (the docs are a folder down)
 
   const ua = navigator.userAgent || "", platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
   // an iPad says it's a Mac (since iPadOS 13): a Mac has no touch screen
@@ -28,8 +30,9 @@
       Object.keys(names).filter(k => k !== os).map(k => names[k]).join(" and ") + ".";
   }
 
-  // The latest release's files, by name. Asked of GitHub's public API; nothing about you is sent with it.
-  if (document.querySelector("a[data-file]")) fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" } })
+  // The latest release's version and files, by name: latest.json, beside this script, written from GitHub's list of
+  // releases each time the site is deployed (each release deploys it), so a visit never asks GitHub itself.
+  if (document.querySelector("a[data-file]")) fetch(new URL("latest.json", HERE))
     .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
     .then(release => {
       const assets = Array.isArray(release.assets) ? release.assets : [];

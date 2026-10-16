@@ -56,7 +56,12 @@ class RoundTrip(unittest.TestCase):
         self.assertIn("secretthing", text, "unlocked: hidden items go in")
         self.assertIn("pin", doc["marks"])
         self.assertNotIn("downloadables", text, "never a link that downloads what you bought")
-        self.assertNotIn("2468", text)
+        # only as their slow hashes, whose random hex held "2468" by chance once: look everywhere else
+        outside = text
+        for field in ("pin", "recovery"):
+            for part in ("salt", "hash"):
+                outside = outside.replace(doc["marks"][field][part], "")
+        self.assertNotIn("2468", outside)
         self.assertNotIn(self.phrase, text, "never the recovery words")
 
         def values(v):   # every value the marks hold (a word can be part of anything else too: "midnight" is a theme)

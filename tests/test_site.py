@@ -57,10 +57,12 @@ class Refs(HTMLParser):
             v = a.get(key)
             if not v:
                 continue
-            self.refs.append((tag, key, v))
-            loads = tag in ("script", "img", "source") or (tag == "link" and a.get("rel") in ("stylesheet", "icon", "preload"))
-            if loads and re.match(r"https?://", v):
-                self.external_loads.append(v)
+            # a srcset lists several files, each with its width ("img/a-800.webp 800w, img/a.webp 1600w")
+            for one in ([c.split()[0] for c in v.split(",") if c.strip()] if key == "srcset" else [v]):
+                self.refs.append((tag, key, one))
+                loads = tag in ("script", "img", "source") or (tag == "link" and a.get("rel") in ("stylesheet", "icon", "preload"))
+                if loads and re.match(r"https?://", one):
+                    self.external_loads.append(one)
 
 
 class TheSite(unittest.TestCase):
@@ -112,9 +114,12 @@ class TheSite(unittest.TestCase):
         css = (SITE / "styles.css").read_text("utf-8")
         self.assertNotRegex(css, r"url\(\s*[\"']?https?://|@import")
         js = (SITE / "site.js").read_text("utf-8")
-        self.assertEqual(set(re.findall(r"fetch\([`'\"]([^`'\"]*)", js)),
-                         {"https://api.github.com/repos/${REPO}/releases/latest", "search.json"},
-                         "only asks GitHub which files the latest release has (and the docs their own search list)")
+        self.assertEqual(set(re.findall(r"fetch\((?:new URL\()?[`'\"]([^`'\"]*)", js)), {"latest.json", "search.json"},
+                         "only the latest release's files and the docs' search list, both from the site itself")
+        self.assertNotIn("api.github.com", js, "a visit never asks GitHub: the deploy writes latest.json")
+        deploy = (REPO / ".github" / "workflows" / "build-listing.yml").read_text("utf-8")
+        self.assertIn("releases/latest", deploy)
+        self.assertIn("/latest.json", deploy)
         self.assertNotIn("innerHTML", js, "nothing from GitHub's answer becomes page markup")
 
     def test_the_glow_is_the_apps(self):
@@ -256,7 +261,8 @@ class TheOtherPages(unittest.TestCase):
         self.assertRegex(settings, r'<h2 id="settings-only-in-configjson">Settings only in config\.json<a class="anchor"')
         cli = (site / "docs" / "Command-Line.html").read_text("utf-8")
         self.assertIn("<pre><code>hoard-cli sync --dry-run</code></pre>", cli)
-        self.assertIn("<td><code>login &lt;store&gt;</code></td>", cli, "code in a table, escaped")
+        self.assertIn('<td data-label="Command"><code>login &lt;store&gt;</code></td>', cli,
+                      "code in a table, escaped, under its column's name (a card per row on a phone)")
         home = (site / "docs" / "index.html").read_text("utf-8")
         self.assertNotIn("<picture>", home, "the wiki's raw HTML isn't the site's")
         self.assertIn('href="Installing-Hoard.html"', home, "wiki links go to the docs page")
