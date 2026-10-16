@@ -192,7 +192,8 @@ class Server(unittest.TestCase):
         self.assertEqual(status, 200, out)
         self.assertEqual(out["left_out"], [], "a plain .unitypackage goes into the ALCOM template")
         template = json.loads(Path(out["path"]).read_text())
-        self.assertEqual(template["unityPackages"], [str(Path(self.asset["abs_folder"]) / "Hoodie.unitypackage")])
+        # (the file's full path, as the library resolves it: on Windows, not a short 8.3 name such as RUNNER~1)
+        self.assertEqual(template["unityPackages"], [str((Path(self.asset["abs_folder"]) / "Hoodie.unitypackage").resolve())])
         self.assertEqual(template["vpmDependencies"], {"nadena.dev.modular-avatar": "^1.10.0"})
         listed = {t["name"]: t for t in self.call("GET", "/api/vpm")[1]["templates"]}
         self.assertTrue(listed["Avatar base"]["available"], "ALCOM's template, made from it, is listed as one")
