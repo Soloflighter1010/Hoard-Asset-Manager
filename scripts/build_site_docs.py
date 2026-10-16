@@ -151,9 +151,12 @@ class Renderer:
                 while i < n and lines[i].lstrip().startswith("|"):
                     rows.append(cells(lines[i]))
                     i += 1
+                # each cell names its column (data-label): on a phone, a row is a card with its values under them
+                labels = [html.escape(plain(self.inline(c)), quote=True) for c in head]
                 out.append('<div class="table"><table><thead><tr>' + "".join(f"<th>{self.inline(c)}</th>" for c in head)
                            + "</tr></thead><tbody>" + "".join(
-                               "<tr>" + "".join(f"<td>{self.inline(c)}</td>" for c in r) + "</tr>" for r in rows)
+                               "<tr>" + "".join((f'<td data-label="{labels[k]}">' if k < len(labels) and labels[k] else "<td>")
+                                                + f"{self.inline(c)}</td>" for k, c in enumerate(r)) + "</tr>" for r in rows)
                            + "</tbody></table></div>")
                 continue
             m = LIST.match(line)

@@ -261,7 +261,8 @@ class TheOtherPages(unittest.TestCase):
         self.assertRegex(settings, r'<h2 id="settings-only-in-configjson">Settings only in config\.json<a class="anchor"')
         cli = (site / "docs" / "Command-Line.html").read_text("utf-8")
         self.assertIn("<pre><code>hoard-cli sync --dry-run</code></pre>", cli)
-        self.assertIn("<td><code>login &lt;store&gt;</code></td>", cli, "code in a table, escaped")
+        self.assertIn('<td data-label="Command"><code>login &lt;store&gt;</code></td>', cli,
+                      "code in a table, escaped, under its column's name (a card per row on a phone)")
         home = (site / "docs" / "index.html").read_text("utf-8")
         self.assertNotIn("<picture>", home, "the wiki's raw HTML isn't the site's")
         self.assertIn('href="Installing-Hoard.html"', home, "wiki links go to the docs page")
