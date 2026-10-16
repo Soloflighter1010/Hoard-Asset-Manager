@@ -62,8 +62,9 @@ another to take in everything between. **Ctrl+A** chooses everything shown, and 
 choose **Select**, then tap the items. A plain click still opens an item.
 
 What's chosen gets a bar at the bottom: **Download** (one job, across stores; Payhip's are left out, as Hoard
-doesn't download from Payhip), **Tags** (add or take off a tag), and **More** (archive, hide or remove them, or
-delete their downloaded files), with **Select all shown** and **Done**. Right-click a tile (or press the menu key)
+doesn't download from Payhip), **Tags** (add or take off a tag), **Sets**, **Projects** (put what's downloaded of them
+in a Unity project, or start a new one with them: see [Projects](Projects#from-anywhere-in-your-library)), and **More**
+(archive, hide or remove them, or delete their downloaded files), with **Select all shown** and **Done**. Right-click a tile (or press the menu key)
 for the same in one menu; right-clicking one you haven't chosen chooses just it.
 
 ## Archive, Removed and Hidden

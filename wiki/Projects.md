@@ -46,6 +46,18 @@ added for you.
 your products. A `.unitypackage` goes straight into the project (as ALCOM puts one in, without opening Unity), a VPM
 package in a `.zip` goes into `Packages`, and whatever those packages need is installed with them.
 
+### From anywhere in your library
+
+Products don't have to be chosen in Projects. In the Library or Downloads, choose some (tick them, Ctrl- or
+Shift-click, or **Select**) or right-click one, then **Projects**:
+
+- **Put in a project...** chooses a project from the list and shows what goes in, with what the products need (to
+  leave out with a tick), before it's put in. Nothing already in the project is replaced.
+- **New project with these...** opens **New project** with them already in it.
+
+A product with several packages to choose from (one for PC and one for Quest, say) asks which; one that isn't
+downloaded, or has no Unity or VPM package, is left out, and Hoard says which.
+
 ### Presets
 
 **Save as a preset** keeps the template, Unity version, packages and products as a preset, to start a project from

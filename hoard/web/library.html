@@ -383,7 +383,7 @@ body.selecting .toast { bottom: 96px; }
   border-radius: 14px; box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; }
 .bulk .count-sel { font-weight: 700; }
 /* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
-.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk { flex-wrap: nowrap; width: max-content; max-width: calc(var(--vw) - 24px); gap: 8px; }   /* (max-content: centred at left 50%, "auto" would be half the window at most) */
 .bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
 .bulk .count-sel { white-space: nowrap; }
@@ -2270,7 +2270,7 @@ const T = {
   download: keys => startDownload(storesOf(keys), null, null, keys),   // (the Sets tab)
   actions: () => ({   // what the selection bar and right-click offer here
     main: [{ label: "Download", primary: true, run: downloadSelected }],
-    groups: [TAG_ACTIONS, SET_ACTIONS(), { name: "More", items: [...markActions(state.view),
+    groups: [TAG_ACTIONS, SET_ACTIONS(), PROJECT_ACTIONS(), { name: "More", items: [...markActions(state.view),
       ...(state.view === "removed" ? [{ label: "Delete for good", danger: true, run: list => purgeItems(list) }] : []),
       { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
   }),

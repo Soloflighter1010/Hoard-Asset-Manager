@@ -422,7 +422,7 @@ body.selecting .toast { bottom: 96px; }
 .dupes .primary.danger { background: var(--warn); color: var(--gold-ink); }
 .dupes .primary.danger:disabled { opacity: .5; }
 /* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
-.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk { flex-wrap: nowrap; width: max-content; max-width: calc(var(--vw) - 24px); gap: 8px; }   /* (max-content: centred at left 50%, "auto" would be half the window at most) */
 .bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
 .bulk .count-sel { white-space: nowrap; }
@@ -2603,7 +2603,7 @@ const T = {
     return a && (stackSize.get(a.id) || 0) > 1 ? (stackMembers.get(a.stack_key) || [a]).map(o => String(o.id)) : null;
   },
   actions: () => {   // what the selection bar and right-click offer here
-    const groups = [TAG_ACTIONS, SET_ACTIONS()];
+    const groups = [TAG_ACTIONS, SET_ACTIONS(), PROJECT_ACTIONS()];
     const libs = (DATA.libraries || []).filter(l => l.available);
     if ((DATA.libraries || []).length > 1 && libs.length)
       groups.push({ name: "Move", items: libs.map(l => ({ label: tr("Move to {0}", libText(l)), raw: true, run: () => bulkMove(l.n) })) });

@@ -143,6 +143,38 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual((saved["defaultProjectPath"], saved["showPrereleasePackages"]), (folder, True))
         self.assertEqual(len(saved["userProjects"]), 2, "the rest of its settings kept")
 
+    def test_put_products_in_a_project_from_their_menu(self):
+        """Right-click a downloaded product (or choose several with Select): Projects, Put in a project..."""
+        page = self.page
+        ran = []
+        self.srv.jobs.project_runner = lambda what: ran.append(what) or "Done."   # (what the task is asked to do)
+        page.keyboard.press("Escape")
+        page.locator("#projectsWin").wait_for(state="hidden")
+        page.locator(".slot", has_text="Rusk").first.click(button="right")
+        page.locator(".selmenu [role=menuitem]", has_text="Put in a project...").click()
+        chooser = page.locator("dialog.pj-dlg")
+        self.assertNotIn("Old World", chooser.inner_text(), "only projects whose folder is there")
+        chooser.locator(".linkish", has_text="Rusk Avatar").click()
+        sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
+        self.assertIn("rusk.unitypackage", sure.inner_text())
+        sure.locator("button[value=yes]").click()
+        for _ in range(200):
+            if ran:
+                break
+            page.wait_for_timeout(100)
+        self.assertEqual((ran[0]["op"], Path(ran[0]["path"]).name), ("preload", "Rusk Avatar"))
+        self.assertEqual([(p["kind"], p["file"]) for p in ran[0]["picks"]], [("unitypackage", "rusk.unitypackage")])
+
+    def test_a_new_project_with_products_from_the_menu(self):
+        page = self.page
+        page.keyboard.press("Escape")
+        page.locator("#projectsWin").wait_for(state="hidden")
+        page.click("nav.apptabs a[href='/downloads']")
+        page.locator("#grid .slot", has_text="Rusk").first.click(button="right")
+        page.locator(".selmenu [role=menuitem]", has_text="New project with these...").click()
+        page.locator("#projectsWin #pjName").wait_for()
+        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "already in the new project")
+
 
 if __name__ == "__main__":
     unittest.main()

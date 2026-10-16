@@ -23,6 +23,9 @@
   Hoard's), and checks each download against the SHA-256 its repository gives.
 - **Put products in a project later**, from **Manage**: nothing already in the project is replaced (by its asset ID
   or its path), and the project remembers what you put in.
+- **From anywhere in your library:** choose products in the Library or Downloads (or right-click one), then
+  **Projects**: **Put in a project...** puts them in one of your projects, and **New project with these...** starts a
+  new one with them already in it.
 - **Open in Unity**, with the Unity version the project needs (found as ALCOM finds them, through Unity Hub), or
   another one you choose. **Back up** zips a project, without what Unity makes again by itself, into your backups
   folder.

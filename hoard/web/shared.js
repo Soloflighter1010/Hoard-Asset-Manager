@@ -1560,6 +1560,7 @@ async function loadProjects(view) {
     if (PJ.view === "report") PJ.report = PJ.reports.find(x => x.id === (PJ.report || {}).id) || null;
     if (PJ.view === "report" && !PJ.report) PJ.view = "list";
     if (PJ.view === "project" && PJ.project) return openProject(PJ.project.path);
+    if (PJ.view === "new" && !PJ.form) PJ.view = "list";
     drawProjects();
   } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Projects couldn't be read just now."))} ${esc(e.message || "")}</p>`; }
 }
@@ -1845,6 +1846,11 @@ async function pjPickProducts() {
   if (!res.value || res.value === "no" || res.value === "yes") return [];
   const product = await pjProductContents(res.value);
   if (!product || !product.contents.length) { if (product) toast(tr("There's no Unity package or VPM package in that one.")); return []; }
+  return await pjChooseContents(product) || [];
+}
+// What to put in of one product: its .unitypackage files and VPM packages, each with a tick (one of several
+// variants left to choose), and the VPM packages it needs. null when it's cancelled.
+async function pjChooseContents(product) {
   const many = product.contents.filter(c => c.kind === "unitypackage").length > 1;
   const pick = await pjDialog(`<p><b translate="no">${esc(product.name)}</b></p>` +
     (many ? `<p class="hint">${esc(tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant)."))}</p>` : "") +
@@ -1854,12 +1860,86 @@ async function pjPickProducts() {
       `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${esc(s.package)}</span>` +
       (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>` : "") + `</label></li>`).join("")}</ul>` : "") +
     `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put these in"))}</button></div>`);
-  if (!pick.ok) return [];
+  if (!pick.ok) return null;
   const boxes = [...pick.dlg.querySelectorAll("input[type=checkbox]:checked")];
   const picks = boxes.filter(b => !b.dataset.sugg).map(b => product.contents[+b.value]).map(c =>
     ({ key: product.key, kind: c.kind, file: c.file, member: c.member, label: c.label, product: product.name }));
   const sugg = boxes.filter(b => b.dataset.sugg).map(b => product.suggested[+b.dataset.sugg]);
   return { picks, suggested: sugg };
+}
+// ---- products into a project from the selection bar and right-click, on both pages: Put in a project..., and New
+// project with these... What's put in of each is all its packages, unless it has several to choose from (a PC and a
+// Quest one, say), when it asks; what they need (lilToon, Modular Avatar...) comes with a tick to leave it out.
+const PROJECT_ACTIONS = () => ({ name: "Projects", items: [
+  { label: "Put in a project...", run: list => putInProject(list) },
+  { label: "New project with these...", run: list => newProjectWith(list) }] });
+async function pjPicksFor(list) {   // {picks, suggested, skipped (not downloaded, or no package in it)}, or null
+  const picks = [], suggested = new Map(), skipped = [];
+  for (const a of list) {
+    const r = a.tag_key ? await api(`/api/vpm/product?key=${encodeURIComponent(a.tag_key)}`) : null;
+    const product = r && r.ok ? await r.json() : null;
+    if (!product || !product.contents.length) { skipped.push(a.name); continue; }
+    let got = { picks: product.contents.map(c => ({ key: product.key, kind: c.kind, file: c.file, member: c.member,
+                                                     label: c.label, product: product.name })), suggested: product.suggested };
+    if (product.contents.filter(c => c.kind === "unitypackage").length > 1) {
+      got = await pjChooseContents(product);
+      if (!got) return null;
+    }
+    picks.push(...got.picks);
+    for (const s of got.suggested) suggested.set(s.package, s);
+  }
+  if (skipped.length) toast(tr("Left out, with no Unity package or VPM package downloaded: {0}.", listed(skipped)));
+  return { picks, suggested: [...suggested.values()], skipped };
+}
+async function pjLoaded() {   // the projects, for the menus (read when Projects hasn't been opened yet)
+  if (!PJ.data) {
+    const r = await api("/api/vpm", { cache: "no-store" });
+    if (r.ok) PJ.data = await r.json();
+  }
+  return PJ.data;
+}
+async function putInProject(list) {
+  const d = await pjLoaded();
+  const projects = ((d && d.projects) || []).filter(p => p.exists);
+  if (!projects.length) {
+    toast(tr("No projects yet: New project with these makes one with them in it."));
+    return;
+  }
+  const order = [...projects.filter(p => p.favorite), ...projects.filter(p => !p.favorite)];
+  const res = await pjDialog(`<p><b>${esc(tr("Put in a project"))}</b></p>` +
+    `<ul class="pj-picklist">${order.map(p => `<li><button class="linkish" value="${esc(p.path)}" translate="no">${esc(p.name)}</button> ` +
+      `<span class="muted">${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}</span></li>`).join("")}</ul>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
+    `<button class="ghost" value="new">${esc(tr("New project with these..."))}</button></div>`, "wide");
+  if (res.value === "new") return newProjectWith(list);
+  const project = projects.find(p => p.path === res.value);
+  if (!project) return;
+  const got = await pjPicksFor(list);
+  if (!got || !got.picks.length) return;
+  const ok = await pjDialog(`<p><b>${esc(tr("Put these in {0}?", project.name))}</b></p>` +
+    `<ul class="pj-picklist">${got.picks.map(x => `<li><b translate="no">${esc(x.product)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span></li>`).join("")}</ul>` +
+    (got.suggested.length ? `<p class="hint">${esc(tr("They need these too, from their own repositories:"))}</p><ul class="pj-picklist">${got.suggested.map((s, i) =>
+      `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${esc(s.package)}</span>` +
+      (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>` : "") + `</label></li>`).join("")}</ul>` : "") +
+    `<p class="hint">${esc(tr("Nothing already in the project is replaced."))}</p>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put them in"))}</button></div>`, "wide");
+  if (!ok.ok) return;
+  const sugg = [...ok.dlg.querySelectorAll("input[data-sugg]:checked")].map(b => got.suggested[+b.dataset.sugg]);
+  const extra = await pjAddSuggested(sugg);
+  if (extra.length) await pjShowChanges({ path: project.path, add: extra.map(name => ({ name })) });
+  pjRun("/api/vpm/preload", { path: project.path, picks: got.picks });
+}
+async function newProjectWith(list) {   // Projects' New project, with these in it (and what they need)
+  const d = await pjLoaded();
+  if (!d) { toast(tr("Projects couldn't be read just now.")); return; }
+  const got = await pjPicksFor(list);
+  if (!got || !got.picks.length) return;
+  const extra = await pjAddSuggested(got.suggested);
+  PJ.form = pjNewForm();
+  PJ.form.picks.push(...got.picks);
+  for (const n of extra) PJ.form.packages[n] = PJ.form.packages[n] || "*";
+  PJ.view = "new";
+  openProjects(true);
 }
 async function pjAddSuggested(list) {   // a tool's repository, added first when you don't have it yet
   const names = [];

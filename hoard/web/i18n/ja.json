@@ -1676,5 +1676,14 @@
  "Nothing from your library was there to put in.": "入れられるライブラリのものはありませんでした。",
  "Projects is your Unity projects, the same list as ALCOM's and the VRChat Creator Companion's: make one from a template with the packages and products from your library it needs, open it in Unity, and change its packages. With Hoard for Unity in a project, it shows what the project uses, and its credits.": "「プロジェクト」はUnityのプロジェクトの一覧で、ALCOMやVRChat Creator Companionと同じ一覧です。必要なパッケージとライブラリの商品を入れてテンプレートから作り、Unityで開き、パッケージを変更できます。プロジェクトにHoard for Unityを入れると、使っているものとクレジットも表示されます。",
  "Fetching the repositories": "リポジトリを取得しています",
- "Couldn't fetch {0}": "{0}を取得できませんでした"
+ "Couldn't fetch {0}": "{0}を取得できませんでした",
+ "Put in a project...": "プロジェクトに入れる...",
+ "New project with these...": "これで新しいプロジェクト...",
+ "Put in a project": "プロジェクトに入れる",
+ "Left out, with no Unity package or VPM package downloaded: {0}.": "UnityパッケージもVPMパッケージもダウンロードされていないため外しました:{0}。",
+ "No projects yet: New project with these makes one with them in it.": "まだプロジェクトがありません。「これで新しいプロジェクト」で、これらを入れたプロジェクトを作れます。",
+ "Put these in {0}?": "これらを{0}に入れますか?",
+ "They need these too, from their own repositories:": "それぞれのリポジトリから、これらも必要です:",
+ "Nothing already in the project is replaced.": "プロジェクトにすでにあるものは置き換えません。",
+ "Put them in": "入れる"
 }

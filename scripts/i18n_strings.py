@@ -102,6 +102,8 @@ def sample_projects(root: Path) -> dict:
     (vcc / "Repos" / "vrc-official.json").write_text(json.dumps({"repo": {
         "name": "Official", "id": "com.vrchat.repos.official", "url": "https://packages.vrchat.com/official?download",
         "packages": packages}}), "utf-8")
+    (vcc / "Repos" / "vrc-curated.json").write_text(json.dumps({"repo": {
+        "name": "Curated", "url": "https://packages.vrchat.com/curated?download", "packages": {}}}), "utf-8")
     (vcc / "settings.json").write_text(json.dumps({"userProjects": [str(avatar), str(unity / "Old World")]}), "utf-8")
     reports = Path(os.environ["HOARD_DATA_DIR"]) / "projects"
     reports.mkdir(parents=True, exist_ok=True)

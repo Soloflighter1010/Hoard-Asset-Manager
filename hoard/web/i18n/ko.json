@@ -1676,5 +1676,14 @@
  "Nothing from your library was there to put in.": "넣을 수 있는 라이브러리의 것이 없었어요.",
  "Projects is your Unity projects, the same list as ALCOM's and the VRChat Creator Companion's: make one from a template with the packages and products from your library it needs, open it in Unity, and change its packages. With Hoard for Unity in a project, it shows what the project uses, and its credits.": "'프로젝트'는 Unity 프로젝트 목록으로, ALCOM, VRChat Creator Companion과 같은 목록이에요. 필요한 패키지와 라이브러리의 상품을 넣어 템플릿으로 만들고, Unity에서 열고, 패키지를 바꿀 수 있어요. 프로젝트에 Hoard for Unity를 넣으면 쓰는 것과 크레딧도 보여요.",
  "Fetching the repositories": "저장소를 받는 중",
- "Couldn't fetch {0}": "{0}을(를) 받지 못했어요"
+ "Couldn't fetch {0}": "{0}을(를) 받지 못했어요",
+ "Put in a project...": "프로젝트에 넣기...",
+ "New project with these...": "이것으로 새 프로젝트...",
+ "Put in a project": "프로젝트에 넣기",
+ "Left out, with no Unity package or VPM package downloaded: {0}.": "Unity 패키지도 VPM 패키지도 다운로드되지 않아서 뺐어요: {0}.",
+ "No projects yet: New project with these makes one with them in it.": "아직 프로젝트가 없어요. '이것으로 새 프로젝트'로 이것들을 넣은 프로젝트를 만들 수 있어요.",
+ "Put these in {0}?": "이것들을 {0}에 넣을까요?",
+ "They need these too, from their own repositories:": "각자의 저장소에서 이것들도 필요해요:",
+ "Nothing already in the project is replaced.": "프로젝트에 이미 있는 것은 바꾸지 않아요.",
+ "Put them in": "넣기"
 }
