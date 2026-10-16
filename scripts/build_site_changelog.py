@@ -26,7 +26,7 @@ except ImportError:
     sys.path.insert(0, str(REPO))
     from hoard.changelog import blocks, inline, is_beta, releases  # noqa: E402,F401
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from site_chrome import footer, header  # noqa: E402  (the bar and footer every page has)
+from site_chrome import footer, header, preloads  # noqa: E402  (the bar and footer every page has)
 REPO_URL = "https://github.com/Soloflighter1010/Hoard-Asset-Manager"
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 
@@ -59,7 +59,7 @@ def page(markdown: str, dates: dict[str, str]) -> str:
         </article>
       </li>""")
     built = ' This page is built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.'
-    return (TEMPLATE.replace("{header}", header("changelog.html")).replace("{footer}", footer(built))
+    return (TEMPLATE.replace("{header}", header("changelog.html")).replace("{footer}", footer(built)).replace("{preloads}", preloads())
             .replace("{releases}", "\n".join(cards)))
 
 
@@ -84,7 +84,7 @@ TEMPLATE = """<!doctype html>
   <meta name="theme-color" content="#F0B429">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="favicon.ico">
-  <link rel="stylesheet" href="styles.css">
+{preloads}  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>

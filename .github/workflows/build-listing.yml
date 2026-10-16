@@ -115,6 +115,31 @@ jobs:
           cp -r "$GITHUB_WORKSPACE/site/." .
           test -f index.html && test -f vcc/index.html && test -f index.json && test -f vpm/index.json
 
+      # Where to report a security problem, as RFC 9116 asks (/.well-known/security.txt): a private report on GitHub,
+      # as SECURITY.md says. It has to say when it runs out, so it's written here, a year on from each deploy.
+      - name: security.txt
+        run: |
+          mkdir -p "${{ env.listPublishDirectory }}/.well-known"
+          {
+            echo "Contact: https://github.com/$GITHUB_REPOSITORY/security/advisories/new"
+            echo "Expires: $(date -u -d '+1 year' +%Y-%m-%dT00:00:00Z)"
+            echo "Preferred-Languages: en"
+            echo "Policy: https://github.com/$GITHUB_REPOSITORY/blob/main/SECURITY.md"
+            echo "Canonical: https://hoard.furryup.link/.well-known/security.txt"
+          } > "${{ env.listPublishDirectory }}/.well-known/security.txt"
+          cat "${{ env.listPublishDirectory }}/.well-known/security.txt"
+
+      # The latest release's version and files, for the website's download buttons (site.js reads latest.json):
+      # read here, on each deploy (each release runs one), so a visit to the site never asks GitHub's API itself.
+      # Without it, the buttons open the releases page.
+      - name: The latest release, for the download buttons
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '{tag_name, assets: [.assets[] | {name, browser_download_url}]}' \
+            > "${{ env.listPublishDirectory }}/latest.json" || echo '{}' > "${{ env.listPublishDirectory }}/latest.json"
+          cat "${{ env.listPublishDirectory }}/latest.json"
+
       # The website's What's new page, from CHANGELOG.md, with each release's date from GitHub (a release without
       # one, or a failed lookup, is shown without a date).
       - name: Build the What's new page from the changelog

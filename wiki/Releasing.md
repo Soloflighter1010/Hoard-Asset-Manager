@@ -190,8 +190,9 @@ of Hoard that needs a change to it: a Hoard that can't reach it says so, and the
 Hoard's website (https://hoard.furryup.link/, its own address for GitHub Pages) is the `site/` folder, deployed by
 **Build Repo Listing** with the VCC listing: the site at the root, VRChat's listing page at `vcc/`, and
 `index.json` (and the older `vpm/index.json`) where VCC finds them. A change to `site/` reaching `main` deploys
-it. It loads nothing from other sites (a test checks); its download buttons ask GitHub's API for the latest
-release's files, and open the releases page without it. Its fonts are the app's, cut down to Latin characters
+it. It loads nothing from other sites (a test checks), nor asks any: its download buttons take the latest
+release's files from `latest.json`, which the deploy writes from GitHub's list of releases (each release deploys the
+site), and open the releases page without it. Its fonts are the app's, cut down to Latin characters
 with `pyftsubset` (fontTools), and its screenshot is of the app with a sample library.
 
 Its **What's new** page (`changelog.html`) is built from `CHANGELOG.md` on each deploy

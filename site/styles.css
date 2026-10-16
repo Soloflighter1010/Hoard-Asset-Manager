@@ -71,7 +71,7 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .bar {
   position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap;
   max-width: 1240px; margin: 0 auto; padding: 14px 24px;
-  background: color-mix(in srgb, var(--cave) 88%, transparent); backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--cave) 95%, transparent); backdrop-filter: blur(10px);
 }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
@@ -97,6 +97,14 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .primary:hover { filter: brightness(1.06); }
 
 main { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+/* Every page's content sits on a surface of the page's own colour, feathered at its edges, so the glow shows around
+   it, and faintly through it, but never at full strength under text: grey text, gold links and even the page's own
+   text fell under 4.5:1 where the glow rises, towards the foot of the window. (The docs' is behind their sidebar too;
+   the brief pages' is solid: .brief::before.) */
+main, .docs { --surface: color-mix(in srgb, var(--cave) 88%, transparent); position: relative; isolation: isolate; }
+main::before, .docs::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 40px;
+  background: var(--surface); box-shadow: 0 0 56px 36px var(--surface); pointer-events: none; }
+.docs > main::before { content: none; }
 section { padding: 56px 0; border-top: 1px solid var(--seam); }
 section:first-child { border-top: 0; }
 .hero { text-align: center; padding-top: 40px; }
@@ -110,7 +118,7 @@ section:first-child { border-top: 0; }
 .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; margin: 24px 0; }
 .gallery figure { margin: 0; }
 .gallery img { width: 100%; height: auto; display: block; }
-.gallery figcaption { margin-top: 10px; color: var(--dust); }
+.gallery figcaption { margin-top: 14px; color: var(--dust); }
 .gallery figcaption strong { color: var(--bone); }
 @media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } }
 
@@ -194,7 +202,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .release ul ul { list-style: circle; }
 .release li { margin: .35em 0; }
 .release article > .small { display: inline-block; margin-top: 8px; }
-.release code { overflow-wrap: anywhere; }
+.release code, .release p, .release li { overflow-wrap: anywhere; }   /* (a long address ran off a phone's edge) */
 
 /* How it works: where an asset goes (left to right; top to bottom on a phone), then each step in turn */
 .flow { list-style: none; margin: 0 auto; padding: 0; max-width: 1000px; display: grid; gap: 40px;
@@ -252,6 +260,9 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .store-notes strong { color: var(--bone); }
 .store-notes strong.store { color: var(--c); }
 .js .store-notes p:not(.here) { display: none; }
+/* Store names as text, in light mode: each store's colour a little darker, 5:1 or more on the page (the colours
+   themselves, for the dots and the glow, are 4.0 to 4.4:1 as text there) */
+@media (prefers-color-scheme: light) { .store, .store-notes strong.store { color: color-mix(in srgb, var(--c) 82%, #000); } }
 .window .shot { margin-top: 18px; }
 
 /* tiles: a square picture with a store's spine along its foot, the name, and a line under it */
@@ -260,6 +271,8 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .art { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--ledge);
        transition: transform .12s ease-out; }
 .art.wide { aspect-ratio: auto; border: 1px solid var(--seam); box-shadow: 0 16px 40px rgb(0 0 0 / .3); }
+/* in light mode, a softer shadow under the screenshots: their captions, just below, sat in it (grey text at 3:1) */
+@media (prefers-color-scheme: light) { .shot img, .art.wide { box-shadow: 0 8px 20px rgb(60 40 20 / .1); } }
 .slot:hover .art, figure:hover .art { transform: translateY(-3px); }
 .notch { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: var(--c); }
 .notch.dup { height: 7px; background: repeating-linear-gradient(135deg, var(--booth) 0 9px, var(--jinxxy) 9px 18px); }
@@ -322,6 +335,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .docs-search .none { padding: 7px 9px; color: var(--dust); font-size: 14px; }
 .doc { min-width: 0; max-width: 820px; margin: 0; padding: 0; }   /* (not the site's centred main: in a grid, that sizes it to its widest line) */
 .doc h1 { font-size: clamp(2rem, 4vw, 2.8rem); margin: 6px 0 .5em; }
+@media (max-width: 360px) { .doc h1 { font-size: 1.75rem; } }   /* ("Troubleshooting", one word, was wider than a 320 px phone) */
 .doc h2 { font-size: 1.55rem; margin: 1.8em 0 .5em; scroll-margin-top: 90px; }
 .doc h3 { font-size: 1.15rem; margin: 1.6em 0 .4em; scroll-margin-top: 90px; }
 .doc .anchor { margin-left: .4em; color: var(--dust); text-decoration: none; opacity: 0; font: 700 .8em var(--body); }
@@ -343,6 +357,17 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .doc-toc a:hover { color: var(--gold-text); }
 .doc-toc a.l3 { padding-left: 12px; font-size: 13px; }
 @media (max-width: 1100px) { .docs { grid-template-columns: 220px minmax(0, 1fr); } .doc-toc { display: none; } }
+/* On a phone, a docs table is a card per row, each value under its column's name, as the brief pages' are: two or
+   three columns squeezed to a phone's width ran off its edge and left a word or two to a line. */
+@media (max-width: 640px) {
+  .doc .table { overflow: visible; box-shadow: none; border-radius: 0; }
+  .doc table, .doc tbody, .doc tr, .doc td { display: block; }
+  .doc thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .doc tr { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); border-radius: 12px; margin: 0 0 10px; padding: 8px 0; }
+  .doc td { padding: 6px 14px; border: 0; }
+  .doc td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: .72rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--dust); }
+}
 @media (max-width: 760px) {
   .docs { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px 16px 0; }
   .docs-side { position: static; max-height: none; }
@@ -373,6 +398,18 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .bar-tools { margin-left: 0; }
   .bar { position: static; }
 }
+/* On a phone, GitHub and Download sit beside the logo, the tabs on their own rows under them: a row less before the
+   page begins (it took four: the logo, two of tabs, then the buttons) */
+@media (max-width: 640px) {
+  .bar-tools { order: 2; margin-left: auto; }
+  .apptabs { order: 3; flex-basis: 100%; }
+}
+@media (max-width: 380px) {   /* a small phone: the logo and both buttons still on one row, the tabs on two */
+  .bar { padding: 12px 14px; gap: 10px 12px; }
+  .brand svg { height: 28px; }
+  .bar-tools .ghost, .bar-tools .primary { padding-left: 11px; padding-right: 11px; font-size: 14px; }
+  .apptabs a { padding: 6px 8px; font-size: 14px; }
+}
 @media (max-width: 760px) {
   body { font-size: 16px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
@@ -380,7 +417,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   .grid, .trust ul { grid-template-columns: 1fr; }
   .steps li { padding: 64px 18px 18px; }
   .steps li::before { left: 18px; top: 16px; }
-  .unity { grid-template-columns: 1fr; }
+  .unity { grid-template-columns: minmax(0, 1fr); }   /* (1fr kept it as wide as its longest word: 337 px on a 320 px phone) */
   .bar { padding: 14px 16px; }
   main { padding: 0 16px; }
   section { padding: 40px 0; }
@@ -466,7 +503,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 /* On a phone, each store is a card of its own, every value under its column's name, instead of a table that only
    shows half its columns until it's scrolled sideways; the code table's links wrap under each other. */
 @media (max-width: 640px) {
-  .brief::before { border-radius: 0; box-shadow: none; }
+  .brief::before, main::before, .docs::before { border-radius: 0; box-shadow: none; }
   .brief .table-wrap.cards { overflow: visible; background: none; border: 0; border-radius: 0; }
   .brief table.cards, .brief table.cards tbody, .brief table.cards tr, .brief table.cards th, .brief table.cards td { display: block; min-width: 0; }
   .brief table.cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -497,7 +534,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .setviewer section.sv-photos, .setviewer section.sv-get { padding: 24px 0; border-top: 0; }
 .setviewer h1 { font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 .3em; overflow-wrap: anywhere; }
 .setviewer h2 { font-size: clamp(1.3rem, 2.6vw, 1.7rem); margin: 28px 0 .6em; }
-.setviewer .eyebrow { margin: 0 0 6px; color: var(--gold); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+.setviewer .eyebrow { margin: 0 0 6px; color: var(--gold-text); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
 .setviewer .lead { font-size: 1.15rem; color: var(--dust); margin: 0 0 1em; }
 .sv-note { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 14px 18px; }
 .sv-note p { margin: 0; overflow-wrap: anywhere; }
