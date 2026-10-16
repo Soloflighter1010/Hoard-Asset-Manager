@@ -422,7 +422,7 @@ body.selecting .toast { bottom: 96px; }
 .dupes .primary.danger { background: var(--warn); color: var(--gold-ink); }
 .dupes .primary.danger:disabled { opacity: .5; }
 /* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
-.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk { flex-wrap: nowrap; width: max-content; max-width: calc(var(--vw) - 24px); gap: 8px; }   /* (max-content: centred at left 50%, "auto" would be half the window at most) */
 .bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
 .bulk .count-sel { white-space: nowrap; }
@@ -719,8 +719,8 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .inside .zipfiles .nm { overflow-wrap: anywhere; }
 .inside .more { font-size: 12px; color: var(--dust); margin: 6px 0; }
 
-/* Projects (issue #86): the Unity projects that use your assets, and their credits */
-.projects.win { width: min(960px, calc(var(--vw) - 48px)); }
+/* Projects (issue #86): what Hoard for Unity reports about a project (the products it uses), and its credits */
+.projects.win { width: min(1040px, calc(var(--vw) - 48px)); }
 .proj { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .proj summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; cursor: pointer; list-style: none; }
 .proj summary::-webkit-details-marker { display: none; }
@@ -738,6 +738,86 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 12.5px/1.5 ui-monospace, monospace; }
 .proj .muted { font-size: 12px; color: var(--dust); }
 .projects .none { margin: 0; color: var(--dust); }
+/* Projects (hoard/vpm): the list shared with ALCOM and the Creator Companion, a project's packages and what from your
+   library is in it, a new project, repositories, and Unity and folders */
+.projects .hint { font-size: 13px; color: var(--dust); margin: 6px 0 12px; line-height: 1.5; }
+.projects .hint.bad, .pj-warn { color: var(--warn); }
+.projects h4 { margin: 18px 0 8px; font: 700 13px var(--body); color: var(--dust); }
+.projects .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.projects .row > button { width: auto; flex: none; margin: 0; }
+.projects .meta, .projects .muted { font-size: 12px; color: var(--dust); overflow-wrap: anywhere; }
+.projects input:not([type=checkbox]):not([type=radio]), .projects select:not([data-proj-style]), .projects textarea:not([readonly]) {
+  height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0; background: var(--cave); color: var(--bone);
+  box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; min-width: 0; box-sizing: border-box; }
+.projects textarea:not([readonly]) { height: auto; width: 100%; padding: 8px 12px; resize: vertical; font: 12.5px/1.5 ui-monospace, monospace; }
+.projects input:focus, .projects select:focus, .projects textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.pj-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.projects .primary, .projects .ghost { width: auto; margin-top: 0; }   /* (not a panel's one full-width button) */
+.pj-top input[type=search] { flex: 1 1 200px; }
+.pj-top > button { width: auto; flex: none; margin: 0; }
+.pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pj-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "star main acts" "star what acts"; gap: 2px 12px;
+  align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main acts" "what acts"; }
+.pj-row.gone { opacity: .7; }
+.pj-star { grid-area: star; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--seam); font-size: 17px; line-height: 1; }
+.pj-star[aria-pressed="true"] { color: var(--gold-text); }
+.pj-star:hover { color: var(--gold-text); background: var(--ledge); }
+.pj-star:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.pj-main { grid-area: main; display: flex; flex-direction: column; min-width: 0; }
+.pj-main b { overflow-wrap: anywhere; }
+.pj-what { grid-area: what; font-size: 12.5px; color: var(--dust); }
+.pj-row.gone .pj-what { color: var(--warn); }
+.pj-acts { grid-area: acts; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.pj-acts > button { width: auto; margin: 0; }
+@media (max-width: 640px) {
+  .pj-row, .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "what" "acts"; }
+  .pj-row .pj-star { position: absolute; }
+  .pj-row { position: relative; padding-right: 40px; }
+  .pj-row .pj-star { top: 8px; right: 8px; }
+  .pj-acts { justify-content: flex-start; margin-top: 6px; }
+}
+.pj-back { font-size: 13px; margin: 0 0 10px; }
+.projects h3.pj-h { margin: 0 0 2px; padding: 0; border: 0; font: 400 22px/1.25 var(--display); overflow-wrap: anywhere; }
+.pj-facts { margin: 6px 0; font-size: 13.5px; }
+.pj-warn { margin: 8px 0; font-size: 13.5px; line-height: 1.5; }
+.pj-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--ledge); color: var(--dust); }
+.pj-tag.warn { color: var(--warn); }
+.pj-pk { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pj-pk td { padding: 7px 6px; border-top: 1px solid var(--seam); vertical-align: middle; overflow-wrap: anywhere; }
+.pj-pk td.v { white-space: nowrap; text-align: right; }
+.pj-pk td.v > button { width: auto; margin: 0; }
+@media (max-width: 640px) {   /* each package a row of its own: its name, then its version and buttons */
+  .pj-pk, .pj-pk tbody { display: block; }
+  .pj-pk tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); }
+  .pj-pk td { display: block; padding: 0; border: 0; }
+  .pj-pk td:first-child { flex: 1 1 100%; }
+  .pj-pk td.v:empty { display: none; }
+}
+.pj-pre { margin: 4px 0; padding-left: 18px; font-size: 13.5px; }
+.pj-pre li { margin: 4px 0; overflow-wrap: anywhere; }
+.pj-field { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 8px 0; }
+.pj-field label { font-size: 13.5px; color: var(--dust); }
+.pj-field > button { width: auto; margin: 0; }
+@media (max-width: 640px) { .pj-field { grid-template-columns: minmax(0, 1fr) auto; } .pj-field label { grid-column: 1 / -1; } }
+.pj-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.pj-chips .pill { color: var(--bone); cursor: pointer; }
+.pj-sugg { font-weight: 500; font-size: 13px; color: var(--dust); border: 1px dashed var(--seam); padding: 2px 9px; }
+.pj-sugg::before { content: "+ "; }
+.pj-sugg:hover { color: var(--gold-text); border-color: var(--gold); }
+.pj-go { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--seam); justify-content: flex-end; }
+.pj-more { margin: 10px 0; font-size: 13.5px; }
+.pj-more summary { cursor: pointer; color: var(--dust); font-weight: 700; }
+.projects label.check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
+dialog.ask.pj-dlg.wide { width: min(720px, calc(var(--vw) - 32px)); }
+dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc(var(--vh) - 72px); }
+.pj-picklist { list-style: none; margin: 0 0 10px; padding: 0; overflow: auto; min-height: 0; flex: 0 1 auto; font-size: 13.5px; }
+.pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.pj-picklist li:first-child { border-top: 0; }
+.pj-picklist label.check { display: flex; align-items: flex-start; gap: 10px; }
+.pj-picklist label.check input { margin-top: 3px; flex: none; }
+.pj-picklist .linkish { text-align: left; }
+.pj-desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dust); }
 /* Sets, a tab beside the stores: each set a big tile, its own picture or four of its products'; a set open is a folder
    of its products, the ones here as the usual tiles, then the rest (not downloaded, or not yours yet) */
 .setview { margin: 0 0 18px; }
@@ -1043,7 +1123,7 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
-</g></svg><span>Hoard <span id="version"></span></span></div>
+</g></svg><span translate="no">Hoard <span id="version"></span></span></div>
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
@@ -2523,7 +2603,7 @@ const T = {
     return a && (stackSize.get(a.id) || 0) > 1 ? (stackMembers.get(a.stack_key) || [a]).map(o => String(o.id)) : null;
   },
   actions: () => {   // what the selection bar and right-click offer here
-    const groups = [TAG_ACTIONS, SET_ACTIONS()];
+    const groups = [TAG_ACTIONS, SET_ACTIONS(), PROJECT_ACTIONS()];
     const libs = (DATA.libraries || []).filter(l => l.available);
     if ((DATA.libraries || []).length > 1 && libs.length)
       groups.push({ name: "Move", items: libs.map(l => ({ label: tr("Move to {0}", libText(l)), raw: true, run: () => bulkMove(l.n) })) });
@@ -2685,8 +2765,8 @@ $("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.che
    leave the field. Only what changed is sent, so a setting a running job needs doesn't hold up the others. */
 /* ---------- a file downloading: how much has come in, how fast, and how long is left */
 /* ---------- Tasks: what's running, what's waiting its turn (issue #49), and what finished, with its progress */
-/* ---------- Projects (issue #86): the Unity projects that use your assets, as Hoard for Unity reports them, with
-   which have updates, and each project's credits list (the same one the Unity window makes) */
+/* ---------- Projects (shared.js): your Unity projects, the same list as ALCOM's and the Creator Companion's, with their
+   packages and your library in them; and what Hoard for Unity reports about each (its products, and credits) */
 const storeLabel = s => STORE_NAMES[s] || storeName(s);   // a store's id ("booth") or its folder ("Itch"), as people know it
 /* ---------- What's new: Hoard's changelog, in the app. Betas are left out unless you tick them (ticked to begin
    with when you get beta updates). The changelog's HTML is made from CHANGELOG.md with everything escaped first. */

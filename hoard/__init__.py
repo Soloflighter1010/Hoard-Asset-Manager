@@ -1,3 +1,3 @@
 """Hoard: everything you've bought for VRChat, from every store, in one place, with local copies."""
-__version__ = "4.3.6"
+__version__ = "5.0.0-beta.1"
 APP_NAME = "Hoard"

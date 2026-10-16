@@ -36,6 +36,8 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   notify.py            a notification from the system when the routine check finds something to download
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
+  vpm/                 Projects: the Unity projects shared with ALCOM and the Creator Companion, their VPM packages,
+                       and your library in them (see "Projects" below); templates/ holds vrc-get's VRChat templates
   web/                 library.html, downloads.html, shared.js (what both pages share) and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
@@ -276,6 +278,47 @@ A shared set's long link holds the set itself. A short link (`set.html#S1.<id>.<
   the token. Backups leave short links out; a restore keeps this computer's.
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
+
+## Projects (`vpm/`)
+
+Projects is a project manager that works as [vrc-get and ALCOM](https://github.com/vrc-get/vrc-get) do, written in
+Python from vrc-get's Rust (MIT): the same versions chosen, the same files kept, so Hoard, ALCOM and the VRChat
+Creator Companion can be used side by side on one set of projects.
+
+```
+vpm/
+  version.py       versions, npm-style ranges (with vrc-get's prerelease rules) and Unity versions
+  manifest.py      a package's package.json, checked; which Unity versions it fits (unity_compatible)
+  environment.py   the Creator Companion's folder (HOARD_VCC_DIR in tests), its settings.json (every key kept),
+                   ALCOM's own settings, and vcc.liteDb, read only
+  litedb.py        reads LiteDB 5 files (vcc.liteDb), never writes them
+  fetch.py         repository listings and package downloads, through egress.fetch
+  repos.py         repositories: their cached listings in Repos/, adding, removing and refreshing them; finding a
+                   package version (Selector) across them and your package folders
+  project.py       a Unity project: its vpm-manifest.json, its installed and embedded packages, its Unity version
+  resolve.py       package changes, as vrc-get works them out: add, upgrade, remove, repair; legacy packages and
+                   files; then made with everything staged and moved aside first, so a failure (or Stop) puts the
+                   project back as it was
+  templates.py     VRChat's avatar and world templates (vrc-get's, in templates/), Blank, ALCOM's .alcomtemplate
+                   files, and making a project from one
+  unitypackage.py  puts a .unitypackage's files straight into a project (as ALCOM does), never over one already there
+  preload.py       your library in a project: which .unitypackage and VPM package files a download has, and putting
+                   them in; the VPM packages for the tools What it needs knows
+  listing.py       the project list (settings.json's userProjects, or vcc.liteDb's), and Hoard's notes on each
+                   (vpm-projects.json)
+  presets.py       presets for new projects (vpm-presets.json), and writing one as an ALCOM template
+  unity.py         the Unity editors Unity Hub knows, which one a project opens with, and whether it has it open
+  backup.py        a project's backup zip
+  api.py           what the server answers about all of this, and the work it hands to a "project" job
+```
+
+Every change to a project is a job (`jobs.py`, task "project"), so it's in Tasks and Stop stops it; the page asks
+the server what a change will do first (`/api/vpm/preview`) and shows it. Only projects on the list are changed:
+`api.Service.listed()` checks each path the page sends. Downloads go through `egress.fetch` like everything else:
+public addresses only, a repository's headers sent to its own host only, and a package's SHA-256 checked when its
+listing gives one. `tests/test_vpm_resolve.py` is vrc-get's own resolver tests, ported; `tests/test_vpm_version.py`
+has its (and node-semver's) range cases; `tests/data/vcc-sample.liteDb.gz` is a Creator Companion database made with
+vrc-get's LiteDB writer.
 
 ## Data files
 

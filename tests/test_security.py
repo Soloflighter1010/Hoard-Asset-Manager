@@ -1188,8 +1188,8 @@ class Egress(unittest.TestCase):
 
     def test_no_other_way_out(self):
         """No module makes its own requests: only egress (store traffic) and safety.fetch_public (public images)."""
-        for f in (REPO / "hoard").glob("*.py"):
-            if f.name in ("egress.py", "safety.py"):
+        for f in (REPO / "hoard").rglob("*.py"):
+            if f.relative_to(REPO / "hoard").as_posix() in ("egress.py", "safety.py"):
                 continue
             text = f.read_text("utf-8")
             if f.name == "app.py":   # Hoard talking to itself: one call, behind a check that it's this computer only

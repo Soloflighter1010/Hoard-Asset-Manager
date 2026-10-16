@@ -499,6 +499,9 @@ def self_test() -> int:
     check("recovery words", len(WORDS) == 2048)
     from .changelog import changelog_file
     check("changelog (What's new)", changelog_file().is_file(), str(changelog_file()))
+    from .vpm.templates import BUILTIN, VRCHAT_UNITY
+    check("Projects' templates", all((BUILTIN / f"{kind}-{unity}.tar.gz").is_file() for kind in ("avatars", "worlds")
+                                     for unity in VRCHAT_UNITY), str(BUILTIN))
     try:
         from playwright._impl._driver import compute_driver_executable
         node, cli = compute_driver_executable()

@@ -110,7 +110,7 @@ class Selecting(unittest.TestCase):
         slots.nth(1).click(button="right")   # on a chosen tile: the selection stays
         menu = page.locator(".selmenu")
         self.assertEqual(page.locator("#bulkCount").inner_text(), "2 selected")
-        self.assertEqual(menu.locator(".selmenu-h").all_inner_texts(), ["Tags", "Sets", "More"], "every group of the bar")
+        self.assertEqual(menu.locator(".selmenu-h").all_inner_texts(), ["Tags", "Sets", "Projects", "More"], "every group of the bar")
         page.keyboard.press("Escape")
         self.assertEqual(menu.count(), 0)
         slots.nth(3).click(button="right")   # on one not chosen: just that one, as file managers do

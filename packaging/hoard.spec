@@ -19,6 +19,7 @@ datas = [
     (str(REPO / "hoard" / "web"), "hoard/web"),                          # the pages and their fonts
     (str(REPO / "hoard" / "recovery_words.txt"), "hoard"),                # the hidden library's recovery words
     (str(REPO / "hoard" / "known_tools.json"), "hoard"),                  # What it needs: the tools Hoard knows (hoard/needs.py)
+    (str(REPO / "hoard" / "vpm" / "templates"), "hoard/vpm/templates"),   # Projects: VRChat's templates, from vrc-get (MIT)
     (str(REPO / "CHANGELOG.md"), "."),                                    # What's new, in the app (hoard/changelog.py)
 ]
 datas += collect_data_files("playwright")                                 # Playwright's driver (Node and its package)
