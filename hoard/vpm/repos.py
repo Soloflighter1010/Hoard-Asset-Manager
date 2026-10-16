@@ -366,7 +366,7 @@ def remove_repo(settings: Settings, local_path: str) -> bool:
     if not gone:
         return False
     settings.save()
-    cache = Path(local_path)
+    cache = Path(gone[0]["localPath"])   # (the settings' own copy of it)
     try:
         if cache.parent.resolve() == (settings.folder / "Repos").resolve() and cache.suffix == ".json" and cache.is_file():
             cache.unlink()

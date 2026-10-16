@@ -70,11 +70,13 @@ class Service:
         }
 
     def listed(self, path) -> str:
+        """The project's path as the list has it: what's worked on is always the list's own, never what was sent."""
         if not isinstance(path, str) or not path or len(path) > 2000:
             raise ProjectsError("Choose a project.")
-        if not listing.is_listed(path):
+        found = listing.find(path)
+        if found is None:
             raise ProjectsError("That project isn't on the list any more.")
-        return path
+        return found
 
     def project(self, path: str) -> dict:
         path = self.listed(path)

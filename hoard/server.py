@@ -1251,8 +1251,9 @@ class Handler(BaseHTTPRequestHandler):
                 found = srv.vpm.project(str(body.get("path") or ""))
                 if found["open_in_unity"]:
                     return self._json({"error": "Unity already has this project open."}, 409)
-                editor = body.get("editor") if isinstance(body.get("editor"), str) else (found["editor"] or {}).get("path")
-                if not editor or editor not in {e["path"] for e in found["editors"]}:
+                wanted = body.get("editor") if isinstance(body.get("editor"), str) else (found["editor"] or {}).get("path")
+                editor = next((e["path"] for e in found["editors"] if e["path"] == wanted), None)   # (Hoard's own copy)
+                if not editor:
                     return self._json({"error": f"Unity {found['unity']} isn't installed. Install it with Unity Hub, or "
                                                 "choose another version to open it in."}, 400)
                 vpm_unity.open_project(Path(editor), Path(found["path"]))

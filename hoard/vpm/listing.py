@@ -163,5 +163,10 @@ def remove(path: str) -> bool:
 
 
 def is_listed(path: str) -> bool:
+    return find(path) is not None
+
+
+def find(path: str) -> str | None:
+    """The list's own copy of a project's path (the one in settings.json), or None when it isn't on the list."""
     listed, _ = shared_paths()
-    return any(_key(p) == _key(path) for p in listed)
+    return next((p for p in listed if _key(p) == _key(path)), None)
