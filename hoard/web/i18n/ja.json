@@ -1674,5 +1674,7 @@
  "Backed up {0} to {1}.": "{0}を{1}にバックアップしました。",
  "Stopped. What was being changed was put back as it was.": "停止しました。変更中だったものは元に戻しました。",
  "Nothing from your library was there to put in.": "入れられるライブラリのものはありませんでした。",
- "Projects is your Unity projects, the same list as ALCOM's and the VRChat Creator Companion's: make one from a template with the packages and products from your library it needs, open it in Unity, and change its packages. With Hoard for Unity in a project, it shows what the project uses, and its credits.": "「プロジェクト」はUnityのプロジェクトの一覧で、ALCOMやVRChat Creator Companionと同じ一覧です。必要なパッケージとライブラリの商品を入れてテンプレートから作り、Unityで開き、パッケージを変更できます。プロジェクトにHoard for Unityを入れると、使っているものとクレジットも表示されます。"
+ "Projects is your Unity projects, the same list as ALCOM's and the VRChat Creator Companion's: make one from a template with the packages and products from your library it needs, open it in Unity, and change its packages. With Hoard for Unity in a project, it shows what the project uses, and its credits.": "「プロジェクト」はUnityのプロジェクトの一覧で、ALCOMやVRChat Creator Companionと同じ一覧です。必要なパッケージとライブラリの商品を入れてテンプレートから作り、Unityで開き、パッケージを変更できます。プロジェクトにHoard for Unityを入れると、使っているものとクレジットも表示されます。",
+ "Fetching the repositories": "リポジトリを取得しています",
+ "Couldn't fetch {0}": "{0}を取得できませんでした"
 }

@@ -84,7 +84,17 @@ class Server(unittest.TestCase):
         (self.vcc / "Repos" / "vrc-official.json").write_text(json.dumps(
             {"repo": {"name": "Official", "id": "com.vrchat.repos.official", "url": "https://packages.vrchat.com/official?download",
                       "packages": packages}}))
-        (self.vcc / "settings.json").write_text(json.dumps({"userProjects": [], "keepMe": 1}))
+        (self.vcc / "Repos" / "vrc-curated.json").write_text(json.dumps(
+            {"repo": {"name": "Curated", "url": "https://packages.vrchat.com/curated?download", "packages": {}}}))
+        # a repository of yours that hasn't been fetched on this computer yet: fetched when a project needs packages
+        extra = _zip({"package.json": json.dumps({"name": "com.example.extra", "version": "1.0.0"})})
+        _Repo.files["/extra.zip"] = extra
+        _Repo.files["/extra.json"] = json.dumps({"name": "Extra", "id": "com.example.repo", "url": f"{self.origin}/extra.json",
+                                                 "packages": {"com.example.extra": {"versions": {"1.0.0": {
+                                                     "name": "com.example.extra", "version": "1.0.0",
+                                                     "url": f"{self.origin}/extra.zip"}}}}}).encode()
+        (self.vcc / "settings.json").write_text(json.dumps({"userProjects": [], "keepMe": 1, "userRepos": [
+            {"localPath": str(self.vcc / "Repos" / "extra.json"), "url": f"{self.origin}/extra.json", "name": "Extra"}]}))
         downloads = self.tmp / "downloads" / "Booth" / "Hoodie"
         downloads.mkdir(parents=True)
         (downloads / "Hoodie.unitypackage").write_bytes(make_unitypackage(SAMPLE))
@@ -122,19 +132,23 @@ class Server(unittest.TestCase):
         self.assertEqual(overview["repos"][0]["packages"], 2)
         status, made = self.call("POST", "/api/vpm/create", {
             "name": "My Avatar", "location": str(self.tmp / "Projects"), "template": "com.anatawa12.vrc-get.vrchat.avatars",
-            "unity": "2022.3.22f1", "picks": [{"key": "booth/hoodie", "kind": "unitypackage", "file": "Hoodie.unitypackage"}]})
+            "unity": "2022.3.22f1", "packages": {"com.example.extra": "*"},
+            "picks": [{"key": "booth/hoodie", "kind": "unitypackage", "file": "Hoodie.unitypackage"}]})
         self.assertEqual(status, 200, made)
         job = self.wait()
         project = self.tmp / "Projects" / "My Avatar"
         self.assertEqual(job["outcome"], "done", job)
         self.assertTrue((project / "Packages" / "com.vrchat.avatars" / "Runtime" / "x.cs").is_file())
         self.assertTrue((project / "Packages" / "com.vrchat.base" / "package.json").is_file())
+        self.assertTrue((project / "Packages" / "com.example.extra" / "package.json").is_file(),
+                        "from a repository fetched for the first time, as the project was made")
+        self.assertTrue((self.vcc / "Repos" / "extra.json").is_file(), "its listing kept, as ALCOM keeps it")
         self.assertEqual((project / "Assets" / "Creator" / "Hoodie.prefab").read_bytes(), b"%YAML 1.1\nprefab")
         saved = json.loads((self.vcc / "settings.json").read_text())
         self.assertEqual((saved["userProjects"], saved["keepMe"]), ([str(project)], 1))
         status, detail = self.call("GET", f"/api/vpm/project?path={quote(str(project))}")
         self.assertEqual(status, 200, detail)
-        self.assertEqual({p["name"] for p in detail["packages"]}, {"com.vrchat.avatars", "com.vrchat.base"})
+        self.assertEqual({p["name"] for p in detail["packages"]}, {"com.vrchat.avatars", "com.vrchat.base", "com.example.extra"})
         self.assertFalse(detail["needs_repair"])
         self.assertEqual(detail["preloaded"][0]["tag_key"], "booth/hoodie")
         # removing the SDK: previewed first, then done as a job

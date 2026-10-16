@@ -9,6 +9,7 @@
 - [Sets](Sets)
 - [Your own packages](Your-Own-Packages)
 - [Tags](Tags)
+- [Projects](Projects)
 - [Hoard for Unity](Hoard-for-Unity)
 - [Settings](Settings)
 

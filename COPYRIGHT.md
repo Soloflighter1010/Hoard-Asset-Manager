@@ -58,6 +58,20 @@ the VRChat SDK publishes through VRChat's package listing, with each one's name 
 name them. It holds nothing else of theirs: no code, shaders or other files. Each belongs to its makers, who don't
 endorse Hoard. `scripts/build_known_tools.py` makes the list from those sources.
 
+## Projects, and vrc-get
+
+Projects (`hoard/vpm`) works as [vrc-get and ALCOM](https://github.com/vrc-get/vrc-get) do, by anatawa12 and other
+contributors, under the MIT License: how a package's versions and ranges are read and compared, which version of each
+package a project gets, how the Creator Companion's settings and project list are kept, and the projects ALCOM makes.
+Hoard's code for these is its own, written in Python from vrc-get's, and vrc-get's own tests are among Hoard's
+(`tests/test_vpm_resolve.py`). The VRChat avatar and world templates (`hoard/vpm/templates/*.tar.gz`) are vrc-get's,
+under its MIT License, which is beside them (`hoard/vpm/templates/LICENSE-vrc-get.txt`). The version range cases in
+`tests/test_vpm_version.py` are [node-semver](https://github.com/npm/node-semver)'s, as vrc-get uses them: Copyright
+(c) Isaac Z. Schlueter and Contributors, under the ISC License. Hoard reads the Creator Companion's database the way
+[LiteDB](https://github.com/litedb-org/LiteDB) (MIT) writes it, with code of its own, and never writes to it. ALCOM
+and vrc-get aren't affiliated with Hoard and don't endorse it; nor does VRChat, whose Creator Companion this shares
+its project list with.
+
 ## The Unity project and the listing page
 
 The Unity project layout, the release and listing workflows and the listing page (`Website/`) are adapted

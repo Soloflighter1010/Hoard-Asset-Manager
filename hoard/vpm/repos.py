@@ -229,6 +229,17 @@ class Collection:
                     failed.append(f"{r.label()}: {r.error}")
         return failed
 
+    def fetch_missing(self) -> list[str]:
+        """Fetch the repositories with no listing kept here yet (VRChat's, on a computer where neither ALCOM nor the
+        Creator Companion has fetched it): the ones that couldn't be, with why."""
+        failed = []
+        for r in self.repos:
+            if r.url and not r.loaded:
+                r.refresh()
+                if r.error:
+                    failed.append(f"{r.label()}: {r.error}")
+        return failed
+
     def loaded(self) -> list[Repo]:
         return [r for r in self.repos if r.loaded]
 

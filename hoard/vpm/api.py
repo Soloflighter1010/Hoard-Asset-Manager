@@ -187,6 +187,8 @@ class Service:
             self.forget()
             return "Repositories refreshed." if not failed else "Refreshed, except: " + "; ".join(failed)
         path = self.listed(what.get("path"))
+        if op in ("change", "preload"):
+            self._fetch_missing()
         if op == "change":
             project = UnityProject.load(path)
             changes = self.changes(project, what)
@@ -205,6 +207,14 @@ class Service:
             return f"Backed up {Path(path).name} to {out}."
         raise ProjectsError("Hoard doesn't know that project task.")
 
+    def _fetch_missing(self) -> None:
+        """Before packages are chosen: the repositories never fetched here yet, fetched (a first project, say)."""
+        coll = self.collection()
+        if any(r.url and not r.loaded for r in coll.repos):
+            log("Fetching the repositories")
+            for failed in coll.fetch_missing():
+                log(f"Couldn't fetch {failed}")
+
     def _create(self, what: dict, assets_by_key) -> str:
         settings = self.settings()
         u = UnityVersion.parse(what.get("unity"))
@@ -222,6 +232,7 @@ class Service:
                     raise ProjectsError(f"The version asked for {name} can't be read.") from None
         editors = unity.find_editors(environment.database(settings.folder)["unityVersions"])
         name = str(what.get("name") or "").strip()
+        self._fetch_missing()
         log(f"Making the project {name}")
         try:
             project = templates.create(settings.folder, sorted({e["version"] for e in editors}), str(what.get("template")),

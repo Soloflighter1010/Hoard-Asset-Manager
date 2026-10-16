@@ -333,7 +333,8 @@ class EveryBuildHasHoardsFiles(unittest.TestCase):
 
     def test_the_windows_and_mac_apps(self):
         spec = (REPO / "packaging" / "hoard.spec").read_text("utf-8")
-        given = set(re.findall(r'REPO / "hoard" / "([^"]+)"\), "hoard"', spec))
+        # each (str(REPO / "hoard" / ...), ...) in its datas: a file, or a folder with everything in it
+        given = {"/".join(re.findall(r'"([^"]+)"', parts)) for parts in re.findall(r'\(str\(REPO((?: / "[^"]+")+)\),', spec)}
         for f in self.files():
             with self.subTest(f=f):
-                self.assertTrue(f.startswith("hoard/web/") or f[len("hoard/"):] in given, f"{f} isn't in packaging/hoard.spec")
+                self.assertTrue(any(f == g or f.startswith(g + "/") for g in given), f"{f} isn't in packaging/hoard.spec")

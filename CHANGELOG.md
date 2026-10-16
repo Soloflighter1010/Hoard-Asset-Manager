@@ -1,5 +1,38 @@
 # Changelog
 
+## 5.0.0-beta.1
+
+- **Projects is now a project manager, with your library in it.** A beta, for testers: **Projects** (at the top of
+  either page) is your Unity projects, the same list as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the
+  VRChat Creator Companion's. A project added in any of the three shows in all of them, and Hoard keeps the
+  Creator Companion's other settings as they are. Hoard works as ALCOM does, from its own code (it doesn't need ALCOM
+  or the Creator Companion installed). See [Projects](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Projects) in the wiki.
+- **A new project, ready to use.** **New project** makes one from VRChat's avatar or world template (Unity
+  2022.3.22f1, the VRChat SDK's own, or 2022.3.6f1 or 2019.4.31f1), a blank one, or an ALCOM template, with the VPM
+  packages you choose, and with products from your library already in it: a .unitypackage is put straight in
+  (each file of one with several variants chosen with a tick), and a VPM package in a .zip goes into `Packages`, with
+  what it needs. What your products need (lilToon, Poiyomi, Modular Avatar, VRCFury, NDMF, Avatar Optimizer, the
+  VRChat SDK) is offered with a tick, its repository added for you. Put in a whole set at once with **Put in a set**.
+- **Presets.** **Save as a preset** keeps a project to start from again: its template, Unity, packages and products
+  ("my avatar base"). **Save it for ALCOM too** writes it as an ALCOM template, so ALCOM makes the same project
+  (leaving out any package inside a .zip, which ALCOM can't open).
+- **A project's packages.** **Manage** lists them, with each one's update; add packages from your repositories,
+  update one or all, remove one (with what only it needed), or **Put it right** when they aren't installed the way
+  the project says. Every change is shown before it's made, and made as a task, so it shows in **Tasks** and
+  **Stop** puts everything back as it was. Hoard chooses versions exactly as ALCOM does (its own tests are among
+  Hoard's), and checks each download against the SHA-256 its repository gives.
+- **Put products in a project later**, from **Manage**: nothing already in the project is replaced (by its asset ID
+  or its path), and the project remembers what you put in.
+- **Open in Unity**, with the Unity version the project needs (found as ALCOM finds them, through Unity Hub), or
+  another one you choose. **Back up** zips a project, without what Unity makes again by itself, into your backups
+  folder.
+- **Repositories** and **Unity and folders** have views of their own: add a repository (with headers for a private
+  one, sent only to its own address), refresh them all, and choose where new projects and backups go, kept in the
+  Creator Companion's settings.
+- **What Hoard for Unity reports** about a project shows with it, as before: what it uses, which has updates, and
+  its credits. A project it reported that isn't on the list shows below the list, with **Add to the list**.
+- Hoard reads the Creator Companion's own database (to show what it knows of a project) and never writes to it.
+
 ## 4.3.6
 
 - **One Payhip shop that can't be read no longer stops the rest.** A shop on its own address that Payhip sent round
