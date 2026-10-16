@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.3.6
+
+- **One Payhip shop that can't be read no longer stops the rest.** A shop on its own address that Payhip sent round
+  in a loop of redirects (during an outage at Payhip) failed the whole Payhip refresh, with "Couldn't read the
+  library: Page.goto: net::ERR_TOO_MANY_REDIRECTS ..." and nothing read from your other shops. Now Hoard reads every
+  other shop, and says on Payhip's row in **Stores** which shop it couldn't read and why. Only when no shop can be
+  read does the refresh fail.
+- **A Payhip refresh that couldn't read every shop keeps what it had from those shops.** A shop you weren't signed in
+  to had its purchases dropped from your library until the next full refresh. Now they stay.
+- **Why a page didn't load, in plain words.** A store's row said what the browser said, with its log of each step.
+  Now it says what happened ("the website kept redirecting in a loop", "the website didn't answer in time").
+- **Why some Payhip purchases have no Open on Payhip.** Hoard only opens the links of the Payhip shops in your list,
+  so a purchase from a shop on its own address you haven't added had no link, and nothing said why. Its details now
+  say so, with **Add this shop**; refresh Payhip after to get its links. **Settings** explains that a shop on
+  payhip.com usually lists everything you bought on Payhip, but only the shops listed there have their links opened.
+- **The Windows portable zip isn't published any more.** Antivirus engines kept flagging it (never the installer),
+  so each release waited on a false positive. Use **Hoard-Setup**: if you used the portable zip, run it once. Your
+  settings, library and downloads carry over, and from then on Hoard updates itself. A copy from the portable zip
+  now says so when there's an update. `Hoard-<version>.zip`, to run Hoard with Python from any folder, is still
+  published.
+
 ## 4.3.5
 
 - **Reading a photo site's page stays on that site.** When you add a set's photo by its page link, Hoard reads the

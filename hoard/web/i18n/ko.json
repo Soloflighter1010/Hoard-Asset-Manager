@@ -113,7 +113,7 @@
  "Add": "추가",
  "New downloads go to the downloads folder; a product already in another folder is kept up to date there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops Hoard reading it: its files stay where they are.": "새 다운로드는 다운로드 폴더에 들어가요. 이미 다른 폴더에 있는 상품은 그 폴더에서 최신으로 유지돼요. 폴더 사이로 상품을 옮기려면 다운로드에서 상품을 열거나 여러 개를 선택하세요. 폴더를 빼도 Hoard가 읽지 않게 될 뿐, 파일은 그대로 남아요.",
  "Payhip shops": "Payhip 상점",
- "Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.": "Payhip은 구매품을 라이브러리 하나가 아니라 구매한 상점마다 보관해요. 각 상점 주소(구매 메일에 있어요)를 한 줄에 하나씩 추가하세요. 상점의 저장한 페이지를 가져오면 자동으로 추가돼요. Hoard는 Payhip에서 산 것을 목록으로만 보여주고, 다운로드는 Payhip에서 직접 하세요.",
+ "Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.": "Payhip은 구매품을 라이브러리 하나가 아니라 구매한 상점마다 보관해요. 각 상점 주소(구매 메일에 있어요)를 한 줄에 하나씩 추가하세요. payhip.com/…의 상점에는 보통 모든 상점에서 산 것이 나오지만, Hoard는 여기에 있는 상점의 링크만 열어요. 상점의 저장한 페이지를 가져오면 자동으로 추가돼요. Hoard는 Payhip에서 산 것을 목록으로만 보여주고, 다운로드는 Payhip에서 직접 하세요.",
  "Offline": "오프라인",
  "Save product images, so the library works offline": "상품 이미지를 저장해서 오프라인에서도 라이브러리 쓰기",
  "New in your library": "라이브러리의 새것",
@@ -1484,5 +1484,13 @@
  "Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)": "이미지 링크나 사진 사이트(Imgur, Gyazo, ImgBB, Bluesky 등)의 이미지 페이지 링크를 붙여 넣으세요",
  "Paste a link to a picture on a photo site Hoard knows, or to its page there.": "Hoard가 아는 사진 사이트에 있는 이미지나 그 이미지 페이지의 링크를 붙여 넣으세요.",
  "Hoard couldn't find a picture on that page. Open the picture itself, then copy its own link (right-click it, Copy image address).": "그 페이지에서 이미지를 찾지 못했어요. 이미지를 직접 열고 그 이미지의 링크를 복사하세요(오른쪽 클릭 후 “이미지 주소 복사”).",
- "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture.": "세트 사진(입혀 본 아바타 등)은 공유 페이지에 보여요. 사진을 Imgur나 Gyazo 같은 사진 사이트에 올린 뒤 그 이미지 링크나 그 사이트의 이미지 페이지 링크를 추가하세요. Hoard는 이미지가 아니라 링크를 저장해요."
+ "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture.": "세트 사진(입혀 본 아바타 등)은 공유 페이지에 보여요. 사진을 Imgur나 Gyazo 같은 사진 사이트에 올린 뒤 그 이미지 링크나 그 사이트의 이미지 페이지 링크를 추가하세요. Hoard는 이미지가 아니라 링크를 저장해요.",
+ "{0} is in your Payhip shops now: refresh Payhip to open this from here.": "{0}은(는) 이제 Payhip 상점에 있어요. Payhip을 새로고침하면 여기서 열 수 있어요.",
+ "This is from {0}, a Payhip shop on its own address that isn't in your Payhip shops, so Hoard doesn't open its links.": "자체 주소를 쓰는 Payhip 상점 {0}의 상품이에요. 이 상점은 Payhip 상점에 없어서 Hoard가 링크를 열지 않아요.",
+ "Add this shop": "이 상점 추가",
+ "Add {0} to your Payhip shops? Hoard will then open its products' links, and read your purchases there when you refresh Payhip. Only add a shop you bought from.": "{0}을(를) Payhip 상점에 추가할까요? 추가하면 Hoard가 그 상품의 링크를 열고, Payhip을 새로고침할 때 그곳의 구매품도 읽어요. 구매한 적이 있는 상점만 추가하세요.",
+ "Add it": "추가하기",
+ "Hoard didn't answer, so the shop wasn't added. Try again.": "Hoard가 응답하지 않아서 상점을 추가하지 못했어요. 다시 시도해 주세요.",
+ "Added. Refresh Payhip to open its products from here.": "추가했어요. Payhip을 새로고침하면 여기서 상품을 열 수 있어요.",
+ "It wasn't added.": "추가하지 못했어요."
 }

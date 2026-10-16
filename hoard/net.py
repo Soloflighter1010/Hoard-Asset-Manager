@@ -27,3 +27,29 @@ def reachable(store: str, timeout: float = 5.0) -> bool:
 def is_network_error(error: Exception) -> bool:
     """True when an error means the store couldn't be reached, rather than something going wrong on it."""
     return any(code in str(error) for code in NETWORK_ERRORS)
+
+
+# Why a page didn't load, in plain words: the browser's own name for it, with the address and a log of each step,
+# meant little in Stores ("Page.goto: net::ERR_TOO_MANY_REDIRECTS at https://... Call log: - navigating to ...").
+PAGE_ERRORS = (
+    ("ERR_TOO_MANY_REDIRECTS", "the website kept redirecting in a loop, which is usually a passing problem on the "
+                               "website's side"),
+    ("ERR_NAME_NOT_RESOLVED", "no website was found at that address"),
+    ("ERR_CERT_", "the website's security certificate isn't valid"),
+    ("ERR_SSL_", "a secure connection to the website couldn't be made"),
+    ("ERR_CONNECTION_", "the website didn't answer"),
+    ("ERR_EMPTY_RESPONSE", "the website sent back nothing"),
+)
+
+
+def plain_error(error: Exception) -> str:
+    """Why a page couldn't be read, to show you: in plain words where it's one the browser names, else the error's
+    first line, without the browser's log of each step."""
+    text = str(error)
+    for code, words in PAGE_ERRORS:
+        if code in text:
+            return words
+    first = text.strip().split("\n", 1)[0].split(" Call log:", 1)[0].strip()
+    if type(error).__name__ == "TimeoutError" or first.startswith("Timeout "):
+        return "the website didn't answer in time"
+    return first[:300] or type(error).__name__

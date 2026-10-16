@@ -17,8 +17,8 @@ from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_
 from .common import Cancelled, NotLoggedIn, Progress, capture_log
 from . import diagnostics
 from .config import payhip_shops
-from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, sign_in_urls, unreachable_message
-from .net import is_network_error, reachable
+from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, payhip_unread_note, sign_in_urls, unreachable_message
+from .net import is_network_error, plain_error, reachable
 from .paths import data_dir
 from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
 from .safety import DataFileError, read_json_file, write_file_safely
@@ -931,6 +931,7 @@ class Jobs:
                       error="You're offline. Your saved library still works.")
             return list(stores)
         refreshed, unread = [], [s for s in stores if s not in online]
+        some_shops = False   # Payhip was read, but not every shop
         # itch.io is read through its API: Playwright isn't started (nor needed) when it's the only store read
         with (_playwright()() if any(s not in NO_BROWSER for s in online) else contextlib.nullcontext()) as p:
             for store in online:
@@ -957,16 +958,21 @@ class Jobs:
                             run_cfg = {**self.cfg, "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
                                                                     if i["store"] == store and i.get("page")}}
                         items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                        shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
                         if not items and before:
                             self.lib.set_error(store, f"Found no items this time (last time: {before}), so the old list was kept. "
                                                       f"Try again, or run the command: debug {store}")
                         else:
-                            self.lib.replace_store(store, items)
+                            # a Payhip shop that couldn't be read keeps what Hoard had from it
+                            self.lib.replace_store(store, items, keep_others=bool(shops_unread))
                             if store == "payhip":   # shops on their own domains, found in your library, to review
                                 with self.lib.lock:
                                     self.lib.data["stores"]["payhip"]["found_shops"] = run_cfg.pop("_found_payhip_shops", [])[:200]
                                     self.lib.save()
+                            if shops_unread:
+                                self.lib.set_error(store, payhip_unread_note(shops_unread))
+                                some_shops = True
                             refreshed.append(store)
                     except NotLoggedIn as e:
                         self.lib.set_error(store, (
@@ -982,7 +988,7 @@ class Jobs:
                     except Exception as e:
                         if not self._forced:   # (its browser was closed by Force stop: not the store's fault)
                             self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
-                                               else f"Couldn't read the library: {e}")
+                                               else f"Couldn't read the library: {plain_error(e)}")
                 finally:
                     if ctx:
                         ctx.close()
@@ -1003,6 +1009,8 @@ class Jobs:
             self._set(message=why, error=why)
         elif unread:
             self._set(message=f"Library updated, except {_names(unread)}: see Stores.", partial=True)
+        elif some_shops:
+            self._set(message="Library updated, except some Payhip shops: see Stores.", partial=True)
         else:
             self._set(message="Library updated")
         return unread

@@ -107,7 +107,6 @@ yourself; there's no need to uninstall first. Your settings, library, sign-ins a
 tags live in Hoard's app-data folder (`%LOCALAPPDATA%\Hoard`), and your downloads in your downloads folder, so
 installing, updating and uninstalling never touch them.
 
-Prefer no installer? `Hoard-<version>-windows.zip` is the same app: extract it anywhere and run `Hoard.exe`.
 Hoard's window uses Microsoft Edge WebView2, part of Windows 11 and kept up to date on Windows 10; without it,
 Hoard opens in your web browser instead (quit it from **Settings**).
 

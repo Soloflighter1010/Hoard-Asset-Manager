@@ -18,8 +18,9 @@ Hoard is an app for Windows, macOS and Linux (a Flatpak). It also runs from sour
 Closing the window quits Hoard. While it's downloading, it asks first: stop and close, keep going in the
 background, or close at once (a download stopped part way carries on from where it was next time).
 
-**Prefer no installer?** `Hoard-<version>-windows.zip` is the same app. Extract it anywhere of your own (a
-folder in your user folder is best) and run `Hoard.exe`.
+**Used the portable zip before?** It isn't published any more, from 4.3.6: antivirus engines kept flagging it.
+Run `Hoard-Setup` instead. Your settings, library and downloads carry over (they're kept apart from the program),
+and from then on Hoard updates itself. Delete the folder you extracted the zip to afterwards.
 
 **Hoard's window** uses Microsoft Edge WebView2, which is part of Windows 11 and kept up to date on Windows 10.
 Without it, Hoard says so and opens in your web browser instead; quit it from **Settings**, then **Quit Hoard**.
@@ -36,8 +37,8 @@ update in the middle of a refresh or download: wait for it, or **Stop** it.
 starts; a newer version then shows as **Update to** at the bottom of the page. A check sends GitHub nothing but
 the request itself: see [Security and privacy](Security-and-Privacy).
 
-Hoard installs updates itself only when it was installed with `Hoard-Setup`. The portable zip, the Mac app, the
-Flatpak and Hoard run with Python say there's a newer version, which file to get, and link to it. You can always run the newer setup yourself too.
+Hoard installs updates itself only when it was installed with `Hoard-Setup`. A copy from the portable zip, the
+Mac app, the Flatpak and Hoard run with Python say there's a newer version, which file to get, and link to it. You can always run the newer setup yourself too.
 There's no need to uninstall first, and an update replaces the program files completely, so nothing from the
 old version lingers.
 

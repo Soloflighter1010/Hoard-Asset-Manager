@@ -2198,6 +2198,140 @@ class ItchAPI(unittest.TestCase):
         self.assertIsNone(vault.load_key(cfg, "itch"))
 
 
+class PayhipShopByShop(unittest.TestCase):
+    """A tester's report: with a shop on its own address that Payhip sent round in a loop of redirects (an outage at
+    Payhip), "Couldn't read the library: Page.goto: net::ERR_TOO_MANY_REDIRECTS at https://kitskennel.com/b-account
+    Call log: ..." and nothing from Payhip was read, not even the shops that worked."""
+
+    LOOP = "Page.goto: net::ERR_TOO_MANY_REDIRECTS at https://kitskennel.com/b-account\nCall log:\n  - navigating to \"https://kitskennel.com/b-account\""
+
+    class Page:
+        def __init__(self):
+            self.closed = False
+
+        def is_closed(self):
+            return self.closed
+
+        def close(self):
+            self.closed = True
+
+    def ctx(self):
+        import types
+        return types.SimpleNamespace(new_page=lambda: self.Page())
+
+    def card(self, shop, code, name):
+        host = shop.split("://", 1)[1].split("/", 1)[0]
+        return {"id": f"{host}:{code}", "name": name, "creator": "Kit", "creator_url": shop, "thumbnail": "",
+                "url": f"{shop}/b-account/digital/{code}", "download_url": f"{shop}/b-account/digital/{code}"}
+
+    def read(self, results):
+        """read_payhip_shop as each shop answers: a list of cards, or an exception to raise."""
+        def read_payhip_shop(page, shop, cfg, progress):
+            got = results[shop]
+            if isinstance(got, BaseException):
+                raise got
+            return got
+        return read_payhip_shop
+
+    def test_a_shop_that_cant_be_read_leaves_the_others(self):
+        from unittest import mock
+        shops = ["https://payhip.com/Mochi", "https://kitskennel.com", "https://anko.store"]
+        cfg = {**config.load_config(), "payhip": {**config.load_config()["payhip"], "shops": shops}}
+        said = []
+        results = {shops[0]: [self.card(shops[0], "aaa", "Mochi Hat")], shops[1]: RuntimeError(self.LOOP),
+                   shops[2]: common.NotLoggedIn("not signed in")}
+        with mock.patch.object(library, "read_payhip_shop", self.read(results)):
+            items = library.fetch_payhip(self.ctx(), cfg, said.append)
+        self.assertEqual([i["name"] for i in items], ["Mochi Hat"])
+        unread = dict(cfg["_unread_payhip_shops"])
+        self.assertIn("redirecting in a loop", unread["kitskennel.com"])
+        self.assertNotIn("Call log", unread["kitskennel.com"])
+        self.assertIn("aren't signed in", unread["anko.store"])
+        self.assertTrue(any("Couldn't read kitskennel.com" in m for m in said))
+
+    def test_nothing_read_is_still_a_failure(self):
+        from unittest import mock
+        shops = ["https://kitskennel.com", "https://anko.store"]
+        cfg = {**config.load_config(), "payhip": {**config.load_config()["payhip"], "shops": shops}}
+        loop = RuntimeError(self.LOOP)
+        with mock.patch.object(library, "read_payhip_shop", self.read({shops[0]: loop, shops[1]: common.NotLoggedIn("x")})):
+            with self.assertRaises(RuntimeError) as got:
+                library.fetch_payhip(self.ctx(), cfg, lambda m: None)
+        self.assertIs(got.exception, loop)
+        with mock.patch.object(library, "read_payhip_shop", self.read({s: common.NotLoggedIn("x") for s in shops})):
+            with self.assertRaises(common.NotLoggedIn):
+                library.fetch_payhip(self.ctx(), cfg, lambda m: None)
+        from hoard.browser import Blocked
+        with mock.patch.object(library, "read_payhip_shop", self.read({shops[0]: Blocked("bot check"), shops[1]: []})):
+            with self.assertRaises(Blocked, msg="Payhip's bot check isn't one shop's problem"):
+                library.fetch_payhip(self.ctx(), cfg, lambda m: None)
+
+    def test_a_partial_refresh_keeps_what_it_couldnt_read(self):
+        from unittest import mock
+        shops = ["https://payhip.com/Mochi", "https://kitskennel.com"]
+        cfg = config.load_config()
+        cfg["payhip"] = {**cfg["payhip"], "shops": shops}
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        old = [library.payhip_item(self.card(shops[0], "aaa", "Mochi Hat")), library.payhip_item(self.card(shops[1], "kkk", "Kit Tail"))]
+        lib.replace_store("payhip", old)
+        job = jobs.Jobs(cfg, lib)
+
+        def fetch(ctx, run_cfg, progress):
+            run_cfg["_unread_payhip_shops"] = [("kitskennel.com", "the website kept redirecting in a loop")]
+            return [library.payhip_item(self.card(shops[0], "aaa", "Mochi Hat")), library.payhip_item(self.card(shops[0], "bbb", "Mochi Scarf"))]
+
+        class NoBrowser:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, *a):
+                return False
+
+        class Window:
+            def close(self):
+                pass
+        with mock.patch.multiple(jobs, reachable=lambda store, timeout=5.0: True, _playwright=lambda: NoBrowser,
+                                 launch=lambda *a, **k: Window(), cache_images=lambda *a, **k: 0), \
+                mock.patch.dict(jobs.FETCHERS, {"payhip": fetch}), mock.patch("hoard.downloader.build_catalog", lambda *a: None):
+            job._refresh(["payhip"])
+        names = sorted(i["name"] for i in lib.data["items"] if i["store"] == "payhip")
+        self.assertEqual(names, ["Kit Tail", "Mochi Hat", "Mochi Scarf"], "kitskennel.com's purchase is kept")
+        note = lib.data["stores"]["payhip"]["error"]
+        self.assertIn("Couldn't read the Payhip shop kitskennel.com", note)
+        self.assertIn("is kept", note)
+        self.assertEqual(lib.data["stores"]["payhip"]["count"], 3)
+        self.assertTrue(job.state["partial"])
+        self.assertIn("except some Payhip shops", job.state["message"])
+
+    def test_page_errors_in_plain_words(self):
+        from hoard import net
+        self.assertEqual(net.plain_error(RuntimeError(self.LOOP)),
+                         "the website kept redirecting in a loop, which is usually a passing problem on the website's side")
+        self.assertEqual(net.plain_error(RuntimeError("Page.goto: Something new at https://x.example\nCall log:\n - a")),
+                         "Page.goto: Something new at https://x.example", "else its first line, without the log")
+        timeout = type("TimeoutError", (Exception,), {})("Timeout 30000ms exceeded.\nCall log: ...")
+        self.assertEqual(net.plain_error(timeout), "the website didn't answer in time")
+
+    def test_a_purchase_from_a_shop_you_havent_added_says_so(self):
+        """Another tester: "It doesn't show the Open on Payhip button for some of the purchases". A shop on its own
+        address that you haven't added has no link Hoard opens, so its purchases now say why, and offer to add it."""
+        from hoard import safety
+        before = safety._EXTRA_SITES.get("payhip", ())
+        self.addCleanup(safety.set_extra_sites, "payhip", before)
+        safety.set_extra_sites("payhip", [])
+        kit = library.payhip_item(self.card("https://kitskennel.com", "kkk", "Kit Tail"))
+        mochi = library.payhip_item(self.card("https://payhip.com/Mochi", "aaa", "Mochi Hat"))
+        self.assertIsNone(kit["download_url"], "its link isn't kept: the shop isn't one of yours")
+        got = {e["name"]: e for e in library.enrich([kit, mochi], {})}
+        self.assertEqual((got["Kit Tail"]["payhip_shop"], got["Kit Tail"]["payhip_shop_added"]), ("https://kitskennel.com", False))
+        self.assertNotIn("payhip_shop", got["Mochi Hat"], "a shop on payhip.com has its links")
+        safety.set_extra_sites("payhip", ["kitskennel.com"])
+        got = {e["name"]: e for e in library.enrich([kit], {})}
+        self.assertTrue(got["Kit Tail"]["payhip_shop_added"], "added since: a refresh brings its links")
+        html_src = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
+        self.assertIn('data-act="add-shop"', html_src)
+
+
 class PayhipIsListedOnly(unittest.TestCase):
     """Hoard reads Payhip and never downloads from it: a sync leaves it out, however it's asked."""
 

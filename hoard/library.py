@@ -17,9 +17,9 @@ from urllib.parse import urlparse
 
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
-from .browser import _playwright, goto, goto_past_check, has_password_field, settle
+from .browser import Blocked, _playwright, goto, goto_past_check, has_password_field, settle
 from .common import NotLoggedIn, now_iso
-from .net import STORE_HOSTS
+from .net import STORE_HOSTS, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
 from .tags import TagMatcher, TagStore, tag_key
@@ -662,27 +662,40 @@ def open_sign_in_pages(ctx, cfg: dict, store: str):
 
 
 def fetch_payhip(ctx, cfg, progress) -> list[dict]:
-    """Every product you bought on Payhip. Payhip keeps purchases in each shop, so this reads every shop in
-    your settings; a shop you aren't signed in to is noted and the others still count."""
+    """Every product you bought on Payhip. Payhip keeps purchases in each shop, so this reads every shop in your
+    settings. A shop that can't be read (you aren't signed in there, or its website fails: a shop on its own address
+    redirected in a loop during an outage at Payhip) is left out, with why, in cfg["_unread_payhip_shops"], and the
+    others still count. Only when nothing could be read does the refresh fail."""
     shops = payhip_shops(cfg)
     if not shops:
         raise RuntimeError(PAYHIP_NO_SHOPS)
     page = ctx.new_page()
     cards: dict[str, dict] = {}
-    signed_out = []
+    unread: list[tuple[str, str]] = []   # (shop, why)
+    failed: Exception | None = None
     try:
         for shop in shops:
+            name = shop.split("://", 1)[1]
             try:
                 for c in read_payhip_shop(page, shop, cfg, progress):
                     cards.setdefault(c["id"], c)
             except NotLoggedIn:
-                signed_out.append(shop.split("://", 1)[1])
+                unread.append((name, "you aren't signed in there"))
+            except Blocked:
+                raise   # Payhip's bot check: every shop would wait for it in turn
+            except Exception as e:
+                if page.is_closed():   # Force stop closed the browser: nothing more can be read
+                    raise
+                failed = failed or e
+                unread.append((name, plain_error(e)))
+                progress(f"Couldn't read {name} ({plain_error(e)}); reading your other shops")
     finally:
         page.close()
-    if signed_out and not cards:
-        raise NotLoggedIn("not signed in to " + ", ".join(signed_out))
-    if signed_out:
-        progress(f"Not signed in to {', '.join(signed_out)}; sign in to Payhip again to include them")
+    if unread and not cards:
+        if failed:
+            raise failed
+        raise NotLoggedIn("not signed in to " + ", ".join(n for n, _why in unread))
+    cfg["_unread_payhip_shops"] = unread
     # Payhip's library lists purchases from every shop, including shops on their own domains. Those aren't trusted
     # until you add them (their links are left out till then), so they're offered for you to review.
     known = set(payhip_shops(cfg)) | {"https://payhip.com"}
@@ -690,6 +703,26 @@ def fetch_payhip(ctx, cfg, progress) -> list[dict]:
              and not s.startswith("https://payhip.com/")}
     cfg["_found_payhip_shops"] = sorted(found)
     return [payhip_item(c) for c in cards.values()]
+
+
+def payhip_shop_of(i: dict) -> str | None:
+    """The Payhip shop on its own address that a purchase is from (a shop's library page names its products by the
+    shop's host and a code), or None. Its links count only once the shop is in your settings (store_link), so until
+    then its purchase has no Open on Payhip: the library says so, and offers to add the shop."""
+    host, sep, _code = str(i.get("id", "")).partition(":")
+    shop = clean_payhip_shop(host) if sep and host else None
+    return shop if shop and urlparse(shop).hostname not in ("payhip.com", "www.payhip.com") else None
+
+
+def payhip_unread_note(unread: list[tuple[str, str]]) -> str:
+    """What Payhip's row in Stores says after a refresh that couldn't read every shop."""
+    if len(unread) == 1:
+        name, why = unread[0]
+        return (f"Couldn't read the Payhip shop {name}: {why}. Your other shops were read, and what Hoard had from "
+                f"{name} is kept. Refresh again later.")
+    said = "; ".join(f"{name}: {why}" for name, why in unread[:5]) + ("; and others" if len(unread) > 5 else "")
+    return (f"Couldn't read {len(unread)} of your Payhip shops ({said}). Your other shops were read, and what Hoard "
+            "had from these is kept. Refresh again later.")
 
 
 def payhip_item(c: dict) -> dict:
@@ -1099,9 +1132,13 @@ class Library:
                 i["page"] = before[i["key"]].get("page")
         return first
 
-    def replace_store(self, store: str, items: list[dict]) -> None:
-        """Swap in a store's freshly read items and record the refresh."""
+    def replace_store(self, store: str, items: list[dict], keep_others: bool = False) -> None:
+        """Swap in a store's freshly read items and record the refresh. keep_others: the refresh couldn't read
+        everything (a Payhip shop), so items it didn't find are kept rather than dropped."""
         with self.lock:
+            if keep_others:
+                found = {i["key"] for i in items}
+                items = items + [i for i in self.data["items"] if i["store"] == store and i["key"] not in found]
             first = self._stamp(store, items)
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store] + items
             self.data["stores"][store] = {"updated": now_iso(), "count": len(items), "error": None, "source": "refresh",
@@ -1224,6 +1261,9 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))
         e["files"] = [f for f in e.get("files", []) if store_link(e["store"], f.get("url"))]
+        shop = payhip_shop_of(e) if e["store"] == "payhip" and not e["download_url"] else None
+        if shop:   # why there's no Open on Payhip, and the shop to add for it
+            e["payhip_shop"], e["payhip_shop_added"] = shop, bool(store_link("payhip", shop + "/"))
         out.append(e)
         groups.setdefault(e["match_key"], []).append(e)
     stack_by_picture(out)
