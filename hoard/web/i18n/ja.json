@@ -113,7 +113,7 @@
  "Add": "追加",
  "New downloads go to the downloads folder; a product already in another folder is kept up to date there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops Hoard reading it: its files stay where they are.": "新しいダウンロードはダウンロードフォルダーに入ります。ほかのフォルダーにある商品は、そのフォルダーで最新に保たれます。フォルダー間で商品を移すには、ダウンロードで商品を開くか、いくつか選択してください。フォルダーを外しても、Hoardが読み込まなくなるだけで、ファイルはそのまま残ります。",
  "Payhip shops": "Payhipのショップ",
- "Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.": "Payhipは購入品を1つのライブラリではなく、購入した各ショップに保管します。各ショップのアドレス(購入時のメールに載っています)を1行に1つずつ追加してください。ショップの保存ページを取り込むと自動で追加されます。HoardはPayhipで買ったものを一覧にするだけで、ダウンロードはPayhipでご自身で行ってください。",
+ "Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.": "Payhipは購入品を1つのライブラリではなく、購入した各ショップに保管します。各ショップのアドレス(購入時のメールに載っています)を1行に1つずつ追加してください。payhip.com/…のショップには、たいていすべてのショップで買ったものが表示されますが、Hoardがリンクを開くのはここにあるショップだけです。ショップの保存ページを取り込むと自動で追加されます。HoardはPayhipで買ったものを一覧にするだけで、ダウンロードはPayhipでご自身で行ってください。",
  "Offline": "オフライン",
  "Save product images, so the library works offline": "商品の画像を保存して、オフラインでもライブラリを使えるようにする",
  "New in your library": "ライブラリの新着",
@@ -1484,5 +1484,13 @@
  "Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)": "画像のリンク、または写真サイト(Imgur、Gyazo、ImgBB、Blueskyなど)の画像ページのリンクを貼り付けてください",
  "Paste a link to a picture on a photo site Hoard knows, or to its page there.": "Hoardが対応している写真サイト上の画像、またはその画像ページへのリンクを貼り付けてください。",
  "Hoard couldn't find a picture on that page. Open the picture itself, then copy its own link (right-click it, Copy image address).": "そのページに画像が見つかりませんでした。画像そのものを開き、その画像のリンクをコピーしてください(右クリックして「画像アドレスをコピー」)。",
- "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture.": "セットの写真(着用したアバターなど)は共有ページに表示されます。写真をImgurやGyazoなどの写真サイトに置いてから、その画像のリンク、またはそのサイトの画像ページのリンクを追加してください。Hoardが保存するのはリンクで、画像ではありません。"
+ "Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture.": "セットの写真(着用したアバターなど)は共有ページに表示されます。写真をImgurやGyazoなどの写真サイトに置いてから、その画像のリンク、またはそのサイトの画像ページのリンクを追加してください。Hoardが保存するのはリンクで、画像ではありません。",
+ "{0} is in your Payhip shops now: refresh Payhip to open this from here.": "{0}はPayhipのショップに追加済みです。Payhipを更新すると、ここから開けるようになります。",
+ "This is from {0}, a Payhip shop on its own address that isn't in your Payhip shops, so Hoard doesn't open its links.": "これは独自アドレスのPayhipショップ{0}の商品です。このショップはPayhipのショップにないため、Hoardはそのリンクを開きません。",
+ "Add this shop": "このショップを追加",
+ "Add {0} to your Payhip shops? Hoard will then open its products' links, and read your purchases there when you refresh Payhip. Only add a shop you bought from.": "{0}をPayhipのショップに追加しますか?追加すると、Hoardはその商品のリンクを開き、Payhipを更新したときにそこでの購入品も読み込みます。購入したことのあるショップだけを追加してください。",
+ "Add it": "追加する",
+ "Hoard didn't answer, so the shop wasn't added. Try again.": "Hoardから応答がなかったため、ショップは追加されませんでした。もう一度お試しください。",
+ "Added. Refresh Payhip to open its products from here.": "追加しました。Payhipを更新すると、ここから商品を開けるようになります。",
+ "It wasn't added.": "追加されませんでした。"
 }

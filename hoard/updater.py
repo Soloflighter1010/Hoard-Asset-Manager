@@ -12,8 +12,8 @@ and the installer opens the new Hoard when it's done. Your settings, library, si
 touched: an update replaces only the program files.
 
 Everything else is told there's a newer version, with a link to it and which file to get (how_to_update): the
-Mac app its .pkg for this Mac's chip, the Flatpak its .flatpak bundle, and the portable zip, pip or source the
-releases page.
+Mac app its .pkg for this Mac's chip, the Flatpak its .flatpak bundle, a copy from the portable zip (no longer
+published from 4.3.6: antivirus engines kept flagging it) the installer, and pip or source the releases page.
 """
 from __future__ import annotations
 
@@ -79,6 +79,10 @@ def how_to_update(version: str) -> str:
         chip = "apple-silicon" if platform.machine() == "arm64" else "intel"
         return (f"Download Hoard-{version}-macos-{chip}.pkg from the releases page and open it. It replaces this "
                 "one in Applications.")
+    if sys.platform == "win32" and getattr(sys, "frozen", False):   # a copy from the portable zip
+        return (f"Download Hoard-Setup-{version}.exe from the releases page and run it: the portable zip isn't "
+                "published any more. Your settings, library and downloads carry over, and from then on Hoard "
+                "updates itself. Delete this folder afterwards.")
     return "Download it from the releases page, and install it over this one."
 
 

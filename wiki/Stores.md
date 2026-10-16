@@ -113,11 +113,17 @@ Payhip has no single library: your purchases live in each shop you bought from, 
   them and choose **Refresh**.) Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
   appears, complete it there and Hoard carries on. It waits up to 3 minutes.
 
+**A shop that can't be read doesn't stop the others.** If a shop's site fails (Payhip once sent shops on their own
+addresses round in a loop of redirects) or you aren't signed in there, Hoard reads your other shops, keeps what it
+already had from that one, and says on Payhip's row which shop it couldn't read and why. Refresh again later.
+
 If you sell on Payhip too, your own shop's library page lists everything you've bought on Payhip, from every shop,
 without saying who made each product. Hoard shows those as **Unknown creator** rather than crediting them to you.
 
-A shop on payhip.com lists your purchases from every shop, so one is often enough. Shops on their own domains
-that turn up in your library are offered in **Stores**: choose **Review** to add the ones that are yours.
+A shop on payhip.com lists your purchases from every shop, so one is often enough. Hoard only opens the links of
+shops in your list, though, so a purchase from a shop on its own address that you haven't added has no **Open on
+Payhip**: its details say so, with **Add this shop**. Shops on their own domains that turn up in your library are
+also offered in **Stores**: choose **Review** to add them all. Then refresh Payhip to get their links.
 
 ## itch.io
 

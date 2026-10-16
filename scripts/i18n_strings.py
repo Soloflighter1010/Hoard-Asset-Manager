@@ -46,7 +46,7 @@ def sample_server(root: Path, lang: str) -> server.AppServer:
             library.item("booth", "1", name="Rusk", creator="Kitsu Studio", added=old),
             library.item("gumroad", "2", name="Mochi", creator="Mochi Works", added=common.now_iso()),
             library.item("jinxxy", "3", name="Anko", creator="Kitsu Studio", added=old),
-            library.item("payhip", "4", name="Yuzu", creator="Citrus", added=old),
+            library.item("payhip", "citrus.store:4", name="Yuzu", creator="Citrus", added=old),   # (a shop not added)
             library.item("itch", "5", name="Kinako", creator="Soy", added=old)]
         for s in ("booth", "gumroad", "jinxxy"):
             srv.lib.data["stores"][s] = {"count": 1, "error": None, "source": "refresh", "first_read": old, "updated": common.now_iso()}

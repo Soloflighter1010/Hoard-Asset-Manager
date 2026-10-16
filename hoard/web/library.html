@@ -1118,8 +1118,9 @@ body.less-motion .tour-try::before { animation: none; }
   <textarea id="setShops" rows="3" spellcheck="false" autocomplete="off" aria-label="Payhip shops"
     placeholder="myshop.store&#10;payhip.com/AnotherShop"></textarea>
   <p class="hint">Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's
-    address (it's in your purchase email), one per line. Importing a shop's saved page adds it for you. Hoard lists
-    what you bought on Payhip; you download it from Payhip yourself.</p>
+    address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from
+    every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for
+    you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.</p>
   <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
   <h3>New in your library</h3>
@@ -1682,6 +1683,35 @@ function openStores(open) {
 }
 
 /* ---------- detail */
+// A Payhip purchase from a shop on its own address that isn't in your Payhip shops: Hoard opens no link of a shop you
+// haven't added, so it has no Open on Payhip. Say why, and offer to add the shop (or, once added, to refresh).
+function shopNote(a) {
+  if (!a.payhip_shop) return "";
+  const host = a.payhip_shop.replace(/^https:\/\//, "");
+  return `<p class="note">${a.payhip_shop_added
+    ? esc(tr("{0} is in your Payhip shops now: refresh Payhip to open this from here.", host))
+    : esc(tr("This is from {0}, a Payhip shop on its own address that isn't in your Payhip shops, so Hoard doesn't open its links.", host)) +
+      ` <button class="linkish" data-act="add-shop">${esc(tr("Add this shop"))}</button>`}</p>`;
+}
+// Add Payhip shops to the ones in your settings, read first: if they can't be, nothing is saved (it would replace them
+// all). The response, or null.
+async function addPayhipShops(add) {
+  let current;
+  try {
+    const got = await api("/api/settings", { cache: "no-store" });
+    if (!got.ok) throw new Error();
+    current = (await got.json()).payhip_shops || [];
+  } catch (e) { return null; }
+  return apiPost("/api/settings", { payhip_shops: [...current, ...add] });
+}
+async function addShop(shop) {
+  const host = shop.replace(/^https:\/\//, "");
+  if (!await ask(tr("Add {0} to your Payhip shops? Hoard will then open its products' links, and read your purchases there when you refresh Payhip. Only add a shop you bought from.", host), tr("Add it"))) return;
+  const r = await addPayhipShops([shop]);
+  toast(!r ? tr("Hoard didn't answer, so the shop wasn't added. Try again.")
+    : r.ok ? tr("Added. Refresh Payhip to open its products from here.") : (r.data.error || tr("It wasn't added.")));
+  if (r && r.ok) await load();
+}
 function showDetail(a, focus = true) {
   openKey = a.key;
   markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
@@ -1711,6 +1741,7 @@ function showDetail(a, focus = true) {
     `<p class="copy">${onDisk(a) ? `<span class="ondisk">On disk${a.update ? ", with an update" : ""}</span>`
       : downloadable(a.store) ? `<span class="muted">Not downloaded yet. Hoard keeps the copy in your downloads folder.</span>`
       : `<span class="muted">Hoard lists what you own on ${store}, and doesn't download it: get the files on ${store}.</span>`}</p>` +
+    shopNote(a) +
     (links ? `<div class="actions links">${links}</div>` : "") +
     `<h3>Organise</h3><div class="marks">${markButtons(a)}</div>` +
     tagSection(a) + setsSection(a) +
@@ -2109,6 +2140,7 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "unset") { changeSets({ action: "remove", id: b.dataset.set, items: [a.tag_key] }); return; }
   if (b.dataset.act === "toset") { addToSet([a], $("#setPick").value); return; }
   if (b.dataset.act === "showset") { showSet(b.dataset.set); return; }
+  if (b.dataset.act === "add-shop") { addShop(a.payhip_shop); return; }
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") showCopies(a);
@@ -2907,14 +2939,8 @@ function wirePrivacy() {
     if (!found.length) return;
     const list = found.map(s => s.replace(/^https:\/\//, "")).join("\n");
     if (!await ask(`Your Payhip library has products from these shops, on their own addresses:\n\n${list}\n\nAdd them to your Payhip shops? Hoard will then read your purchases there. Only add shops you bought from.`, "Add them")) return;
-    // the shops you have now, to add to: if they can't be read, nothing is saved (it would replace them all)
-    let current;
-    try {
-      const got = await api("/api/settings", { cache: "no-store" });
-      if (!got.ok) throw new Error();
-      current = (await got.json()).payhip_shops || [];
-    } catch (e) { toast("Hoard didn't answer, so the shops weren't added. Try again."); return; }
-    const r = await apiPost("/api/settings", { payhip_shops: [...current, ...found] });
+    const r = await addPayhipShops(found);
+    if (!r) { toast("Hoard didn't answer, so the shops weren't added. Try again."); return; }
     toast(r.ok ? "Added. Refresh Payhip to read them." : (r.data.error || "They weren't added."));
   });
 }

@@ -203,6 +203,20 @@ class Updating(unittest.TestCase):
                 with mock.patch("platform.machine", return_value=machine):
                     self.assertIn(f"Hoard-2.11.0-macos-{chip}.pkg", updater.how_to_update("2.11.0"))
 
+    def test_a_copy_from_the_portable_zip(self):
+        """The portable zip isn't published from 4.3.6 (antivirus engines kept flagging it), so a copy from it is
+        pointed at the installer, which updates itself from then on."""
+        from hoard import updater
+        with mock.patch.dict(os.environ, {"FLATPAK_ID": ""}), mock.patch.object(updater.sys, "platform", "win32"), \
+                mock.patch.object(updater.sys, "frozen", True, create=True), \
+                mock.patch("hoard.paths.Path.exists", return_value=False):
+            said = updater.how_to_update("4.3.6")
+        self.assertIn("Hoard-Setup-4.3.6.exe", said)
+        self.assertIn("carry over", said)
+        workflow = (REPO / ".github" / "workflows" / "release.yml").read_text("utf-8")
+        self.assertNotIn("windows.zip", workflow)
+        self.assertNotIn("Compress-Archive", workflow)
+
     def test_the_view_says_it(self):
         from hoard import updater
         u = updater.Updates({})
@@ -271,7 +285,7 @@ class Workflows(unittest.TestCase):
         self.assertIn("needs: [release, windows, macos, flatpak-release]", r, "published once every file is on it")
 
     def test_windows_programs_are_signed_where_signing_is_set_up(self):
-        """Hoard.exe and hoard-cli.exe are signed before the installer and zip are made from them, the installer
+        """Hoard.exe and hoard-cli.exe are signed before the installer is made from them, the installer
         before its checksum and provenance, all only where Azure signing is set up (a fork builds unsigned), with
         no key or password stored: Azure is signed in to with GitHub's OIDC token, in the release-signing
         environment."""
@@ -282,7 +296,7 @@ class Workflows(unittest.TestCase):
         order = ["Sign in to Azure, to sign the programs", "Sign Hoard.exe and hoard-cli.exe",
                  "Check the signed build still runs", "Build the installer (Inno Setup, pinned version)",
                  "Sign the installer", "Check every signature, as Windows sees it",
-                 "Zip the app, and list the files' checksums", "Sign build provenance", "Add them to the release"]
+                 "List the installer's checksum", "Sign build provenance", "Add it to the release"]
         self.assertEqual([s for s in steps if s in order], order)
         for name in order[:3] + order[4:6]:
             step = job.split(f"- name: {name}", 1)[1].split("- name:", 1)[0]

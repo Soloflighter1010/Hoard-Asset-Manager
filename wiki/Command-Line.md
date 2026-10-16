@@ -10,7 +10,6 @@ without a desktop (a NAS, say).
   "%LOCALAPPDATA%\Programs\Hoard\hoard-cli.exe" sync
   ```
 
-- **The portable zip:** `hoard-cli.exe` in the folder you extracted.
 - **The Mac app:** `/Applications/Hoard.app/Contents/MacOS/hoard-cli <command>`.
 - **The Flatpak:** `flatpak run io.github.soloflighter1010.Hoard <command>`.
 - **From source:** `Hoard.bat <command>` on Windows, `./run.sh <command>` on macOS and Linux.

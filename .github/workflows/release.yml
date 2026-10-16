@@ -110,8 +110,8 @@ jobs:
               --title "$TITLE" --prerelease="$PRERELEASE" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
           fi
 
-  # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer and a portable zip,
-  # added to the same release. Built from requirements-app.txt (every file hash-checked).
+  # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer, added to the same
+  # release. (Not as a portable zip too, from 4.3.6: antivirus engines kept flagging the zip, never the installer.) Built from requirements-app.txt (every file hash-checked).
   # Code signing (Windows): Hoard.exe, hoard-cli.exe and the setup are signed with Azure Artifact Signing (Trusted
   # Signing) when the repository has it set up (the AZURE_SIGNING_* variables and the AZURE_* secrets of the
   # release-signing environment; see the wiki's Releasing page). Elsewhere, such as a fork, the build is unsigned,
@@ -122,7 +122,7 @@ jobs:
     runs-on: windows-latest
     environment: release-signing
     permissions:
-      contents: write        # add the installer and zip to the release
+      contents: write        # add the installer to the release
       id-token: write        # sign the build provenance, and sign in to Azure to sign the programs
       attestations: write   # store the provenance with the repository
     env:
@@ -225,28 +225,24 @@ jobs:
             if ($sig.Status -ne "Valid") { Write-Output "::error::$($f.Name) isn't validly signed ($($sig.Status))"; exit 1 }
           }
 
-      - name: Zip the app, and list the files' checksums
+      - name: List the installer's checksum
         shell: pwsh
         run: |
-          $version = python -c "import hoard; print(hoard.__version__)"
-          Compress-Archive -Path dist\Hoard -DestinationPath "dist\Hoard-$version-windows.zip"
-          Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip | ForEach-Object {
+          Get-ChildItem dist\Hoard-Setup-*.exe | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS-windows.txt
 
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: |
-            dist/Hoard-Setup-*.exe
-            dist/Hoard-*-windows.zip
+          subject-path: dist/Hoard-Setup-*.exe
 
-      - name: Add them to the release
+      - name: Add it to the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $files = @(Get-ChildItem dist\Hoard-Setup-*.exe, dist\Hoard-*-windows.zip, dist\SHA256SUMS-windows.txt | ForEach-Object FullName)
+          $files = @(Get-ChildItem dist\Hoard-Setup-*.exe, dist\SHA256SUMS-windows.txt | ForEach-Object FullName)
           gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
 
   # The Mac app, as an installer package for each kind of Mac, built natively on each: Hoard.app, installed in
