@@ -71,7 +71,7 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .bar {
   position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap;
   max-width: 1240px; margin: 0 auto; padding: 14px 24px;
-  background: color-mix(in srgb, var(--cave) 88%, transparent); backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--cave) 95%, transparent); backdrop-filter: blur(10px);
 }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
@@ -97,6 +97,14 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .primary:hover { filter: brightness(1.06); }
 
 main { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+/* Every page's content sits on a surface of the page's own colour, feathered at its edges, so the glow shows around
+   it, and faintly through it, but never at full strength under text: grey text, gold links and even the page's own
+   text fell under 4.5:1 where the glow rises, towards the foot of the window. (The docs' is behind their sidebar too;
+   the brief pages' is solid: .brief::before.) */
+main, .docs { --surface: color-mix(in srgb, var(--cave) 88%, transparent); position: relative; isolation: isolate; }
+main::before, .docs::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 40px;
+  background: var(--surface); box-shadow: 0 0 56px 36px var(--surface); pointer-events: none; }
+.docs > main::before { content: none; }
 section { padding: 56px 0; border-top: 1px solid var(--seam); }
 section:first-child { border-top: 0; }
 .hero { text-align: center; padding-top: 40px; }
@@ -466,7 +474,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 /* On a phone, each store is a card of its own, every value under its column's name, instead of a table that only
    shows half its columns until it's scrolled sideways; the code table's links wrap under each other. */
 @media (max-width: 640px) {
-  .brief::before { border-radius: 0; box-shadow: none; }
+  .brief::before, main::before, .docs::before { border-radius: 0; box-shadow: none; }
   .brief .table-wrap.cards { overflow: visible; background: none; border: 0; border-radius: 0; }
   .brief table.cards, .brief table.cards tbody, .brief table.cards tr, .brief table.cards th, .brief table.cards td { display: block; min-width: 0; }
   .brief table.cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
