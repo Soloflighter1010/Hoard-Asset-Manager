@@ -155,6 +155,16 @@ class ProjectsServer(unittest.TestCase):
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class ProjectsPage(unittest.TestCase):
+    """A project Hoard for Unity reported, in Projects: not on the Creator Companion's list (an empty one of its own
+    here, so a real one is never read), it's listed below it, with what it uses and its credits."""
+
+    def setUp(self):
+        from unittest import mock
+        vcc = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, vcc, True)
+        env = mock.patch.dict(os.environ, {"HOARD_VCC_DIR": str(vcc)})
+        env.start()
+        self.addCleanup(env.stop)
 
     def test_the_projects_panel(self):
         shutil.rmtree(projects.projects_dir(), ignore_errors=True)
@@ -174,16 +184,21 @@ class ProjectsPage(unittest.TestCase):
             page.on("pageerror", lambda e: errors.append(str(e)))
             page.goto(srv.entry_url())
             page.click("#projectsTab")
-            page.locator("#projectsWin .proj[open]").wait_for()
-            self.assertIn("My Avatar", page.locator("#projectsWin summary").inner_text())
+            row = page.locator("#projectsWin .pj-row", has_text="My Avatar")
+            self.assertIn("2 assets from Hoard", row.inner_text())
+            row.locator("[data-pj=report]").click()
+            page.locator("#projectsWin .proj").wait_for()
+            self.assertIn("My Avatar", page.locator("#projectsWin .pj-h").inner_text())
             self.assertIn("Partly in the project", page.locator("#projectsWin table").inner_text())
             box = page.locator("#projectsWin textarea")
             self.assertIn("## Assets used", box.input_value(), "the style chosen in Unity")
             page.select_option("#projectsWin [data-proj-style]", "ByCreator")
             self.assertEqual(box.input_value(), "Assets used\nKitsu Studio: Rusk\nMia: Hair Pack\n")
-            page.click("#projectsWin [data-proj='forget']")
+            page.click("#projectsWin [data-pj='back']")
+            page.click("#projectsWin [data-pj='forgetreport']")
             page.click("#askDialog[open] button[value=yes]")
             page.get_by_text("No projects yet").wait_for()
+            self.assertEqual(projects.read_all(), [])
             self.assertEqual(errors, [])
             browser.close()
 
@@ -211,6 +226,7 @@ class ProjectsPage(unittest.TestCase):
             page.wait_for_function("() => localStorage.getItem('hoard-key')")
             page.click("nav.apptabs a[href='/downloads']")
             page.click("#projectsTab")
+            page.click("#projectsWin [data-pj='report']")
             page.click("#projectsWin [data-proj='set']")
             name = page.locator("dialog[open] #askName")
             self.assertEqual(name.input_value(), "My Avatar", "named for the project, to change if you like")
@@ -223,16 +239,13 @@ class ProjectsPage(unittest.TestCase):
                              "what's in it now: not what was imported once and is gone")
             page.goto(page.url.split("/downloads")[0] + "/")   # and from the Library page
             page.click("#projectsTab")
+            page.click("#projectsWin [data-pj='report']")
             page.click("#projectsWin [data-proj='set']")
             page.locator("dialog[open] button", has_text="OK").click()
             page.get_by_text("Made the set My Avatar, with 2 products in it.").wait_for()
             self.assertEqual(len(SetStore().load()["sets"]), 2)
             self.assertEqual(errors, [])
             browser.close()
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PublicPages(unittest.TestCase):
@@ -326,3 +339,7 @@ class PublicPages(unittest.TestCase):
             self.assertNotIn("/my/inventory", text)
             self.assertNotIn("/d/", text)
         self.assertNotIn("/my/inventory", projects.credits_text(p), "without a download here, still never yours")
+
+
+if __name__ == "__main__":
+    unittest.main()

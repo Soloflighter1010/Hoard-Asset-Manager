@@ -222,7 +222,7 @@ class Service:
                     raise ProjectsError(f"The version asked for {name} can't be read.") from None
         editors = unity.find_editors(environment.database(settings.folder)["unityVersions"])
         name = str(what.get("name") or "").strip()
-        log(f"Making {name}")
+        log(f"Making the project {name}")
         try:
             project = templates.create(settings.folder, sorted({e["version"] for e in editors}), str(what.get("template")),
                                        location, name, u, extra)
@@ -234,7 +234,7 @@ class Service:
         log("Installing its packages")
         changes = resolve.repair(project, self.collection())
         resolve.apply(project, changes, settings.folder)
-        done = f"Made {name}."
+        done = f"Made the project {name}."
         if what.get("picks"):
             done += " " + self._preload(path, what["picks"], assets_by_key, new=True)
         return done

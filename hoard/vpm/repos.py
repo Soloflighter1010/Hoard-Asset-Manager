@@ -27,6 +27,7 @@ from .version import ALLOW, DENY, UnityVersion, Version, VersionRange
 OFFICIAL_URL = "https://packages.vrchat.com/official?download"
 CURATED_URL = "https://packages.vrchat.com/curated?download"
 OFFICIAL_ID, CURATED_ID = "com.vrchat.repos.official", "com.vrchat.repos.curated"
+BUILTIN_NAMES = {OFFICIAL_URL: "Official", CURATED_URL: "Curated"}   # (their own names, before they're first fetched)
 MAX_LISTING = 64 << 20
 MAX_PACKAGES = 20_000
 MAX_VERSIONS = 2_000
@@ -55,7 +56,7 @@ class Repo:
         return self.raw is not None
 
     def label(self) -> str:
-        return self.setting_name or self.name or self.url or self.path.stem
+        return (self.setting_name or self.name or BUILTIN_NAMES.get(self.url) or self.url or self.path.stem)
 
     def load(self) -> None:
         try:

@@ -223,7 +223,7 @@ def apply(project: Path, picks: list[tuple[dict, dict]], new_project: bool, lock
                 if path is None:
                     raise ResolveError("its file isn't in its folder")
                 if log:
-                    log(f"Importing {label}")
+                    log(f"Putting {label} in the project")
                 r = unitypackage.place_file(project, path, entry.get("member"), existing)
                 done["placed"] += r.placed
                 done["already_there"] += r.skipped_same

@@ -669,7 +669,7 @@ def package_zip(vcc_folder: Path, p: Info) -> Path:
     # a repository's own headers (a key, say) go only to its own host; a package's, to where it's downloaded from
     same_host = p.repo is not None and p.repo.url and urlsplit(p.repo.url).hostname == urlsplit(p.package.url).hostname
     headers = {**(p.repo.headers if same_host else {}), **p.package.headers}
-    log(f"Downloading {p.package.label()} {p.version}")
+    log(f"Downloading the package {p.package.label()} {p.version}")
 
     def progress(got, whole):
         tick(f"{p.package.label()}: {got // 1024} KB" + (f" of {whole // 1024} KB" if whole else ""))
@@ -754,10 +754,10 @@ def apply(project: UnityProject, changes: Changes, vcc_folder: Path) -> None:
         for p in installs:
             if p.repo is not None:
                 zip_path = package_zip(vcc_folder, p)
-                log(f"Unpacking {p.package.label()} {p.version}")
+                log(f"Unpacking the package {p.package.label()} {p.version}")
                 unzip(zip_path, staged / p.name)
             else:
-                log(f"Copying {p.package.label()} {p.version} from {p.folder}")
+                log(f"Copying the package {p.package.label()} {p.version} from {p.folder}")
                 _copy_folder(p.folder, staged / p.name)
         packages.mkdir(exist_ok=True)
         for name in dict.fromkeys(out_of_the_way):

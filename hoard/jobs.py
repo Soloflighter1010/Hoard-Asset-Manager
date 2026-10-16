@@ -632,7 +632,7 @@ class Jobs:
             if self.stop.is_set() and threading.get_ident() == self._job_thread:
                 self.stop.clear()
                 raise Cancelled()
-        self._set(task="project", message=f"{what.get('op', '').capitalize()}: {what.get('name') or ''}".strip(": "))
+        self._set(task="project", message=describe_job("project", [], project=what))
         try:
             with capture_log(sink):
                 done = self.project_runner(what) if self.project_runner else "Projects aren't available here."
