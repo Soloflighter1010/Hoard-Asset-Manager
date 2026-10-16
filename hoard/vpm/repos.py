@@ -17,6 +17,7 @@ import re
 import uuid
 from pathlib import Path
 
+from .. import egress
 from ..safety import DataFileError, clean_text
 from . import environment, fetch
 from .environment import Settings
@@ -310,7 +311,7 @@ def add_repo(settings: Settings, url: str, name: str | None = None, headers: dic
     """Fetch a repository's listing and add it, as ALCOM's "Add repository" does. Raises RepoError (already
     added, unreachable, not a listing)."""
     url = (url or "").strip()
-    if not url.startswith("https://") or len(url) > 2000 or any(c.isspace() for c in url):
+    if not (url.startswith("https://") or egress._test_origin(url)) or len(url) > 2000 or any(c.isspace() for c in url):
         raise RepoError("Enter the repository's address, starting https://.")
     headers = check_headers(headers)
     if url in (OFFICIAL_URL, CURATED_URL) or any(e.get("url") == url for e in settings.user_repos()):
