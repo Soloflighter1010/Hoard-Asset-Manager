@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.3.7
+
+- **Payhip shops whose sign-in check goes round in a loop now say so, and what to do.** A tester's refresh failed on
+  four shops every time: two on their own addresses ("the website kept redirecting in a loop, which is usually a
+  passing problem") and two on payhip.com (": : Navigation to ... is interrupted by another navigation to
+  chrome-error://chromewebdata/"). A shop on its own address sends every visit to Payhip's sign-in check on
+  payhip.com and back, and when that check never finds you signed in to Payhip itself, the two go round until the
+  browser gives up. That isn't a passing problem, so Payhip's row now says "Payhip kept sending the page back and
+  forth between the shop and its sign-in check on payhip.com", and tells you to sign in to Payhip itself.
+- **Signing in to Payhip opens payhip.com's own sign-in page first,** then a tab for each of your shops. Before, it
+  opened only the shops, so you were never asked to sign in on payhip.com, which shops on their own addresses rely on.
+- **A page that doesn't load says why, in the browser's own words.** When a page fails partway through its redirects,
+  the browser shows its own error page, and all Hoard could say was that the navigation "is interrupted by another
+  navigation to chrome-error://chromewebdata/". Hoard now reads the reason from that error page, and its log lists each
+  address the page went through (without anything after a "?", which can carry sign-in tokens), so a support report
+  shows where a loop goes. The stray ": :" before such messages is gone.
+
 ## 4.3.6
 
 - **One Payhip shop that can't be read no longer stops the rest.** A shop on its own address that Payhip sent round
