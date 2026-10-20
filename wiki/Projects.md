@@ -70,6 +70,9 @@ template, so ALCOM can make the same project. ALCOM can't open a package inside 
 **Manage** shows a project's packages, each with its version and any update. From there:
 
 - **Add packages**, **Update** one or all of them, or **Remove** one (with what only it needed).
+- **Another version of a package**: choose a package's version (the button with its number on it) to see every
+  version that works in the project's Unity, newest first, and install any of them, an older one too. The packages
+  it needs change to match. **Add packages** can choose a version as well, instead of the newest.
 - **Put it right**, when the project's packages aren't installed the way it says (after cloning it from Git, say).
 - **Put in products from your library**, later. Nothing already in the project is replaced: a file that's there
   (with the same asset ID, or at the same path) is left as it is.

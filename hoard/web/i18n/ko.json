@@ -1685,5 +1685,16 @@
  "Put these in {0}?": "이것들을 {0}에 넣을까요?",
  "They need these too, from their own repositories:": "각자의 저장소에서 이것들도 필요해요:",
  "Nothing already in the project is replaced.": "프로젝트에 이미 있는 것은 바꾸지 않아요.",
- "Put them in": "넣기"
+ "Put them in": "넣기",
+ "{0}, version {1}: choose another version": "{0}, 버전 {1}: 다른 버전 고르기",
+ "No other version of {0} works with this project's Unity.": "이 프로젝트의 Unity에서 쓸 수 있는 {0}의 다른 버전이 없습니다.",
+ "Choose the version to install. An older one replaces the one it has, and the packages it needs change to match.": "설치할 버전을 고르세요. 이전 버전은 지금 버전을 대신하고, 필요한 패키지도 그에 맞게 바뀝니다.",
+ "Find a version": "버전 찾기",
+ "Versions": "버전",
+ "Installed now": "지금 설치됨",
+ "Prerelease": "프리릴리스",
+ "prerelease": "프리릴리스",
+ "Use this version": "이 버전으로",
+ "Version of {0}": "{0}의 버전",
+ "Newest": "최신"
 }

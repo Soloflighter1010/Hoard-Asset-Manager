@@ -172,6 +172,29 @@ class Server(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(elsewhere)})[0], 200)
         self.assertEqual(self.call("GET", f"/api/vpm/project?path={quote(str(elsewhere))}")[0], 200)
 
+    def test_versions_to_choose_from(self):
+        """Manage project's and Add packages' version choice (#160): newest first, only those that work in the
+        project's Unity, never a yanked one, and prereleases when they're offered or one is installed."""
+        cache = self.vcc / "Repos" / "vrc-official.json"
+        repo = json.loads(cache.read_text())
+        base = repo["repo"]["packages"]["com.vrchat.base"]["versions"]
+        for v, more in (("3.9.0", {}), ("3.11.0-beta.1", {}), ("3.8.0", {"vrc-get": {"yanked": "broken"}}),
+                        ("3.12.0", {"unity": "2023.1"})):
+            base[v] = {**base["3.10.5"], "version": v, **more}
+        cache.write_text(json.dumps(repo))
+        self.srv.vpm.forget()
+
+        def versions(**query):
+            q = "&".join(f"{k}={v}" for k, v in {"name": "com.vrchat.base", "unity": "2022.3.22f1", **query}.items())
+            status, body = self.call("GET", f"/api/vpm/versions?{q}")
+            self.assertEqual(status, 200)
+            return [(x["version"], x["pre"]) for x in body["versions"]]
+        self.assertEqual(versions(), [("3.10.5", False), ("3.9.0", False)])
+        self.assertEqual(versions(pre=1), [("3.11.0-beta.1", True), ("3.10.5", False), ("3.9.0", False)])
+        self.assertEqual(versions(keep="3.11.0-beta.1")[0], ("3.11.0-beta.1", True), "the one installed is always there")
+        self.assertEqual(versions(unity="")[0], ("3.12.0", False), "with no Unity to go by, every version")
+        self.assertEqual(versions(name="com.example.none"), [])
+
     def test_names_and_settings(self):
         status, check = self.call("POST", "/api/vpm/check-name", {"location": str(self.tmp), "name": "CON"})
         self.assertIsNotNone(check["problem"])

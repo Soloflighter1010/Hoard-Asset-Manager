@@ -103,6 +103,20 @@ class ProjectsPanel(unittest.TestCase):
         self.assertIn("com.vrchat.base", dialog.inner_text())
         dialog.locator("button[value=no]").click()
         self.assertTrue((self.tmp / "Unity" / "Rusk Avatar" / "Packages" / "com.vrchat.base").is_dir())
+        # another version of a package (#160): every one that works in its Unity, the one installed chosen to start with
+        self.assertEqual(avatars.locator("[data-pj=versions]").count(), 0, "one that isn't installed has none to change")
+        page.locator(".pj-pk tr", has_text="VRChat SDK - Base").locator("[data-pj=versions]").click()
+        versions = page.locator("dialog.pj-dlg", has_text="Choose the version to install")
+        versions.wait_for()
+        self.assertEqual(versions.locator(".pj-vers input").evaluate_all("l => l.map(i => i.value)"), ["3.10.5", "3.7.0"])
+        self.assertTrue(versions.locator(".pj-vers input[value='3.7.0']").is_checked())
+        self.assertIn("Installed now", versions.locator(".pj-vers li", has_text="3.7.0").inner_text())
+        versions.locator(".pj-vers input[value='3.10.5']").check()
+        versions.locator("button[value=yes]").click()
+        changes = page.locator("dialog.pj-dlg", has_text="These changes will be made")
+        changes.wait_for()
+        self.assertIn("VRChat SDK - Base 3.10.5", changes.inner_text())
+        changes.locator("button[value=no]").click()
         page.click("[data-pj=back]")
         page.locator("#pjFind").wait_for()
 
@@ -125,8 +139,13 @@ class ProjectsPanel(unittest.TestCase):
         page.locator(".pj-pre", has_text="rusk.unitypackage").wait_for()
         page.click("[data-pj=addpkg]")
         page.locator("dialog.pj-dlg input[value='com.vrchat.avatars']").check()
+        # the newest unless another version is chosen (#160)
+        pick = page.locator("dialog.pj-dlg .pj-pick-ver")
+        page.locator("dialog.pj-dlg .pj-pick-ver option[value='3.7.0']").wait_for(state="attached")
+        self.assertEqual(pick.locator("option").evaluate_all("l => l.map(o => o.value)"), ["", "3.10.5", "3.7.0"])
+        pick.select_option("3.7.0")
         page.locator("dialog.pj-dlg button[value=yes]").click()
-        page.locator(".pj-chips .pill", has_text="com.vrchat.avatars").wait_for()
+        self.assertIn("3.7.0", page.locator(".pj-chips .pill", has_text="com.vrchat.avatars").inner_text())
 
     def test_unity_and_folders(self):
         page = self.page

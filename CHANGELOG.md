@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.0.0-beta.2
+
+- **Any version of a package** ([#160](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/160)). In
+  **Manage**, a package's version is a button: it lists every version that works in the project's Unity, newest
+  first (prereleases too when **Offer prerelease versions of packages** is on), and installs the one you choose,
+  an older one included, with what it needs changed to match. As before, every change is shown before it's made.
+  **Add packages** can choose a version too, for a new project or one you have.
+
 ## 5.0.0-beta.1
 
 - **Projects is now a project manager, with your library in it.** A beta, for testers: **Projects** (at the top of

@@ -1194,7 +1194,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vpm/packages":
                 return self._json({"packages": srv.vpm.packages(one("unity"), one("pre") == "1")}, compress=True)
             if path == "/api/vpm/versions":
-                return self._json({"versions": srv.vpm.versions(one("name"), one("unity"))})
+                return self._json({"versions": srv.vpm.versions(one("name"), one("unity"), one("pre") == "1", one("keep"))},
+                                  compress=True)
             if path == "/api/vpm/product":
                 key = one("key")
                 asset = srv.asset_by_key(key)

@@ -1642,7 +1642,9 @@ function pjProject() {
   const rows = pk.map(x => `<tr data-name="${esc(x.name)}"><td><b translate="no">${esc(x.label)}</b><br><span class="muted" translate="no">${esc(x.name)}</span>` +
       (x.own ? ` <span class="pj-tag">${esc(tr("The project's own"))}</span>` : "") +
       (x.missing ? ` <span class="pj-tag warn">${esc(tr("Not installed"))}</span>` : "") + `</td>` +
-    `<td class="v" translate="no">${esc(x.version)}</td>` +
+    `<td class="v">${x.own || x.missing ? `<span translate="no">${esc(x.version)}</span>`
+      : `<button class="ghost sm pj-ver" data-pj="versions" data-version="${esc(x.version)}" aria-label="${esc(tr("{0}, version {1}: choose another version", x.label, x.version))}">` +
+        `<span translate="no">${esc(x.version)}</span> <span aria-hidden="true">▾</span></button>`}</td>` +
     `<td class="v">${x.latest ? `<button class="ghost sm" data-pj="update" data-version="${esc(x.latest)}">${esc(tr("Update to {0}", x.latest))}</button>` : ""}</td>` +
     `<td class="v">${x.own ? "" : `<button class="ghost sm" data-pj="remove">${esc(tr("Remove"))}</button>`}</td></tr>`).join("");
   const pre = (p.preloaded || []).slice().reverse();
@@ -1796,7 +1798,37 @@ function pjDialog(html, cls = "") {
     dlg.showModal();
   });
 }
-async function pjPickPackages(unityVersion) {
+// A package's versions there are to choose from (newest first), for this Unity: [{version, pre}]
+async function pjVersions(name, unityVersion, keep = "") {
+  const pre = !!(PJ.data.settings || {}).prerelease;
+  const r = await api(`/api/vpm/versions?name=${encodeURIComponent(name)}&unity=${encodeURIComponent(unityVersion || "")}` +
+                      `&pre=${pre ? 1 : 0}&keep=${encodeURIComponent(keep)}`);
+  return r.ok ? (await r.json()).versions : [];
+}
+// Another version of an installed package (issue #160): the one chosen, or "" for none
+async function pjChooseVersion(name, label, current, unityVersion) {
+  const list = await pjVersions(name, unityVersion, current);
+  if (!list.some(v => v.version !== current)) { toast(tr("No other version of {0} works with this project's Unity.", label)); return ""; }
+  const dlgP = pjDialog(`<p><b translate="no">${esc(label)}</b> <span class="muted" translate="no">${esc(name)}</span></p>` +
+    `<p class="hint">${esc(tr("Choose the version to install. An older one replaces the one it has, and the packages it needs change to match."))}</p>` +
+    (list.length > 12 ? `<p><input type="search" id="pjVerFind" placeholder="${esc(tr("Find a version"))}" aria-label="${esc(tr("Find a version"))}" style="width:100%;box-sizing:border-box"></p>` : "") +
+    `<ul class="pj-picklist pj-vers" role="radiogroup" aria-label="${esc(tr("Versions"))}">${list.map(v => `<li data-hay="${esc(v.version)}"><label class="check">` +
+      `<input type="radio" name="pjVer" value="${esc(v.version)}"${v.version === current ? " checked" : ""}> <span translate="no">${esc(v.version)}</span>` +
+      (v.version === current ? ` <span class="pj-tag">${esc(tr("Installed now"))}</span>` : "") +
+      (v.pre ? ` <span class="pj-tag warn">${esc(tr("Prerelease"))}</span>` : "") + `</label></li>`).join("")}</ul>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Use this version"))}</button></div>`, "wide");
+  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
+  const find = dlg.querySelector("#pjVerFind");
+  if (find) find.addEventListener("input", () => {
+    const q = find.value.trim();
+    for (const li of dlg.querySelectorAll(".pj-vers li")) li.hidden = !!q && !li.dataset.hay.includes(q);
+  });
+  (dlg.querySelector(".pj-vers input:checked") || {}).scrollIntoView?.({ block: "nearest" });
+  const res = await dlgP;
+  const picked = res.ok ? (res.dlg.querySelector(".pj-vers input:checked") || {}).value || "" : "";
+  return picked === current ? "" : picked;
+}
+async function pjPickPackages(unityVersion) {   // [{name, version}]: version "" for the newest
   const pre = !!(PJ.data.settings || {}).prerelease;
   const r = await api(`/api/vpm/packages?unity=${encodeURIComponent(unityVersion || "")}&pre=${pre ? 1 : 0}`);
   const list = r.ok ? (await r.json()).packages : [];
@@ -1813,9 +1845,24 @@ async function pjPickPackages(unityVersion) {
     const words = norm(e.target.value).split(/\s+/).filter(Boolean);
     for (const li of dlg.querySelectorAll(".pj-picklist li")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
   });
-  dlg.addEventListener("change", e => { if (e.target.type === "checkbox") e.target.checked ? chosen.add(e.target.value) : chosen.delete(e.target.value); });
+  dlg.addEventListener("change", async e => {
+    if (e.target.type !== "checkbox") return;
+    const li = e.target.closest("li"), name = e.target.value;
+    if (!e.target.checked) { chosen.delete(name); li.querySelector(".pj-pick-ver")?.remove(); return; }
+    chosen.add(name);
+    const label = li.querySelector("b").textContent;
+    const pick = document.createElement("select");   // which version: the newest unless you choose another (issue #160)
+    pick.className = "pj-pick-ver";
+    pick.setAttribute("aria-label", tr("Version of {0}", label));
+    pick.innerHTML = `<option value="">${esc(tr("Newest"))}</option>`;
+    li.appendChild(pick);
+    const versions = await pjVersions(name, unityVersion);
+    if (pick.isConnected) pick.insertAdjacentHTML("beforeend", versions.map(v =>
+      `<option value="${esc(v.version)}" translate="no">${esc(v.version)}${v.pre ? ` (${esc(tr("prerelease"))})` : ""}</option>`).join(""));
+  });
   const res = await dlgP;
-  return res.ok ? [...chosen] : [];
+  return res.ok ? [...chosen].map(name => ({ name,
+    version: (res.dlg.querySelector(`.pj-picklist input[value="${CSS.escape(name)}"]`)?.closest("li").querySelector(".pj-pick-ver") || {}).value || "" })) : [];
 }
 async function pjAssets() {
   if (PJ.assets) return PJ.assets;
@@ -2054,12 +2101,17 @@ async function pjAct(b) {
   if (act === "repair") return pjShowChanges({ path, repair: true });
   if (act === "updateall") return pjShowChanges({ path, upgrade_all: true });
   if (act === "update") return pjShowChanges({ path, add: [{ name: b.closest("tr").dataset.name, version: b.dataset.version }] });
+  if (act === "versions") {
+    const name = b.closest("tr").dataset.name, x = (PJ.project.packages || []).find(p => p.name === name) || {};
+    const version = await pjChooseVersion(name, x.label || name, b.dataset.version, PJ.project.unity);
+    return version ? pjShowChanges({ path, add: [{ name, version }] }) : undefined;
+  }
   if (act === "remove") return pjShowChanges({ path, remove: [b.closest("tr").dataset.name] });
   if (act === "addpkg") {
-    const names = await pjPickPackages(PJ.view === "new" ? f.unity : PJ.project.unity);
-    if (!names.length) return;
-    if (PJ.view === "new") { for (const n of names) f.packages[n] = f.packages[n] || "*"; return drawProjects(); }
-    return pjShowChanges({ path, add: names.map(name => ({ name })), prerelease: !!PJ.data.settings.prerelease });
+    const picked = await pjPickPackages(PJ.view === "new" ? f.unity : PJ.project.unity);
+    if (!picked.length) return;
+    if (PJ.view === "new") { for (const x of picked) f.packages[x.name] = x.version || f.packages[x.name] || "*"; return drawProjects(); }
+    return pjShowChanges({ path, add: picked.map(x => x.version ? x : { name: x.name }), prerelease: !!PJ.data.settings.prerelease });
   }
   if (act === "unpkg") { delete f.packages[b.dataset.name]; return drawProjects(); }
   if (act === "sugg") {

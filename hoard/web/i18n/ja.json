@@ -1685,5 +1685,16 @@
  "Put these in {0}?": "これらを{0}に入れますか?",
  "They need these too, from their own repositories:": "それぞれのリポジトリから、これらも必要です:",
  "Nothing already in the project is replaced.": "プロジェクトにすでにあるものは置き換えません。",
- "Put them in": "入れる"
+ "Put them in": "入れる",
+ "{0}, version {1}: choose another version": "{0}、バージョン {1}:別のバージョンを選ぶ",
+ "No other version of {0} works with this project's Unity.": "このプロジェクトのUnityで使える{0}の別のバージョンはありません。",
+ "Choose the version to install. An older one replaces the one it has, and the packages it needs change to match.": "入れるバージョンを選んでください。古いバージョンは今のものと入れ替わり、必要なパッケージもそれに合わせて変わります。",
+ "Find a version": "バージョンを探す",
+ "Versions": "バージョン",
+ "Installed now": "今入っている",
+ "Prerelease": "プレリリース",
+ "prerelease": "プレリリース",
+ "Use this version": "このバージョンにする",
+ "Version of {0}": "{0}のバージョン",
+ "Newest": "最新"
 }

@@ -796,6 +796,9 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-pk td { padding: 7px 6px; border-top: 1px solid var(--seam); vertical-align: middle; overflow-wrap: anywhere; }
 .pj-pk td.v { white-space: nowrap; text-align: right; }
 .pj-pk td.v > button { width: auto; margin: 0; }
+.pj-pk .pj-ver { min-width: 0; padding: 0 10px; font-variant-numeric: tabular-nums; }   /* a package's version: choose another (#160) */
+.pj-picklist .pj-pick-ver { margin: 4px 0 0 28px; max-width: calc(100% - 28px); }
+.pj-vers { max-height: min(50vh, 420px); }
 @media (max-width: 640px) {   /* each package a row of its own: its name, then its version and buttons */
   .pj-pk, .pj-pk tbody { display: block; }
   .pj-pk tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); }

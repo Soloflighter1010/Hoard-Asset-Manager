@@ -21,6 +21,7 @@ from .repos import Selector
 from .version import UnityVersion, Version, VersionError, VersionRange
 
 MAX_PACKAGES_LISTED = 5000
+MAX_VERSIONS_LISTED = 2000   # (VRCFury alone has well over a thousand)
 
 
 class ProjectsError(Exception):
@@ -122,11 +123,14 @@ class Service:
                         "keywords": pk.keywords[:10], "changelog": pk.changelog_url})
         return out
 
-    def versions(self, name: str, unity_text) -> list[str]:
+    def versions(self, name: str, unity_text, pre: bool = False, keep: str | None = None) -> list[dict]:
+        """Every version of a package there is to choose from (Manage project, Add packages), newest first: those that
+        work in this Unity, not yanked, and prereleases only when they're offered (or it's the one installed, keep)."""
         u = UnityVersion.parse(unity_text) if unity_text else None
-        found = sorted({i.version for i in self.collection().versions(name) if not i.package.yanked
-                        and (u is None or Selector.latest(u, True).satisfies(i.package))}, reverse=True)
-        return [str(v) for v in found[:100]]
+        fits = Selector.latest(u, True)
+        found = sorted({i.version for i in self.collection().versions(name) if fits.satisfies(i.package)
+                        and (pre or not i.version.is_pre or str(i.version) == keep)}, reverse=True)
+        return [{"version": str(v), "pre": v.is_pre} for v in found[:MAX_VERSIONS_LISTED]]
 
     def product(self, asset: dict, needs: dict | None) -> dict:
         """What in a downloaded product can go into a project, and the VPM packages for what it needs."""

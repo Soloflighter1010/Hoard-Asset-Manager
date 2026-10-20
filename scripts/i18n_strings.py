@@ -28,9 +28,10 @@ STEPS = {
     "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab",
           # Projects: a project, its changes and backup asked about, one Hoard for Unity reported, a new project with
           # the packages and products to choose from, the repositories, and Unity and folders
-          "[data-pj=manage] >> nth=0", "[data-pj=repair]", "dialog.pj-dlg button[value=no]", "[data-pj=backup]",
+          "[data-pj=manage] >> nth=0", "[data-pj=versions] >> nth=0", "dialog.pj-dlg button[value=no]",
+          "[data-pj=repair]", "dialog.pj-dlg button[value=no]", "[data-pj=backup]",
           "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=report] >> nth=0", "[data-pj=back]", "[data-pj=new]",
-          "[data-pj=addpkg]", "dialog.pj-dlg button[value=no]", "[data-pj=addprod]", "dialog.pj-dlg .linkish >> nth=0",
+          "[data-pj=addpkg]", "dialog.pj-dlg .pj-picklist input >> nth=0", "dialog.pj-dlg button[value=no]", "[data-pj=addprod]", "dialog.pj-dlg .linkish >> nth=0",
           "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=repos]", ".pj-more summary", "[data-pj=back]",
           "[data-pj=settings]", "[data-pj=back]", "Escape", '#storeSeg [data-store="Sets"]',
           "[data-setopen] >> nth=0", ".setextra summary", '#storeSeg [data-store=""]', "#selectBtn", "#selectBtn",
@@ -78,7 +79,7 @@ def sample_server(root: Path, lang: str) -> server.AppServer:
 
 def sample_projects(root: Path) -> dict:
     """Projects' sample: the Creator Companion's folder (HOARD_VCC_DIR) listing a project with VRChat's packages (one
-    with an update, one not installed), and one whose folder has gone; VRChat's repository; and what Hoard for Unity
+    with an update, one not installed, both with another version to choose), and one whose folder has gone; VRChat's repository; and what Hoard for Unity
     reported about the first project and about one not on the list. Returns the environment to run with."""
     vcc, unity = root / "vcc", root / "Unity"
     avatar = unity / "Rusk Avatar"
