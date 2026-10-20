@@ -1064,7 +1064,7 @@ class Jobs:
         if self._forced:   # Force stop came while the window was opening: it closes now
             window.end()
         try:
-            tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(sign_in_urls(self.cfg, store)) > 1 else ""
+            tabs = " (payhip.com first, then one tab per shop; sign in on each)" if store == "payhip" and len(sign_in_urls(self.cfg, store)) > 1 else ""
             close = "quit it (Command-Q)" if sys.platform == "darwin" else "close that window"
             self._set(task="login", store=store,
                       message=f"Sign in to {label} in the {name} window that opened{tabs}, then {close}.")
@@ -1092,7 +1092,7 @@ class Jobs:
         with _playwright()() as p:
             ctx = launch(p, self.cfg, False, store)
             open_sign_in_pages(ctx, self.cfg, store)
-            tabs = " (one tab per shop; sign in on each)" if store == "payhip" and len(ctx.pages) > 1 else ""
+            tabs = " (payhip.com first, then one tab per shop; sign in on each)" if store == "payhip" and len(ctx.pages) > 1 else ""
             self._set(task="login", store=store,
                       message=f"Sign in to {label} in the {name} window that opened{tabs}, then close that window.")
             while not self._forced:  # wait for the window to be closed

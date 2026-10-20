@@ -108,14 +108,18 @@ Payhip has no single library: your purchases live in each shop you bought from, 
   of them in it. See [Importing saved pages](#importing-saved-pages). A shop that isn't in your list yet is
   added when you confirm it: Hoard asks once for all of them, showing each address.
 - **Sign in and refresh.** Add your shops in **Settings** under **Payhip shops**, one per line: a shop's
-  address is either its own domain (`myshop.store`) or `payhip.com/ShopName`. **Sign in** then opens a tab for
-  each shop. (Signed in before adding any shops? That's fine: Hoard says so, and reads Payhip once you've added
+  address is either its own domain (`myshop.store`) or `payhip.com/ShopName`. **Sign in** then opens Payhip's own
+  sign-in page first, then a tab for each shop: sign in on payhip.com too, since a shop on its own address asks
+  payhip.com whether you're signed in to Payhip on every visit. (Signed in before adding any shops? That's fine: Hoard says so, and reads Payhip once you've added
   them and choose **Refresh**.) Payhip checks for automated browsers, so refreshing happens in a visible window: if a check
   appears, complete it there and Hoard carries on. It waits up to 3 minutes.
 
-**A shop that can't be read doesn't stop the others.** If a shop's site fails (Payhip once sent shops on their own
-addresses round in a loop of redirects) or you aren't signed in there, Hoard reads your other shops, keeps what it
-already had from that one, and says on Payhip's row which shop it couldn't read and why. Refresh again later.
+**A shop that can't be read doesn't stop the others.** If a shop's site fails or you aren't signed in there, Hoard
+reads your other shops, keeps what it already had from that one, and says on Payhip's row which shop it couldn't read
+and why. If it says **Payhip kept sending the page back and forth between the shop and its sign-in check**, the shop
+asked payhip.com whether you're signed in to Payhip, and never heard yes: choose **Sign in** on Payhip's row, sign in
+on payhip.com's own page (the first tab), then refresh. Hoard's log names each address the page went through, for
+a support report.
 
 If you sell on Payhip too, your own shop's library page lists everything you've bought on Payhip, from every shop,
 without saying who made each product. Hoard shows those as **Unknown creator** rather than crediting them to you.

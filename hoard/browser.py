@@ -916,9 +916,75 @@ def goto_past_check(page, url: str, wait_s: float, progress=lambda m: None):
     raise Blocked("the check wasn't completed in time")
 
 
+class PageLoadError(RuntimeError):
+    """A page that didn't load: the browser's own reason (code: ERR_TOO_MANY_REDIRECTS, ...), and the addresses it
+    went through on the way (hops: (status, address), each redirect in turn)."""
+
+    def __init__(self, message: str, code: str = "", hops=()):
+        super().__init__(message)
+        self.code, self.hops = code, list(hops)
+
+
+# The browser's reason for an error page, from the page itself: when a page fails partway through its redirects (a
+# loop that crosses from one site to another, say), the browser shows its own error page instead, and all Playwright
+# says is that the navigation "is interrupted by another navigation to chrome-error://chromewebdata/".
+ERROR_PAGE_CODE_JS = """() => {
+  try { if (window.loadTimeData && loadTimeData.data_ && loadTimeData.data_.errorCode) return loadTimeData.data_.errorCode; } catch (e) {}
+  const el = document.querySelector('.error-code, #error-code');
+  return el ? el.textContent.trim() : '';
+}"""
+
+
+def error_page_code(page) -> str:
+    """ERR_... from the browser's error page when that's what's showing, else ''."""
+    try:
+        if not str(page.url).startswith(("chrome-error:", "edge-error:")):
+            return ""
+        code = str(page.evaluate(ERROR_PAGE_CODE_JS) or "")
+    except Exception:
+        return ""
+    m = re.search(r"ERR_[A-Z0-9_]+", code)
+    return m.group(0) if m else ""
+
+
+def hops_text(hops) -> str:
+    """The addresses a page went through, briefly (no query strings: they can carry sign-in tokens)."""
+    out = []
+    for status, url in list(hops)[:12]:
+        u = urlparse(url)
+        out.append(f"{status} {u.hostname or ''}{u.path}")
+    return " -> ".join(out) + (" -> ..." if len(hops) > 12 else "")
+
+
 def goto(page, url: str):
-    """Navigate and fail loudly on an error or bot-check page, so it never looks like an empty library."""
-    resp = page.goto(url, wait_until="domcontentloaded")
+    """Navigate and fail loudly on an error or bot-check page, so it never looks like an empty library. A page that
+    doesn't load at all raises PageLoadError, with the browser's reason and the redirects it went through."""
+    hops = []
+
+    def seen(r):
+        try:
+            if r.request.is_navigation_request() and r.frame == page.main_frame:
+                hops.append((r.status, r.url))
+        except Exception:
+            pass
+    try:
+        page.on("response", seen)
+    except Exception:   # (a page that can't report its responses still loads)
+        pass
+    try:
+        resp = page.goto(url, wait_until="domcontentloaded")
+    except Exception as e:
+        text = str(e)
+        m = re.search(r"net::(ERR_[A-Z0-9_]+)", text)
+        code = (m.group(1) if m else "") or error_page_code(page)
+        if code or "chrome-error://" in text:
+            raise PageLoadError(f"net::{code or 'ERR_FAILED'} at {url}", code, hops) from None
+        raise
+    finally:
+        try:
+            page.remove_listener("response", seen)
+        except Exception:
+            pass
     status = resp.status if resp is not None else 200
     try:
         title = page.title().lower()

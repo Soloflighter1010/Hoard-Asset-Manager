@@ -1663,8 +1663,9 @@ class SetupAssistant(unittest.TestCase):
         shops = ["https://shop-one.store", "https://payhip.com/ShopTwo"]
         started, said, refreshed, profile, program = self.plain_sign_in(
             "payhip", {"payhip": {**config.load_config()["payhip"], "shops": shops}})
-        self.assertEqual(started[0][-2:], [s + "/b-account" for s in shops])
-        self.assertTrue(any("one tab per shop" in m for m in said))
+        self.assertEqual(started[0][-3:], ["https://payhip.com/auth/login", *[s + "/b-account" for s in shops]],
+                         "payhip.com's own sign-in first: a shop on its own address asks payhip.com if you're signed in")
+        self.assertTrue(any("payhip.com first, then one tab per shop" in m for m in said))
 
     def test_without_chromiums_own_sandbox_only_where_it_cant_start(self):
         """Hoard's window always runs without Chromium's own sandbox (Playwright's default). A plain window keeps it,
@@ -2308,9 +2309,56 @@ class PayhipShopByShop(unittest.TestCase):
         self.assertEqual(net.plain_error(RuntimeError(self.LOOP)),
                          "the website kept redirecting in a loop, which is usually a passing problem on the website's side")
         self.assertEqual(net.plain_error(RuntimeError("Page.goto: Something new at https://x.example\nCall log:\n - a")),
-                         "Page.goto: Something new at https://x.example", "else its first line, without the log")
+                         "Something new at https://x.example", "else its first line, without the log or Playwright's name")
+        # a tester's report: "payhip.com/zy0n7: : Navigation to ... is interrupted by another navigation to
+        # chrome-error://chromewebdata/" (Playwright's name for the call left empty, and the browser's error page)
+        interrupted = RuntimeError(': Navigation to "https://payhip.com/zy0n7/b-account" is interrupted by another '
+                                   'navigation to "chrome-error://chromewebdata/"\nCall log: ...')
+        self.assertEqual(net.plain_error(interrupted), "the page didn't load (the browser showed its own error page instead)")
+        self.assertEqual(net.plain_error(RuntimeError(": Something odd")), "Something odd")
         timeout = type("TimeoutError", (Exception,), {})("Timeout 30000ms exceeded.\nCall log: ...")
         self.assertEqual(net.plain_error(timeout), "the website didn't answer in time")
+
+    def test_payhips_sign_in_check_going_round_in_a_loop(self):
+        """A tester's report (4.3.6): four shops failed every refresh, two on their own addresses ("the website kept
+        redirecting in a loop") and two on payhip.com ("Navigation ... is interrupted by another navigation to
+        chrome-error://chromewebdata/"). A shop on its own address sends each visit to Payhip's sign-in check on
+        payhip.com (global-identity) and back: when that check never says you're signed in, the two go round until
+        the browser gives up. It's named as that, with what to do, and where it went is logged."""
+        from unittest import mock
+        from hoard.browser import PageLoadError
+        hops = [(307, "https://kitskennel.com/b-account"),
+                (302, "https://payhip.com/global-identity?redirect=https%3A%2F%2Fkitskennel.com%2Fb-account")] * 10
+        cfg = config.load_config()
+        logged = []
+
+        def looping(page, url, wait, progress):
+            raise PageLoadError(f"net::ERR_TOO_MANY_REDIRECTS at {url}", "ERR_TOO_MANY_REDIRECTS", hops)
+        with mock.patch.object(library, "goto_past_check", looping), mock.patch.object(library, "log", logged.append):
+            with self.assertRaises(library.PayhipSignInLoop) as got:
+                library.read_payhip_shop(self.Page(), "https://kitskennel.com", cfg, lambda m: None)
+        self.assertIn("sign-in check on payhip.com", str(got.exception))
+        self.assertIn("payhip.com/global-identity", logged[0])
+        self.assertNotIn("redirect=", logged[0], "no query strings: they can carry sign-in tokens")
+
+        def other_loop(page, url, wait, progress):   # a loop that isn't Payhip's sign-in check stays as it was
+            raise PageLoadError(f"net::ERR_TOO_MANY_REDIRECTS at {url}", "ERR_TOO_MANY_REDIRECTS",
+                                [(302, "https://anko.store/b-account"), (302, "https://anko.store/x")] * 10)
+        with mock.patch.object(library, "goto_past_check", other_loop), mock.patch.object(library, "log", logged.append):
+            with self.assertRaises(PageLoadError) as got:
+                library.read_payhip_shop(self.Page(), "https://anko.store", cfg, lambda m: None)
+        self.assertNotIsInstance(got.exception, library.PayhipSignInLoop)
+
+        shops = ["https://payhip.com/Mochi", "https://kitskennel.com"]
+        cfg["payhip"] = {**cfg["payhip"], "shops": shops}
+        loop = library.PayhipSignInLoop(library.PAYHIP_SIGN_IN_LOOP, "ERR_TOO_MANY_REDIRECTS", hops)
+        with mock.patch.object(library, "read_payhip_shop",
+                               self.read({shops[0]: [self.card(shops[0], "aaa", "Mochi Hat")], shops[1]: loop})):
+            items = library.fetch_payhip(self.ctx(), cfg, lambda m: None)
+        self.assertEqual([i["name"] for i in items], ["Mochi Hat"], "the other shops are still read")
+        why = dict(cfg["_unread_payhip_shops"])["kitskennel.com"]
+        self.assertIn("Sign in to Payhip itself", why)
+        self.assertNotIn("passing problem", why)
 
     def test_a_purchase_from_a_shop_you_havent_added_says_so(self):
         """Another tester: "It doesn't show the Open on Payhip button for some of the purchases". A shop on its own

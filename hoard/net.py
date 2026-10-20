@@ -1,7 +1,7 @@
 """Is a store reachable? Used before refreshing, signing in or downloading, and to explain network failures."""
 from __future__ import annotations
 
-
+import re
 
 STORE_HOSTS = {"booth": "accounts.booth.pm", "gumroad": "app.gumroad.com", "jinxxy": "jinxxy.com", "payhip": "payhip.com",
                "itch": "api.itch.io"}
@@ -39,7 +39,9 @@ PAGE_ERRORS = (
     ("ERR_SSL_", "a secure connection to the website couldn't be made"),
     ("ERR_CONNECTION_", "the website didn't answer"),
     ("ERR_EMPTY_RESPONSE", "the website sent back nothing"),
+    ("chrome-error://", "the page didn't load (the browser showed its own error page instead)"),
 )
+_API_PREFIX = re.compile(r"^(?:[A-Za-z]+\.[A-Za-z]+)?:\s*")   # Playwright's "Page.goto: ", or a bare ": " left of it
 
 
 def plain_error(error: Exception) -> str:
@@ -49,7 +51,7 @@ def plain_error(error: Exception) -> str:
     for code, words in PAGE_ERRORS:
         if code in text:
             return words
-    first = text.strip().split("\n", 1)[0].split(" Call log:", 1)[0].strip()
+    first = _API_PREFIX.sub("", text.strip().split("\n", 1)[0].split(" Call log:", 1)[0].strip())
     if type(error).__name__ == "TimeoutError" or first.startswith("Timeout "):
         return "the website didn't answer in time"
     return first[:300] or type(error).__name__

@@ -17,8 +17,8 @@ from urllib.parse import urlparse
 
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
-from .browser import Blocked, _playwright, goto, goto_past_check, has_password_field, settle
-from .common import NotLoggedIn, now_iso
+from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check, has_password_field, hops_text, settle
+from .common import NotLoggedIn, log, now_iso
 from .net import STORE_HOSTS, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
@@ -611,12 +611,31 @@ PAYHIP_SHOP_JS = r"""
 """
 
 
+class PayhipSignInLoop(PageLoadError):
+    """A shop's page went back and forth with Payhip's sign-in check (payhip.com/global-identity) until the browser
+    gave up. A shop on its own address, and one on payhip.com that has moved to its own address, asks payhip.com
+    whether you're signed in to Payhip itself on every visit: when that never comes back as yes, the two send the
+    page to each other in a loop."""
+
+
+PAYHIP_SIGN_IN_LOOP = ("Payhip kept sending the page back and forth between the shop and its sign-in check on "
+                       "payhip.com. Sign in to Payhip itself (Payhip's Sign in, in Stores, opens payhip.com's own "
+                       "sign-in page first), then refresh again")
+
+
 def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
     """Every product you bought from one Payhip shop, from its library page (<shop>/b-account), all its pages."""
     url, cards = shop + "/b-account", {}
     wait = float(cfg["payhip"].get("bot_check_wait", 180)) if cfg["payhip"].get("headed", True) else 0
     for page_no in range(1, 200):   # 15 products a page: 3,000 products
-        goto_past_check(page, url, wait, progress)
+        try:
+            goto_past_check(page, url, wait, progress)
+        except PageLoadError as e:
+            if e.hops:   # where it went, for a support report (addresses only: no query strings)
+                log(f"{shop.split('://', 1)[1]}: {e.code or 'the page'} after {hops_text(e.hops)}")
+            if any(urlparse(u).path.rstrip("/").endswith("/global-identity") for _status, u in e.hops):
+                raise PayhipSignInLoop(PAYHIP_SIGN_IN_LOOP, e.code, e.hops) from None
+            raise
         settle(page)
         if "/b-account" not in urlparse(page.url).path or has_password_field(page):
             raise NotLoggedIn(f"not signed in to {urlparse(shop).hostname}{urlparse(shop).path}")
@@ -645,10 +664,12 @@ def jinxxy_inventory_pages(hrefs) -> list[str]:
 
 
 def sign_in_urls(cfg: dict, store: str) -> list[str]:
-    """The page(s) where you sign in to a store. For Payhip, one per shop in your settings (each shop keeps its own
-    buyer account); with no shops listed yet, Payhip's own sign-in page."""
-    urls = [s + "/b-account" for s in payhip_shops(cfg)] if store == "payhip" else []
-    return urls or [STORES[store]["login"]]
+    """The page(s) where you sign in to a store. For Payhip, its own sign-in page first, then one page per shop in
+    your settings: a shop keeps its own buyer account, and a shop on its own address also asks payhip.com whether
+    you're signed in to Payhip itself (its sign-in check, payhip.com/global-identity), which goes round in a loop
+    when you aren't."""
+    shops = [s + "/b-account" for s in payhip_shops(cfg)] if store == "payhip" else []
+    return [STORES[store]["login"], *shops]
 
 
 def open_sign_in_pages(ctx, cfg: dict, store: str):
@@ -681,6 +702,10 @@ def fetch_payhip(ctx, cfg, progress) -> list[dict]:
                     cards.setdefault(c["id"], c)
             except NotLoggedIn:
                 unread.append((name, "you aren't signed in there"))
+            except PayhipSignInLoop as e:
+                failed = failed or e
+                unread.append((name, str(e)))
+                progress(f"Couldn't read {name}: Payhip's sign-in check went round in a loop; reading your other shops")
             except Blocked:
                 raise   # Payhip's bot check: every shop would wait for it in turn
             except Exception as e:
