@@ -4,7 +4,7 @@
 //   deployed; else it opens the releases page),
 // - Copy copies the VCC listing's address,
 // - the store tabs on the front page tint the glow and say what Hoard does on each store, as the app's tabs do,
-// - the docs' search box finds any section of the docs (docs/search.json),
+// - the docs' search box finds any section of the docs (docs/search.json, or docs/ja/search.json in Japanese),
 // - and there are a few things to find, as in the app.
 (() => {
   "use strict";
@@ -139,7 +139,7 @@
       }
       if (!hits.length) {
         const li = document.createElement("li");
-        li.className = "none"; li.textContent = "Nothing in the docs matches that.";
+        li.className = "none"; li.textContent = search.dataset.none || "Nothing in the docs matches that.";
         results.append(li);
       }
       results.hidden = false;

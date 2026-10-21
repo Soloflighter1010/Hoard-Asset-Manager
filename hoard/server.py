@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, shortlinks, space, themes, updater, vault
+from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -56,7 +56,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
-           "/api/backup/show", "/api/local/picture")
+           "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -974,10 +974,12 @@ class Handler(BaseHTTPRequestHandler):
                              "creator": (i or a or p).get("creator") or "",
                              "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
                              "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
-                             "local": store == "local", "mark": mark})
+                             "local": store == "local", "mark": mark,
+                             **{k: p[k] for k in ("price", "was") if p.get(k)}})   # on a wishlist: what it costs
             out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                         "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
-                        "short": (s.get("short") or {}).get("expires"), "items": rows})
+                        "short": (s.get("short") or {}).get("expires"), "items": rows,
+                        **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 
     def _set_code(self, sid: str):
@@ -1182,6 +1184,28 @@ class Handler(BaseHTTPRequestHandler):
         srv.forget_index()
         return self._json({"ok": True, **done})
 
+    def _import_wishlists(self, body: dict):
+        """Wishlist pages saved from your own browser: each read offline (wishlists.from_saved_pages), and each list
+        in them kept as a wishlist. A long wishlist saved a page at a time comes together as one."""
+        files = body.get("files")
+        if not isinstance(files, list) or not 1 <= len(files) <= MAX_IMPORT_FILES or \
+                not all(isinstance(f, dict) and isinstance(f.get("content"), str) for f in files):
+            return self._json({"error": f"Send between 1 and {MAX_IMPORT_FILES} saved pages at a time."}, 400)
+        try:
+            results = wishlists.from_saved_pages([(str(f.get("filename") or "page")[:300], f["content"]) for f in files])
+        except Exception as e:   # the reading browser itself didn't start
+            return self._json({"error": browser_problem(e) or f"Couldn't read the pages: {e}"}, 500)
+        lists = wishlists.merge_lists([x for r in results for x in r.get("lists", [])])
+        try:
+            done = sets.SetStore().put_wishlists(lists) if lists else {"lists": 0, "cheaper": []}
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        return self._json({"ok": True, "lists": done["lists"],
+                           "pages": [{"filename": r["filename"], **({"error": r["error"]} if "error" in r else
+                                      {"lists": [{"list": x["list"], "store": x["store"], "products": len(x["products"])}
+                                                 for x in r["lists"]]})} for r in results],
+                           **self._sets_view()})
+
     def _import(self, body: dict):
         """Import library pages saved from your own browser: any number, sent a batch at a time. Each page gets its
         own result, so one bad page doesn't stop the rest. A page from a Payhip shop you haven't added comes back
@@ -1265,10 +1289,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "Bad request."}, 400)
         if length < 0:   # (read(-1) would wait for the connection to close)
             return self._json({"error": "Bad request."}, 400)
-        if length > (80 * 1024 * 1024 if path in ("/api/import", "/api/backup/check", "/api/backup/restore")
+        if length > (80 * 1024 * 1024 if path in ("/api/import", "/api/wishlists/import", "/api/backup/check",
+                                                    "/api/backup/restore")
                      else 1024 * 1024):  # only imports and backups are large
-            return self._json({"error": "That's too large." if path != "/api/import"
-                               else "That's too large to be library pages. Import fewer at a time."}, 413)
+            return self._json({"error": "That's too large to be saved pages. Import fewer at a time."
+                               if path in ("/api/import", "/api/wishlists/import") else "That's too large."}, 413)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except (ValueError, RecursionError):
@@ -1449,6 +1474,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": str(e)}, 500)
         if path == "/api/import":
             return self._import(body)
+        if path == "/api/wishlists/read":   # Read wishlists: each chosen store's, in its signed-in window (wishlists.py)
+            stores = [x for x in body.get("stores") or [] if x in wishlists.READERS] if isinstance(body.get("stores"), list) else []
+            if not stores:
+                return self._json({"error": "Choose the stores to read your wishlists from."}, 400)
+            started = srv.jobs.start("wishlists", stores)
+            return self._json({"ok": bool(started), "started": started}, 202 if started else 409)
+        if path == "/api/wishlists/import":   # wishlist pages saved from your own browser, read offline
+            return self._import_wishlists(body)
         if path == "/api/itch-key":
             return self._itch_key(body)
         if path == "/api/cancel":

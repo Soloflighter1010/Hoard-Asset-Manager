@@ -12,7 +12,7 @@ For working on Hoard itself. How it's built, in depth, is in
 | `scripts/` | `build_release.py` (the source zip) and `build_vpm.py` (the Unity package) |
 | `packaging/` | The apps: PyInstaller spec (Windows and Mac), Inno Setup installer, icons, and `flatpak/` (the Linux Flatpak's manifest and files) |
 | `docs/` | Architecture, command line, data formats, and responses to security reviews |
-| `wiki/` | This wiki. It's published from here (see [Releasing](Releasing#the-wiki)) |
+| `wiki/` | This wiki, and its Japanese and Korean translations in `wiki/ja/` and `wiki/ko/`. It's published from here (see [Releasing](Releasing#the-wiki)) |
 | `share/` | Hoard's share server, for [short links](Sets#short-links) to shared sets: a Cloudflare Worker (`worker.mjs`), its configuration and its setup guide ([share/README.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/share/README.md)). See [Forks and the share server](#forks-and-the-share-server) |
 | `Website/` | The VCC listing's page on GitHub Pages |
 | `.github/workflows/` | Checks, releases, the VCC listing and the wiki |

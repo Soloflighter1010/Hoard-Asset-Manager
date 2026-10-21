@@ -56,7 +56,7 @@ shown with their creators' pictures. <a href="https://hoard.furryup.link/credits
 each one, and where to get it</a>. Thank you for making them.</sub>
 
 Guides for everything, from installing to fixing a problem, are in the
-**[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**.
+**[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**, also in [Japanese](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/ホーム) and [Korean](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/홈).
 
 ---
 
