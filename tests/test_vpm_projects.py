@@ -272,6 +272,86 @@ class Backups(Temp):
             names = set(zf.namelist())
         self.assertEqual(names, {"Assets/a.txt", "ProjectSettings/ProjectVersion.txt"})
         self.assertTrue(out.name.startswith("Project-") and out.suffix == ".zip")
+        self.assertEqual([b["path"] for b in backup.found(self.tmp / "Backups")], [str(out)], "a new backup is listed")
+
+    def backups(self, folder: Path, *names: str) -> list[Path]:
+        folder.mkdir(parents=True, exist_ok=True)
+        out = []
+        for n in names:
+            (folder / n).write_bytes(b"PK\x05\x06" + bytes(18) + n.encode())
+            out.append(folder / n)
+        return out
+
+    def test_the_panel_lists_backups_and_which_are_old(self):
+        """The backup manager: the newest few of each project are kept, the rest are old once they're old enough;
+        only zips named as a backup are listed."""
+        f = self.tmp / "Backups"
+        self.backups(f, *[f"Avatar-2025-0{m}-01T10-00-00.zip" for m in range(1, 6)], "World-2025-01-01T10-00-00.zip",
+                     "notes.zip", "Avatar.zip", "Avatar-2025-07-01T10-00-00.zip.part")
+        (f / "Sub-2025-01-01T10-00-00.zip").mkdir()
+        found = backup.found(f)
+        self.assertEqual([b["name"] for b in found][:2], ["Avatar-2025-05-01T10-00-00.zip", "Avatar-2025-04-01T10-00-00.zip"])
+        self.assertEqual(len(found), 6, "only zips named <project>-<date>T<time>.zip")
+        self.assertEqual((found[0]["project"], found[0]["when"]), ("Avatar", "2025-05-01T10:00:00"))
+        now = 1767225600   # 2026-01-01
+        old = {b["name"] for b in backup.mark_old(found, keep=3, days=30, now=now) if b["old"]}
+        self.assertEqual(old, {"Avatar-2025-01-01T10-00-00.zip", "Avatar-2025-02-01T10-00-00.zip"},
+                         "past the newest three of Avatar; World's only one stays")
+        self.assertFalse(any(b["old"] for b in backup.mark_old(found, keep=3, days=365, now=now)), "not old enough yet")
+        view = backup.overview(f, None, 3, 30)
+        self.assertEqual((view["keep"], view["days"], len(view["backups"])), (3, 30, 6))
+        self.assertIn("free", view["room"])
+
+    def test_only_backups_can_be_deleted_or_moved(self):
+        """What a page asks to delete or move is checked: a backup-named zip, directly in the backups folder or the
+        one old ones were moved to, and not a link."""
+        f, away = self.tmp / "Backups", self.tmp / "Elsewhere"
+        a, b = self.backups(f, "Avatar-2025-01-01T10-00-00.zip", "Avatar-2025-02-01T10-00-00.zip")
+        (other,) = self.backups(self.tmp / "Other", "Avatar-2025-03-01T10-00-00.zip")
+        self.assertEqual(backup.chosen([str(a)], [f, None]), [a])
+        for bad in (str(other), str(f / "notes.zip"), "Avatar-2025-01-01T10-00-00.zip", str(f / ".." / "Other" / other.name)):
+            with self.assertRaises(ValueError, msg=bad):
+                backup.chosen([bad], [f, None])
+        (f / "notes.zip").write_bytes(b"x")
+        with self.assertRaises(ValueError):
+            backup.chosen([str(f / "notes.zip")], [f])
+        if hasattr(os, "symlink"):
+            try:
+                os.symlink(other, f / "Link-2025-04-01T10-00-00.zip")
+            except OSError:
+                pass
+            else:
+                with self.assertRaises(ValueError, msg="a link"):
+                    backup.chosen([str(f / "Link-2025-04-01T10-00-00.zip")], [f])
+        count, freed, problems = backup.move([a], away)
+        self.assertEqual((count, problems), (1, []))
+        self.assertFalse(a.exists())
+        self.assertTrue((away / a.name).is_file())
+        self.assertEqual(freed, (away / a.name).stat().st_size)
+        self.assertEqual(backup.chosen([str(away / a.name)], [f, away]), [away / a.name], "a moved one, there")
+        (away / b.name).write_bytes(b"already here")
+        count, _, problems = backup.move([b], away)
+        self.assertEqual(count, 0)
+        self.assertTrue(b.exists(), "one already there by that name is left, and this one kept")
+        self.assertIn("already", problems[0])
+        self.assertEqual(backup.delete([b])[0], 1)
+        self.assertFalse(b.exists())
+        self.assertFalse(list(away.glob("*.part")), "no half-made copy left")
+
+    def test_a_drive_low_on_room(self):
+        with mock.patch("shutil.disk_usage", return_value=mock.Mock(free=5 << 30, total=500 << 30)):
+            self.assertTrue(backup.room(self.tmp)["low"], "under 10 GB")
+        with mock.patch("shutil.disk_usage", return_value=mock.Mock(free=40 << 30, total=500 << 30)):
+            self.assertTrue(backup.room(self.tmp)["low"], "under 10%")
+        with mock.patch("shutil.disk_usage", return_value=mock.Mock(free=200 << 30, total=500 << 30)):
+            self.assertFalse(backup.room(self.tmp / "not made yet")["low"])
+
+    def test_the_rule_is_kept(self):
+        self.assertEqual(listing.backup_prefs(), {"keep": 3, "days": 30, "moved_to": ""})
+        listing.set_backup_prefs(keep=5, days=90, moved_to=str(self.tmp / "E"))
+        self.assertEqual(listing.backup_prefs(), {"keep": 5, "days": 90, "moved_to": str(self.tmp / "E")})
+        listing.set_backup_prefs(keep=4)   # not one of the choices
+        self.assertEqual(listing.backup_prefs()["keep"], 3)
 
 
 class Editors(Temp):

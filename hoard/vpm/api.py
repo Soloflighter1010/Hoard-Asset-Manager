@@ -68,7 +68,28 @@ class Service:
             "repos": [{"label": r.label(), "url": r.url, "path": str(r.path), "id": r.id, "builtin": r.builtin,
                        "packages": len(r.packages), "loaded": r.loaded, "error": r.error} for r in coll.repos],
             "presets": presets.load(),
+            "backups": self.backups(summary=True),
         }
+
+    def backups_folder(self) -> Path:
+        return Path(self.settings().project_backup_path() or backup.default_folder())
+
+    def backups(self, summary: bool = False) -> dict:
+        """The backups panel: every backup, which are old, and the room left on their drive. In the overview, just
+        enough to say when the drive is low on room and old backups could go."""
+        prefs = listing.backup_prefs()
+        view = backup.overview(self.backups_folder(), Path(prefs["moved_to"]) if prefs["moved_to"] else None,
+                               prefs["keep"], prefs["days"])
+        if summary:
+            return {k: view[k] for k in ("room", "old_count", "old_size")}
+        return view
+
+    def backups_chosen(self, paths) -> list[Path]:
+        prefs = listing.backup_prefs()
+        try:
+            return backup.chosen(paths, [self.backups_folder(), Path(prefs["moved_to"]) if prefs["moved_to"] else None])
+        except ValueError as e:
+            raise ProjectsError(str(e)) from None
 
     def listed(self, path) -> str:
         """The project's path as the list has it: what's worked on is always the list's own, never what was sent."""
@@ -192,6 +213,15 @@ class Service:
             failed = self.collection().refresh()
             self.forget()
             return "Repositories refreshed." if not failed else "Refreshed, except: " + "; ".join(failed)
+        if op == "move-backups":
+            paths, to = self.backups_chosen(what.get("paths")), Path(str(what.get("to") or ""))
+            if not to.is_absolute():
+                raise ProjectsError("Choose a folder to move them to, by its full path.")
+            count, freed, problems = backup.move(paths, to)
+            if count:
+                listing.set_backup_prefs(moved_to=str(to))
+            done = f"Moved {count} {'backup' if count == 1 else 'backups'} to {to}, {freed / (1 << 30):.1f} GB freed."
+            return done + (" Not moved: " + "; ".join(problems[:10]) if problems else "")
         path = self.listed(what.get("path"))
         if op in ("change", "preload"):
             self._fetch_missing()

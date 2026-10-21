@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 16 October 2026 (version 1.6.0)
+Last updated: 21 October 2026 (version 1.7.0)
 
 **The short version:** Hoard runs entirely on your own computer, and sends nothing to me or to anyone else. There
 are no accounts, no analytics, no tracking and no ads. The one exception is a short link for a set, if you choose to
@@ -21,6 +21,7 @@ information.
 | Your library list: names, creators, links and image links for the items you own | To show your library | `library.json` in Hoard's app-data folder |
 | Product images, saved after each refresh (turn off in Settings) | So the library loads quickly and works offline | `cache/thumbs` in Hoard's app-data folder |
 | Pictures you choose for your sets' and your own packages' tiles (4.2.0) | To show them on those tiles | `set-pictures` and `local-pictures` in Hoard's app-data folder, and a copy of a package's beside it in `Local`. Never in a set's shared link |
+| Your wishlists, if you read or import them (4.4.0): each store list's products, with their store pages, pictures and prices when they were last read (and the price before, if it changed) | So you can see what you'd like, what it costs, and when a price changes | `sets.json` in Hoard's app-data folder |
 | Each set's short link, if you made one (4.3.0): its address, the key that unlocks it, and a token that lets your Hoard update or delete it | So Hoard can show the link again, update it or delete it | `sets.json` in Hoard's app-data folder, until the link runs out or you delete it |
 | Downloaded files and their records (`_manifest.json`, `catalog.json`, `tags.json`, `asset.json`) | So nothing is downloaded twice, and for search and tags | The download folder you choose |
 | Your tags | So you can sort and find things your way, in Hoard | `tags.json` in the same private `Hoard` folder as your sign-ins |
@@ -45,8 +46,8 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
 ## Who Hoard talks to
 
 - **The stores you sign in to:** Booth (and pixiv, which Booth uses for sign-in), Gumroad, Jinxxy, Payhip
-  and itch.io. Hoard reads your purchases there and downloads your files (from every store but Payhip, which
-  it only reads), as your own browser would, and each store handles those visits under its own privacy
+  and itch.io. Hoard reads your purchases there (and your wishlists, when you choose **Read my wishlists**) and downloads
+  your files (from every store but Payhip, which it only reads), as your own browser would, and each store handles those visits under its own privacy
   policy. For itch.io that's its API (`api.itch.io`), with the API key you gave Hoard, and the file hosts its
   downloads come from. Pages you import instead are read on your computer, and nothing is sent anywhere for them.
   With the **routine check** turned on in **Settings** (it's off unless you do, or had **Sync automatically** on),

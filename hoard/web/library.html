@@ -288,8 +288,11 @@ a.ghost { height: 42px; }
 .detail h3 { font: 700 13px var(--body); color: var(--dust); margin: 26px 0 10px; }
 .detail .chips { gap: 4px 12px; }
 .files { list-style: none; margin: 0; padding: 0; }
-.files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
-.files .fn { overflow-wrap: anywhere; }
+.files li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+/* the name keeps a readable width whatever the font (OpenDyslexic's letters are wide); the button goes below it
+   when it doesn't fit beside it */
+.files .fn { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+.files li > a { margin-left: auto; }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 30;
@@ -787,6 +790,13 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   .pj-acts { justify-content: flex-start; margin-top: 6px; }
 }
 .pj-back { font-size: 13px; margin: 0 0 10px; }
+/* the backups panel: each backup with a box to choose it, the old ones marked */
+.pj-bk .pj-main.check { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+.pj-bk .pj-main.check > span { display: flex; flex-direction: column; min-width: 0; }
+.pj-bk.old .pj-what { color: var(--warn); font-weight: 700; }
+.pj-field.pj-bkrule { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.pj-field.pj-bkrule select { width: auto; }
+.pj-low .linkish { margin-left: 4px; }
 .projects h3.pj-h { margin: 0 0 2px; padding: 0; border: 0; font: 400 22px/1.25 var(--display); overflow-wrap: anywhere; }
 .pj-facts { margin: 6px 0; font-size: 13.5px; }
 .pj-warn { margin: 8px 0; font-size: 13.5px; line-height: 1.5; }
@@ -858,6 +868,12 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .ext-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: -3px; font-size: 12.5px; }
 .ext-what { color: var(--dust); }
 .slot.ext.wanted .ext-what { color: var(--warn); }
+/* a wishlist product's price, and what it was when it changed (struck through); cheaper than before stands out */
+.ext-price { display: block; margin-top: -2px; font-size: 13px; font-weight: 700; color: var(--bone); overflow-wrap: anywhere; }
+.ext-price .was { font-weight: 500; color: var(--dust); }
+.ext-price .price.down { color: var(--gold-text); }
+.ext-price .price.down::before { content: "\2193 "; }
+.wish-h { margin-top: 30px; }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
 .sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

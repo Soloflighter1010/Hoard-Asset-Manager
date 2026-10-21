@@ -108,10 +108,27 @@ The Unity versions Hoard found, the way ALCOM finds them (the ones Unity Hub ins
 folders new projects and backups go in. **Offer prerelease versions of packages** lists packages' prereleases too.
 These are kept in the Creator Companion's settings, so ALCOM and the Creator Companion use them too.
 
+## Backups
+
+**Backups** (beside **Repositories**) lists every project backup in your backups folder, newest first, with its size,
+and how much room the drive it's on has left. A backup is **old** when it's past the newest few of its project (3
+unless you choose 1, 2, 5 or 10) and older than a month (or a week, 2 weeks, 3 or 6 months, or a year). **Delete the old
+ones**, or **Move the old ones...** to a folder on another drive with more room; or tick the ones you want, then **Delete
+the chosen ones** or **Move the chosen ones...**.
+
+- When the drive your backups are on runs low on room (less than 10 GB, or a tenth of the drive, free) and there are
+  old backups, the top of Projects says so, with **Delete or move them**.
+- Moving copies each backup, checks the copy is whole, and only then deletes it where it was, as a task. The ones you
+  moved are listed under **Moved to**, to delete later too.
+- Only zips named as a backup is (`<project>-<date>T<time>.zip`, as Hoard and ALCOM name them), directly in your
+  backups folder or the folder you moved them to, are ever listed, deleted or moved. Anything else there is left as it
+  is.
+
 ## Where it's kept
 
 The project list, repositories and these settings are the Creator Companion's, in its folder: `%LOCALAPPDATA%\VRChatCreatorCompanion`
 on Windows, `~/.local/share/VRChatCreatorCompanion` on macOS and Linux. Hoard reads the Creator Companion's database
 there (`vcc.liteDb`) and never writes to it. Favourites, when you opened a project from Hoard, and what you put in
-each from your library are Hoard's own, in `vpm-projects.json`; presets are in `vpm-presets.json` (see
+each from your library are Hoard's own, in `vpm-projects.json`, with which backups count as old and where you last moved
+some; presets are in `vpm-presets.json` (see
 [Where Hoard keeps things](Where-Hoard-Keeps-Things)).

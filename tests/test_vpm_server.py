@@ -125,6 +125,40 @@ class Server(unittest.TestCase):
             time.sleep(0.05)
         self.fail("the job didn't finish")
 
+    def test_the_backups_panel(self):
+        """Projects' backups: listed with which are old, the rule changed, old ones moved to another drive as a task,
+        one deleted, and a file that isn't one of the backups refused."""
+        settings = json.loads((self.vcc / "settings.json").read_text())
+        folder = self.tmp / "Backups"
+        settings["projectBackupPath"] = str(folder)
+        (self.vcc / "settings.json").write_text(json.dumps(settings))
+        folder.mkdir()
+        for m in range(1, 6):
+            (folder / f"Avatar-2024-0{m}-01T10-00-00.zip").write_bytes(b"PK" + bytes(m))
+        (folder / "notes.zip").write_bytes(b"mine")
+        status, view = self.call("POST", "/api/vpm/backups", {})
+        self.assertEqual((status, len(view["backups"]), view["old_count"]), (200, 5, 2))
+        status, overview = self.call("GET", "/api/vpm")
+        self.assertEqual(overview["backups"]["old_count"], 2, "the list's page says when the drive is low")
+        status, view = self.call("POST", "/api/vpm/backups/settings", {"keep": 1, "days": 7})
+        self.assertEqual((view["keep"], view["old_count"]), (1, 4))
+        status, out = self.call("POST", "/api/vpm/backups/delete", {"paths": [str(folder / "notes.zip")]})
+        self.assertEqual(status, 400)
+        self.assertTrue((folder / "notes.zip").exists())
+        old = [b["path"] for b in view["backups"] if b["old"]]
+        away = self.tmp / "E" / "Old backups"
+        status, out = self.call("POST", "/api/vpm/backups/move", {"paths": old[:3], "to": str(away)})
+        self.assertEqual(status, 200, out)
+        done = self.wait()
+        self.assertIn("Moved 3 backups", done["message"])
+        self.assertEqual(len(list(away.glob("*.zip"))), 3)
+        status, view = self.call("POST", "/api/vpm/backups", {})
+        self.assertEqual((len(view["backups"]), len(view["moved"]), view["moved_to"]), (2, 3, str(away)))
+        status, out = self.call("POST", "/api/vpm/backups/delete", {"paths": [view["moved"][0]["path"]]})
+        self.assertEqual((status, out["deleted"]), (200, 1))
+        status, out = self.call("POST", "/api/vpm/backups/move", {"paths": [view["backups"][0]["path"]], "to": "relative"})
+        self.assertEqual(status, 400)
+
     def test_make_a_project_with_its_sdk_and_a_product(self):
         status, overview = self.call("GET", "/api/vpm")
         self.assertEqual(status, 200)

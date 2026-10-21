@@ -1,3 +1,5 @@
+<p><a href="ホーム" lang="ja">日本語</a> · <a href="홈" lang="ko">한국어</a></p>
+
 **[Home](Home)**
 
 **Using Hoard**

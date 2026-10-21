@@ -204,7 +204,8 @@ TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "che
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
-              "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects"}
+              "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
+              "wishlists": "Read wishlists"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -233,7 +234,7 @@ def tasks_file():
 
 
 PROJECT_WORK = {"create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
-                "backup": "Back up {0}", "refresh": "Refresh the repositories"}
+                "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}"}
 
 
 def describe_job(task: str, stores: list[str], only: str | None = None, keys: list | None = None,
@@ -445,6 +446,8 @@ class Jobs:
             target = self._login_then_refresh
         elif task == "logout":
             target = self._logout
+        elif task == "wishlists":
+            target = self._wishlists
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
@@ -1059,6 +1062,58 @@ class Jobs:
         else:
             self._set(message="Library updated")
         return unread
+
+    def _wishlists(self, stores: list[str]) -> None:
+        """Read your wishlists from each store (issue #158), in its own signed-in browser as a refresh reads your
+        library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists)."""
+        from .sets import SetStore
+        from .wishlists import READERS
+        stores = [s for s in stores if s in READERS]
+        self._set(task="wishlists", message="Checking your connection")
+        online = [s for s in stores if reachable(s)]
+        failed = {s: unreachable_message(s, "read") for s in stores if s not in online}
+        got: list[dict] = []
+        with (_playwright()() if online else contextlib.nullcontext()) as p:
+            for store in online:
+                if self._forced or self.stop.is_set():
+                    break
+                label = STORES[store]["label"]
+                if store == "payhip" and not payhip_shops(self.cfg):
+                    failed[store] = PAYHIP_NO_SHOPS
+                    continue
+                self._set(task="wishlists", store=store, message=f"Reading {label}'s wishlists")
+                try:
+                    ctx = launch(p, self.cfg, not (store == "payhip" and self.cfg["payhip"].get("headed", True)), store)
+                except (ProfileBusy, SigninsUnprotected) as e:
+                    failed[store] = str(e)
+                    continue
+                try:
+                    got += READERS[store](ctx, self.cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                except NotLoggedIn:
+                    failed[store] = f"Not signed in to {label}. Choose Sign in on its row in Stores, then read your wishlists again."
+                except Blocked as e:
+                    failed[store] = (f"{label} blocked the automated browser ({e}). Save your wishlist pages from your own "
+                                     f"browser instead, and choose Import saved pages in Wishlists.")
+                except Exception as e:
+                    if not self._forced:
+                        failed[store] = unreachable_message(store, "read") if is_network_error(e) \
+                            else f"Couldn't read {label}'s wishlists: {plain_error(e)}"
+                finally:
+                    ctx.close()
+        done = SetStore().put_wishlists(got) if got else {"lists": 0, "cheaper": []}
+        cheaper = done.get("cheaper") or []
+        lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
+            [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
+        self._set(log=lines[-200:])
+        read = f"{done['lists']} {'wishlist' if done['lists'] == 1 else 'wishlists'} read" + \
+            (f", {len(cheaper)} {'product' if len(cheaper) == 1 else 'products'} cheaper than before" if cheaper else "")
+        if failed and not got:
+            why = f"Couldn't read {_names(list(failed))}'s wishlists. " + " ".join(failed.values())
+            self._set(message=why, error=why)
+        elif failed:
+            self._set(message=f"{read}, except {_names(list(failed))}'s: " + " ".join(failed.values()), partial=True)
+        else:
+            self._set(message=read)
 
     def _login_then_refresh(self, stores: list[str]) -> None:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""

@@ -51,6 +51,25 @@ def save_state(state: dict) -> None:
     write_file_safely(_state_path(), json.dumps(state, indent=1, ensure_ascii=False))
 
 
+def backup_prefs() -> dict:
+    """How the backups panel decides which backups are old, and where old ones were last moved to."""
+    from . import backup
+    raw = load_state().get("backups")
+    raw = raw if isinstance(raw, dict) else {}
+    keep = raw.get("keep") if raw.get("keep") in backup.KEEP_CHOICES else 3
+    days = raw.get("days") if raw.get("days") in backup.DAYS_CHOICES else 30
+    moved = raw.get("moved_to") if isinstance(raw.get("moved_to"), str) and Path(raw["moved_to"]).is_absolute() else ""
+    return {"keep": keep, "days": days, "moved_to": moved}
+
+
+def set_backup_prefs(**changes) -> dict:
+    with _lock:
+        state = load_state()
+        state["backups"] = {**backup_prefs(), **changes}
+        save_state(state)
+        return backup_prefs()
+
+
 def note(path: str, **changes) -> dict:
     """Change what Hoard notes about a project (favourite, opened, preloaded, ...), returning it."""
     with _lock:

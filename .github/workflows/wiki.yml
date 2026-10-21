@@ -2,7 +2,8 @@ name: Wiki
 
 # Publishes wiki/ to this repository's GitHub wiki whenever it changes on main, or by hand. The pages are written
 # and reviewed here like the code, so the wiki describes what's on main. Each publish replaces every page, so edit
-# them in wiki/, not on GitHub.
+# them in wiki/, not on GitHub. The translations in wiki/ja/ and wiki/ko/ go beside the English pages: the wiki keeps
+# every page in one folder, so each has a name of its own (scripts/wiki_translations.py checks they do).
 #
 # Once, before the first run: open the repository's Wiki tab and save any first page. GitHub only creates the
 # wiki's storage when its first page is saved.
@@ -42,7 +43,8 @@ jobs:
             exit 1
           fi
           find "$RUNNER_TEMP/wiki" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +   # a page removed from wiki/ goes too
-          cp -R wiki/. "$RUNNER_TEMP/wiki/"
+          cp wiki/*.md "$RUNNER_TEMP/wiki/"
+          for lang in wiki/*/; do cp "$lang"*.md "$RUNNER_TEMP/wiki/"; done   # Japanese, Korean: one folder of pages, as the wiki has
           cd "$RUNNER_TEMP/wiki"   # outside the checkout, whose site/ is the website
           git add --all
           if git diff --cached --quiet; then

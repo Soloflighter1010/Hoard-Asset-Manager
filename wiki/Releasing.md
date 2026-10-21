@@ -208,6 +208,19 @@ The wiki is written in the repository's `wiki/` folder and reviewed like code. W
 Once, before the first publish: open the repository's **Wiki** tab and save any first page. GitHub only creates
 the wiki's storage when its first page is saved; the workflow then replaces it.
 
+The wiki is also in Japanese (`wiki/ja/`) and Korean (`wiki/ko/`): a page for each English page but this one and
+[Development](Development). Each is named in its own language (GitHub's wiki keeps every page in one folder, so the
+workflow copies them in beside the English pages), and starts with the English page it's from, as that page was
+when it was translated. So when an English page changes, the tests fail until its translations say the same:
+
+- `python3 scripts/wiki_translations.py --diff` shows what changed in each English page since it was translated.
+- Update the translations, then `python3 scripts/wiki_translations.py --done ja Settings` (and `ko`) records
+  that each now says what the English page does.
+- Use the app's own words for its buttons and settings (`hoard/web/i18n/ja.json`, `ko.json`), so a reader finds
+  them as the page names them.
+
+The docs site builds them into `docs/ja/` and `docs/ko/`, each page at its English page's address there.
+
 ## Checks on every change
 
 **Check** runs for every pull request and every push to `main`: the tests on Ubuntu and Windows (browser tests

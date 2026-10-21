@@ -22,7 +22,10 @@ New here? Start with [Installing Hoard](Installing-Hoard), then [Getting started
 | Sign in to a store, or fix one that won't read | [Stores](Stores) |
 | Find, sort, archive or hide what I own | [Your library](Library) |
 | Keep copies of my files, and keep them up to date | [Downloads](Downloads) |
+| Group what I use together, or keep my wishlists | [Sets](Sets) |
+| Add packages and folders I made myself | [Your own packages](Your-Own-Packages) |
 | Organise things my way | [Tags](Tags) |
+| Make and manage my Unity projects | [Projects](Projects) |
 | Import my assets in Unity | [Hoard for Unity](Hoard-for-Unity) |
 | Script Hoard, or run it on a NAS | [Command line](Command-Line) |
 | Use Hoard from my phone or another computer | [Using Hoard on other devices](Using-Hoard-on-Other-Devices) |

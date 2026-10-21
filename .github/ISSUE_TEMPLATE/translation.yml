@@ -1,5 +1,5 @@
 name: "🌐 Translation fix · 翻訳の修正 · 번역 수정"
-description: "Something in Hoard's Japanese or Korean reads wrong · 日本語の表示がおかしい · 한국어 표시가 어색해요"
+description: "Something in Hoard's Japanese or Korean (the app or the wiki) reads wrong · 日本語の表示やwikiがおかしい · 한국어 표시나 wiki가 어색해요"
 title: "[Translation]: "
 labels: ["translation"]
 body:
@@ -27,7 +27,7 @@ body:
     id: where
     attributes:
       label: Where is it? · 場所 · 위치
-      description: "The page, panel or step, e.g. Settings › Appearance · 例:設定 › 外観 · 예: 설정 › 모양"
+      description: "The page, panel or step, or the wiki page, e.g. Settings › Appearance · 例:設定 › 外観、wikiの「ストア」 · 예: 설정 › 모양, wiki의 '스토어'"
     validations:
       required: true
 

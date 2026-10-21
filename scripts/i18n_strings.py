@@ -33,7 +33,8 @@ STEPS = {
           "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=report] >> nth=0", "[data-pj=back]", "[data-pj=new]",
           "[data-pj=addpkg]", "dialog.pj-dlg .pj-picklist input >> nth=0", "dialog.pj-dlg button[value=no]", "[data-pj=addprod]", "dialog.pj-dlg .linkish >> nth=0",
           "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=repos]", ".pj-more summary", "[data-pj=back]",
-          "[data-pj=settings]", "[data-pj=back]", "Escape", '#storeSeg [data-store="Sets"]',
+          "[data-pj=settings]", "[data-pj=back]", "[data-pj=backups]", "[data-pj=bkmoveold]",
+          "dialog.pj-dlg button[value=no]", "[data-pj=back]", "Escape", '#storeSeg [data-store="Sets"]',
           "[data-setopen] >> nth=0", ".setextra summary", '#storeSeg [data-store=""]', "#selectBtn", "#selectBtn",
           ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]',
           # the setup assistant, each step up to the last (not Finish, which would start reading the stores)
@@ -105,7 +106,13 @@ def sample_projects(root: Path) -> dict:
         "packages": packages}}), "utf-8")
     (vcc / "Repos" / "vrc-curated.json").write_text(json.dumps({"repo": {
         "name": "Curated", "url": "https://packages.vrchat.com/curated?download", "packages": {}}}), "utf-8")
-    (vcc / "settings.json").write_text(json.dumps({"userProjects": [str(avatar), str(unity / "Old World")]}), "utf-8")
+    backups = root / "Backups"   # the backups panel: three old ones, past the newest three and long ago
+    backups.mkdir(parents=True, exist_ok=True)
+    for when in ("2024-01-01T10-00-00", "2024-02-01T10-00-00", "2024-03-01T10-00-00", "2025-01-01T10-00-00",
+                 "2025-02-01T10-00-00", "2025-03-01T10-00-00"):
+        (backups / f"Rusk Avatar-{when}.zip").write_bytes(b"PK\x05\x06" + bytes(18))
+    (vcc / "settings.json").write_text(json.dumps({"userProjects": [str(avatar), str(unity / "Old World")],
+                                                   "projectBackupPath": str(backups)}), "utf-8")
     reports = Path(os.environ["HOARD_DATA_DIR"]) / "projects"
     reports.mkdir(parents=True, exist_ok=True)
     for pid, name, path in (("aaaaaaaaaaaaaaaa", "Rusk Avatar", avatar), ("bbbbbbbbbbbbbbbb", "Mochi World", unity / "Mochi World")):
