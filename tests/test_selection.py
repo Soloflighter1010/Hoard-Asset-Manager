@@ -35,7 +35,8 @@ class Selecting(unittest.TestCase):
             rec.update(name=name, creator="Kitsu")
             rec["files"]["f"] = {"path": f"{name}.unitypackage", "size": 1}
             man.save()
-        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True}, lan=False)
+        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True,
+                                                       "ui": {}}, lan=False)   # (by name, whatever sort a test before kept)
         with cls.srv.lib.lock:   # the Library page's list (in memory only)
             cls.srv.lib.data["items"] = [library.item("booth", k, name=n, creator="Kitsu", url=f"https://booth.pm/ja/items/{k}")
                                          for k, n in (("1", "Boots"), ("2", "Hoodie"), ("3", "Rusk"), ("4", "Skirt"))]

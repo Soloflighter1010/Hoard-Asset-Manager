@@ -1911,10 +1911,14 @@ class WindowsTabsAndTasks(unittest.TestCase):
         mochi = page.locator(".slot", has_text="Mochi")
         self.assertEqual(mochi.locator(".badge.new").count(), 1)
         self.assertEqual(page.locator(".slot", has_text="Rusk").locator(".badge.new").count(), 0)
-        page.select_option("#sort", "added")
-        self.assertEqual(page.locator(".slot .nm-t").first.inner_text(), "Mochi", "the newest first")
-        page.click("[data-fresh]")
-        self.assertEqual(page.locator(".slot").count(), 1)
+        self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("sort", None))
+        with mock.patch.object(server, "save_config"):   # (the sort is kept: not in the config other tests read)
+            page.select_option("#sort", "added")
+            self.assertEqual(page.locator(".slot .nm-t").first.inner_text(), "Mochi", "the newest first")
+            page.click("[data-fresh]")
+            self.assertEqual(page.locator(".slot").count(), 1)
+            page.evaluate("uiFlush()")
+            page.wait_for_timeout(300)
         page.close()
 
     def test_the_tasks_window(self):
