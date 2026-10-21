@@ -37,6 +37,18 @@ NEEDS_KEY = "Hoard didn't recognise this page"
 LOADED = "kind => [...document.images].some(i => i.src.includes(kind) && i.complete && i.naturalWidth === 1)"
 
 
+def goto(page, url):
+    """Open a page, and again (twice at most) if the computer ran short of network buffers for a moment: Windows
+    runners in CI did, hundreds of pages into the tests (net::ERR_NO_BUFFER_SPACE), failing a test before it began."""
+    for wait in (1, 3, None):
+        try:
+            return page.goto(url)
+        except Exception as e:   # (playwright's Error)
+            if wait is None or "ERR_NO_BUFFER_SPACE" not in str(e):
+                raise
+            time.sleep(wait)
+
+
 def png() -> bytes:
     """A 1x1 PNG, so an image that loaded can be told from one that was refused."""
     def chunk(kind, data):
@@ -107,7 +119,7 @@ class AccessKey(unittest.TestCase):
         page = self.browser.new_page()
         refused = []
         page.on("response", lambda r: refused.append(r.url) if r.status == 401 else None)
-        page.goto(url)
+        goto(page, url)
         return page, refused
 
     def test_a_one_time_link_lets_both_pages_in(self):
@@ -167,7 +179,7 @@ class AccessKey(unittest.TestCase):
             page.get_by_text("Rusk").first.wait_for()
             for url in (None, f"{self.srv.url}downloads"):
                 if url:
-                    page.goto(url)
+                    goto(page, url)
                     page.get_by_text("Rusk").first.wait_for()
                 page.click("#settingsBtn")
                 page.locator("#settingsPanel:not([hidden])").wait_for()
@@ -195,7 +207,7 @@ class AccessKey(unittest.TestCase):
         page.get_by_text("Rusk").first.wait_for()
         st.change("archived", {rusk}, True)   # as the Library's Archive button does
         self.addCleanup(st.change, "archived", {rusk}, False)
-        page.goto(f"{self.srv.url}downloads")
+        goto(page, f"{self.srv.url}downloads")
         page.locator("#views [data-view='archive']").wait_for()
         self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Updates\n0", "Archive\n1", "Disk space\n3 bytes"],
                          "Disk space counts what's archived too: it's still on disk")
@@ -232,7 +244,7 @@ class AccessKey(unittest.TestCase):
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.click()
             page.get_by_role("link", name="See the update").wait_for()   # issue #108: beside Show in Downloads
-            page.goto(f"{self.srv.url}downloads")
+            goto(page, f"{self.srv.url}downloads")
             page.locator("#views [data-view='updates']").wait_for()
             self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Updates\n1")
             page.click("#views [data-view='updates']")
@@ -296,7 +308,7 @@ class AccessKey(unittest.TestCase):
         with mock.patch.object(server, "save_config"):   # the test never writes your settings
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.wait_for()
-            page.goto(f"{self.srv.url}downloads")
+            goto(page, f"{self.srv.url}downloads")
             page.get_by_text("Rusk").first.wait_for()
             page.click("#settingsBtn")
             page.locator("#setUpdates").wait_for()
@@ -314,7 +326,7 @@ class AccessKey(unittest.TestCase):
         page.get_by_text("Rusk").first.wait_for()
         self.assertTrue(page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--local').trim()"),
                         "the Library has Local's colour too (custom colours started it grey)")
-        page.goto(f"{self.srv.url}#setup")
+        goto(page, f"{self.srv.url}#setup")
         page.reload()
         page.locator("#setup").wait_for(state="visible")
         page.close()
@@ -478,7 +490,7 @@ class DiskSpace(unittest.TestCase):
 
     def open(self):
         page = self.browser.new_page()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.get_by_text("Tiny Hat").first.wait_for()
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
@@ -584,7 +596,7 @@ class StackingAcrossStores(unittest.TestCase):
 
     def test_both_pages_stack_them(self):
         page = self.browser.new_page()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.get_by_text("Hoodie").first.wait_for()
         # the Ashbeast pictures aren't the same bytes: once the page has worked out how they look, they stack too
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
@@ -630,7 +642,7 @@ class StackingAcrossStores(unittest.TestCase):
         sort = lambda: page.eval_on_selector("#sort", "s => s.value")
         names = lambda: page.eval_on_selector_all(".slot", "els => els.map(e => e.getAttribute('aria-label'))")
         with mock.patch.object(server, "save_config"):   # (kept in memory: not in your config)
-            page.goto(self.srv.entry_url())
+            goto(page, self.srv.entry_url())
             page.get_by_text("Hoodie").first.wait_for()
             self.assertEqual(sort(), "name")
             page.select_option("#sort", "creator")
@@ -654,11 +666,11 @@ class StackingAcrossStores(unittest.TestCase):
             self.assertEqual(sort(), "size", "back on the page that has it")
             # next launch: the page reads it from config.json (here, as if chosen before)
             self.srv.cfg["ui"]["sort"] = "store"
-            page.goto(self.srv.entry_url())
+            goto(page, self.srv.entry_url())
             page.get_by_text("Hoodie").first.wait_for()
             self.assertEqual(sort(), "store")
             # a link's own sort wins; Downloads' old name for Recently added still works
-            page.goto(self.srv.entry_url().split("/#")[0] + "/downloads#sort=newest")
+            goto(page, self.srv.entry_url().split("/#")[0] + "/downloads#sort=newest")
             page.get_by_text("Hoodie").first.wait_for()
             self.assertEqual(sort(), "added")
             self.assertEqual(self.srv.cfg["ui"]["sort"], "store", "only choosing a sort keeps it")
@@ -690,7 +702,7 @@ class Delights(unittest.TestCase):
 
     def open(self, path=""):
         page = self.browser.new_page()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         if path:
             page.click(f"nav.apptabs a[href='/{path}']")
@@ -789,10 +801,10 @@ class SaveForHoard(unittest.TestCase):
             page.route("https://images.payhip.com/**", lambda r: r.fulfill(status=404, body=""))
             alerts = []
             page.on("dialog", lambda d: (alerts.append(d.message), d.dismiss()))
-            page.goto("https://testshop.store/")
+            goto(page, "https://testshop.store/")
             page.evaluate(payhip_saver())
             self.assertIn("/b-account", alerts[0], "anywhere else, it says where to run it")
-            page.goto("https://testshop.store/b-account?page=2")   # from any page of it: it starts at the first
+            goto(page, "https://testshop.store/b-account?page=2")   # from any page of it: it starts at the first
             with page.expect_download() as got:
                 page.evaluate(payhip_saver())
             download = got.value
@@ -835,7 +847,7 @@ class ImportingFromTheLibrary(unittest.TestCase):
         page = browser.new_page()
         asked = []
         page.on("dialog", lambda d: (asked.append(d.message), d.accept()))   # (there should be none: Hoard asks itself)
-        page.goto(srv.entry_url())
+        goto(page, srv.entry_url())
         page.locator("#storesBtn").click()
         page.locator("#importPages").wait_for()
         page.set_input_files("#importFile", [
@@ -891,7 +903,7 @@ class LargeLibrary(unittest.TestCase):
 
     def open(self):
         page = self.browser.new_page(viewport={"width": 1280, "height": 800})
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.locator(".slot").first.wait_for()
         return page
 
@@ -941,7 +953,7 @@ class LargeLibrary(unittest.TestCase):
         with mock.patch.object(server, "collect_catalog", lambda cfg, root: (catalog, None)):
             self.srv.forget_index()
             page = self.open()
-            page.goto(self.srv.url + "downloads")
+            goto(page, self.srv.url + "downloads")
             page.locator("#grid .slot").first.wait_for()
             page.wait_for_timeout(300)
             self.assertLessEqual(self.drawn(page), 240)
@@ -1000,7 +1012,7 @@ class CopiesAndActions(unittest.TestCase):
 
     def open(self):
         page = self.browser.new_page()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.get_by_text("Mochi").first.wait_for()
         return page
 
@@ -1220,7 +1232,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
 
     def open(self):
         page = self.browser.new_page()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.get_by_text("Mochi").first.wait_for()
         return page
 
@@ -1235,7 +1247,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page = self.browser.new_page()
         page.add_init_script(self.SAMPLE_SPLASH)
         began = time.monotonic()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         self.assertIn("first", page.locator("#splash").get_attribute("class") or "")
         page.get_by_text("Mochi").first.wait_for(state="attached")
         page.locator("#splash").wait_for(state="detached")
@@ -1244,7 +1256,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.get_by_text("Mochi").first.click()   # nothing in the way once it's gone
 
         # a later page (the same window): not straight away; only once reading takes a while
-        page.goto(f"{self.srv.url}downloads")
+        goto(page, f"{self.srv.url}downloads")
         self.assertNotIn("first", page.locator("#splash").get_attribute("class") or "")
         page.locator("#splash").wait_for(state="detached")
 
@@ -1252,14 +1264,14 @@ class HighlightsAndAccessibility(unittest.TestCase):
             time.sleep(1.0)
             route.continue_()
         page.route("**/api/library*", slow)
-        page.goto(f"{self.srv.url}")
+        goto(page, f"{self.srv.url}")
         page.locator("#splash").wait_for(state="detached", timeout=10000)
         self.assertEqual(page.evaluate("window.__splash"), 1, "shown while reading took a while")
         page.close()
 
         page = self.browser.new_page()   # a new window whose library can't be read
         page.route("**/api/library*", lambda route: route.abort())
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.locator("#splash").wait_for(state="detached", timeout=10000)
         page.close()
 
@@ -1285,7 +1297,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         mochi = next(i for i in self.srv.lib.data["items"] if i["name"] == "Mochi")
         store.change("hidden", {library.tag_key(mochi["store"], mochi["name"])}, True)
         page = self.browser.new_page()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         page.click('#views [data-view="hidden"]')
         page.fill("#pinInput", "2468")
@@ -1381,7 +1393,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
             self.assertEqual(page.evaluate("getComputedStyle(document.documentElement).colorScheme"), "light")
             page.close()
             page = self.browser.new_page()   # opened again: in the theme from the first moment
-            page.goto(self.srv.entry_url())
+            goto(page, self.srv.entry_url())
             self.assertEqual(page.evaluate(cave), "#F3ECE8")
             page.close()
 
@@ -1414,7 +1426,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
             page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
             for where in ("library", "downloads"):
                 if where == "downloads":
-                    page.goto(f"{self.srv.url}downloads")
+                    goto(page, f"{self.srv.url}downloads")
                     page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
                 if page.locator("#settingsPanel").is_hidden():
                     page.click("#settingsBtn")
@@ -1457,7 +1469,7 @@ class SetupAssistant(unittest.TestCase):
                 mock.patch.object(srv.lib, "save"):   # in memory only, as elsewhere here
             browser = p.chromium.launch()
             page = browser.new_page()
-            page.goto(srv.entry_url())
+            goto(page, srv.entry_url())
             page.wait_for_function("() => typeof openSetup === 'function' && document.readyState === 'complete'")
             page.evaluate("openSetup()")   # Set up Hoard, from Settings
             page.locator("#setup:not([hidden])").wait_for()
@@ -1500,7 +1512,7 @@ class SetupAssistant(unittest.TestCase):
             browser = p.chromium.launch()
             page = browser.new_page()
             page.on("dialog", lambda d: self.fail(f"the browser's own dialog: {d.message}"))
-            page.goto(srv.entry_url())
+            goto(page, srv.entry_url())
             page.locator("#setup:not([hidden])").wait_for()
             self.assertTrue(page.locator("#setupSkip").is_hidden(), "no Skip the first time")
             page.keyboard.press("Escape")
@@ -1557,7 +1569,7 @@ class SetupAssistant(unittest.TestCase):
         with sync_playwright() as p, mock.patch.object(server, "save_config"):
             browser = p.chromium.launch()
             page = browser.new_page()
-            page.goto(srv.entry_url())
+            goto(page, srv.entry_url())
             page.wait_for_function("() => DATA && DATA.version")
             page.evaluate("openSetup()")
             page.locator("#setup:not([hidden])").wait_for()
@@ -1631,7 +1643,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page = ctx.new_page() if ctx else self.browser.new_page(viewport={"width": 1400, "height": 860})
         self.errors = []
         page.on("pageerror", lambda e: self.errors.append(str(e)))
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.locator(".slot", has_text="Mochi").wait_for()
         return page
 
@@ -1673,7 +1685,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page = self.browser.new_page(viewport={"width": width, "height": 860})
             self.errors = []
             page.on("pageerror", lambda e: self.errors.append(str(e)))
-            page.goto(self.srv.entry_url())
+            goto(page, self.srv.entry_url())
             page.locator(".slot", has_text="Mochi").click()
             page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
             page.evaluate("document.querySelector('#dlPanel').hidden = false")
@@ -1750,7 +1762,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertGreater(page.evaluate(height), one_row, "two rows")
         page.set_viewport_size({"width": 1600, "height": 800})
         page.wait_for_function(f"() => document.querySelector('.bar').offsetHeight === {one_row}")
-        page.goto(self.srv.url + "downloads")
+        goto(page, self.srv.url + "downloads")
         page.wait_for_timeout(500)
         self.assertEqual(page.evaluate(height), one_row, "the same on Downloads")
         page.close()
@@ -1780,7 +1792,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         it, and a job that went well lets it go after a moment; one with problems keeps it until you close it."""
         page = self.browser.new_page(viewport={"width": 1100, "height": 700})
         page.clock.install()
-        page.goto(self.srv.entry_url())
+        goto(page, self.srv.entry_url())
         page.locator(".slot", has_text="Mochi").wait_for()
         pad = "() => parseFloat(getComputedStyle(document.querySelector('main')).paddingBottom)"
         before = page.evaluate(pad)
