@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ..common import log
 from ..safety import DataFileError
-from . import backup, environment, listing, presets, repos, resolve, templates, unity
+from . import backup, environment, imports, listing, presets, repos, resolve, templates, unity
 from .manifest import valid_name
 from .preload import apply as put_in
 from .preload import contents, suggested_packages
@@ -280,8 +280,10 @@ class Service:
             except resolve.ResolveError as e:
                 done["failed"].append({"what": "the packages they need", "why": str(e)})
         listing.add_preloaded(path, [{"tag_key": a["tag_key"], "name": a["name"], "file": e["file"],
-                                      "member": e.get("member"), "label": e.get("label"), "kind": e["kind"]}
-                                     for a, e in chosen])
+                                      "member": e.get("member"), "label": e.get("label"), "kind": e["kind"],
+                                      "added": one.get("added", [])[:20]}
+                                     for (a, e), one in zip(chosen, done["each"])])
+        imports.note(path, done["each"], log=log)   # and in the project itself, for you and Hoard for Unity (#155)
         parts = [f"{done['placed']:,} assets placed"]
         if done["already_there"] or done["in_the_way"]:
             parts.append(f"{done['already_there'] + done['in_the_way']:,} already there, left as they were")

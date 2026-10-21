@@ -213,10 +213,14 @@ def apply(project: Path, picks: list[tuple[dict, dict]], new_project: bool, lock
     each product, what happened."""
     project = Path(project)
     existing = None if new_project else unitypackage.project_guids(project)
-    done = {"placed": 0, "already_there": 0, "in_the_way": 0, "packages": [], "failed": []}
+    done = {"placed": 0, "already_there": 0, "in_the_way": 0, "packages": [], "failed": [], "each": []}
     for asset, entry in picks:
         folder = Path(asset["abs_folder"])
         label = f"{asset['name']}: {entry.get('label') or entry['file']}"
+        one = {"store": asset.get("store"), "name": asset.get("name"), "creator": asset.get("creator"),
+               "file": Path(entry.get("member") or entry["file"]).name, "label": entry.get("label") or entry["file"],
+               "added": []}   # what this product put in, for the project's list of imports (imports.py)
+        done["each"].append(one)
         try:
             if entry["kind"] == "unitypackage":
                 path = safe_join(folder, entry["file"])
@@ -228,6 +232,8 @@ def apply(project: Path, picks: list[tuple[dict, dict]], new_project: bool, lock
                 done["placed"] += r.placed
                 done["already_there"] += r.skipped_same
                 done["in_the_way"] += r.skipped_taken
+                one.update(placed=r.placed, already_there=r.skipped_same, in_the_way=r.skipped_taken,
+                           added=sorted(set(r.paths)))
             else:
                 path = folder if entry["kind"] == "vpm-folder" else safe_join(folder, entry["file"])
                 if path is None:
@@ -237,8 +243,11 @@ def apply(project: Path, picks: list[tuple[dict, dict]], new_project: bool, lock
                 what = _install_package(project, _Source(path, entry.get("member"), entry["kind"]), entry["kind"],
                                         locked or set())
                 done["packages"].append({"name": entry.get("package"), "label": entry.get("label"), "result": what})
+                one.update(package=entry.get("package"), result=what,
+                           added=[f"Packages/{entry['package']}"] if entry.get("package") and what in ("added", "updated") else [])
         except (OSError, ResolveError, unitypackage.NotAPackage, zipfile.BadZipFile, KeyError, ValueError) as e:
             done["failed"].append({"what": label, "why": str(e) or e.__class__.__name__})
+            one["why"] = str(e) or e.__class__.__name__
     return done
 
 

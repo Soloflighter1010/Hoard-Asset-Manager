@@ -1216,7 +1216,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({"ok": True, "queued": started == "queued"})
 
     def _vpm_post(self, path: str, body: dict):
-        from .vpm import listing, presets as vpm_presets, templates as vpm_templates, unity as vpm_unity
+        from .vpm import imports as vpm_imports, listing, presets as vpm_presets, templates as vpm_templates, unity as vpm_unity
         from .vpm.project import is_project
         srv = self.server
         try:
@@ -1261,8 +1261,12 @@ class Handler(BaseHTTPRequestHandler):
                 listing.note(found["path"], opened=time.strftime("%Y-%m-%dT%H:%M:%S"))
                 return self._json({"ok": True})
             if path == "/api/vpm/open-folder":
-                where = srv.vpm.listed(body.get("path"))
-                return self._json({"ok": True, "in": reveal(Path(where))})
+                where = Path(srv.vpm.listed(body.get("path")))
+                if body.get("show") == "imports":   # what Hoard put in it (vpm/imports.py), shown in its folder
+                    where = where / vpm_imports.NOTE_NAME
+                    if not where.is_file():
+                        return self._json({"error": "There's no list of what Hoard put in this project yet."}, 404)
+                return self._json({"ok": True, "in": reveal(where)})
             if path == "/api/vpm/add-project":
                 where = str(body.get("path") or "")[:2000]
                 if not where or not Path(where).is_absolute() or not Path(where).is_dir() or not is_project(Path(where)):

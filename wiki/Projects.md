@@ -76,6 +76,11 @@ template, so ALCOM can make the same project. ALCOM can't open a package inside 
 - **Put it right**, when the project's packages aren't installed the way it says (after cloning it from Git, say).
 - **Put in products from your library**, later. Nothing already in the project is replaced: a file that's there
   (with the same asset ID, or at the same path) is left as it is.
+- **What went in, and where.** Each time Hoard puts products in a project (making it, or later), it adds them to
+  `Hoard imports.md`, beside the project's `Assets` folder: each product, its file, when, and the folders it added
+  (or the package, in `Packages`), with anything left as it was because the project already had it. Unity doesn't
+  use that file, and deleting it changes nothing. Hoard also adds them to `ProjectSettings/Hoard/imports.json`, the
+  list [Hoard for Unity](Hoard-for-Unity) keeps of what it imported, so it knows they're in the project.
 - **Open in Unity**, with the version the project uses; when that one isn't installed, another you have (which
   may change the project to its own version).
 - **Open folder**, and **Back up**: everything in the project but what Unity makes again by itself (`Library`,

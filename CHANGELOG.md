@@ -2,6 +2,11 @@
 
 ## 5.0.0-beta.2
 
+- **What went into a project, and where** ([#155](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/155)).
+  Each time Hoard puts products from your library in a project, it adds them to `Hoard imports.md`, beside the
+  project's `Assets`: each product, its file, when, and the folders it added (or its package), and what was left
+  as it was. They're added to Hoard for Unity's own list of imports too (`ProjectSettings/Hoard/imports.json`), so
+  it knows those products are in the project. **Manage** lists the folders each one added.
 - Everything in 4.3.7: Payhip's sign-in loop named, and payhip.com's own sign-in opened first.
 - **Any version of a package** ([#160](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/160)). In
   **Manage**, a package's version is a button: it lists every version that works in the project's Unity, newest

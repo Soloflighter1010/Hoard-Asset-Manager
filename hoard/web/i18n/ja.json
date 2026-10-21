@@ -1696,5 +1696,8 @@
  "prerelease": "プレリリース",
  "Use this version": "このバージョンにする",
  "Version of {0}": "{0}のバージョン",
- "Newest": "最新"
+ "Newest": "最新",
+ "Show the list in the project": "プロジェクト内の一覧を表示",
+ "Added:": "追加:",
+ "There's no list of what Hoard put in this project yet.": "Hoardがこのプロジェクトに入れたものの一覧はまだありません。"
 }

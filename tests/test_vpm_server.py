@@ -151,6 +151,22 @@ class Server(unittest.TestCase):
         self.assertEqual({p["name"] for p in detail["packages"]}, {"com.vrchat.avatars", "com.vrchat.base", "com.example.extra"})
         self.assertFalse(detail["needs_repair"])
         self.assertEqual(detail["preloaded"][0]["tag_key"], "booth/hoodie")
+        self.assertEqual(detail["preloaded"][0]["added"], ["Assets/Creator"])
+        # what went in is written into the project too (#155): Hoard for Unity's list of imports, and one to read
+        log = json.loads((project / "ProjectSettings" / "Hoard" / "imports.json").read_text("utf-8"))
+        self.assertEqual(log["format"], "hoard-unity-imports")
+        entry = log["imports"][0]
+        self.assertEqual((entry["store"], entry["name"], entry["file"], entry["via"], entry["added"]),
+                         ("Booth", "Hoodie", "Hoodie.unitypackage", "hoard", ["Assets/Creator"]))
+        self.assertRegex(entry["imported_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        note = (project / "Hoard imports.md").read_text("utf-8")
+        self.assertIn("**Hoodie** (Booth): `Hoodie.unitypackage`", note)
+        self.assertIn("- Added: `Assets/Creator`", note)
+        with mock.patch.object(server, "reveal", lambda p: str(p)):   # Manage's Show the list in the project
+            status, shown = self.call("POST", "/api/vpm/open-folder", {"path": str(project), "show": "imports"})
+        self.assertEqual((status, Path(shown["in"])), (200, project / "Hoard imports.md"))
+        (project / "Hoard imports.md").unlink()
+        self.assertEqual(self.call("POST", "/api/vpm/open-folder", {"path": str(project), "show": "imports"})[0], 404)
         # removing the SDK: previewed first, then done as a job
         status, preview = self.call("POST", "/api/vpm/preview", {"path": str(project), "remove": ["com.vrchat.avatars"]})
         self.assertEqual({r["name"] for r in preview["remove"]}, {"com.vrchat.avatars", "com.vrchat.base"})
@@ -221,6 +237,52 @@ class Server(unittest.TestCase):
         listed = {t["name"]: t for t in self.call("GET", "/api/vpm")[1]["templates"]}
         self.assertTrue(listed["Avatar base"]["available"], "ALCOM's template, made from it, is listed as one")
         self.assertEqual(self.call("POST", "/api/vpm/presets", {"action": "save", "preset": {"name": ""}})[0], 400)
+
+
+
+class ImportsList(unittest.TestCase):
+    """What Hoard put in a project, written into it (#155): added to Hoard for Unity's own list, never written over."""
+
+    def setUp(self):
+        from hoard.vpm import imports
+        self.imports = imports
+        self.project = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.project, True)
+        self.log = self.project / "ProjectSettings" / "Hoard" / "imports.json"
+
+    def test_added_to_what_hoard_for_unity_noted(self):
+        self.log.parent.mkdir(parents=True)
+        unity = {"store": "Gumroad", "name": "Hat", "creator": "Mochi", "file": "Hat.unitypackage", "imported_at": "2026-01-01T00:00:00Z"}
+        self.log.write_text(json.dumps({"format": "hoard-unity-imports", "version": 1, "imports": [unity]}))
+        self.imports.note(self.project, [
+            {"store": "Booth", "name": "[Asset] *Hoodie*", "creator": "Kitsu", "file": "Hoodie.unitypackage",
+             "added": ["Assets/Kitsu"], "already_there": 2, "in_the_way": 1},
+            {"store": "Booth", "name": "Tool", "creator": "Kitsu", "file": "tool.zip", "label": "Tool",
+             "package": "com.kitsu.tool", "result": "added", "added": ["Packages/com.kitsu.tool"]},
+            {"store": "Jinxxy", "name": "Broken", "creator": "", "file": "x.unitypackage", "why": "not a package"}])
+        doc = json.loads(self.log.read_text())
+        self.assertEqual(doc["imports"][0], unity, "what Hoard for Unity noted is kept as it was")
+        self.assertEqual([e["name"] for e in doc["imports"]], ["Hat", "[Asset] *Hoodie*", "Tool"], "not what failed")
+        self.assertEqual((doc["imports"][1]["left"], doc["imports"][2]["package"]), (3, "com.kitsu.tool"))
+        note = (self.project / "Hoard imports.md").read_text("utf-8")
+        self.assertTrue(note.startswith("# What Hoard put in this project"))
+        self.assertIn(r"**\[Asset\] \*Hoodie\***, by Kitsu (Booth)", note, "a name is never read as Markdown")
+        self.assertIn("3 of its assets were already in the project", note)
+        self.assertIn("- Added: the package `com.kitsu.tool`, in `Packages/com.kitsu.tool`", note)
+        self.assertIn("- Not put in: not a package", note)
+        self.imports.note(self.project, [{"store": "Booth", "name": "Again", "file": "a.unitypackage", "added": []}])
+        note = (self.project / "Hoard imports.md").read_text("utf-8")
+        self.assertEqual(note.count("# What Hoard put in this project"), 1, "added to, not written again")
+        self.assertIn("**Again** (Booth)", note)
+
+    def test_a_list_that_cant_be_read_is_kept_aside(self):
+        self.log.parent.mkdir(parents=True)
+        self.log.write_text("{not json")
+        self.imports.note(self.project, [{"store": "Booth", "name": "Hoodie", "file": "h.unitypackage", "added": []}])
+        self.assertEqual([e["name"] for e in json.loads(self.log.read_text())["imports"]], ["Hoodie"])
+        aside = list(self.log.parent.glob("imports.json.unreadable-*"))
+        self.assertEqual(len(aside), 1)
+        self.assertEqual(aside[0].read_text(), "{not json")
 
 
 if __name__ == "__main__":

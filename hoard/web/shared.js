@@ -1658,9 +1658,11 @@ function pjProject() {
     `<h4>${esc(tr("Packages"))}</h4><div class="row"><button class="ghost sm" data-pj="addpkg">${esc(tr("Add packages"))}</button>` +
     (updates ? `<button class="ghost sm" data-pj="updateall">${esc(tr(updates === 1 ? "Update {0} package" : "Update {0} packages", updates))}</button>` : "") + `</div>` +
     (pk.length ? `<table class="pj-pk">${rows}</table>` : `<p class="none">${esc(tr("No VPM packages in it yet."))}</p>`) +
-    `<h4>${esc(tr("From your library"))}</h4><div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button></div>` +
+    `<h4>${esc(tr("From your library"))}</h4><div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
+    (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
     (pre.length ? `<ul class="pj-pre">${pre.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span>` +
-      (x.when ? ` <span class="muted">${esc(ago(x.when))}</span>` : "") + `</li>`).join("")}</ul>`
+      (x.when ? ` <span class="muted">${esc(ago(x.when))}</span>` : "") +
+      ((x.added || []).length ? `<br><span class="muted">${esc(tr("Added:"))} <span translate="no">${esc(x.added.join(", "))}</span></span>` : "") + `</li>`).join("")}</ul>`
       : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`) +
     (p.report ? pjReport(p.report) : "");
 }
@@ -2077,6 +2079,11 @@ async function pjAct(b) {
     return;
   }
   if (act === "folder") { await apiPost("/api/vpm/open-folder", { path }); return; }
+  if (act === "importlist") {   // Hoard imports.md, in the project's folder (#155)
+    const r = await apiPost("/api/vpm/open-folder", { path, show: "imports" });
+    if (!r.ok) toast(r.data.error || tr("That can't be done."));
+    return;
+  }
   if (act === "forget") {
     if (!await ask(tr("Take {0} off the list? Its folder is left as it is, and you can add it again.", (row && row.querySelector("b") || {}).textContent || PJ.project.name), tr("Take off"))) return;
     const r = await apiPost("/api/vpm/remove-project", { path });

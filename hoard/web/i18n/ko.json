@@ -1696,5 +1696,8 @@
  "prerelease": "프리릴리스",
  "Use this version": "이 버전으로",
  "Version of {0}": "{0}의 버전",
- "Newest": "최신"
+ "Newest": "최신",
+ "Show the list in the project": "프로젝트 안의 목록 보기",
+ "Added:": "추가:",
+ "There's no list of what Hoard put in this project yet.": "Hoard가 이 프로젝트에 넣은 것의 목록이 아직 없습니다."
 }
