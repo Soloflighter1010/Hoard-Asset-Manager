@@ -1331,7 +1331,7 @@
  "Search inside": "中を検索",
  "Open its folders, or search for a file by name. Hoard reads it where it is, and changes nothing.": "フォルダーを開いたり、ファイルを名前で検索したりできます。Hoardはその場で読むだけで、何も変えません。",
  "Hoard reads each package for what else it uses, such as a shader or a tool, with a link to get it. Hoard for Unity checks it too, and asks before importing something your project is missing.": "Hoardは各パッケージを読み、ほかに使っているもの(シェーダーやツールなど)を入手先のリンク付きで示します。Hoard for Unityも確認し、プロジェクトに足りないものがあればインポートの前に尋ねます。",
- "Tags are your own words for things: an outfit, a base, a style. Add one here, or to many at once from the selection bar. Suggested tags come from words in your items' names.": "タグは、衣装・素体・スタイルなど、自分で決める言葉です。ここで追加するか、選択バーからまとめて付けられます。おすすめのタグは、アイテム名の言葉から作られます。",
+ "Tags are your own words for things: an outfit, a base, a style. Add one here, or to many at once from the selection bar. Suggested tags come from words in your items' names. In Tags, give a tag a kind, such as Avatar or Clothing, and your tags are grouped by it.": "タグは、衣装・素体・スタイルなど、自分で決める言葉です。ここで追加するか、選択バーからまとめて付けられます。おすすめのタグは、アイテム名の言葉から作られます。「タグ」では、タグに「アバター」や「衣装」などの種類を付けられ、タグが種類ごとにまとまります。",
  "A set gathers products that go together, such as an avatar and its outfits. Make one here, from the selection bar, or from a project in Projects. Hoard for Unity imports a whole set at once.": "セットは、アバターとその衣装のように一緒に使う商品をまとめたものです。ここか、選択バーか、「プロジェクト」のプロジェクトから作れます。Hoard for Unityはセットをまとめてインポートします。",
  "When a store has newer files for something you downloaded, it's listed here. Settings can keep the previous version too, so you can go back.": "ダウンロードしたものにストアで新しいファイルがあると、ここに表示されます。設定で以前のバージョンも残しておけば、元に戻せます。",
  "What takes the most room, files kept twice, what no project uses, and products you have from more than one store. Try it: Disk space.": "容量をいちばん使っているもの、二重に保存されているファイル、どのプロジェクトでも使っていないもの、複数のストアから持っている商品が分かります。試してみましょう:「ディスク容量」。",
@@ -1793,5 +1793,9 @@
  "Pick again": "選び直す",
  "Make a set of them": "セットにする",
  "Mix and match picks an avatar and an outfit from your tags. Give your tags a kind first, in Tags: an Avatar tag on your avatars, and Clothing tags on your clothes (a tag for each kind of thing, such as tops, shoes or hair, gives a pick of each).": "組み合わせは、タグからアバターと服を選びます。先に「タグ」でタグに種類を付けてください。アバターには種類が「アバター」のタグ、服には種類が「衣装」のタグを付けます（トップス、靴、髪型など、ものの種類ごとにタグを分けると、それぞれから1つずつ選びます）。",
- "A set is shared as a short link, which you can update to keep it going.": "セットは短縮リンクで共有します。更新すれば、使い続けられます。"
+ "A set is shared as a short link, which you can update to keep it going.": "セットは短縮リンクで共有します。更新すれば、使い続けられます。",
+ "Try it: open Sets.": "試してみましょう: 「セット」を開いてください。",
+ "Your wishlists from the stores live here too, with what each product costs: Read my wishlists brings them in from the stores you're signed in to. Read them again later, and what got cheaper is marked.": "ストアのほしい物リストもここにあり、各商品の価格がわかります。「ほしい物リストを読み込む」で、サインインしているストアから取り込みます。あとでもう一度読み込むと、安くなったものに印が付きます。",
+ "Mix and match picks an avatar and an outfit at random from what you own, by your tags' kinds: an Avatar tag on your bases, and Clothing tags on your clothes. Keep the picks you like, pick the rest again, and make a set of them.": "組み合わせは、タグの種類をもとに、持っているものからアバターとコーディネートをランダムに選びます。ベースには種類が「アバター」のタグを、服には「衣装」のタグを付けてください。気に入ったものは残してほかを選び直し、セットにできます。",
+ "Backups, in Projects, lists your projects' backups, and deletes or moves the old ones when the drive runs low on room.": "「プロジェクト」の「バックアップ」では、プロジェクトのバックアップが一覧になり、ドライブの空きが少なくなったら古いものを削除したり移動したりできます。"
 }
