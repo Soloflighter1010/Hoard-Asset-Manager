@@ -28,6 +28,10 @@ from .safety import DataFileError, read_json_file, set_aside, write_file_safely
 
 TAG_MAX_LENGTH = 40
 
+# What a tag is about (issue #157): a few kinds, so the filters can group them and Mix and match knows avatars from
+# clothes. A tag has one, or none.
+TAG_TYPES = ("avatar", "world", "clothing", "gimmick", "script", "texture", "other")   # as issue #157 lists them
+
 
 TAG_LIMITS = {"tags": 1000, "matching": 200, "per_item": 100, "tagged_items": 50000, "keys_per_change": 5000}
 
@@ -174,7 +178,8 @@ class TagStore:
     """Your tags. Every change re-reads tags.json under a lock, so both tools can edit them safely.
 
     tags.json holds:
-      tags      {name: {"match": word or null}}   every tag you have, even ones on no items yet
+      tags      {name: {"match": word or null,    every tag you have, even ones on no items yet, and what kind of
+                       "type": one of TAG_TYPES}}   thing it's about (no "type" when it has none)
       items     {tag_key: [tag, ...]}              tags you put on items
       excluded  {tag_key: [tag, ...]}              matched tags you took off an item
       hidden    [word, ...]                        suggestions you hid
@@ -207,11 +212,13 @@ class TagStore:
             match = clean_tag(match) if isinstance(match, str) else ""
             if match and matching >= TAG_LIMITS["matching"]:
                 match = ""
+            kind = info.get("type") if isinstance(info, dict) and info.get("type") in TAG_TYPES else None
             if new in data["tags"]:  # two old names became one: keep the first's match unless it had none
                 match = data["tags"][new]["match"] or match
                 matching -= bool(data["tags"][new]["match"])
+                kind = data["tags"][new].get("type") or kind
             matching += bool(match)
-            data["tags"][new] = {"match": match or None}
+            data["tags"][new] = {"match": match or None, **({"type": kind} if kind else {})}
         for field in ("items", "excluded"):
             mapping = raw.get(field) if isinstance(raw.get(field), dict) else {}
             for key, names in list(mapping.items())[:TAG_LIMITS["tagged_items"]]:
@@ -311,12 +318,21 @@ class TagStore:
             need(name)
             if len(set(tags) | {name}) > TAG_LIMITS["tags"]:
                 raise ValueError(f"That's more than {TAG_LIMITS['tags']} tags. Delete some first.")
-            tags[name] = {"match": name}
+            tags[name] = {**tags.get(name, {}), "match": name}
             data["hidden"] = [w for w in data["hidden"] if w != name]
         elif action == "match":
             if need(name) not in tags:
                 raise ValueError(f"There's no tag called {name}.")
-            tags[name] = {"match": clean_tag(body.get("match")) or None}
+            tags[name] = {**tags[name], "match": clean_tag(body.get("match")) or None}
+        elif action == "type":   # what kind of thing the tag is about, or none
+            if need(name) not in tags:
+                raise ValueError(f"There's no tag called {name}.")
+            kind = body.get("type")
+            if kind not in (*TAG_TYPES, None, ""):
+                raise ValueError("That isn't a kind of tag Hoard knows.")
+            tags[name] = {k: v for k, v in tags[name].items() if k != "type"}
+            if kind:
+                tags[name]["type"] = kind
         elif action == "rename":
             new = need(clean_tag(body.get("to")), "a new name")
             if need(name) not in tags:
@@ -359,7 +375,8 @@ def tag_overview(data: dict, entries: list[dict]) -> dict:
             sugg[t] = sugg.get(t, 0) + 1
     return {
         "file": str(tags_file()),
-        "tags": sorted(({"name": t, "match": (info or {}).get("match"), "count": counts.get(t, 0)}
+        "tags": sorted(({"name": t, "match": (info or {}).get("match"), "type": (info or {}).get("type"),
+                         "count": counts.get(t, 0)}
                         for t, info in data["tags"].items()), key=lambda x: (-x["count"], x["name"])),
         "suggestions": sorted(({"name": t, "count": n} for t, n in sugg.items()), key=lambda x: (-x["count"], x["name"])),
         "hidden": sorted(data["hidden"]),

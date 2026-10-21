@@ -195,6 +195,24 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .side h2 { font: 700 13px var(--body); color: var(--dust); margin: 20px 0 10px; }
 .side h2:first-child { margin-top: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+/* your tags in the filters, by what they're about (issue #157): each kind's name on a line of its own */
+.chips .tgroup { flex-basis: 100%; margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--dust); }
+.chips .tgroup:first-child { margin-top: 0; }
+.tagrows select.ttype { width: auto; height: 32px; padding: 0 8px; font-size: 13px; }
+/* Mix and match (issue #156) */
+dialog.ask.mixdlg { width: min(560px, calc(var(--vw) - 32px)); }
+dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
+.mixlist { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mixlist li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; background: var(--cave);
+  box-shadow: inset 0 0 0 1px var(--seam); }
+.mixart { flex: none; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--stone); display: grid; place-items: center; }
+.mixart img, .mixart canvas { width: 100%; height: 100%; object-fit: cover; }
+.mixph { font-weight: 700; color: var(--dust); text-transform: uppercase; }
+.mixtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mixtext small { color: var(--dust); font-size: 11.5px; font-weight: 700; }
+.mixtext b { overflow-wrap: anywhere; }
+.mixtext .muted { font-size: 12.5px; }
+.mixlist label.check, .mixdlg > form > label.check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -2324,6 +2342,10 @@ function wireTags() {
   $("#tagsBtn").addEventListener("click", () => openTagPanel());
   $("#manageTags").addEventListener("click", () => openTagPanel(true));
   $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
+  $("#tagPanel").addEventListener("change", e => {   // what a tag is about (issue #157)
+    const s = e.target.closest("[data-ttype]");
+    if (s) changeTags({ action: "type", name: s.dataset.ttype, type: s.value || null }, s.value ? tr("{0} is now about: {1}.", "#" + s.dataset.ttype, tr(TAG_TYPES[s.value])) : "");
+  });
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
   wireSelection();

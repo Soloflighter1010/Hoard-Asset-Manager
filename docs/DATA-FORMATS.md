@@ -140,10 +140,13 @@ The same fields as one `<asset>` above, plus `"format": "hoard-asset"` and `"ver
   "version": 2,
   "generated_at": "...",
   "total_assets": 612,
-  "tags":      { "<your tag>":   { "count": 12, "assets": ["<folder>", ...] } },
+  "tags":      { "<your tag>":   { "count": 12, "assets": ["<folder>", ...], "type": "clothing" } },
   "suggested": { "<suggestion>": { "count": 30, "assets": ["<folder>", ...] } }
 }
 ```
+
+`type` (5.0) is what a tag of yours is about, when you've said: `avatar`, `world`, `clothing`, `gimmick`, `script`,
+`texture` or `other`. A tag with no kind has no `type`.
 
 ## `marks.json` (in Hoard's app-data folder)
 
@@ -193,6 +196,7 @@ says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the pro
 
 ## Version history
 
+- **2**, still, in 5.0: a tag's `type` in `tags.json`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.3.3: `page`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.0: `needs`, which readers that don't know it ignore.
 - **4** (3.0): `library`, for products in another library folder. Only written when there are some; otherwise

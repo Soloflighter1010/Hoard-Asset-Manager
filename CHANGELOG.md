@@ -19,6 +19,14 @@
   first (prereleases too when **Offer prerelease versions of packages** is on), and installs the one you choose,
   an older one included, with what it needs changed to match. As before, every change is shown before it's made.
   **Add packages** can choose a version too, for a new project or one you have.
+- **Kinds of tags** ([#157](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/157)). A tag can say
+  what it's about: Avatar, World, Clothing, Gimmick, Script, Texture or Other, chosen beside it in **Tags**. Your
+  tags in the filters are grouped by kind, and the downloads folder's `tags.json` says each tag's kind, for other
+  programs.
+- **Mix and match** ([#156](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/156)). In the Sets tab,
+  **Mix and match...** picks an avatar and an outfit at random from what you own, one product from each of your
+  Clothing tags, and only clothes tagged for that avatar if you like. Keep the picks you like, pick the rest again,
+  and make a set of them.
 
 ## 5.0.0-beta.1
 

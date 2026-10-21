@@ -24,6 +24,14 @@ The **Tags** button opens a list of all your tags and the suggestions:
 - **Rename** a tag. Renaming it to an existing tag's name merges the two.
 - **Match names** gives any tag that automatic matching, and **Delete** removes a tag.
 
+## Kinds of tags
+
+A tag of yours can say what it's about: **Avatar**, **World**, **Clothing**, **Gimmick**, **Script**, **Texture** or
+**Other** (5.0). Choose it beside the tag in the **Tags** panel; a tag has one kind, or none. Your tags in the filters
+are then grouped by kind, and [Mix and match](Sets#mix-and-match) takes avatars and clothes from them: tag your bases
+with an Avatar tag, and your outfits with Clothing tags (one tag for each kind of thing, such as tops, shoes or hair, if
+you'd like a pick of each).
+
 ## What a tag can be
 
 Lower case letters, marks and digits in any script (so Japanese works), plus spaces and `- _ . + & '`, up to 40

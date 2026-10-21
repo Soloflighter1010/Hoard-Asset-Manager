@@ -2808,6 +2808,34 @@ class CopiesStack(unittest.TestCase):
             self.assertEqual(library.picture_looks(), {"a" * 64: "0123456789abcdef"})
 
 
+class TagKinds(unittest.TestCase):
+    """What a tag is about (issue #157): one of a few kinds, or none, kept through a rename, a match and a keep, and
+    nothing else accepted."""
+
+    def test_a_tag_has_a_kind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = tags.TagStore(Path(tmp) / "tags.json")
+            store.change({"action": "create", "name": "Hoodies"})
+            store.change({"action": "type", "name": "hoodies", "type": "clothing"})
+            self.assertEqual(store.load()["tags"]["hoodies"], {"match": None, "type": "clothing"})
+            store.change({"action": "match", "name": "hoodies", "match": "hoodie"})
+            store.change({"action": "rename", "name": "hoodies", "to": "tops"})
+            self.assertEqual(store.load()["tags"]["tops"], {"match": "hoodie", "type": "clothing"})
+            with self.assertRaises(ValueError):
+                store.change({"action": "type", "name": "tops", "type": "vehicle"})
+            with self.assertRaises(ValueError):
+                store.change({"action": "type", "name": "nowhere", "type": "avatar"})
+            store.change({"action": "type", "name": "tops", "type": None})
+            self.assertNotIn("type", store.load()["tags"]["tops"])
+            self.assertEqual(tags.TagStore.sanitize({"tags": {"rusk": {"match": None, "type": "avatar"},
+                                                              "odd": {"match": None, "type": "<b>"}}})["tags"],
+                             {"rusk": {"match": None, "type": "avatar"}, "odd": {"match": None}})
+            store.change({"action": "type", "name": "tops", "type": "clothing"})
+            over = tags.tag_overview(store.load(), [{"tags": ["tops"], "suggested": []}])
+            self.assertEqual(over["tags"], [{"name": "tops", "match": "hoodie", "type": "clothing", "count": 1}])
+        self.assertEqual(tags.TAG_TYPES, ("avatar", "world", "clothing", "gimmick", "script", "texture", "other"))
+
+
 class TagMatching(unittest.TestCase):
     """Matching tags go through a word index (review finding P-04), with exactly name_has_word's answers."""
 

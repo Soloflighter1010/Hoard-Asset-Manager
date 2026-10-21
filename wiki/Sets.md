@@ -44,6 +44,19 @@ shown and shared whether or not the product is in your library now. Products are
 (their store and name, without versions or labels), so a product stays in its set when it's updated or moved to
 another library folder.
 
+## Mix and match
+
+**Mix and match...**, at the top of the Sets tab, picks an outfit at random from what you own (5.0): an avatar, and
+one product from each of your Clothing tags (tops, shoes, hair...), for something new from what you have. It takes
+them from your [kinds of tags](Tags#kinds-of-tags): avatars are what has a tag whose kind is **Avatar**, and clothes
+are what has a tag whose kind is **Clothing**. Until you have both, it says how to set them up.
+
+- **Keep** beside a pick keeps it; **Pick again** picks the rest again.
+- **Only clothes that share a tag with the avatar** (on to begin with) picks clothes that have one of the avatar's
+  other tags too, such as its name, so they're made for it. When nothing of a Clothing tag does, that pick is from
+  all of them, and Hoard says which.
+- **Make a set of them** makes a new set of the avatar and its outfit.
+
 ## Sharing a set
 
 **Share...** makes a link to the set viewer on Hoard's website, such as

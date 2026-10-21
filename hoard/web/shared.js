@@ -396,6 +396,7 @@ function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
     }));
     const [no, yes] = d.querySelectorAll("button");
     no.textContent = cancel; yes.textContent = ok;
+    no.hidden = !cancel;   // (an empty cancel: something to read, with only the one button)
     yes.classList.toggle("danger", !!danger);
     d.returnValue = "no";
     d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
@@ -457,6 +458,10 @@ async function changeTags(body, done) {
   if (done) toast(done);
   return true;
 }
+// What a tag is about (hoard/tags.py, issue #157): the filters group your tags by it, and Mix and match takes avatars
+// and clothes from it
+const TAG_TYPES = { avatar: "Avatar", world: "World", clothing: "Clothing", gimmick: "Gimmick", script: "Script", texture: "Texture", other: "Other" };
+const tagTypes = () => new Map(((DATA.tagset || {}).tags || []).filter(x => x.type).map(x => [x.name, x.type]));
 const tagChip = ([t, n], kind) =>
   `<button class="chip ${kind}" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}<span class="n">${n}</span></button>`;
 
@@ -470,7 +475,11 @@ function renderTagFacets(list) {
   for (const t of state.tags) if (!mine.has(t) && !sugg.has(t)) (yours.has(t) ? mine : sugg).set(t, 0);
   const order = (x, y) => state.tags.has(y[0]) - state.tags.has(x[0]) || y[1] - x[1] || coll.compare(x[0], y[0]);
   const m = [...mine].sort(order), s = [...sugg].sort(order);
-  $("#myTags").innerHTML = m.map(x => tagChip(x, "mine")).join("") ||
+  const kinds = tagTypes(), grouped = kinds.size && m.some(x => kinds.has(x[0]));
+  $("#myTags").innerHTML = (grouped   // your tags by what they're about, those with no kind last
+    ? [...Object.keys(TAG_TYPES), ""].map(k => { const these = m.filter(x => (kinds.get(x[0]) || "") === k);
+        return these.length ? `<span class="tgroup">${esc(tr(k ? TAG_TYPES[k] : "Other tags"))}</span>` + these.map(x => tagChip(x, "mine")).join("") : ""; }).join("")
+    : m.map(x => tagChip(x, "mine")).join("")) ||
     `<span class="none">${yours.size ? "None on these items" : "Add tags from an item's details, or select several items at once."}</span>`;
   $("#tags").innerHTML = (state.allTags ? s : s.slice(0, 36)).map(x => tagChip(x, "sugg")).join("") ||
     `<span class="none">No suggestions here</span>`;
@@ -688,7 +697,9 @@ function renderTagPanel() {
   const items = n => `${n} ${n === 1 ? "item" : "items"}`;
   $("#tagRows").innerHTML = ts.tags.map(x => `<li><span class="tname">${esc(x.name)}</span>` +
     `<span class="tmeta">${items(x.count)}${x.match ? `, including every name with “${esc(x.match)}”` : ""}</span>` +
-    `<span class="tbtns">${btn("rename", x.name, "Rename")}` +
+    `<span class="tbtns"><select class="ttype" data-ttype="${esc(x.name)}" aria-label="${esc(tr("What {0} is about", x.name))}">` +
+    `<option value="">${esc(tr("No kind"))}</option>${Object.entries(TAG_TYPES).map(([k, label]) => `<option value="${k}"${x.type === k ? " selected" : ""}>${esc(tr(label))}</option>`).join("")}</select>` +
+    `${btn("rename", x.name, "Rename")}` +
     `${btn("match", x.name, x.match ? "Change match" : "Match names", `data-match="${esc(x.match || "")}"`)}` +
     `${btn("delete", x.name, "Delete", `data-count="${x.count}"`)}</span></li>`).join("") ||
     `<li class="none">No tags yet. Create one above, keep a suggestion below, or add one from an item's details.</li>`;
@@ -2383,6 +2394,72 @@ async function addToSet(list, id) {
   const done = await changeSets({ action: "add", id, items });
   if (done) toast(tr(items.length === 1 ? "Added it to {0}." : "Added {1} products to {0}.", (setById(id) || {}).name || "", items.length));
 }
+/* Mix and match (issue #156): an outfit picked at random from what you own, to try something new with what you have.
+   An avatar from your tags whose kind is Avatar, and one product from each tag whose kind is Clothing (tops, shoes,
+   hair...), only those tagged for that avatar too when you like; keep the picks you want and pick the rest again, then
+   make a set of them. */
+const MIX = { picks: [], held: new Set(), fit: true };
+function mixPools() {
+  const kinds = tagTypes(), items = T.all().filter(a => a.tag_key);
+  const has = (a, kind) => (a.tags || []).some(t => kinds.get(t) === kind);
+  const avatars = items.filter(a => has(a, "avatar"));
+  const slots = [...kinds].filter(([, k]) => k === "clothing").map(([t]) => t).sort(coll.compare)
+    .map(t => ({ tag: t, items: items.filter(a => (a.tags || []).includes(t) && !has(a, "avatar")) })).filter(s => s.items.length);
+  return { avatars, slots };
+}
+function mixRoll() {
+  const { avatars, slots } = mixPools(), any = list => list[Math.floor(Math.random() * list.length)];
+  const kept = new Map(MIX.picks.filter(p => MIX.held.has(p.slot)).map(p => [p.slot, p]));
+  const avatar = kept.get("") ? kept.get("").item : any(avatars);
+  const avatarTags = new Set((avatar.tags || []).filter(t => tagTypes().get(t) !== "clothing"));
+  const taken = new Set([avatar.tag_key]);
+  MIX.picks = [{ slot: "", label: tr("Avatar"), item: avatar }];
+  MIX.unfit = [];
+  for (const s of slots) {
+    if (kept.get(s.tag)) { MIX.picks.push(kept.get(s.tag)); taken.add(kept.get(s.tag).item.tag_key); continue; }
+    const fits = s.items.filter(a => (a.tags || []).some(t => avatarTags.has(t)));
+    const pool = (MIX.fit && fits.length ? fits : s.items).filter(a => !taken.has(a.tag_key));
+    if (MIX.fit && !fits.length) MIX.unfit.push(s.tag);
+    const item = any(pool);
+    if (item) { MIX.picks.push({ slot: s.tag, label: s.tag, item }); taken.add(item.tag_key); }
+  }
+}
+function mixHTML() {
+  const img = a => (a.thumbnail || a.thumb) ? `<img src="${esc(a.thumbnail || a.thumb)}" alt="" loading="lazy">` : `<span class="mixph">${esc((a.name || "?").slice(0, 2))}</span>`;
+  return `<h3>${esc(tr("Mix and match"))}</h3>` +
+    `<p class="hint">${esc(tr("An outfit from what you own, picked at random. Keep the picks you like, and pick the rest again."))}</p>` +
+    `<ul class="mixlist">${MIX.picks.map(p => `<li><span class="mixart">${img(p.item)}</span><span class="mixtext">` +
+      `<small>${esc(p.label)}</small><b translate="no">${esc(p.item.name)}</b><span class="muted" translate="no">${esc(p.item.creator || "")}</span></span>` +
+      `<label class="check"><input type="checkbox" data-mixhold="${esc(p.slot)}"${MIX.held.has(p.slot) ? " checked" : ""}> ${esc(tr("Keep"))}</label></li>`).join("")}</ul>` +
+    `<label class="check"><input type="checkbox" id="mixFit"${MIX.fit ? " checked" : ""}> ${esc(tr("Only clothes that share a tag with the avatar"))}</label>` +
+    ((MIX.unfit || []).length ? `<p class="hint">${esc(tr("Nothing in {0} shares a tag with this avatar, so that pick is from all of them.", MIX.unfit.join(", ")))}</p>` : "") +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Close"))}</button>` +
+    `<button class="ghost" type="button" data-mix="again">${esc(tr("Pick again"))}</button>` +
+    `<button class="primary" value="yes">${esc(tr("Make a set of them"))}</button></div>`;
+}
+async function mixAndMatch() {
+  const { avatars, slots } = mixPools();
+  if (!avatars.length || !slots.length) {
+    await ask(tr("Mix and match picks an avatar and an outfit from your tags. Give your tags a kind first, in Tags: an Avatar tag on your avatars, and Clothing tags on your clothes (a tag for each kind of thing, such as tops, shoes or hair, gives a pick of each)."), tr("OK"), false, "");
+    return;
+  }
+  MIX.picks = []; MIX.held = new Set();
+  mixRoll();
+  const dlg = document.createElement("dialog");
+  dlg.className = "ask mixdlg";
+  dlg.innerHTML = `<form method="dialog">${mixHTML()}</form>`;
+  document.body.appendChild(dlg);
+  const redraw = () => { dlg.querySelector("form").innerHTML = mixHTML(); };
+  dlg.addEventListener("click", e => { if (e.target.closest("[data-mix=again]")) { e.preventDefault(); mixRoll(); redraw(); } });
+  dlg.addEventListener("change", e => {
+    const hold = e.target.closest("[data-mixhold]");
+    if (hold) { hold.checked ? MIX.held.add(hold.dataset.mixhold) : MIX.held.delete(hold.dataset.mixhold); return; }
+    if (e.target.id === "mixFit") { MIX.fit = e.target.checked; mixRoll(); redraw(); }
+  });
+  const result = await new Promise(resolve => { dlg.addEventListener("close", () => resolve(dlg.returnValue), { once: true }); dlg.showModal(); });
+  dlg.remove();
+  if (result === "yes") await addToSet(MIX.picks.map(p => p.item), "new");
+}
 async function takeOutOfSet(list) {   // from the set that's open
   const s = setById(state.set), items = keysOf(list.filter(Boolean));
   if (!s || !items.length) return;
@@ -2454,7 +2531,8 @@ function setTile(s) {
 }
 function setsRoot() {
   const top = `<div class="row sets-top"><button class="primary sm" data-setx="new">New set</button>` +
-    `<button class="ghost sm" data-setx="import">Add a shared set...</button></div>` +
+    `<button class="ghost sm" data-setx="import">Add a shared set...</button>` +
+    `<button class="ghost sm" data-setx="mix">${esc(tr("Mix and match..."))}</button></div>` +
     (SETS.hidden_left_out ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "");
   if (SETS.error) return top + `<p class="none">${esc(tr("Your sets couldn't be read just now."))}</p>`;
   const plain = SETS.sets.filter(s => !isWish(s)), wishes = SETS.sets.filter(isWish);
@@ -2725,6 +2803,7 @@ async function setAct(e) {
     return;
   }
   if (act === "readwish" || act === "reread") { readWishlists(act === "reread" ? [b.dataset.store] : null); return; }
+  if (act === "mix") { mixAndMatch(); return; }
   if (act === "importwish") { importWishlists(); return; }
   if (act === "import") {
     let code = await askName("Paste the set's link or code", "", { max: 262144 });
