@@ -478,6 +478,7 @@ class Tab(unittest.TestCase):
         self.assertNotIn("Secret", json.dumps(view))
         shared = self.api("/api/sets", {"action": "share", "id": made})
         self.assertEqual((shared["count"], shared["left_out"]), (1, 1))
+        self.assertNotIn("link", shared, "a set is shared only by a short link (issue #162): its code is for locking")
         self.assertNotIn("Secret", json.dumps(sets.from_code(shared["code"])), "never in a code, locked or not")
         self.assertNotIn(secret, self.api("/api/library")["sets"][0]["items"])
         self.assertEqual(self.api("/api/sets", {"action": "add", "id": made, "items": [secret]}).get("ok"), True)
@@ -527,11 +528,14 @@ class Tab(unittest.TestCase):
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")   # both are yours
             self.assertIn("store=Sets&set=", page.url)
             self.assertEqual(page.locator("#setMore .slot").count(), 0)
-            # shared: the link holds the set
+            # shared: only by a short link (issue #162), made when it's asked for (tests/test_shortlinks.py), and
+            # never the long link that holds the set itself
             page.click('#setView [data-setx="share"]')
-            link = page.locator("dialog.share input").input_value()
-            self.assertTrue(link.startswith("https://hoard.furryup.link/set.html#H1."))
-            self.assertEqual(sets.from_code(link)["items"], [RUSK, HOODIE])
+            dialog = page.locator("dialog.share")
+            dialog.get_by_role("button", name="Make a short link").wait_for()
+            self.assertEqual(dialog.locator("input").count(), 0)
+            self.assertNotIn("H1.", dialog.inner_html())
+            self.assertIn("14 days", dialog.inner_text())
             page.locator("dialog.share button", has_text="Close").click()
             # its own picture, on its tile and in its folder
             with page.expect_file_chooser() as chosen:

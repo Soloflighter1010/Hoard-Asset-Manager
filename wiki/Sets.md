@@ -59,48 +59,44 @@ are what has a tag whose kind is **Clothing**. Until you have both, it says how 
 
 ## Sharing a set
 
-**Share...** makes a link to the set viewer on Hoard's website, such as
-`https://hoard.furryup.link/set.html#H1.…`, with **Copy the link**, **Copy the code** (just the part after `#`)
-and **Open it**. Anyone who opens the link sees the set's name, your note and photos, and each product with its
-picture and a link to its store page. Pasting the link (or the code) into **Add a shared set...** in their Sets
-tab adds the set to their Hoard: what they own already shows as theirs, and what they don't says where to buy it.
+**Share...** shares a set as a short link to the set viewer on Hoard's website, such as
+`https://hoard.furryup.link/set.html#S1.Xq3vT9bKa2.Rk2Lw0pY7cHq-4nZsV1aEg`, about 70 characters, that works for 14
+days: **Make a short link**, then **Copy the short link** or **Open it**. From 5.0 a short link is the only way to
+share a set: the long link earlier versions made held the whole set, and was too long to pass around. Anyone who
+opens the link sees the set's name, your note and photos, and each product with its picture and a link to its store
+page. Pasting the link into **Add a shared set...** in their Sets tab adds the set to their Hoard: what they own
+already shows as theirs, and what they don't says where to buy it.
 
-- **Nothing is uploaded.** The set is in the link itself, after the `#`, which a browser never sends anywhere:
-  the viewer reads it in the page, and Hoard's website never sees it. Hoard keeps no copy of shared sets, and
-  there's no account. (A [short link](#short-links) is the one exception, and only if you make one.)
-- **What's in a link:** the set's name, note and photo links, and each product's store, name, creator, public store
+- **What's in it:** the set's name, note and photo links, and each product's store, name, creator, public store
   page and picture address. Not your library, your downloads, your tags or anything else of yours.
-- **Only public pages:** a product's store page in a link is its public page on the store (or, where Hoard doesn't
-  know it, its creator's page), never one of yours, such as a Gumroad purchase's download page or your Jinxxy
-  inventory. Gumroad and Jinxxy products get their own page from your next refresh of that store. (Hoard 4.2.0 put your Gumroad
-  download pages in shared links: the viewer no longer shows them, but if you shared a set with Gumroad products
-  from 4.2.0, delete those posts and share it again.)
+- **Only public pages:** a product's store page in a shared set is its public page on the store (or, where Hoard
+  doesn't know it, its creator's page), never one of yours, such as a Gumroad purchase's download page or your
+  Jinxxy inventory. Gumroad and Jinxxy products get their own page from your next refresh of that store. (Hoard
+  4.2.0 put your Gumroad download pages in shared links: the viewer no longer shows them, but if you shared a set
+  with Gumroad products from 4.2.0, delete those posts and share it again.)
 - **What's never in one:** your own products (**Local**) and hidden products, whether the hidden library is
   locked or not. Sharing says how many were left out.
 - **Pictures:** each product's picture loads from its store's own image host (Booth's, Gumroad's, Jinxxy's and so
   on), so Hoard hosts nothing; one without a picture shows its initials, as in Hoard. Store pages are only links to
   the stores' own websites.
-- A set of 20 products makes a link of about 2,000 characters. Links that long work in browsers and most chat
-  apps; for a shorter one, make a [short link](#short-links).
+- **A long link from before 5.0** (`set.html#H1.…`, with the set itself after the `#`) still opens in the viewer,
+  and in **Add a shared set...**, as does its code.
 
 ### Short links
 
-**Make a short link**, in **Share...**, makes a link of about 70 characters, such as
-`https://hoard.furryup.link/set.html#S1.Xq3vT9bKa2.Rk2Lw0pY7cHq-4nZsV1aEg`, that works for 14 days.
-
-- **What's uploaded:** a locked copy of the set (the same set a long link holds), kept on Hoard's share server
-  (`hoard-share.furryup.link`) for 14 days. Hoard locks it on your computer first (AES-GCM, with a new random
-  key), and the key is only in the link, after the `#`, which a browser never sends anywhere. So the share
-  server can't read the set, and neither can anyone who runs it: only someone with the link can.
-- **Yours to change:** Hoard keeps a private token for each short link, which only it has. **Update the link**
-  puts the set as it is now behind the same link and keeps it 14 days from today; the dialog says when the set
+- **What's uploaded:** a locked copy of the set, kept on Hoard's share server (`hoard-share.furryup.link`) for 14
+  days. Hoard locks it on your computer first (AES-GCM, with a new random key), and the key is only in the link,
+  after the `#`, which a browser never sends anywhere. So the share server can't read the set, and neither can
+  anyone who runs it: only someone with the link can.
+- **Yours to keep going, or to change:** Hoard keeps a private token for each short link, which only it has.
+  **Update the link** puts the set as it is now behind the same link and keeps it 14 days from today, so update
+  it before it runs out to share the set for longer: Hoard doesn't do it by itself. The dialog says when the set
   has changed since. **Delete the short link** deletes it from the server at once, and deleting the set deletes
   its short link too. Whoever opens a deleted or run-out link is told it's gone.
 - **Opening one:** the viewer fetches the locked set from the share server by the link's id, and unlocks it in
-  the page. **Add a shared set...** takes a short link too. The viewer's **Copy just the code** copies the set's
-  whole code, which Hoard 4.2 can add as well.
+  the page. **Add a shared set...** does the same.
 - **Limits:** a short link holds a set of up to about 500 products. The share server can make a limited number
-  a day: if it can't, or can't be reached, Hoard says so, and the long link still works.
+  a day: if it can't, or can't be reached, Hoard says so, and you can try again later.
 
 ## Its picture
 

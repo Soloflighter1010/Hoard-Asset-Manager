@@ -1024,12 +1024,13 @@ class Handler(BaseHTTPRequestHandler):
                 "changed": rec["made"] != sets.code_mark(code), "days": shortlinks.LIFETIME_DAYS}
 
     def _share_set(self, sid: str):
-        """A set's share code and link (hoard/sets.py), and its short link, if it has one."""
+        """A set's share code (hoard/sets.py), for the page to lock for its short link, and that link, if it has one.
+        The code's own long link isn't offered: a set is shared only by a short link (issue #162)."""
         got = self._set_code(sid)
         if not isinstance(got, tuple):
             return got
         s, code, count = got
-        return self._json({"ok": True, "code": code, "link": sets.share_link(code), "count": count,
+        return self._json({"ok": True, "code": code, "count": count,
                            "left_out": len(s["items"]) - count, "short": self._short_view(s.get("short"), code),
                            "short_days": shortlinks.LIFETIME_DAYS})
 

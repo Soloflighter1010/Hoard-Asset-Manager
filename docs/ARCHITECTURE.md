@@ -260,7 +260,9 @@ Both servers share the rules in their "web safety" section:
 
 ## Short links (`shortlinks.py`, `share/`)
 
-A shared set's long link holds the set itself. A short link (`set.html#S1.<id>.<key>`) holds only an id and a key:
+From 5.0 a set is shared only by a short link (issue #162): `/api/sets` (`share`) gives the page the set's code to
+lock, never a long link. A long link (`set.html#H1.…`, from Hoard before 5.0) holds the set itself, and the viewer
+and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`) holds only an id and a key:
 
 - **Making one:** the page locks the set's code with AES-GCM under a new random 128-bit key (`lockSet` in
   `shared.js`) and posts the locked set, with the key and the code it locked, to `/api/sets` (`short`). The
@@ -366,8 +368,8 @@ Nothing a page needs comes from outside the computer:
 - Before refreshing, signing in or syncing, `reachable(store)` opens a connection to that store only. An
   unreachable store gets `unreachable_message()`, and its saved data is left alone. Browser errors that
   mean the connection dropped part-way (`is_network_error`, `NETWORK_ERRORS`) are reported the same way.
-- Short links (Sets, **Share...**) need Hoard's share server: without it, Hoard says so, and the long link
-  works offline as ever.
+- Sharing a set (Sets, **Share...**) needs Hoard's share server: without it, Hoard says so. A long link from
+  before 5.0 opens offline as ever.
 - The pages show a notice while the browser reports being offline, and Hoard's Refresh and Sign in
   buttons explain instead of trying. Sign out works offline because it only touches local files.
 

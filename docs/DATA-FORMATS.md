@@ -96,8 +96,9 @@ the code it holds, to tell whether the set has changed since.
 A **share code** is `H1.` and then that set as JSON, compressed with raw DEFLATE and written in URL-safe base64
 without padding: `{"v": 1, "n": name, "d"?: note, "p"?: [photo links], "i": [[store, id, name, creator, url,
 thumbnail], ...]}` (a row's empty parts at its end are left out; Local and hidden products never are in it). The
-set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. It's shared as
-`https://hoard.furryup.link/set.html#<code>`.
+set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. From 5.0 it's shared
+only inside a short link (below); Hoard before 5.0 shared it as a long link, `https://hoard.furryup.link/set.html#<code>`,
+which the viewer and **Add a shared set** still read.
 
 A **short link** (4.3.0) is `https://hoard.furryup.link/set.html#S1.<id>.<key>`: `<id>` is 10 letters and digits,
 and `<key>` 16 random bytes in URL-safe base64 without padding (22 characters). The share code, as UTF-8, is locked

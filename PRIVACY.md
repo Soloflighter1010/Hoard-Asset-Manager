@@ -54,14 +54,12 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   Hoard does this by itself while it's open, as often as you chose, to see what's new or updated. It downloads
   nothing without you.
 - **The image hosts those stores use,** to fetch product images.
-- **No one, when you share a set.** **Share** in the Sets tab makes a link to the set viewer on Hoard's website
-  (`hoard.furryup.link`) with the set itself after the link's `#`: its name, note and photo links, and each
-  product's store, name, creator, store page and picture address. A browser never sends what's after `#`, so
-  the website never receives the set, and Hoard uploads nothing. Your own products (Local) and hidden ones are
-  never in a link. Whoever opens it loads each picture from its store's image host, and the photos from the
-  photo sites they're on, as any page with those pictures would.
-- **Hoard's share server, only when you make a short link for a set** (4.3.0, **Make a short link** in
-  **Share...**), and when you or someone else opens one. Hoard locks the set on your computer first (AES-GCM,
+- **Hoard's share server, only when you share a set** (**Make a short link** in **Share...**, in the Sets tab: from
+  5.0 a set is shared only by a short link to the set viewer on Hoard's website, `hoard.furryup.link`), and when
+  you or someone else opens one. A shared set holds its name, note and photo links, and each product's store, name,
+  creator, store page and picture address; your own products (Local) and hidden ones are never in one. Whoever
+  opens it loads each picture from its store's image host, and the photos from the photo sites they're on, as any
+  page with those pictures would. Hoard locks the set on your computer first (AES-GCM,
   with a new random key) and sends only the locked copy to `hoard-share.furryup.link`. The key is only in the
   link, after its `#`, which a browser never sends anywhere, so the server can't read the set, and neither can I.
   The server keeps the locked copy, when it runs out, and a fingerprint (SHA-256) of the token your Hoard keeps to
@@ -70,7 +68,8 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   link that's reported for abuse, by its id, without being able to read it (see [TERMS.md](TERMS.md)). Opening a short link
   (in the set viewer, or in **Add a shared set**) fetches the locked copy by its id. The server runs on
   Cloudflare, which sees the IP address of whoever makes or opens a short link, as with any website, under
-  [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link never involves it.
+  [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link from Hoard before 5.0
+  holds the set itself, after its `#`, which a browser never sends, so opening one never involves the server.
 - **A photo site, when you add a photo to a set by its page link** (an Imgur, Gyazo, ImgBB, Postimages, Bluesky,
   Reddit or X page rather than the picture itself): Hoard reads that page once, as a browser would, for the
   picture it shows, and keeps only the picture's link. It reads it from that site only, following no redirect to

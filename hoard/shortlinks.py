@@ -26,7 +26,8 @@ KEY = re.compile(r"[A-Za-z0-9_-]{22}")              # 128 bits, base64url
 TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")            # 256 bits, base64url
 DATA = re.compile(r"[A-Za-z0-9_-]{42,65536}")       # a locked set, base64url: 31 bytes to 48 KiB
 CODE = re.compile(r"S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})")
-OFFLINE = "Couldn't reach Hoard's share server. Check your connection, or share the long link."
+OFFLINE = "Couldn't reach Hoard's share server. Check your connection, and try again."
+TOO_BIG = "This set is too big to share: a short link holds up to about 500 products."
 
 
 class ShortLinkError(Exception):
@@ -66,11 +67,11 @@ def _request(method: str, path: str, *, token: str | None = None, data: str | No
     if r.status_code == 403:
         raise ShortLinkError("That short link was made by another copy of Hoard, so this one can't change it.")
     if r.status_code == 413:
-        raise ShortLinkError("This set is too big for a short link. Share the long link.")
+        raise ShortLinkError(TOO_BIG)
     if r.status_code == 429 or r.status_code >= 500:
-        raise ShortLinkError("Hoard's share server is busy. Share the long link, or try again later.")
+        raise ShortLinkError("Hoard's share server is busy. Try again later.")
     if not 200 <= r.status_code < 300 or not isinstance(body, dict):
-        raise ShortLinkError(f"Hoard's share server didn't take that ({r.status_code}). Share the long link.")
+        raise ShortLinkError(f"Hoard's share server didn't take that ({r.status_code}). Try again later.")
     return body
 
 
@@ -84,7 +85,7 @@ def _expires(body: dict) -> int:
 def make(data: str) -> dict:
     """Keep a locked set (base64url) on the server: {"id", "token", "expires" (Unix seconds)}."""
     if not isinstance(data, str) or not DATA.fullmatch(data):
-        raise ShortLinkError("This set is too big for a short link. Share the long link.")
+        raise ShortLinkError(TOO_BIG)
     body = _request("POST", "/v1/sets", data=data)
     sid, token = body.get("id"), body.get("token")
     if not (isinstance(sid, str) and ID.fullmatch(sid) and isinstance(token, str) and TOKEN.fullmatch(token)):
@@ -96,7 +97,7 @@ def replace(sid: str, token: str, data: str) -> int:
     """The set behind a short link of this Hoard's, as it is now: kept LIFETIME_DAYS from now. Returns when it
     runs out. Raises Gone when the link has already."""
     if not isinstance(data, str) or not DATA.fullmatch(data):
-        raise ShortLinkError("This set is too big for a short link. Share the long link.")
+        raise ShortLinkError(TOO_BIG)
     return _expires(_request("PUT", f"/v1/sets/{sid}", token=token, data=data))
 
 
@@ -115,5 +116,5 @@ def fetch(sid: str) -> dict:
     body = _request("GET", f"/v1/sets/{sid}")
     data = body.get("data")
     if not isinstance(data, str) or not DATA.fullmatch(data):
-        raise ShortLinkError("That short link's set is damaged. Ask for the long link instead.")
+        raise ShortLinkError("That short link's set is damaged. Ask whoever shared it for a new one.")
     return {"data": data, "expires": _expires(body)}

@@ -27,6 +27,11 @@
   **Mix and match...** picks an avatar and an outfit at random from what you own, one product from each of your
   Clothing tags, and only clothes tagged for that avatar if you like. Keep the picks you like, pick the rest again,
   and make a set of them.
+- **Sets are shared by short link only** ([#162](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/162)).
+  **Share...** makes a short link (about 70 characters, for 14 days) instead of the long link that held the whole set,
+  which was too long to pass around. **Update the link** keeps it 14 days from today, so a set can stay shared for as
+  long as you like; Hoard doesn't renew it by itself. Long links shared from earlier versions still open, in the
+  viewer and in **Add a shared set...**.
 
 ## 5.0.0-beta.1
 

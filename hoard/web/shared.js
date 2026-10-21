@@ -2358,8 +2358,9 @@ function wireProjects() {
    you've downloaded them or not, and whether they're yours yet: a set shared with you lists what to buy, and where.
    Sets is a tab beside the stores, on both pages: each set is a big tile, and a set opened is a folder of its products,
    those this page has as its usual tiles (to choose, open and select as anywhere), then the rest: not downloaded, or
-   not yours yet. A set is shared as a link to the set viewer on Hoard's website, with the set itself after its "#"
-   (so it's never sent anywhere): nothing is uploaded, and the same link pasted here adds the set. */
+   not yours yet. A set is shared as a short link to the set viewer on Hoard's website: the set, locked, is kept on
+   Hoard's share server for 14 days, and the key that opens it is after the link's "#" (so it's never sent anywhere).
+   The same link pasted here adds the set, as does a long link (the set itself after its "#") from Hoard before 5.0. */
 const setById = id => (DATA.sets || []).find(s => s.id === id);
 function setOptions(first, withNew = true) {
   return `<option value="">${esc(tr(first))}</option>` +
@@ -2661,8 +2662,8 @@ async function unlockSet(data, key) {
   return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: LOCKED_AS }, k, bytes.subarray(12)));
 }
 const canLock = () => !!(window.crypto && crypto.subtle);   // (a page on 127.0.0.1 has it; one opened by its LAN address over http doesn't)
-const NO_LOCK = "This browser can't lock a set for a short link here. Share the long link instead.";
-const NO_UNLOCK = "This browser can't open a short link here. Ask for the set's long link instead.";
+const NO_LOCK = "This browser can't lock a set for a short link here. Share it from Hoard on the computer it runs on.";
+const NO_UNLOCK = "This browser can't open a short link here. Add the set from Hoard on the computer it runs on.";
 const day = seconds => new Date(seconds * 1000).toLocaleDateString(document.documentElement.lang || "en", { year: "numeric", month: "long", day: "numeric" });
 // The set behind a short link someone shared (Add a shared set): its code, or "" when it can't be had (said why)
 async function openShortLink(text) {
@@ -2673,8 +2674,8 @@ async function openShortLink(text) {
   try { return await unlockSet(r.data.data, m[2]); }
   catch (e) { toast("That short link's key doesn't open its set. Copy all of the link, and try again."); return ""; }
 }
-// A set's link to share: copied, opened in the viewer, or shown to copy by hand; and its short link, made, updated
-// or deleted here
+// A set's link to share (issue #162: only a short link, as a set's own long link was too long to pass around): made
+// here, then copied, opened, updated (which keeps it {days} more days, by hand) or deleted
 function showShare(s, got) {
   const d = document.createElement("dialog");
   d.className = "ask share";
@@ -2683,40 +2684,36 @@ function showShare(s, got) {
   d.innerHTML = `<form method="dialog"><p><b translate="no">${esc(s.name)}</b></p>` +
     `<p>${esc(tr(got.count === 1 ? "Anyone with this link can see the product in this set, where to buy it, and your note and photos."
       : "Anyone with this link can see the {0} products in this set, where to buy each one, and your note and photos.", got.count))} ` +
-    `${esc(tr("To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link."))}</p>` +
-    `<p><input readonly value="${esc(got.link)}" aria-label="${esc(tr("The set's link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` + left +
-    `<p class="hint">${esc(tr("This link holds the set itself, so nothing is uploaded. Each product's picture loads from its store."))}</p>` +
-    `<div class="ask-row"><a class="ghost" href="${esc(safeUrl(got.link))}" target="_blank" rel="noopener noreferrer">Open it</a>` +
-    `<button class="ghost" value="code" type="button" data-copy="code">Copy the code</button>` +
-    `<button class="ghost" value="link" type="button" data-copy="link">Copy the link</button></div>` +
-    `<section class="shortlink" aria-labelledby="shortTitle"></section>` +
+    `${esc(tr("To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link."))}</p>` + left +
+    `<section class="shortlink" aria-label="${esc(tr("Short link"))}"></section>` +
     `<div class="ask-row"><button class="ghost" value="no">Close</button></div></form>`;
   const box = d.querySelector(".shortlink");
   const drawShort = () => {
     const sh = got.short, days = got.short_days || 14;
-    box.innerHTML = `<p id="shortTitle"><b>${esc(tr("Short link"))}</b></p>` + (sh
+    box.innerHTML = sh
       ? `<p><input readonly value="${esc(sh.link)}" aria-label="${esc(tr("The set's short link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` +
         `<p class="hint">${esc(tr("It works until {0}.", day(sh.expires)))} ${esc(tr(sh.changed
           ? "The set has changed since: update the link to share it as it is now." : "Updating it keeps it {0} days from today.", days))}</p>` +
         `<div class="ask-row"><button class="ghost danger" type="button" data-short="delete">Delete the short link</button>` +
+        `<a class="ghost" href="${esc(safeUrl(sh.link))}" target="_blank" rel="noopener noreferrer">Open it</a>` +
         `<button class="${sh.changed ? "primary" : "ghost"}" type="button" data-short="update">Update the link</button>` +
         `<button class="${sh.changed ? "ghost" : "primary"}" type="button" data-copy="short">Copy the short link</button></div>`
-      : `<p class="hint">${esc(tr("A short link keeps a locked copy of the set on Hoard's share server for {0} days. Only the link opens it: the key is in the link, and never sent to the server. You can delete it whenever you like.", days))}</p>` +
-        `<div class="ask-row"><button class="primary" type="button" data-short="make">Make a short link</button></div>`);
+      : `<p class="hint">${esc(tr("A set is shared as a short link, which you can update to keep it going."))} ` +
+        `${esc(tr("A short link keeps a locked copy of the set on Hoard's share server for {0} days. Only the link opens it: the key is in the link, and never sent to the server. You can delete it whenever you like.", days))}</p>` +
+        `<div class="ask-row"><button class="primary" type="button" data-short="make">Make a short link</button></div>`;
   };
   drawShort();
   document.body.appendChild(d);
   d.addEventListener("click", async e => {
     const c = e.target.closest("[data-copy]"), act = e.target.closest("[data-short]");
     if (c) {
-      const text = { code: got.code, link: got.link, short: got.short && got.short.link }[c.dataset.copy];
-      try { await navigator.clipboard.writeText(text); toast({ code: "Copied the set's code.", link: "Copied the set's link.", short: "Copied the short link." }[c.dataset.copy]); }
-      catch (err) { const i = c.closest(".shortlink, form").querySelector("input"); i.value = text; i.select(); }
+      try { await navigator.clipboard.writeText(got.short.link); toast("Copied the short link."); }
+      catch (err) { box.querySelector("input").select(); }
       return;
     }
     if (!act || act.disabled) return;
     if (act.dataset.short === "delete") {
-      if (!await ask("Delete this set's short link? Anyone who opens it will see that it's gone. The long link still works.", "Delete", true)) return;
+      if (!await ask("Delete this set's short link? Anyone who opens it will see that it's gone.", "Delete", true)) return;
       act.disabled = true;
       const r = await apiPost("/api/sets", { action: "unshort", id: s.id });
       act.disabled = false;
@@ -2737,7 +2734,7 @@ function showShare(s, got) {
   });
   d.addEventListener("close", () => d.remove(), { once: true });
   d.showModal();
-  d.querySelector("input").select();
+  (box.querySelector("input") || box.querySelector("button")).focus();
 }
 async function shareSet(s) {
   const r = await apiPost("/api/sets", { action: "share", id: s.id });
@@ -3194,7 +3191,7 @@ const TOUR_STEPS = [
   { id: "sets", page: "downloads", at: () => $('#stores [data-store="Sets"]'),
     enter: () => T.closeDetail(),
     title: () => tr("Sets"),
-    body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a link that shows what's in it and where to buy each, or as a short link that lasts 14 days. Hoard for Unity imports a whole set at once.")) },
+    body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a short link that shows what's in it and where to buy each, for 14 days. Hoard for Unity imports a whole set at once.")) },
   { id: "updates", page: "downloads", at: () => $('#views [data-view="updates"]'),
     title: () => tr("Updates"),
     body: () => esc(tr("When a store has newer files for something you downloaded, it's listed here. Settings can keep the previous version too, so you can go back.")) },

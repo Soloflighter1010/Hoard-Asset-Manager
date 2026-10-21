@@ -899,7 +899,8 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .sets-top { margin: 0 0 16px; }
 dialog.ask.share { width: min(600px, calc(var(--vw) - 32px)); }   /* (wider than other questions: its link and four buttons) */
 dialog.ask .ask-row a.ghost { height: var(--btn-h); }   /* (a link among the buttons, the buttons' height) */
-dialog.ask.share .shortlink { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--seam); }   /* (its short link, apart from the long one) */
+dialog.ask.share .shortlink { margin-top: 4px; }   /* (its short link: the only link a set is shared by) */
+dialog.ask.share .shortlink p:first-child { font-weight: 400; }   /* (not a question's first line) */
 dialog.ask .ghost.danger { color: var(--warn); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
