@@ -647,6 +647,19 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
         return self.server.lan or host in LOOPBACK
 
+    def _drop_body(self) -> None:
+        """Read a small request body that won't be used, before answering without it: Windows resets a connection
+        closed with bytes it hasn't read, and the answer can be lost on the way (WinError 10053 for the page)."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if 0 < length <= 64 * 1024:   # (a larger one is closed on: not worth reading for a refusal)
+            try:
+                self.rfile.read(length)
+            except OSError:
+                pass
+
     def _refused(self):
         """The request didn't carry this run's access key (see check_access)."""
         return self._json({"error": "Hoard didn't recognise this page. Open Hoard again, or the address it printed."}, 401)
@@ -1495,11 +1508,14 @@ class Handler(BaseHTTPRequestHandler):
         """Run an action. Only requests from this computer, sent as JSON with the access key, are accepted."""
         path, srv = urlparse(self.path).path, self.server
         if path not in ACTIONS:
+            self._drop_body()
             return self._send(404, b"Not found", "text/plain")
         if (not self._host_ok() or self.client_address[0] not in LOOPBACK
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
+            self._drop_body()
             return self._json({"error": "That only works on the computer running Hoard."}, 403)
         if path not in KEYLESS_ACTIONS and not check_access(self, srv.key):
+            self._drop_body()
             return self._refused()
         srv.last_seen = time.time()
         try:
