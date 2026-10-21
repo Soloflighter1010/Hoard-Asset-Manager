@@ -59,6 +59,12 @@ Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a
 assets came from (from 0.5.2, a package with scripts too, though Unity reloads its scripts part way through). If
 the file is damaged, it's kept beside the new one as `imports.json.unreadable-<time>` rather than written over.
 
+Products the Hoard app put in the project ([Projects](Projects#managing-a-project), 5.0) are added to the same list.
+From 0.9.0, a product's details show them under **Put in by Hoard**: when, from which file, the folders it added (or
+its package, in `Packages`), and how many of its assets were left as they were because the project already had
+them, with **Select** to select what it added in the Project window. The project's `Hoard imports.md`, beside
+`Assets`, lists the same for you to read.
+
 ## Credits
 
 Creators often ask to be credited when you use their assets. **Create Credits List** in the window's bar lists the

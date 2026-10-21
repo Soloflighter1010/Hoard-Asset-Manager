@@ -6,7 +6,9 @@
   Each time Hoard puts products from your library in a project, it adds them to `Hoard imports.md`, beside the
   project's `Assets`: each product, its file, when, and the folders it added (or its package), and what was left
   as it was. They're added to Hoard for Unity's own list of imports too (`ProjectSettings/Hoard/imports.json`), so
-  it knows those products are in the project. **Manage** lists the folders each one added.
+  it knows those products are in the project. **Manage** lists the folders each one added, and Hoard for Unity 0.9.0
+  shows them under each product (**Put in by Hoard**, with **Select** to select them), and keeps them when it adds
+  an import of its own.
 - Everything in 4.3.7: Payhip's sign-in loop named, and payhip.com's own sign-in opened first.
 - **Old project backups, kept in hand.** **Backups**, in Projects, lists every project backup with its size, marks
   the old ones (past the newest 3 of a project, and older than a month, unless you choose otherwise), and deletes them,

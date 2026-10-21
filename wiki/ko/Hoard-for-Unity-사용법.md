@@ -1,4 +1,4 @@
-<!-- Translated from Hoard-for-Unity (English b7fab69ce1fe). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Hoard-for-Unity (English b58c4d5c3bc1). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Hoard-for-Unity">English</a> · <a href="Hoard-for-Unityの使い方">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 **Hoard for Unity**는 Hoard가 다운로드한 것을 Unity 에디터로 가져와요. 에셋을 찾아 헤매거나 다시 다운로드하지 않고 임포트할 수 있어요. (Hoard for Unity의 화면은 영어예요. 이 페이지에서는 버튼 등의 이름을 영어 그대로 적었어요.)
@@ -18,6 +18,8 @@
 - **업데이트를 임포트해요**(0.6.0). 이 프로젝트에 있는 상품은, 지금 가진 것보다 새 패키지를 Hoard가 다운로드했으면 **Update to import**라고 나와요. 모두 프로젝트에 있는 패키지보다 한 시간 넘게 뒤에, 또는 마지막으로 Hoard로 그 상품을 임포트한 뒤에 다운로드한 것이에요. 상세 정보에는 **Import update**가 있고, 그것에 대해 Unity의 임포트 대화 상자를 열어요. Hoard가 마지막으로 다운로드한 뒤 제작자가 업데이트한 상품(Hoard의 지난 **업데이트 확인**에서 찾은 것. Hoard 자체 폴더의 `asset-updates.json`)은 **Update in Hoard**라고 나와요. Hoard에서 업데이트를 다운로드한 다음(**다운로드**, **업데이트**) 여기서 임포트하세요. 타일 위의 **Updates**를 누르면 그런 상품만 보여요.
 
 이렇게 한 임포트는 `ProjectSettings/Hoard/imports.json`에 기록돼서, 프로젝트가 에셋이 어디서 왔는지 기억해요(0.5.2부터는 Unity가 중간에 스크립트를 다시 로드해도, 스크립트가 든 패키지도 기록해요). 파일이 손상됐으면 덮어쓰지 않고 새 파일 옆에 `imports.json.unreadable-<time>`으로 남겨 둬요.
+
+Hoard 앱이 프로젝트에 넣은 상품([프로젝트](프로젝트#프로젝트-관리), 5.0)도 같은 목록에 추가돼요. 0.9.0부터는 상품 상세의 **Put in by Hoard**에 나와요. 언제, 어느 파일에서 넣었는지, 추가한 폴더(또는 `Packages`의 패키지), 프로젝트에 이미 있어서 그대로 둔 에셋 수예요. **Select**로 추가한 것을 Project 창에서 선택해요. 프로젝트의 `Assets` 옆에 있는 `Hoard imports.md`에도 읽기 위한 같은 목록이 있어요.
 
 ## 크레딧
 

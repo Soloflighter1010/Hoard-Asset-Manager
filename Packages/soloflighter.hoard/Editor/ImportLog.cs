@@ -1,5 +1,8 @@
 // What this project imported through Hoard, kept in ProjectSettings/Hoard/imports.json so it travels with the
-// project (and with version control). One entry per import: which product, which file, and when.
+// project (and with version control). One entry per import: which product, which file, and when. The Hoard app adds
+// one too for each product it puts in a project (Projects, issue #155), marked "via": "hoard", with what it added:
+// the folders under Assets ("added"), or the package in Packages ("package"), and how many of its assets were left as
+// they were ("left"). Those are kept when an entry is added here, and shown under the product.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -16,6 +19,9 @@ namespace SoloFlighter.Hoard.Editor
         public sealed class Entry
         {
             public string Store, Name, Creator, File, ImportedAt;
+            public string Via, Package;                        // "hoard": the app put it in; the package it added
+            public List<string> Added = new List<string>();    // the folders under Assets it added
+            public long Left;                                  // how many of its assets were already in the project
         }
 
         public static List<Entry> Read()
@@ -40,7 +46,8 @@ namespace SoloFlighter.Hoard.Editor
                 foreach (var v in items.Items)
                     if (v.Kind == JsonKind.Object)
                         list.Add(new Entry { Store = v.Str("store"), Name = v.Str("name"), Creator = v.Str("creator"),
-                                             File = v.Str("file"), ImportedAt = v.Str("imported_at") });
+                                             File = v.Str("file"), ImportedAt = v.Str("imported_at"), Via = v.Str("via"),
+                                             Package = v.Str("package"), Added = v.Strings("added"), Left = v.Long("left") ?? 0 });
             }
             catch (Exception) { readable = false; list.Clear(); }
             return list;
@@ -62,7 +69,13 @@ namespace SoloFlighter.Hoard.Editor
                 var e = list[n];
                 sb.Append("    {\"store\": ").Append(Q(e.Store)).Append(", \"name\": ").Append(Q(e.Name))
                   .Append(", \"creator\": ").Append(Q(e.Creator)).Append(", \"file\": ").Append(Q(e.File))
-                  .Append(", \"imported_at\": ").Append(Q(e.ImportedAt)).Append(n < list.Count - 1 ? "},\n" : "}\n");
+                  .Append(", \"imported_at\": ").Append(Q(e.ImportedAt));
+                if (e.Via != null) sb.Append(", \"via\": ").Append(Q(e.Via));   // (the app's, kept as it wrote them)
+                if (e.Via != null || e.Added.Count > 0)
+                    sb.Append(", \"added\": [").Append(string.Join(", ", e.Added.ConvertAll(Q).ToArray())).Append("]");
+                if (e.Package != null) sb.Append(", \"package\": ").Append(Q(e.Package));
+                if (e.Left > 0) sb.Append(", \"left\": ").Append(e.Left.ToString(CultureInfo.InvariantCulture));
+                sb.Append(n < list.Count - 1 ? "},\n" : "}\n");
             }
             sb.Append("  ]\n}\n");
             JsonBuild.WriteFile(LogFile, new UTF8Encoding(false).GetBytes(sb.ToString()));
@@ -71,6 +84,19 @@ namespace SoloFlighter.Hoard.Editor
         public static bool Imported(HoardAsset asset, List<Entry> log)
         {
             return log.Exists(e => e.Store == asset.Store && e.Name == asset.Name);
+        }
+
+        /// <summary>The times the Hoard app put this product in the project, oldest first.</summary>
+        public static List<Entry> PutInByHoard(HoardAsset asset, List<Entry> log)
+        {
+            return log.FindAll(e => e.Via == "hoard" && e.Store == asset.Store && e.Name == asset.Name);
+        }
+
+        /// <summary>When an entry was noted, in this computer's time ("8 Oct 2026, 14:00"), or as written.</summary>
+        public static string When(Entry e)
+        {
+            var t = Updates.ParseTime(e.ImportedAt);
+            return t.HasValue ? t.Value.ToLocalTime().ToString("d MMM yyyy, HH:mm", CultureInfo.InvariantCulture) : e.ImportedAt ?? "";
         }
 
         static string Q(string s)

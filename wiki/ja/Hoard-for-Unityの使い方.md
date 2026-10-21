@@ -1,4 +1,4 @@
-<!-- Translated from Hoard-for-Unity (English b7fab69ce1fe). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Hoard-for-Unity (English b58c4d5c3bc1). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Hoard-for-Unity">English</a> · <b>日本語</b> · <a href="Hoard-for-Unity-사용법">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 **Hoard for Unity** は、HoardがダウンロードしたものをUnityエディターに持ち込みます。アセットを探し回ったり、もう一度ダウンロードしたりせずにインポートできます。(Hoard for Unityの画面は英語です。このページでは、ボタンなどの名前を英語のまま書いています。)
@@ -18,6 +18,8 @@
 - **アップデートをインポートできます**(0.6.0)。このプロジェクトにある商品は、今あるものより新しいパッケージをHoardがダウンロードしていると、**Update to import** と表示されます。すべてプロジェクトにあるパッケージより1時間以上あと、または最後にHoardでその商品をインポートしたあとにダウンロードしたものです。詳細には **Import update** があり、それに対してUnityのインポートダイアログを開きます。Hoardが最後にダウンロードしたあとにクリエイターが更新した商品(Hoardの前回の **アップデートを確認** で見つかったもの。Hoard自身のフォルダーの `asset-updates.json`)は **Update in Hoard** と表示されます。Hoardでアップデートをダウンロードし(**ダウンロード**、**アップデート**)、ここでインポートしてください。タイルの上の **Updates** で、そのような商品だけが表示されます。
 
 こうして行ったインポートは `ProjectSettings/Hoard/imports.json` に記録されるので、プロジェクトはアセットがどこから来たかを覚えています(0.5.2からは、Unityが途中でスクリプトをリロードしても、スクリプトを含むパッケージも記録します)。ファイルが壊れていた場合は、上書きせずに、新しいファイルの横に `imports.json.unreadable-<time>` として残します。
+
+Hoardのアプリがプロジェクトに入れた商品([プロジェクト](プロジェクト#プロジェクトの管理)、5.0)も同じ一覧に追加されます。0.9.0からは、商品の詳細の **Put in by Hoard** に表示されます。いつ、どのファイルから入れたか、追加したフォルダー(または `Packages` のパッケージ)、プロジェクトにすでにあったためそのままにしたアセットの数です。**Select** で、追加したものをProjectウィンドウで選択します。プロジェクトの `Assets` の横にある `Hoard imports.md` にも、読むための同じ一覧があります。
 
 ## クレジット
 
