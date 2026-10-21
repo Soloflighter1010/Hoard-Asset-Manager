@@ -140,6 +140,19 @@ class SavedPages(unittest.TestCase):
                                                             "<html><body>Library</body></html>")])
         self.assertIn("isn't a wishlist page", r["error"])
 
+    def test_a_page_saved_as_html_only_names_its_address(self):
+        """An HTML-only save has no "saved from" line, so its <link rel="canonical"> says where it's from; a page full
+        of half-made <link tags is read as quickly (CodeQL: a pattern for it that could take quadratic time)."""
+        self.assertEqual(wishlists._canonical('<link rel="icon" href="https://x/i.png"><link rel="canonical" '
+                                              'href="https://jinxxy.com/my/likes?page=2">'), "https://jinxxy.com/my/likes?page=2")
+        self.assertEqual(wishlists._canonical('<link href="https://gumroad.com/wishlists/abc" rel="canonical">'),
+                         "https://gumroad.com/wishlists/abc")
+        self.assertEqual(wishlists._canonical('<link rel="canonical" href="http://x">'), "", "https only")
+        start = time.monotonic()
+        wishlists._canonical("<link" * 100_000)
+        wishlists._canonical('<link=rel="canonical"' * 50_000)
+        self.assertLess(time.monotonic() - start, 1.0)
+
     def test_a_long_list_saved_a_page_at_a_time(self):
         one = {"store": "booth", "list": "Loved items", "url": "u", "products": [product("A", "1 JPY"), product("B", "2 JPY")]}
         two = {"store": "booth", "list": "Loved items", "url": "u", "products": [product("B", "2 JPY"), product("C", "3 JPY")]}

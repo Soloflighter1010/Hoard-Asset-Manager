@@ -438,6 +438,23 @@ def _list_name(kind: str, url: str, page) -> str:
     return clean_text(title, 60) or "Wishlist"
 
 
+def _canonical(html: str) -> str:
+    """A page's <link rel="canonical" href="https://..."> address, or "". Each tag is found first, then read on its
+    own, so a page full of half-made <link tags can't make the search slow."""
+    start = html.find("<link")
+    while start != -1:
+        end = html.find(">", start)
+        if end == -1:
+            break
+        tag = html[start:end]
+        if 'rel="canonical"' in tag:
+            m = re.search(r'\bhref="(https://[^"]+)"', tag)
+            if m:
+                return m.group(1)
+        start = html.find("<link", end)
+    return ""
+
+
 def from_saved_pages(pages) -> list[dict]:
     """Read wishlist pages saved from your own browser, (filename, text) each: one result per page, in order, as
     {"filename", "lists"} or {"filename", "error"}. Read offline, with scripts off and every request blocked. The
@@ -451,8 +468,7 @@ def from_saved_pages(pages) -> list[dict]:
         try:
             html, url, _images = read_saved_page(filename, text)
             if not page_kind(url):   # saved as HTML only: the page names its own address
-                m = re.search(r'<link[^>]+rel="canonical"[^>]+href="(https://[^"]+)"', html[:200000])
-                url = m.group(1) if m else url
+                url = _canonical(html[:200000]) or url
             kind = page_kind(url)
             if not kind:
                 raise ValueError("that isn't a wishlist page Hoard can read (Booth's loved items, a Gumroad wishlist, "
