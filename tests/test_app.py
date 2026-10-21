@@ -3662,6 +3662,9 @@ class PageLayout(unittest.TestCase):
         self.assertEqual(shown["windows"], {"tagPanel": {"x": 120, "y": 80.5, "w": 500}, "stores": {"x": 10, "y": 20}},
                          "one window's move doesn't forget the others")
         self.assertEqual(server.ui_settings({"ui": "junk"}), {"windows": {}, "sections": {}})
+        # the sort, one for both pages: only one of theirs
+        self.assertEqual(server.apply_settings(cfg, {"ui": {"sort": "added"}})["ui"], {"sort": "added"})
+        self.assertEqual(server.apply_settings(cfg, {"ui": {"sort": "price"}})["ui"], {})
         self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")
 
 

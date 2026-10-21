@@ -1900,7 +1900,7 @@ function readHash() {
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.disk = DISK[p.get("downloaded")] ? p.get("downloaded") : "";
   state.fresh = p.get("new") === "1";
-  state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
+  state.sort = sortFrom(p.get("sort"), SORTS);
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";
   if (p.get("open")) openKey = p.get("open").slice(0, 400);   // a product, from a set's folder in Downloads
@@ -1916,7 +1916,7 @@ addEventListener("hashchange", () => {   // the bar's Sets, from here
 let qTimer;
 $("#q").addEventListener("input", e => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = e.target.value; render(); }, 90); });
 $("#storeSeg").addEventListener("click", e => { const b = e.target.closest("[data-store]"); if (b) { state.store = b.dataset.store; state.set = ""; render(); } });
-$("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
+$("#sort").addEventListener("change", e => { state.sort = e.target.value; uiSave({ sort: state.sort }); render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
@@ -2512,6 +2512,7 @@ function applyUi(ui) {   // once, when the page first has its data
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
   if (typeof applyStack === "function") applyStack(UI.stack);   // the Library draws itself next
+  state.sort = sortFrom(new URLSearchParams(location.hash.slice(1)).get("sort"), SORTS);   // the sort last chosen
 }
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
    Both are remembered. */

@@ -31,6 +31,9 @@
   which was too long to pass around. **Update the link** keeps it 14 days from today, so a set can stay shared for as
   long as you like; Hoard doesn't renew it by itself. Long links shared from earlier versions still open, in the
   viewer and in **Add a shared set...**.
+- **Your sort stays.** The sort you choose (**Sort**, beside the store tabs) is kept when you go between the Library
+  and Downloads, and next time Hoard starts. Downloads can sort by store too, as the Library does; **Largest** is
+  only in Downloads, so the Library sorts by name while it's chosen. A link with its own sort still shows that one.
 - Everything in 4.4.0: your wishlists from the stores, with their prices, file names that stay readable with
   OpenDyslexic, and the wiki in Japanese and Korean.
 - Everything in 4.3.7: Payhip's sign-in loop named, and payhip.com's own sign-in opened first.

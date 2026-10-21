@@ -1194,6 +1194,12 @@ function uiSave(part) {
   clearTimeout(uiTimer);
   uiTimer = setTimeout(uiFlush, 300);
 }
+// The sort a page shows: the link's, else the one last chosen on either page (kept with the other layout choices, so
+// it stays between launches, and between the Library and Downloads), when this page has it; else by name
+function sortFrom(given, sorts) {
+  if (given === "newest") given = "added";   // (Downloads' own name for it, before 5.0)
+  return sorts[given] ? given : sorts[UI.sort] ? UI.sort : "name";
+}
 function uiFlush() {   // also as the page is left (to the other view, or closing), so nothing just changed is lost
   clearTimeout(uiTimer);
   if (!uiPending || !ACCESS.key) return;

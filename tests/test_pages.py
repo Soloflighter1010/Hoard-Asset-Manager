@@ -621,6 +621,49 @@ class StackingAcrossStores(unittest.TestCase):
             page.wait_for_timeout(300)
         page.close()
 
+    def test_the_sort_stays(self):
+        """The sort you choose stays when you go to the other page, and next time Hoard starts (kept in config.json,
+        one for both pages). One the page doesn't have (Largest, in the Library) shows by name there, and comes back on
+        the page that has it. A link with its own sort keeps it."""
+        self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("sort", None))
+        page = self.browser.new_page()
+        sort = lambda: page.eval_on_selector("#sort", "s => s.value")
+        names = lambda: page.eval_on_selector_all(".slot", "els => els.map(e => e.getAttribute('aria-label'))")
+        with mock.patch.object(server, "save_config"):   # (kept in memory: not in your config)
+            page.goto(self.srv.entry_url())
+            page.get_by_text("Hoodie").first.wait_for()
+            self.assertEqual(sort(), "name")
+            page.select_option("#sort", "creator")
+            page.evaluate("uiFlush()")
+            page.wait_for_timeout(300)
+            self.assertEqual(self.srv.cfg["ui"]["sort"], "creator")
+            page.click("nav.apptabs a[href='/downloads']")
+            page.wait_for_url("**/downloads**")
+            page.get_by_text("Hoodie").first.wait_for()
+            self.assertEqual(sort(), "creator", "the same sort on Downloads")
+            self.assertTrue(names()[0].startswith("Face Tracking - Ashbeast DLC"), "by creator: Han's Creations first")
+            page.select_option("#sort", "size")
+            page.evaluate("uiFlush()")
+            page.wait_for_timeout(300)
+            self.assertEqual(self.srv.cfg["ui"]["sort"], "size")
+            page.click("nav.apptabs a[href='/']")
+            page.get_by_text("Hoodie").first.wait_for()
+            self.assertEqual(sort(), "name", "the Library has no Largest")
+            page.click("nav.apptabs a[href='/downloads']")
+            page.get_by_text("Hoodie").first.wait_for()
+            self.assertEqual(sort(), "size", "back on the page that has it")
+            # next launch: the page reads it from config.json (here, as if chosen before)
+            self.srv.cfg["ui"]["sort"] = "store"
+            page.goto(self.srv.entry_url())
+            page.get_by_text("Hoodie").first.wait_for()
+            self.assertEqual(sort(), "store")
+            # a link's own sort wins; Downloads' old name for Recently added still works
+            page.goto(self.srv.entry_url().split("/#")[0] + "/downloads#sort=newest")
+            page.get_by_text("Hoodie").first.wait_for()
+            self.assertEqual(sort(), "added")
+            self.assertEqual(self.srv.cfg["ui"]["sort"], "store", "only choosing a sort keeps it")
+        page.close()
+
 
 class Delights(unittest.TestCase):
     """The logo glows and shakes while an update to Hoard is waiting, and opens Updates when chosen; and a few

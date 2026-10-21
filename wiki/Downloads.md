@@ -195,7 +195,8 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
 ## The Downloads view
 
 - **Search** matches names, creators, tags and file names. Filter by store, creator, tag or **File types**, and
-  sort by name, creator, newest or size.
+  sort by name, creator, store, **Recently added** or **Largest**. The sort you choose is the Library's too, and Hoard
+  remembers it next time it starts (5.0); **Largest** is only here, so the Library sorts by name meanwhile.
 - Open a product to see its files, sizes and folder. **Open folder** opens it in Explorer (or Finder), **Show in
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,

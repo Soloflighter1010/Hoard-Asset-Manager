@@ -151,11 +151,13 @@ def mask_names(text: str, names: list[str]) -> str:
 
 
 UI_WINDOWS = ("tagPanel", "stores", "settingsPanel", "tasksWin")
+UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and Downloads' Sort (size: Downloads only)
 
 
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
-    is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size."""
+    is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
+    and the sort, one for both pages."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -171,6 +173,8 @@ def ui_settings(cfg: dict) -> dict:
     for k in ("tile_size", "dl_tile_size"):   # the Library's and the Downloads page's
         if isinstance(ui.get(k), int) and not isinstance(ui.get(k), bool) and 100 <= ui[k] <= 400:
             out[k] = ui[k]
+    if ui.get("sort") in UI_SORTS:
+        out["sort"] = ui["sort"]
     return out
 
 

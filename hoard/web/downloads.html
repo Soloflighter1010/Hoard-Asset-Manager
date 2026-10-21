@@ -1105,7 +1105,8 @@ body.less-motion .tour-try::before { animation: none; }
       <select id="sort">
         <option value="name">Name</option>
         <option value="creator">Creator</option>
-        <option value="newest">Recently added</option>
+        <option value="store">Store</option>
+        <option value="added">Recently added</option>
         <option value="size">Largest</option>
       </select>
     </label>
@@ -1538,10 +1539,12 @@ function matches(a, skip) {
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
 }
+const storeRank = folder => { const i = Object.keys(STORE_NAMES).indexOf(String(folder).toLowerCase()); return i < 0 ? 99 : i; };   // Local last
 const SORTS = {
   name: (a, b) => coll.compare(a.name, b.name),
   creator: (a, b) => coll.compare(a.creator, b.creator) || coll.compare(a.name, b.name),
-  newest: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
+  store: (a, b) => storeRank(a.store) - storeRank(b.store) || coll.compare(a.name, b.name),   // as the Library's Store
+  added: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
   size: (a, b) => b.size - a.size,
 };
 const countBy = (list, key) => {
@@ -1843,7 +1846,7 @@ async function showView(v) {
     if (!(DATA.privacy || {}).unlocked) return;
   }
   if (v === "space" && state.view !== "space") { state.sort = "size"; state.space = ""; SPACE = null; loadSpace(); }
-  else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = "name";
+  else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = sortFrom("", SORTS);   // the one you chose
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
 $("#viewBar").addEventListener("click", async e => {
@@ -2266,7 +2269,7 @@ function readHash() {
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";   // (a set's folder; and "Show in Downloads" from 4.1)
-  state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
+  state.sort = sortFrom(p.get("sort"), SORTS);
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
   if (/^\d+$/.test(p.get("open") || "")) openId = +p.get("open");  // "Show it in Downloads" from the Library
@@ -2349,7 +2352,7 @@ function renderDrives() {
   if (html !== drivesShown) { $("#drives").innerHTML = html; drivesShown = html; }
   $("#drives").hidden = !html;
 }
-$("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
+$("#sort").addEventListener("change", e => { state.sort = e.target.value; if (state.view !== "space") uiSave({ sort: state.sort }); render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, keys) : startDownload(stores));
@@ -2798,6 +2801,7 @@ function applyUi(ui) {   // once, when the page first has its data
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
   $("#stackCopies").checked = UI.stack !== false;   // the same choice as the Library's
+  if (state.view !== "space") state.sort = sortFrom(new URLSearchParams(location.hash.slice(1)).get("sort"), SORTS);   // the sort last chosen
 }
 $("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.checked }); render(); });
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
