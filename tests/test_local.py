@@ -411,7 +411,8 @@ class LocalPage(unittest.TestCase):
             finally:
                 srv.jobs.busy.release()
                 srv.jobs.kick()
-            page.get_by_text("Took Commission Kit out of Local").wait_for(timeout=20000)
+            # (in the toast: the task button, hidden once the task is done, can say the same)
+            page.locator("#toast", has_text="Took Commission Kit out of Local").wait_for(timeout=20000)
             page.locator("#grid .slot", has_text="Commission Kit").wait_for(state="detached")
             self.assertTrue((src / "Kit.unitypackage").exists())
             self.assertEqual(errors, [])
