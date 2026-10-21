@@ -2,6 +2,7 @@
 
 ## 5.0.0-beta.2
 
+- Everything in 4.3.7: Payhip's sign-in loop named, and payhip.com's own sign-in opened first.
 - **Any version of a package** ([#160](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/160)). In
   **Manage**, a package's version is a button: it lists every version that works in the project's Unity, newest
   first (prereleases too when **Offer prerelease versions of packages** is on), and installs the one you choose,
@@ -43,6 +44,23 @@
 - **What Hoard for Unity reports** about a project shows with it, as before: what it uses, which has updates, and
   its credits. A project it reported that isn't on the list shows below the list, with **Add to the list**.
 - Hoard reads the Creator Companion's own database (to show what it knows of a project) and never writes to it.
+
+## 4.3.7
+
+- **Payhip shops whose sign-in check goes round in a loop now say so, and what to do.** A tester's refresh failed on
+  four shops every time: two on their own addresses ("the website kept redirecting in a loop, which is usually a
+  passing problem") and two on payhip.com (": : Navigation to ... is interrupted by another navigation to
+  chrome-error://chromewebdata/"). A shop on its own address sends every visit to Payhip's sign-in check on
+  payhip.com and back, and when that check never finds you signed in to Payhip itself, the two go round until the
+  browser gives up. That isn't a passing problem, so Payhip's row now says "Payhip kept sending the page back and
+  forth between the shop and its sign-in check on payhip.com", and tells you to sign in to Payhip itself.
+- **Signing in to Payhip opens payhip.com's own sign-in page first,** then a tab for each of your shops. Before, it
+  opened only the shops, so you were never asked to sign in on payhip.com, which shops on their own addresses rely on.
+- **A page that doesn't load says why, in the browser's own words.** When a page fails partway through its redirects,
+  the browser shows its own error page, and all Hoard could say was that the navigation "is interrupted by another
+  navigation to chrome-error://chromewebdata/". Hoard now reads the reason from that error page, and its log lists each
+  address the page went through (without anything after a "?", which can carry sign-in tokens), so a support report
+  shows where a loop goes. The stray ": :" before such messages is gone.
 
 ## 4.3.6
 

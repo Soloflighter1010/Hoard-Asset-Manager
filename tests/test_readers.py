@@ -195,6 +195,55 @@ PAYHIP_OWN_SHOP = PAYHIP_SHOP.replace(
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class PageThatNeverLoads(unittest.TestCase):
+    """A tester's report (4.3.6): a Payhip shop on its own address sends every visit to Payhip's sign-in check on
+    payhip.com and back; when that never ends, the browser gives up. Hoard says why, from the browser itself, with
+    the addresses it went through, instead of "Navigation ... is interrupted by another navigation to
+    chrome-error://chromewebdata/". The shop and payhip.com are played by two addresses of this computer."""
+
+    def test_a_loop_between_two_sites(self):
+        import http.server
+        import threading
+        from urllib.parse import quote
+        from hoard import browser
+
+        class Loop(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                port = self.server.server_port
+                if self.path.startswith("/global-identity"):   # "payhip.com": back to the shop
+                    to = f"http://localhost:{port}/b-account"
+                else:                                          # "the shop": to Payhip's sign-in check
+                    to = f"http://127.0.0.1:{port}/global-identity?redirect=" + quote(f"http://localhost:{port}/b-account", safe="")
+                self.send_response(307)
+                self.send_header("Location", to)
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Loop)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with sync_playwright() as p:
+            b = p.chromium.launch()
+            try:
+                page = b.new_page()
+                with self.assertRaises(browser.PageLoadError) as got:
+                    browser.goto(page, f"http://localhost:{srv.server_port}/b-account")
+            finally:
+                b.close()
+        e = got.exception
+        self.assertEqual(e.code, "ERR_TOO_MANY_REDIRECTS")
+        self.assertGreater(len(e.hops), 10)
+        self.assertTrue(any("/global-identity" in u for _s, u in e.hops))
+        self.assertIn("127.0.0.1/global-identity", browser.hops_text(e.hops))
+        self.assertNotIn("redirect=", browser.hops_text(e.hops))
+        from hoard import net
+        self.assertIn("redirecting in a loop", net.plain_error(e))
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class BoothAndPayhip(unittest.TestCase):
 
     def page_at(self, url, html):
