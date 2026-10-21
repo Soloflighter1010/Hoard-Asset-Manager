@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.4.0
+
+- **Wishlists** ([#158](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/158)). The Sets tab now has
+  your wishlists too, each product with what it costs, and those already in your library shown as yours:
+  - **Read my wishlists...** reads them from Booth (your loved items, and each list of them you made), Gumroad (each
+    of your wishlists), Jinxxy (your wishlist, likes and lists) and Payhip (each shop's wishlists), in each store's
+    own signed-in window, as a refresh reads your library. It runs as a task.
+  - **Import saved wishlist pages...** reads pages you saved from your own browser instead, on your computer.
+  - Read again, a wishlist holds what the store's list does now, and a price that changed shows the old one struck
+    through. A product that's cheaper than before is marked, and the task lists them.
+  - **New wishlist** makes one of your own. A wishlist can be shared, like any set; Hoard for Unity doesn't list them.
+  - The privacy policy (version 1.6.0) says so: Hoard reads your wishlists from the stores only when you choose to,
+    and keeps them in `sets.json` with their prices.
+- **File lists keep their names readable with OpenDyslexic.** A downloaded product's files showed one letter a line
+  with the dyslexic font, its wider letters leaving no room beside the size and buttons. The buttons now go below
+  the name when they don't fit.
+
 ## 4.3.7
 
 - **Payhip shops whose sign-in check goes round in a loop now say so, and what to do.** A tester's refresh failed on

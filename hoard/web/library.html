@@ -778,6 +778,12 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .ext-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: -3px; font-size: 12.5px; }
 .ext-what { color: var(--dust); }
 .slot.ext.wanted .ext-what { color: var(--warn); }
+/* a wishlist product's price, and what it was when it changed (struck through); cheaper than before stands out */
+.ext-price { display: block; margin-top: -2px; font-size: 13px; font-weight: 700; color: var(--bone); overflow-wrap: anywhere; }
+.ext-price .was { font-weight: 500; color: var(--dust); }
+.ext-price .price.down { color: var(--gold-text); }
+.ext-price .price.down::before { content: "\2193 "; }
+.wish-h { margin-top: 30px; }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
 .sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

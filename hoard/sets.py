@@ -38,10 +38,11 @@ from urllib.parse import quote, urlparse, urlsplit
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
 from .shortlinks import CODE as SHORT_CODE, ID as SHORT_ID, KEY as SHORT_KEY, PREFIX as SHORT_PREFIX, TOKEN as SHORT_TOKEN
-from .tags import TAG_KEY_RX
+from .tags import TAG_KEY_RX, tag_key
 
 MAX_SETS = 200
 MAX_ITEMS = 500
+MAX_WISH_ITEMS = 5000             # a wishlist read from a store holds what the store's list does (Booth's can be long)
 NAME_LENGTH = 60
 NOTE_LENGTH = 1000
 MAX_PHOTOS = 8
@@ -51,6 +52,7 @@ CODE_PREFIX = "H1."
 MAX_CODE = 256 * 1024             # characters of a code (a set of 500 products is well under it)
 MAX_CODE_JSON = 1024 * 1024       # what a code may unpack to: a bomb stops here
 STORES = tuple(STORE_LINK_SITES)  # the stores a shared product can be from (not Local: your own files stay yours)
+STORE_LABELS = {"booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip", "itch": "itch.io"}
 # where store pictures come from: a shared product's picture is shown only from its store's own image host
 STORE_IMAGE_HOSTS = {"booth": ("booth.pximg.net",), "gumroad": ("public-files.gumroad.com",),
                      "jinxxy": ("jinxxy-c.jinxxy-cdn.com",), "payhip": ("images.payhip.com",), "itch": ("img.itch.zone",)}
@@ -242,6 +244,17 @@ def product_link(store, value) -> str | None:
     return f"https://{host}{path}" if ok else None
 
 
+def clean_price(value) -> dict | None:
+    """A price as a wishlist keeps it (wishlists.parse_price's shape): {"text", "amount", "currency"}, checked."""
+    if not isinstance(value, dict):
+        return None
+    text, amount, cur = value.get("text"), value.get("amount"), value.get("currency")
+    if not isinstance(text, str) or not text.strip() or isinstance(amount, bool) or not isinstance(amount, (int, float)) \
+            or not 0 <= amount < 10 ** 9 or not isinstance(cur, str) or not re.fullmatch(r"[A-Z]{3}|", cur):
+        return None
+    return {"text": clean_text(text, 40), "amount": float(amount), "currency": cur}
+
+
 def clean_product(p) -> dict | None:
     """What a set remembers of one product, checked: its store, id, name, creator, store page and picture."""
     if not isinstance(p, dict) or not isinstance(p.get("store"), str):
@@ -263,6 +276,10 @@ def clean_product(p) -> dict | None:
         out["url"] = url
     if picture:
         out["thumbnail"] = picture
+    for k in ("price", "was"):   # on a wishlist: what it costs, and what it cost before a change
+        price = clean_price(p.get(k))
+        if price:
+            out[k] = price
     return out
 
 
@@ -302,7 +319,15 @@ class SetStore:
             for k in s.get("items") if isinstance(s.get("items"), list) else []:
                 if isinstance(k, str) and TAG_KEY_RX.match(k) and k not in items:
                     items.append(k)
-            one = {"id": s["id"], "name": name, "items": items[:MAX_ITEMS]}
+            wish = s.get("kind") == "wishlist"
+            one = {"id": s["id"], "name": name, "items": items[:MAX_WISH_ITEMS if wish else MAX_ITEMS]}
+            if wish:   # a wishlist (issue #158); read from a store's list ("source"), when it was read last
+                one["kind"] = "wishlist"
+                src = s.get("source") if isinstance(s.get("source"), dict) else {}
+                if src.get("store") in STORES and isinstance(src.get("list"), str) and clean_text(src["list"], 60):
+                    one["source"] = {"store": src["store"], "list": clean_text(src["list"], 60)}
+                if isinstance(s.get("read"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:]{8}Z", s["read"]):
+                    one["read"] = s["read"]
             note = clean_note(s.get("note"))
             if note:
                 one["note"] = note
@@ -373,6 +398,8 @@ class SetStore:
                     one.update({k: given[k] for k in ("note", "photos", "products") if given.get(k)})
                 else:
                     one.update(note=clean_note(body.get("note")), photos=body.get("photos") or [])
+                    if body.get("kind") == "wishlist":   # one of your own, product by product (issue #158)
+                        one["kind"] = "wishlist"
                     remember(one, one["items"])
                 sets.append(one)
             else:
@@ -388,8 +415,9 @@ class SetStore:
                     sets.remove(s)
                 elif action == "add":
                     s["items"] = list(dict.fromkeys(s["items"] + items))
-                    if len(s["items"]) > MAX_ITEMS:
-                        raise ValueError(f"A set holds up to {MAX_ITEMS} products.")
+                    most = MAX_WISH_ITEMS if s.get("kind") == "wishlist" else MAX_ITEMS
+                    if len(s["items"]) > most:
+                        raise ValueError(f"A set holds up to {most} products.")
                     remember(s, items)
                 elif action == "remove":
                     s["items"] = [k for k in s["items"] if k not in items]
@@ -433,6 +461,56 @@ class SetStore:
                 if not s["short"]:
                     raise ValueError("That short link can't be kept.")
             self._save(data)
+
+    def put_wishlists(self, lists: list[dict], when: str | None = None) -> dict:
+        """Wishlists read from the stores (wishlists.py's shape): each store list becomes, or updates, the wishlist
+        read from it, holding what the list does now, in its order. A product whose price changed since the last
+        read keeps the old one as "was". A name, note, photos or picture you gave a wishlist stay. Returns
+        {"lists", "added", "cheaper": [(wishlist name, product name, was, now)]} and the sets after it."""
+        when = when or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        added, cheaper = 0, []
+        with _lock:
+            data = self.load()
+            sets = data["sets"]
+            for got in lists:
+                store, name = got.get("store"), clean_text(got.get("list") if isinstance(got.get("list"), str) else "", 60)
+                if store not in STORES or not name:
+                    continue
+                s = next((x for x in sets if x.get("kind") == "wishlist" and x.get("source") == {"store": store, "list": name}), None)
+                if s is None:
+                    if len(sets) >= MAX_SETS:
+                        raise ValueError(f"Hoard keeps up to {MAX_SETS} sets and wishlists.")
+                    taken, base, n = {x["name"] for x in sets}, clean_name(f"{STORE_LABELS.get(store, store)}: {name}"), 2
+                    label = base
+                    while label in taken:
+                        label, n = clean_name(f"{base} ({n})"), n + 1
+                    s = {"id": secrets.token_hex(4), "name": label, "items": [], "kind": "wishlist",
+                         "source": {"store": store, "list": name}}
+                    sets.append(s)
+                before = s.get("products") or {}
+                keys, products = [], {}
+                for p in got.get("products") or []:
+                    clean = clean_product(p)
+                    if not clean:
+                        continue
+                    k = tag_key(clean["store"], clean["name"])
+                    if k in products:
+                        continue
+                    old = before.get(k) or {}
+                    if old.get("price") and clean.get("price") and (old["price"]["amount"], old["price"]["currency"]) != \
+                            (clean["price"]["amount"], clean["price"]["currency"]):
+                        clean["was"] = old["price"]
+                        if clean["price"]["currency"] == old["price"]["currency"] and clean["price"]["amount"] < old["price"]["amount"]:
+                            cheaper.append((s["name"], clean["name"], old["price"]["text"], clean["price"]["text"]))
+                    elif old.get("was") and clean.get("price"):
+                        clean["was"] = old["was"]
+                    added += k not in s["items"]
+                    keys.append(k)
+                    products[k] = clean
+                s["items"], s["products"], s["read"] = keys[:MAX_WISH_ITEMS], products, when
+            data = self.sanitize(data)
+            self._save(data)
+        return {**data, "lists": len(lists), "added": added, "cheaper": cheaper}
 
 
 # ----------------------------------------------------------------------------- sharing a set
@@ -535,6 +613,8 @@ def for_catalog(catalog: list[dict], data: dict | None = None) -> list[dict]:
         folders.setdefault(tag_key(e["store"], e["name"]), []).append(e["folder"])
     out = []
     for s in data["sets"]:
+        if s.get("kind") == "wishlist":   # what you want, not a set to import together (Hoard for Unity's Import set)
+            continue
         items = [f for k in s["items"] for f in folders.get(k, [])]
         if items:
             out.append({"name": s["name"], "items": items})

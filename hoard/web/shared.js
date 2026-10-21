@@ -1686,7 +1686,21 @@ function setArt(s) {   // the picture you chose for it, else up to four of its p
   const pics = s.items.filter(i => i.pic).slice(0, 4);
   return pics.length ? `<span class="collage n${pics.length}">${pics.map(i => setPic(i.pic)).join("")}</span>` : setPlaceholder(s.name);
 }
+// Wishlists (issue #158): sets of the kind "wishlist", most read from a store's own list, each product with its price
+const isWish = s => s.kind === "wishlist";
+const cheaper = i => i.was && i.price && i.was.currency === i.price.currency && i.price.amount < i.was.amount;
+function priceHTML(i) {   // what a product on a wishlist costs, and what it cost before, when that changed
+  if (!i.price) return "";
+  return `<span class="price${cheaper(i) ? " down" : ""}" translate="no">${esc(i.price.text)}</span>` +
+    (i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "");
+}
 function setCounts(s) {
+  if (isWish(s)) {
+    const yours = s.items.filter(i => i.owned).length, down = s.items.filter(cheaper).length;
+    return { got: 0, owned: s.items.filter(i => i.owned && i.download == null).length, buy: s.items.length - yours,
+      text: [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length), yours && tr("{0} yours already", yours),
+             down && tr(down === 1 ? "1 cheaper than before" : "{0} cheaper than before", down)].filter(Boolean).join(", ") };
+  }
   const got = s.items.filter(i => i.download != null).length, owned = s.items.filter(i => i.owned && i.download == null).length;
   const buy = s.items.filter(i => !i.owned && !i.local && i.download == null).length;
   return { got, owned, buy, text: [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length),
@@ -1702,10 +1716,17 @@ function setsRoot() {
     `<button class="ghost sm" data-setx="import">Add a shared set...</button></div>` +
     (SETS.hidden_left_out ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "");
   if (SETS.error) return top + `<p class="none">${esc(tr("Your sets couldn't be read just now."))}</p>`;
-  if (!SETS.sets.length) return top + `<p class="none">No sets yet. A set groups products you use together, such as an avatar,
+  const plain = SETS.sets.filter(s => !isWish(s)), wishes = SETS.sets.filter(isWish);
+  const sets = plain.length ? `<div class="grid setgrid">${plain.map(setTile).join("")}</div>`
+    : `<p class="none">No sets yet. A set groups products you use together, such as an avatar,
     its outfits and the shaders they need, downloaded or not. Make one here, or choose products in the Library or Downloads and
     use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`;
-  return top + `<div class="grid setgrid">${SETS.sets.map(setTile).join("")}</div>`;
+  return top + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
+    `<div class="row sets-top"><button class="primary sm" data-setx="readwish">${esc(tr("Read my wishlists..."))}</button>` +
+    `<button class="ghost sm" data-setx="importwish">${esc(tr("Import saved wishlist pages..."))}</button>` +
+    `<button class="ghost sm" data-setx="newwish">${esc(tr("New wishlist"))}</button></div>` +
+    (wishes.length ? `<div class="grid setgrid">${wishes.map(setTile).join("")}</div>`
+      : `<p class="none">${esc(tr("Your wishlists from Booth (your loved items), Gumroad, Jinxxy (your wishlist, likes and lists) and Payhip, with what each product costs. Read them from the stores you're signed in to, or import wishlist pages you saved from your own browser. Each time they're read again, a price that changed shows what it was."))}</p>`);
 }
 function setHead(s) {
   const c = setCounts(s);
@@ -1713,6 +1734,8 @@ function setHead(s) {
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
     `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
+      (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +
+        `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
       (s.note ? `<p class="setnote" translate="no">${esc(s.note)}</p>` : "") +
       `<div class="row"><button class="primary sm" data-setx="share">Share...</button>` +
       (c.owned ? `<button class="ghost sm" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>` : "") +
@@ -1744,11 +1767,13 @@ function setExtraTile(s, i) {
   const href = i.download != null ? `/downloads#open=${+i.download}`   // (Hoard's own pages, or the store's, checked)
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
   const what = i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
+  const price = !i.owned && !i.local ? priceHTML(i) : "";
   const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
   return `<div class="slot ext${buy ? " wanted" : ""}">` +
     (href === buy && buy ? `<a class="ext-main" href="${esc(storeUrl(i.store, i.url))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
+    (price ? `<span class="ext-price">${price}</span>` : "") +
     `<span class="ext-row"><span class="ext-what">${esc(what)}${href === buy && buy ? `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span>` : ""}</span>` +
     `<button class="untag" data-setx="out" data-key="${esc(i.key)}" aria-label="${esc(tr("Take {0} out of the set", i.name))}">×</button></span></div>`;
 }
@@ -1951,6 +1976,15 @@ async function setAct(e) {
     if (done && done.made) { showSet(done.made); toast("Now add products: select them in the Library or Downloads, then choose Sets in the selection bar."); }
     return;
   }
+  if (act === "newwish") {   // one of your own, product by product: add them as you'd add to a set
+    const name = await askName("Name the new wishlist");
+    if (!name) return;
+    const done = await changeSets({ action: "create", name, items: [], kind: "wishlist" });
+    if (done && done.made) { showSet(done.made); toast("Now add products: select them in the Library or Downloads, then choose Sets in the selection bar, or add a shared set's products."); }
+    return;
+  }
+  if (act === "readwish" || act === "reread") { readWishlists(act === "reread" ? [b.dataset.store] : null); return; }
+  if (act === "importwish") { importWishlists(); return; }
   if (act === "import") {
     let code = await askName("Paste the set's link or code", "", { max: 262144 });
     if (code && SHORT_LINK.test(code.replace(/\s+/g, ""))) code = await openShortLink(code);
@@ -1978,6 +2012,64 @@ async function setAct(e) {
   } else if (act === "unphoto") {
     changeSets({ action: "photos", id: s.id, photos: s.photos.filter((u, n) => n !== +b.dataset.n) });
   }
+}
+// Read my wishlists: from each store chosen, in its own signed-in window, as a task (hoard/wishlists.py)
+const WISH_STORES = ["booth", "gumroad", "jinxxy", "payhip"];
+async function readWishlists(only) {
+  let stores = only;
+  if (!stores) {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Read my wishlists"))}</b></p>` +
+      `<p class="hint">${esc(tr("Hoard opens each store's page in its signed-in window and reads your lists, with each product's price. A wishlist read before is brought up to date."))}</p>` +
+      WISH_STORES.map(st => `<p><label class="check"><input type="checkbox" value="${st}" checked> ${esc(STORE_NAMES[st])}</label></p>`).join("") +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Read them"))}</button></div></form>`;
+    document.body.appendChild(d);
+    stores = await new Promise(resolve => {
+      d.addEventListener("close", () => {
+        const got = d.returnValue === "yes" ? [...d.querySelectorAll("input:checked")].map(x => x.value) : [];
+        d.remove(); resolve(got);
+      }, { once: true });
+      d.showModal();
+    });
+    if (!stores.length) return;
+  }
+  const r = await apiPost("/api/wishlists/read", { stores });
+  if (!r.ok) { toast(r.data.error || "Hoard is busy. Try again when it's done."); return; }
+  toast(r.data.started === "queued" ? "Reading your wishlists after what Hoard is doing now. See Tasks." : "Reading your wishlists. See Tasks for how it's going.");
+}
+// Import saved wishlist pages: wishlist pages you saved from your own browser, read on this computer
+async function importWishlists() {
+  const input = Object.assign(document.createElement("input"), { type: "file", multiple: true, accept: ".mhtml,.mht,.html,.htm" });
+  const files = await new Promise(resolve => {
+    input.addEventListener("change", () => resolve([...input.files]), { once: true });
+    input.addEventListener("cancel", () => resolve([]), { once: true });
+    input.click();
+  });
+  const pages = files.filter(f => /\.(mhtml|mht|html|htm)$/i.test(f.name));
+  if (!pages.length) { if (files.length) toast('Those aren\'t saved pages. Save the wishlist page as "Webpage, Single File" (.mhtml), and import that.'); return; }
+  const said = [], problems = [];
+  let lists = 0;
+  for (let i = 0; i < pages.length;) {
+    const batch = [];
+    let bytes = 0;
+    while (i < pages.length && batch.length < 10 && (!batch.length || bytes + pages[i].size <= 24 * 1024 * 1024)) { bytes += pages[i].size; batch.push(pages[i++]); }
+    toast(tr("Reading {0} of {1} pages...", i, pages.length));
+    let sent;
+    try { sent = await Promise.all(batch.map(async f => ({ filename: f.name, content: await f.text() }))); }
+    catch (e) { batch.forEach(f => problems.push(tr("{0}: couldn't be opened.", f.name))); continue; }
+    const r = await apiPost("/api/wishlists/import", { files: sent });
+    if (!r.ok) { batch.forEach(f => problems.push(`${f.name}: ${tr(r.data.error || "couldn't be imported.")}`)); if (r.status === 0 || r.status >= 500) break; continue; }
+    lists += r.data.lists || 0;
+    for (const pg of r.data.pages || []) {
+      if (pg.error) problems.push(`${pg.filename}: ${tr(pg.error)}`);
+      else pg.lists.forEach(x => said.push(tr("{0}: {1} ({2} products)", pg.filename, x.list, x.products)));
+    }
+    if (r.data.sets) { SETS = { ...r.data, for: DATA }; drawSets(); }
+  }
+  await ask([tr(lists === 1 ? "1 wishlist imported." : "{0} wishlists imported.", lists), said.join("\n"),
+             problems.length ? tr("Not imported:") + "\n" + problems.join("\n") : ""].filter(Boolean).join("\n\n"), "OK", false, "Close");
+  loadSets();
 }
 function wireSets() {
   for (const box of [$("#setView"), $("#setMore")]) {

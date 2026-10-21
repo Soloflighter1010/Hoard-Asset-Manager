@@ -115,8 +115,28 @@ Hoard for Unity's **Sets** pill lists your sets, and **Import set** imports the 
 (see [Hoard for Unity](Hoard-for-Unity)). Products a set has that aren't downloaded aren't in Unity yet:
 **Download the N not downloaded** in the Sets tab brings them in, and buying the ones that aren't yours.
 
+## Wishlists
+
+From 4.4, the Sets tab has your **Wishlists** too, below your sets: what you'd like from each store, with what each
+product costs. A wishlist is a set (you can share it, give it a picture, a note and photos), and the products
+already in your library show as yours.
+
+- **Read my wishlists...** reads them from the stores you choose, each in its own signed-in window, as a refresh
+  reads your library: Booth's loved items (all of them as one wishlist, and each list of them you made as one more),
+  each of your Gumroad wishlists, your Jinxxy wishlist, likes and each of your lists, and the wishlists in each Payhip
+  shop you've added. It runs as a task, in **Tasks**.
+- **Import saved wishlist pages...** reads wishlist pages you saved from your own browser instead (press Ctrl+S and
+  save as "Webpage, Single File"), on your computer, with nothing sent anywhere. A long wishlist saved a page at a
+  time comes together as one. Save each Gumroad wishlist's or Jinxxy list's own page, not the page listing them.
+- Each time a wishlist is read again, it holds what the store's list does now, and a product whose price changed
+  shows the new price with the old one struck through; one that's cheaper than before is marked, and **Tasks** lists
+  them. A name, note or picture you gave a wishlist stays.
+- **New wishlist** makes one of your own, which you add products to as you would to a set.
+
+Hoard for Unity's **Sets** pill doesn't list wishlists: they're what you want, not what you use together.
+
 ## Where sets are kept
 
-In `sets.json` in Hoard's app-data folder (see [Where Hoard keeps things](Where-Hoard-Keeps-Things)), and in
+Sets and wishlists are in `sets.json` in Hoard's app-data folder (see [Where Hoard keeps things](Where-Hoard-Keeps-Things)), and in
 backups (**Settings**, **Backup**). A backup made while your hidden library is locked leaves hidden products out
 of every set.
