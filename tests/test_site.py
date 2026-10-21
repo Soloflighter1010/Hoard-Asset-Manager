@@ -40,8 +40,8 @@ PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it
 
 
 def every_page(site: Path) -> list[str]:
-    """Every page of the built site, the docs' too, by its path in the site."""
-    return list(PAGES) + sorted(f"docs/{p.name}" for p in (site / "docs").glob("*.html"))
+    """Every page of the built site, the docs' too (in every language), by its path in the site."""
+    return list(PAGES) + sorted(p.relative_to(site).as_posix() for p in (site / "docs").rglob("*.html"))
 
 
 class Refs(HTMLParser):
@@ -236,9 +236,10 @@ class TheOtherPages(unittest.TestCase):
             bar = re.search(r'<header class="bar">.*?</header>', page, re.S).group(0)
             foot = re.search(r'<footer class="foot">.*?</footer>', page, re.S).group(0)
             if name.startswith("docs/"):
-                self.assertEqual(bar, site_chrome.header("docs/", up="../"), name)
-                self.assertEqual(foot, site_chrome.footer(up="../"), name)
-                self.assertIn('<a href="../docs/" aria-current="page">Docs</a>', bar)
+                up = "../" * name.count("/")
+                self.assertEqual(bar, site_chrome.header("docs/", up=up), name)
+                self.assertEqual(foot, site_chrome.footer(up=up), name)
+                self.assertIn(f'<a href="{up}docs/" aria-current="page">Docs</a>', bar)
             else:
                 self.assertEqual(bar, site_chrome.header(site_chrome.CURRENT.get(name)), name)
                 self.assertIn(foot, (site_chrome.footer(), site_chrome.footer(
@@ -270,6 +271,31 @@ class TheOtherPages(unittest.TestCase):
         self.assertIn("<title>Settings · Hoard docs</title>", settings)
         index = json.loads((site / "docs" / "search.json").read_text("utf-8"))
         self.assertTrue(any(s["page"] == "Stores.html" and s["anchor"] == "payhip" for s in index))
+        self.assertIn('<b lang="en">English</b> · <a href="ja/Settings.html" lang="ja" hreflang="ja">日本語</a>', settings)
+
+    def test_the_docs_in_japanese_and_korean(self):
+        """The wiki's translations are docs/ja/ and docs/ko/, each page at its English page's address there, in its
+        own language: its words, its sidebar (an English page it has no translation of linked from the English
+        docs), its search, and the same page in each language a click away."""
+        site = built_site()
+        english = {p.stem for p in (site / "docs").glob("*.html")}
+        for lang, home, settings_title, title in (("ja", "ホーム", "設定", "Hoardドキュメント"), ("ko", "홈", "설정", "Hoard 문서")):
+            built = {p.stem for p in (site / "docs" / lang).glob("*.html")}
+            self.assertEqual(built, english - {"Development", "Releasing"}, lang)
+            page = (site / "docs" / lang / "Settings.html").read_text("utf-8")
+            self.assertIn(f'<html lang="{lang}">', page)
+            self.assertIn(f"<title>{settings_title} · {title}</title>", page)
+            self.assertIn(f'<a href="Settings.html" aria-current="page">{settings_title}</a>', page)
+            self.assertIn('<a href="../Development.html">Development</a>', page, "the English page, where there's no translation")
+            self.assertIn('<p class="docs-langs"><a href="../Settings.html" lang="en" hreflang="en">English</a> · ', page)
+            self.assertIn(f'<b lang="{lang}">', page)
+            self.assertIn(f'<link rel="alternate" hreflang="{lang}" href="https://hoard.furryup.link/docs/{lang}/Settings.html">', page)
+            self.assertIn('data-none="', page)
+            self.assertNotIn("Translated from", page, "the wiki's first lines are the wiki's")
+            self.assertIn(f"<title>{title}</title>", (site / "docs" / lang / "index.html").read_text("utf-8"))
+            self.assertIn(f"{home}", (site / "docs" / lang / "index.html").read_text("utf-8"))
+            index = json.loads((site / "docs" / lang / "search.json").read_text("utf-8"))
+            self.assertTrue(any(s["page"] == "Stores.html" and s["anchor"] == "payhip" for s in index))
 
     def test_a_broken_link_stops_the_docs(self):
         with tempfile.TemporaryDirectory() as tmp:

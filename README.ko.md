@@ -55,7 +55,7 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 
 <sub>라이브러리, 다운로드, 프로젝트, 내 패키지, 스토어 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://hoard.furryup.link/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
 
-설치부터 문제 해결까지 모든 안내는 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)**(영어)에 있어요.
+설치부터 문제 해결까지 모든 안내는 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/홈)**에 있어요(한국어. [영어판](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)도 있어요).
 
 ---
 
@@ -92,7 +92,7 @@ Hoard 창은 Microsoft Edge WebView2를 써요(Windows 11에 포함되어 있고
 - **macOS 11 이상:** [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)에서 `Hoard-<버전>-macos-apple-silicon.pkg`(M 시리즈 Mac) 또는 `Hoard-<버전>-macos-intel.pkg`를 다운로드해서 여세요. 아직 Apple 서명이 없어서 처음에는 열리지 않아요. **완료**를 고른 뒤 **시스템 설정 › 개인정보 보호 및 보안 › 그래도 열기**를 고르세요. Hoard는 **응용 프로그램**에 들어가요.
 - **Linux (x86_64):** `Hoard-<버전>-linux-x86_64.flatpak`을 다운로드해서 소프트웨어 센터로 열거나, `flatpak install --user Hoard-<버전>-linux-x86_64.flatpak`을 실행하세요. [Flathub](https://flathub.org/setup)의 GNOME 런타임을 써요.
 
-둘 다 Hoard 전용 창에서 열려요. 업데이트하려면 새 파일을 같은 방법으로 설치하세요(어떤 파일인지는 **설정 › 업데이트**에 나와요). 자세한 내용: [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard)(영어)
+둘 다 Hoard 전용 창에서 열려요. 업데이트하려면 새 파일을 같은 방법으로 설치하세요(어떤 파일인지는 **설정 › 업데이트**에 나와요). 자세한 내용: [Hoard 설치](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoard-설치)
 
 **소스에서 (어떤 OS든):** [Python 3.10 이상](https://www.python.org/downloads/)을 설치하고, `Hoard-<버전>.zip`을 다운로드해서 압축을 푼 뒤 `Hoard.bat`(Windows) 또는 `./run.sh`를 실행하세요. 전용 Python 환경을 만들고(모든 패키지를 미리 기록된 지문과 맞춰 봐요) Hoard를 열어요.
 

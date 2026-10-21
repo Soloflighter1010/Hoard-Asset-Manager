@@ -13,6 +13,13 @@
   - **New wishlist** makes one of your own. A wishlist can be shared, like any set; Hoard for Unity doesn't list them.
   - The privacy policy (version 1.6.0) says so: Hoard reads your wishlists from the stores only when you choose to,
     and keeps them in `sets.json` with their prices.
+- **The wiki in Japanese and Korean.** Every page of the wiki for using Hoard is in Japanese and Korean too, naming
+  each button and setting as the app does in that language, on GitHub's wiki (linked from the sidebar) and on the
+  website, at `docs/ja/` and `docs/ko/`, where each docs page links the same page in the other languages. They were
+  translated with AI's help: where one says something different, the English page is right, and
+  [Translation fix](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml)
+  is how to say so. The pages for working on Hoard itself (Development and Releasing) stay in English. The wiki's home page
+  also lists Sets and Your own packages now.
 - **File lists keep their names readable with OpenDyslexic.** A downloaded product's files showed one letter a line
   with the dyslexic font, its wider letters leaving no room beside the size and buttons. The buttons now go below
   the name when they don't fit.
