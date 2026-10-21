@@ -288,8 +288,11 @@ a.ghost { height: 42px; }
 .detail h3 { font: 700 13px var(--body); color: var(--dust); margin: 26px 0 10px; }
 .detail .chips { gap: 4px 12px; }
 .files { list-style: none; margin: 0; padding: 0; }
-.files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
-.files .fn { overflow-wrap: anywhere; }
+.files li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+/* the name keeps a readable width whatever the font (OpenDyslexic's letters are wide); the button goes below it
+   when it doesn't fit beside it */
+.files .fn { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+.files li > a { margin-left: auto; }
 
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 30;

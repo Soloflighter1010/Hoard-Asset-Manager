@@ -279,13 +279,16 @@ a.ghost { height: 42px; }
 .detail h3 { font: 700 13px var(--body); color: var(--dust); margin: 26px 0 10px; }
 .detail .chips { gap: 4px 12px; }
 .files { list-style: none; margin: 0; padding: 0; }
-.files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
-.files .fn { overflow-wrap: anywhere; }
-.files .fb { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.files li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+/* the name keeps a readable width (12 characters or so, whatever the font: OpenDyslexic's are wide), and the buttons
+   go below it when they don't fit beside it, rather than squeezing it to a letter a line */
+.files .fn { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+.files .fb { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-left: auto; }
 .files .fn .muted { font-size: 12px; color: var(--dust); }
 .needs { list-style: none; margin: 0; padding: 0; }
-.needs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 14px; }
-.needs .nm { overflow-wrap: anywhere; }
+.needs li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+.needs .nm { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+.needs li > :last-child:not(.nm) { margin-left: auto; }
 .needs .muted { font-size: 12px; color: var(--dust); }
 
 .toast {
@@ -347,8 +350,7 @@ body.less-motion .slot:hover .art { transform: none; }
 .update .muted { display: block; margin-top: 8px; color: var(--dust); font-size: 13px; }
 .update .muted-inline { color: var(--dust); font-size: 12.5px; }
 .also { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
-.files li { grid-template-columns: minmax(0, 1fr) auto auto; }
-.files .fs { color: var(--dust); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+.files .fs { flex: none; color: var(--dust); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
 .files .miss .fs { color: var(--warn); }
 .detail h3 .muted { font-weight: 500; color: var(--dust); margin-left: 8px; }
 .path { font-size: 12.5px; color: var(--dust); overflow-wrap: anywhere; user-select: all; margin-top: 22px; }
