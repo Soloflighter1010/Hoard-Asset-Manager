@@ -33,27 +33,39 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 <p align="center">
 <picture>
   <source srcset="site/img/library-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/library-dark.webp" width="49%" alt="Hoard 라이브러리: 여러 스토어의 상품이 그림 타일로 나오고, 스토어 탭, 검색, 태그, 제작자가 있어요.">
+  <img src="site/img/library-dark.webp" width="49%" alt="Hoard 라이브러리: 여러 스토어의 상품이 이미지 타일로 나오고, 스토어 탭, 검색, 종류별로 묶인 태그가 있어요.">
 </picture>
 <picture>
   <source srcset="site/img/downloads-details-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoard 다운로드 페이지: 타일 옆에 상품 상세가 열려 있고, 스토어, 그 상품을 쓰는 Unity 프로젝트, 폴더 열기와 편집용 사본 만들기 버튼이 있어요.">
+  <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoard 다운로드 페이지: 타일 옆에 상품 상세가 열리고, 스토어, 사용하는 Unity 프로젝트, 폴더 열기 버튼과 편집용 사본 만들기 버튼이 있어요.">
 </picture>
 <picture>
-  <source srcset="site/img/projects-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/projects-dark.webp" width="49%" alt="Hoard 프로젝트 화면: Unity 프로젝트의 에셋이 프로젝트에 있는지, 일부만 있는지 표시되고, 크레딧 목록이 있어요.">
+  <source srcset="site/img/project-manage-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-manage-dark.webp" width="49%" alt="Hoard에서 Unity 프로젝트 관리: VRChat 패키지와 업데이트, 고를 수 있는 다른 버전, 라이브러리에서 넣은 상품과 각각이 추가한 폴더, Hoard for Unity가 찾은 것이 있어요.">
+</picture>
+<picture>
+  <source srcset="site/img/inside-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/inside-dark.webp" width="49%" alt="Unity 패키지 내용 보기: 폴더와 파일을 Unity의 미리보기와 함께, 풀지 않고 보여 줘요.">
+</picture>
+<picture>
+  <source srcset="site/img/sets-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/sets-dark.webp" width="49%" alt="세트 탭: 상품 이미지로 된 큰 타일의 세트와, Booth와 Gumroad에서 읽어 온 위시리스트.">
+</picture>
+<picture>
+  <source srcset="site/img/wishlist-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/wishlist-dark.webp" width="49%" alt="Hoard의 Booth 위시리스트: 상품마다 가격이 있고, 전보다 싸진 상품은 이전 가격에 취소선이 그어져 있으며, 구매 링크가 있어요.">
+</picture>
+<picture>
+  <source srcset="site/img/mix-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/mix-dark.webp" width="49%" alt="조합하기: 의상 태그에서 무작위로 고른 아바타와 코디. 각각에 「남기기」, 「다시 고르기」와 「세트로 만들기」가 있어요.">
 </picture>
 <picture>
   <source srcset="site/img/local-add-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/local-add-dark.webp" width="49%" alt="로컬에 추가 화면: 폴더나 파일, 이름, 만든 사람과 대상, 그리고 Hoard에 복사할지 있는 곳 그대로 목록에 넣을지 고르기.">
-</picture>
-<picture>
-  <source srcset="site/img/stores-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/stores-dark.webp" width="49%" alt="Hoard 스토어 화면: Booth, Gumroad, Jinxxy, Payhip, itch.io마다 로그인, 새로고침, 다운로드가 있어요.">
+  <img src="site/img/local-add-dark.webp" width="49%" alt="로컬에 추가하는 창: 폴더나 파일, 이름, 만든 사람과 대상, 그리고 Hoard에 복사할지 그 자리에 둔 채 목록에 넣을지 고르는 선택.">
 </picture>
 </p>
 
-<sub>라이브러리, 다운로드, 프로젝트, 내 패키지, 스토어 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://hoard.furryup.link/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
+<sub>라이브러리, 다운로드의 상품 상세, 프로젝트의 Unity 프로젝트, 내용 보기, 세트, 위시리스트, 조합하기, 내 것 추가하기 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://hoard.furryup.link/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
 
 설치부터 문제 해결까지 모든 안내는 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/홈)**에 있어요(한국어. [영어판](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)도 있어요).
 

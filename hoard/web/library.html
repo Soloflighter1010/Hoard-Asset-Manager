@@ -207,7 +207,6 @@ dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
   box-shadow: inset 0 0 0 1px var(--seam); }
 .mixart { flex: none; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--stone); display: grid; place-items: center; }
 .mixart img, .mixart canvas { width: 100%; height: 100%; object-fit: cover; }
-.mixph { font-weight: 700; color: var(--dust); text-transform: uppercase; }
 .mixtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .mixtext small { color: var(--dust); font-size: 11.5px; font-weight: 700; }
 .mixtext b { overflow-wrap: anywhere; }
@@ -2293,6 +2292,7 @@ afterSetMade = () => load();   // (shared.js: a set made from a project shows in
 const T = {
   slotKey: "key",
   id: a => a.key,
+  art: a => thumb(a),   // its picture (through Hoard's own copy) or its initials
   byId: id => byKey.get(id),
   open: () => (openKey ? byKey.get(openKey) : null),
   shown: () => DATA.items.filter(a => matches(a)),

@@ -2432,10 +2432,9 @@ function mixRoll() {
   }
 }
 function mixHTML() {
-  const img = a => (a.thumbnail || a.thumb) ? `<img src="${esc(a.thumbnail || a.thumb)}" alt="" loading="lazy">` : `<span class="mixph">${esc((a.name || "?").slice(0, 2))}</span>`;
   return `<h3>${esc(tr("Mix and match"))}</h3>` +
     `<p class="hint">${esc(tr("An outfit from what you own, picked at random. Keep the picks you like, and pick the rest again."))}</p>` +
-    `<ul class="mixlist">${MIX.picks.map(p => `<li><span class="mixart">${img(p.item)}</span><span class="mixtext">` +
+    `<ul class="mixlist">${MIX.picks.map(p => `<li><span class="mixart">${T.art(p.item)}</span><span class="mixtext">` +
       `<small>${esc(p.label)}</small><b translate="no">${esc(p.item.name)}</b><span class="muted" translate="no">${esc(p.item.creator || "")}</span></span>` +
       `<label class="check"><input type="checkbox" data-mixhold="${esc(p.slot)}"${MIX.held.has(p.slot) ? " checked" : ""}> ${esc(tr("Keep"))}</label></li>`).join("")}</ul>` +
     `<label class="check"><input type="checkbox" id="mixFit"${MIX.fit ? " checked" : ""}> ${esc(tr("Only clothes that share a tag with the avatar"))}</label>` +

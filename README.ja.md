@@ -33,27 +33,39 @@ Hoardなら、タブを4つも開かずに答えが分かります。
 <p align="center">
 <picture>
   <source srcset="site/img/library-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/library-dark.webp" width="49%" alt="Hoardのライブラリ:複数のストアの商品が画像タイルで並び、ストアのタブ、検索、タグ、クリエイターがあります。">
+  <img src="site/img/library-dark.webp" width="49%" alt="Hoardのライブラリ:複数のストアの商品が画像タイルで並び、ストアのタブ、検索、種類ごとにまとまったタグがあります。">
 </picture>
 <picture>
   <source srcset="site/img/downloads-details-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoardのダウンロードページ:タイルの横に商品の詳細が開き、ストア、使っているUnityプロジェクト、フォルダーを開くボタンと編集用コピーを作るボタンがあります。">
 </picture>
 <picture>
-  <source srcset="site/img/projects-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/projects-dark.webp" width="49%" alt="Hoardのプロジェクト画面:Unityプロジェクトのアセットが、プロジェクトに入っているか一部だけ入っているかの印つきで並び、クレジット一覧があります。">
+  <source srcset="site/img/project-manage-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-manage-dark.webp" width="49%" alt="HoardでのUnityプロジェクトの管理:VRChatのパッケージと更新、選べるほかのバージョン、ライブラリから入れた商品とそれぞれが追加したフォルダー、Hoard for Unityが見つけたものがあります。">
+</picture>
+<picture>
+  <source srcset="site/img/inside-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/inside-dark.webp" width="49%" alt="Unityパッケージの中身を見る:フォルダーとファイルをUnityのプレビューつきで、展開せずに表示します。">
+</picture>
+<picture>
+  <source srcset="site/img/sets-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/sets-dark.webp" width="49%" alt="セットのタブ:商品の画像を並べた大きなタイルのセットと、BoothとGumroadから読み込んだほしい物リスト。">
+</picture>
+<picture>
+  <source srcset="site/img/wishlist-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/wishlist-dark.webp" width="49%" alt="HoardでのBoothのほしい物リスト:各商品と価格、前より安くなった商品は前の価格に取り消し線がつき、購入リンクがあります。">
+</picture>
+<picture>
+  <source srcset="site/img/mix-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/mix-dark.webp" width="49%" alt="組み合わせ:衣装のタグからランダムに選んだアバターとコーディネート。それぞれに「残す」、「選び直す」と「セットにする」があります。">
 </picture>
 <picture>
   <source srcset="site/img/local-add-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/local-add-dark.webp" width="49%" alt="ローカルに追加する画面:フォルダーかファイル、名前、作った人と対象、そしてHoardにコピーするかその場所のまま一覧に入れるかの選択。">
 </picture>
-<picture>
-  <source srcset="site/img/stores-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/stores-dark.webp" width="49%" alt="Hoardのストア画面:Booth、Gumroad、Jinxxy、Payhip、itch.ioそれぞれにサインイン、更新、ダウンロードがあります。">
-</picture>
 </p>
 
-<sub>ライブラリ、ダウンロード、プロジェクト、自分のパッケージ、ストアの画面です。メンテナー自身のライブラリにある実際の商品を、クリエイターの画像とともに表示しています。<a href="https://hoard.furryup.link/credits.html">それぞれの作者と入手先</a>。素敵な作品をありがとうございます。</sub>
+<sub>ライブラリ、ダウンロードの商品の詳細、プロジェクトのUnityプロジェクト、中身を見る、セット、ほしい物リスト、組み合わせ、自分のものの追加の画面です。メンテナー自身のライブラリにある実際の商品を、クリエイターの画像とともに表示しています。<a href="https://hoard.furryup.link/credits.html">それぞれの作者と入手先</a>。素敵な作品をありがとうございます。</sub>
 
 インストールからトラブル解決まで、すべてのガイドは**[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/ホーム)**にあります(日本語。[英語版](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)もあります)。
 

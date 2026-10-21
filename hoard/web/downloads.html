@@ -195,7 +195,6 @@ dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
   box-shadow: inset 0 0 0 1px var(--seam); }
 .mixart { flex: none; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--stone); display: grid; place-items: center; }
 .mixart img, .mixart canvas { width: 100%; height: 100%; object-fit: cover; }
-.mixph { font-weight: 700; color: var(--dust); text-transform: uppercase; }
 .mixtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .mixtext small { color: var(--dust); font-size: 11.5px; font-weight: 700; }
 .mixtext b { overflow-wrap: anywhere; }
@@ -2629,6 +2628,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-
 const T = {
   slotKey: "id",
   id: a => String(a.id),
+  art: a => art(a),   // its picture (from its folder) or its initials
   byId: id => byId.get(+id),
   open: () => (openId != null ? byId.get(openId) : null),
   shown: () => DATA.assets.filter(a => matches(a)),
