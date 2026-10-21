@@ -493,7 +493,7 @@ def self_test() -> int:
         if not ok:
             problems.append(name)
 
-    check("pages", all((WEB / f).is_file() for f in ("library.html", "downloads.html", "shared.js")), str(WEB))
+    check("pages", all((WEB / f).is_file() for f in ("library.html", "downloads.html", "shared.js", "looks.css")), str(WEB))
     check("fonts", len(list((WEB / "fonts").glob("*.woff2"))) >= 3)
     from .marks import WORDS
     check("recovery words", len(WORDS) == 2048)

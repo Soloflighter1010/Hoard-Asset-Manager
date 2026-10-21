@@ -121,6 +121,7 @@ def display_settings(cfg: dict) -> dict:
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
             "theme": themes.theme_id(d.get("theme")), "mode": themes.mode_id(d.get("mode")),
             "theme_css": themes.css(d.get("theme"), d.get("mode")), "themes": themes.choices(),
+            "style": themes.style_id(d.get("style")),
             "language": i18n.setting(d.get("language"))}
 
 
@@ -327,6 +328,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["mode"] not in themes.MODES:
                 raise ValueError("Choose Match my computer, Light or Dark.")
             display["mode"] = given["mode"]
+        if "style" in given:
+            if given["style"] not in themes.STYLES:
+                raise ValueError("Choose Standard, Treasure or Workbench.")
+            display["style"] = given["style"]
         if "custom_colours" in given:
             colours = custom_colours(given["custom_colours"])
             if not isinstance(given["custom_colours"], dict) or len(colours) != len(given["custom_colours"]):
@@ -1921,18 +1926,22 @@ SHARED_MARK = b"//@include shared.js\n"
 
 def page_source(name: str, cfg: dict | None = None, accept_language: str | None = None) -> bytes:
     """A page as it's served: its file, with what both pages share (web/shared.js) put in its script where it says
-    so, so each page is still one script the Content-Security-Policy allows by its hash; the theme you chose
-    (Settings, Appearance) after the page's own colours, so it shows from the first moment; and your language: the
-    page's lang, and the catalog it translates itself from (hoard/i18n.py), before its script. The page stays
-    hidden until it has (data-i18n), so it never shows in English first."""
+    so, so each page is still one script the Content-Security-Policy allows by its hash; the styles (web/looks.css),
+    and the theme you chose (Settings, Appearance) after the page's own colours, so it shows from the first moment;
+    and your language: the page's lang, and the catalog it translates itself from (hoard/i18n.py), before its
+    script. The page stays hidden until it has (data-i18n), so it never shows in English first."""
     page = (WEB / name).read_bytes()
     if SHARED_MARK in page:
         page = page.replace(SHARED_MARK, (WEB / "shared.js").read_bytes().replace(b"\r\n", b"\n") + b"\n", 1)
     d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
+    # the styles' layouts (web/looks.css, both pages alike), then the theme's colours
+    looks = '<style id="looks">\n' + (WEB / "looks.css").read_text("utf-8").replace("\r\n", "\n") + "</style>\n"
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
-    page = page.replace(b"</head>", style.encode() + b"</head>", 1)
-    # the font and spacing you chose (Settings, Accessibility), on the page from its first moment
+    page = page.replace(b"</head>", looks.encode() + style.encode() + b"</head>", 1)
+    # the font, spacing (Settings, Accessibility) and style (Appearance) you chose, on the page from its first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
+    if themes.style_id(d.get("style")) != "standard":
+        marks += f' data-style="{themes.style_id(d.get("style"))}"'
     if marks:
         page = page.replace(b'<html lang="en">', f'<html lang="en"{marks}>'.encode(), 1)
     lang = i18n.language(cfg, accept_language)

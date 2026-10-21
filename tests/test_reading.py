@@ -80,7 +80,7 @@ class InSetup(unittest.TestCase):
                              {"font": "dyslexic", "spacing": True, "text_size": 130}, "saved as chosen")
             page.wait_for_function("() => document.fonts.check('16px OpenDyslexic')")   # the bundled file loaded
             page.click("#setupNext")
-            page.locator("#setupTitle", has_text="Welcome to Hoard").wait_for()
+            page.locator("#setupTitle", has_text="Choose a style").wait_for()   # (tests/test_styles.py)
             page.click("#setupBack")
             self.assertTrue(page.locator("#setupSpacing").is_checked(), "as chosen, coming back")
             page.goto(srv.entry_url().replace("/#", "/downloads#", 1))

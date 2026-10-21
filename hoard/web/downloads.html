@@ -1301,6 +1301,8 @@ body.less-motion .tour-try::before { animation: none; }
     <label><input type="radio" name="setMode" id="setModeDark" value="dark"> Dark</label>
   </div>
   <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
+  <p class="hint">Style: how Hoard lays everything out.</p>
+  <div id="styleChoices" class="style-choices" role="radiogroup" aria-label="Style"></div>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -1910,15 +1912,23 @@ const slotHTML = a => {
     const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, storeName(a.store)), n > 1 && tr("{0} copies", n),
                   also.length && tr("also from {0}", listed(also))];
-    return `<button class="slot${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
+    return `<button class="slot ${a.store.toLowerCase()}${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
       `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
         `${n > 1 ? `<span class="flag count" aria-hidden="true">×${n}</span>` : ""}` +
         `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}` +
         `${state.view === "space" && copiesOf(a) ? '<span class="flag upd">Copies</span>' : ""}</span>` +
       `<span class="nm" translate="no">${esc(a.name)}</span><span class="cr">${state.view === "space" ? `${fmtSize(a.size)} · ` : ""}<span translate="no">${esc(a.creator)}</span></span>` +
-    `</button>`;
+      rowMeta(a) + `</button>`;
 };
+// The Workbench style's list (web/looks.css): each download's store, its files (or what's wrong), and when it came
+function rowMeta(a) {
+  const n = a.files.length;
+  const [state, how] = a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
+    : [tr(n === 1 ? "{0} file, {1}" : "{0} files, {1}", n, fmtSize(a.size)), ""];
+  return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)}</span>` +
+    `<span class="rm-state ${how}">${esc(state)}</span><span class="rm-when">${esc(shortDay(a.added || (a.modified && new Date(a.modified * 1000).toISOString())))}</span></span>`;
+}
 function renderGrid(list) {
   (cards = cards || lazyCards(grid)).show(list, slotHTML);
 
@@ -2057,10 +2067,12 @@ function showDetail(a, focus = true) {
   const storeLink = storeUrl(a.store, a.url) ? `<a href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer" title="${esc(storeUrl(a.store, a.url))}">Open on ${storeName(a.store)}</a>` : "";
   detail.innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
-    `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="">` : placeholder(a)}</div>` +
+    `<div class="d-art ${a.store.toLowerCase()}">${a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="">` : placeholder(a)}</div>` +
     `<h2 class="d-name" translate="no">${esc(a.name)}</h2>` +
     `<p class="d-by" translate="no">${esc(tr("by {0}", a.creator))}${a.variants ? esc(tr(", {0}", a.variants)) : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)} ${storeLink}</p>` +
+    dStats([["Files", a.files.length], ["Size", esc(fmtSize(a.size))], ["Added", esc(shortDay(a.added)) || "—"],
+            ["Projects", (a.used_in || []).length]]) +
     ((a.used_in || []).length ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
     otherCopies(a).map(o => `<p class="also"><span translate="no">${esc(tr(o.store === a.store ? (o.creator !== a.creator ? "You also have this again (by {1})." : "You also have this again.")

@@ -1,6 +1,6 @@
 """Screenshots of every part of Hoard, for the website and the README, made from real products you choose.
 
-    python scripts/screenshots.py PRODUCTS_FOLDER [OUT_FOLDER]
+    python scripts/screenshots.py PRODUCTS_FOLDER [OUT_FOLDER] [--style=treasure] [--themes=dark] [--only=library,set]
 
 PRODUCTS_FOLDER holds each product's picture (PNG, JPEG, WebP or GIF) and products.json, listing them:
 
@@ -18,7 +18,9 @@ Hoard runs on a made-up data folder of its own (never yours): those products are
 downloaded, with a Local item, sets and wishlists of them, two Unity projects (with VRChat's packages, backups, and
 what Hoard put in them), a finished check and a few tasks. Then each part is photographed, in the dark and light
 themes, at 1600x950: OUT_FOLDER/<part>-<theme>.png (and .webp, at 1600, 1200 and 800 wide, for the website).
-Nothing is fetched from the internet: the pictures come from the folder. Paths on the pages are shown as
+--style takes them in the Treasure or Workbench style (Settings, Appearance), named
+<part>-<style>-<theme>; --themes and --only take fewer of them. Nothing is fetched from the internet: the pictures
+come from the folder. Paths on the pages are shown as
 C:\\Users\\you\\..., as a usual computer's would be.
 """
 from __future__ import annotations
@@ -312,9 +314,10 @@ SHOW_PATHS = """work => {
 SEEDED = "(() => { let s = 20261021; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })()"   # (Mix and match's picks, the same each time)
 
 
-def shoot(items: list[dict], out: Path) -> None:
+def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None) -> None:
     from playwright.sync_api import sync_playwright
     root, made = build(items)
+    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style}
     # what a usual computer says (this one may have no keyring, and its folders are made up for the pictures)
     server.signin_protection = lambda cfg: "encrypted by your Windows account"
     from pathlib import PureWindowsPath
@@ -344,15 +347,17 @@ def shoot(items: list[dict], out: Path) -> None:
     shots = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        for theme in ("dark", "light"):
+        for theme in themes:
             page = browser.new_page(viewport=SIZE, color_scheme=theme)
             page.add_init_script(SEEDED)
 
             def snap(name, settle=500):
+                if only and name not in only:
+                    return
                 page.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
                 page.wait_for_timeout(settle)
                 page.evaluate(SHOW_PATHS, str(WORK))
-                path = out / f"{name}-{theme}.png"
+                path = out / (f"{name}-{theme}.png" if style == "standard" else f"{name}-{style}-{theme}.png")
                 page.screenshot(path=str(path))
                 shots.append(path)
 
@@ -437,9 +442,13 @@ def shoot(items: list[dict], out: Path) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    given = [a for a in sys.argv[1:] if not a.startswith("--")]
+    opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
+    if not given or opts.get("style", "standard") not in server.themes.STYLES:
         sys.exit(__doc__)
     try:
-        shoot(products(Path(sys.argv[1])), Path(sys.argv[2]) if len(sys.argv) > 2 else REPO / "build" / "screenshots")
+        shoot(products(Path(given[0])), Path(given[1]) if len(given) > 1 else REPO / "build" / "screenshots",
+              opts.get("style", "standard"), tuple(opts.get("themes", "dark,light").split(",")),
+              set(opts["only"].split(",")) if opts.get("only") else None)
     finally:
         shutil.rmtree(WORK, ignore_errors=True)

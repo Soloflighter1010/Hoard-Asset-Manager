@@ -11,6 +11,10 @@ from __future__ import annotations
 
 MODES = ("system", "light", "dark")
 DEFAULT = "hoard"
+# How the pages are laid out (Settings, Appearance, issue #159), apart from their colours: Standard, as Hoard has
+# always looked; Treasure, big pictures in frames of their store's colour; Workbench, close-set lists and tables. The
+# server marks the page with it (data-style), and web/looks.css lays it out.
+STYLES = ("standard", "treasure", "workbench")
 
 # What each colour is for: cave (the page), ledge (panels, tiles' ground), stone (hover), seam (lines), bone (text),
 # dust (quieter text), gold (the accent: "yours" or "do this"), gold-ink (text on the accent), gold-text (the accent as
@@ -92,6 +96,10 @@ def theme_id(value) -> str:
 
 def mode_id(value) -> str:
     return value if isinstance(value, str) and value in MODES else "system"
+
+
+def style_id(value) -> str:
+    return value if isinstance(value, str) and value in STYLES else "standard"
 
 
 def _block(selector: str, values: dict, scheme: str | None = None) -> str:

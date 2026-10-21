@@ -52,6 +52,15 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
     screens, and white), **High contrast** and **Spooky Hoard**. In a theme whose accent is close to a store's
     colour, that store's colour shifts a little, so the two aren't mistaken for each other. **Store colours** (below)
     still apply in every theme.
+  - **Style** (5.0): how Hoard lays everything out, apart from its colours. **Standard** is Hoard as it has always
+    looked: tiles with their store's colour along the bottom. **Treasure** shows bigger pictures, each in a frame of
+    its store's colour with the store's name on it, with round buttons and tabs, and a product's details with its
+    picture large and a row of what it is. **Workbench** makes the Library, Downloads and sets close-set lists (a
+    small picture, the name and creator, the store, whether it's downloaded or what's in it, and when it came), in
+    your computer's own font, with square corners and lower bars, panels and tables: more at a glance. A style shows
+    as you choose it, on both pages, and is kept with your other settings, so it stays when Hoard starts again or
+    updates (and in a backup). Every theme, Light or Dark, and the settings under **Accessibility** work with all
+    three. Hoard for Unity and the shared set page keep their own look.
 - **Accessibility:**
   - **Text size:** **Normal**, **Larger**, **Large** or **Largest**. Everything on the page grows with the text.
   - **Font:** **Standard**, or **OpenDyslexic, for dyslexia** (4.1.0): a typeface whose letters are weighted at the
@@ -133,6 +142,7 @@ and keep it valid JSON.
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
 | `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |
 | `display.mode` | `"system"` | `"system"` (match your computer), `"light"` or `"dark"` (**Appearance** in Settings) |
+| `display.style` | `"standard"` | The style: `"standard"`, `"treasure"` or `"workbench"` (**Appearance** in Settings) |
 | `display.language` | `"system"` | `"system"` (match your computer), `"en"`, `"ja"` or `"ko"` (**Appearance** in Settings) |
 | `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
 | `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |

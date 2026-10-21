@@ -39,6 +39,7 @@ DEFAULT_CONFIG = {
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False, "font": "standard", "spacing": False,   # accessibility
                 "glow": True, "colours": "standard", "custom_colours": {},   # issue #112: the glow, store colours
                 "theme": "hoard", "mode": "system",   # Settings, Appearance: hoard/themes.py, and Light or Dark
+                "style": "standard",   # and the style (issue #159): standard, treasure or workbench (web/looks.css)
                 "language": "system"},   # and the pages' language (hoard/i18n.py): system follows the window's
     "ui": {},                      # how you left the pages: the sidebar folded, the tile size
     "gumroad": {"enabled": True, "include_archived": True, "save_thumbnails": True},

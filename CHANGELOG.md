@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.0.0-beta.3
+
+- **Three styles: Standard, Treasure and Workbench** ([#159](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/159)).
+  Choose how Hoard lays everything out, in the setup assistant (right after **Make Hoard easier to use**) or in
+  Settings, under **Appearance**. **Standard** is Hoard as it has always looked. **Treasure** shows bigger pictures,
+  each in a frame of its store's colour with the store's name on it, round buttons and tabs, and a product's details
+  with its picture large and a row of what it is (its files, size, when it came, and the like). **Workbench** makes
+  the Library, Downloads and sets close-set lists, each product a row with a small picture, its store, whether it's
+  downloaded (or its files and size) and when it came, in your computer's own font, with lower bars and closer-set
+  panels and tables. A style shows as you choose it, on both pages and from the first moment a page opens, and it's
+  kept in `config.json` with your other settings, so it stays when Hoard starts again or updates, and in a backup.
+  Every theme, Light or Dark, and the accessibility settings work with all three.
+
 ## 5.0.0-beta.2
 
 - **What went into a project, and where** ([#155](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/155)).

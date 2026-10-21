@@ -1338,7 +1338,7 @@
  "Free some room": "空きを作る",
  "Choose from any of these lists to move things to another library folder, archive them or delete their files. From more than one store keeps one store's copy, and the others won't download again.": "どのリストからでも選んで、ほかのライブラリフォルダーへ移したり、アーカイブしたり、ファイルを削除したりできます。「複数のストアから」ではひとつのストアのものを残し、ほかは再びダウンロードされません。",
  "Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.": "同期やダウンロードなど、Hoardがしていることは実行中にここに表示され、見つけたものも分かります。その間もほかの作業を続けられます。",
- "Your language, light or dark, themes and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.": "言語、ライト・ダーク、テーマ、文字の大きさ。定期チェック。以前のバージョン。ライブラリフォルダーの追加。タグ・セット・設定のバックアップ。このツアーもここにあります。",
+ "Your language, light or dark, themes, styles and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.": "言語、ライト・ダーク、テーマ、スタイル、文字の大きさ。定期チェック。以前のバージョン。ライブラリフォルダーの追加。タグ・セット・設定のバックアップ。このツアーもここにあります。",
  "That's the tour": "ツアーはここまでです",
  "You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.": "主な機能はこれで全部です。そのほかはHoardのwikiに、すべての変更は設定の「新機能」にあります。",
  "Font": "フォント",
@@ -1797,5 +1797,18 @@
  "Try it: open Sets.": "試してみましょう: 「セット」を開いてください。",
  "Your wishlists from the stores live here too, with what each product costs: Read my wishlists brings them in from the stores you're signed in to. Read them again later, and what got cheaper is marked.": "ストアのほしい物リストもここにあり、各商品の価格がわかります。「ほしい物リストを読み込む」で、サインインしているストアから取り込みます。あとでもう一度読み込むと、安くなったものに印が付きます。",
  "Mix and match picks an avatar and an outfit at random from what you own, by your tags' kinds: an Avatar tag on your bases, and Clothing tags on your clothes. Keep the picks you like, pick the rest again, and make a set of them.": "組み合わせは、タグの種類をもとに、持っているものからアバターとコーディネートをランダムに選びます。ベースには種類が「アバター」のタグを、服には「衣装」のタグを付けてください。気に入ったものは残してほかを選び直し、セットにできます。",
- "Backups, in Projects, lists your projects' backups, and deletes or moves the old ones when the drive runs low on room.": "「プロジェクト」の「バックアップ」では、プロジェクトのバックアップが一覧になり、ドライブの空きが少なくなったら古いものを削除したり移動したりできます。"
+ "Backups, in Projects, lists your projects' backups, and deletes or moves the old ones when the drive runs low on room.": "「プロジェクト」の「バックアップ」では、プロジェクトのバックアップが一覧になり、ドライブの空きが少なくなったら古いものを削除したり移動したりできます。",
+ "Style": "スタイル",
+ "Style: how Hoard lays everything out.": "スタイル:Hoardの画面の並べ方です。",
+ "Treasure": "トレジャー",
+ "Workbench": "ワークベンチ",
+ "Hoard as it has always looked: tiles with their store's colour along the bottom.": "これまでどおりのHoardです。タイルの下にストアの色の帯が付きます。",
+ "Big pictures, each in a frame of its store's colour, and round buttons.": "大きな画像を、ストアの色の枠で囲みます。ボタンは丸くなります。",
+ "Close-set lists and tables, in your computer's own font: more at a glance.": "詰めたリストと表を、コンピューターのフォントで表示します。一度に多くを見渡せます。",
+ "Listed": "一覧のみ",
+ "Added": "追加日",
+ "Size": "サイズ",
+ "Choose a style": "スタイルを選んでください",
+ "How Hoard lays out your library, downloads and everything else. You see each one as you choose it.": "ライブラリ、ダウンロード、そのほかすべての並べ方です。選ぶとすぐに反映されます。",
+ "Choose Standard, Treasure or Workbench.": "「標準」「トレジャー」「ワークベンチ」から選んでください。"
 }

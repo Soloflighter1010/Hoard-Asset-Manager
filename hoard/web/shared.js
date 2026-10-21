@@ -251,7 +251,15 @@ const STRIPE_STORES = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
 // A tile's store spine; for something you own on more than one store, striped with the other store's colour.
 function notch(store, others) {
   const other = (others || []).find(o => STRIPE_STORES.includes(o) && o !== store);
-  return other ? `<i class="notch ${store} dup" style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"></i>`;
+  const named = COLOUR_NAMES[store] ? ` data-s="${esc(tr(COLOUR_NAMES[store]))}"` : "";   // (the Treasure style's tag)
+  return other ? `<i class="notch ${store} dup"${named} style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"${named}></i>`;
+}
+// The Treasure style's row of facts in a product's details (web/looks.css): [label, value as HTML]
+const dStats = facts => `<div class="d-stats">${facts.map(([k, v]) => `<span><small>${esc(tr(k))}</small><b>${v}</b></span>`).join("")}</div>`;
+// a day as your language writes it, short: "12 Oct 2026" (the Workbench style's list, Treasure's details)
+function shortDay(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleDateString(document.documentElement.lang || "en", { year: "numeric", month: "short", day: "numeric" }) : "";
 }
 /* Stacking copies across stores (hoard/library.py): when two shops' copies of one product have the same name but
    their pictures aren't the same file, Hoard asks the page how the pictures look. A difference hash: the picture
@@ -328,8 +336,28 @@ function fillThemes() {
     `<span class="theme-swatch" aria-hidden="true">${half(t.dark)}${half(t.light)}</span><span>${esc(t.name)}${t.tag ? `<small>${esc(t.tag)}</small>` : ""}</span></label>`).join("");
   for (const r of document.querySelectorAll('input[name="setMode"]')) r.checked = r.value === d.mode;
 }
+// Styles (Settings, Appearance; issue #159): how the pages are laid out (web/looks.css), each with a small picture
+const STYLES = [["standard", "Standard", "Hoard as it has always looked: tiles with their store's colour along the bottom."],
+                ["treasure", "Treasure", "Big pictures, each in a frame of its store's colour, and round buttons."],
+                ["workbench", "Workbench", "Close-set lists and tables, in your computer's own font: more at a glance."]];
+function stylePicture(id) {
+  const stores = ["booth", "gumroad", "jinxxy", "payhip", "itch", "local"];
+  const n = { standard: 4, treasure: 3, workbench: 12 }[id];
+  return `<span class="style-pic ${id}" aria-hidden="true">` + Array.from({ length: n }, (_, i) =>
+    `<i class="${id === "workbench" ? (i % 3 ? "" : stores[(i / 3) % stores.length]) : stores[i % stores.length]}"></i>`).join("") + `</span>`;
+}
+function styleChoices(name, now) {
+  return STYLES.map(([id, label, about]) => `<label class="style-choice"><input type="radio" name="${name}" value="${id}"${id === (now || "standard") ? " checked" : ""}>` +
+    `${stylePicture(id)}<span><b>${esc(tr(label))}</b><small>${esc(tr(about))}</small></span></label>`).join("");
+}
+function fillStyles() {
+  const box = $("#styleChoices");
+  if (box) box.innerHTML = styleChoices("setStyle", SETTINGS.display.style);
+}
 function applyDisplay(d) {
   if (!d) return;
+  const look = d.style && d.style !== "standard" ? d.style : "";   // (Standard: no mark, the pages as written)
+  if (look) document.documentElement.dataset.style = look; else delete document.documentElement.dataset.style;
   // the theme, in place of the one the page was served with (the same colours, from the same place)
   const theme = $("#theme");
   if (theme && typeof d.theme_css === "string" && theme.textContent.trim() !== d.theme_css.trim()) { theme.textContent = d.theme_css; }
@@ -1059,6 +1087,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
   fillThemes();
+  fillStyles();
   $("#setLanguage").value = SETTINGS.display.language || "system";
   $("#setShops").value = (SETTINGS.payhip_shops || []).map(s => s.replace(/^https:\/\//, "")).join("\n");
   const box = (store, opt, on, label, sub) =>
@@ -1347,6 +1376,7 @@ function settingsPart(el) {
   if (el.name === "setTheme") return { display: { theme: el.value } };
   if (el.id === "setLanguage") return { display: { language: el.value } };
   if (el.name === "setMode") return { display: { mode: el.value } };
+  if (el.name === "setStyle") return { display: { style: el.value } };
   switch (el.id) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
@@ -3230,7 +3260,7 @@ const TOUR_STEPS = [
     body: () => esc(tr("Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.")) },
   { id: "settings", page: "downloads", at: () => $("#settingsBtn"),
     title: () => tr("Settings"),
-    body: () => esc(tr("Your language, light or dark, themes and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.")) },
+    body: () => esc(tr("Your language, light or dark, themes, styles and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.")) },
   { id: "end", page: "downloads",
     title: () => tr("That's the tour"),
     body: () => esc(tr("You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.")),

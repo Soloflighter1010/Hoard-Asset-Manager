@@ -1509,6 +1509,8 @@ class SetupAssistant(unittest.TestCase):
             page.click("#setupNext")   # the language, as it is: on without reloading
             page.locator("#setupTitle", has_text="Make Hoard easier to use").wait_for()
             page.click("#setupNext")   # nothing changed there
+            page.locator("#setupTitle", has_text="Choose a style").wait_for()
+            page.click("#setupNext")   # Standard, as it is
             page.locator("#setupTitle", has_text="Welcome to Hoard").wait_for()
             page.click("#setupNext")   # welcome
             page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()

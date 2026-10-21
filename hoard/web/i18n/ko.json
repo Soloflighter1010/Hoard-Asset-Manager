@@ -1338,7 +1338,7 @@
  "Free some room": "공간 비우기",
  "Choose from any of these lists to move things to another library folder, archive them or delete their files. From more than one store keeps one store's copy, and the others won't download again.": "어느 목록에서든 골라 다른 라이브러리 폴더로 옮기거나, 보관하거나, 파일을 삭제할 수 있어요. '여러 스토어에서'는 한 스토어의 것을 남기고, 나머지는 다시 다운로드되지 않아요.",
  "Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.": "동기화나 다운로드처럼 Hoard가 하는 일은 실행되는 동안 여기에 나오고, 찾은 것도 보여요. 그동안 다른 일을 계속할 수 있어요.",
- "Your language, light or dark, themes and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.": "언어, 밝게·어둡게, 테마, 글자 크기. 정기 점검. 이전 버전. 라이브러리 폴더 추가. 태그·세트·설정 백업. 이 둘러보기도 여기 있어요.",
+ "Your language, light or dark, themes, styles and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.": "언어, 밝게·어둡게, 테마, 스타일, 글자 크기. 정기 점검. 이전 버전. 라이브러리 폴더 추가. 태그·세트·설정 백업. 이 둘러보기도 여기 있어요.",
  "That's the tour": "둘러보기는 여기까지예요",
  "You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.": "주요 기능은 다 봤어요. 나머지는 Hoard 위키에, 모든 변경 사항은 설정의 '새로운 기능'에 있어요.",
  "Font": "글꼴",
@@ -1797,5 +1797,18 @@
  "Try it: open Sets.": "해 보세요: 「세트」를 여세요.",
  "Your wishlists from the stores live here too, with what each product costs: Read my wishlists brings them in from the stores you're signed in to. Read them again later, and what got cheaper is marked.": "스토어의 위시리스트도 여기 있고, 상품마다 가격이 나와요. 「위시리스트 읽어오기」로 로그인한 스토어에서 가져와요. 나중에 다시 읽으면 싸진 것에 표시가 붙어요.",
  "Mix and match picks an avatar and an outfit at random from what you own, by your tags' kinds: an Avatar tag on your bases, and Clothing tags on your clothes. Keep the picks you like, pick the rest again, and make a set of them.": "조합하기는 태그 종류를 바탕으로 가진 것 중에서 아바타와 코디를 무작위로 골라요. 베이스에는 종류가 「아바타」인 태그를, 옷에는 「의상」 태그를 붙이세요. 마음에 드는 것은 남기고 나머지를 다시 고른 다음, 세트로 만들 수 있어요.",
- "Backups, in Projects, lists your projects' backups, and deletes or moves the old ones when the drive runs low on room.": "「프로젝트」의 「백업」에는 프로젝트 백업 목록이 나오고, 드라이브 공간이 부족해지면 오래된 것을 삭제하거나 옮길 수 있어요."
+ "Backups, in Projects, lists your projects' backups, and deletes or moves the old ones when the drive runs low on room.": "「프로젝트」의 「백업」에는 프로젝트 백업 목록이 나오고, 드라이브 공간이 부족해지면 오래된 것을 삭제하거나 옮길 수 있어요.",
+ "Style": "스타일",
+ "Style: how Hoard lays everything out.": "스타일: Hoard가 모든 것을 배치하는 방식이에요.",
+ "Treasure": "트레저",
+ "Workbench": "워크벤치",
+ "Hoard as it has always looked: tiles with their store's colour along the bottom.": "지금까지의 Hoard 그대로예요. 타일 아래쪽에 스토어 색이 들어가요.",
+ "Big pictures, each in a frame of its store's colour, and round buttons.": "큰 그림을 스토어 색 테두리로 감싸고, 버튼은 둥글어져요.",
+ "Close-set lists and tables, in your computer's own font: more at a glance.": "촘촘한 목록과 표를 컴퓨터의 글꼴로 보여 줘요. 한눈에 더 많이 볼 수 있어요.",
+ "Listed": "목록만",
+ "Added": "추가한 날",
+ "Size": "크기",
+ "Choose a style": "스타일을 고르세요",
+ "How Hoard lays out your library, downloads and everything else. You see each one as you choose it.": "라이브러리, 다운로드와 그 밖의 모든 것을 배치하는 방식이에요. 고르는 대로 바로 보여요.",
+ "Choose Standard, Treasure or Workbench.": "기본, 트레저, 워크벤치 중에서 고르세요."
 }

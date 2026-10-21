@@ -1298,6 +1298,8 @@ body.less-motion .tour-try::before { animation: none; }
     <label><input type="radio" name="setMode" id="setModeDark" value="dark"> Dark</label>
   </div>
   <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
+  <p class="hint">Style: how Hoard lays everything out.</p>
+  <div id="styleChoices" class="style-choices" role="radiogroup" aria-label="Style"></div>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -1674,13 +1676,20 @@ const slotHTML = a => {
     const n = stackSize.get(a.key) || 0;
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
                   a.also_in.length && tr("also on {0}", listed(a.also_in.map(label))), onDisk(a) && tr("downloaded"), a.new && tr("new")];
-    return `<button class="slot${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
+    return `<button class="slot ${a.store}${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span></span>` +
-      `<span class="nm-t" translate="no">${esc(a.name)}</span><span class="cr" translate="no">${esc(a.creator)}</span></button>`;
+      `<span class="nm-t" translate="no">${esc(a.name)}</span><span class="cr" translate="no">${esc(a.creator)}</span>${rowMeta(a)}</button>`;
 };
+// The Workbench style's list (web/looks.css): each product's store, where it is, and when it came into your library
+function rowMeta(a) {
+  const [state, how] = onDisk(a) ? (a.update ? ["Update", "upd"] : ["Downloaded", "ok"])
+    : !downloadable(a.store) ? ["Listed", ""] : a.new ? ["New", "new"] : ["Not downloaded yet", ""];
+  return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store}"></span>${label(a.store)}</span>` +
+    `<span class="rm-state ${how}">${esc(tr(state))}</span><span class="rm-when">${esc(shortDay(a.added))}</span></span>`;
+}
 function renderGrid(list) {
   (cards = cards || lazyCards($("#grid"))).show(list, slotHTML);
   const empty = $("#empty");
@@ -1848,10 +1857,12 @@ function showDetail(a, focus = true) {
                  page && a.url !== a.download_url && outside(a.url, "Store page")].filter(Boolean).join("");
   $("#detail").innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
-    `<div class="d-art">${a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="">` : placeholder(a)}</div>` +
+    `<div class="d-art ${a.store}">${a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="">` : placeholder(a)}</div>` +
     `<h2 class="d-name" translate="no">${esc(a.name)}</h2>` +
     `<p class="d-by" translate="no">${trHTML("by {0}", by)}${extra ? esc(tr(", {0}", extra)) : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store}"></span>${store}</p>` +
+    dStats([["Store", `<span class="dot ${a.store}"></span>${store}`], ["Files", a.files.length || "—"],
+            ["Added", esc(shortDay(a.added)) || "—"], ["Tags", a.tags.length]]) +
     (a.also_in.length ? `<p class="note">You also own this on ${a.also_in.map(label).join(" and ")}. ` +
       `<button class="linkish" data-act="others">Show all copies</button></p>` : "") +
     `<div class="actions">${main}</div>` +
@@ -2550,7 +2561,7 @@ function setupPicked(st, s) {
   if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
   return !!((DATA.stores || {})[s] || {}).count;
 }
-const setupSteps = () => ["language", "access", "welcome", "browser", "older", "stores",
+const setupSteps = () => ["language", "access", "look", "welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
 async function setupStatus() {
@@ -2624,6 +2635,11 @@ const SETUP_VIEWS = {
     </div>
     <p class="muted">There's more, and you can change these later, in Settings, under Appearance and Accessibility.</p>`;
   },
+  // how Hoard lays everything out (issue #159): shown as it's chosen, and saved at once
+  look: () => `<h2 id="setupTitle">Choose a style</h2>
+    <p>How Hoard lays out your library, downloads and everything else. You see each one as you choose it.</p>
+    <div class="style-choices" role="radiogroup" aria-labelledby="setupTitle">${styleChoices("setupStyle", (DATA.display || {}).style)}</div>
+    <p class="muted">You can change it later in Settings, under Appearance.</p>`,
   welcome: () => `<h2 id="setupTitle">Welcome to Hoard</h2>
     <p>Let's get Hoard ready: choose your stores, sign in to them, and pick where downloads go. It takes a few minutes, and you can run this again from Settings.</p>
     <p class="muted">Hoard runs only on this computer. It never sees your passwords: you sign in on each store's own page, in a browser window that belongs to Hoard alone.</p>`,
@@ -2696,6 +2712,14 @@ function pollSetup(onDone, show) {
   }, 1000);
 }
 const SETUP_WIRES = {
+  look: () => {
+    $("#setupBody .style-choices").addEventListener("change", async e => {
+      const r = await apiPost("/api/settings", { display: { style: e.target.value } });
+      if (!r.ok) { toast(r.data.error || "That wasn't saved."); return; }
+      DATA.display = r.data.settings.display;
+      applyDisplay(DATA.display);
+    });
+  },
   access: () => {
     const read = () => ({ text_size: Number($("#setupTextSize").value), font: $("#setupFont").value, mode: $("#setupMode").value,
                           colours: $("#setupColours").value, spacing: $("#setupSpacing").checked,
