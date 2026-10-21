@@ -6,16 +6,13 @@
   Each time Hoard puts products from your library in a project, it adds them to `Hoard imports.md`, beside the
   project's `Assets`: each product, its file, when, and the folders it added (or its package), and what was left
   as it was. They're added to Hoard for Unity's own list of imports too (`ProjectSettings/Hoard/imports.json`), so
-  it knows those products are in the project. **Manage** lists the folders each one added, and Hoard for Unity 0.9.0
+  it knows those products are in the project. **Manage** lists the folders each one added, and the next Hoard for Unity (0.9.0)
   shows them under each product (**Put in by Hoard**, with **Select** to select them), and keeps them when it adds
   an import of its own.
-- Everything in 4.3.7: Payhip's sign-in loop named, and payhip.com's own sign-in opened first.
 - **Old project backups, kept in hand.** **Backups**, in Projects, lists every project backup with its size, marks
   the old ones (past the newest 3 of a project, and older than a month, unless you choose otherwise), and deletes them,
   or moves them to a folder on another drive, copied and checked before they go. When the drive your backups are on is
   low on room, Projects says so, with how much the old ones take.
-- Everything in 4.4.0: your wishlists from the stores, with their prices, file names that stay readable with
-  OpenDyslexic, and the wiki in Japanese and Korean.
 - **Any version of a package** ([#160](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/160)). In
   **Manage**, a package's version is a button: it lists every version that works in the project's Unity, newest
   first (prereleases too when **Offer prerelease versions of packages** is on), and installs the one you choose,
@@ -34,6 +31,9 @@
   which was too long to pass around. **Update the link** keeps it 14 days from today, so a set can stay shared for as
   long as you like; Hoard doesn't renew it by itself. Long links shared from earlier versions still open, in the
   viewer and in **Add a shared set...**.
+- Everything in 4.4.0: your wishlists from the stores, with their prices, file names that stay readable with
+  OpenDyslexic, and the wiki in Japanese and Korean.
+- Everything in 4.3.7: Payhip's sign-in loop named, and payhip.com's own sign-in opened first.
 
 ## 5.0.0-beta.1
 
