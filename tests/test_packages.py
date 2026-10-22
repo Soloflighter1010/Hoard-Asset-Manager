@@ -36,8 +36,9 @@ def _png_1x1() -> bytes:
 PNG_1x1 = _png_1x1()
 
 
-def unitypackage(assets: dict, previews: dict | None = None, long_names: bool = False) -> bytes:
-    """A .unitypackage as Unity makes one: {guid: (project path, file bytes or None for a folder)}."""
+def unitypackage(assets: dict, previews: dict | None = None, long_names: bool = False, asset_first: bool = False) -> bytes:
+    """A .unitypackage as Unity makes one: {guid: (project path, file bytes or None for a folder)}; each asset's
+    entries as Unity writes them (asset, asset.meta, pathname) with asset_first, else its .meta first."""
     raw = io.BytesIO()
     fmt = tarfile.GNU_FORMAT if long_names else tarfile.USTAR_FORMAT
     with tarfile.open(fileobj=raw, mode="w", format=fmt) as tar:
@@ -46,8 +47,15 @@ def unitypackage(assets: dict, previews: dict | None = None, long_names: bool = 
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
         for guid, (path, data) in assets.items():
+            meta = b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n"
+            if asset_first:
+                if data is not None:
+                    add(f"{guid}/asset", data)
+                add(f"{guid}/asset.meta", meta)
+                add(f"{guid}/pathname", path.encode())
+                continue
             add(f"{guid}/pathname", path.encode())
-            add(f"{guid}/asset.meta", b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n")
+            add(f"{guid}/asset.meta", meta)
             if data is not None:
                 add(f"{guid}/asset", data)
             if previews and guid in previews:
@@ -239,9 +247,9 @@ class Extract(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
-    def package(self, assets: dict) -> Path:
+    def package(self, assets: dict, **how) -> Path:
         path = self.home / "Hoodie.unitypackage"
-        path.write_bytes(unitypackage(assets))
+        path.write_bytes(unitypackage(assets, **how))
         return path
 
     def out(self, name="out") -> Path:
@@ -310,14 +318,119 @@ class Extract(unittest.TestCase):
         dest = self.out()
         done = packages.extract(path, dest, ["z:Hoodie/利用規約.txt", "p:0:Assets/Creator/Hoodie.prefab"])
         self.assertEqual(self.files(dest), {"Hoodie/利用規約.txt": "terms".encode(),
-                                            "Hoodie_v2/Assets/Creator/Hoodie.prefab": SAMPLE[G2][1]},
-                         "a zip's file where its name says; a package's assets in a folder named after it")
+                                            "Hoodie/Hoodie_v2/Assets/Creator/Hoodie.prefab": SAMPLE[G2][1]},
+                         "a zip's file where its name says; a package's assets in a folder named after it, where it is")
         self.assertEqual(done["skipped"], [])
         dest = self.out("all")
         done = packages.extract(path, dest, ["all"])
         self.assertEqual(set(self.files(dest)), {"Hoodie/Hoodie_v2.unitypackage", "Hoodie/利用規約.txt"}, "every file, as it is")
         self.assertEqual(done["skipped"], [("../evil.txt", "its name leads outside the folder")])
         self.assertFalse((self.home / "evil.txt").exists())
+
+    def meta(self, guid: str) -> bytes:
+        return b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n"
+
+    def test_a_meta_always_beside_its_own_file(self):
+        """With Unity's .meta files: each beside the file it's for, under the same name, even when that name was
+        taken and the file renamed, in either order a package lists them; and nothing is ever written over, even a
+        file named like another's .meta (issue #172)."""
+        clash = {"1" * 32: ("Assets/same.txt", b"one"), "2" * 32: ("Assets/same.txt", b"two"),
+                 "3" * 32: ("Assets/a.txt.meta", b"a file, not a .meta"), "4" * 32: ("Assets/a.txt", b"a")}
+        for asset_first in (True, False):
+            with self.subTest(asset_first=asset_first):
+                dest = self.out(f"out{asset_first}")
+                done = packages.extract(self.package(clash, asset_first=asset_first), dest, ["all"], metas=True)
+                got = self.files(dest)
+                self.assertEqual(done["files"], len(got), "every file counted was written, once")
+                self.assertEqual(len(got), 8)
+                for name, data in got.items():
+                    if data.startswith(b"fileFormatVersion"):   # a .meta: beside the file it's for, by name
+                        mine = next(g for g in clash if data == self.meta(g))
+                        self.assertEqual(got[name[:-len(".meta")]], clash[mine][1], name)
+                self.assertIn(b"a file, not a .meta", got.values(), "never written over")
+
+    def test_a_folders_meta_too(self):
+        """A folder's .meta holds its GUID, which Unity keeps: with .meta files, a chosen folder's comes out beside
+        it (issue #173)."""
+        dest = self.out()
+        packages.extract(self.package(SAMPLE, asset_first=True), dest, ["d:0:Assets/Creator"], metas=True)
+        self.assertEqual(self.files(dest)["Assets/Creator.meta"], self.meta(G1))
+        self.assertEqual(self.files(dest)["Assets/Creator/Hoodie.prefab.meta"], self.meta(G2))
+
+    def test_what_cant_be_written_is_left_out_and_the_rest_come_out(self):
+        """One file that can't be written (a file where its folder should be, a path too long for the system)
+        is left out, with why, and the rest still come out; one that climbs out is said too. A full disk stops it
+        all (issue #174)."""
+        import errno
+        assets = {"1" * 32: ("Assets/Foo", b"a file"), "2" * 32: ("Assets/Foo/bar.txt", b"in a folder of that name"),
+                  "3" * 32: ("../climb.txt", b"out"), "4" * 32: ("Assets/Deep/x.txt", b"deep"),
+                  "5" * 32: ("Assets/fine.txt", b"fine")}
+        real = packages.tempfile.mkstemp
+
+        def mkstemp(dir=None, prefix=None):
+            if "Deep" in str(dir):
+                raise OSError(errno.ENAMETOOLONG, "File name too long")
+            return real(dir=dir, prefix=prefix)
+        dest = self.out()
+        with mock.patch.object(packages.tempfile, "mkstemp", mkstemp):
+            done = packages.extract(self.package(assets, asset_first=True), dest, ["all"])
+        self.assertEqual(self.files(dest), {"Assets/Foo": b"a file", "Assets/fine.txt": b"fine"})
+        self.assertEqual(sorted(done["skipped"]), [("../climb.txt", "its path leads outside the folder"),
+                                                   ("Assets/Deep/x.txt", "its path is too long for this system"),
+                                                   ("Assets/Foo/bar.txt", "a file of the same name is in the way")])
+
+        def full(dir=None, prefix=None):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        with mock.patch.object(packages.tempfile, "mkstemp", full), self.assertRaises(packages.CantExtract) as e:
+            packages.extract(self.package(assets, asset_first=True), self.out("full"), ["all"])
+        self.assertIn("No space left", str(e.exception))
+
+    def test_packages_of_the_same_name_in_a_zip_stay_apart(self):
+        """Two packages of the same name in a zip, in different folders or not: each one's files in a folder of its
+        own, where it is in the zip (issue #175)."""
+        path = self.home / "Avatar.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("PC/Avatar.unitypackage", unitypackage({G2: ("Assets/Avatar.prefab", b"pc")}))
+            zf.writestr("Quest/Avatar.unitypackage", unitypackage({G2: ("Assets/Avatar.prefab", b"quest")}))
+            zf.writestr("Avatar.unitypackage", unitypackage({G2: ("Assets/Avatar.prefab", b"one")}))
+            with self.assertWarns(UserWarning):   # (a zip can hold two of the same name; zipfile says so)
+                zf.writestr("Avatar.unitypackage", unitypackage({G2: ("Assets/Avatar.prefab", b"two")}))
+        dest = self.out()
+        packages.extract(path, dest, [f"p:{n}:Assets/Avatar.prefab" for n in range(4)])
+        self.assertEqual(self.files(dest), {"PC/Avatar/Assets/Avatar.prefab": b"pc", "Quest/Avatar/Assets/Avatar.prefab": b"quest",
+                                            "Avatar/Assets/Avatar.prefab": b"one", "Avatar (2)/Assets/Avatar.prefab": b"two"})
+
+    @unittest.skipIf(os.name == "nt", "permissions as POSIX has them")
+    def test_files_get_a_new_files_permissions(self):
+        """Taken out, a file has the permissions any new file has here (the umask's), not mkstemp's owner-only ones
+        (issue #176)."""
+        dest = self.out()
+        packages.extract(self.package(SAMPLE), dest, ["all"])
+        mode = (dest / "Assets" / "Creator" / "Hoodie.prefab").stat().st_mode & 0o777
+        self.assertEqual(mode, packages.FILE_MODE)
+        mask = os.umask(0)
+        os.umask(mask)
+        self.assertEqual(packages.FILE_MODE, 0o666 & ~mask)
+
+    def test_reading_stops_once_the_chosen_files_are_out(self):
+        """One small file from the start of a large package: the rest of it isn't read (issue #182)."""
+        big = {G2: ("Assets/Small.prefab", b"small"), G3: ("Assets/Big.bin", os.urandom(2 << 20))}
+        path = self.package(big, asset_first=True)
+        packages.look_inside(path)   # (as Look inside has, before Extract)
+        real, read = packages.read_unitypackage, []
+
+        class Counted:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def read(self, n=-1):
+                data = self.stream.read(n)
+                read.append(len(data))
+                return data
+        with mock.patch.object(packages, "read_unitypackage", lambda stream, **kw: real(Counted(stream), **kw)):
+            done = packages.extract(path, self.out(), ["p:0:Assets/Small.prefab"])
+        self.assertEqual(done["files"], 1)
+        self.assertLess(sum(read), path.stat().st_size // 4)
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -426,8 +539,9 @@ class LookInsidePage(unittest.TestCase):
             # again, every file, with Unity's .meta files: a new folder beside the first
             page.locator("#insideMetas").check()
             win.locator("[data-x=extract][data-what=all]").click()
-            page.get_by_text("Took 4 files out, into").wait_for()
+            page.get_by_text("Took 5 files out, into").wait_for()   # (two files, their .meta files, and the folder's)
             self.assertTrue((edits / "Hoodie (2)" / "Assets" / "Creator" / "Hoodie.prefab.meta").is_file())
+            self.assertTrue((edits / "Hoodie (2)" / "Assets" / "Creator.meta").is_file())
             self.assertEqual(errors, [])
 
     def test_only_files_in_the_downloads(self):
@@ -440,6 +554,24 @@ class LookInsidePage(unittest.TestCase):
                 with self.subTest(path=path, action=action), self.assertRaises(urllib.error.HTTPError) as e:
                     urllib.request.urlopen(req)
                 self.assertEqual(e.exception.code, 404)
+
+    def test_when_nothing_could_be_taken_out_it_says_why(self):
+        """Every chosen file left out: Extract says why, and leaves no empty folder behind (issue #174)."""
+        import json, urllib.request
+        from hoard import server
+        edits = Path(self.tmp.name) / "Hoard Edits" / "Extracted"
+        before = set(edits.iterdir()) if edits.is_dir() else set()
+        nothing = {"files": 0, "bytes": 0, "skipped": [("../climb.txt", "its path leads outside the folder")]}
+        req = urllib.request.Request(f"http://127.0.0.1:{self.srv.server_address[1]}/api/look-inside/extract", method="POST",
+                                     data=json.dumps({"path": "Booth/Kitsu Studio/Hoodie/Hoodie.unitypackage", "picks": ["all"]}).encode(),
+                                     headers={"Content-Type": "application/json", "X-Hoard-Key": self.srv.key})
+        with mock.patch.object(server.packages, "extract", lambda *a, **k: nothing), \
+                self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        self.assertEqual((e.exception.code, json.loads(e.exception.read())),
+                         (400, {"error": "Nothing could be taken out.",
+                                "skipped": [{"name": "../climb.txt", "why": "its path leads outside the folder"}]}))
+        self.assertEqual(set(edits.iterdir()) if edits.is_dir() else set(), before, "no empty folder left behind")
 
     def test_a_hidden_products_files_stay_shut_while_locked(self):
         """Look inside and Extract refuse a hidden product's file while the hidden library is locked, as Make an

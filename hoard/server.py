@@ -1176,6 +1176,10 @@ class Handler(BaseHTTPRequestHandler):
             said = str(e) if isinstance(e, packages.CantExtract) else (f"Couldn't take them out: {e.strerror or e}."
                                                                        if isinstance(e, OSError) else "That file couldn't be read.")
             return self._json({"error": said}, 400 if isinstance(e, packages.CantExtract) else 500)
+        if not done["files"] and done["skipped"]:   # nothing at all came out: say why, not an empty folder (#174)
+            rmtree(dest, ignore_errors=True)
+            return self._json({"error": "Nothing could be taken out.",
+                               "skipped": [{"name": n, "why": w} for n, w in done["skipped"]]}, 400)
         print(f"Took {done['files']} files out of {target.name} into {dest}"
               + (f" ({len(done['skipped'])} left out)" if done["skipped"] else ""), flush=True)
         opened = None

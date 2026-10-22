@@ -214,12 +214,17 @@ from when that shop isn't in the user's list (it's only added when the user conf
 - Look inside's **Extract** (`POST /api/look-inside/extract`, `packages.extract`): the page sends what's ticked
   (`p:<package>:<path>`, `d:<package>:<folder>`, `z:<zip member>`, or `all`), and the server writes it into a new
   folder in `edits_root(cfg, root)/Extracted` (the folder editable copies go in), named after the file. A package
-  is read once, in order (`read_unitypackage(on_asset=...)`), each asset streamed to a temp file beside where it goes
-  and moved into place. `out_parts` makes each path's parts names every system allows and refuses `..`; `Writer`
-  makes folders one level at a time and refuses a link or a file in the way, so nothing lands outside the folder,
-  gives a name already taken " (2)", and stops (`CantExtract`) before the disk has less than `ROOM_TO_SPARE`
-  left. A zip member locked with a password, or one that can't be read, is skipped and named in the answer; a
-  failure part way deletes the half-made folder.
+  is read once, in order (`read_unitypackage(on_asset=...)`), and no further than its last chosen file (`_Done`),
+  each asset streamed to a temp file beside where it goes, given `FILE_MODE` (a new file's permissions, not
+  mkstemp's 0600) and moved into place. `out_parts` makes each path's parts names every system allows and refuses
+  `..`; `Writer` makes folders one level at a time and never through a link (that stops it all), gives a name
+  already taken " (2)", keeps an asset's name and its `.meta`'s as a pair (`place(meta=True)`) so they always match,
+  a folder's `.meta` its exact name (`exactly`), and stops (`CantExtract`) when the disk is full or would have less
+  than `ROOM_TO_SPARE` left. One file that can't be written (`_Skip`: a file in the way, a path too long, a path
+  that climbs out) is left out with why and the rest carry on, the bytes it would have taken read past so the
+  package's reader stays in step. A zip's members are found by the names Look inside gave them (`member_name`,
+  shared with `read_zip`), and a package in a zip goes under its own path in the zip. Nothing written at all says
+  why (`Nothing could be taken out.`, with what was left out); a failure part way deletes the half-made folder.
 
 ## Tags
 

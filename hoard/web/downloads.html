@@ -2330,7 +2330,11 @@ async function extractInside(what, button) {
   const r = await apiPost("/api/look-inside/extract", { path: INSIDE.path, picks, metas: !!INSIDE.metas, open: true });
   const bar = $("#insideBody .inside-bar");
   if (bar) bar.outerHTML = insideBar();
-  if (!r.ok) { toast(r.data.error || "Those files couldn't be taken out."); return; }
+  if (!r.ok) {   // (with what was left out, and why, when nothing could be: issue #174)
+    const why = (r.data.skipped || [])[0];
+    toast(tr(r.data.error || "Those files couldn't be taken out.") + (why ? ` ${why.name} (${tr(why.why)})` : ""));
+    return;
+  }
   toast(tr(r.data.files === 1 ? "Took 1 file out, into {1}." : "Took {0} files out, into {1}.", r.data.files.toLocaleString(), r.data.folder) +
     (r.data.skipped.length ? " " + tr(r.data.skipped.length === 1 ? "1 file was left out: {0}." : "{0} files were left out.",
       r.data.skipped.length === 1 ? `${r.data.skipped[0].name} (${tr(r.data.skipped[0].why)})` : r.data.skipped.length) : ""));

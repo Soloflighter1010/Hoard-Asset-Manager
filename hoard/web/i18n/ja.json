@@ -1901,6 +1901,11 @@
  "locked with a password": "パスワードで保護されています",
  "its name leads outside the folder": "名前がフォルダーの外を指しています",
  "couldn't be read": "読み込めませんでした",
+ "its path leads outside the folder": "パスがフォルダーの外を指しています",
+ "a file of the same name is in the way": "同じ名前のファイルがあります",
+ "its path is too long for this system": "パスがこのシステムには長すぎます",
+ "it couldn't be written": "書き込めませんでした",
+ "Nothing could be taken out.": "何も取り出せませんでした。",
  "Choose what to take out first.": "先に取り出すものを選んでください。",
  "There isn't room for it on that disk.": "そのディスクに十分な空きがありません。",
  "A path in it leads outside the folder it's taken out to, so it wasn't.": "中のパスが取り出し先のフォルダーの外を指しているため、取り出しませんでした。"

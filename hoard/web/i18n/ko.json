@@ -1901,6 +1901,11 @@
  "locked with a password": "비밀번호로 잠겨 있어요",
  "its name leads outside the folder": "이름이 폴더 밖을 가리켜요",
  "couldn't be read": "읽지 못했어요",
+ "its path leads outside the folder": "경로가 폴더 밖을 가리켜요",
+ "a file of the same name is in the way": "같은 이름의 파일이 있어요",
+ "its path is too long for this system": "경로가 이 시스템에는 너무 길어요",
+ "it couldn't be written": "쓰지 못했어요",
+ "Nothing could be taken out.": "아무것도 꺼내지 못했어요.",
  "Choose what to take out first.": "먼저 꺼낼 것을 선택하세요.",
  "There isn't room for it on that disk.": "그 디스크에 공간이 부족해요.",
  "A path in it leads outside the folder it's taken out to, so it wasn't.": "안에 있는 경로가 꺼낼 폴더 밖을 가리켜서 꺼내지 않았어요."
