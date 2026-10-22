@@ -12,6 +12,11 @@
   repositories, and what went wrong, each with its time and level (Info, Warning, Error). Find entries by their words,
   show only some levels, and watch new ones come in. Each time Hoard starts, they're written to a log of their own in
   the logs folder (**Open logs folder**).
+- Put right: putting products in a project offered what they need even when the project already had it, and could
+  add a repository you already had (VRCFury's, say, added in ALCOM or the Creator Companion with its address spelled
+  another way) a second time. What the project has is now only said, a repository that already gives a package is
+  used for it, and a repository already there, at any spelling of its address or another address for the same
+  listing, is never added again.
 
 ## 5.1.2
 

@@ -46,7 +46,9 @@ the products you want, then **Add to project**, and you're back at the new proje
 asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
 What the products need ([What it needs](Downloads#the-downloads-view): lilToon, Poiyomi Toon, Modular Avatar, VRCFury,
 NDMF, Avatar Optimizer, the VRChat SDK) is offered beside them, to add with a click; the repository it comes from is
-added for you.
+added for you, unless a repository you have already gives it (one added in ALCOM or the Creator Companion too, under
+any spelling of its address), which is used instead, so no repository is ever added twice. What the project already
+has isn't offered again: it's said, as **Already in the project**.
 
 **Make the project** makes it as a task (see [Projects' tasks](#projects-tasks)): the template, its packages, then
 your products. A `.unitypackage` goes straight into the project (as ALCOM puts one in, without opening Unity), a VPM

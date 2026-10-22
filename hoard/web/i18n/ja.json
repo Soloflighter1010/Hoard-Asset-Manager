@@ -1927,5 +1927,7 @@
  "Level": "レベル",
  "Message": "メッセージ",
  "Nothing in the log matches.": "ログに当てはまるものはありません。",
- "Nothing has been logged since Hoard started.": "Hoardが起動してから、ログに記録されたものはまだありません。"
+ "Nothing has been logged since Hoard started.": "Hoardが起動してから、ログに記録されたものはまだありません。",
+ "from {0}": "{0}から",
+ "Already in the project: {0}.": "プロジェクトにすでにあります: {0}。"
 }

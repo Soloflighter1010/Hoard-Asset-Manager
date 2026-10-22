@@ -237,6 +237,58 @@ class Server(unittest.TestCase):
         self.assertIn("[ WARN] Couldn't fetch Extra", lines[4])
         self.assertIn("[ERROR] Open in Unity:", lines[1])
 
+    def test_what_a_product_needs_as_things_stand(self):
+        """What a product needs, offered for a project: a repository you have already that gives a package is used,
+        whatever address it was added with (in ALCOM, say), so it's never added twice; and what the project already
+        has isn't offered again. Adding a repository that's already there, under another spelling of its address or
+        another address with the same listing, is refused."""
+        from hoard.vpm import repos as vpm_repos
+        settings_file = self.vcc / "settings.json"
+        settings = json.loads(settings_file.read_text())
+        # VRCFury's, added elsewhere with its address spelled differently; and one giving lilToon, at an address of its own
+        for file, url, listing in (
+                ("vrcfury.json", "https://VCC.vrcfury.com/", {"name": "VRCFury Repo", "id": "com.vrcfury.vpm", "packages": {}}),
+                ("mirror.json", "https://mirror.example/vpm.json", {"name": "A mirror", "id": "com.example.mirror", "url": "https://mirror.example/vpm.json",
+                 "packages": {"jp.lilxyzw.liltoon": {"versions": {"1.0.0": {"name": "jp.lilxyzw.liltoon", "version": "1.0.0", "url": "https://mirror.example/l.zip"}}}}})):
+            (self.vcc / "Repos" / file).write_text(json.dumps({"repo": listing}))
+            settings["userRepos"].append({"localPath": str(self.vcc / "Repos" / file), "url": url, "name": listing["name"]})
+        project = self.tmp / "Unity" / "Mochi"
+        for sub in ("Assets", "ProjectSettings", "Packages"):
+            (project / sub).mkdir(parents=True)
+        (project / "Packages" / "vpm-manifest.json").write_text(json.dumps({
+            "dependencies": {"com.vrchat.avatars": {"version": "3.10.5"}},
+            "locked": {"com.vrchat.avatars": {"version": "3.10.5", "dependencies": {}}}}))
+        settings["userProjects"] = [str(project)]
+        settings_file.write_text(json.dumps(settings))
+        self.srv.vpm.forget()
+        needs = {"tools": [{"key": k} for k in ("vrcfury", "liltoon", "vrchat-sdk", "modular-avatar")]}
+        got = {s["package"]: s for s in self.srv.vpm.product(self.asset, needs, str(project))["suggested"]}
+        self.assertEqual((got["com.vrcfury.vrcfury"]["repo_added"], got["com.vrcfury.vrcfury"]["in_repo"]), (True, "VRCFury Repo"),
+                         "the same address, spelled another way")
+        self.assertEqual((got["jp.lilxyzw.liltoon"]["repo_added"], got["jp.lilxyzw.liltoon"]["in_repo"]), (True, "A mirror"),
+                         "a repository that has the package already")
+        self.assertEqual((got["nadena.dev.modular-avatar"]["repo_added"], got["nadena.dev.modular-avatar"]["in_repo"]), (False, None))
+        self.assertEqual(got["com.vrchat.avatars"]["in_project"], "3.10.5")
+        self.assertIsNone(got["jp.lilxyzw.liltoon"]["in_project"])
+        # without a project (or one not on the list): what it has isn't known
+        elsewhere = self.srv.vpm.product(self.asset, needs, str(self.tmp / "Elsewhere"))["suggested"]
+        self.assertTrue(all(s["in_project"] is None for s in elsewhere))
+        # and through the server, with the project
+        status, answer = self.call("GET", f"/api/vpm/product?key=booth%2Fhoodie&path={quote(str(project))}")
+        self.assertEqual(status, 200, answer)
+        # a repository already there isn't added again: not under another spelling of its address...
+        status, answer = self.call("POST", "/api/vpm/repos/add", {"url": "https://vcc.vrcfury.com"})
+        self.assertEqual((status, answer.get("error")), (400, "That repository is already added."))
+        # ...nor at another address whose listing is one already here (its id)
+        _Repo.files["/mirror-again.json"] = json.dumps({"name": "Mirror", "id": "com.example.mirror", "packages": {}}).encode()
+        status, answer = self.call("POST", "/api/vpm/repos/add", {"url": f"{self.origin}/mirror-again.json"})
+        self.assertEqual((status, answer.get("error")), (400, "That repository is already added."))
+        self.assertEqual(len(json.loads(settings_file.read_text())["userRepos"]), 3, "nothing added")
+        # a new one is still added
+        _Repo.files["/new.json"] = json.dumps({"name": "New", "id": "com.example.new", "packages": {}}).encode()
+        self.assertEqual(self.call("POST", "/api/vpm/repos/add", {"url": f"{self.origin}/new.json"})[0], 200)
+        self.assertTrue(vpm_repos.same_address("https://vcc.vrcfury.com", "https://VCC.vrcfury.com:443/"))
+
     def test_the_backups_panel(self):
         """Projects' backups: listed with which are old, the rule changed, old ones moved to another drive as a task,
         one deleted, and a file that isn't one of the backups refused."""
@@ -510,6 +562,19 @@ class ImportsList(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Addresses(unittest.TestCase):
+    def test_the_same_repository_address(self):
+        from hoard.vpm.repos import same_address
+        for a, b in (("https://vcc.vrcfury.com", "https://vcc.vrcfury.com/"), ("https://VPM.nadena.dev/vpm.json", "https://vpm.nadena.dev/vpm.json"),
+                     ("https://example.com:443/a/", "https://example.com/a"),
+                     ("https://packages.vrchat.com/official?download", "https://packages.vrchat.com/official/?download")):
+            self.assertTrue(same_address(a, b), (a, b))
+        for a, b in (("https://example.com/a", "https://example.com/b"), ("https://example.com/vpm.json", "https://example.com/vpm.json?x=1"),
+                     ("https://example.com:8443/a", "https://example.com/a"), ("http://example.com/a", "https://example.com/a"),
+                     ("https://Example.com/A", "https://example.com/a"), ("", ""), (None, "https://example.com")):
+            self.assertFalse(same_address(a, b), (a, b))
 
 
 class Logbook(unittest.TestCase):

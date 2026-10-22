@@ -2213,9 +2213,7 @@ async function pjChooseContents(product) {
     (many ? `<p class="hint">${esc(tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant)."))}</p>` : "") +
     `<ul class="pj-picklist">${product.contents.map((c, i) => `<li><label class="check"><input type="checkbox" value="${i}"${many && c.kind === "unitypackage" ? "" : " checked"}> ` +
       `<span><span translate="no">${esc(c.label)}</span> <span class="muted">${esc(c.kind === "unitypackage" ? tr("Unity package") : tr("VPM package"))}${c.member ? ` · <span translate="no">${esc(c.file)}</span>` : ""}</span></span></label></li>`).join("")}</ul>` +
-    (product.suggested.length ? `<p class="hint">${esc(tr("It needs these too, from their own repositories:"))}</p><ul class="pj-picklist">${product.suggested.map((s, i) =>
-      `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${esc(s.package)}</span>` +
-      (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>` : "") + `</label></li>`).join("")}</ul>` : "") +
+    pjNeedsList(product.suggested, "It needs these too, from their own repositories:") + pjAlready(product.already || []) +
     `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put these in"))}</button></div>`);
   if (!pick.ok) return null;
   const boxes = [...pick.dlg.querySelectorAll("input[type=checkbox]:checked")];
@@ -2224,18 +2222,38 @@ async function pjChooseContents(product) {
   const sugg = boxes.filter(b => b.dataset.sugg).map(b => product.suggested[+b.dataset.sugg]);
   return { picks, suggested: sugg };
 }
+// What products need (/api/vpm/product), as the project stands: what it has already (or New project's form has) isn't
+// offered again, only said; and a repository you have that gives a package already is used for it, never added again
+// (in_repo), so one added in ALCOM or the Creator Companion under another address isn't added twice.
+function pjSplitNeeds(product, have) {
+  const keep = [], already = [];
+  for (const s of product.suggested || []) (s.in_project != null || (have && have.has(s.package)) ? already : keep).push(s);
+  product.suggested = keep;
+  product.already = already;
+  return product;
+}
+const pjNeedsList = (list, heading) => list.length ? `<p class="hint">${esc(tr(heading))}</p><ul class="pj-picklist">${list.map((s, i) =>
+  `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${esc(s.package)}</span>` +
+  (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>`
+    : s.in_repo ? ` <span class="muted">(${trHTML("from {0}", `<span translate="no">${esc(s.in_repo)}</span>`)})</span>` : "") +
+  `</label></li>`).join("")}</ul>` : "";
+const pjAlready = list => list.length ? `<p class="hint pj-already">${trHTML("Already in the project: {0}.",
+  `<span translate="no">${esc(listed(list.map(s => s.package + (s.in_project ? " " + s.in_project : ""))))}</span>`)}</p>` : "";
 // ---- products into a project from the selection bar and right-click, on both pages: Put in a project..., and New
 // project with these... What's put in of each is all its packages, unless it has several to choose from (a PC and a
 // Quest one, say), when it asks; what they need (lilToon, Modular Avatar...) comes with a tick to leave it out.
 const PROJECT_ACTIONS = () => ({ name: "Projects", items: [
   { label: "Put in a project...", run: list => putInProject(list) },
   { label: "New project with these...", run: list => newProjectWith(list) }] });
-async function pjPicksFor(list) {   // {picks, suggested, skipped (not downloaded, or no package in it)}, or null
-  const picks = [], suggested = new Map(), skipped = [];
+// {picks, suggested, already (what the project has of what they need), skipped (not downloaded, or no package in it)},
+// or null; where: {path} of a project on the list, or {have}: the packages New project's form has
+async function pjPicksFor(list, where = {}) {
+  const picks = [], suggested = new Map(), already = new Map(), skipped = [];
   for (const a of list) {
-    const r = a.tag_key ? await api(`/api/vpm/product?key=${encodeURIComponent(a.tag_key)}`) : null;
-    const product = r && r.ok ? await r.json() : null;
+    const r = a.tag_key ? await api(`/api/vpm/product?key=${encodeURIComponent(a.tag_key)}${where.path ? "&path=" + encodeURIComponent(where.path) : ""}`) : null;
+    const product = r && r.ok ? pjSplitNeeds(await r.json(), where.have) : null;
     if (!product || !product.contents.length) { skipped.push(a.name); continue; }
+    for (const s of product.already) already.set(s.package, s);
     let got = { picks: product.contents.map(c => ({ key: product.key, kind: c.kind, file: c.file, member: c.member,
                                                      label: c.label, product: product.name })), suggested: product.suggested };
     if (product.contents.filter(c => c.kind === "unitypackage").length > 1) {
@@ -2246,7 +2264,7 @@ async function pjPicksFor(list) {   // {picks, suggested, skipped (not downloade
     for (const s of got.suggested) suggested.set(s.package, s);
   }
   if (skipped.length) toast(tr("Left out, with no Unity package or VPM package downloaded: {0}.", listed(skipped)));
-  return { picks, suggested: [...suggested.values()], skipped };
+  return { picks, suggested: [...suggested.values()], already: [...already.values()], skipped };
 }
 async function pjLoaded() {   // the projects, for the menus (read when Projects hasn't been opened yet)
   if (!PJ.data) {
@@ -2275,13 +2293,11 @@ async function putInProject(list) {
 // These products into a project: what's in each (asked when one has several to choose from), shown before it's put
 // in, with what they need from their own repositories ticked to come too. True when it's started.
 async function pjPutIn(project, list) {
-  const got = await pjPicksFor(list);
+  const got = await pjPicksFor(list, { path: project.path });
   if (!got || !got.picks.length) return false;
   const ok = await pjDialog(`<p><b>${esc(tr("Put these in {0}?", project.name))}</b></p>` +
     `<ul class="pj-picklist">${got.picks.map(x => `<li><b translate="no">${esc(x.product)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span></li>`).join("")}</ul>` +
-    (got.suggested.length ? `<p class="hint">${esc(tr("They need these too, from their own repositories:"))}</p><ul class="pj-picklist">${got.suggested.map((s, i) =>
-      `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${esc(s.package)}</span>` +
-      (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>` : "") + `</label></li>`).join("")}</ul>` : "") +
+    pjNeedsList(got.suggested, "They need these too, from their own repositories:") + pjAlready(got.already) +
     `<p class="hint">${esc(tr("Nothing already in the project is replaced."))}</p>` +
     `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put them in"))}</button></div>`, "wide");
   if (!ok.ok) return false;
@@ -2300,7 +2316,7 @@ async function newProjectWith(list) {   // Projects' New project, with these in 
   openProjects(true);
 }
 async function pjFormWith(form, list) {   // these products, and what they need, into New project's form
-  const got = await pjPicksFor(list);
+  const got = await pjPicksFor(list, { have: new Set(Object.keys(form.packages)) });
   if (!got || !got.picks.length) return false;
   const extra = await pjAddSuggested(got.suggested);
   form.picks.push(...got.picks);

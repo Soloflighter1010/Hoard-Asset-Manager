@@ -1434,7 +1434,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self._hidden_key(key):
                     return self._json({"error": "Unlock your hidden library first."}, 403)
                 index = srv.index(stale_ok=True)
-                return self._json(srv.vpm.product(asset, srv.needs_view(index).get(asset["id"])))
+                return self._json(srv.vpm.product(asset, srv.needs_view(index).get(asset["id"]), one("path") or None))
         except vpm_api.ProjectsError as e:
             return self._json({"error": str(e)}, 400)
         return self._send(404, b"Not found", "text/plain")

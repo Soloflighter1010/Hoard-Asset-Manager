@@ -155,7 +155,7 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual((box["x"], box["width"]), (0, 1280), "the whole width")
         self.assertLessEqual(abs(box["y"] - bar), 2, "from the bar down")
         self.assertGreaterEqual(box["y"] + box["height"], 899, "to the bottom")
-        self.assertEqual(page.locator(".pj-tabs .pj-tab").all_inner_texts(), ["Projects", "Repositories", "Backups", "Unity and folders"])
+        self.assertEqual(page.locator(".pj-tabs .pj-tab").all_inner_texts(), ["Projects", "Repositories", "Backups", "Unity and folders", "Logs"])
         rows = page.locator("#projectsBody .pj-list > li")
         colour = lambda n: rows.nth(n).evaluate("e => getComputedStyle(e).backgroundColor")  # noqa: E731
         self.assertNotEqual(colour(0), colour(1), "rows alternate")
@@ -355,6 +355,45 @@ class ProjectsPanel(unittest.TestCase):
         page.keyboard.press("Escape")
         page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
         self.assertTrue(bar.is_hidden())
+
+    def test_what_products_need_as_the_project_stands(self):
+        """Put in a project: what the products need that the project has already isn't offered again, only said; one a
+        repository you have gives already says so, and that repository isn't added again; only one you don't have is."""
+        page = self.page
+        asked, added = [], []
+
+        def product(route):   # (the sample's Rusk, as if it needed these)
+            asked.append(route.request.url)
+            reply = route.fetch()
+            data = reply.json()
+            data["suggested"] = [
+                {"package": "com.vrchat.avatars", "repo": None, "repo_added": True, "in_repo": "Official", "in_project": "3.7.0"},
+                {"package": "com.vrcfury.vrcfury", "repo": "https://vcc.vrcfury.com", "repo_added": True, "in_repo": "VRCFury Repo", "in_project": None},
+                {"package": "nadena.dev.modular-avatar", "repo": "https://vpm.nadena.dev/vpm.json", "repo_added": False, "in_repo": None, "in_project": None}]
+            route.fulfill(response=reply, json=data)
+        page.route("**/api/vpm/product*", product)
+        page.route("**/api/vpm/repos/add", lambda route: added.append(json.loads(route.request.post_data)["url"]) or route.fulfill(json={"ok": True}))
+        page.route("**/api/vpm/preview", lambda route: route.fulfill(status=400, json={"error": "(not in the sample)"}))
+        self.srv.project_jobs.project_runner = lambda what: "Done."
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        page.click("[data-pj=sub][data-sub=library]")
+        page.click("[data-pj=addprod]")
+        page.wait_for_url("**/downloads*")
+        page.locator("#bulk [data-main]").wait_for()
+        page.locator(".slot", has_text="Rusk").click()
+        page.locator("#bulk [data-main]").click()
+        sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
+        sure.wait_for()
+        text = sure.inner_text()
+        self.assertIn("path=", asked[0], "asked as the project stands")
+        self.assertIn("Already in the project: com.vrchat.avatars 3.7.0.", text)
+        self.assertEqual(sure.locator("input[data-sugg]").count(), 2, "not offered again")
+        self.assertIn("(from VRCFury Repo)", text)
+        self.assertNotIn("adds the repository https://vcc.vrcfury.com", text)
+        self.assertIn("adds the repository https://vpm.nadena.dev/vpm.json", text)
+        sure.locator("button[value=yes]").click()
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        self.assertEqual(added, ["https://vpm.nadena.dev/vpm.json"], "only the repository you don't have is added")
 
     def test_logs(self):
         """Projects' Logs, as ALCOM's and the Creator Companion's: what Hoard did and what went wrong, newest last,

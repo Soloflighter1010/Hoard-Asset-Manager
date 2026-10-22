@@ -170,12 +170,25 @@ class Service:
                         and (pre or not i.version.is_pre or str(i.version) == keep)}, reverse=True)
         return [{"version": str(v), "pre": v.is_pre} for v in found[:MAX_VERSIONS_LISTED]]
 
-    def product(self, asset: dict, needs: dict | None) -> dict:
-        """What in a downloaded product can go into a project, and the VPM packages for what it needs."""
+    def product(self, asset: dict, needs: dict | None, project: str | None = None) -> dict:
+        """What in a downloaded product can go into a project, and the VPM packages for what it needs: each with
+        whether a repository you have already gives it (in_repo: which; then its own isn't added again), and, for a
+        project on the list, the version the project already has of it (in_project)."""
         tools = [t["key"] for t in (needs or {}).get("tools", [])]
         coll = self.collection()
-        have_repo = {r.url for r in coll.repos if r.url}
-        suggested = [{**s, "repo_added": s["repo"] is None or s["repo"] in have_repo} for s in suggested_packages(tools)]
+        has = {}
+        if project:
+            try:
+                p = UnityProject.load(self.listed(project))
+                has = {**{n: "" for n in p.dependencies}, **{n: str(v) for n, (v, _) in p.locked.items()}}
+            except (ProjectsError, ProjectError):
+                pass   # (not one on the list: what it has isn't known)
+        suggested = []
+        for s in suggested_packages(tools):
+            source = coll.provides(s["package"]) or (coll.has_repo(s["repo"]) if s["repo"] else None)
+            suggested.append({**s, "repo_added": s["repo"] is None or source is not None,
+                              "in_repo": source.label() if source else None,
+                              "in_project": has.get(s["package"]) if s["package"] in has else None})
         return {"name": asset["name"], "key": asset["tag_key"], "contents": contents(asset), "suggested": suggested}
 
     # ---- changes, worked out (for the page to show before they're made) and made (in a job)
