@@ -2677,8 +2677,8 @@ async function loadSets() {
   } catch (e) { got = { error: true, sets: [] }; }
   got.for = asked;
   if (asked !== DATA) return;   // (the page has read everything again: it asks again)
-  SETS = got;
-  if (openWish()) T.render(); else drawSets();   // (a wishlist's tags and creators are in the filters beside it)
+  SETS = got;   // (where the page is is known now, a set or a wishlist: #180)
+  if (wishScope() || openWish()) T.render(); else drawSets();   // (a wishlist's tags and creators are in the filters beside it)
 }
 const setPic = src => `<img src="${esc(keyed(src))}" alt="" loading="lazy" decoding="async">`;
 const setPlaceholder = (name, by) => `<span class="ph" style="--h:${hue(by || name)}" translate="no"><b>${esc(initials(name))}</b></span>`;
@@ -2772,11 +2772,15 @@ function setMoreHTML(s) {
 const WISH = { set: "", cur: "", min: "", max: "" };
 const openWish = () => { const s = inSets() && state.set && SETS && !SETS.error ? SETS.sets.find(x => x.id === state.set) : null; return s && isWish(s) ? s : null; };
 let wishScoped;   // the wishlist the filters were last for ("" none, undefined not known yet)
-function wishScope() {   // into a wishlist or out of one, the tags and creator chosen start again: they were another list's
-  if (inSets() && state.set && !SETS) return;   // (not read yet: once it is, it's where the page was opened)
+function wishScope() {   // into a wishlist or out of one, the tags and creator chosen start again: they were another list's.
+  if (inSets() && state.set && !SETS) return false;   // (not read yet: once it is, it's where the page was opened)
   const w = openWish(), id = w ? w.id : "";
-  if (wishScoped !== undefined && id !== wishScoped && (id || wishScoped)) { state.tags.clear(); state.creator = ""; }
+  // its price range too, before anything of it is counted: another list's would empty its filters (issue #180)
+  if (w && WISH.set !== id) Object.assign(WISH, { set: id, cur: "", min: "", max: "" });
+  const changed = wishScoped !== undefined && id !== wishScoped && !!(id || wishScoped);
+  if (changed) { state.tags.clear(); state.creator = ""; }
   wishScoped = id;
+  return changed;
 }
 let ownTagsFor = null, ownTags = new Map();
 function wishOwnTags(i) {   // your tags on a wishlist's product you have (by the key tags use)

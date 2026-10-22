@@ -555,6 +555,45 @@ class LookInsidePage(unittest.TestCase):
                     urllib.request.urlopen(req)
                 self.assertEqual(e.exception.code, 404)
 
+    def test_while_files_are_being_taken_out(self):
+        """While Extract runs: ticking a box (which draws the bar again) doesn't turn its buttons back on; closing
+        the window says how it went, without an error; and an empty folder counts as no files (issue #177)."""
+        import threading
+        from hoard import server
+        go, real = threading.Event(), server.packages.extract
+
+        def slow(*a, **k):
+            go.wait(15)
+            return real(*a, **k)
+        with mock.patch.object(server, "reveal", lambda p: None), mock.patch.object(server.packages, "extract", slow):
+            page = self.open_hoodie()
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.locator("#detail .files li", has_text="Hoodie.unitypackage").locator("[data-act='inside']").click()
+            win = page.locator("#insideWin")
+            win.locator(".sum", has_text="2 files, ").wait_for()
+            win.locator("[data-x=extract][data-what=all]").click()
+            win.locator("[data-x=extract][data-what=chosen]", has_text="Taking them out").wait_for()
+            win.locator("summary", has_text="Assets").click()
+            win.locator("summary", has_text="Creator").locator("input.pick").check()   # (the bar, drawn again)
+            self.assertTrue(win.locator("[data-x=extract][data-what=all]").is_disabled(), "still taking them out")
+            self.assertTrue(win.locator("[data-x=extract][data-what=chosen]").is_disabled())
+            win.locator(".win-x").click()   # closed before it's done
+            go.set()
+            page.get_by_text("Took 2 files out, into").wait_for()
+            page.locator("#detail .files li", has_text="Hoodie.unitypackage").locator("[data-act='inside']").click()
+            win.locator(".sum", has_text="2 files, ").wait_for()
+            empty = page.evaluate("""() => {
+                const d = document.createElement("details");
+                d.innerHTML = '<summary><input class="pick" type="checkbox" data-pick="d:0:Assets/Empty" data-count="0"></summary>';
+                const box = d.querySelector("input");
+                box.checked = true;
+                pickChanged(box);
+                return [INSIDE.pick.get("d:0:Assets/Empty"), document.querySelector("#insideWin [data-what=chosen]").textContent];
+            }""")
+            self.assertEqual(empty, [0, "Choose files to extract"])
+            self.assertEqual(errors, [])
+
     def test_when_nothing_could_be_taken_out_it_says_why(self):
         """Every chosen file left out: Extract says why, and leaves no empty folder behind (issue #174)."""
         import json, urllib.request

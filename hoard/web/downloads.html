@@ -2299,16 +2299,17 @@ function pickBox(key, count, name) {
   return `<input type="checkbox" class="pick" data-pick="${esc(key)}" data-count="${count}"${on ? " checked" : ""}${under ? " disabled" : ""}` +
     ` aria-label="${esc(tr("Choose {0}", name))}">`;
 }
-function insideBar() {
+function insideBar() {   // (while files are being taken out, its buttons stay off, however it's drawn again: #177)
   const n = [...INSIDE.pick.values()].reduce((t, c) => t + c, 0), packaged = INSIDE.kind !== "zip" || INSIDE.packages.length;
-  return `<div class="inside-bar"><button class="primary sm" data-x="extract" data-what="chosen"${n ? "" : " disabled"}>` +
-    `${esc(n ? tr(n === 1 ? "Extract the chosen file" : "Extract the {0} chosen files", n.toLocaleString()) : tr("Choose files to extract"))}</button>` +
-    `<button class="ghost sm" data-x="extract" data-what="all">${esc(tr("Extract everything"))}</button>` +
+  const busy = INSIDE.busy ? " disabled" : "";
+  return `<div class="inside-bar"><button class="primary sm" data-x="extract" data-what="chosen"${n && !busy ? "" : " disabled"}>` +
+    `${esc(busy ? tr("Taking them out...") : n ? tr(n === 1 ? "Extract the chosen file" : "Extract the {0} chosen files", n.toLocaleString()) : tr("Choose files to extract"))}</button>` +
+    `<button class="ghost sm" data-x="extract" data-what="all"${busy}>${esc(tr("Extract everything"))}</button>` +
     (packaged ? `<label class="check"><input type="checkbox" id="insideMetas"${INSIDE.metas ? " checked" : ""}> ${esc(tr("With Unity's .meta files"))}</label>` : "") + `</div>`;
 }
 function pickChanged(box) {
   const key = box.dataset.pick;
-  if (box.checked) INSIDE.pick.set(key, +box.dataset.count || 1); else INSIDE.pick.delete(key);
+  if (box.checked) INSIDE.pick.set(key, Number(box.dataset.count)); else INSIDE.pick.delete(key);   // (an empty folder: 0)
   if (key.startsWith("d:")) {   // a folder: what's in it comes with it (and is no longer chosen on its own)
     const n = key.split(":")[1], under = key.slice(`d:${n}:`.length) + "/";
     for (const k of [...INSIDE.pick.keys()]) if (/^[pd]:/.test(k) && k.split(":")[1] === n && k.slice(`d:${n}:`.length).startsWith(under)) INSIDE.pick.delete(k);
@@ -2322,14 +2323,15 @@ function pickChanged(box) {
   const bar = $("#insideBody .inside-bar");
   if (bar) bar.outerHTML = insideBar();
 }
-async function extractInside(what, button) {
-  const picks = what === "all" ? ["all"] : [...INSIDE.pick.keys()];
-  if (!picks.length) return;
-  for (const b of document.querySelectorAll("#insideBody [data-x=extract]")) b.disabled = true;
-  button.textContent = tr("Taking them out...");
-  const r = await apiPost("/api/look-inside/extract", { path: INSIDE.path, picks, metas: !!INSIDE.metas, open: true });
-  const bar = $("#insideBody .inside-bar");
-  if (bar) bar.outerHTML = insideBar();
+async function extractInside(what) {
+  const I = INSIDE, picks = what === "all" ? ["all"] : [...I.pick.keys()];
+  if (!picks.length || I.busy) return;
+  const redraw = () => { const bar = INSIDE === I && $("#insideBody .inside-bar"); if (bar) bar.outerHTML = insideBar(); };
+  I.busy = true;
+  redraw();
+  const r = await apiPost("/api/look-inside/extract", { path: I.path, picks, metas: !!I.metas, open: true });
+  I.busy = false;
+  redraw();   // (only while it's still this file's window: closed, or another file opened, it just says how it went)
   if (!r.ok) {   // (with what was left out, and why, when nothing could be: issue #174)
     const why = (r.data.skipped || [])[0];
     toast(tr(r.data.error || "Those files couldn't be taken out.") + (why ? ` ${why.name} (${tr(why.why)})` : ""));
@@ -2362,7 +2364,7 @@ function wireInside() {
   });
   w.addEventListener("click", e => {
     const x = e.target.closest("[data-x=extract]");
-    if (x && INSIDE && !x.disabled) extractInside(x.dataset.what, x);
+    if (x && INSIDE && !x.disabled) extractInside(x.dataset.what);
     if (e.target.matches("summary input.pick")) e.stopPropagation();   // (choosing a folder doesn't open or close it)
   });
   let t;

@@ -395,6 +395,51 @@ class InHoard(unittest.TestCase):
             browser.close()
         self.assertEqual(errors, [])
 
+    def test_a_wishlists_filters_are_its_own(self):
+        """The filters beside a wishlist count its products under its own price range, never the last one's; and a
+        tag chosen elsewhere doesn't carry into it, even coming back to it after a reload on a set (issue #180)."""
+        sets.SetStore().put_wishlists([
+            {"store": "booth", "list": "Loved items", "url": "u", "products": [
+                product("Fox Hoodie", "1,200 JPY"), product("Fox Ears", "800 JPY", creator="Ash Atelier"),
+                product("Wolf Hoodie", "3,000 JPY"), product("Snow Cap", "500 JPY")]},
+            {"store": "gumroad", "list": "Winter", "url": "w", "products": [
+                product("Scarf", "12.00 USD", "gumroad", creator="Snow Co"), product("Mittens", "8.00 USD", "gumroad", creator="Snow Co")]}])
+        made = sets.SetStore().change({"action": "create", "name": "Rusk, winter", "items": ["booth:rusk"]},
+                                      lambda key: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"})["made"]
+        ids = {s["name"]: s["id"] for s in sets.SetStore().load()["sets"]}
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            base = self.srv.entry_url().split("/#")[0]
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(base + "/#store=Sets")
+            page.locator(".settile", has_text="Booth: Loved items").click()
+            page.locator('details[data-fold="wish-buy"]').wait_for()
+            page.fill('[data-wish="min"]', "1000")
+            page.click('[data-setx="back"]')
+            page.locator(".settile", has_text="Gumroad: Winter").click()
+            page.locator('details[data-fold="wish-buy"] .nm-t', has_text="Scarf").wait_for()
+            self.assertEqual(page.locator("#creators button").evaluate_all("l => l.map(b => b.dataset.creator + ' ' + b.querySelector('.n').textContent)"),
+                             ["Snow Co 2"], "its own creators, not none for the last one's price range")
+            # a tag chosen on a set, the page reloaded there, then Back to a wishlist: the tag stays with the set
+            page.goto(base + f"/#store=Sets&set={ids['Booth: Loved items']}")
+            page.locator('details[data-fold="wish-buy"]').wait_for()
+            page.goto(base + f"/#store=Sets&set={made}&tags=fox")
+            page.reload()
+            page.locator(".sethead h2", has_text="Rusk, winter").wait_for()
+            page.go_back()
+            page.locator(".sethead h2", has_text="Booth: Loved items").wait_for()
+            buy = page.locator('details[data-fold="wish-buy"]')
+            buy.locator(".nm-t", has_text="Wolf Hoodie").wait_for()
+            self.assertEqual(buy.locator(".slot.ext").count(), 4)
+            self.assertEqual(page.locator('#status [data-clear="tag"]').count(), 0)
+            browser.close()
+        self.assertEqual(errors, [])
+
     def test_a_list_read_again_shows_without_opening_it_again(self):
         """Read it again brought a wishlist up to date, but the page kept showing it as it was, until something else
         (making a new list) made it read the sets again. When the read ends, the page reads them again."""
