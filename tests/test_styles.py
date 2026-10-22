@@ -217,9 +217,10 @@ class Guide(unittest.TestCase):
                 self.assertEqual(page.locator("[data-token=gold]").inner_text().lower(), themes.THEMES["hoard"]["dark" if page.evaluate(
                     "matchMedia('(prefers-color-scheme: dark)').matches") else "light"]["gold"].lower())
             for font in ("standard", "dyslexic"):   # Workbench's list: each column's words whole, in either font,
-                for width in (1280, 900, 700, 520):   # and the name keeps its room as the list narrows
+                page.goto(f"{base}/styleguide?style=workbench&font={font}")
+                for width in range(1300, 480, -20):   # and the name keeps its room as the list narrows
                     page.set_viewport_size({"width": width, "height": 800})
-                    page.goto(f"{base}/styleguide?style=workbench&font={font}")
+                    page.wait_for_timeout(30)
                     cut = page.evaluate("() => [...document.querySelectorAll('#tiles ~ .sg-item .row-meta > span')]"
                                         ".filter(s => s.offsetParent && s.scrollWidth > s.clientWidth + 1).map(s => s.textContent)")
                     self.assertEqual(cut, [], f"{font}, {width} wide")

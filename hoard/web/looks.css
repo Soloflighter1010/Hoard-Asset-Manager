@@ -185,10 +185,17 @@
 /* as the list gets narrower (a smaller window, a larger text size, a product's details open beside it), the row keeps
    its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */
 [data-style="workbench"] .grid { container-type: inline-size; }
+@container (max-width: 860px) {   /* (OpenDyslexic's wider words make way sooner) */
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 110px 192px; gap: 10px; }
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta .rm-when { display: none; }
+}
 @container (max-width: 760px) {
   [data-style="workbench"] .grid .row-meta { grid-template-columns: 96px 152px; gap: 10px; }
-  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 110px 192px; }
   [data-style="workbench"] .grid .row-meta .rm-when { display: none; }
+}
+@container (max-width: 640px) {
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: auto; }
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta > :not(.rm-state) { display: none; }
 }
 @container (max-width: 560px) {   /* (in either font: the OpenDyslexic columns above don't hold here) */
   [data-style="workbench"] .grid .row-meta, [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: auto; }
