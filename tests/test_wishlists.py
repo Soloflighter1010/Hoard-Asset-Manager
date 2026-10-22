@@ -344,6 +344,12 @@ class InHoard(unittest.TestCase):
             page.fill('[data-wish="max"]', "20")
             self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Snow Cap"])
             page.click('[data-setx="wclear"]')
+            # back to every set: the wishlist goes with it (its groups stayed below the sets, after a filter)
+            page.click('[data-setx="back"]')
+            page.locator(".settile", has_text="Booth: Loved items").wait_for()
+            self.assertEqual(page.locator("#setMore .wishgroup, #setMore .wishbar").count(), 0, "nothing of the wishlist left")
+            page.locator(".settile", has_text="Booth: Loved items").click()
+            buy.wait_for()
             # added by its link
             page.click('[data-setx="addlinks"]')
             page.fill("#addLinks", "https://booth.pm/en/items/4242")

@@ -1123,9 +1123,30 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(got, tuple):
             return got
         s, code, count = got
+        fits = shortlinks.fits(code)
         return self._json({"ok": True, "code": code, "count": count,
                            "left_out": len(s["items"]) - count, "short": self._short_view(s.get("short"), code),
-                           "short_days": shortlinks.LIFETIME_DAYS})
+                           "short_days": shortlinks.LIFETIME_DAYS, "fits": fits,
+                           **({} if fits else {"parts": len(self._share_parts(s))})})
+
+    def _share_parts(self, s: dict) -> list[list[str]]:
+        """A set's products in parts that each fit a short link (sets.share_parts), hidden ones left out of the
+        sizes, as they're left out of what's shared."""
+        return sets.share_parts(s, self._product_details(), leave_out=MarkStore().keys("hidden"))
+
+    def _split_set(self, sid: str):
+        """Split into...: a set too big for one short link, as new sets that each fit (sets.SetStore.split). The set
+        stays as it is."""
+        s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+        if s is None:
+            return self._json({"error": "That set isn't there anymore."}, 400)
+        try:
+            data = sets.SetStore().split(sid, self._share_parts(s))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        threading.Thread(target=rebuild_catalog_quietly, args=(self.server,), daemon=True).start()   # (Unity's Import set)
+        names = {x["id"]: x["name"] for x in data["sets"]}
+        return self._json({"ok": True, "made": data["made"], "names": [names[i] for i in data["made"]]})
 
     def _shorten_set(self, body: dict):
         """Make a set's short link, or update the set behind the one it has (hoard/shortlinks.py): {"id", "code" (the
@@ -1758,6 +1779,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._add_links(str(body.get("id", "")), body.get("links"))
             if body.get("action") == "share":
                 return self._share_set(str(body.get("id", "")))
+            if body.get("action") == "split":   # too big for one short link: sets of it that each fit
+                return self._split_set(str(body.get("id", "")))
             if body.get("action") == "short":   # Make a short link, or update the one it has
                 return self._shorten_set(body)
             if body.get("action") == "unshort":

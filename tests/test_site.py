@@ -23,6 +23,7 @@ RELEASES = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/lat
 sys.path.insert(0, str(REPO / "scripts"))
 import build_site_changelog as changelog  # noqa: E402
 import build_site_docs as docs  # noqa: E402
+import build_press_kit as press  # noqa: E402
 import site_chrome  # noqa: E402
 
 
@@ -32,11 +33,12 @@ def built_site() -> Path:
     shutil.copytree(SITE, out)
     changelog.main([str(out / "changelog.html")])
     docs.build(out / "docs")
+    press.build(out)
     return out
 
 
 PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-         "stores.html", "set.html", "save-for-hoard.html", "404.html")
+         "stores.html", "set.html", "save-for-hoard.html", "press.html", "404.html")
 
 
 def every_page(site: Path) -> list[str]:
@@ -174,7 +176,7 @@ class TheSite(unittest.TestCase):
         site = built_site()
         cards = set()
         for name in ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-                     "stores.html", "set.html", "docs/index.html", "docs/Settings.html"):
+                     "stores.html", "set.html", "press.html", "docs/index.html", "docs/Settings.html"):
             html = (site / name).read_text("utf-8")
             image = re.search(r'<meta property="og:image" content="([^"]+)">', html)
             self.assertIsNotNone(image, f"{name}: no og:image")
@@ -188,9 +190,37 @@ class TheSite(unittest.TestCase):
             self.assertEqual(jpeg_size(picture.read_bytes()), (1200, 630), "a JPEG every site shows, at 1.91:1")
             self.assertIn('<meta name="theme-color" content="#F0B429">', html, f"{name}: the embed's edge in Hoard's gold")
             cards.add(image.group(1))
-        self.assertEqual(len(cards), 10, "each page its own card, with its name on it (the docs share one)")
+        self.assertEqual(len(cards), 11, "each page its own card, with its name on it (the docs share one)")
         self.assertEqual({p.name for p in SITE.glob("img/social*.jpg")}, {c.rsplit("/", 1)[1] for c in cards},
                          "scripts/make_social_cards.py draws just the cards the pages show")
+
+    def test_the_press_kit_has_everything_it_says(self):
+        """press.html: its logos as SVG and PNG, linked; its download, made on deploy, with the logos, every
+        screenshot the site shows (full size, dark and light) and the page's words; and every page links it."""
+        import zipfile
+        page = (SITE / "press.html").read_text("utf-8")
+        for name in ("hoard-logo-on-dark", "hoard-logo-on-light", "hoard-mark"):
+            for kind in ("svg", "png"):
+                self.assertIn(f'href="img/press/{name}.{kind}"', page)
+                self.assertTrue((SITE / "img" / "press" / f"{name}.{kind}").is_file(), f"{name}.{kind}")
+            svg = (SITE / "img" / "press" / f"{name}.svg").read_text("utf-8")
+            self.assertNotIn("var(--", svg, "a file of its own: its colours written in")
+            self.assertIn('xmlns="http://www.w3.org/2000/svg"', svg)
+        site = built_site()
+        with zipfile.ZipFile(site / "press" / "hoard-press-kit.zip") as z:
+            names = set(z.namelist())
+            about = z.read("hoard-press-kit/About Hoard.txt").decode()
+        shots = {f"hoard-press-kit/screenshots/{p.name}" for p in SITE.glob("img/*-dark.webp")} | \
+                {f"hoard-press-kit/screenshots/{p.name}" for p in SITE.glob("img/*-light.webp")}
+        self.assertTrue(shots and shots <= names, "every screenshot, full size")
+        self.assertFalse(any(n.endswith(("-800.webp", "-1200.webp")) for n in names), "not the smaller copies too")
+        self.assertIn("hoard-press-kit/logos/hoard-logo-on-dark.svg", names)
+        for words in ("In a sentence", "Hoard is a free, open-source desktop app", "Runs on: Windows 10 and 11",
+                      "Get in touch"):
+            self.assertIn(words, about)
+        self.assertNotIn("<", about, "words, not markup")
+        for name in PAGES:
+            self.assertIn('<a href="press.html">Press kit</a>', (site / name).read_text("utf-8"), f"{name} links it")
 
     def test_the_chosen_store_tab_has_no_line_on_top(self):
         """The app took the coloured line off the chosen tab's top (with the Local tab); the site follows."""

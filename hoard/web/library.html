@@ -755,8 +755,8 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* Projects takes the whole window below the bar (it's a place of its own, not a panel over the page) */
 .projects.win { left: 0; right: 0; top: var(--bar-h); bottom: 0; transform: none; width: auto; max-height: none; border-radius: 0;
   box-shadow: inset 0 1px 0 var(--seam); background: var(--cave); }
-.projects.win > .win-bar { padding-left: max(18px, calc((100% - 1240px) / 2)); padding-right: max(10px, calc((100% - 1260px) / 2)); }
-.projects.win > .win-body { padding: 0 max(20px, calc((100% - 1240px) / 2)) 28px; }
+.projects.win > .win-bar { padding-left: 28px; padding-right: 18px; }   /* (all of the window's width: no column in the middle) */
+.projects.win > .win-body { padding: 0 28px 28px; }
 .pj-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--seam); }
 .pj-tab { width: auto; margin: 0; padding: 7px 14px; border: 0; border-radius: 9px; background: none; color: var(--dust); font: 700 14px var(--body); }
 .pj-tab:hover { color: var(--bone); background: var(--stone); }

@@ -280,6 +280,12 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
   (`open-short`), unlocks it in the page, and adds the code as any other.
 - **Deleting one:** **Delete the short link** (`unshort`), and deleting the set, delete it from the server with
   the token. Backups leave short links out; a restore keeps this computer's.
+- **Too big for one:** the share server takes a locked set of up to 48 KiB of base64url (`shortlinks.MAX_DATA`,
+  `MAX_BYTES` in the Worker); `shortlinks.fits(code)` says whether a code locks to that. `/api/sets` (`share`) says
+  `fits`, and when it doesn't, how many `parts` it takes: `sets.share_parts()` cuts the set's products, in order,
+  into parts each as full as fits (a binary search on each part's length, measured with `share_code` and a name of
+  the longest "(N of N)"), hidden products taking no room. `split` makes them new sets (`SetStore.split`): a
+  wishlist's are wishlists without a `source`, so reading the store's list again changes only the wishlist itself.
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 

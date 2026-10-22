@@ -26,8 +26,9 @@ KEY = re.compile(r"[A-Za-z0-9_-]{22}")              # 128 bits, base64url
 TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")            # 256 bits, base64url
 DATA = re.compile(r"[A-Za-z0-9_-]{42,65536}")       # a locked set, base64url: 31 bytes to 48 KiB
 CODE = re.compile(r"S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})")
+MAX_DATA = 48 * 1024                                # the share server's most for a locked set, base64url (worker.mjs)
 OFFLINE = "Couldn't reach Hoard's share server. Check your connection, and try again."
-TOO_BIG = "This set is too big to share: a short link holds up to about 500 products."
+TOO_BIG = "This set is too big for one short link. Choose Share... again to split it into sets that each fit."
 
 
 class ShortLinkError(Exception):
@@ -45,6 +46,12 @@ def parse(text) -> tuple[str, str] | None:
     text = re.sub(r"\s+", "", text)
     m = CODE.fullmatch(text.split("#", 1)[1] if "#" in text else text)
     return (m[1], m[2]) if m else None
+
+
+def fits(code: str) -> bool:
+    """Whether a set's code, locked (a 12-byte nonce, the code, a 16-byte tag) and in base64url, is small enough for
+    the share server: a set of about 500 products is, depending on its products' names and links."""
+    return -(-(12 + len(code.encode()) + 16) * 4 // 3) <= MAX_DATA
 
 
 def code(sid: str, key: str) -> str:

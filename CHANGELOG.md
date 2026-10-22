@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.2.0
+
+- **A set too big for one short link can be split.** A short link holds about 500 products, and a longer set or
+  wishlist (Booth's Loved items can run to hundreds) couldn't be shared at all. **Share...** now says when a set is
+  too big, and **Split into N sets** makes new sets of its products, in its order, each as full as one short link
+  holds: "Booth: Loved items (1 of 2)", "(2 of 2)", each with the set's note and photos. Share each one. The set
+  itself stays as it is, and a wishlist read from a store is still brought up to date when you read it again.
+- **Projects uses the whole window**, not a column down its middle.
+- **A press kit**, on Hoard's website: what Hoard is, the facts, its logo and colours, and its screenshots, to download
+  in one go. Every page of the site links it.
+- Put right: a wishlist you'd filtered stayed on show below the list of sets after you went back to it.
+
 ## 5.1.0
 
 - **Projects takes the whole window**, with its views as tabs along its top: Projects, Repositories, Backups, and Unity

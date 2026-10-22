@@ -1460,7 +1460,6 @@
  "Couldn't reach Hoard's share server. Check your connection, and try again.": "Hoardの共有サーバーに接続できませんでした。接続を確かめて、もう一度お試しください。",
  "That short link has run out (short links last 14 days), or whoever shared it deleted it.": "その短縮リンクは期限が切れたか(短縮リンクは14日間使えます)、共有した人が削除しました。",
  "That short link was made by another copy of Hoard, so this one can't change it.": "その短縮リンクは別のHoardで作られたため、このHoardでは変更できません。",
- "This set is too big to share: a short link holds up to about 500 products.": "このセットは大きすぎて共有できません。短縮リンクに入るのは約500個の商品までです。",
  "Hoard's share server is busy. Try again later.": "Hoardの共有サーバーが混み合っています。あとでもう一度お試しください。",
  "Hoard's share server didn't take that ({0}). Try again later.": "Hoardの共有サーバーが受け付けませんでした({0})。あとでもう一度お試しください。",
  "That short link's set is damaged. Ask whoever shared it for a new one.": "その短縮リンクのセットは壊れています。共有した人に新しいリンクを頼んでください。",
@@ -1877,5 +1876,14 @@
  "Booth didn't show that item (it may be gone, or for adults only)": "Boothがその商品を表示しませんでした(なくなったか、成人向けかもしれません)",
  "its page couldn't be read": "ページを読み込めませんでした",
  "its page doesn't say what it is": "ページに何の商品か書かれていません",
- "Paste a product's link.": "商品のリンクを貼り付けてください。"
+ "Paste a product's link.": "商品のリンクを貼り付けてください。",
+ "This set is too big for one short link.": "このセットは1つの短縮リンクには大きすぎます。",
+ "A short link holds about 500 products, depending on their names and links. Split it into {0} sets that each fit, and share each one. This set stays as it is.": "短縮リンクに入るのは、商品の名前やリンクにもよりますが約500個までです。それぞれが収まる{0}個のセットに分けて、1つずつ共有してください。このセットはそのまま残ります。",
+ "Split into {0} sets": "{0}個のセットに分ける",
+ "That set couldn't be split.": "そのセットを分けられませんでした。",
+ "Made {0} sets from {1}, each small enough to share: share each one from its tile.": "{1}から{0}個のセットを作りました。どれも共有できる大きさです。それぞれのタイルから共有してください。",
+ "This set is too big for one short link. Choose Share... again to split it into sets that each fit.": "このセットは1つの短縮リンクには大きすぎます。もう一度「共有...」を選ぶと、それぞれが収まるセットに分けられます。",
+ "That set fits in one short link: it doesn't need splitting.": "そのセットは1つの短縮リンクに収まるので、分ける必要はありません。",
+ "Hoard keeps up to {0} sets and wishlists, so this one can't be split into {1} more. Delete some first.": "Hoardが持てるセットとほしい物リストは{0}個までなので、これをさらに{1}個に分けることはできません。先にいくつか削除してください。",
+ "A product in this set is too big for a short link on its own.": "このセットには、それだけで短縮リンクに収まらない大きさの商品があります。"
 }

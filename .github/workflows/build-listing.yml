@@ -156,6 +156,12 @@ jobs:
           python3 scripts/build_site_docs.py "${{ env.listPublishDirectory }}/docs"
           test -s "${{ env.listPublishDirectory }}/docs/index.html" && test -s "${{ env.listPublishDirectory }}/docs/search.json"
 
+      # The press kit's download (press.html): the logos, the screenshots and the page's words, zipped.
+      - name: Build the press kit
+        run: |
+          python3 scripts/build_press_kit.py "${{ env.listPublishDirectory }}"
+          test -s "${{ env.listPublishDirectory }}/press/hoard-press-kit.zip"
+
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:

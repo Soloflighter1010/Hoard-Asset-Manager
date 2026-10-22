@@ -376,6 +376,47 @@ class EndToEnd(unittest.TestCase):
                 page.close()
             browser.close()
 
+    def test_a_set_too_big_for_one_link_is_split_into_sets_that_each_fit(self):
+        """Booth's Loved items of 808 products was too big to share, with no way round it but taking products out:
+        Share... offers to split it into sets that each fit, and a part's short link is taken by the share server."""
+        import random
+        r = random.Random(3)
+        word = lambda: "".join(r.choice("abcdefghijklmnopqrstuvwxyzアバター衣装") for _ in range(r.randint(4, 9)))  # noqa: E731
+        sets.SetStore().put_wishlists([{"store": "booth", "list": "Loved items", "products": [
+            {"store": "booth", "id": str(5000 + n), "name": f"【VRChat】{word()} {word()} {word()}", "creator": word(),
+             "url": f"https://booth.pm/ja/items/{5000 + n}",
+             "thumbnail": f"https://booth.pximg.net/c/300x300_a2_g5/{r.getrandbits(64):016x}/i/{5000 + n}/{r.getrandbits(128):032x}_base_resized.jpg"}
+            for n in range(808)]}])
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Booth: Loved items").click()
+            page.click('#setView [data-setx="share"]')
+            dialog = page.locator("dialog.share")
+            self.assertIn("too big for one short link", dialog.locator(".shortlink").inner_text())
+            self.assertEqual(dialog.get_by_role("button", name="Make a short link").count(), 0)
+            split = dialog.locator('[data-short="split"]')
+            parts = int(re.search(r"Split into (\d+) sets", split.inner_text())[1])
+            self.assertGreaterEqual(parts, 2)
+            split.click()
+            page.get_by_text(f"Made {parts} sets from Booth: Loved items").wait_for()
+            names = [s["name"] for s in sets.SetStore().load()["sets"]]
+            self.assertEqual(names, ["Booth: Loved items"] + [f"Booth: Loved items ({n} of {parts})" for n in range(1, parts + 1)])
+            # a part: its short link is made, and the share server takes it
+            page.click('[data-setx="back"]')
+            page.locator("#setView .settile", has_text=f"Booth: Loved items (1 of {parts})").click()
+            page.click('#setView [data-setx="share"]')
+            dialog.get_by_role("button", name="Make a short link").click()
+            page.get_by_text("Made a short link. It works until").wait_for()
+            browser.close()
+        self.assertEqual(errors, [])
+
     def test_a_deleted_set_takes_its_short_link_with_it(self):
         made = self.api("/api/sets", {"action": "create", "name": "Rusk", "items": [RUSK]})["made"]
         code = self.api("/api/sets", {"action": "share", "id": made})["code"]

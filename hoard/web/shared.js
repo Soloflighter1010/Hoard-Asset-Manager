@@ -2808,7 +2808,7 @@ function wishChanged() {   // a filter changed: the groups again (the bar stays 
   const s = SETS && SETS.sets.find(x => x.id === state.set), box = $("#wishGroups");
   if (!s || !box) return;
   box.innerHTML = wishGroups(s);
-  setMoreShown = "";   // (drawn again whole next time)
+  setMoreShown = null;   // (drawn again whole next time, or emptied: "" is what the list of sets has there)
   const clear = $('#setMore [data-setx="wclear"]');
   if (clear) clear.hidden = !(WISH.tags.size || WISH.min || WISH.max);
 }
@@ -2919,15 +2919,20 @@ function showShare(s, got) {
     `<div class="ask-row"><button class="ghost" value="no">Close</button></div></form>`;
   const box = d.querySelector(".shortlink");
   const drawShort = () => {
-    const sh = got.short, days = got.short_days || 14;
+    const sh = got.short, days = got.short_days || 14, big = got.fits === false;
+    // too big for one short link: split into sets that each fit (the set itself stays), and share each of those
+    const split = big ? `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ` +
+        `${esc(tr("A short link holds about 500 products, depending on their names and links. Split it into {0} sets that each fit, and share each one. This set stays as it is.", got.parts))}</p>` +
+        `<div class="ask-row"><button class="primary" type="button" data-short="split">${esc(tr("Split into {0} sets", got.parts))}</button></div>` : "";
     box.innerHTML = sh
       ? `<p><input readonly value="${esc(sh.link)}" aria-label="${esc(tr("The set's short link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` +
-        `<p class="hint">${esc(tr("It works until {0}.", day(sh.expires)))} ${esc(tr(sh.changed
+        `<p class="hint">${esc(tr("It works until {0}.", day(sh.expires)))} ${esc(big ? "" : tr(sh.changed
           ? "The set has changed since: update the link to share it as it is now." : "Updating it keeps it {0} days from today.", days))}</p>` +
         `<div class="ask-row"><button class="ghost danger" type="button" data-short="delete">Delete the short link</button>` +
         `<a class="ghost" href="${esc(safeUrl(sh.link))}" target="_blank" rel="noopener noreferrer">Open it</a>` +
-        `<button class="${sh.changed ? "primary" : "ghost"}" type="button" data-short="update">Update the link</button>` +
-        `<button class="${sh.changed ? "ghost" : "primary"}" type="button" data-copy="short">Copy the short link</button></div>`
+        (big ? "" : `<button class="${sh.changed ? "primary" : "ghost"}" type="button" data-short="update">Update the link</button>`) +
+        `<button class="${sh.changed || big ? "ghost" : "primary"}" type="button" data-copy="short">Copy the short link</button></div>` + split
+      : big ? split
       : `<p class="hint">${esc(tr("A set is shared as a short link, which you can update to keep it going."))} ` +
         `${esc(tr("A short link keeps a locked copy of the set on Hoard's share server for {0} days. Only the link opens it: the key is in the link, and never sent to the server. You can delete it whenever you like.", days))}</p>` +
         `<div class="ask-row"><button class="primary" type="button" data-short="make">Make a short link</button></div>`;
@@ -2949,6 +2954,16 @@ function showShare(s, got) {
       act.disabled = false;
       if (!r.ok) { toast(r.data.error || "The short link couldn't be deleted."); return; }
       got.short = null; drawShort(); toast("Deleted the short link.");
+      return;
+    }
+    if (act.dataset.short === "split") {
+      act.disabled = true;
+      const r = await apiPost("/api/sets", { action: "split", id: s.id });
+      act.disabled = false;
+      if (!r.ok) { toast(r.data.error || "That set couldn't be split."); return; }
+      d.close();
+      toast(tr("Made {0} sets from {1}, each small enough to share: share each one from its tile.", r.data.made.length, s.name));
+      await T.reload();
       return;
     }
     if (!canLock()) { toast(NO_LOCK); return; }

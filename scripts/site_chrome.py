@@ -34,7 +34,7 @@ FOOT_LINKS = [("docs/", "Docs"), ("how-it-works.html", "How it works"), ("change
               (f"{GITHUB}/blob/main/PRIVACY.md", "Privacy"), (f"{GITHUB}/blob/main/TERMS.md", "Terms"),
               ("vcc/", "VCC listing"), ("trust.html", "How you can trust Hoard"),
               ("stores.html", "For stores"),
-              ("ai.html", "AI disclosure"), (GITHUB, "GitHub")]
+              ("ai.html", "AI disclosure"), ("press.html", "Press kit"), (GITHUB, "GitHub")]
 # which tab each page is (the rest are none, or are in docs/)
 CURRENT = {"index.html": "./", "how-it-works.html": "how-it-works.html", "trust.html": "trust.html",
            "testers.html": "testers.html", "changelog.html": "changelog.html"}
