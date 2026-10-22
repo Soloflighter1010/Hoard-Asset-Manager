@@ -2953,9 +2953,11 @@ function showShare(s, got) {
   const drawShort = () => {
     const sh = got.short, days = got.short_days || 14, big = got.fits === false;
     // too big for one short link: split into sets that each fit (the set itself stays), and share each of those
-    const split = big ? `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ` +
+    const split = !big ? "" : got.why   // (one product too big on its own: splitting wouldn't help, issue #178)
+      ? `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ${esc(tr(got.why))}</p>`
+      : `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ` +
         `${esc(tr("A short link holds about 500 products, depending on their names and links. Split it into {0} sets that each fit, and share each one. This set stays as it is.", got.parts))}</p>` +
-        `<div class="ask-row"><button class="primary" type="button" data-short="split">${esc(tr("Split into {0} sets", got.parts))}</button></div>` : "";
+        `<div class="ask-row"><button class="primary" type="button" data-short="split">${esc(tr("Split into {0} sets", got.parts))}</button></div>`;
     box.innerHTML = sh
       ? `<p><input readonly value="${esc(sh.link)}" aria-label="${esc(tr("The set's short link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` +
         `<p class="hint">${esc(tr("It works until {0}.", day(sh.expires)))} ${esc(big ? "" : tr(sh.changed
@@ -3011,7 +3013,7 @@ function showShare(s, got) {
   });
   d.addEventListener("close", () => d.remove(), { once: true });
   d.showModal();
-  (box.querySelector("input") || box.querySelector("button")).focus();
+  (box.querySelector("input") || box.querySelector("button") || d.querySelector('button[value="no"]')).focus();   // (nothing to do: Close)
 }
 async function shareSet(s) {
   const r = await apiPost("/api/sets", { action: "share", id: s.id });

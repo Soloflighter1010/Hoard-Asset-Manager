@@ -1124,11 +1124,15 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(got, tuple):
             return got
         s, code, count = got
-        fits = shortlinks.fits(code)
+        fits, more = shortlinks.fits(code), {}
+        if not fits:
+            try:
+                more = {"parts": len(self._share_parts(s))}
+            except ValueError as e:   # a product too big on its own: no split makes it fit, so say so (issue #178)
+                more = {"parts": 0, "why": str(e)}
         return self._json({"ok": True, "code": code, "count": count,
                            "left_out": len(s["items"]) - count, "short": self._short_view(s.get("short"), code),
-                           "short_days": shortlinks.LIFETIME_DAYS, "fits": fits,
-                           **({} if fits else {"parts": len(self._share_parts(s))})})
+                           "short_days": shortlinks.LIFETIME_DAYS, "fits": fits, **more})
 
     def _share_parts(self, s: dict) -> list[list[str]]:
         """A set's products in parts that each fit a short link (sets.share_parts), hidden ones left out of the
@@ -1143,6 +1147,8 @@ class Handler(BaseHTTPRequestHandler):
         target = open_target(srv.cfg, str(body.get("path", "")))
         if not target or not packages.can_look_inside(target.name) or not target.is_file():
             return self._json({"error": "That file isn't on disk anymore."}, 404)
+        if self._hidden_file(target):
+            return self._json({"error": "Unlock your hidden library first."}, 403)
         picks = body.get("picks")
         if not isinstance(picks, list) or not picks or len(picks) > 100_000 or \
                 not all(isinstance(p, str) and len(p) <= 2100 for p in picks):
@@ -1336,6 +1342,28 @@ class Handler(BaseHTTPRequestHandler):
 
     def _hidden_key(self, key) -> bool:
         return isinstance(key, str) and key in MarkStore().keys("hidden") and not self._unlocked()
+
+    def _hidden_file(self, target: Path) -> bool:
+        """Whether a file is in a hidden product's folder while the hidden library is locked (issue #171): Look inside
+        and Extract refuse it, as Make an editable copy does. Folders are compared as they resolve, so another
+        spelling of the same path is the same file."""
+        hidden = MarkStore().keys("hidden")
+        if not hidden or self._unlocked():
+            return False
+        try:
+            real = target.resolve()
+        except OSError:
+            return True
+        for a in self.server.index(stale_ok=True)["assets"]:
+            if a.get("tag_key") not in hidden:
+                continue
+            folder = open_target(self.server.cfg, a.get("folder") or "")
+            try:
+                if folder and (real == folder.resolve() or folder.resolve() in real.parents):
+                    return True
+            except OSError:
+                return True
+        return False
 
     def _vpm_get(self, path: str, query: dict):
         srv = self.server
@@ -1746,6 +1774,8 @@ class Handler(BaseHTTPRequestHandler):
             target = open_target(srv.cfg, str(body.get("path", "")))
             if not target or not packages.can_look_inside(target.name) or not target.is_file():
                 return self._json({"error": "That file isn't on disk anymore."}, 404)
+            if self._hidden_file(target):   # (what's in a hidden product, as its name, stays hidden: #171)
+                return self._json({"error": "Unlock your hidden library first."}, 403)
             try:
                 return self._json(packages.look_inside(target), compress=True)
             except (packages.NotAPackage, OSError):

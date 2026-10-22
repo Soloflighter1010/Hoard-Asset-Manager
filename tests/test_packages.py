@@ -225,7 +225,6 @@ class LookInside(unittest.TestCase):
         self.assertEqual({p.name for p in packages.cache_dir().iterdir()}, {ids[-1]}, "the newest always stays")
 
 
-@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class Extract(unittest.TestCase):
     """Look inside's Extract: the chosen files, or all of them, taken out of a package or a zip into a folder of
     their own, where their paths say, and never anywhere else, whatever a package's paths claim."""
@@ -321,6 +320,7 @@ class Extract(unittest.TestCase):
         self.assertFalse((self.home / "evil.txt").exists())
 
 
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class LookInsidePage(unittest.TestCase):
     """Downloads: Look inside on a product's .unitypackage, and on a .zip with one in it."""
 
@@ -440,6 +440,36 @@ class LookInsidePage(unittest.TestCase):
                 with self.subTest(path=path, action=action), self.assertRaises(urllib.error.HTTPError) as e:
                     urllib.request.urlopen(req)
                 self.assertEqual(e.exception.code, 404)
+
+    def test_a_hidden_products_files_stay_shut_while_locked(self):
+        """Look inside and Extract refuse a hidden product's file while the hidden library is locked, as Make an
+        editable copy does, however the path is spelled; unlocked, they work (issue #171)."""
+        import json, shutil, urllib.request
+        from hoard import marks, server, tags
+
+        def ask(action, path):
+            req = urllib.request.Request(f"http://127.0.0.1:{self.srv.server_address[1]}{action}", method="POST",
+                                         data=json.dumps({"path": path, "picks": ["all"]}).encode(),
+                                         headers={"Content-Type": "application/json", "X-Hoard-Key": self.srv.key})
+            try:
+                with urllib.request.urlopen(req) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b"{}")
+        st = marks.MarkStore()
+        st.set_pin("4821")
+        st.change("hidden", {tags.tag_key("Booth", "Hoodie")}, True)
+        self.addCleanup(lambda: st.path.unlink(missing_ok=True))
+        with mock.patch.object(server, "reveal", lambda p: None):
+            for path in ("Booth/Kitsu Studio/Hoodie/Hoodie.unitypackage", "Booth/Kitsu Studio/./Hoodie//Hoodie.unitypackage"):
+                for action in ("/api/look-inside", "/api/look-inside/extract"):
+                    with self.subTest(path=path, action=action):
+                        self.assertEqual(ask(action, path), (403, {"error": "Unlock your hidden library first."}))
+            with mock.patch.object(server.Handler, "_unlocked", lambda self: True):
+                self.assertEqual(ask("/api/look-inside", "Booth/Kitsu Studio/Hoodie/Hoodie.unitypackage")[0], 200)
+                status, done = ask("/api/look-inside/extract", "Booth/Kitsu Studio/Hoodie/Hoodie.unitypackage")
+                self.assertEqual((status, done["ok"]), (200, True))
+                shutil.rmtree(done["folder"])
 
 
 if __name__ == "__main__":

@@ -148,8 +148,14 @@ class Splitting(unittest.TestCase):
             if n < len(parts) - 1:   # as full as it can be: one more wouldn't fit
                 more = {**named, "items": part + [parts[n + 1][0]]}
                 self.assertFalse(shortlinks.fits(sets.share_code({**more, "name": more["name"][:50] + " (99 of 99)"})[0]))
-        hidden = set(self.wish["items"][:300])   # hidden products aren't shared, so they take no room
-        self.assertLess(len(sets.share_parts(self.wish, leave_out=hidden)), len(parts) + 1)
+        # hidden products aren't shared, so they take no room: with a hundred or so a part, hiding a third of three
+        # hundred saves one (issue #183)
+        few = {**self.wish, "items": self.wish["items"][:300]}
+        room = len(sets.share_code({**few, "items": few["items"][:100]})[0]) + 64
+        small = lambda code: len(code) <= room   # noqa: E731
+        whole = sets.share_parts(few, fits=small)
+        self.assertGreaterEqual(len(whole), 3)
+        self.assertLess(len(sets.share_parts(few, leave_out=set(few["items"][:100]), fits=small)), len(whole))
         self.assertEqual(sets.share_parts({**self.wish, "items": self.wish["items"][:20]}), [self.wish["items"][:20]], "one that fits: one part")
 
     def test_split_into_new_sets(self):
@@ -480,6 +486,42 @@ class Page(unittest.TestCase):
             browser.close()
         [s] = sets.SetStore().load()["sets"]
         self.assertEqual((s["name"], s["items"]), ("Rusk, winter", [RUSK]))
+
+    def test_a_product_too_big_for_a_short_link_on_its_own(self):
+        """Share... on a set with a product no short link could hold, whatever the split: it says so, and offers no
+        split, rather than getting no answer at all (issue #178)."""
+        import threading
+        from playwright.sync_api import sync_playwright
+        from hoard import config, server, shortlinks
+        tmp = Path(tempfile.mkdtemp())
+        env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})
+        env.start()
+        self.addCleanup(env.stop)
+        (tmp / "dl").mkdir()
+        sets.SetStore().change({"action": "create", "name": "Rusk, winter", "items": [RUSK]},
+                               lambda key: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"})
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(tmp / "dl"), "setup_done": True,
+                                                  "ui": {"toured": True}}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        too_big = ValueError("A product in this set is too big for a short link on its own.")
+        with mock.patch.object(shortlinks, "fits", lambda code: False), \
+                mock.patch.object(sets, "share_parts", mock.Mock(side_effect=too_big)), sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Rusk, winter").click()
+            page.click('#setView [data-setx="share"]')
+            dialog = page.locator("dialog.share")
+            self.assertIn("A product in this set is too big for a short link on its own.", dialog.locator(".shortlink").inner_text())
+            self.assertEqual(dialog.locator('[data-short="split"], [data-short="make"]').count(), 0)
+            browser.close()
+        self.assertEqual(errors, [])
 
 
 

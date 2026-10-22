@@ -26,7 +26,7 @@ KEY = re.compile(r"[A-Za-z0-9_-]{22}")              # 128 bits, base64url
 TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")            # 256 bits, base64url
 DATA = re.compile(r"[A-Za-z0-9_-]{42,65536}")       # a locked set, base64url: 31 bytes to 48 KiB
 CODE = re.compile(r"S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})")
-MAX_DATA = 48 * 1024                                # the share server's most for a locked set, base64url (worker.mjs)
+MAX_DATA = 48 * 1024                                # the share server's most for a locked set, in bytes (MAX_BYTES in worker.mjs)
 OFFLINE = "Couldn't reach Hoard's share server. Check your connection, and try again."
 TOO_BIG = "This set is too big for one short link. Choose Share... again to split it into sets that each fit."
 
@@ -49,9 +49,10 @@ def parse(text) -> tuple[str, str] | None:
 
 
 def fits(code: str) -> bool:
-    """Whether a set's code, locked (a 12-byte nonce, the code, a 16-byte tag) and in base64url, is small enough for
-    the share server: a set of about 500 products is, depending on its products' names and links."""
-    return -(-(12 + len(code.encode()) + 16) * 4 // 3) <= MAX_DATA
+    """Whether a set's code, locked (a 12-byte nonce, the code, a 16-byte tag), is small enough for the share server,
+    which measures what it's sent once it's decoded from base64url (issue #170): a set of about 500 products is,
+    depending on its products' names and links."""
+    return 12 + len(code.encode()) + 16 <= MAX_DATA
 
 
 def code(sid: str, key: str) -> str:
