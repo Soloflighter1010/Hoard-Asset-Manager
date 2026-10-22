@@ -518,7 +518,7 @@ function renderTagFacets(list) {
 
 function tagSection(a) {
   const mine = a.tags.map(t => `<span class="tagpill"><button class="chip" data-act="tag" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}</button>` +
-    `<button class="untag" data-act="untag" data-tag="${esc(t)}" aria-label="Remove the tag ${esc(t)}">×</button></span>`).join("");
+    `<button class="untag" data-act="untag" data-tag="${esc(t)}" aria-label="${esc(tr("Remove the tag {0}", t))}">×</button></span>`).join("");
   const sugg = a.suggested.map(t => `<button class="chip add" data-act="addtag" data-tag="${esc(t)}" aria-label="Add the tag ${esc(t)}">${esc(t)}</button>`).join("");
   return `<h3>Tags</h3><div class="chips">${mine || '<span class="none">No tags yet</span>'}</div>` +
     (sugg ? `<p class="sub">Suggested for this item</p><div class="chips">${sugg}</div>` : "") +
@@ -732,7 +732,7 @@ function renderTagPanel() {
     `${btn("delete", x.name, "Delete", `data-count="${x.count}"`)}</span></li>`).join("") ||
     `<li class="none">No tags yet. Create one above, keep a suggestion below, or add one from an item's details.</li>`;
   $("#suggRows").innerHTML = ts.suggestions.slice(0, 60).map(x => `<li><span class="tname">${esc(x.name)}</span>` +
-    `<span class="tmeta">in ${x.count} ${x.count === 1 ? "name" : "names"}</span>` +
+    `<span class="tmeta">${esc(tr(x.count === 1 ? "in 1 name" : "in {0} names", x.count))}</span>` +
     `<span class="tbtns">${btn("keep", x.name, "Keep")}${btn("hide", x.name, "Hide")}</span></li>`).join("") ||
     `<li class="none">No suggestions right now.</li>`;
   $("#hiddenCount").textContent = ts.hidden.length;
@@ -1612,10 +1612,22 @@ async function loadProjects(view) {
     drawProjects();
   } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Projects couldn't be read just now."))} ${esc(e.message || "")}</p>`; }
 }
+let pjDrawn = "";
+const pjTicks = el => el.type === "checkbox";
 function drawProjects() {
   const body = $("#projectsBody");
   const views = { list: pjList, project: pjProject, new: pjNew, repos: pjRepos, settings: pjSettings, report: pjReportView, backups: pjBackups };
+  // what you've typed or ticked in Repositories or Unity and folders and not saved yet stays when it's drawn again
+  // (as it is when a task ends, or a save is refused)
+  const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
+    ? [...body.querySelectorAll("input[id], textarea[id]")].filter(el => pjTicks(el) ? el.checked !== el.defaultChecked : el.value !== el.defaultValue)
+      .map(el => [el.id, pjTicks(el) ? el.checked : el.value]) : [];
   body.innerHTML = (views[PJ.view] || pjList)();
+  pjDrawn = PJ.view;
+  for (const [id, v] of typed) {
+    const el = document.getElementById(id);
+    if (el) pjTicks(el) ? (el.checked = v) : (el.value = v);
+  }
   if (PJ.view === "new") pjFillNew();
   const find = $("#pjFind");
   if (find) { find.value = PJ.find; find.addEventListener("input", () => { PJ.find = find.value; pjFilter(); }); pjFilter(); }
@@ -1853,7 +1865,7 @@ async function pjLoadBackups() {
 }
 function pjBackupRow(b) {
   return `<li class="pj-row pj-bk${b.old ? " old" : ""}"><label class="pj-main check"><input type="checkbox" class="pj-bkpick" value="${esc(b.path)}">` +
-    `<span><b translate="no">${esc(b.project)}</b><span class="meta">${esc(new Date(b.when).toLocaleString())} · ${esc(sizeText(b.size))}</span></span></label>` +
+    `<span><b translate="no">${esc(b.project)}</b><span class="meta">${esc(whenDone(b.when))} · ${esc(sizeText(b.size))}</span></span></label>` +
     `<span class="pj-what">${b.old ? esc(tr("Old")) : ""}</span></li>`;
 }
 function pjBackups() {
@@ -2329,6 +2341,7 @@ async function pjAct(b) {
     b.disabled = false;
     if (!r.ok) { toast(r.data.error || tr("That repository couldn't be added.")); return; }
     toast(tr(r.data.packages === 1 ? "Added {0}, with {1} package." : "Added {0}, with {1} packages.", r.data.label, r.data.packages));
+    for (const el of [$("#pjRepoUrl"), $("#pjRepoHeaders")]) if (el) el.value = "";   // (added: not kept for the next one)
     return loadProjects();
   }
   if (act === "unrepo") {
@@ -2340,7 +2353,9 @@ async function pjAct(b) {
     const r = await apiPost("/api/vpm/settings", { projects_folder: $("#pjProjectsFolder").value, backups_folder: $("#pjBackupsFolder").value,
       prerelease: $("#pjPrerelease").checked });
     toast(r.ok ? tr("Saved.") : (r.data.error || tr("That can't be done.")));
-    return loadProjects();
+    if (!r.ok) return;   // (what you typed stays, to put right)
+    for (const el of $("#projectsBody").querySelectorAll("input[id]")) pjTicks(el) ? (el.defaultChecked = el.checked) : (el.defaultValue = el.value);
+    return loadProjects();   // (saved: as the settings have it now)
   }
 }
 function wireProjects() {
@@ -2449,7 +2464,7 @@ function mixRoll() {
   const kept = new Map(MIX.picks.filter(p => MIX.held.has(p.slot)).map(p => [p.slot, p]));
   const avatar = kept.get("") ? kept.get("").item : any(avatars);
   const avatarTags = new Set((avatar.tags || []).filter(t => tagTypes().get(t) !== "clothing"));
-  const taken = new Set([avatar.tag_key]);
+  const taken = new Set([avatar.tag_key, ...[...kept.values()].map(p => p.item.tag_key)]);   // (a kept pick isn't picked again for another slot)
   MIX.picks = [{ slot: "", label: tr("Avatar"), item: avatar }];
   MIX.unfit = [];
   for (const s of slots) {

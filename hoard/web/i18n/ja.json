@@ -1810,5 +1810,8 @@
  "Size": "サイズ",
  "Choose a style": "スタイルを選んでください",
  "How Hoard lays out your library, downloads and everything else. You see each one as you choose it.": "ライブラリ、ダウンロード、そのほかすべての並べ方です。選ぶとすぐに反映されます。",
- "Choose Standard, Treasure or Workbench.": "「標準」「トレジャー」「ワークベンチ」から選んでください。"
+ "Choose Standard, Treasure or Workbench.": "「標準」「トレジャー」「ワークベンチ」から選んでください。",
+ "Remove the tag {0}": "タグ「{0}」を外す",
+ "in 1 name": "1件の名前にあります",
+ "in {0} names": "{0}件の名前にあります"
 }

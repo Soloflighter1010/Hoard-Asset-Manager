@@ -13,6 +13,7 @@ offered as the VPM package that provides it, from that tool's own repository.
 """
 from __future__ import annotations
 
+import functools
 import io
 import json
 import os
@@ -29,6 +30,7 @@ from .resolve import MAX_MEMBERS, MAX_UNPACKED, ResolveError, _member_path, _rmt
 from .version import Version
 
 MAX_INNER_ZIP = 512 << 20
+MAX_INNER_PEEK = 128 << 20   # a .zip inside a product's .zip, read into memory to see if it's a VPM package (none is bigger)
 MAX_ZIP_LISTED = 50_000
 
 # The tools needs.py knows, as VPM packages: (package, its repository, the repository's name)
@@ -87,11 +89,22 @@ def contents(asset: dict) -> list[dict]:
         if lower.endswith(".unitypackage"):
             out.append({"kind": "unitypackage", "file": rel, "member": None, "label": Path(rel).name})
         elif lower.endswith(".zip"):
-            out += _zip_contents(path, rel)
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            out += [dict(x) for x in _zip_contents(str(path), rel, st.st_size, st.st_mtime_ns)]
     return out
 
 
-def _zip_contents(path: Path, rel: str) -> list[dict]:
+@functools.lru_cache(maxsize=256)
+def _zip_contents(path: str, rel: str, _size: int, _mtime: int) -> tuple:
+    """What's in one .zip, worked out once for each version of the file (its size and time are part of the key):
+    choosing a product's contents, then putting them in, reads each zip, and the zips inside it, only once."""
+    return tuple(_read_zip_contents(Path(path), rel))
+
+
+def _read_zip_contents(path: Path, rel: str) -> list[dict]:
     out = []
     try:
         with zipfile.ZipFile(path) as zf:
@@ -106,7 +119,7 @@ def _zip_contents(path: Path, rel: str) -> list[dict]:
                     continue
                 if name.lower().endswith(".unitypackage"):
                     out.append({"kind": "unitypackage", "file": rel, "member": info.filename, "label": Path(name).name})
-                elif name.lower().endswith(".zip") and info.file_size <= MAX_INNER_ZIP:
+                elif name.lower().endswith(".zip") and info.file_size <= MAX_INNER_PEEK:
                     try:
                         with zipfile.ZipFile(io.BytesIO(zf.read(info))) as inner:
                             found = _package_in_zip(inner)

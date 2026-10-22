@@ -32,11 +32,15 @@ def default_folder() -> Path:
     return Path.home() / "ALCOM" / "Backups"
 
 
-def files(project: Path, leave_out_packages: set[str] = frozenset()):
-    """Every file to back up, as (path, its name in the zip), skipping links."""
+def files(project: Path, leave_out_packages: set[str] = frozenset(), skip: Path | None = None):
+    """Every file to back up, as (path, its name in the zip), skipping links, and the folder skip (the backups
+    folder, should it be inside the project: a backup never takes in itself or the backups before it)."""
     project = Path(project)
     skip_packages = {n.lower() for n in leave_out_packages}
+    skip_real = os.path.normcase(os.path.realpath(skip)) if skip else None
     for root, dirs, names in os.walk(project):
+        if skip_real:
+            dirs[:] = [d for d in dirs if os.path.normcase(os.path.realpath(os.path.join(root, d))) != skip_real]
         rel_root = os.path.relpath(root, project)
         parts = [] if rel_root == "." else rel_root.replace(os.sep, "/").split("/")
         if not parts:
@@ -60,7 +64,7 @@ def back_up(project: Path, folder: Path, leave_out_packages: set[str] = frozense
     count, said = 0, 0.0
     try:
         with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=1 if fast else 9, allowZip64=True) as zf:
-            for full, name in files(project, leave_out_packages):
+            for full, name in files(project, leave_out_packages, skip=folder):
                 try:
                     zf.write(full, name)
                 except (OSError, ValueError):

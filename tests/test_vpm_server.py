@@ -1,7 +1,6 @@
 """Projects through Hoard's server (hoard/vpm/api.py, server.py's /api/vpm): a project made from a template, its
 VRChat SDK installed from a repository (a stand-in on this computer), products from the library put in, its
 packages changed, all as Tasks jobs; and only projects on the list are ever touched."""
-import gzip
 import hashlib
 import http.client
 import http.server

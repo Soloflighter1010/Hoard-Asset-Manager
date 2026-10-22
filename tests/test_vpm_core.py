@@ -20,7 +20,7 @@ from unittest import mock
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import egress
-from hoard.vpm import environment, fetch, litedb, repos, resolve
+from hoard.vpm import environment, litedb, repos, resolve
 from hoard.vpm.manifest import Package, unity_compatible, valid_name
 from hoard.vpm.project import AVATARS, UNKNOWN, VPM_STARTER, WORLDS, UnityProject
 from hoard.vpm.version import UnityVersion, Version

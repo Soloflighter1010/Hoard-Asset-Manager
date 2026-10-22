@@ -15,8 +15,8 @@ from unittest import mock
 
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
-from hoard.vpm import backup, environment, listing, preload, templates, unity, unitypackage
-from hoard.vpm.project import AVATARS, UnityProject
+from hoard.vpm import backup, listing, preload, templates, unity, unitypackage
+from hoard.vpm.project import UnityProject
 from hoard.vpm.version import UnityVersion, VersionRange
 
 G1, G2, G3, G4 = "a" * 32, "b" * 32, "c" * 32, "d" * 32
@@ -274,6 +274,15 @@ class Backups(Temp):
         self.assertTrue(out.name.startswith("Project-") and out.suffix == ".zip")
         self.assertEqual([b["path"] for b in backup.found(self.tmp / "Backups")], [str(out)], "a new backup is listed")
 
+    def test_a_backups_folder_in_the_project_is_left_out(self):
+        p = self.project()
+        (p / "Assets" / "a.txt").write_text("a")
+        self.backups(p / "Backups", "Project-2025-01-01T10-00-00.zip")
+        out = backup.back_up(p, p / "Backups")
+        with zipfile.ZipFile(out) as zf:
+            names = set(zf.namelist())
+        self.assertEqual(names, {"Assets/a.txt", "ProjectSettings/ProjectVersion.txt"}, "never itself or the one before")
+
     def backups(self, folder: Path, *names: str) -> list[Path]:
         folder.mkdir(parents=True, exist_ok=True)
         out = []
@@ -376,7 +385,6 @@ class Editors(Temp):
 
     @unittest.skipIf(sys.platform == "win32", "Windows locks differently (checked there by opening the file)")
     def test_open_in_unity(self):
-        import fcntl
         p = self.project()
         self.assertFalse(unity.project_open_in_unity(p))
         (p / "Temp").mkdir()

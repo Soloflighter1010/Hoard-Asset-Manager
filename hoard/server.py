@@ -436,14 +436,23 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.needs_reader.on_read = lambda: rebuild_catalog_quietly(self)
         self._needs = (None, None, None)   # (the index and the read packages' time it was worked out from, {product id: ...})
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
+        self._by_key = (None, {})       # (asset_by_key's map, and the index it was made from)
         self.vpm = vpm_api.Service()   # Projects (hoard/vpm): the repositories, loaded once
         self.jobs.project_runner = lambda what: self.vpm.run(what, self.asset_by_key)
 
     def asset_by_key(self, key) -> dict | None:
-        """A downloaded product, by its tag key (Projects: your library in a project)."""
+        """A downloaded product, by its tag key (Projects: your library in a project). The keys are looked up in a
+        map made once for each index, not by going through every download for each product."""
         if not isinstance(key, str):
             return None
-        return next((a for a in self.index(stale_ok=True).get("assets", []) if a.get("tag_key") == key), None)
+        index = self.index(stale_ok=True)
+        made_for, by_key = self._by_key
+        if made_for is not index:
+            by_key = {}
+            for a in index.get("assets", []):
+                by_key.setdefault(a.get("tag_key"), a)   # (the first, as before)
+            self._by_key = (index, by_key)
+        return by_key.get(key)
 
     def start_schedule(self) -> threading.Event:
         """Automatic syncs, while this server runs (the desktop app starts it). Set the returned event to stop."""
@@ -1381,9 +1390,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _picks(self, raw) -> list[dict]:
         """Products from your library to put in a project, as the page chose them; hidden ones only when unlocked."""
-        out = []
+        out, hidden = [], set() if self._unlocked() else set(MarkStore().keys("hidden"))   # (read once, not for each)
         for p in (raw if isinstance(raw, list) else [])[:500]:
-            if not isinstance(p, dict) or not isinstance(p.get("key"), str) or self._hidden_key(p["key"]):
+            if not isinstance(p, dict) or not isinstance(p.get("key"), str) or p["key"] in hidden:
                 continue
             out.append({"key": p["key"][:400], "kind": str(p.get("kind") or "")[:20], "file": str(p.get("file") or "")[:1000],
                         "member": p["member"][:1000] if isinstance(p.get("member"), str) else None})

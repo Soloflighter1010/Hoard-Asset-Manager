@@ -238,7 +238,7 @@ class Service:
         if op == "backup":
             project = UnityProject.load(path)
             leave_out = set(project.locked) if what.get("leave_out_packages") else set()
-            out = backup.back_up(Path(path), Path(self.overview()["settings"]["backups_folder"]), leave_out)
+            out = backup.back_up(Path(path), self.backups_folder(), leave_out)
             listing.note(path, backed_up=time.strftime("%Y-%m-%dT%H:%M:%S"))
             return f"Backed up {Path(path).name} to {out}."
         raise ProjectsError("Hoard doesn't know that project task.")

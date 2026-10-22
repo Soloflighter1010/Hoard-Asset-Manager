@@ -497,6 +497,74 @@ class Tab(unittest.TestCase):
         self.assertIn("couldn't find a picture", bad["error"])
         self.assertEqual(sets.SetStore().load()["sets"][0]["photos"], ["https://i.imgur.com/fOJAk3L.jpeg"], "unchanged")
 
+    def test_mix_and_match(self):
+        """Issue #156: an avatar from the Avatar tags and one product from each Clothing tag, only clothes that share a
+        tag with the avatar when asked; a kept pick stays (and isn't picked again for another slot), and the picks
+        make a set."""
+        from playwright.sync_api import sync_playwright
+        from hoard import library
+        names = {"4": "Rusk Cap", "5": "Rusk Cap and Tee", "6": "Plain Tee", "7": "Other Avatar"}
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] += [library.item("booth", k, name=n, creator="Mochi", url=f"https://booth.pm/ja/items/{k}")
+                                           for k, n in names.items()]
+        key = {n: tag_key("Booth", n) for n in ["Rusk", "Hoodie for Rusk", *names.values()]}
+        for keys, add in (([key["Rusk"], key["Other Avatar"]], ["avatars"]), ([key["Rusk"]], ["rusk"]),
+                          ([key["Hoodie for Rusk"], key["Rusk Cap and Tee"], key["Plain Tee"]], ["tops"]),
+                          ([key["Rusk Cap"], key["Rusk Cap and Tee"]], ["hats"]),
+                          ([key["Hoodie for Rusk"], key["Rusk Cap"], key["Rusk Cap and Tee"]], ["rusk"])):
+            self.assertEqual(self.api("/api/tags", {"action": "assign", "keys": keys, "add": add}).get("ok"), True)
+        for name, kind in (("avatars", "avatar"), ("tops", "clothing"), ("hats", "clothing")):
+            self.assertEqual(self.api("/api/tags", {"action": "type", "name": name, "type": kind}).get("ok"), True)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.locator("#grid .slot").first.wait_for()
+            picks = page.evaluate("""() => {   // the rules, with the dice fixed
+                const avatar = T.all().find(a => a.name === 'Rusk'), both = T.all().find(a => a.name === 'Rusk Cap and Tee');
+                const hats = T.all().filter(a => a.name.startsWith('Rusk Cap')).map(a => a.name);
+                const rnd = Math.random; Math.random = () => hats[0] === both.name ? 0 : 0.99;   // the kept one, were it allowed
+                MIX.fit = true; MIX.held = new Set(['tops']);
+                MIX.picks = [{ slot: '', item: avatar }, { slot: 'tops', label: 'tops', item: both }];
+                mixRoll();
+                const kept = MIX.picks.map(p => [p.slot, p.item.name]);
+                MIX.held = new Set(); MIX.fit = false; mixRoll();
+                const loose = MIX.picks.map(p => p.slot);
+                Math.random = rnd;
+                return { kept, loose };
+            }""")
+            slots = dict(picks["kept"])
+            self.assertEqual(slots["tops"], "Rusk Cap and Tee", "a kept pick stays")
+            self.assertEqual(slots["hats"], "Rusk Cap", "and isn't picked again for another slot")
+            self.assertNotIn(slots[""], ("Rusk Cap", "Rusk Cap and Tee"))
+            self.assertEqual(picks["loose"], ["", "hats", "tops"], "an avatar, then a pick from each Clothing tag")
+            # on the page: the Sets tab's Mix and match, a pick kept, the rest picked again, a set made of them
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("[data-setx=mix]").click()
+            dlg = page.locator("dialog.mixdlg[open]")
+            dlg.wait_for()
+            self.assertEqual(dlg.locator(".mixlist li").count(), 3)
+            self.assertEqual(dlg.locator(".mixlist small").all_inner_texts(), ["Avatar", "hats", "tops"])
+            avatar = dlg.locator(".mixlist .mixtext b").first.inner_text()
+            self.assertIn(avatar, ("Rusk", "Other Avatar"))
+            dlg.locator('[data-mixhold=""]').check()
+            for _ in range(4):
+                dlg.locator("[data-mix=again]").click()
+                self.assertEqual(dlg.locator(".mixlist .mixtext b").first.inner_text(), avatar, "the kept avatar stays")
+            chosen = dlg.locator(".mixlist .mixtext b").all_inner_texts()
+            self.assertEqual(len(set(chosen)), 3, "three different products")
+            dlg.locator("button[value=yes]").click()
+            page.fill("dialog[open] #askName", "Mixed")
+            page.keyboard.press("Enter")
+            page.get_by_text("Made the set Mixed, with 3 products in it.").wait_for()
+            self.assertEqual(errors, [])
+            browser.close()
+        [s] = sets.SetStore().load()["sets"]
+        self.assertEqual((s["name"], sorted(s["items"])), ("Mixed", sorted(key[n] for n in chosen)))
+
     def test_make_share_and_add_a_set(self):
         from playwright.sync_api import sync_playwright
         code = sets.share_code({"name": "Fox outfit", "items": ["jinxxy:foxears", RUSK], "products": {

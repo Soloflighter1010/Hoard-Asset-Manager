@@ -1810,5 +1810,8 @@
  "Size": "크기",
  "Choose a style": "스타일을 고르세요",
  "How Hoard lays out your library, downloads and everything else. You see each one as you choose it.": "라이브러리, 다운로드와 그 밖의 모든 것을 배치하는 방식이에요. 고르는 대로 바로 보여요.",
- "Choose Standard, Treasure or Workbench.": "기본, 트레저, 워크벤치 중에서 고르세요."
+ "Choose Standard, Treasure or Workbench.": "기본, 트레저, 워크벤치 중에서 고르세요.",
+ "Remove the tag {0}": "태그 {0} 빼기",
+ "in 1 name": "이름 1개에 있어요",
+ "in {0} names": "이름 {0}개에 있어요"
 }

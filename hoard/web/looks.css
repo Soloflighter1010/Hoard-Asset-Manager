@@ -179,10 +179,18 @@
 [data-style="workbench"] .slot.ext .ext-price { grid-area: price; margin: 0; }
 [data-style="workbench"] .slot.ext .ext-row { grid-area: row; margin: 0; gap: 10px; }
 [data-style="workbench"] .setview .sethead > .art { max-width: 160px; }
-@media (max-width: 860px) {
+/* as the list gets narrower (a smaller window, a larger text size, a product's details open beside it), the row keeps
+   its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */
+[data-style="workbench"] .grid { container-type: inline-size; }
+@container (max-width: 760px) {
+  [data-style="workbench"] .grid .row-meta { grid-template-columns: 96px 140px; gap: 10px; }
+  [data-style="workbench"] .grid .row-meta .rm-when { display: none; }
+}
+@container (max-width: 560px) {
   [data-style="workbench"] .grid .row-meta { grid-template-columns: auto; }
   [data-style="workbench"] .grid .row-meta > :not(.rm-state) { display: none; }
 }
+@container (max-width: 360px) { [data-style="workbench"] .grid .row-meta { display: none; } }
 /* a product's details: a smaller picture, close-set, the parts' names in capitals */
 [data-style="workbench"] .detail { padding: 14px 20px 30px; }
 [data-style="workbench"] .d-art { aspect-ratio: 16 / 9; max-height: 220px; border-radius: 8px; }

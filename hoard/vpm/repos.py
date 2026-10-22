@@ -22,7 +22,7 @@ from ..safety import DataFileError, clean_text
 from . import environment, fetch
 from .environment import Settings
 from .manifest import Package, unity_compatible
-from .version import ALLOW, DENY, UnityVersion, Version, VersionRange
+from .version import DENY, UnityVersion, Version, VersionRange
 
 OFFICIAL_URL = "https://packages.vrchat.com/official?download"
 CURATED_URL = "https://packages.vrchat.com/curated?download"
