@@ -299,8 +299,9 @@ class Service:
             out = backup.back_up(folder, self.backups_folder(), set())
             log(f"Backed up to {out}")
         log(f"Deleting {name}")   # (the last word Stop can come at)
-        listing.remove(str(folder))
-        listing.forget(str(folder))
+        listed = self.listed(path)   # (as the list has it: on Windows, a short name like RUNNER~1 resolves to another)
+        listing.remove(listed)
+        listing.forget(listed)
         shutil.rmtree(folder, **({"onexc": _writable_then_again} if sys.version_info >= (3, 12) else {"onerror": _writable_then_again}))
         return f"Deleted {name} from this computer." + (" Its backup is in your backups folder." if backup_first else "")
 

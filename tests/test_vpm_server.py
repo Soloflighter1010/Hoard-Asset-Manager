@@ -333,6 +333,26 @@ class Server(unittest.TestCase):
         self.assertEqual([z.name.startswith("Old Idea-") for z in backups.glob("*.zip")], [True], "backed up first")
         self.assertNotIn(str(project), [p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"]])
 
+    def test_a_deleted_project_listed_by_another_name_comes_off_the_list(self):
+        """On Windows the list can hold a short name (C:\\Users\\RUNNER~1\\...) that resolves to a longer one: the
+        project was deleted but stayed on the list. A link to its folder stands in for a short name here."""
+        project = self.tmp / "Unity" / "Real Name"
+        for sub in ("Assets", "Packages", "ProjectSettings"):
+            (project / sub).mkdir(parents=True)
+        (project / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        try:
+            (self.tmp / "Linked").symlink_to(self.tmp / "Unity", target_is_directory=True)
+        except OSError:
+            self.skipTest("links can't be made here")
+        listed = str(self.tmp / "Linked" / "Real Name")
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": listed})[0], 200)
+        body = {"path": listed, "confirm": "Real Name", "backup": False}
+        self.assertEqual(self.call("POST", "/api/vpm/delete-project", body)[1], {"ok": True, "queued": False})
+        done = self.wait()
+        self.assertEqual(done["outcome"], "done", done["message"])
+        self.assertFalse(project.exists())
+        self.assertEqual([p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"] if "Real Name" in p["path"]], [])
+
     def test_versions_to_choose_from(self):
         """Manage project's and Add packages' version choice (#160): newest first, only those that work in the
         project's Unity, never a yanked one, and prereleases when they're offered or one is installed."""
