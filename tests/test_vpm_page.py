@@ -226,6 +226,9 @@ class ProjectsPanel(unittest.TestCase):
         text = page.locator("#projectsBody").inner_text()
         self.assertIn("Some packages aren't installed the way the project says.", text)
         self.assertIn("Unity 2022.3.22f1 isn't installed", text)
+        # its packages' columns, named; and where each comes from
+        self.assertEqual(page.locator(".pj-pk thead th").all_inner_texts(), ["Package", "Installed", "Update", "Comes from", "Remove"])
+        self.assertEqual(page.locator(".pj-pk tr[data-name='com.vrchat.avatars'] td.from").inner_text(), "Official")
         # its tabs: Packages, Add packages, From your library, and what Hoard for Unity reported of it
         tabs = page.locator(".pj-subs .pj-tab")
         self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report"])
@@ -291,6 +294,18 @@ class ProjectsPanel(unittest.TestCase):
         self.assertIn("Hoard for Unity", page.locator(".pj-chips").inner_text())
         # Add packages: a view of its own (not a window over the page), and back to the new project
         page.click("[data-pj=addpkg]")
+        # in groups by the repository they come from, each folding away
+        group = page.locator(".pj-repo", has_text="Official")
+        self.assertEqual(" ".join(group.locator("summary").inner_text().split()), "Official 2")
+        self.assertTrue(group.evaluate("d => d.open"))
+        group.locator("summary").click()
+        self.assertFalse(group.evaluate("d => d.open"))
+        page.fill("#pjPkFind", "avatars")   # what you look for is shown, wherever it is
+        page.wait_for_function("() => document.querySelector('.pj-repo').open")
+        self.assertEqual(page.locator(".pj-addlist li:visible").count(), 1)
+        page.fill("#pjPkFind", "nothing like it")
+        self.assertTrue(group.is_hidden(), "a repository with nothing found is left out")
+        page.fill("#pjPkFind", "")
         page.locator(".pj-addlist input[value='com.vrchat.avatars']").check()
         self.assertEqual(page.locator("dialog[open]").count(), 0)
         # the newest unless another version is chosen (#160)

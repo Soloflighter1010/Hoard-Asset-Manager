@@ -1929,5 +1929,7 @@
  "Nothing in the log matches.": "로그에 맞는 항목이 없어요.",
  "Nothing has been logged since Hoard started.": "Hoard가 시작된 뒤로 아직 로그에 남은 것이 없어요.",
  "from {0}": "{0}에서",
- "Already in the project: {0}.": "프로젝트에 이미 있어요: {0}."
+ "Already in the project: {0}.": "프로젝트에 이미 있어요: {0}.",
+ "Package": "패키지",
+ "Comes from": "출처"
 }

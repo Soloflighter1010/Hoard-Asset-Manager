@@ -39,7 +39,8 @@ name, one already there).
 
 [Hoard for Unity](Hoard-for-Unity) is in a new project to begin with (its repository is added for you if you haven't
 got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
-that works in the project's Unity, to tick (with a version, if you'd rather not have the newest), then **Add the
+that works in the project's Unity, in groups by the repository it comes from (VRChat's own first, your package folders
+last; each folds away, and what you find opens its group), to tick (with a version, if you'd rather not have the newest), then **Add the
 chosen packages**. **Put in products from your library** opens Downloads in **Select** mode, for this project: tick
 the products you want, then **Add to project**, and you're back at the new project as you left it, with them in
 (**Cancel** goes back without them). A product with several packages (one for PC, one for Quest, a few variants)
@@ -75,7 +76,8 @@ template, so ALCOM can make the same project. ALCOM can't open a package inside 
 
 ## Managing a project
 
-**Manage** shows a project, with tabs of its own: **Packages** (each with its version and any update), **Add
+**Manage** shows a project, with tabs of its own: **Packages** (in columns: each package, the version installed, any
+update, and the repository it comes from), **Add
 packages**, **From your library**, and, when [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) has reported on it,
 what it found. From there:
 

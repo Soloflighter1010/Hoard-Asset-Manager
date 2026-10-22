@@ -774,14 +774,24 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-job .pj-job-msg { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
 .pj-job > button { width: auto; margin: 0; }
 /* rows in Projects alternate, and the one under the pointer stands out, so a long list is easy to follow */
-.pj-list > li:nth-child(even), .pj-rows > li:nth-child(even), .pj-pk tr:nth-child(even) { background: var(--ledge); }
-.pj-list > li:hover, .pj-rows > li:hover, .pj-pk tr:hover { box-shadow: inset 0 0 0 2px var(--gold); }
-.pj-pk tr > td:first-child { padding-left: 10px; }
-.pj-pk tr > td:last-child { padding-right: 10px; }
+.pj-list > li:nth-child(even), .pj-rows > li:nth-child(even), .pj-pk tbody tr:nth-child(even) { background: var(--ledge); }
+.pj-list > li:hover, .pj-rows > li:hover, .pj-pk tbody tr:hover { box-shadow: inset 0 0 0 2px var(--gold); }
+.pj-pk tr > :first-child { padding-left: 10px; }
+.pj-pk tr > :last-child { padding-right: 10px; }
 .pj-rows { padding: 0; list-style: none; }
 .pj-rows > li { margin: 0; padding: 8px 10px; border-radius: 8px; }
 /* Add packages: chosen ones, and the button to add them, stay in reach at the foot of the list */
 .pj-addlist { margin-top: 10px; }
+.pj-repo { margin-top: 10px; }
+.pj-repo > summary { display: flex; align-items: center; gap: 8px; padding: 8px 4px; cursor: pointer; border-bottom: 1px solid var(--seam);
+  font: 700 14px var(--body); color: var(--bone); }
+.pj-repo > summary .n { font-size: 12px; font-weight: 700; color: var(--dust); }
+.pj-repo > summary::-webkit-details-marker { display: none; }
+.pj-repo > summary::before { content: ""; width: 8px; height: 8px; flex: none; margin: -3px 2px 0; border: solid currentColor;
+  border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform .15s ease; }   /* (as a wishlist's groups fold) */
+.pj-repo:not([open]) > summary::before { transform: rotate(-45deg); margin-top: 0; }
+.pj-repo[hidden] { display: none; }
+.pj-repo > .pj-addlist { margin-top: 4px; }
 .pj-addbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 14px;
   margin-top: 8px; padding: 10px 14px; border-radius: 12px 12px 0 0; background: var(--stone); box-shadow: 0 0 0 1px var(--seam); }
 .pj-addbar > button { width: auto; margin: 0; }
@@ -875,12 +885,17 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-pk { width: 100%; border-collapse: collapse; font-size: 13px; }
 .pj-pk td { padding: 7px 6px; border-top: 1px solid var(--seam); vertical-align: middle; overflow-wrap: anywhere; }
 .pj-pk td.v { white-space: nowrap; text-align: right; }
+/* its columns, named (Package, Installed, Update, Comes from) */
+.pj-pk th { padding: 6px; text-align: left; font: 700 12px var(--body); color: var(--dust); white-space: nowrap; }
+.pj-pk th.v { text-align: right; }
+.pj-pk td.from { color: var(--dust); font-size: 12.5px; }
 .pj-pk td.v > button { width: auto; margin: 0; }
 .pj-pk .pj-ver { min-width: 0; padding: 0 10px; font-variant-numeric: tabular-nums; }   /* a package's version: choose another (#160) */
 .pj-picklist .pj-pick-ver { margin: 4px 0 0 28px; max-width: calc(100% - 28px); }
 .pj-vers { max-height: min(50vh, 420px); }
 @media (max-width: 640px) {   /* each package a row of its own: its name, then its version and buttons */
   .pj-pk, .pj-pk tbody { display: block; }
+  .pj-pk thead { display: none; }   /* (a row of its own each: the names would sit over nothing) */
   .pj-pk tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); }
   .pj-pk td { display: block; padding: 0; border: 0; }
   .pj-pk td:first-child { flex: 1 1 100%; }

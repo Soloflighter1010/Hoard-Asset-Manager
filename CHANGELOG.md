@@ -17,6 +17,9 @@
   another way) a second time. What the project has is now only said, a repository that already gives a package is
   used for it, and a repository already there, at any spelling of its address or another address for the same
   listing, is never added again.
+- **Add packages** shows packages in groups by the repository they come from (VRChat's own first), each folding away.
+- A project's **Packages** has its columns named (Package, Installed, Update, Comes from), and says which repository
+  each package comes from.
 
 ## 5.1.2
 

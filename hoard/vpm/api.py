@@ -158,6 +158,7 @@ class Service:
             pk = info.package
             out.append({"name": pk.name, "label": pk.label(), "version": str(pk.version), "description": pk.description[:300],
                         "author": pk.author, "repo": info.repo.label() if info.repo else "your package folders",
+                        "source": ("vrchat" if info.repo.builtin else "repo") if info.repo else "folder",   # (to group them by)
                         "keywords": pk.keywords[:10], "changelog": pk.changelog_url})
         return out
 

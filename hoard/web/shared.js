@@ -1566,6 +1566,12 @@ function renderTasks(t) {
   if (win) win.scrollTop = winTop;
   taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + t.queue.length);
 }
+// Add packages: a repository folded away stays so while you're in Projects
+document.addEventListener("toggle", e => {
+  const d = e.target;
+  if (!d.matches || !d.matches(".pj-repo") || PJ.pkFind) return;
+  if (d.open) PJ.repoShut.delete(d.dataset.repo); else PJ.repoShut.add(d.dataset.repo);
+}, true);
 // opening what's running shows its newest lines (while it was closed, it had no size to scroll)
 document.addEventListener("toggle", e => {
   const d = e.target;
@@ -1613,6 +1619,7 @@ const PJ = { view: "list", data: null, project: null, find: "", form: null, asse
   sub: "packages",       // a project's tab: packages, add (Add packages), library (From your library) or report
   pick: new Map(),       // Add packages: the ones ticked, each with the version chosen ("" for the newest)
   pkgs: null, pkFind: "", vers: {},   // the packages there are to add (for one Unity), and each one's versions
+  repoShut: new Set(),   // Add packages' repositories you folded away
   job: {} };             // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
 const PJ_KINDS = { 0: "Unknown", 1: "Legacy SDK2", 2: "Legacy Worlds", 3: "Legacy Avatars", 4: "UPM Worlds", 5: "UPM Avatars",
   6: "UPM Starter", 7: "Worlds", 8: "Avatars", 9: "VPM Starter" };
@@ -1766,7 +1773,11 @@ function pjProject() {
       : `<button class="ghost sm pj-ver" data-pj="versions" data-version="${esc(x.version)}" aria-label="${esc(tr("{0}, version {1}: choose another version", x.label, x.version))}">` +
         `<span translate="no">${esc(x.version)}</span> <span aria-hidden="true">▾</span></button>`}</td>` +
     `<td class="v">${x.latest ? `<button class="ghost sm" data-pj="update" data-version="${esc(x.latest)}">${esc(tr("Update to {0}", x.latest))}</button>` : ""}</td>` +
+    `<td class="from" translate="no">${x.own ? "" : esc(x.repo || "")}</td>` +
     `<td class="v">${x.own ? "" : `<button class="ghost sm" data-pj="remove">${esc(tr("Remove"))}</button>`}</td></tr>`).join("");
+  const head = `<thead><tr><th scope="col">${esc(tr("Package"))}</th><th scope="col" class="v">${esc(tr("Installed"))}</th>` +
+    `<th scope="col" class="v">${esc(tr("Update"))}</th><th scope="col">${esc(tr("Comes from"))}</th>` +
+    `<th scope="col" class="v"><span class="visually-hidden">${esc(tr("Remove"))}</span></th></tr></thead>`;
   const pre = (p.preloaded || []).slice().reverse();
   const subs = [["packages", tr("Packages")], ["add", tr("Add packages")], ["library", tr("From your library")],
                 ...(p.report ? [["report", tr("What Hoard for Unity found")]] : [])];
@@ -1774,7 +1785,7 @@ function pjProject() {
   const part = {
     packages: () => (p.needs_repair ? `<p class="pj-warn">${esc(tr("Some packages aren't installed the way the project says."))} <button class="ghost sm" data-pj="repair">${esc(tr("Put it right"))}</button></p>` : "") +
       (updates ? `<div class="row"><button class="ghost sm" data-pj="updateall">${esc(tr(updates === 1 ? "Update {0} package" : "Update {0} packages", updates))}</button></div>` : "") +
-      (pk.length ? `<table class="pj-pk">${rows}</table>` : `<p class="none">${esc(tr("No VPM packages in it yet. Add some in Add packages."))}</p>`),
+      (pk.length ? `<table class="pj-pk">${head}<tbody>${rows}</tbody></table>` : `<p class="none">${esc(tr("No VPM packages in it yet. Add some in Add packages."))}</p>`),
     add: () => pjAddList(p.unity, new Set(pk.map(x => x.name))),
     library: () => `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
       (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
@@ -1810,16 +1821,24 @@ function pjAddList(unityVersion, have) {
   if (!k || k.for !== pjPkgKey(unityVersion)) { pjLoadPkgs(unityVersion); return `<p class="none">${esc(tr("Reading the packages..."))}</p>`; }
   if (!k.list.length) return `<p class="none">${esc(tr("No packages yet: refresh the repositories first (Repositories, Refresh them all)."))}</p>`;
   const chosen = PJ.pick.size;
+  // in groups by where they come from (a repository is usually one creator's): VRChat's own first, then yours by name,
+  // then your package folders; each folds away, and stays as you left it
+  const groups = new Map();
+  for (const x of k.list) { if (!groups.has(x.repo)) groups.set(x.repo, []); groups.get(x.repo).push(x); }
+  const rank = r => ({ vrchat: 0, repo: 1, folder: 2 })[groups.get(r)[0].source] ?? 1;
+  const row = x => {
+    const on = PJ.pick.has(x.name), already = have.has(x.name);
+    return `<li data-hay="${esc(norm([x.label, x.name, x.author, x.repo, x.description, ...(x.keywords || [])].join(" ")))}" data-name="${esc(x.name)}">` +
+      `<label class="check"><input type="checkbox" value="${esc(x.name)}"${on ? " checked" : ""}${already ? " disabled" : ""}> <span><b translate="no">${esc(x.label)}</b> <span class="muted" translate="no">${esc(x.version)}</span>` +
+      (already ? ` <span class="pj-tag">${esc(tr("In it already"))}</span>` : "") + `<br>` +
+      `<span class="muted" translate="no">${esc(x.name)}${x.author ? ` · ${esc(x.author)}` : ""}</span>` +
+      (x.description ? `<br><span class="pj-desc">${esc(x.description)}</span>` : "") + `</span></label>` +
+      (on ? pjVerPick(x.name, x.label) : "") + `</li>`;
+  };
   return `<div class="pj-top"><input type="search" id="pjPkFind" value="${esc(PJ.pkFind)}" placeholder="${esc(tr("Find a package"))}" aria-label="${esc(tr("Find a package"))}"></div>` +
-    `<ul class="pj-picklist pj-rows pj-addlist">${k.list.map(x => {
-      const on = PJ.pick.has(x.name), already = have.has(x.name);
-      return `<li data-hay="${esc(norm([x.label, x.name, x.author, x.description, ...(x.keywords || [])].join(" ")))}" data-name="${esc(x.name)}">` +
-        `<label class="check"><input type="checkbox" value="${esc(x.name)}"${on ? " checked" : ""}${already ? " disabled" : ""}> <span><b translate="no">${esc(x.label)}</b> <span class="muted" translate="no">${esc(x.version)}</span>` +
-        (already ? ` <span class="pj-tag">${esc(tr("In it already"))}</span>` : "") + `<br>` +
-        `<span class="muted" translate="no">${esc(x.name)} · ${esc(x.repo)}</span>` +
-        (x.description ? `<br><span class="pj-desc">${esc(x.description)}</span>` : "") + `</span></label>` +
-        (on ? pjVerPick(x.name, x.label) : "") + `</li>`;
-    }).join("")}</ul>` +
+    [...groups.keys()].sort((a, b) => rank(a) - rank(b) || coll.compare(a, b)).map(r =>
+      `<details class="pj-repo" data-repo="${esc(r)}"${PJ.repoShut.has(r) ? "" : " open"}><summary><b translate="no">${esc(r)}</b> ` +
+      `<span class="n">${groups.get(r).length}</span></summary><ul class="pj-picklist pj-rows pj-addlist">${groups.get(r).map(row).join("")}</ul></details>`).join("") +
     `<div class="pj-addbar"><span class="muted" id="pjChosen">${esc(tr(chosen === 1 ? "{0} chosen" : "{0} chosen", chosen))}</span>` +
     `<button class="primary sm" data-pj="addchosen"${chosen ? "" : " disabled"}>${esc(tr("Add the chosen packages"))}</button></div>`;
 }
@@ -1828,9 +1847,14 @@ function pjVerPick(name, label) {   // which version of a ticked package: the ne
   return `<select class="pj-pick-ver" data-name="${esc(name)}" aria-label="${esc(tr("Version of {0}", label))}"><option value="">${esc(tr("Newest"))}</option>` +
     versions.map(v => `<option value="${esc(v.version)}"${v.version === picked ? " selected" : ""} translate="no">${esc(v.version)}${v.pre ? ` (${esc(tr("prerelease"))})` : ""}</option>`).join("") + `</select>`;
 }
-function pjPkFilter() {
+function pjPkFilter() {   // (a repository with nothing found in it is left out while you look)
   const words = norm(PJ.pkFind).split(/\s+/).filter(Boolean);
   for (const li of document.querySelectorAll(".pj-addlist li")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
+  for (const g of document.querySelectorAll(".pj-repo")) {
+    const shown = g.querySelectorAll(".pj-addlist li:not([hidden])").length;
+    g.hidden = !shown;
+    if (words.length && shown) g.open = true;   // (what you look for is shown, wherever it is)
+  }
 }
 async function pjPickChanged(box) {   // a package ticked or not, in place (the list isn't drawn again, so it keeps its place)
   const li = box.closest("li"), name = box.value, unityVersion = PJ.view === "addnew" ? PJ.form.unity : PJ.project.unity;
