@@ -17,7 +17,7 @@
 :root {
   --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
   --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --gold-text: #F0B429; --warn: #FF9F6B;
-  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A; --local: #E8C26A;
+  --booth: #FF6259; --gumroad: #FF8AD8; --jinxxy: #56D1DC; --payhip: #95A0FF; --itch: #7ED67A; --local: #E8C26A; --sets: #C79BFF;
   --ph-l: 30%; --ph-s: 28%;
   --slot-size: 172px; --bar-h: 72px;
   --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic UI", "Segoe UI Black", system-ui, sans-serif;
@@ -28,16 +28,16 @@
   :root {
     --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3;
     --bone: #211C18; --dust: #6B6157; --gold: #B07A00; --gold-ink: #1F1500; --gold-text: #7A5100;   /* gold as text, and text on gold: 4.5:1 or more on every light background */ --warn: #A34818;
-    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35; --local: #8A6410;
+    --booth: #D8332B; --gumroad: #C8339A; --jinxxy: #07808B; --payhip: #5360D6; --itch: #2B7F35; --local: #8A6410; --sets: #7A3FC4;
     --ph-l: 82%; --ph-s: 30%;
     color-scheme: light;
   }
 }
 /* Store colours that stay apart with colour blindness (issue #112): Okabe and Ito's palette, 3:1 or more on every
    background. Your own colours are set on the page itself (applyDisplay). */
-:root[data-colours="colourblind"] { --booth: #E69F00; --gumroad: #CC79A7; --jinxxy: #56B4E9; --payhip: #F0E442; --itch: #2BB58C; --local: #D8D8D8; }
+:root[data-colours="colourblind"] { --booth: #E69F00; --gumroad: #CC79A7; --jinxxy: #56B4E9; --payhip: #F0E442; --itch: #2BB58C; --local: #D8D8D8; --sets: #FF8A4D; }
 @media (prefers-color-scheme: light) {
-  :root[data-colours="colourblind"] { --booth: #A86A00; --gumroad: #A84D86; --jinxxy: #1F72AE; --payhip: #7D7300; --itch: #00775A; --local: #5E5E5E; }
+  :root[data-colours="colourblind"] { --booth: #A86A00; --gumroad: #A84D86; --jinxxy: #1F72AE; --payhip: #7D7300; --itch: #00775A; --local: #5E5E5E; --sets: #B34700; }
 }
 /* Your language (hoard/i18n.py): the page stays hidden until it's translated (a moment at most), and Korean gets a
    font that has it (the bundled ones have Japanese, not Hangul) and keeps its words whole when it wraps */
@@ -148,6 +148,9 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; background: var(--c); transform: rotate(45deg); }
 .booth { --c: var(--booth); } .gumroad { --c: var(--gumroad); } .jinxxy { --c: var(--jinxxy); } .payhip { --c: var(--payhip); }
 .itch { --c: var(--itch); }
+/* Sets and wishlists: a colour of its own beside the stores', and a heart, as it isn't a store */
+[data-store="Sets"] { --c: var(--sets); }
+.dot.sets { transform: none; width: 11px; height: 10px; border-radius: 0; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 18'%3E%3Cpath d='M10 18 1.6 9.6A5.2 5.2 0 0 1 9 2.3L10 3.3l1-1a5.2 5.2 0 0 1 7.4 7.3z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 18'%3E%3Cpath d='M10 18 1.6 9.6A5.2 5.2 0 0 1 9 2.3L10 3.3l1-1a5.2 5.2 0 0 1 7.4 7.3z'/%3E%3C/svg%3E") center / contain no-repeat; }
 .local { --c: var(--local); }
 
 /* stores panel */
@@ -739,7 +742,36 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .inside .more { font-size: 12px; color: var(--dust); margin: 6px 0; }
 
 /* Projects (issue #86): what Hoard for Unity reports about a project (the products it uses), and its credits */
-.projects.win { width: min(1040px, calc(var(--vw) - 48px)); }
+/* Projects takes the whole window below the bar (it's a place of its own, not a panel over the page) */
+.projects.win { left: 0; right: 0; top: var(--bar-h); bottom: 0; transform: none; width: auto; max-height: none; border-radius: 0;
+  box-shadow: inset 0 1px 0 var(--seam); background: var(--cave); }
+.projects.win > .win-bar { padding-left: max(18px, calc((100% - 1240px) / 2)); padding-right: max(10px, calc((100% - 1260px) / 2)); }
+.projects.win > .win-body { padding: 0 max(20px, calc((100% - 1240px) / 2)) 28px; }
+.pj-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--seam); }
+.pj-tab { width: auto; margin: 0; padding: 7px 14px; border: 0; border-radius: 9px; background: none; color: var(--dust); font: 700 14px var(--body); }
+.pj-tab:hover { color: var(--bone); background: var(--stone); }
+.pj-tab[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-tab .n { margin-left: 4px; font-size: 12px; font-weight: 500; color: var(--dust); }
+.pj-subs { margin-top: 18px; }
+/* what Projects' own lane is doing: on top of every view, with Stop */
+.pj-job { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 4px;
+  padding: 9px 14px; border-radius: 0 0 12px 12px; background: var(--stone); box-shadow: 0 0 0 1px var(--seam); font-size: 13.5px; }
+.pj-job[hidden] { display: none; }
+.pj-job .pj-job-msg { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.pj-job > button { width: auto; margin: 0; }
+/* rows in Projects alternate, and the one under the pointer stands out, so a long list is easy to follow */
+.pj-list > li:nth-child(even), .pj-rows > li:nth-child(even), .pj-pk tr:nth-child(even) { background: var(--ledge); }
+.pj-list > li:hover, .pj-rows > li:hover, .pj-pk tr:hover { box-shadow: inset 0 0 0 2px var(--gold); }
+.pj-pk tr > td:first-child { padding-left: 10px; }
+.pj-pk tr > td:last-child { padding-right: 10px; }
+.pj-rows { padding: 0; list-style: none; }
+.pj-rows > li { margin: 0; padding: 8px 10px; border-radius: 8px; }
+/* Add packages: chosen ones, and the button to add them, stay in reach at the foot of the list */
+.pj-addlist { margin-top: 10px; }
+.pj-addbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 14px;
+  margin-top: 8px; padding: 10px 14px; border-radius: 12px 12px 0 0; background: var(--stone); box-shadow: 0 0 0 1px var(--seam); }
+.pj-addbar > button { width: auto; margin: 0; }
+.projects .danger { color: var(--warn); }
 .proj { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .proj summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; cursor: pointer; list-style: none; }
 .proj summary::-webkit-details-marker { display: none; }
@@ -774,9 +806,9 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .projects .primary, .projects .ghost { width: auto; margin-top: 0; }   /* (not a panel's one full-width button) */
 .pj-top input[type=search] { flex: 1 1 200px; }
 .pj-top > button { width: auto; flex: none; margin: 0; }
-.pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pj-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "star main acts" "star what acts"; gap: 2px 12px;
-  align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+  align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--stone); }
 .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main acts" "what acts"; }
 .pj-row.gone { opacity: .7; }
 .pj-star { grid-area: star; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--seam); font-size: 17px; line-height: 1; }
@@ -847,6 +879,24 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .pj-picklist label.check input { margin-top: 3px; flex: none; }
 .pj-picklist .linkish { text-align: left; }
 .pj-desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dust); }
+/* a wishlist open: its suggested tags and a price range above its two groups (not yours yet, yours already), each of
+   which folds away */
+.wishbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 16px; }
+.wish-tags, .wish-price { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; min-width: 0; }
+.wish-l { font-size: 12.5px; font-weight: 700; color: var(--dust); }
+.wish-price input { width: 96px; height: var(--btn-h-sm); padding: 0 10px; border-radius: 8px; border: 0; background: var(--cave);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; box-sizing: border-box; }
+.wish-price select { width: auto; }
+.wish-price > button { width: auto; margin: 0; }
+.wishgroup { margin: 0 0 18px; }
+.wishgroup > summary { display: flex; align-items: center; gap: 8px; margin: 22px 0 14px; cursor: pointer; list-style: none;
+  font: 700 15px var(--body); color: var(--dust); }   /* (as a set's other headings: .setmore h3) */
+.wishgroup > summary .n { font-weight: 400; }
+.wishgroup > summary::-webkit-details-marker { display: none; }
+.wishgroup > summary::before { content: ""; width: 8px; height: 8px; flex: none; margin: -3px 2px 0; border: solid currentColor;
+  border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform .15s; }
+.wishgroup:not([open]) > summary::before { transform: rotate(-45deg); margin-top: 0; }
+.wishgroup > summary:hover { color: var(--bone); }
 /* Sets, a tab beside the stores: each set a big tile, its own picture or four of its products'; a set open is a folder
    of its products, the ones here as the usual tiles, then the rest (not downloaded, or not yours yet) */
 .setview { margin: 0 0 18px; }
@@ -1064,7 +1114,7 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
+  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets and wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <label class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search downloads" aria-label="Search your downloads: names, creators, tags and files" autocomplete="off">
@@ -1094,7 +1144,7 @@ body.less-motion .tour-try::before { animation: none; }
     <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip<span class="n"></span></button>
     <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io<span class="n"></span></button>
     <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local<span class="n"></span></button>
-    <button role="radio" class="sets" data-store="Sets" aria-checked="false" title="Products you use together">Sets<span class="n"></span></button>
+    <button role="radio" class="sets" data-store="Sets" aria-checked="false" title="Products you use together, and products you want"><span class="dot sets" aria-hidden="true"></span>Sets and wishlists<span class="n"></span></button>
     <span id="drives" class="drives" role="radiogroup" aria-label="Library folder" hidden></span>
   </div>
   <div class="shelf-tools">
@@ -1343,8 +1393,9 @@ body.less-motion .tour-try::before { animation: none; }
   </div>
   <h3 id="part-updates">Updates</h3>
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
-  <p class="hint">Once a day, when Hoard starts, it asks GitHub (where Hoard is published) whether there's a newer
-    version. GitHub sees your IP address, as with any website; nothing else is sent.</p>
+  <p class="hint">Each time Hoard starts, and once a day while it's open, it asks GitHub (where Hoard is published)
+    whether there's a newer version, in the background. GitHub sees your IP address, as with any website; nothing else
+    is sent.</p>
   <label class="check"><input type="checkbox" id="setBetas"> Get beta updates</label>
   <p class="hint">Betas are the next version before it's finished, for testers: they may have problems. With this on,
     a beta counts as an update too, and you're offered the finished version when it's out.</p>
@@ -1370,6 +1421,7 @@ body.less-motion .tour-try::before { animation: none; }
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
+  <div id="pjJob" class="pj-job" hidden aria-live="polite"></div>
   <div id="projectsBody"></div>
 </section>
 <section id="insideWin" class="stores inside" hidden aria-labelledby="insideTitle">
@@ -2834,8 +2886,9 @@ async function watchJobs() {
       const st = await r.json(), j = st.job || {};
       showRoutine(st.routine);
       if (["verify", "add-local", "move", "rescan-local", "remove-local", "delete-files"].includes(lastTask) && j.task !== lastTask && typeof renderIntegrity === "function") load(true);
+      jobEnded(lastTask, j);
       lastTask = j.running ? j.task : null;
-      taskCount((j.running ? 1 : 0) + (j.queue || []).length);
+      taskCount(jobCount(st));
       const pill = $("#job");   // what's running, on the shelf
       if (pill) { pill.hidden = !(j.running && j.message); pill.textContent = j.message || ""; }
       if (j.running && (j.sync || j.task === "download" || j.task === "check-updates") && !dlActive) pollDownload();

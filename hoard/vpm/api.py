@@ -6,6 +6,10 @@ Only projects on the list are ever changed: a path the page sends is checked aga
 """
 from __future__ import annotations
 
+import os
+import shutil
+import stat
+import sys
 import threading
 import time
 from pathlib import Path
@@ -16,11 +20,14 @@ from . import backup, environment, imports, listing, presets, repos, resolve, te
 from .manifest import valid_name
 from .preload import apply as put_in
 from .preload import contents, suggested_packages
-from .project import TYPE_NAMES, ProjectError, UnityProject
+from .project import TYPE_NAMES, ProjectError, UnityProject, is_project
 from .repos import Selector
 from .version import UnityVersion, Version, VersionError, VersionRange
 
 MAX_PACKAGES_LISTED = 5000
+# Hoard for Unity: in every new project unless you leave it out, from its own repository (added when it isn't yet)
+HOARD_PACKAGE = "soloflighter.hoard"
+HOARD_REPO = "https://hoard.furryup.link/index.json"
 MAX_VERSIONS_LISTED = 2000   # (VRCFury alone has well over a thousand)
 
 
@@ -69,7 +76,13 @@ class Service:
                        "packages": len(r.packages), "loaded": r.loaded, "error": r.error} for r in coll.repos],
             "presets": presets.load(),
             "backups": self.backups(summary=True),
+            "hoard_for_unity": {"package": HOARD_PACKAGE, "repo": HOARD_REPO, "repo_added": self._has_hoard(coll)},
         }
+
+    @staticmethod
+    def _has_hoard(coll) -> bool:
+        """Is Hoard for Unity's repository added (by its address, or a repository that has the package)?"""
+        return any((r.url or "").rstrip("/") == HOARD_REPO or HOARD_PACKAGE in r.packages for r in coll.repos)
 
     def backups_folder(self) -> Path:
         return Path(self.settings().project_backup_path() or backup.default_folder())
@@ -241,7 +254,55 @@ class Service:
             out = backup.back_up(Path(path), self.backups_folder(), leave_out)
             listing.note(path, backed_up=time.strftime("%Y-%m-%dT%H:%M:%S"))
             return f"Backed up {Path(path).name} to {out}."
+        if op == "delete":
+            return self._delete(path, backup_first=what.get("backup") is not False)
         raise ProjectsError("Hoard doesn't know that project task.")
+
+    def deletable(self, path: str) -> Path:
+        """The project's folder, when it's safe to delete: on the list, a Unity project, closed in Unity, and holding
+        none of Hoard's own folders (its data, the downloads, the project backups), nor being a drive's top or your
+        home folder. Raises ProjectsError saying why not."""
+        from ..config import load_config, root_dir   # (here: the config isn't Projects' own)
+        from ..paths import data_dir
+        keep = [data_dir(), root_dir(load_config()), self.backups_folder()]
+        folder = Path(self.listed(path))
+        try:
+            real = folder.resolve(strict=True)
+        except OSError:
+            raise ProjectsError("Its folder isn't there any more: take it off the list instead.") from None
+        if not real.is_dir() or not is_project(real):
+            raise ProjectsError("That folder isn't a Unity project, so Hoard won't delete it.")
+        if real.parent == real or real == Path.home().resolve() or len(real.parts) < 3:
+            raise ProjectsError("Hoard won't delete a folder that high up.")
+        for other in keep:
+            try:
+                inside = Path(other).resolve()
+            except OSError:
+                continue
+            if inside == real or real in inside.parents:
+                raise ProjectsError(f"{inside} is inside this project, so it would go too. Move it somewhere else first.")
+        try:
+            if UnityProject.load(str(real)).unity_running():
+                raise ProjectsError("Unity has this project open. Close it first.")
+        except ProjectError:
+            pass   # (a project whose files can't be read is still deleted when you ask)
+        return real
+
+    def _delete(self, path: str, backup_first: bool) -> str:
+        """Delete a project from this computer: backed up first (unless you said not to), taken off the list, then its
+        folder deleted. Stop works until the deleting starts; after that it carries on, so no half-deleted project is
+        left behind."""
+        name = Path(path).name
+        folder = self.deletable(path)
+        if backup_first:
+            log(f"Backing up {name} first")
+            out = backup.back_up(folder, self.backups_folder(), set())
+            log(f"Backed up to {out}")
+        log(f"Deleting {name}")   # (the last word Stop can come at)
+        listing.remove(str(folder))
+        listing.forget(str(folder))
+        shutil.rmtree(folder, **({"onexc": _writable_then_again} if sys.version_info >= (3, 12) else {"onerror": _writable_then_again}))
+        return f"Deleted {name} from this computer." + (" Its backup is in your backups folder." if backup_first else "")
 
     def _fetch_missing(self) -> None:
         """Before packages are chosen: the repositories never fetched here yet, fetched (a first project, say)."""
@@ -269,6 +330,14 @@ class Service:
         editors = unity.find_editors(environment.database(settings.folder)["unityVersions"])
         name = str(what.get("name") or "").strip()
         self._fetch_missing()
+        if HOARD_PACKAGE in extra and not self._has_hoard(self.collection()):   # its repository, added first
+            log("Adding Hoard for Unity's repository")
+            try:
+                repos.add_repo(settings, HOARD_REPO, "Hoard for Unity")
+                self.forget()
+            except repos.RepoError as e:
+                log(f"Hoard for Unity's repository couldn't be added ({e}), so the project is made without it")
+                del extra[HOARD_PACKAGE]
         log(f"Making the project {name}")
         try:
             project = templates.create(settings.folder, sorted({e["version"] for e in editors}), str(what.get("template")),
@@ -324,3 +393,11 @@ class Service:
             message += " Not put in: " + "; ".join(f"{f['what']} ({f['why']})" for f in done["failed"][:5]) + "."
         return message
 
+
+def _writable_then_again(func, path, _exc):
+    """Deleting a project: a file Unity or git left read-only (as on Windows) is made writable, then deleted."""
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except OSError:
+        raise

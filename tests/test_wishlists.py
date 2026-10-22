@@ -295,7 +295,96 @@ class InHoard(unittest.TestCase):
             hoodie = page.locator(".slot.ext", has_text="Fox Hoodie")
             self.assertEqual(hoodie.locator(".price.down").inner_text(), "1,200 JPY")
             self.assertEqual(" ".join(hoodie.locator(".was").inner_text().split()), "was 1,500 JPY", "struck through, read as was")
-            self.assertEqual(page.locator(".slot.ext", has_text="Mochi Boots").count(), 0, "yours: a tile in the library, not one to buy")
+            self.assertEqual(page.locator('details[data-fold="wish-yours"] .nm-t').all_inner_texts(), ["Mochi Boots"],
+                             "yours: under Yours already")
+            self.assertEqual(page.locator(".slot.wanted", has_text="Mochi Boots").count(), 0, "not one to buy")
+            browser.close()
+        self.assertEqual(errors, [])
+
+    def test_groups_tags_prices_and_links(self):
+        """A wishlist open: what isn't yours yet and what is, in two groups that fold away (and stay folded); its
+        suggested tags, from the words its names share, narrow it down; so does a price range, in one currency;
+        and products are added by their links."""
+        from hoard import server
+        sets.SetStore().put_wishlists([{"store": "booth", "list": "Loved items", "url": "u", "products": [
+            product("Fox Hoodie", "1,200 JPY"), product("Fox Ears", "800 JPY"), product("Wolf Hoodie", "3,000 JPY"),
+            product("Mochi Boots", "500 JPY", id_="1002"), product("Snow Cap", "12.50 USD", "gumroad")]}])
+        page_json = json.dumps({"name": "Fox Tail", "price": "¥ 600", "shop": {"name": "Mochi Works"}, "images": []})
+        from playwright.sync_api import sync_playwright
+        with mock.patch.object(server, "read_store_page", lambda url, hosts: (page_json, "application/json")), sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
+            self.assertIn("Sets and wishlists", page.locator('#storeSeg [data-store="Sets"]').inner_text())
+            page.locator(".settile", has_text="Booth: Loved items").wait_for()
+            self.assertEqual(page.locator("#count").inner_text(), "0 sets", "a wishlist is counted under Wishlists")
+            page.locator(".settile", has_text="Booth: Loved items").click()
+            buy, yours = page.locator('details[data-fold="wish-buy"]'), page.locator('details[data-fold="wish-yours"]')
+            buy.wait_for()
+            self.assertEqual(buy.locator(".slot.ext").count(), 4)
+            self.assertEqual(yours.locator(".nm-t").all_inner_texts(), ["Mochi Boots"], "yours already: in its own group")
+            self.assertEqual(page.locator("#grid .slot").count(), 0, "a wishlist's products are all in its groups")
+            yours.locator("summary").click()
+            page.wait_for_function("() => !document.querySelector('details[data-fold=\"wish-yours\"]').open")
+            # its suggested tags: words several names share
+            tags = page.locator(".wish-tags .chip")
+            self.assertIn("hoodie2", tags.evaluate_all("l => l.map(b => b.textContent)"))
+            page.click('.wish-tags [data-tag="fox"]')
+            self.assertEqual(sorted(buy.locator(".nm-t").all_inner_texts()), ["Fox Ears", "Fox Hoodie"])
+            # a price range, in one of its currencies (the one most of its prices are in, to begin with)
+            page.fill('[data-wish="min"]', "1000")
+            self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Fox Hoodie"])
+            page.click('[data-setx="wclear"]')
+            self.assertEqual(buy.locator(".slot.ext").count(), 4)
+            page.select_option('[data-wish="cur"]', "USD")
+            page.fill('[data-wish="max"]', "20")
+            self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Snow Cap"])
+            page.click('[data-setx="wclear"]')
+            # added by its link
+            page.click('[data-setx="addlinks"]')
+            page.fill("#addLinks", "https://booth.pm/en/items/4242")
+            page.locator("dialog.ask button[value=yes]").click()
+            buy.locator(".slot.ext", has_text="Fox Tail").wait_for()
+            # folded stays folded, next time too
+            page.reload()
+            page.locator('details[data-fold="wish-buy"]').wait_for()
+            self.assertFalse(page.locator('details[data-fold="wish-yours"]').evaluate("d => d.open"))
+            browser.close()
+        self.assertEqual(errors, [])
+
+    def test_a_list_read_again_shows_without_opening_it_again(self):
+        """Read it again brought a wishlist up to date, but the page kept showing it as it was, until something else
+        (making a new list) made it read the sets again. When the read ends, the page reads them again."""
+        from hoard import jobs
+        first = [{"store": "gumroad", "list": "Winter", "url": "u", "products": [product("Snow Cap", "12.50 USD", "gumroad")]}]
+        sets.SetStore().put_wishlists(first)
+        again = [{**first[0], "products": first[0]["products"] + [product("Snow Boots", "20 USD", "gumroad")]}]
+
+        class Ctx:
+            def close(self):
+                pass
+        from playwright.sync_api import sync_playwright
+        with mock.patch.object(jobs, "reachable", lambda s: True), mock.patch.object(jobs, "launch", lambda *a: Ctx()), \
+                mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                mock.patch.dict(wishlists.READERS, {"gumroad": lambda ctx, cfg, progress: time.sleep(1) or again}), \
+                sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
+            page.locator(".settile", has_text="Gumroad: Winter").click()
+            page.locator(".slot.ext", has_text="Snow Cap").wait_for()
+            self.assertEqual(page.locator(".slot.ext", has_text="Snow Boots").count(), 0)
+            page.click("[data-setx=reread]")
+            page.locator(".slot.ext", has_text="Snow Boots").wait_for(timeout=15000)   # (no reload, no new list)
+            self.assertIn("2 products", page.locator(".sethead").inner_text())
             browser.close()
         self.assertEqual(errors, [])
 

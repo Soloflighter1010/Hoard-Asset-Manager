@@ -164,7 +164,7 @@ class AccessKey(unittest.TestCase):
         page.get_by_text("Hoard 99.0.0 is available").wait_for()
         self.assertTrue(page.locator("#updInstall").is_hidden(), "only the installed app installs it")
         self.assertTrue(page.locator("#updLink").is_visible())
-        self.assertFalse(page.locator("#setUpdates").is_checked(), "automatic checks are off unless turned on")
+        self.assertTrue(page.locator("#setUpdates").is_checked(), "automatic checks are on in a new Hoard (5.1.0)")
         self.assertEqual(refused, [])
         page.close()
 

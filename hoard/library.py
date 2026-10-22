@@ -1257,30 +1257,40 @@ def _norm(s: str) -> str:
     return key if len(key) >= 4 else re.sub(r"[\W_]+", "", s)
 
 
-def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
-    """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
-    tagdata = tagdata or TagStore.empty()
-    def tokens(name):
-        name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
-        return {t for t in re.findall(r"[^\W_]+", name.lower())
-                if len(t) >= 2 and t not in STOPWORDS and not t.isdigit() and not re.fullmatch(r"v\d+[a-z]?", t)}
+def name_tokens(name: str) -> set[str]:
+    """The words of a product's name that could be a tag: not too short, not a number, a version or a stopword."""
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name or "")
+    return {t for t in re.findall(r"[^\W_]+", name.lower())
+            if len(t) >= 2 and t not in STOPWORDS and not t.isdigit() and not re.fullmatch(r"v\d+[a-z]?", t)}
 
-    toks = [tokens(i["name"]) for i in items]
+
+def common_words(names: list[str], min_count: int, max_share: float, block=frozenset()) -> list[set[str]]:
+    """Suggested tags: for each name, its words that min_count or more of the names share (a plural counting as its
+    singular), leaving out those most of them share (over max_share of ten or more) and those in block."""
+    toks = [name_tokens(n) for n in names]
     df = Counter(t for ts in toks for t in ts)
     plural = {w: w[:-1] for w in df if len(w) > 3 and w.endswith("s") and not w.endswith("ss") and w[:-1] in df}
     toks = [{plural.get(t, t) for t in ts} for ts in toks]
     df = Counter(t for ts in toks for t in ts)
-    n, block = len(items), {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
-    keep = {w for w, c in df.items() if c >= int(tcfg.get("min_count", 3)) and w not in block
-            and (n < 10 or c / n <= float(tcfg.get("max_share", 0.4)))}
+    n = len(names)
+    keep = {w for w, c in df.items() if c >= min_count and w not in block and (n < 10 or c / n <= max_share)}
+    return [ts & keep for ts in toks]
+
+
+def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
+    """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
+    tagdata = tagdata or TagStore.empty()
+    block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
+    suggestions = common_words([i["name"] for i in items], int(tcfg.get("min_count", 3)),
+                               float(tcfg.get("max_share", 0.4)), block)
 
     groups: dict[str, list] = {}
     out = []
     matcher = TagMatcher(tagdata["tags"])
-    for i, ts in zip(items, toks):
+    for i, ts in zip(items, suggestions):
         key = tag_key(i["store"], i["name"])
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
-        e = {**i, "tag_key": key, "tags": mine, "suggested": sorted((ts & keep) - set(mine)),
+        e = {**i, "tag_key": key, "tags": mine, "suggested": sorted(ts - set(mine)),
              "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": ""}
         for k in ("creator_url", "url", "download_url", "page"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))

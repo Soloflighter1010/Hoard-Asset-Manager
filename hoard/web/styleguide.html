@@ -80,7 +80,10 @@
   <span><span class="dot booth"></span> Booth</span><span><span class="dot gumroad"></span> Gumroad</span>
   <span><span class="dot jinxxy"></span> Jinxxy</span><span><span class="dot payhip"></span> Payhip</span>
   <span><span class="dot itch"></span> itch.io</span><span><span class="dot local"></span> Local</span>
+  <span data-store="Sets"><span class="dot sets"></span> Sets and wishlists</span>
 </div></div>
+<p>Sets and wishlists isn't a store: its tab has a colour of its own (<code>--sets</code>, set on
+  <code>[data-store="Sets"]</code>) and a heart for its dot (<code>dot sets</code>).</p>
 
 <h2 class="sg-h" id="type">Text</h2>
 <div class="sg-ex on-ledge">
@@ -228,8 +231,13 @@
 </div>
 
 <h2 class="sg-h" id="projects">Projects</h2>
-<p>The Projects window is <code>projects</code>: its fields, buttons and lists take their look from inside it.</p>
+<p>Projects is <code>projects</code>, the whole window below the bar: its fields, buttons and lists take their look
+  from inside it. Its views are tabs (<code>pj-tabs</code>), as are a project's (<code>pj-tabs pj-subs</code>); what its
+  own lane of tasks is doing shows above them (<code>pj-job</code>). Its rows alternate, and the one under the pointer
+  is outlined.</p>
 <div class="sg-ex on-ledge"><div class="projects">
+  <div class="pj-job"><span class="spin" aria-hidden="true"></span><span class="pj-job-msg">Projects: Change Rusk Avatar's packages</span><button class="ghost sm">Stop</button><span class="muted">1 more waiting</span></div>
+  <nav class="pj-tabs" aria-label="Projects"><button class="pj-tab" aria-current="page">Projects</button><button class="pj-tab">Repositories</button><button class="pj-tab">Backups</button><button class="pj-tab">Unity and folders</button></nav>
   <ul class="pj-list">
     <li class="pj-row"><button class="pj-star" aria-pressed="true" aria-label="Favourite">★</button><span class="pj-main"><b translate="no">Rusk Avatar</b><span class="meta" translate="no">C:\Users\you\ALCOM\Projects\Rusk Avatar</span></span><span class="pj-what">Avatar · <span translate="no">Unity 2022.3.22f1</span> · opened 2 hours ago</span><span class="pj-acts"><button class="primary sm">Open in Unity</button><button class="ghost sm">Manage</button></span></li>
     <li class="pj-row gone"><button class="pj-star" aria-pressed="false" aria-label="Favourite">★</button><span class="pj-main"><b translate="no">Old World</b><span class="meta" translate="no">D:\Unity\Old World</span></span><span class="pj-what">The folder isn't there</span><span class="pj-acts"><button class="ghost sm">Take off the list</button></span></li>
@@ -239,6 +247,13 @@
     <li class="pj-row pj-bk"><label class="pj-main check"><input type="checkbox"><span><b translate="no">Rusk Avatar</b><span class="meta">20 Oct 2026, 01:47 · 1.3 GB</span></span></label><span class="pj-what"></span></li>
     <li class="pj-row pj-bk old"><label class="pj-main check"><input type="checkbox"><span><b translate="no">Rusk Avatar</b><span class="meta">5 Apr 2026, 01:47 · 1.3 GB</span></span></label><span class="pj-what">Old</span></li>
   </ul>
+  <h3 class="sg-h">A project's tabs, and Add packages</h3>
+  <nav class="pj-tabs pj-subs" aria-label="This project"><button class="pj-tab">Packages <span class="n">2</span></button><button class="pj-tab" aria-current="page">Add packages</button><button class="pj-tab">From your library</button></nav>
+  <ul class="pj-picklist pj-rows pj-addlist">
+    <li><label class="check"><input type="checkbox" checked> <span><b translate="no">Modular Avatar</b> <span class="muted" translate="no">1.12.5</span><br><span class="muted" translate="no">nadena.dev.modular-avatar · bd_</span></span></label><select class="pj-pick-ver" aria-label="Version of Modular Avatar"><option>Newest</option></select></li>
+    <li><label class="check"><input type="checkbox" disabled> <span><b translate="no">VRChat SDK - Base</b> <span class="muted" translate="no">3.10.5</span> <span class="pj-tag">In it already</span><br><span class="muted" translate="no">com.vrchat.base · Official</span></span></label></li>
+  </ul>
+  <div class="pj-addbar"><span class="muted">1 chosen</span><button class="primary sm">Add the chosen packages</button></div>
 </div></div>
 
 <h2 class="sg-h" id="sets">Sets and wishlists</h2>
@@ -247,6 +262,13 @@
     <button class="slot settile" aria-label="Rusk, winter: 3 products"><span class="art"><span class="collage n2"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%2356D1DC'/%3E%3C/svg%3E" alt=""><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%23FF8AD8'/%3E%3C/svg%3E" alt=""></span><i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">Rusk, winter</span><span class="cr">3 products, all yours</span></button>
     <div class="slot ext wanted"><a class="ext-main" href="#sets"><span class="art"><span class="ph" style="--h:330" translate="no"><b>FE</b></span><i class="notch jinxxy" data-s="Jinxxy"></i></span><span class="nm-t" translate="no">Fox Ears</span><span class="cr" translate="no">by Tails · Jinxxy</span></a><span class="ext-price"><span class="price down" translate="no">$8.00</span> <s class="was" translate="no"><span class="visually-hidden">was </span>$12.00</s></span><span class="ext-row"><span class="ext-what">Buy on Jinxxy</span></span></div>
   </div>
+  <h3 class="sg-h">A wishlist open</h3>
+  <div class="wishbar">
+    <div class="wish-tags" role="group" aria-label="Suggested tags"><span class="wish-l">Suggested tags</span><button class="chip" data-tag="fox" aria-pressed="true" translate="no">fox<span class="n">3</span></button><button class="chip" data-tag="hoodie" aria-pressed="false" translate="no">hoodie<span class="n">2</span></button></div>
+    <div class="wish-price" role="group" aria-label="Price range"><span class="wish-l">Price</span><input type="number" placeholder="From" aria-label="Lowest price"><span aria-hidden="true">–</span><input type="number" placeholder="To" aria-label="Highest price"><span translate="no">JPY</span><button class="linkish">Clear</button></div>
+  </div>
+  <details class="wishgroup" open><summary>Not yours yet <span class="n">2</span></summary><p class="none">(its products, as tiles)</p></details>
+  <details class="wishgroup"><summary>Yours already <span class="n">1</span></summary></details>
   <h3 class="sg-h">Mix and match</h3>
   <ul class="mixlist"><li><span class="mixart"><span class="ph" style="--h:24"><b>RU</b></span></span><span class="mixtext"><small>Avatar</small><b translate="no">Rusk</b><span class="muted" translate="no">Kitsu</span></span><label class="check"><input type="checkbox" checked> Keep</label></li>
     <li><span class="mixart"><span class="ph" style="--h:300"><b>WH</b></span></span><span class="mixtext"><small>tops</small><b translate="no">Winter Hoodie</b><span class="muted" translate="no">Mochi</span></span><label class="check"><input type="checkbox"> Keep</label></li></ul>

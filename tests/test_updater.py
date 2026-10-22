@@ -301,25 +301,32 @@ class Downloading(unittest.TestCase):
 
 
 class WhenHoardAsks(unittest.TestCase):
-    def test_off_unless_turned_on(self):
+    def test_each_time_hoard_starts_unless_turned_off(self):
+        """On to begin with: Hoard checks for a newer version in the background each time it starts (whenever the
+        last check was), and once a day while it stays open. Turned off, it never asks."""
         cfg = config.load_config()
-        self.assertFalse(config.DEFAULT_CONFIG["check_for_updates"])
+        self.assertTrue(config.DEFAULT_CONFIG["check_for_updates"])
         updates = updater.Updates(cfg)
-        updates.state["checked"] = 0
+        updates.state["checked"] = time.time() - 60
+        self.assertTrue(updates.due(), "at start, however recent the last check")
+        with mock.patch.object(updater, "fetch_latest", return_value=None) as fetch:
+            updates.check_in_background(every=0.2)
+            for _ in range(50):
+                if fetch.call_count >= 2:
+                    break
+                time.sleep(0.05)
+            self.assertGreaterEqual(fetch.call_count, 2, "and again while it's open")
+            cfg["check_for_updates"] = False   # (first: the loop goes on, and asks no more once it's off)
         self.assertFalse(updates.due())
         with mock.patch.object(updater, "fetch_latest") as fetch:
-            updates.check_in_background()
+            updater.Updates(cfg).check_in_background()
             time.sleep(0.2)
             fetch.assert_not_called()
-        cfg["check_for_updates"] = True
-        self.assertTrue(updates.due())
-        updates.state["checked"] = time.time() - 3600
-        self.assertFalse(updates.due(), "at most once a day")
 
     def test_the_setting(self):
         cfg = config.load_config()
-        self.assertEqual(server.apply_settings(cfg, {"check_for_updates": 1}), {"check_for_updates": True})
-        self.assertFalse(server.public_settings(cfg)["check_for_updates"])
+        self.assertEqual(server.apply_settings(cfg, {"check_for_updates": 0}), {"check_for_updates": False})
+        self.assertTrue(server.public_settings(cfg)["check_for_updates"], "(applied by the server, to the config it keeps)")
 
     def test_the_last_check_is_remembered(self):
         with mock.patch.object(updater, "fetch_latest", lambda betas=False: release(f"v{NEXT}")):

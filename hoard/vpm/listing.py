@@ -87,6 +87,14 @@ def note(path: str, **changes) -> dict:
         return entry
 
 
+def forget(path: str) -> None:
+    """Forget what Hoard noted about a project (a deleted one): its favourite, what was put in it, ..."""
+    with _lock:
+        state = load_state()
+        if state["projects"].pop(_key(path), None) is not None:
+            save_state(state)
+
+
 def add_preloaded(path: str, items: list[dict]) -> None:
     """Note products from the library that went into a project (for its credits and the page)."""
     with _lock:

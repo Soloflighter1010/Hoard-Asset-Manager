@@ -1,5 +1,33 @@
 # Changelog
 
+## 5.1.0
+
+- **Projects takes the whole window**, with its views as tabs along its top: Projects, Repositories, Backups, and Unity
+  and folders. A project has tabs of its own: its Packages, **Add packages** (a tab now, not a window over the page:
+  tick the packages you want, choose a version if you like, then **Add the chosen packages**), From your library, and
+  what Hoard for Unity found in it. Rows alternate in colour, and the one under the pointer is outlined.
+- **Projects' tasks run on their own**, beside the rest of Hoard's: a project's change never waits behind a sync or a
+  download, and they never wait behind it. What Projects is doing shows at its top, with **Stop** (what it was
+  changing is put back as it was), as well as in **Tasks**.
+- **Add a project...** opens your computer's own folder picker (in Hoard's window), in your projects folder.
+  **Repositories** puts **Add a repository** first, above the list.
+- **Delete from this computer...**, in a project: its folder deleted, backed up into your backups folder first unless
+  you untick that, once you've typed its name. Never a project that holds Hoard's own folders, or one Unity has open.
+- **Hoard for Unity in every new project**, unless you leave it out; its repository is added for you if you haven't
+  got it.
+- **Sets and wishlists** is the Sets tab's name now, with a colour and a heart of its own beside the stores.
+- **Wishlists, easier to go through.** What isn't yours yet and what is are two groups, each folding away (and
+  staying folded). **Suggested tags**, from words its products' names share, narrow it down, and so does a **price
+  range**, in one of its currencies.
+- **Add products by link...**, in any set or wishlist: paste products' links on Booth, Gumroad, Jinxxy, Payhip or
+  itch.io, and Hoard reads each one's page (as anyone sees it, without your sign-in) for its name, creator, price and
+  picture. A wishlist of your own can hold what you don't own yet.
+- **Check for updates automatically** checks in the background each time Hoard starts, and once a day while it's
+  open (it was at most once a day). It's on to begin with in a new Hoard; one you have already keeps your choice, so
+  turn it on in **Settings**, **Updates**, if it's off.
+- Put right: a wishlist read again shows as it is now straight away (it showed as it was until you made a new list),
+  and taking a product out of a list no longer leaves the products after it with the wrong pictures.
+
 ## 5.0.1
 
 - **Projects is now a project manager, with your library in it.** **Projects** (at the top of either page) is your

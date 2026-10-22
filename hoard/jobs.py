@@ -14,7 +14,7 @@ from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, 
 from .safety import store_link
 from .tags import tag_key
 from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
-from .common import Cancelled, NotLoggedIn, Progress, capture_log
+from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane
 from . import diagnostics
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, payhip_unread_note, sign_in_urls, unreachable_message
@@ -233,8 +233,17 @@ def tasks_file():
     return data_dir() / "tasks.json"
 
 
+def project_tasks_file():
+    """Projects' finished tasks: their lane's own file (see Jobs)."""
+    return data_dir() / "project-tasks.json"
+
+
+PROJECTS = "projects"   # Projects' lane: its tasks run on a thread of their own, never waiting behind a sync or download
+
+
 PROJECT_WORK = {"create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
-                "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}"}
+                "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}",
+                "delete": "Delete {0} from this computer"}
 
 
 def describe_job(task: str, stores: list[str], only: str | None = None, keys: list | None = None,
@@ -279,11 +288,17 @@ def _paused_in_hoard() -> str:
 class Jobs:
     """Background work, one job at a time: refreshing stores, signing in and out, downloading. A job started while
     another runs waits in a queue and starts when its turn comes (issue #49); finished jobs are kept, with their
-    progress, for the Tasks tab."""
+    progress, for the Tasks tab.
 
-    def __init__(self, cfg: dict, lib: Library, on_download_done=None):
+    Projects' tasks (changing a project's packages, making one, backing one up) have a lane of their own: a second
+    Jobs, lane PROJECTS, with its own queue, thread and finished tasks, so they never wait behind a sync or a
+    download, and a sync never waits behind them. Its Stop never touches the store browsers, which aren't its own."""
+
+    def __init__(self, cfg: dict, lib: Library, on_download_done=None, lane: str = "main"):
         """No job is running at first. on_download_done is called after every download job."""
         self.cfg, self.lib = cfg, lib
+        self.lane = lane
+        self._prefix = "p" if lane == PROJECTS else ""   # (its jobs' ids, told apart from the main lane's)
         self.on_download_done = on_download_done or (lambda: None)
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
         self.project_runner = None   # Projects' work (hoard/vpm/api.py: the server sets it)
@@ -306,6 +321,9 @@ class Jobs:
         self._moved = time.monotonic()      # when the running job last said anything
         self._ids = 0
         self.history: list[dict] = self._load_history()
+
+    def _history_file(self):
+        return project_tasks_file() if self.lane == PROJECTS else tasks_file()
 
     def _set(self, **kw):
         """Update the job state the page polls (and note each new message in the running job's progress)."""
@@ -342,7 +360,7 @@ class Jobs:
             if not queue or same or len(self._queue) >= MAX_QUEUE:
                 return None
             self._ids += 1
-            entry = {**spec, "id": f"q{self._ids}", "label": describe_job(task, stores, only, keys, scheduled, project),
+            entry = {**spec, "id": f"{self._prefix}q{self._ids}", "lane": self.lane, "label": describe_job(task, stores, only, keys, scheduled, project),
                      "queued": now_iso()}
             # issue #110: yours go ahead of automatic ones waiting, and an automatic one running makes way for it
             ahead = next((n for n, q in enumerate(self._queue) if q.get("scheduled")), len(self._queue))
@@ -350,7 +368,7 @@ class Jobs:
             make_way = not scheduled and self.state.get("scheduled") and self.state.get("running")
             if make_way and self._spec and not any(q.get("scheduled") and q["task"] == self._spec["task"] for q in self._queue):
                 self._ids += 1   # it starts again after yours (what it had done is kept; a file part way resumes)
-                self._queue.append({**self._spec, "id": f"q{self._ids}", "queued": now_iso(),
+                self._queue.append({**self._spec, "id": f"{self._prefix}q{self._ids}", "lane": self.lane, "queued": now_iso(),
                                     "label": describe_job(self._spec["task"], self._spec["stores"], scheduled=True)})
             self._publish_queue()
         if make_way:
@@ -392,7 +410,7 @@ class Jobs:
             return n
 
     def _publish_queue(self) -> None:
-        self.state["queue"] = [{"id": q["id"], "task": q["task"], "label": q["label"], "queued": q["queued"]}
+        self.state["queue"] = [{"id": q["id"], "task": q["task"], "label": q["label"], "queued": q["queued"], "lane": self.lane}
                                for q in self._queue]
 
     def _launch(self, spec: dict) -> None:
@@ -413,7 +431,7 @@ class Jobs:
         self._spec = dict(spec)
         skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
         self._ids += 1
-        self._current = {"id": f"j{self._ids}", "task": task, "stores": stores,
+        self._current = {"id": f"{self._prefix}j{self._ids}", "task": task, "stores": stores, "lane": self.lane,
                          "label": describe_job(task, stores, only, keys, scheduled, spec.get("project")),
                          "started": now_iso()}
         self._trail = []
@@ -461,6 +479,7 @@ class Jobs:
         """Run a job, recording any error for the page, and always free the runner afterwards (then start the next
         waiting job)."""
         self._job_thread = threading.get_ident()
+        set_lane(self.lane)   # (what this job says goes to its own lane's progress, not the other's)
         try:
             self._set(running=True)
             fn(stores)
@@ -505,13 +524,13 @@ class Jobs:
                              "report": report, "log": [str(x)[:500] for x in trail][-MAX_TRAIL:]})
         del self.history[:-MAX_HISTORY]
         try:
-            write_file_safely(tasks_file(), json.dumps({"history": self.history}, ensure_ascii=False))
+            write_file_safely(self._history_file(), json.dumps({"history": self.history}, ensure_ascii=False))
         except OSError as e:
             print(f"Couldn't save the task log: {e}", flush=True)
 
     def _load_history(self) -> list[dict]:
         try:
-            raw = read_json_file(tasks_file()) if tasks_file().is_file() else {}
+            raw = read_json_file(self._history_file()) if self._history_file().is_file() else {}
         except (DataFileError, OSError):
             return []
         out = []
@@ -525,7 +544,7 @@ class Jobs:
                         "message": str(h.get("message") or "")[:600],
                         "report": h.get("report") if isinstance(h.get("report"), dict) else None,
                         "log": [str(x)[:500] for x in h.get("log") or [] if isinstance(x, str)][-MAX_TRAIL:]
-                        if isinstance(h.get("log"), list) else []})
+                        if isinstance(h.get("log"), list) else [], "lane": self.lane})
         return out
 
     def tasks(self) -> dict:
@@ -540,7 +559,7 @@ class Jobs:
     def clear_history(self) -> None:
         self.history = []
         try:
-            tasks_file().unlink(missing_ok=True)
+            self._history_file().unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -806,7 +825,10 @@ class Jobs:
 
     def cancel(self) -> bool:
         """Stop the running download (or sync) within a few seconds; a file it was part way through resumes next time
-        where it can. False when neither is running."""
+        where it can. False when neither is running. In Projects' lane: stop its task at its next step, which puts
+        back what it was changing."""
+        if self.lane == PROJECTS:
+            return self._stop_project()
         if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify", "move", "routine")
                                       or self.state.get("sync") or self.state.get("routine")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
@@ -820,6 +842,8 @@ class Jobs:
         browsers, a sign-in window and a browser download are ended at once, so a task waiting on one ends straight
         away; anything else ends at its next step (a thread can't be ended from outside). What finished is kept, and
         a file part way through resumes next time where it can. False when nothing is running."""
+        if self.lane == PROJECTS:   # (the store browsers and a sign-in window are the main lane's: left alone)
+            return self._stop_project()
         if not self.state["running"]:
             return False
         self._forced = True
@@ -830,6 +854,13 @@ class Jobs:
             window.end()
         stop_install()
         end_browsers()
+        return True
+
+    def _stop_project(self) -> bool:
+        if not self.state["running"]:
+            return False
+        self._set(message="Stopping: what it was changing is put back as it was")
+        self.stop.set()
         return True
 
     # ---- a job that doesn't stop, or doesn't move

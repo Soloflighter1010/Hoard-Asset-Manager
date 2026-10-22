@@ -407,7 +407,7 @@ def run_in_browser(srv) -> None:
     webbrowser.open(srv.entry_url())
     while not stop.wait(15):
         idle = time.time() - getattr(srv, "last_seen", time.time())
-        if idle > IDLE_MINUTES * 60 and not srv.jobs.state.get("running"):
+        if idle > IDLE_MINUTES * 60 and not any(jobs.state.get("running") for jobs in _lanes(srv)):
             print("No Hoard page has been open for a while, so Hoard stopped.")
             break
 
@@ -424,6 +424,11 @@ def app_quitting() -> bool:
     return False
 
 
+def _lanes(srv) -> list:
+    """The server's jobs: the main lane, and Projects' (see hoard/jobs.py)."""
+    return [jobs for jobs in (getattr(srv, "jobs", None), getattr(srv, "project_jobs", None)) if jobs is not None]
+
+
 def close_decision(srv, quitting: bool = False) -> str:
     """What closing Hoard's window does: "background" (it's minimized to the taskbar, or the Dock, and Hoard
     carries on: unless you turned that off in Settings), "ask" (something is running or waiting its turn: the page asks whether to stop it first, carry on in
@@ -431,7 +436,7 @@ def close_decision(srv, quitting: bool = False) -> str:
     Hoard does, asking first only while something is running."""
     if srv.cfg.get("close_to_taskbar", True) and not quitting:
         return "background"
-    if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+    if any(jobs.state.get("running") or jobs.state.get("queue") for jobs in _lanes(srv)):   # (a project's task too)
         return "ask"
     return "quit"
 
@@ -440,10 +445,11 @@ def quit_when_done(srv, patience: float = 120.0) -> None:
     """Close Hoard once what's running has stopped: what's waiting is taken off the queue, and a download or sync is
     stopped (its browser ended if it has stopped answering); anything else (a refresh, a sign-in) is let finish.
     After patience seconds, Hoard closes anyway, ending any store browser still open."""
-    srv.jobs.clear_queue()
-    srv.jobs.cancel()
+    for jobs in _lanes(srv):   # (a project's task stops at its next step, putting back what it was changing)
+        jobs.clear_queue()
+        jobs.cancel()
     deadline = time.monotonic() + patience
-    while srv.jobs.state.get("running") and time.monotonic() < deadline:
+    while any(jobs.state.get("running") for jobs in _lanes(srv)) and time.monotonic() < deadline:
         time.sleep(0.25)
     if srv.jobs.state.get("running"):
         from .browser import end_browsers
@@ -457,8 +463,9 @@ def quit_now(srv) -> None:
     download is stopped where it is (a half-downloaded file resumes next time, where the store allows), and every
     store browser is ended."""
     from .browser import end_browsers
-    srv.jobs.clear_queue()
-    srv.jobs.cancel()
+    for jobs in _lanes(srv):
+        jobs.clear_queue()
+        jobs.cancel()
     end_browsers()
     if srv.quit_app:
         srv.quit_app()
@@ -469,9 +476,10 @@ def quit_cleanly(srv) -> None:
     if srv is None:
         return
     try:
-        srv.jobs.cancel()
-        for _ in range(20):   # up to ~5 s for the file being written to finish
-            if not srv.jobs.state.get("running"):
+        for jobs in _lanes(srv):
+            jobs.cancel()
+        for _ in range(20):   # up to ~5 s for the file being written to finish (or a project's change put back)
+            if not any(jobs.state.get("running") for jobs in _lanes(srv)):
                 break
             time.sleep(0.25)
         srv.shutdown()

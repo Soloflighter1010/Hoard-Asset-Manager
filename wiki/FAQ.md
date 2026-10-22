@@ -54,8 +54,9 @@ Hoard: see [Using Hoard on other devices](Using-Hoard-on-Other-Devices).
 
 When you ask it to. In **Settings**, **Updates**: **Check now** asks GitHub whether there's a newer version, and
 in the installed Windows app **Update to** downloads it, checks it, closes Hoard, installs it and opens Hoard
-again. Turn on **Check for updates automatically** and Hoard checks once a day when it starts, and shows
-**Update to** at the bottom of the page when there's a new version. It's off unless you turn it on. See
+again. With **Check for updates automatically** on, Hoard checks in the background each time it starts and once a
+day while it's open, and shows **Update to** at the bottom of the page when there's a new version. From 5.1 it's on
+to begin with in a new Hoard (one you had before keeps your choice). See
 [Installing Hoard](Installing-Hoard#updating).
 
 ## Is the hidden library encrypted?
