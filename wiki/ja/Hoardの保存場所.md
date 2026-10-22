@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English 84c7ca2a4f67). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 261396ef58be). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <b>日本語</b> · <a href="Hoard가-저장하는-곳">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 Hoardが保管するものは2つに分かれます。あなたが選んだフォルダーにあるダウンロードと、それ以外のすべてを入れた、あなたのユーザーアカウント専用の非公開のアプリデータフォルダーです。
@@ -34,6 +34,7 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 | `local-pictures/` | 自分のパッケージのタイル用に選んだ画像。Hoardはその横にもコピーします(4.2.0)。[自分のパッケージ](自分のパッケージ#画像)をご覧ください |
 | `package-needs.json` | ダウンロードした各パッケージについて、中にあるものと使っているもののID。**必要なもの** がもう一度読まずに分かるようにするためです(4.0) |
 | `logs/hoard-<date>_<time>.log` | コンソールなしで動いているときにHoardが出力する内容。何を読んだか、何をダウンロードしたか、エラー(パスワード、Cookie、ページの内容は入りません)。Hoardの起動ごとに1つで、30日間残します(古さにかかわらず最新10個は残します)。20 MBを超えて書き込む回は `-part2` に続きます。設定の **ログフォルダーを開く** でこのフォルダーが開きます。(2.9.2より前は、すべての回で1つの `hoard.log` でした。) |
+| `logs/projects-<date>_<time>.log` | プロジェクトのログ(5.1.3)。ALCOMやCreator Companionが残すのと同じく、Hoardがあなたのプロジェクト、パッケージ、リポジトリに対して行ったことと、うまくいかなかったことを、時刻とレベルとともに1行ずつ書きます。プロジェクトに書くことがあったときに、Hoardの起動ごとに1つ作り、最新の30個を残します。プロジェクトの **ログ** には今回の分が表示されます。[プロジェクト](プロジェクト#ログ)をご覧ください |
 | `diagnostics/incidents.jsonl` | 最近のエラーとクラッシュのトレースバックの、ローカルだけの非公開の記録。サポートレポートを作るのに使い、自動で送ることはありません |
 | `window/` | ウィンドウ自身のストレージ |
 | `window-place.json` | 最後に閉じたときのウィンドウの大きさと位置、最大化していたかどうか。次もそこで開くためです。削除すると、ふつうの大きさで中央に開きます |

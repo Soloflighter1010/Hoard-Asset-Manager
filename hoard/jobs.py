@@ -637,6 +637,7 @@ class Jobs:
     def _project(self, what: dict) -> None:
         """Projects' work (hoard/vpm): making a project, changing its packages, putting your products in it, backing
         it up, refreshing the repositories. Stop stops it between steps; a change part way is put back as it was."""
+        from .vpm import logbook
         from .vpm.api import ProjectsError
         from .vpm.fetch import FetchError
         from .vpm.project import ProjectError
@@ -651,21 +652,30 @@ class Jobs:
                 lines.append(str(msg))
                 del lines[:-40]
                 self._set(message=str(msg), log=lines[-20:])
+                logbook.book.add(logbook.level_of(msg), msg)   # (and in Projects' log, as ALCOM's has its work)
             if self.stop.is_set() and threading.get_ident() == self._job_thread:
                 self.stop.clear()
                 raise Cancelled()
-        self._set(task="project", message=describe_job("project", [], project=what))
+        label = describe_job("project", [], project=what)
+        self._set(task="project", message=label)
+        logbook.info(label)
         try:
             with capture_log(sink):
                 done = self.project_runner(what) if self.project_runner else "Projects aren't available here."
         except Cancelled:
             self._set(message="Stopped. What was being changed was put back as it was.")
+            logbook.warning(f"{label}: stopped. What was being changed was put back as it was.")
             return
         except (ProjectsError, ResolveError, ProjectError, FetchError, ValueError, OSError) as e:
             why = str(e) if not isinstance(e, OSError) else f"That couldn't be done ({e.strerror or e})."
             self._set(message=why, error=why)
+            logbook.error(f"{label}: {why}")
             return
+        except Exception as e:   # (shown in Tasks as any job's is; said here too, so the log has it)
+            logbook.error(f"{label}: {type(e).__name__}: {e}")
+            raise
         self._set(message=done)
+        logbook.info(done)
 
     def _files(self, task: str, what: dict) -> None:
         """A rescan or take-out of something in Local, or deleting a removed product's downloaded files, that was

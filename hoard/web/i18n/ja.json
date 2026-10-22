@@ -1913,5 +1913,19 @@
  "Add to project": "プロジェクトに追加",
  "{0} selected for {1}": "{1}用に{0}件選択中",
  "1 selected for {1}": "{1}用に1件選択中",
- "the new project": "新しいプロジェクト"
+ "the new project": "新しいプロジェクト",
+ "Logs": "ログ",
+ "Find in the log": "ログを検索",
+ "Info": "情報",
+ "Warnings": "警告",
+ "Errors": "エラー",
+ "Warning": "警告",
+ "Error": "エラー",
+ "Follow new entries": "新しい項目を追う",
+ "What Hoard did to your projects, packages and repositories since it started, and what went wrong, as ALCOM and the Creator Companion each keep a log of their own. Each time Hoard starts, it writes them to a log in the logs folder.": "Hoardが起動してから、あなたのプロジェクト、パッケージ、リポジトリに対して行ったことと、うまくいかなかったことです。ALCOMとCreator Companionも、それぞれ自分のログを残しています。Hoardは起動するたびに、これらをログフォルダーのログに書き込みます。",
+ "Time": "時刻",
+ "Level": "レベル",
+ "Message": "メッセージ",
+ "Nothing in the log matches.": "ログに当てはまるものはありません。",
+ "Nothing has been logged since Hoard started.": "Hoardが起動してから、ログに記録されたものはまだありません。"
 }

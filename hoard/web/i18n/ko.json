@@ -1913,5 +1913,19 @@
  "Add to project": "프로젝트에 추가",
  "{0} selected for {1}": "{1}에 넣을 {0}개 선택함",
  "1 selected for {1}": "{1}에 넣을 1개 선택됨",
- "the new project": "새 프로젝트"
+ "the new project": "새 프로젝트",
+ "Logs": "로그",
+ "Find in the log": "로그에서 찾기",
+ "Info": "정보",
+ "Warnings": "경고",
+ "Errors": "오류",
+ "Warning": "경고",
+ "Error": "오류",
+ "Follow new entries": "새 항목 따라가기",
+ "What Hoard did to your projects, packages and repositories since it started, and what went wrong, as ALCOM and the Creator Companion each keep a log of their own. Each time Hoard starts, it writes them to a log in the logs folder.": "Hoard가 시작된 뒤로 내 프로젝트, 패키지, 저장소에 한 일과 잘 안 된 일이에요. ALCOM과 Creator Companion도 각자 로그를 남겨요. Hoard는 시작할 때마다 이것들을 로그 폴더의 로그에 써요.",
+ "Time": "시간",
+ "Level": "수준",
+ "Message": "메시지",
+ "Nothing in the log matches.": "로그에 맞는 항목이 없어요.",
+ "Nothing has been logged since Hoard started.": "Hoard가 시작된 뒤로 아직 로그에 남은 것이 없어요."
 }

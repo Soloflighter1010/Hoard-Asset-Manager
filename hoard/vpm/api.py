@@ -16,7 +16,8 @@ from pathlib import Path
 
 from ..common import log
 from ..safety import DataFileError
-from . import backup, environment, imports, listing, presets, repos, resolve, templates, unity
+from . import backup, environment, imports, listing, logbook, presets, repos, resolve, templates, unity
+from .logbook import Warn
 from .manifest import valid_name
 from .preload import apply as put_in
 from .preload import contents, suggested_packages
@@ -52,6 +53,9 @@ class Service:
         with self._lock:
             if self._collection is None or reload:
                 self._collection = repos.Collection.load(self.settings())
+                for r in self._collection.repos:   # (in Projects' log: a repository that couldn't be read)
+                    if r.error:
+                        logbook.warning(f"The repository {r.label()} couldn't be read: {r.error}")
             return self._collection
 
     def forget(self) -> None:
@@ -225,6 +229,8 @@ class Service:
         if op == "refresh":
             failed = self.collection().refresh()
             self.forget()
+            for why in failed:   # (each a warning in Projects' log)
+                log(Warn(f"Couldn't refresh {why}"))
             return "Repositories refreshed." if not failed else "Refreshed, except: " + "; ".join(failed)
         if op == "move-backups":
             paths, to = self.backups_chosen(what.get("paths")), Path(str(what.get("to") or ""))
@@ -233,6 +239,8 @@ class Service:
             count, freed, problems = backup.move(paths, to)
             if count:
                 listing.set_backup_prefs(moved_to=str(to))
+            for why in problems[:10]:
+                log(Warn(f"Not moved: {why}"))
             done = f"Moved {count} {'backup' if count == 1 else 'backups'} to {to}, {freed / (1 << 30):.1f} GB freed."
             return done + (" Not moved: " + "; ".join(problems[:10]) if problems else "")
         path = self.listed(what.get("path"))
@@ -311,7 +319,7 @@ class Service:
         if any(r.url and not r.loaded for r in coll.repos):
             log("Fetching the repositories")
             for failed in coll.fetch_missing():
-                log(f"Couldn't fetch {failed}")
+                log(Warn(f"Couldn't fetch {failed}"))
 
     def _create(self, what: dict, assets_by_key) -> str:
         settings = self.settings()
@@ -337,7 +345,7 @@ class Service:
                 repos.add_repo(settings, HOARD_REPO, "Hoard for Unity")
                 self.forget()
             except repos.RepoError as e:
-                log(f"Hoard for Unity's repository couldn't be added ({e}), so the project is made without it")
+                log(Warn(f"Hoard for Unity's repository couldn't be added ({e}), so the project is made without it"))
                 del extra[HOARD_PACKAGE]
         log(f"Making the project {name}")
         try:

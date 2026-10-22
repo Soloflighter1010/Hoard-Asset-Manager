@@ -820,6 +820,23 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .projects .primary, .projects .ghost { width: auto; margin-top: 0; }   /* (not a panel's one full-width button) */
 .pj-top input[type=search] { flex: 1 1 200px; }
 .pj-top > button { width: auto; flex: none; margin: 0; }
+/* Projects' Logs: a table of its own that scrolls (its newest at the bottom), with warnings and errors in their colours */
+.pj-levels { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.projects .pj-levels label.check { padding: 0; font-size: 13.5px; }
+.pj-logbox { max-height: max(260px, calc(var(--vh) - var(--bar-h) - 300px)); overflow: auto; border: 1px solid var(--seam);
+  border-radius: 12px; background: var(--ledge); }
+.pj-logbox:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pj-log { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pj-log th { position: sticky; top: 0; z-index: 1; padding: 8px 12px; text-align: left; background: var(--stone); color: var(--dust);
+  font: 700 12px var(--body); border-bottom: 1px solid var(--seam); }
+.pj-log td { padding: 6px 12px; vertical-align: top; border-bottom: 1px solid var(--seam); }
+.pj-log tr:last-child td { border-bottom: 0; }
+.pj-log td.t { white-space: nowrap; color: var(--dust); font-variant-numeric: tabular-nums; }
+.pj-log td.lv { white-space: nowrap; font-weight: 700; }
+.pj-log td.m { width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.5 ui-monospace, monospace; }
+.pj-log tr.lv-warning td.lv, .pj-log tr.lv-warning td.m { color: var(--gold-text); }
+.pj-log tr.lv-error td.lv, .pj-log tr.lv-error td.m { color: var(--warn); }
+.pj-logbox .none { padding: 14px; }
 .pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pj-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "star main acts" "star what acts"; gap: 2px 12px;
   align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--stone); }

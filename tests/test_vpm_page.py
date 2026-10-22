@@ -356,6 +356,62 @@ class ProjectsPanel(unittest.TestCase):
         page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
         self.assertTrue(bar.is_hidden())
 
+    def test_logs(self):
+        """Projects' Logs, as ALCOM's and the Creator Companion's: what Hoard did and what went wrong, newest last,
+        each with its time and level; found by its words and by level (which levels is kept); new entries come in
+        while it's open; and Open logs folder opens the folder they're written to."""
+        from hoard.vpm import logbook
+        page = self.page
+        book = logbook.Logbook(self.tmp / "logs")
+        patch = mock.patch.object(logbook, "book", book)
+        patch.start()
+        self.addCleanup(patch.stop)
+        opened = []
+        reveal = mock.patch.object(server, "reveal", lambda p: opened.append(p) or str(p))
+        reveal.start()
+        self.addCleanup(reveal.stop)
+        page.click(".pj-tabs [data-pj=logs]")
+        page.locator("#pjLogNone", has_text="Nothing has been logged since Hoard started.").wait_for()
+        book.add("info", "Projects: Make Rusk Avatar")
+        book.add("warning", "Couldn't fetch Extra: it's gone")
+        page.evaluate("loadProjects()")   # (as when a task ends: drawn again, still reading what's new)
+        rows = page.locator("#pjLogRows tr")
+        rows.nth(1).wait_for()
+        # something that couldn't be done, from Projects itself
+        page.evaluate("apiPost('/api/vpm/open', {path: '/not/a/project'})")
+        page.locator("#pjLogRows tr", has_text="Open in Unity: That project isn't on the list any more.").wait_for()
+        self.assertEqual(page.locator("#pjLogRows td.lv").all_inner_texts(), ["Info", "Warning", "Error"])
+        self.assertEqual(page.locator(".pj-tabs [aria-current=page]").inner_text(), "Logs")
+        colour = lambda n: rows.nth(n).locator("td.m").evaluate("e => getComputedStyle(e).color")  # noqa: E731
+        self.assertEqual(len({colour(0), colour(1), colour(2)}), 3, "warnings and errors in their own colours")
+        box = page.locator("#pjLogBox")
+        self.assertTrue(box.evaluate("e => e.scrollTop + e.clientHeight >= e.scrollHeight - 2"), "the newest in view")
+        # by level, and by words
+        page.locator("[data-pjlevel=info]").uncheck()
+        self.assertEqual(page.locator("#pjLogRows td.lv").all_inner_texts(), ["Warning", "Error"])
+        page.fill("#pjLogFind", "UNITY list")
+        self.assertEqual(rows.count(), 1)
+        page.fill("#pjLogFind", "nothing like it")
+        self.assertTrue(page.locator("#pjLogNone", has_text="Nothing in the log matches.").is_visible())
+        page.fill("#pjLogFind", "")
+        page.reload()   # which levels is kept
+        page.click("#projectsTab")
+        page.click(".pj-tabs [data-pj=logs]")
+        rows.nth(1).wait_for()
+        self.assertFalse(page.locator("[data-pjlevel=info]").is_checked())
+        self.assertEqual(rows.count(), 2)
+        page.locator("[data-pjlevel=info]").check()
+        # Follow new entries: on, the newest comes into view; off, it's left where it is
+        follow = page.locator("[data-pj=logfollow]")
+        self.assertEqual(follow.get_attribute("aria-pressed"), "true")
+        follow.click()
+        self.assertEqual(follow.get_attribute("aria-pressed"), "false")
+        book.add("info", "Took Old World off the list")
+        page.locator("#pjLogRows tr", has_text="Took Old World off the list").wait_for()
+        page.click("[data-pj=logfolder]")
+        page.wait_for_function("() => document.querySelector('#toast').textContent.includes('Opened the logs folder')")
+        self.assertEqual(opened[-1].name, "logs")
+
     def test_unity_and_folders(self):
         page = self.page
         page.click("[data-pj=settings]")

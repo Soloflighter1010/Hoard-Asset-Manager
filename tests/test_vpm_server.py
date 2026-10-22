@@ -179,6 +179,64 @@ class Server(unittest.TestCase):
         history = self.call("GET", "/api/tasks")[1]["history"]
         self.assertEqual({h["lane"] for h in history}, {"projects", "main"} if any(h["task"] == "verify" for h in history) else {"projects"})
 
+    def test_projects_log(self):
+        """Projects' log, as ALCOM and the Creator Companion keep theirs: what was done (a task's steps and how it
+        ended, a project put on the list), a warning said as one, and what couldn't be done, each with its time and
+        level; this run's for the page, newest last, and each written to this run's own file in the logs folder."""
+        from hoard.common import log
+        from hoard.vpm import logbook
+        from hoard.vpm.api import ProjectsError
+        book = logbook.Logbook(self.tmp / "logs")
+        patch = mock.patch.object(logbook, "book", book)
+        patch.start()
+        self.addCleanup(patch.stop)
+        got = self.call("GET", "/api/vpm/logs")[1]
+        self.assertEqual((got["entries"], got["file"]), ([], None), "nothing yet, and no file until there is")
+        project = self.tmp / "Unity" / "Mochi"
+        for sub in ("Assets", "Packages", "ProjectSettings"):
+            (project / sub).mkdir(parents=True)
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(project)})[0], 200)
+        self.assertEqual(self.call("POST", "/api/vpm/open", {"path": str(self.tmp / "Elsewhere")})[0], 400)
+        self.assertEqual(self.call("POST", "/api/vpm/check-name", {"location": str(self.tmp), "name": "CON"})[0], 200)
+
+        def refresh(what):   # Projects' work, as hoard/vpm says how it's going
+            log("Fetching the repositories")
+            log(logbook.Warn("Couldn't fetch Extra: it's gone"))
+            return "Refreshed the repositories."
+        self.srv.project_jobs.project_runner = refresh
+        self.assertEqual(self.call("POST", "/api/vpm/refresh", {})[0], 200)
+        self.wait()
+
+        def broken(what):
+            raise ProjectsError("The repositories couldn't be read.")
+        self.srv.project_jobs.project_runner = broken
+        self.assertEqual(self.call("POST", "/api/vpm/refresh", {})[0], 200)
+        self.wait()
+        got = self.call("GET", "/api/vpm/logs")[1]
+        self.assertEqual([(e["level"], e["message"]) for e in got["entries"]], [
+            ("info", f"Added Mochi to the list ({project})"),
+            ("error", "Open in Unity: That project isn't on the list any more."),
+            ("info", "Projects: Refresh the repositories"),
+            ("info", "Fetching the repositories"),
+            ("warning", "Couldn't fetch Extra: it's gone"),
+            ("info", "Refreshed the repositories."),
+            ("info", "Projects: Refresh the repositories"),
+            ("error", "Projects: Refresh the repositories: The repositories couldn't be read.")],
+            "a name checked as it's typed isn't logged")
+        self.assertEqual([e["n"] for e in got["entries"]], list(range(1, 9)))
+        self.assertTrue(all(e["time"][:4].isdigit() and "T" in e["time"] for e in got["entries"]))
+        # only what's newer, for a page that has the rest
+        newer = self.call("GET", "/api/vpm/logs?after=6")[1]
+        self.assertEqual([e["n"] for e in newer["entries"]], [7, 8])
+        self.assertEqual(newer["run"], got["run"])
+        # and the file, a line an entry
+        self.assertTrue(got["file"].startswith("projects-") and got["file"].endswith(".log"))
+        lines = (self.tmp / "logs" / got["file"]).read_text("utf-8").splitlines()
+        self.assertEqual(len(lines), 8)
+        self.assertRegex(lines[0], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}[+-]\d\d:\d\d \[ INFO\] Added Mochi to the list")
+        self.assertIn("[ WARN] Couldn't fetch Extra", lines[4])
+        self.assertIn("[ERROR] Open in Unity:", lines[1])
+
     def test_the_backups_panel(self):
         """Projects' backups: listed with which are old, the rule changed, old ones moved to another drive as a task,
         one deleted, and a file that isn't one of the backups refused."""
@@ -452,3 +510,53 @@ class ImportsList(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Logbook(unittest.TestCase):
+    """Projects' log on its own (hoard/vpm/logbook.py)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_whats_kept(self):
+        from hoard.vpm import logbook
+        with mock.patch.object(logbook, "SHOWN", 3):
+            book = logbook.Logbook(self.tmp)
+            for n in range(5):
+                book.add("info", f"entry {n}")
+        self.assertEqual([e["message"] for e in book.entries()], ["entry 2", "entry 3", "entry 4"], "the newest, to show")
+        self.assertEqual(len(book.file.read_text("utf-8").splitlines()), 5, "and every one in the file")
+        self.assertEqual(book.add("shouting", "  x  ")["level"], "info")
+        self.assertEqual(book.add("error", "")["message"], "(nothing said)")
+        self.assertEqual(len(book.add("info", "y" * 9000)["message"]), logbook.MAX_MESSAGE)
+        self.assertEqual(logbook.level_of(logbook.Warn("careful")), "warning")
+        self.assertEqual(logbook.level_of("fine"), "info")
+
+    def test_the_newest_files_are_kept(self):
+        from hoard.vpm import logbook
+        for n in range(35):
+            (self.tmp / f"projects-2026-01-{n + 1:02d}_10-00-00.log").write_text("x")
+        (self.tmp / "hoard-2026-01-01_10-00-00.log").write_text("Hoard's own")
+        book = logbook.Logbook(self.tmp)
+        book.add("info", "started")
+        left = sorted(p.name for p in self.tmp.glob("projects-*.log"))
+        self.assertEqual(len(left), logbook.KEEP_FILES)
+        self.assertIn(book.file.name, left)
+        self.assertNotIn("projects-2026-01-01_10-00-00.log", left, "the oldest went")
+        self.assertTrue((self.tmp / "hoard-2026-01-01_10-00-00.log").is_file(), "Hoard's own logs are left alone")
+
+    def test_a_log_that_cant_be_written_is_still_shown(self):
+        from hoard.vpm import logbook
+        blocked = self.tmp / "file"
+        blocked.write_text("not a folder")
+        book = logbook.Logbook(blocked / "logs")
+        book.add("error", "said anyway")
+        self.assertEqual([e["message"] for e in book.entries()], ["said anyway"])
+        self.assertIsNone(book.file)
+
+    def test_sizes_and_counts(self):
+        from hoard.vpm import logbook
+        self.assertEqual([logbook.size_text(n) for n in (0, 1023, 1024, 5 * 1024 ** 2, 3 * 1024 ** 3, 5000 * 1024 ** 3)],
+                         ["0 bytes", "1,023 bytes", "1.0 KB", "5.0 MB", "3.0 GB", "5000.0 GB"])
+        self.assertEqual((logbook.count(1, "backup"), logbook.count(1200, "package")), ("1 backup", "1,200 packages"))

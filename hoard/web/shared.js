@@ -1657,7 +1657,7 @@ const pjTicks = el => el.type === "checkbox";
 function drawProjects() {
   const body = $("#projectsBody");
   const views = { list: pjList, project: pjProject, new: pjNew, repos: pjRepos, settings: pjSettings, report: pjReportView, backups: pjBackups,
-                  addnew: pjAddNew };
+                  addnew: pjAddNew, logs: pjLogs };
   // what you've typed or ticked in Repositories or Unity and folders and not saved yet stays when it's drawn again
   // (as it is when a task ends, or a save is refused)
   const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
@@ -1670,13 +1670,14 @@ function drawProjects() {
     if (el) pjTicks(el) ? (el.checked = v) : (el.value = v);
   }
   if (PJ.view === "new") pjFillNew();
+  if (PJ.view === "logs") pjLogWire();
   const find = $("#pjFind");
   if (find) { find.value = PJ.find; find.addEventListener("input", () => { PJ.find = find.value; pjFilter(); }); pjFilter(); }
   const pkFind = $("#pjPkFind");
   if (pkFind) { pkFind.addEventListener("input", () => { PJ.pkFind = pkFind.value; pjPkFilter(); }); pjPkFilter(); }
 }
 // Projects' views, as tabs along its top; a project, a new one, and Add packages open below them, with a way back
-const PJ_TABS = [["list", "Projects"], ["repos", "Repositories"], ["backups", "Backups"], ["settings", "Unity and folders"]];
+const PJ_TABS = [["list", "Projects"], ["repos", "Repositories"], ["backups", "Backups"], ["settings", "Unity and folders"], ["logs", "Logs"]];
 const pjTabs = () => `<nav class="pj-tabs" aria-label="${esc(tr("Projects"))}">${PJ_TABS.map(([v, label]) =>
   `<button class="pj-tab" data-pj="${v === "list" ? "back" : v}"${PJ.view === v ? ' aria-current="page"' : ""}>${esc(tr(label))}</button>`).join("")}</nav>`;
 // What Projects' own lane is doing now, above every view: its task, with Stop (what it was changing is put back)
@@ -1993,6 +1994,74 @@ function pjBackupRow(b) {
   return `<li class="pj-row pj-bk${b.old ? " old" : ""}"><label class="pj-main check"><input type="checkbox" class="pj-bkpick" value="${esc(b.path)}">` +
     `<span><b translate="no">${esc(b.project)}</b><span class="meta">${esc(whenDone(b.when))} · ${esc(sizeText(b.size))}</span></span></label>` +
     `<span class="pj-what">${b.old ? esc(tr("Old")) : ""}</span></li>`;
+}
+// ---- Logs, as ALCOM's Logs page and the Creator Companion's Logs tab have theirs: what Hoard did to your projects,
+// packages and repositories since it started, and what went wrong (hoard/vpm/logbook.py), oldest first, found by its
+// words and its level. New entries come in while it's open; each start of Hoard writes its own to the logs folder.
+const PJ_LEVELS = [["info", "Info"], ["warning", "Warnings"], ["error", "Errors"]];
+const PJ_LEVEL_NAMES = { info: "Info", warning: "Warning", error: "Error" };
+const PJLOG = { run: null, entries: [], last: 0, find: "", follow: true, levels: new Set(["info", "warning", "error"]), timer: 0, gen: 0 };
+try {   // (which levels you show is kept, in this browser)
+  const kept = JSON.parse(localStorage.getItem("hoard-pj-log-levels") || "null");
+  if (Array.isArray(kept)) PJLOG.levels = new Set(kept.filter(k => PJ_LEVEL_NAMES[k]));
+} catch (e) { /* every level, then */ }
+function pjLogs() {
+  return pjTabs() + `<div class="pj-top pj-logtop"><input type="search" id="pjLogFind" placeholder="${esc(tr("Find in the log"))}" aria-label="${esc(tr("Find in the log"))}">` +
+    `<span class="pj-levels">${PJ_LEVELS.map(([k, label]) => `<label class="check lv-${k}"><input type="checkbox" data-pjlevel="${k}"` +
+      `${PJLOG.levels.has(k) ? " checked" : ""}> ${esc(tr(label))}</label>`).join("")}</span>` +
+    `<button class="ghost sm" data-pj="logfollow" aria-pressed="${PJLOG.follow}">${esc(tr("Follow new entries"))}</button>` +
+    `<button class="ghost sm" data-pj="logfolder">${esc(tr("Open logs folder"))}</button></div>` +
+    `<p class="hint">${esc(tr("What Hoard did to your projects, packages and repositories since it started, and what went wrong, as ALCOM and the Creator Companion each keep a log of their own. Each time Hoard starts, it writes them to a log in the logs folder."))}</p>` +
+    `<div class="pj-logbox" id="pjLogBox" tabindex="0" role="region" aria-label="${esc(tr("Logs"))}"><table class="pj-log">` +
+    `<thead><tr><th>${esc(tr("Time"))}</th><th>${esc(tr("Level"))}</th><th>${esc(tr("Message"))}</th></tr></thead>` +
+    `<tbody id="pjLogRows"></tbody></table><p class="none" id="pjLogNone" hidden></p></div>`;
+}
+function pjLogWire() {
+  const find = $("#pjLogFind");
+  find.value = PJLOG.find;
+  find.addEventListener("input", () => { PJLOG.find = find.value; pjLogRows(); });
+  for (const box of document.querySelectorAll("[data-pjlevel]")) box.addEventListener("change", () => {
+    if (box.checked) PJLOG.levels.add(box.dataset.pjlevel); else PJLOG.levels.delete(box.dataset.pjlevel);
+    try { localStorage.setItem("hoard-pj-log-levels", JSON.stringify([...PJLOG.levels])); } catch (e) { /* kept for now */ }
+    pjLogRows();
+  });
+  pjLogRows(true);
+  pjLogPoll();
+}
+const pjLogRow = e => `<tr class="lv-${e.level}"><td class="t">${esc(new Date(e.time).toLocaleString(document.documentElement.lang || undefined))}</td>` +
+  `<td class="lv">${esc(tr(PJ_LEVEL_NAMES[e.level] || "Info"))}</td><td class="m" translate="no">${esc(e.message)}</td></tr>`;
+function pjLogRows(toEnd = false) {
+  const rows = $("#pjLogRows"), box = $("#pjLogBox");
+  if (!rows) return;
+  const words = norm(PJLOG.find).split(/\s+/).filter(Boolean);
+  const shown = PJLOG.entries.filter(e => PJLOG.levels.has(e.level) && words.every(w => norm(e.message).includes(w)));
+  rows.innerHTML = shown.map(pjLogRow).join("");
+  const none = $("#pjLogNone");
+  none.hidden = shown.length > 0;
+  none.textContent = tr(PJLOG.entries.length ? "Nothing in the log matches." : "Nothing has been logged since Hoard started.");
+  if (toEnd || PJLOG.follow) box.scrollTop = box.scrollHeight;
+}
+async function pjLogPoll() {   // while Logs is open: what's new, every second or so
+  clearTimeout(PJLOG.timer);
+  const mine = ++PJLOG.gen, open = () => !$("#projectsWin").hidden && PJ.view === "logs";
+  if (!open()) return;
+  try {
+    const r = await api(`/api/vpm/logs?after=${PJLOG.last}`, { cache: "no-store" });
+    const got = r.ok ? await r.json() : null;
+    if (got && mine === PJLOG.gen) {
+      if (got.run !== PJLOG.run) {   // Hoard started again: its log starts again too
+        if (PJLOG.run !== null && PJLOG.last) { PJLOG.run = got.run; PJLOG.entries = []; PJLOG.last = 0; return pjLogPoll(); }
+        PJLOG.run = got.run;
+      }
+      if (got.entries.length) {
+        PJLOG.entries.push(...got.entries);
+        PJLOG.entries.splice(0, Math.max(0, PJLOG.entries.length - 2000));
+        PJLOG.last = got.entries[got.entries.length - 1].n;
+        pjLogRows();
+      }
+    }
+  } catch (e) { /* Hoard's away for now: tried again */ }
+  if (mine === PJLOG.gen && open()) PJLOG.timer = setTimeout(pjLogPoll, 1500);
 }
 function pjBackups() {
   const k = PJ.backups;
@@ -2313,7 +2382,18 @@ async function pjAct(b) {
     if (r.ok && r.data.ok) toast(tr("Stopping: what it was changing is put back as it was."));
     return;
   }
-  if (act === "repos" || act === "settings") { PJ.view = act; return drawProjects(); }
+  if (act === "repos" || act === "settings" || act === "logs") { PJ.view = act; return drawProjects(); }
+  if (act === "logfollow") {
+    PJLOG.follow = !PJLOG.follow;
+    b.setAttribute("aria-pressed", String(PJLOG.follow));
+    if (PJLOG.follow) pjLogRows();
+    return;
+  }
+  if (act === "logfolder") {
+    const r = await apiPost("/api/open-logs");
+    toast(r.ok ? tr("Opened the logs folder.") : (r.data.error || tr("The logs folder didn't open.")));
+    return;
+  }
   if (act === "backups") { PJ.backups = null; PJ.view = "backups"; drawProjects(); if (await pjLoadBackups()) drawProjects(); return; }
   if (act === "bkopen") { const r = await apiPost("/api/vpm/backups/show", {}); if (!r.ok) toast(r.data.error || tr("That folder couldn't be opened.")); return; }
   if (act === "bkdelold" || act === "bkmoveold") {

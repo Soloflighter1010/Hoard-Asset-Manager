@@ -8,6 +8,10 @@
 - **Put in products from your library** (a project's, and New project's) opens Downloads in **Select** mode for
   that project, instead of a long list in a window: tick what goes in, then **Add to project**, the only other thing
   to do there being **Cancel**. Either way you're back at the project.
+- **Logs in Projects,** as ALCOM and the Creator Companion have: what Hoard did to your projects, packages and
+  repositories, and what went wrong, each with its time and level (Info, Warning, Error). Find entries by their words,
+  show only some levels, and watch new ones come in. Each time Hoard starts, they're written to a log of their own in
+  the logs folder (**Open logs folder**).
 
 ## 5.1.2
 

@@ -2,8 +2,8 @@
 
 **Projects** (at the top of either page) is your Unity projects: make one ready to use, with the packages and the
 products from your library it needs, open it in Unity, and change its packages. It's new in Hoard 5.0. From 5.1 it
-takes the whole window, with its views as tabs along its top: **Projects**, **Repositories**, **Backups**, and **Unity
-and folders**. Rows alternate in colour, and the one under the pointer is outlined.
+takes the whole window, with its views as tabs along its top: **Projects**, **Repositories**, **Backups**, **Unity and
+folders**, and (from 5.1.3) **Logs**. Rows alternate in colour, and the one under the pointer is outlined.
 
 It's the same list of projects as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the VRChat Creator
 Companion's. A project you add or take off in any of the three is added or taken off in all of them, and Hoard keeps
@@ -147,6 +147,26 @@ the chosen ones** or **Move the chosen ones...**.
 - Only zips named as a backup is (`<project>-<date>T<time>.zip`, as Hoard and ALCOM name them), directly in your
   backups folder or the folder you moved them to, are ever listed, deleted or moved. Anything else there is left as it
   is.
+
+## Logs
+
+**Logs** shows what Hoard did to your projects, packages and repositories since it started, and what went wrong, as
+ALCOM's Logs page and the Creator Companion's Logs tab show theirs: each entry's time, its level (**Info**,
+**Warning** or **Error**) and what happened, the newest at the bottom. That's every step of Projects' tasks and how
+each ended; a project opened in Unity, put on the list or taken off it; a repository added or removed, or one that
+couldn't be read; **Unity and folders** saved; presets saved or deleted; backups deleted; and anything Projects
+couldn't do.
+
+- **Find in the log** finds entries by their words. Untick **Info**, **Warnings** or **Errors** to leave those out
+  (which ones you show is kept, in this browser).
+- New entries come in as they happen. **Follow new entries** keeps the newest in view; turn it off to read back
+  without being moved.
+- Each time Hoard starts, Projects' log is written to a file of its own, `projects-<date>_<time>.log`, in Hoard's logs
+  folder (**Open logs folder**), beside Hoard's own logs; the newest 30 are kept, as ALCOM keeps its own. **Logs**
+  shows this run's; earlier runs' are in those files.
+
+ALCOM and the Creator Companion keep logs of what they do: ALCOM's in `vrc-get/gui-logs` in the Creator Companion's
+folder, the Creator Companion's in its `Logs` folder. Hoard leaves those alone.
 
 ## Where it's kept
 
