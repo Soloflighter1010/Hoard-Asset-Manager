@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 21 October 2026 (version 1.6.0)
+Last updated: 21 October 2026 (version 1.7.0)
 
 **The short version:** Hoard runs entirely on your own computer, and sends nothing to me or to anyone else. There
 are no accounts, no analytics, no tracking and no ads. The one exception is a short link for a set, if you choose to
@@ -32,6 +32,7 @@ information.
 | The last 60 finished jobs (refreshes, syncs, downloads): what each did, how it went, and its progress, which names products and creators | So the Tasks window can show them after Hoard restarts | `tasks.json` in Hoard's app-data folder (Clear in Tasks empties it) |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug` in Hoard's app-data folder |
 | Backups you make (4.0): your settings, tags, sets, choices and library list, without sign-ins, keys or download links; hidden items only if you made it while they were unlocked | So you can keep what you've set up, or move it to another computer | `Documents/Hoard backups`, only when you choose **Make a backup** (or restore one, which saves how things were first) |
+| Projects (5.0): your Unity projects' list, the repositories you added, and the folders for new projects and backups, shared with ALCOM and the VRChat Creator Companion; Hoard's own notes on each project (favourites, when you opened it, which of your products you put in it) and your presets | So Hoard, ALCOM and the Creator Companion keep one list, and Hoard remembers what you did | The Creator Companion's folder (`settings.json`, and packages downloaded in `Repos`); `vpm-projects.json` and `vpm-presets.json` in Hoard's app-data folder |
 | Local error history and support reports | So errors can be investigated and a sanitized report can be shared by you | `diagnostics/incidents.jsonl` in app-data; reports you create go to `Documents\\Hoard\\Support Reports` (see below) |
 
 None of this leaves your computer unless you share it yourself.
@@ -53,14 +54,12 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   Hoard does this by itself while it's open, as often as you chose, to see what's new or updated. It downloads
   nothing without you.
 - **The image hosts those stores use,** to fetch product images.
-- **No one, when you share a set.** **Share** in the Sets tab makes a link to the set viewer on Hoard's website
-  (`hoard.furryup.link`) with the set itself after the link's `#`: its name, note and photo links, and each
-  product's store, name, creator, store page and picture address. A browser never sends what's after `#`, so
-  the website never receives the set, and Hoard uploads nothing. Your own products (Local) and hidden ones are
-  never in a link. Whoever opens it loads each picture from its store's image host, and the photos from the
-  photo sites they're on, as any page with those pictures would.
-- **Hoard's share server, only when you make a short link for a set** (4.3.0, **Make a short link** in
-  **Share...**), and when you or someone else opens one. Hoard locks the set on your computer first (AES-GCM,
+- **Hoard's share server, only when you share a set** (**Make a short link** in **Share...**, in the Sets tab: from
+  5.0 a set is shared only by a short link to the set viewer on Hoard's website, `hoard.furryup.link`), and when
+  you or someone else opens one. A shared set holds its name, note and photo links, and each product's store, name,
+  creator, store page and picture address; your own products (Local) and hidden ones are never in one. Whoever
+  opens it loads each picture from its store's image host, and the photos from the photo sites they're on, as any
+  page with those pictures would. Hoard locks the set on your computer first (AES-GCM,
   with a new random key) and sends only the locked copy to `hoard-share.furryup.link`. The key is only in the
   link, after its `#`, which a browser never sends anywhere, so the server can't read the set, and neither can I.
   The server keeps the locked copy, when it runs out, and a fingerprint (SHA-256) of the token your Hoard keeps to
@@ -69,11 +68,19 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   link that's reported for abuse, by its id, without being able to read it (see [TERMS.md](TERMS.md)). Opening a short link
   (in the set viewer, or in **Add a shared set**) fetches the locked copy by its id. The server runs on
   Cloudflare, which sees the IP address of whoever makes or opens a short link, as with any website, under
-  [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link never involves it.
+  [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link from Hoard before 5.0
+  holds the set itself, after its `#`, which a browser never sends, so opening one never involves the server.
 - **A photo site, when you add a photo to a set by its page link** (an Imgur, Gyazo, ImgBB, Postimages, Bluesky,
   Reddit or X page rather than the picture itself): Hoard reads that page once, as a browser would, for the
   picture it shows, and keeps only the picture's link. It reads it from that site only, following no redirect to
   anywhere else. The site sees your IP address, as with any website.
+- **VPM package repositories, when you use Projects** (5.0): VRChat's (`packages.vrchat.com`, which sends Hoard on
+  to `vrchat.github.io`) and the ones you add, yourself or with a click when a product needs a tool (lilToon's or
+  Modular Avatar's, say). Hoard fetches each one's list of packages when you add it or choose **Refresh them all**, or
+  the first time a project needs it, and downloads a package from the address its repository gives when you add it
+  to a project. Each sees your IP address, and that it's Hoard asking (its version, with a link to its page), as with
+  any website. Headers you give a private repository go to its own address only. Nothing about your library or your
+  projects is sent.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
   day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A
@@ -83,7 +90,7 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
 
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
 has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading,
-checking for updates and short links.
+checking for updates, short links and Projects' packages.
 
 ## Using Hoard on your network
 

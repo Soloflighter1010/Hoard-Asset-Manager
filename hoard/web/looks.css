@@ -1,0 +1,240 @@
+/* Styles (Settings, Appearance; issue #159): how the pages are laid out, apart from their colours. Standard is the
+   pages as they're written; Treasure and Workbench lay them out again from here. The server puts this into both pages
+   and marks the page with the style you chose (html data-style), from its first moment; Settings changes the mark.
+   Everything below is for one of the two, except the parts only they show, which are out of sight in Standard. */
+.row-meta, .d-stats { display: none; }
+.local { --c: var(--local); }
+
+/* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */
+.style-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.style-choice { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; cursor: pointer;
+  background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); font-size: 13px; line-height: 1.35; }
+.style-choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.style-choice:has(input:checked) { box-shadow: inset 0 0 0 2px var(--gold); }
+.style-choice:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
+.style-choice b { display: block; font-size: 14px; }
+.style-choice small { display: block; margin-top: 2px; color: var(--dust); font-size: 12px; font-weight: 500; }
+.style-pic { display: grid; gap: 5px; height: 74px; padding: 8px; border-radius: 8px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); overflow: hidden; }
+.style-pic i { display: block; min-width: 0; border-radius: 4px; background: var(--stone); }
+.style-pic.standard { grid-template-columns: repeat(4, 1fr); align-content: center; }
+.style-pic.standard i { aspect-ratio: 1; box-shadow: inset 0 -3px 0 var(--c, var(--gold)); }
+.style-pic.treasure { grid-template-columns: repeat(3, 1fr); align-content: center; gap: 7px; }
+.style-pic.treasure i { aspect-ratio: 1; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--c, var(--gold)); }
+.style-pic.workbench { grid-template-columns: 12px 1fr 28px; align-content: center; gap: 4px 6px; }
+.style-pic.workbench i { height: 10px; border-radius: 2px; }
+.style-pic.workbench i:nth-child(3n+1) { background: var(--c, var(--seam)); }
+.style-pic.workbench i:nth-child(3n) { background: var(--seam); }
+.setup .style-choices { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 16px 0; }
+.setup .style-pic { height: 88px; }
+
+/* ================================================================================================================
+   Treasure: big pictures, each in a frame of its store's colour with the store's name on it; round buttons and tabs
+   ================================================================================================================ */
+:root[data-style="treasure"] { --slot-size: 204px; }
+@media (max-width: 860px) { :root[data-style="treasure"] { --slot-size: 150px; } }
+[data-style="treasure"] :is(.ghost, .btn, .primary) { border-radius: 999px; }
+[data-style="treasure"] .search input { border-radius: 999px; }
+[data-style="treasure"] .tools select, [data-style="treasure"] .shelf-tools select { border-radius: 999px; }
+[data-style="treasure"] .apptabs :is(a, button) { border-radius: 999px; }
+[data-style="treasure"] .apptabs :is(a[aria-current="page"], button[aria-expanded="true"]) { box-shadow: inset 0 0 0 2px var(--gold); }
+/* the stores: a row of round tabs, the chosen one ringed in its store's colour */
+[data-style="treasure"] .shelf { align-items: center; padding: 10px 24px; }
+[data-style="treasure"] .shelf .seg { height: auto; align-items: center; gap: 8px; margin: 0; padding: 3px; }
+[data-style="treasure"] .seg button, [data-style="treasure"] .seg button:hover,
+[data-style="treasure"] .seg button[aria-checked="true"] { height: 38px; margin: 0; padding: 0 15px; border-radius: 999px; }
+[data-style="treasure"] .seg button { background: transparent; box-shadow: inset 0 0 0 1px var(--seam); transition: background .12s, color .12s; }
+[data-style="treasure"] .seg button:hover { background: var(--stone); }
+[data-style="treasure"] .seg button[aria-checked="true"] { background: var(--ledge); box-shadow: inset 0 0 0 2px var(--c, var(--gold)); }
+[data-style="treasure"] .shelf-tools { align-self: center; padding: 0; }
+[data-style="treasure"] .seg .drives .tabsep { margin-top: 0; }
+/* the tiles: a frame in the store's colour, its name on a tag at the top, and a glow when pointed at */
+[data-style="treasure"] .grid { gap: 28px 20px; }
+[data-style="treasure"] .art { border-radius: 18px; }
+[data-style="treasure"] .slot.stacked .art > img, [data-style="treasure"] .slot.stacked .art > .ph { border-radius: 18px; }
+[data-style="treasure"] .notch { top: 0; height: auto; border-radius: inherit; background: none; box-shadow: inset 0 0 0 3px var(--c); pointer-events: none; }
+[data-style="treasure"] .notch.dup { background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px) bottom / 100% 7px no-repeat; }
+[data-style="treasure"] .notch[data-s]::before { content: attr(data-s); position: absolute; left: 9px; top: 9px; max-width: calc(100% - 52px);
+  padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave); font: 700 10.5px/1.5 var(--body); letter-spacing: .06em;
+  text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-style="treasure"] .badges { top: auto; bottom: 10px; left: 10px; flex-direction: row; flex-wrap: wrap; }
+[data-style="treasure"] .badge, [data-style="treasure"] .flag { border-radius: 999px; padding: 2px 9px; }
+[data-style="treasure"] .flag.count { top: auto; bottom: 10px; left: 10px; }
+[data-style="treasure"] .ondisk-mark { border-radius: 999px; }
+[data-style="treasure"] .slot:not(.stacked):is(:hover, [aria-current="true"]) .art { box-shadow: 0 6px 24px -6px var(--c, var(--gold)); }
+[data-style="treasure"] .slot[aria-current="true"] .art { outline-offset: 4px; }
+[data-style="treasure"] :is(.nm-t, .slot .nm) { font-size: 15px; }
+[data-style="treasure"] .count { font-size: clamp(26px, 3vw, 36px); }
+[data-style="treasure"] .setgrid { gap: 30px 22px; }
+[data-style="treasure"] .settile .art { border: 3px solid var(--gold); }   /* (a set is yours: gold) */
+/* a product's details: its picture big, in its store's frame, a row of what it is, and the main button wide */
+[data-style="treasure"] .detail { padding: 16px 22px 36px; }
+[data-style="treasure"] .d-art { aspect-ratio: 1; max-height: 46vh; border-radius: 22px; border: 3px solid var(--c, var(--seam)); box-shadow: 0 10px 34px -10px var(--c, transparent); }
+[data-style="treasure"] .d-art.big { max-height: none; }
+[data-style="treasure"] .d-name { font-size: 28px; line-height: 1.15; }
+[data-style="treasure"] .d-store { display: none; }   /* (its frame and the row below say it) */
+[data-style="treasure"] .d-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin: 14px 0 0; }
+[data-style="treasure"] .d-stats > span { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 9px 6px; border-radius: 14px;
+  background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); text-align: center; min-width: 0; }
+[data-style="treasure"] .d-stats small { font-size: 11.5px; color: var(--dust); }
+[data-style="treasure"] .d-stats b { font-size: 16px; overflow-wrap: anywhere; }
+[data-style="treasure"] .d-stats .dot { margin-right: 6px; }
+[data-style="treasure"] .detail .actions:not(.links) > .primary:first-child { flex: 1 1 100%; height: 50px; font-size: 16px; }
+[data-style="treasure"] .detail h3 { font: 400 17px var(--display); color: var(--bone); }
+[data-style="treasure"] .x { border-radius: 999px; }
+/* panels, windows and questions: rounder, with more room */
+[data-style="treasure"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card) { border-radius: 24px; }
+[data-style="treasure"] .win-bar { padding: 12px 14px 12px 22px; }
+[data-style="treasure"] .win-x { border-radius: 999px; }
+[data-style="treasure"] :is(.task, .proj, .pj-row, .librow, .note, .also, .update, .viewbar, .routine-note) { border-radius: 18px; }
+[data-style="treasure"] .bulk, [data-style="treasure"] .dlpanel, [data-style="treasure"] .selmenu { border-radius: 20px; }
+[data-style="treasure"] .chip[aria-pressed="true"], [data-style="treasure"] .pill { border-radius: 999px; }
+[data-style="treasure"] .theme-choice, [data-style="treasure"] .style-choice { border-radius: 16px; }
+
+/* ================================================================================================================
+   Workbench: close-set lists and tables, the computer's own font, square corners; more at a glance
+   ================================================================================================================ */
+:root[data-style="workbench"] {
+  --body: "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", "Meiryo UI", -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+          "Noto Sans", "Noto Sans JP", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --display: var(--body); --btn-h: 32px; --btn-h-sm: 28px;
+}
+:root[data-style="workbench"]:lang(ko) {
+  --body: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, system-ui, sans-serif;
+}
+:root[data-style="workbench"][data-font="dyslexic"] { --body: "OpenDyslexic", "Segoe UI", "Yu Gothic UI", "Malgun Gothic", system-ui, sans-serif; }
+[data-style="workbench"] body { font-size: 14px; line-height: 1.45; }
+/* headings: the body's font, bold, smaller */
+[data-style="workbench"] :is(.count, .d-name, .stores h2, .win-bar h2, .setup h2, .support-dialog h2, dialog.pin h2, .tour-card h2,
+  .sethead h2, .empty h2, .projects h3.pj-h, .dlpanel h2, .drop) { font-weight: 700; letter-spacing: 0; }
+[data-style="workbench"] .count { font-size: 20px; }
+[data-style="workbench"] .d-name { font-size: 20px; margin-top: 14px; }
+[data-style="workbench"] .win-bar h2, [data-style="workbench"] .stores h2 { font-size: 16px; }
+[data-style="workbench"] .setup h2, [data-style="workbench"] .support-dialog h2, [data-style="workbench"] .sethead h2 { font-size: 20px; }
+[data-style="workbench"] .projects h3.pj-h { font-size: 18px; }
+/* buttons, boxes and menus: square corners, lower */
+[data-style="workbench"] :is(.ghost, .btn, .primary) { border-radius: 6px; padding: 0 12px; font-size: 13.5px; }
+[data-style="workbench"] :is(.ghost, .btn, .primary).sm { padding: 0 10px; font-size: 12.5px; }
+[data-style="workbench"] :is(.search input, .tools select, .shelf-tools select, .find, .settings .field input, .settings select,
+  .settings textarea, .setup .field input, .setup textarea, .tagadd input, .newtag input, .bulk input, dialog.ask input, dialog.pin input) { border-radius: 6px; }
+[data-style="workbench"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card, .bulk, .dlpanel, .selmenu) { border-radius: 10px; }
+[data-style="workbench"] :is(.task, .proj, .librow, .note, .also, .update, .viewbar, .routine-note, .saver, .support-safe, .support-result,
+  .setup .status, .setup details, .setup .storepick label, .setup .closepick label, .setup .access-pick label, .theme-choice, .style-choice) { border-radius: 6px; }
+[data-style="workbench"] .selmenu button, [data-style="workbench"] .views button, [data-style="workbench"] .creators button { border-radius: 4px; }
+/* the bar: lower, the search box and buttons smaller */
+[data-style="workbench"] .bar { min-height: 56px; padding: 8px 20px; gap: 12px; }
+[data-style="workbench"] .brand svg { height: 28px; }
+[data-style="workbench"] .search input { height: 36px; }
+[data-style="workbench"] .apptabs :is(a, button) { padding: 6px 10px; border-radius: 6px; font-size: 13.5px; }
+[data-style="workbench"] .tools select { height: 32px; }
+/* the stores: flat tabs, the chosen one underlined in its colour */
+[data-style="workbench"] .shelf { padding: 0 20px; gap: 4px 12px; }
+[data-style="workbench"] .shelf .seg { height: 40px; gap: 0; }
+[data-style="workbench"] .seg button, [data-style="workbench"] .seg button:hover,
+[data-style="workbench"] .seg button[aria-checked="true"] { height: 40px; margin: 0; padding: 0 12px; border-radius: 0; background: none; font-size: 13.5px; }
+[data-style="workbench"] .seg button { box-shadow: none; }
+[data-style="workbench"] .seg button:hover { color: var(--bone); box-shadow: inset 0 -2px 0 var(--seam); }
+[data-style="workbench"] .seg button[aria-checked="true"] { color: var(--bone); box-shadow: inset 0 -3px 0 var(--c, var(--gold)); }
+[data-style="workbench"] .seg .drives .tabsep { margin-top: 0; }
+[data-style="workbench"] .shelf-tools { padding-bottom: 4px; align-self: center; }
+[data-style="workbench"] .shelf-tools .zoom, [data-style="workbench"] .tools .zoom { display: none; }   /* (no tiles to size) */
+[data-style="workbench"] main { padding-top: 16px; }
+[data-style="workbench"] .side { padding: 14px 16px 24px 20px; }
+[data-style="workbench"] .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+/* the tiles become a list: a small picture, the name over its creator, then its store, where it is, and when it came */
+[data-style="workbench"] .grid { display: flex; flex-direction: column; gap: 0; border-radius: 8px; background: var(--ledge);
+  box-shadow: inset 0 0 0 1px var(--seam); overflow: hidden; }
+[data-style="workbench"] .status ~ .grid { margin-top: 14px; }
+[data-style="workbench"] .grid .slot { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "art nm meta" "art cr meta";
+  align-items: center; gap: 0 12px; min-height: 52px; padding: 6px 12px; border-top: 1px solid var(--seam); border-radius: 0; }
+[data-style="workbench"] .grid .slot:first-child { border-top: 0; }
+[data-style="workbench"] .grid .slot:hover { background: var(--stone); }
+[data-style="workbench"] .grid .slot:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+[data-style="workbench"] .grid .slot[aria-current="true"] { background: var(--stone); box-shadow: inset 3px 0 0 var(--gold); }
+[data-style="workbench"] .grid .art { grid-area: art; width: 40px; height: 40px; aspect-ratio: auto; border-radius: 6px; transform: none !important; outline: none !important; }
+[data-style="workbench"] .grid .slot.stacked .art { box-shadow: 3px -3px 0 -1px var(--seam); }
+[data-style="workbench"] .grid .slot.stacked .art > img, [data-style="workbench"] .grid .slot.stacked .art > .ph { border-radius: 6px; }
+[data-style="workbench"] .grid .ph b { font-size: 14px; }
+[data-style="workbench"] .grid .ph small { display: none; }
+[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .flag) { display: none; }
+[data-style="workbench"] .grid :is(.nm-t, .slot .nm) { grid-area: nm; align-self: end; font-size: 14px; -webkit-line-clamp: 1; }
+[data-style="workbench"] .grid .cr { grid-area: cr; align-self: start; margin-top: 0; font-size: 12.5px; }
+/* the columns fit their longest words: "Not downloaded yet", and a date in Korean ("2026년 9월 28일"), whole; wider
+   in OpenDyslexic, whose letters are wider */
+[data-style="workbench"] .grid .row-meta { grid-area: meta; display: grid; grid-template-columns: 110px 152px 120px; gap: 12px; align-items: center;
+  font-size: 12.5px; color: var(--dust); font-variant-numeric: tabular-nums; }
+[data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 120px 192px 128px; }
+[data-style="workbench"] .row-meta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-style="workbench"] .row-meta .rm-store { display: flex; align-items: center; gap: 7px; color: var(--bone); }
+[data-style="workbench"] .row-meta .rm-state { font-weight: 700; }
+[data-style="workbench"] .row-meta .rm-state.ok { color: #4CC38A; }
+[data-style="workbench"] .row-meta .rm-state.new, [data-style="workbench"] .row-meta .rm-state.upd { color: var(--gold-text); }
+[data-style="workbench"] .row-meta .rm-state.bad { color: var(--warn); }
+@media (prefers-color-scheme: light) { [data-style="workbench"] .row-meta .rm-state.ok { color: #1E7B4E; } }
+/* choosing: the box sits over the small picture */
+[data-style="workbench"] .grid .slot .tick { right: 8px; top: 8px; width: 24px; height: 24px; }
+[data-style="workbench"] body.selecting .grid .slot[aria-pressed="true"] { background: var(--stone); box-shadow: inset 3px 0 0 var(--gold); }
+[data-style="workbench"] .slot.stacked .tick { right: 8px; }
+/* sets and wishlists in the list: the set's picture small, and a product you don't have yet with its price and links */
+[data-style="workbench"] .grid .settile .nm-t { font-size: 14px; }
+[data-style="workbench"] .grid .slot.ext { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "main price row"; }
+[data-style="workbench"] .slot.ext .ext-main { grid-area: main; display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "art nm" "art cr";
+  gap: 0 12px; align-items: center; }
+[data-style="workbench"] .slot.ext .ext-price { grid-area: price; margin: 0; }
+[data-style="workbench"] .slot.ext .ext-row { grid-area: row; margin: 0; gap: 10px; }
+[data-style="workbench"] .setview .sethead > .art { max-width: 160px; }
+/* as the list gets narrower (a smaller window, a larger text size, a product's details open beside it), the row keeps
+   its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */
+[data-style="workbench"] .grid { container-type: inline-size; }
+@container (max-width: 860px) {   /* (OpenDyslexic's wider words make way sooner) */
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 110px 192px; gap: 10px; }
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta .rm-when { display: none; }
+}
+@container (max-width: 760px) {
+  [data-style="workbench"] .grid .row-meta { grid-template-columns: 96px 152px; gap: 10px; }
+  [data-style="workbench"] .grid .row-meta .rm-when { display: none; }
+}
+@container (max-width: 640px) {
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: auto; }
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta > :not(.rm-state) { display: none; }
+}
+@container (max-width: 560px) {   /* (in either font: the OpenDyslexic columns above don't hold here) */
+  [data-style="workbench"] .grid .row-meta, [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: auto; }
+  [data-style="workbench"] .grid .row-meta > :not(.rm-state) { display: none; }
+  /* a product you don't have yet: its price over where to buy it, beside the name */
+  [data-style="workbench"] .grid .slot.ext { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main price" "main row"; }
+  [data-style="workbench"] .slot.ext :is(.ext-price, .ext-row) { justify-self: end; }
+}
+@container (max-width: 360px) { [data-style="workbench"] .grid .row-meta { display: none; } }
+/* a product's details: a smaller picture, close-set, the parts' names in capitals */
+[data-style="workbench"] .detail { padding: 14px 20px 30px; }
+[data-style="workbench"] .d-art { aspect-ratio: 16 / 9; max-height: 220px; border-radius: 8px; }
+[data-style="workbench"] .d-art.big { aspect-ratio: 1; max-height: none; }
+[data-style="workbench"] .d-art .ph b { font-size: 56px; }
+[data-style="workbench"] .x { width: 32px; height: 32px; border-radius: 6px; font-size: 18px; }
+[data-style="workbench"] .detail h3 { margin: 20px 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
+[data-style="workbench"] .detail .actions { margin-top: 14px; gap: 6px; }
+[data-style="workbench"] .files li { padding: 5px 0; font-size: 13px; }
+/* panels and windows: close-set rows, not cards */
+[data-style="workbench"] .stores:not(.win) { padding: 6px 16px 16px; }
+[data-style="workbench"] .win-bar { padding: 6px 8px 6px 14px; }
+[data-style="workbench"] .win-x { width: 28px; height: 28px; border-radius: 6px; font-size: 18px; }
+[data-style="workbench"] .win-body { padding: 6px 16px 16px; }
+[data-style="workbench"] .store-row { padding: 10px 0; }
+[data-style="workbench"] .store-row .nm { font-size: 14.5px; }
+[data-style="workbench"] .tasklist, [data-style="workbench"] .pj-list { gap: 0; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--seam); overflow: hidden; }
+[data-style="workbench"] .task { margin: 0; padding: 8px 12px; border-radius: 0; background: none; border-top: 1px solid var(--seam); }
+[data-style="workbench"] :is(.tasklist, #tasksBody) > .task:first-child, [data-style="workbench"] .tasklist .task:first-child { border-top: 0; }
+[data-style="workbench"] .task.run { box-shadow: inset 3px 0 0 var(--gold); }
+[data-style="workbench"] .pj-row { padding: 8px 12px; border-radius: 0; background: none; box-shadow: none; border-top: 1px solid var(--seam); }
+[data-style="workbench"] .pj-row:first-child { border-top: 0; }
+[data-style="workbench"] .pj-row:hover { background: var(--stone); }
+[data-style="workbench"] .pj-pk { border: 1px solid var(--seam); border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; }
+[data-style="workbench"] .pj-pk td { padding: 5px 8px; }
+[data-style="workbench"] .pj-pk tr:first-child td { border-top: 0; }
+[data-style="workbench"] .pj-pk tr:hover td { background: var(--stone); }
+[data-style="workbench"] .proj { padding: 8px 10px; }
+[data-style="workbench"] .proj table, [data-style="workbench"] .pj-pk { font-size: 12.5px; }
+[data-style="workbench"] .settings h3, [data-style="workbench"] .tasks h3, [data-style="workbench"] .tagpanel h3,
+[data-style="workbench"] .projects h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
+[data-style="workbench"] .setjump button { border-radius: 4px; }
+[data-style="workbench"] .setup-card { padding: 22px 26px; }

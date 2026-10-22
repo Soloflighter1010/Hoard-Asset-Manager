@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English cfbec4adc8e9). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 84c7ca2a4f67). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <a href="Hoardの保存場所">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 Hoard가 보관하는 것은 두 가지로 나뉘어요. 내가 고른 폴더에 있는 다운로드와, 그 밖의 모든 것을 담은 내 사용자 계정 전용의 비공개 앱 데이터 폴더예요.
@@ -21,7 +21,9 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 | `picture-looks.json` | 상품 이미지가 어떻게 보이는지(이미지의 SHA-256마다 64비트 해시). 두 스토어가 다르게 저장한 한 상품의 사본을 묶기 위해서예요. [라이브러리](라이브러리#찾기)를 보세요 |
 | `asset-updates.json` | 지난번 **업데이트 확인**에서 찾은 것. 다운로드한 것마다, 스토어에 있는데 아직 내게 없는 파일. [다운로드](다운로드#다운로드하지-않고-업데이트-확인하기)를 보세요 |
 | `marks.json` | 보관, 숨기기, 삭제한 것, 그리고 숨긴 라이브러리의 PIN과 복구 단어(둘 다 솔트를 친, 시간이 오래 걸리는 해시로만) |
-| `projects/` | Hoard 창을 연 Unity 프로젝트마다 작은 보고서(Hoard for Unity 0.4.0 이상). 이름과 폴더, 쓰는 에셋, 크레딧 설정. Hoard의 **프로젝트**에 나오고, **이 프로젝트 잊기**로 하나를 지워요. [Hoard for Unity 사용법](Hoard-for-Unity-사용법#hoard의-프로젝트)을 보세요 |
+| `projects/` | Hoard 창을 연 Unity 프로젝트마다 작은 보고서(Hoard for Unity 0.4.0 이상). 이름과 폴더, 쓰는 에셋, 크레딧 설정. Hoard의 **프로젝트**에 나오고, **잊기**로 하나를 지워요. [Hoard for Unity 사용법](Hoard-for-Unity-사용법#hoard의-프로젝트)을 보세요 |
+| `vpm-projects.json` | **프로젝트**의 프로젝트에 대해 Hoard가 적어 두는 것(5.0). 즐겨찾기, Hoard에서 연 때, 라이브러리에서 프로젝트마다 넣은 상품, 그리고 어떤 프로젝트 백업을 오래된 것으로 칠지와 마지막으로 어디로 옮겼는지. 프로젝트 목록 자체는 Creator Companion의 것이에요(아래). [프로젝트](프로젝트)를 보세요 |
+| `vpm-presets.json` | 새 프로젝트용 프리셋. 각각의 템플릿, Unity 버전, 패키지, 상품(5.0). [프로젝트](프로젝트#프리셋)를 보세요 |
 | `library_folders.json` | 다른 라이브러리 폴더마다, Hoard가 마지막으로 읽었을 때 어떤 상품이 있었는지. 그 드라이브가 연결되지 않은 동안 동기화가 건드리지 않게 하려는 거예요. [다운로드](다운로드#다른-드라이브의-라이브러리-폴더)를 보세요 |
 | `integrity.key` | Hoard가 기록을 봉인하는 키([봉인](#봉인)을 보세요). 내 계정만의 것이에요 |
 | `sealed-files.json` | 이 설치가 봉인한 기록. 봉인이 없어지면 알아채기 위해서예요 |
@@ -63,6 +65,17 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 | `Payhip/_download-yourself.html` | 2.5.0 전 버전이 남긴 것. Payhip 상품을 직접 다운로드하라고 목록으로 보여 줬어요. Hoard는 이제 Payhip에서 다운로드하지 않아서([스토어](스토어#payhip)를 보세요) 이 페이지를 쓰지도 읽지도 않아요. 지워도 돼요 |
 
 `catalog.json`, `tags.json`, `asset.json`은 다른 프로그램이 읽으라고 쓰는 것이고, 깔끔한 텍스트, 평범한 상대 경로, 상품 자체의 스토어로 가는 링크만 있다고 약속해요. 정확한 형식은 [docs/DATA-FORMATS.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/DATA-FORMATS.md)(영어)에 있어요.
+
+## Creator Companion의 폴더
+
+[프로젝트](프로젝트)(5.0)는 프로젝트 목록, 저장소, 설정을 ALCOM과 VRChat Creator Companion과 그 폴더에서 같이 써요. Windows에서는 `%LOCALAPPDATA%\VRChatCreatorCompanion`, macOS와 Linux에서는 `~/.local/share/VRChatCreatorCompanion`이에요.
+
+| 무엇 | Hoard가 하는 일 |
+|---|---|
+| `settings.json` | 프로젝트에서 바꾸는 대로 프로젝트 목록, 추가한 저장소, 새 프로젝트와 백업 폴더, 프리릴리스 패키지를 보여 줄지를 읽고 바꿔요. 나머지는 그대로 둬요 |
+| `vcc.liteDb` | Creator Companion의 데이터베이스. Hoard는 프로젝트마다와 Unity 버전에 대해 아는 것을 읽지만, 절대 쓰지 않아요 |
+| `Repos/` | 저장소마다의 목록과 거기서 다운로드한 패키지. ALCOM과 같이 써서 둘 다 같은 것을 두 번 다운로드하지 않아요 |
+| `vrc-get/templates/` | ALCOM의 템플릿. **ALCOM용으로도 저장**은 프리셋을 여기에 `hoard-<name>-<id>.alcomtemplate`로 써요 |
 
 ## 봉인
 

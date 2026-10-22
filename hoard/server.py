@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import re
 import secrets
 import sys
@@ -40,6 +41,7 @@ from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
 from .tags import TagStore, tag_key, tag_overview
+from .vpm import api as vpm_api
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
 FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2",
@@ -56,7 +58,13 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
-           "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import")
+           "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
+           # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
+           "/api/vpm/preview", "/api/vpm/apply", "/api/vpm/create", "/api/vpm/preload", "/api/vpm/backup",
+           "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite",
+           "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
+           "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
+           "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -113,6 +121,7 @@ def display_settings(cfg: dict) -> dict:
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
             "theme": themes.theme_id(d.get("theme")), "mode": themes.mode_id(d.get("mode")),
             "theme_css": themes.css(d.get("theme"), d.get("mode")), "themes": themes.choices(),
+            "style": themes.style_id(d.get("style")),
             "language": i18n.setting(d.get("language"))}
 
 
@@ -143,11 +152,13 @@ def mask_names(text: str, names: list[str]) -> str:
 
 
 UI_WINDOWS = ("tagPanel", "stores", "settingsPanel", "tasksWin")
+UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and Downloads' Sort (size: Downloads only)
 
 
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
-    is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size."""
+    is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
+    and the sort, one for both pages."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -163,6 +174,8 @@ def ui_settings(cfg: dict) -> dict:
     for k in ("tile_size", "dl_tile_size"):   # the Library's and the Downloads page's
         if isinstance(ui.get(k), int) and not isinstance(ui.get(k), bool) and 100 <= ui[k] <= 400:
             out[k] = ui[k]
+    if ui.get("sort") in UI_SORTS:
+        out["sort"] = ui["sort"]
     return out
 
 
@@ -315,6 +328,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["mode"] not in themes.MODES:
                 raise ValueError("Choose Match my computer, Light or Dark.")
             display["mode"] = given["mode"]
+        if "style" in given:
+            if given["style"] not in themes.STYLES:
+                raise ValueError("Choose Standard, Treasure or Workbench.")
+            display["style"] = given["style"]
         if "custom_colours" in given:
             colours = custom_colours(given["custom_colours"])
             if not isinstance(given["custom_colours"], dict) or len(colours) != len(given["custom_colours"]):
@@ -419,6 +436,23 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.needs_reader.on_read = lambda: rebuild_catalog_quietly(self)
         self._needs = (None, None, None)   # (the index and the read packages' time it was worked out from, {product id: ...})
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
+        self._by_key = (None, {})       # (asset_by_key's map, and the index it was made from)
+        self.vpm = vpm_api.Service()   # Projects (hoard/vpm): the repositories, loaded once
+        self.jobs.project_runner = lambda what: self.vpm.run(what, self.asset_by_key)
+
+    def asset_by_key(self, key) -> dict | None:
+        """A downloaded product, by its tag key (Projects: your library in a project). The keys are looked up in a
+        map made once for each index, not by going through every download for each product."""
+        if not isinstance(key, str):
+            return None
+        index = self.index(stale_ok=True)
+        made_for, by_key = self._by_key
+        if made_for is not index:
+            by_key = {}
+            for a in index.get("assets", []):
+                by_key.setdefault(a.get("tag_key"), a)   # (the first, as before)
+            self._by_key = (index, by_key)
+        return by_key.get(key)
 
     def start_schedule(self) -> threading.Event:
         """Automatic syncs, while this server runs (the desktop app starts it). Set the returned event to stop."""
@@ -627,6 +661,19 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
         return self.server.lan or host in LOOPBACK
 
+    def _drop_body(self) -> None:
+        """Read a small request body that won't be used, before answering without it: Windows resets a connection
+        closed with bytes it hasn't read, and the answer can be lost on the way (WinError 10053 for the page)."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if 0 < length <= 64 * 1024:   # (a larger one is closed on: not worth reading for a refusal)
+            try:
+                self.rfile.read(length)
+            except OSError:
+                pass
+
     def _refused(self):
         """The request didn't carry this run's access key (see check_access)."""
         return self._json({"error": "Hoard didn't recognise this page. Open Hoard again, or the address it printed."}, 401)
@@ -643,6 +690,8 @@ class Handler(BaseHTTPRequestHandler):
             srv.accept_language = self.headers.get("Accept-Language")
             return self._send(200, page_source(PAGES[path], srv.cfg, srv.accept_language), "text/html; charset=utf-8",
                               {"Cache-Control": "no-store"})
+        if path == "/styleguide":   # every part of the pages, for making and checking them (nothing of yours in it)
+            return self._send(200, guide_source(parse_qs(u.query)), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))
             if not font:
@@ -757,6 +806,8 @@ class Handler(BaseHTTPRequestHandler):
             updates = AssetUpdates().load()["items"]
             return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
                                "hidden_left_out": not self._unlocked() and bool(MarkStore().keys("hidden"))}, compress=True)
+        if path.startswith("/api/vpm"):   # Projects (hoard/vpm)
+            return self._vpm_get(path, parse_qs(u.query))
         if path == "/api/space":   # Downloads, Disk space: the same file kept more than once (hoard/space.py)
             hidden = frozenset() if self._unlocked() else frozenset(MarkStore().keys("hidden"))
             with srv.cfg_lock:
@@ -1006,12 +1057,13 @@ class Handler(BaseHTTPRequestHandler):
                 "changed": rec["made"] != sets.code_mark(code), "days": shortlinks.LIFETIME_DAYS}
 
     def _share_set(self, sid: str):
-        """A set's share code and link (hoard/sets.py), and its short link, if it has one."""
+        """A set's share code (hoard/sets.py), for the page to lock for its short link, and that link, if it has one.
+        The code's own long link isn't offered: a set is shared only by a short link (issue #162)."""
         got = self._set_code(sid)
         if not isinstance(got, tuple):
             return got
         s, code, count = got
-        return self._json({"ok": True, "code": code, "link": sets.share_link(code), "count": count,
+        return self._json({"ok": True, "code": code, "count": count,
                            "left_out": len(s["items"]) - count, "short": self._short_view(s.get("short"), code),
                            "short_days": shortlinks.LIFETIME_DAYS})
 
@@ -1152,6 +1204,202 @@ class Handler(BaseHTTPRequestHandler):
         srv.forget_index()
         return self._json({"ok": True, **done})
 
+    # ---- Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, with your library in them
+
+    def _hidden_key(self, key) -> bool:
+        return isinstance(key, str) and key in MarkStore().keys("hidden") and not self._unlocked()
+
+    def _vpm_get(self, path: str, query: dict):
+        srv = self.server
+        one = lambda k: (query.get(k) or [""])[0][:2000]  # noqa: E731
+        try:
+            if path == "/api/vpm":
+                return self._json({**srv.vpm.overview(), "job": public_job(srv.jobs.state, self._hidden_names())},
+                                  compress=True)
+            if path == "/api/vpm/project":
+                found = srv.vpm.project(one("path"))
+                report = next((r for r in projects.read_all() if r.get("path") and os.path.normcase(os.path.normpath(r["path"]))
+                               == os.path.normcase(os.path.normpath(found["path"]))), None)
+                if report is not None:   # what Hoard for Unity reported: the products it uses, and its credits
+                    updates = AssetUpdates().load()["items"]
+                    report = projects.view([r for r in self._visible_projects() if r["id"] == report["id"]],
+                                           srv.index(stale_ok=True), updates)
+                    report = report[0] if report else None
+                hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
+                found["preloaded"] = [x for x in found["preloaded"] if x.get("tag_key") not in hidden]
+                return self._json({**found, "report": report}, compress=True)
+            if path == "/api/vpm/packages":
+                return self._json({"packages": srv.vpm.packages(one("unity"), one("pre") == "1")}, compress=True)
+            if path == "/api/vpm/versions":
+                return self._json({"versions": srv.vpm.versions(one("name"), one("unity"), one("pre") == "1", one("keep"))},
+                                  compress=True)
+            if path == "/api/vpm/product":
+                key = one("key")
+                asset = srv.asset_by_key(key)
+                if asset is None:
+                    return self._json({"error": "That isn't downloaded."}, 404)
+                if self._hidden_key(key):
+                    return self._json({"error": "Unlock your hidden library first."}, 403)
+                index = srv.index(stale_ok=True)
+                return self._json(srv.vpm.product(asset, srv.needs_view(index).get(asset["id"])))
+        except vpm_api.ProjectsError as e:
+            return self._json({"error": str(e)}, 400)
+        return self._send(404, b"Not found", "text/plain")
+
+    def _vpm_job(self, what: dict):
+        started = self.server.jobs.start("project", [], project=what)
+        if not started:
+            return self._json({"error": "That's already waiting its turn."}, 409)
+        return self._json({"ok": True, "queued": started == "queued"})
+
+    def _vpm_post(self, path: str, body: dict):
+        from .vpm import imports as vpm_imports, listing, presets as vpm_presets, templates as vpm_templates, unity as vpm_unity
+        from .vpm.project import is_project
+        srv = self.server
+        try:
+            if path == "/api/vpm/preview":
+                return self._json(srv.vpm.preview(body))
+            if path in ("/api/vpm/apply", "/api/vpm/backup", "/api/vpm/preload"):
+                srv.vpm.listed(body.get("path"))
+                what = {"op": {"/api/vpm/apply": "change", "/api/vpm/backup": "backup", "/api/vpm/preload": "preload"}[path],
+                        "path": body["path"], "name": Path(body["path"]).name}
+                if path == "/api/vpm/apply":
+                    what.update({k: body.get(k) for k in ("add", "remove", "repair", "upgrade_all", "prerelease")})
+                elif path == "/api/vpm/backup":
+                    what["leave_out_packages"] = body.get("leave_out_packages") is True
+                else:
+                    what["picks"] = self._picks(body.get("picks"))
+                return self._vpm_job(what)
+            if path == "/api/vpm/create":
+                location, name = str(body.get("location") or "")[:1000], str(body.get("name") or "")[:255]
+                problem, _ = vpm_templates.check_name(Path(location), name) if location else ("Choose where it goes.", None)
+                if problem:
+                    return self._json({"error": problem}, 400)
+                return self._vpm_job({"op": "create", "name": name, "location": location,
+                                      "template": str(body.get("template") or "")[:200],
+                                      "unity": str(body.get("unity") or "")[:40],
+                                      "packages": body.get("packages") if isinstance(body.get("packages"), dict) else {},
+                                      "picks": self._picks(body.get("picks"))})
+            if path == "/api/vpm/refresh":
+                return self._vpm_job({"op": "refresh", "name": "repositories"})
+            # the backups panel (vpm/backup.py): old ones deleted, or moved to a drive with more room
+            if path == "/api/vpm/backups":
+                return self._json({"ok": True, **srv.vpm.backups()})
+            if path == "/api/vpm/backups/settings":
+                from .vpm import backup as vpm_backup
+                changes = {}
+                if body.get("keep") in vpm_backup.KEEP_CHOICES:
+                    changes["keep"] = body["keep"]
+                if body.get("days") in vpm_backup.DAYS_CHOICES:
+                    changes["days"] = body["days"]
+                listing.set_backup_prefs(**changes)
+                return self._json({"ok": True, **srv.vpm.backups()})
+            if path == "/api/vpm/backups/show":
+                folder = srv.vpm.backups_folder()
+                folder.mkdir(parents=True, exist_ok=True)
+                return self._json({"ok": True, "in": reveal(folder)})
+            if path == "/api/vpm/backups/delete":
+                from .vpm import backup as vpm_backup
+                count, freed = vpm_backup.delete(srv.vpm.backups_chosen(body.get("paths")))
+                return self._json({"ok": True, "deleted": count, "freed": freed})
+            if path == "/api/vpm/backups/move":
+                paths = srv.vpm.backups_chosen(body.get("paths"))
+                to = str(body.get("to") or "").strip()[:1000]
+                if not paths:
+                    return self._json({"error": "Choose the backups to move."}, 400)
+                if not to or not Path(to).is_absolute():
+                    return self._json({"error": "Choose a folder to move them to, by its full path."}, 400)
+                return self._vpm_job({"op": "move-backups", "paths": [str(p) for p in paths], "to": to,
+                                      "name": f"{len(paths)} {'backup' if len(paths) == 1 else 'backups'}"})
+            if path == "/api/vpm/check-name":
+                problem, warning = vpm_templates.check_name(Path(str(body.get("location") or "")[:1000]), str(body.get("name") or "")[:300])
+                return self._json({"problem": problem, "warning": warning})
+            if path == "/api/vpm/open":
+                found = srv.vpm.project(str(body.get("path") or ""))
+                if found["open_in_unity"]:
+                    return self._json({"error": "Unity already has this project open."}, 409)
+                wanted = body.get("editor") if isinstance(body.get("editor"), str) else (found["editor"] or {}).get("path")
+                editor = next((e["path"] for e in found["editors"] if e["path"] == wanted), None)   # (Hoard's own copy)
+                if not editor:
+                    return self._json({"error": f"Unity {found['unity']} isn't installed. Install it with Unity Hub, or "
+                                                "choose another version to open it in."}, 400)
+                vpm_unity.open_project(Path(editor), Path(found["path"]))
+                listing.note(found["path"], opened=time.strftime("%Y-%m-%dT%H:%M:%S"))
+                return self._json({"ok": True})
+            if path == "/api/vpm/open-folder":
+                where = Path(srv.vpm.listed(body.get("path")))
+                if body.get("show") == "imports":   # what Hoard put in it (vpm/imports.py), shown in its folder
+                    where = where / vpm_imports.NOTE_NAME
+                    if not where.is_file():
+                        return self._json({"error": "There's no list of what Hoard put in this project yet."}, 404)
+                return self._json({"ok": True, "in": reveal(where)})
+            if path == "/api/vpm/add-project":
+                where = str(body.get("path") or "")[:2000]
+                if not where or not Path(where).is_absolute() or not Path(where).is_dir() or not is_project(Path(where)):
+                    return self._json({"error": "That folder isn't a Unity project."}, 400)
+                listing.add(str(Path(where)))
+                return self._json({"ok": True})
+            if path == "/api/vpm/remove-project":
+                return self._json({"ok": listing.remove(srv.vpm.listed(body.get("path")))})
+            if path == "/api/vpm/favorite":
+                listing.note(srv.vpm.listed(body.get("path")), favorite=body.get("on") is True)
+                return self._json({"ok": True})
+            if path == "/api/vpm/repos/add":
+                from .vpm import repos as vpm_repos
+                try:
+                    repo = vpm_repos.add_repo(srv.vpm.settings(), str(body.get("url") or "")[:2000],
+                                              str(body.get("name") or "")[:200] or None, body.get("headers") or None)
+                except vpm_repos.RepoError as e:
+                    return self._json({"error": str(e)}, 400)
+                srv.vpm.forget()
+                return self._json({"ok": True, "label": repo.label(), "packages": len(repo.packages)})
+            if path == "/api/vpm/repos/remove":
+                from .vpm import repos as vpm_repos
+                ok = vpm_repos.remove_repo(srv.vpm.settings(), str(body.get("path") or "")[:2000])
+                srv.vpm.forget()
+                return self._json({"ok": ok})
+            if path == "/api/vpm/settings":
+                settings = srv.vpm.settings()
+                for key, field in (("projects_folder", "defaultProjectPath"), ("backups_folder", "projectBackupPath")):
+                    if isinstance(body.get(key), str) and body[key].strip():
+                        if not Path(body[key].strip()).is_absolute():
+                            return self._json({"error": "Use a folder's full path."}, 400)
+                        settings.set(field, body[key].strip()[:1000])
+                if isinstance(body.get("prerelease"), bool):
+                    settings.set("showPrereleasePackages", body["prerelease"])
+                settings.save()
+                return self._json({"ok": True})
+            if path == "/api/vpm/presets":
+                action = body.get("action")
+                if action == "save":
+                    return self._json({"ok": True, "preset": vpm_presets.save(body.get("preset") or {})})
+                if action == "delete":
+                    return self._json({"ok": vpm_presets.delete(str(body.get("id") or "")[:40])})
+                if action == "export":
+                    preset = next((x for x in vpm_presets.load() if x["id"] == body.get("id")), None)
+                    if preset is None:
+                        return self._json({"error": "That preset isn't there any more."}, 404)
+                    assets = {x["key"]: srv.asset_by_key(x["key"]) for x in preset["products"]}
+                    return self._json({"ok": True, **vpm_presets.export_alcom(preset, assets, srv.vpm.settings().folder)})
+                return self._json({"error": "Bad request."}, 400)
+        except vpm_presets.PresetError as e:
+            return self._json({"error": str(e)}, 400)
+        except vpm_api.ProjectsError as e:
+            return self._json({"error": str(e)}, 400)
+        except OSError as e:
+            return self._json({"error": f"That couldn't be done ({e.strerror or e})."}, 500)
+        return self._send(404, b"Not found", "text/plain")
+
+    def _picks(self, raw) -> list[dict]:
+        """Products from your library to put in a project, as the page chose them; hidden ones only when unlocked."""
+        out, hidden = [], set() if self._unlocked() else set(MarkStore().keys("hidden"))   # (read once, not for each)
+        for p in (raw if isinstance(raw, list) else [])[:500]:
+            if not isinstance(p, dict) or not isinstance(p.get("key"), str) or p["key"] in hidden:
+                continue
+            out.append({"key": p["key"][:400], "kind": str(p.get("kind") or "")[:20], "file": str(p.get("file") or "")[:1000],
+                        "member": p["member"][:1000] if isinstance(p.get("member"), str) else None})
+        return out
+
     def _queued(self, started: str | None):
         """The answer for something asked while a job ran: it waits its turn (or started, if that job just ended)."""
         if not started:
@@ -1276,11 +1524,14 @@ class Handler(BaseHTTPRequestHandler):
         """Run an action. Only requests from this computer, sent as JSON with the access key, are accepted."""
         path, srv = urlparse(self.path).path, self.server
         if path not in ACTIONS:
+            self._drop_body()
             return self._send(404, b"Not found", "text/plain")
         if (not self._host_ok() or self.client_address[0] not in LOOPBACK
                 or not (self.headers.get("Content-Type") or "").startswith("application/json")):
+            self._drop_body()
             return self._json({"error": "That only works on the computer running Hoard."}, 403)
         if path not in KEYLESS_ACTIONS and not check_access(self, srv.key):
+            self._drop_body()
             return self._refused()
         srv.last_seen = time.time()
         try:
@@ -1540,6 +1791,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "queued": started == "queued"})
         if path in ("/api/libraries/add", "/api/libraries/remove"):   # the other library folders, from Settings
             return self._library_folders(path, body)
+        if path.startswith("/api/vpm/"):   # Projects (hoard/vpm)
+            return self._vpm_post(path, body)
         if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)
@@ -1684,18 +1937,22 @@ SHARED_MARK = b"//@include shared.js\n"
 
 def page_source(name: str, cfg: dict | None = None, accept_language: str | None = None) -> bytes:
     """A page as it's served: its file, with what both pages share (web/shared.js) put in its script where it says
-    so, so each page is still one script the Content-Security-Policy allows by its hash; the theme you chose
-    (Settings, Appearance) after the page's own colours, so it shows from the first moment; and your language: the
-    page's lang, and the catalog it translates itself from (hoard/i18n.py), before its script. The page stays
-    hidden until it has (data-i18n), so it never shows in English first."""
+    so, so each page is still one script the Content-Security-Policy allows by its hash; the styles (web/looks.css),
+    and the theme you chose (Settings, Appearance) after the page's own colours, so it shows from the first moment;
+    and your language: the page's lang, and the catalog it translates itself from (hoard/i18n.py), before its
+    script. The page stays hidden until it has (data-i18n), so it never shows in English first."""
     page = (WEB / name).read_bytes()
     if SHARED_MARK in page:
         page = page.replace(SHARED_MARK, (WEB / "shared.js").read_bytes().replace(b"\r\n", b"\n") + b"\n", 1)
     d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
+    # the styles' layouts (web/looks.css, both pages alike), then the theme's colours
+    looks = '<style id="looks">\n' + (WEB / "looks.css").read_text("utf-8").replace("\r\n", "\n") + "</style>\n"
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
-    page = page.replace(b"</head>", style.encode() + b"</head>", 1)
-    # the font and spacing you chose (Settings, Accessibility), on the page from its first moment
+    page = page.replace(b"</head>", looks.encode() + style.encode() + b"</head>", 1)
+    # the font, spacing (Settings, Accessibility) and style (Appearance) you chose, on the page from its first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
+    if themes.style_id(d.get("style")) != "standard":
+        marks += f' data-style="{themes.style_id(d.get("style"))}"'
     if marks:
         page = page.replace(b'<html lang="en">', f'<html lang="en"{marks}>'.encode(), 1)
     lang = i18n.language(cfg, accept_language)
@@ -1703,6 +1960,58 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
         page = page.replace(f'<html lang="en"{marks}>'.encode(), f'<html lang="{lang}"{marks} data-i18n>'.encode(), 1)
         page = page.replace(b"\n<script>\n", b"\n" + i18n.page_script(lang).encode() + b"<script>\n", 1)
     return page
+
+
+GUIDE = "styleguide.html"
+GUIDE_PAGES = {"library": "library.html", "downloads": "downloads.html"}
+GUIDE_SIZES = (100, 115, 130, 150)
+_OWN_STYLE = re.compile(rb"<style[^>]*>(.*?)</style>", re.S)
+# what each of a theme's colours is for (hoard/themes.py), for the guide's swatches
+TOKEN_USES = {"cave": "the page", "ledge": "panels, and the ground under tiles", "stone": "hover, and boxes in panels",
+              "seam": "lines and edges", "bone": "text", "dust": "quieter text", "gold": "the accent: yours, or do this",
+              "gold-ink": "text on the accent", "gold-text": "the accent as text", "warn": "problems",
+              "booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip", "itch": "itch.io",
+              "local": "Local (your own packages)"}
+
+
+def guide_source(query: dict) -> bytes:
+    """The style guide (/styleguide, web/styleguide.html): every part of the pages, drawn with one page's own
+    stylesheet (the Library's or Downloads'), web/looks.css and a theme, as the pages are served, so it never drifts
+    from them. What it's shown in (page, style, theme, Light or Dark, font, spacing, colours, text size) is in its
+    address, chosen in its own bar. Nothing of yours is in it: every product, project and file in it is made up."""
+    def one(k):
+        return (query.get(k) or [""])[0][:40]
+    page = one("page") if one("page") in GUIDE_PAGES else "library"
+    style, theme, mode = themes.style_id(one("style")), themes.theme_id(one("theme")), themes.mode_id(one("mode"))
+    size = int(one("size")) if one("size") in {str(s) for s in GUIDE_SIZES} else 100
+    font, spacing, colours = one("font") == "dyslexic", one("spacing") == "wide", one("colours") == "colourblind"
+    own = _OWN_STYLE.search((WEB / GUIDE_PAGES[page]).read_bytes())
+    styles = (b'<style id="page">' + (own.group(1) if own else b"") + b"</style>\n" +
+              b'<style id="looks">\n' + (WEB / "looks.css").read_bytes() + b"</style>\n" +
+              b'<style id="theme">\n' + themes.css(theme, mode).encode() + b"\n</style>\n")
+    marks = (f' data-page="{page}"' + (f' data-style="{style}"' if style != "standard" else "") +
+             (' data-font="dyslexic"' if font else "") + (' data-spacing="wide"' if spacing else "") +
+             (' data-colours="colourblind"' if colours else "") +
+             (f' style="zoom: {size / 100}; --zoom: {size / 100}"' if size != 100 else ""))
+
+    def choice(name, label, options, chosen):
+        opts = "".join(f'<option value="{v}"{" selected" if v == chosen else ""}>{text}</option>' for v, text in options)
+        return f'<label>{label} <select name="{name}">{opts}</select></label>'
+    bar = (choice("page", "Page", [("library", "Library"), ("downloads", "Downloads")], page) +
+           choice("style", "Style", [(s, s.title()) for s in themes.STYLES], style) +
+           choice("theme", "Theme", [(t["id"], t["name"]) for t in themes.choices()], theme) +
+           choice("mode", "Light or Dark", [("system", "Match my computer"), ("light", "Light"), ("dark", "Dark")], mode) +
+           choice("font", "Font", [("standard", "Standard"), ("dyslexic", "OpenDyslexic")], "dyslexic" if font else "standard") +
+           choice("size", "Text size", [(str(s), f"{s}%") for s in GUIDE_SIZES], str(size)) +
+           choice("colours", "Store colours", [("standard", "Standard"), ("colourblind", "Easier to tell apart")],
+                  "colourblind" if colours else "standard") +
+           f'<label class="check"><input type="checkbox" name="spacing" value="wide"{" checked" if spacing else ""}> Wider spacing</label>')
+    tokens = "".join(f'<li class="sg-tok"><i style="background: var(--{k})"></i><code>--{k}</code><small>{use}</small>'
+                     f'<span class="sg-val" data-token="{k}"></span></li>' for k, use in TOKEN_USES.items())
+    out = (WEB / GUIDE).read_bytes()
+    out = out.replace(b"<!--@styles-->", styles, 1).replace(b"<!--@bar-->", bar.encode(), 1)
+    out = out.replace(b"<!--@tokens-->", tokens.encode(), 1)
+    return out.replace(b'<html lang="en">', f'<html lang="en"{marks}>'.encode(), 1)
 
 
 def chosen_files(raw) -> dict[str, dict] | None:

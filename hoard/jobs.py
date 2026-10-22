@@ -204,7 +204,8 @@ TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "che
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
-              "delete-files": "Delete downloaded files", "routine": "Routine check", "wishlists": "Read wishlists"}
+              "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
+              "wishlists": "Read wishlists"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -232,9 +233,16 @@ def tasks_file():
     return data_dir() / "tasks.json"
 
 
+PROJECT_WORK = {"create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
+                "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}"}
+
+
 def describe_job(task: str, stores: list[str], only: str | None = None, keys: list | None = None,
-                 scheduled: bool = False) -> str:
+                 scheduled: bool = False, project: dict | None = None) -> str:
     """What a job does, in a few words: "Download: Booth, Gumroad (3 items)"."""
+    if task == "project" and project:
+        words = PROJECT_WORK.get(project.get("op"), "Projects")
+        return "Projects: " + words.replace("{0}", str(project.get("name") or "a project")[:100])
     names = ("every store" if stores == ["all"] else
              ", ".join(STORES[s]["label"] for s in stores if s in STORES)) if stores else ""
     extra = [f"{len(keys)} {'item' if len(keys) == 1 else 'items'}"] if keys else []
@@ -278,6 +286,7 @@ class Jobs:
         self.cfg, self.lib = cfg, lib
         self.on_download_done = on_download_done or (lambda: None)
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
+        self.project_runner = None   # Projects' work (hoard/vpm/api.py: the server sets it)
         self.on_found = None   # the routine check found more to download than before: Hoard's app tells you (hoard/notify.py)
         self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
         self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
@@ -313,7 +322,7 @@ class Jobs:
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
               items: list[str] | None = None, local: dict | None = None, move: dict | None = None,
-              files: dict | None = None, chosen: dict | None = None) -> str | None:
+              files: dict | None = None, chosen: dict | None = None, project: dict | None = None) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
@@ -323,7 +332,8 @@ class Jobs:
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
                 "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
                 "local": dict(local) if local else None, "move": dict(move) if move else None,
-                "files": dict(files) if files else None, "chosen": dict(chosen) if chosen else None}
+                "files": dict(files) if files else None, "chosen": dict(chosen) if chosen else None,
+                "project": dict(project) if project else None}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -332,7 +342,7 @@ class Jobs:
             if not queue or same or len(self._queue) >= MAX_QUEUE:
                 return None
             self._ids += 1
-            entry = {**spec, "id": f"q{self._ids}", "label": describe_job(task, stores, only, keys, scheduled),
+            entry = {**spec, "id": f"q{self._ids}", "label": describe_job(task, stores, only, keys, scheduled, project),
                      "queued": now_iso()}
             # issue #110: yours go ahead of automatic ones waiting, and an automatic one running makes way for it
             ahead = next((n for n, q in enumerate(self._queue) if q.get("scheduled")), len(self._queue))
@@ -404,7 +414,8 @@ class Jobs:
         skip_imported, scheduled = spec.get("skip_imported", False), spec.get("scheduled", False)
         self._ids += 1
         self._current = {"id": f"j{self._ids}", "task": task, "stores": stores,
-                         "label": describe_job(task, stores, only, keys, scheduled), "started": now_iso()}
+                         "label": describe_job(task, stores, only, keys, scheduled, spec.get("project")),
+                         "started": now_iso()}
         self._trail = []
         self.stop.clear()
         self._forced = False   # (a Force stop that came as the last job ended isn't this one's)
@@ -427,6 +438,8 @@ class Jobs:
             target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
         elif task == "move":
             target = lambda s: self._move(spec.get("move") or {})  # noqa: E731
+        elif task == "project":
+            target = lambda s: self._project(spec.get("project") or {})  # noqa: E731
         elif task in ("rescan-local", "remove-local", "delete-files"):
             target = lambda s: self._files(task, spec.get("files") or {})  # noqa: E731
         elif task == "login":
@@ -601,6 +614,39 @@ class Jobs:
         finally:
             self.on_download_done()
         self._set(message=f"Moved {done['name']}: {plural(done['files'], 'file')} to {done['to']}.")
+
+    def _project(self, what: dict) -> None:
+        """Projects' work (hoard/vpm): making a project, changing its packages, putting your products in it, backing
+        it up, refreshing the repositories. Stop stops it between steps; a change part way is put back as it was."""
+        from .vpm.api import ProjectsError
+        from .vpm.fetch import FetchError
+        from .vpm.project import ProjectError
+        from .vpm.resolve import ResolveError
+        lines: list[str] = []
+
+        def sink(msg):
+            self._moved = time.monotonic()
+            if isinstance(msg, Progress):
+                self.state["message"] = str(msg)
+            else:
+                lines.append(str(msg))
+                del lines[:-40]
+                self._set(message=str(msg), log=lines[-20:])
+            if self.stop.is_set() and threading.get_ident() == self._job_thread:
+                self.stop.clear()
+                raise Cancelled()
+        self._set(task="project", message=describe_job("project", [], project=what))
+        try:
+            with capture_log(sink):
+                done = self.project_runner(what) if self.project_runner else "Projects aren't available here."
+        except Cancelled:
+            self._set(message="Stopped. What was being changed was put back as it was.")
+            return
+        except (ProjectsError, ResolveError, ProjectError, FetchError, ValueError, OSError) as e:
+            why = str(e) if not isinstance(e, OSError) else f"That couldn't be done ({e.strerror or e})."
+            self._set(message=why, error=why)
+            return
+        self._set(message=done)
 
     def _files(self, task: str, what: dict) -> None:
         """A rescan or take-out of something in Local, or deleting a removed product's downloaded files, that was

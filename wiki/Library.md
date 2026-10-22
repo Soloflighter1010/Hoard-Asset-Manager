@@ -11,7 +11,8 @@ The **Library** shows everything you own on the stores you use, whether or not y
   **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
-- **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs.
+- **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs. Hoard remembers
+  the sort you choose, on this page and in Downloads, and next time it starts (5.0).
 - **Stack copies:** copies of the same product show as one tile with a count on it (×3): bought more than once,
   in several versions, or on two stores (from 3.1). Hoard knows copies by:
   - **the same picture**, byte for byte, when no other creator uses it: "Hair Pack 1" and "Hair Pack 2" stay
@@ -62,8 +63,9 @@ another to take in everything between. **Ctrl+A** chooses everything shown, and 
 choose **Select**, then tap the items. A plain click still opens an item.
 
 What's chosen gets a bar at the bottom: **Download** (one job, across stores; Payhip's are left out, as Hoard
-doesn't download from Payhip), **Tags** (add or take off a tag), and **More** (archive, hide or remove them, or
-delete their downloaded files), with **Select all shown** and **Done**. Right-click a tile (or press the menu key)
+doesn't download from Payhip), **Tags** (add or take off a tag), **Sets**, **Projects** (put what's downloaded of them
+in a Unity project, or start a new one with them: see [Projects](Projects#from-anywhere-in-your-library)), and **More**
+(archive, hide or remove them, or delete their downloaded files), with **Select all shown** and **Done**. Right-click a tile (or press the menu key)
 for the same in one menu; right-clicking one you haven't chosen chooses just it.
 
 ## Archive, Removed and Hidden

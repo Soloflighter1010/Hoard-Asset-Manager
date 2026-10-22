@@ -31,28 +31,39 @@ files? Hoard answers those without opening four tabs.
 <p align="center">
 <picture>
   <source srcset="site/img/library-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/library-dark.webp" width="49%" alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, tags and creators.">
+  <img src="site/img/library-dark.webp" width="49%" alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, and your tags grouped by kind down the side.">
 </picture>
 <picture>
   <source srcset="site/img/downloads-details-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoard's Downloads page, with a product's details open beside the tiles: its store, the Unity project that uses it, and buttons to open its folder or make an editable copy.">
 </picture>
 <picture>
-  <source srcset="site/img/projects-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/projects-dark.webp" width="49%" alt="Hoard's Projects panel: a Unity project's assets, each marked in the project or partly in it, and its credits list.">
+  <source srcset="site/img/project-manage-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-manage-dark.webp" width="49%" alt="Managing a Unity project in Hoard: its VRChat packages with updates and other versions to choose, the products put in from the library and the folders each added, and what Hoard for Unity found in it.">
+</picture>
+<picture>
+  <source srcset="site/img/inside-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/inside-dark.webp" width="49%" alt="Look inside a Unity package: its folders and files with Unity's own previews, read without unpacking it.">
+</picture>
+<picture>
+  <source srcset="site/img/sets-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/sets-dark.webp" width="49%" alt="The Sets tab: sets as big tiles of their products' pictures, and wishlists read from Booth and Gumroad.">
+</picture>
+<picture>
+  <source srcset="site/img/wishlist-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/wishlist-dark.webp" width="49%" alt="A Booth wishlist in Hoard: each product with its price, one cheaper than before with the old price struck through, and a link to buy it.">
+</picture>
+<picture>
+  <source srcset="site/img/mix-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/mix-dark.webp" width="49%" alt="Mix and match: an avatar and an outfit picked at random from your clothing tags, with Keep beside each pick, Pick again and Make a set of them.">
 </picture>
 <picture>
   <source srcset="site/img/local-add-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/local-add-dark.webp" width="49%" alt="The Add to Local panel: a folder or file, its name, who made it and who it's for, and a choice to copy it into Hoard or list it where it is.">
 </picture>
-<picture>
-  <source srcset="site/img/stores-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/stores-dark.webp" width="49%" alt="Hoard's Stores panel: Booth, Gumroad, Jinxxy, Payhip and itch.io, each with sign in, refresh and download.">
-</picture>
 </p>
 
-<sub>Library, Downloads, Projects, your own packages and Stores, with real products from the maintainer's own library,
-shown with their creators' pictures. <a href="https://hoard.furryup.link/credits.html">Who made
+<sub>The Library, a product's details in Downloads, a Unity project in Projects, Look inside, Sets, a wishlist, Mix and match and adding your own, with real products from the maintainer's own library, shown with their creators' pictures. <a href="https://hoard.furryup.link/credits.html">Who made
 each one, and where to get it</a>. Thank you for making them.</sub>
 
 Guides for everything, from installing to fixing a problem, are in the
@@ -157,8 +168,9 @@ your library list and downloads folder: choose the folder you ran 1.x from.
   Poiyomi or Modular Avatar, and whether it also uses files from other products (a base avatar, say). When an update
   replaces a file, the old one is kept (**Previous versions**, with **Restore**). **Sets** group products you use
   together (an avatar, its outfits, its shaders), downloaded or not, in a tab beside the stores: each set a big tile
-  (with a picture of your choosing, if you like), opening to a folder of its products; share one as a link that
-  shows what's in it and where to buy each (nothing uploaded), and Hoard for Unity imports a set in one go.
+  (with a picture of your choosing, if you like), opening to a folder of its products; share one as a short link
+  that shows what's in it and where to buy each for 14 days (locked first, so Hoard's share server can't read it),
+  and Hoard for Unity imports a set in one go.
 - **Backup** (in **Settings**) saves what you've set up (settings, tags, sets, choices and your library list, never
   sign-ins or keys) in one file, to keep or to move to another computer, and restores it.
 - **Payhip** is listed, not downloaded: Hoard shows everything you bought there, with each product's

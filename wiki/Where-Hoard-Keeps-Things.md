@@ -21,7 +21,9 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `picture-looks.json` | How product pictures look (a 64-bit hash of each, by the picture's SHA-256), so copies of one product saved differently by two stores stack. See [Library](Library#finding-things) |
 | `asset-updates.json` | What the last **Check for updates** found: for each thing you've downloaded, the files its store has that you don't yet. See [Downloads](Downloads#checking-for-updates-without-downloading) |
 | `marks.json` | What you've archived, hidden or removed, and your hidden library's PIN and recovery words, each only as a salted, slow hash |
-| `projects/` | One small report per Unity project you've opened Hoard's window in (Hoard for Unity 0.4.0 and newer): its name and folder, which of your assets it uses, and its credits settings. **Projects** in Hoard shows them; **Forget this project** deletes one. See [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) |
+| `projects/` | One small report per Unity project you've opened Hoard's window in (Hoard for Unity 0.4.0 and newer): its name and folder, which of your assets it uses, and its credits settings. **Projects** in Hoard shows them; **Forget** deletes one. See [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) |
+| `vpm-projects.json` | What Hoard notes about the projects in **Projects** (5.0): your favourites, when you opened each from Hoard, and the products from your library you put in each; and which project backups count as old, and where you last moved some. The list of projects itself is the Creator Companion's (below). See [Projects](Projects) |
+| `vpm-presets.json` | Your presets for new projects: each one's template, Unity version, packages and products (5.0). See [Projects](Projects#presets) |
 | `library_folders.json` | Which products each of your other library folders held when Hoard last read it, so a sync leaves them alone while that drive isn't connected. See [Downloads](Downloads#library-folders-on-other-drives) |
 | `integrity.key` | The key Hoard seals its records with (see [Seals](#seals)). Private to your account |
 | `sealed-files.json` | Which records this install has sealed, so a removed seal is noticed |
@@ -66,6 +68,19 @@ A `Hoard` folder in your Documents, unless you chose another in [Settings](Setti
 `catalog.json`, `tags.json` and `asset.json` are written for other programs to read, and promise clean text,
 plain relative paths and links only to the product's own store. Their exact format is in
 [docs/DATA-FORMATS.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/DATA-FORMATS.md).
+
+## The Creator Companion's folder
+
+[Projects](Projects) (5.0) shares its project list, repositories and settings with ALCOM and the VRChat Creator
+Companion, in their folder: `%LOCALAPPDATA%\VRChatCreatorCompanion` on Windows, `~/.local/share/VRChatCreatorCompanion`
+on macOS and Linux.
+
+| What | What Hoard does with it |
+|---|---|
+| `settings.json` | Reads and changes the list of projects, the repositories you added, the folders for new projects and backups, and whether to offer prerelease packages, as you change them in Projects. Everything else in it is kept as it is |
+| `vcc.liteDb` | The Creator Companion's database. Hoard reads what it knows of each project and of your Unity versions, and never writes to it |
+| `Repos/` | Each repository's listing, and the packages downloaded from it, shared with ALCOM so neither downloads one twice |
+| `vrc-get/templates/` | ALCOM's templates. **Save it for ALCOM too** writes a preset here, as `hoard-<name>-<id>.alcomtemplate` |
 
 ## Seals
 

@@ -357,6 +357,17 @@ class LocalAccess(unittest.TestCase):
             self.assertEqual(self.call("POST", path, {})[0], 401, path)
         self.assertEqual(self.call("POST", "/api/cancel", {}, key=self.srv.key)[0], 200)
 
+    def test_a_refusal_reads_what_was_sent_first(self):
+        """Windows resets a connection closed with bytes it hasn't read, and the answer can be lost on the way
+        (WinError 10053): a refused action reads its small body first, and leaves a large one unread."""
+        import io
+        h = server.Handler.__new__(server.Handler)
+        for length, read in ((2, 2), (64 * 1024, 64 * 1024), (64 * 1024 + 1, 0)):
+            h.headers, h.rfile = {"Content-Length": str(length)}, io.BytesIO(b"x" * length)
+            h._drop_body()
+            self.assertEqual(h.rfile.tell(), read, length)
+        self.assertEqual(self.call("POST", "/api/quit", {"x": "y" * 2000})[0], 401, "and answers")
+
     def test_not_from_a_cookie_or_the_address(self):
         """A browser sends a cookie for 127.0.0.1 to every port there, and addresses end up in histories."""
         self.assertEqual(self.call("GET", "/api/settings", headers={"Cookie": f"hoard_key={self.srv.key}"})[0], 401)
@@ -1188,8 +1199,8 @@ class Egress(unittest.TestCase):
 
     def test_no_other_way_out(self):
         """No module makes its own requests: only egress (store traffic) and safety.fetch_public (public images)."""
-        for f in (REPO / "hoard").glob("*.py"):
-            if f.name in ("egress.py", "safety.py"):
+        for f in (REPO / "hoard").rglob("*.py"):
+            if f.relative_to(REPO / "hoard").as_posix() in ("egress.py", "safety.py"):
                 continue
             text = f.read_text("utf-8")
             if f.name == "app.py":   # Hoard talking to itself: one call, behind a check that it's this computer only

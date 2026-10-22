@@ -57,6 +57,7 @@
           && !JINXXY_NOT_A_CREATOR.has(segs[0].toLowerCase()) && (segs.length === 1 || !["products", "lists", "posts"].includes(segs[1].toLowerCase()))
       : store === "payhip" ? on("payhip.com") && /^\/b\/[A-Za-z0-9]{1,20}$/.test(path)
       : store === "itch" ? shop("itch.io") && (!path || /^\/[A-Za-z0-9_-]{1,120}$/.test(path)) : false;
+    if (ok && store === "booth" && on("booth.pm") && path.startsWith("/items/")) return `https://${host}/en${path}`;   // (as Hoard does)
     return ok ? `https://${host}${path}` : "";
   }
   const text = (v, n) => typeof v === "string" ? v.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
@@ -127,7 +128,7 @@
     img.addEventListener("error", () => img.replaceWith(instead ? instead() : el("span", { class: cls + " none", "aria-hidden": "true" })), { once: true });
     return img;
   }
-  function show(set, code, expires) {
+  function show(set, expires) {
     document.title = set.name + " · a set shared from Hoard";
     $("#setName").textContent = set.name;
     const stores = [...new Set(set.items.map(i => STORES[i.store]))];
@@ -153,7 +154,7 @@
               : el("span", { class: "sv-none" }, "No store link")));
     }
     $("#setCode").value = location.href;
-    if (expires) {   // (a short link: the code to copy is the set's own, which every Hoard reads)
+    if (expires) {   // (a short link; a long one, as Hoard shared sets before 5.0, says the set is in it)
       const until = new Date(expires * 1000).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
       $("#setWhere").textContent = `This short link works until ${until}. Its set is kept on Hoard's share server until then, ` +
         "locked: the key that opens it is in this page's link, after the “#”, which your browser never sends anywhere, so " +
@@ -163,10 +164,6 @@
     $("#setCopy").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(location.href); $("#setCopied").textContent = "Copied."; }
       catch (e) { $("#setCode").select(); $("#setCopied").textContent = "Copy it from the box."; }
-    });
-    $("#setCopyCode").addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(code); $("#setCopied").textContent = "Copied the code."; }
-      catch (e) { $("#setCode").value = code; $("#setCode").select(); $("#setCopied").textContent = "Copy it from the box."; }
     });
   }
   function problem(why) {
@@ -188,7 +185,7 @@
     let set;
     try { set = check(await unpack(code)); }
     catch (e) { problem("This link's set is damaged, or the link was cut short. Ask for it again, and copy all of it."); return; }
-    show(set, code, expires);
+    show(set, expires);
   }
   window.addEventListener("hashchange", () => location.reload());
   start();

@@ -303,6 +303,17 @@ class UnityPackage(unittest.TestCase):
         self.assertRegex(m["version"], r"^\d+\.\d+\.\d+$")
         self.assertIn(f"## {m['version']}", (self.PKG / "CHANGELOG.md").read_text("utf-8"), "each version has changelog notes")
 
+    def test_the_import_log_keeps_what_the_app_writes(self):
+        # the Hoard app adds entries to ProjectSettings/Hoard/imports.json (hoard/vpm/imports.py, issue #155); Hoard for
+        # Unity rewrites the file when it adds its own, so it reads and writes back every field the app's entries have
+        from hoard.vpm import imports
+        written = imports.entries([{"store": "booth", "name": "Rusk", "creator": "Kitsu", "file": "r.zip", "package": "com.r",
+                                    "added": ["Packages/com.r"], "already_there": 1}], "2026-10-21T00:00:00Z")[0]
+        log = (self.PKG / "Editor" / "ImportLog.cs").read_text("utf-8")
+        for key in written:
+            self.assertIn(f'v.Str("{key}")' if key not in ("added", "left") else f'"{key}")', log, f"{key}: read")
+            self.assertIn(f'\\"{key}\\": ', log, f"{key}: written back")
+
     def test_editor_only(self):
         for asmdef in self.PKG.rglob("*.asmdef"):
             d = json.loads(asmdef.read_text("utf-8"))

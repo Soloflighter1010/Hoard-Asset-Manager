@@ -96,8 +96,9 @@ the code it holds, to tell whether the set has changed since.
 A **share code** is `H1.` and then that set as JSON, compressed with raw DEFLATE and written in URL-safe base64
 without padding: `{"v": 1, "n": name, "d"?: note, "p"?: [photo links], "i": [[store, id, name, creator, url,
 thumbnail], ...]}` (a row's empty parts at its end are left out; Local and hidden products never are in it). The
-set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. It's shared as
-`https://hoard.furryup.link/set.html#<code>`.
+set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. From 5.0 it's shared
+only inside a short link (below); Hoard before 5.0 shared it as a long link, `https://hoard.furryup.link/set.html#<code>`,
+which the viewer and **Add a shared set** still read.
 
 A **short link** (4.3.0) is `https://hoard.furryup.link/set.html#S1.<id>.<key>`: `<id>` is 10 letters and digits,
 and `<key>` 16 random bytes in URL-safe base64 without padding (22 characters). The share code, as UTF-8, is locked
@@ -140,10 +141,13 @@ The same fields as one `<asset>` above, plus `"format": "hoard-asset"` and `"ver
   "version": 2,
   "generated_at": "...",
   "total_assets": 612,
-  "tags":      { "<your tag>":   { "count": 12, "assets": ["<folder>", ...] } },
+  "tags":      { "<your tag>":   { "count": 12, "assets": ["<folder>", ...], "type": "clothing" } },
   "suggested": { "<suggestion>": { "count": 30, "assets": ["<folder>", ...] } }
 }
 ```
+
+`type` (5.0) is what a tag of yours is about, when you've said: `avatar`, `world`, `clothing`, `gimmick`, `script`,
+`texture` or `other`. A tag with no kind has no `type`.
 
 ## `marks.json` (in Hoard's app-data folder)
 
@@ -193,6 +197,7 @@ says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the pro
 
 ## Version history
 
+- **2**, still, in 5.0: a tag's `type` in `tags.json`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.3.3: `page`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.0: `needs`, which readers that don't know it ignore.
 - **4** (3.0): `library`, for products in another library folder. Only written when there are some; otherwise

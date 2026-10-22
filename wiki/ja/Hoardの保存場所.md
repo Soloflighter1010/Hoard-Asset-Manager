@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English cfbec4adc8e9). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 84c7ca2a4f67). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <b>日本語</b> · <a href="Hoard가-저장하는-곳">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 Hoardが保管するものは2つに分かれます。あなたが選んだフォルダーにあるダウンロードと、それ以外のすべてを入れた、あなたのユーザーアカウント専用の非公開のアプリデータフォルダーです。
@@ -21,7 +21,9 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 | `picture-looks.json` | 商品の画像の見た目(画像のSHA-256ごとに、64ビットのハッシュ)。2つのストアが別々に保存した1つの商品のコピーをまとめるためです。[ライブラリ](ライブラリ#探す)をご覧ください |
 | `asset-updates.json` | 前回の **アップデートを確認** で見つかったもの。ダウンロードしたものごとに、ストアにあって手元にまだないファイル。[ダウンロード](ダウンロード#ダウンロードせずにアップデートを確認する)をご覧ください |
 | `marks.json` | アーカイブ、非表示、削除したもの、それに非表示のライブラリのPINと復元ワード(どちらもソルトつきの時間のかかるハッシュとしてだけ) |
-| `projects/` | Hoardのウィンドウを開いたUnityプロジェクトごとの小さなレポート(Hoard for Unity 0.4.0以降)。名前とフォルダー、使っているアセット、クレジットの設定。Hoardの **プロジェクト** に表示され、**このプロジェクトを忘れる** で1つ削除します。[Hoard for Unityの使い方](Hoard-for-Unityの使い方#hoardのプロジェクト)をご覧ください |
+| `projects/` | Hoardのウィンドウを開いたUnityプロジェクトごとの小さなレポート(Hoard for Unity 0.4.0以降)。名前とフォルダー、使っているアセット、クレジットの設定。Hoardの **プロジェクト** に表示され、**忘れる** で1つ削除します。[Hoard for Unityの使い方](Hoard-for-Unityの使い方#hoardのプロジェクト)をご覧ください |
+| `vpm-projects.json` | **プロジェクト** のプロジェクトについてHoardが記録すること(5.0)。お気に入り、Hoardから開いた日時、ライブラリから各プロジェクトに入れた商品、それにどのプロジェクトのバックアップを古いとみなすか、最後にどこへ移動したか。プロジェクトの一覧そのものはCreator Companionのものです(下)。[プロジェクト](プロジェクト)をご覧ください |
+| `vpm-presets.json` | 新しいプロジェクトのプリセット。それぞれのテンプレート、Unityのバージョン、パッケージ、商品(5.0)。[プロジェクト](プロジェクト#プリセット)をご覧ください |
 | `library_folders.json` | ほかのライブラリフォルダーそれぞれに、Hoardが最後に読んだとき何の商品があったか。そのドライブがつながっていない間、同期が手をつけないようにするためです。[ダウンロード](ダウンロード#ほかのドライブのライブラリフォルダー)をご覧ください |
 | `integrity.key` | Hoardが記録に封印をするためのキー([封印](#封印)をご覧ください)。あなたのアカウントだけのものです |
 | `sealed-files.json` | このインストールが封印した記録。封印が外されたら気づけるようにするためです |
@@ -63,6 +65,17 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 | `Payhip/_download-yourself.html` | 2.5.0より前のバージョンが残したもの。Payhipの商品を、自分でダウンロードするための一覧にしていました。HoardはもうPayhipからダウンロードしない([ストア](ストア#payhip)をご覧ください)ので、このページを書くことも読むこともありません。削除してかまいません |
 
 `catalog.json`、`tags.json`、`asset.json` は、ほかのプログラムが読むために書いていて、整ったテキスト、ふつうの相対パス、商品自身のストアへのリンクだけであることを約束しています。正確な形式は[docs/DATA-FORMATS.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/DATA-FORMATS.md)(英語)にあります。
+
+## Creator Companionのフォルダー
+
+[プロジェクト](プロジェクト)(5.0)は、プロジェクトの一覧、リポジトリ、設定を、ALCOMとVRChat Creator Companionと、それらのフォルダーで共有しています。Windowsでは `%LOCALAPPDATA%\VRChatCreatorCompanion`、macOSとLinuxでは `~/.local/share/VRChatCreatorCompanion` です。
+
+| もの | Hoardがすること |
+|---|---|
+| `settings.json` | プロジェクトでの変更に合わせて、プロジェクトの一覧、追加したリポジトリ、新しいプロジェクトとバックアップのフォルダー、プレリリース版のパッケージを表示するかどうかを読み、変えます。ほかの内容はそのまま残します |
+| `vcc.liteDb` | Creator Companionのデータベース。Hoardは、各プロジェクトとUnityのバージョンについての情報を読みますが、書き込むことはありません |
+| `Repos/` | 各リポジトリの一覧と、そこからダウンロードしたパッケージ。ALCOMと共有するので、どちらも同じものを2回ダウンロードしません |
+| `vrc-get/templates/` | ALCOMのテンプレート。**ALCOM用にも保存** で、プリセットをここに `hoard-<name>-<id>.alcomtemplate` として書き出します |
 
 ## 封印
 

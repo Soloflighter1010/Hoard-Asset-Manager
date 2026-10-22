@@ -177,6 +177,36 @@ def send(method: str, url: str, user_agent: str = "", **kwargs) -> requests.Resp
         return r
 
 
+def fetch(url: str, headers: dict | None = None, carry: dict | None = None, user_agent: str = "",
+          **kwargs) -> requests.Response:
+    """GET a site that isn't a store's (a VPM repository and the files it lists: vpm/fetch.py), with no cookies,
+    following redirects one checked hop at a time. headers (a repository's key, say) go to the first address's
+    host only, never to a host it redirects to; carry goes to every host. The answer isn't read: use it in a with."""
+    host = urlparse(url).hostname
+    sess = session(user_agent)
+    try:
+        for _ in range(MAX_HOPS):
+            check_hop(url)
+            hop = dict(carry or {}, **(headers or {} if urlparse(url).hostname == host else {}))
+            if _test_origin(url):   # tests only: a stand-in server on this computer, plain http
+                plain = requests.Session()
+                plain.trust_env = False
+                plain.headers.update(sess.headers)
+                r = plain.get(url, headers=hop, allow_redirects=False, **kwargs)
+            else:
+                r = sess.get(url, headers=hop, allow_redirects=False, **kwargs)
+            if not r.is_redirect:
+                weakref.finalize(r, sess.close)   # (the session lives as long as the answer being read)
+                return r
+            url = urljoin(url, r.headers.get("Location", ""))
+            r.close()
+    except BaseException:
+        sess.close()
+        raise
+    sess.close()
+    raise UnsafeRequest("too many redirects")
+
+
 def _content_range(r: requests.Response) -> tuple[int, int, int | None] | None:
     """A 206 answer's Content-Range, as (first byte, last byte, the whole file's size or None), or None when it has
     none that makes sense."""

@@ -59,6 +59,12 @@ Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a
 assets came from (from 0.5.2, a package with scripts too, though Unity reloads its scripts part way through). If
 the file is damaged, it's kept beside the new one as `imports.json.unreadable-<time>` rather than written over.
 
+Products the Hoard app put in the project ([Projects](Projects#managing-a-project), 5.0) are added to the same list.
+From 0.9.0, a product's details show them under **Put in by Hoard**: when, from which file, the folders it added (or
+its package, in `Packages`), and how many of its assets were left as they were because the project already had
+them, with **Select** to select what it added in the Project window. The project's `Hoard imports.md`, beside
+`Assets`, lists the same for you to read.
+
 ## Credits
 
 Creators often ask to be credited when you use their assets. **Create Credits List** in the window's bar lists the
@@ -83,7 +89,8 @@ control. The list is made from what's on your computer; nothing is sent anywhere
 ## Projects in Hoard
 
 Each project you open Hoard's window in shows up in Hoard under **Projects** (at the top of the page), from
-0.4.0. For each one, Projects lists:
+0.4.0: with the project, when it's on the list of projects Hoard shares with ALCOM and the Creator Companion (see
+[Projects](Projects)), or below that list when it isn't. For each one, Projects lists:
 
 - every product of yours it uses, and how much of it: **In the project**, **Partly in the project**, or
   **Imported, not found now** (Hoard imported it there, but its files aren't found any more);
@@ -93,8 +100,8 @@ Each project you open Hoard's window in shows up in Hoard under **Projects** (at
 
 In Downloads, a product says which projects use it. The window tells Hoard what a project uses a few seconds after
 anything changes (an import, a deleted folder, the credits settings), by writing a small report to `projects/` in
-Hoard's own folder. Hoard doesn't need to be running. **Forget this project** in Projects takes one out until you
-open its window again. **Make a set** (from 4.0.4) makes a [set](Downloads#sets) of the products in the project, all of
+Hoard's own folder. Hoard doesn't need to be running. **Forget** in Projects takes one that isn't on the list out
+until you open its window again. **Make a set** (from 4.0.4) makes a [set](Downloads#sets) of the products in the project, all of
 them or partly (not ones imported once and gone since), named for the project: to import them together in another.
 
 ## What it needs

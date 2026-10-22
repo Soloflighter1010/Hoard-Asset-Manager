@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0
+
+- **What the Hoard app put in the project, and where.** Hoard 5.0's Projects puts products from your library in a
+  project and notes each one in `ProjectSettings/Hoard/imports.json`, with the folders it added (or its package, in
+  `Packages`). A product's details now show that under **Put in by Hoard**: when, from which file, where it went, and
+  how many of its assets were left as they were because the project already had them, with **Select** to select
+  what it added in the Project window.
+- **The import list keeps what the Hoard app wrote in it.** Importing a product here rewrote
+  `ProjectSettings/Hoard/imports.json` with only what Hoard for Unity notes itself, so the folders the Hoard app had
+  listed were lost. Now every entry is written back as it was.
+- **Booth links open the item for everyone.** A Booth product's link that names no language
+  (`booth.pm/items/<id>`) is printed in credits as its English page (`booth.pm/en/items/<id>`), as the Hoard app now
+  keeps it; one that names a language stays as it is.
+
 ## 0.8.3
 
 - **Credits link each product's public page.** **Create Credits List** linked each product with the link Hoard keeps

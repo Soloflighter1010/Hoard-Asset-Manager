@@ -116,7 +116,7 @@ BOOTH_JS = r"""() => {
     const shop = [...w.querySelectorAll('a[href]')].find(a => /^https:\/\/[a-z0-9-]+\.booth\.pm\/?$/i.test(a.href));
     const img = [...w.querySelectorAll('img')].find(i => !i.classList.contains('hidden') && /\/i\/\d+\//.test(i.src));
     const leaves = [...w.querySelectorAll('div, span')].filter(e => !e.children.length).map(e => e.textContent.trim());
-    cards.push({id: m[1], url: 'https://booth.pm/items/' + m[1], name: title ? title.textContent.trim() : '',
+    cards.push({id: m[1], url: 'https://booth.pm/en/items/' + m[1], name: title ? title.textContent.trim() : '',
                 creator: shop ? shop.textContent.trim() : '', creator_url: shop ? shop.href : '', thumbnail: img ? img.src : '',
                 price: leaves.find(t => /^[~〜]?\s*(¥\s*\d|\d[\d,]*\s*(JPY|円))/.test(t)) || ''});
   }
@@ -124,6 +124,19 @@ BOOTH_JS = r"""() => {
     shown: b.getAttribute('data-state') === 'default'})).filter(l => l.name);
   return {cards, lists};
 }"""
+
+# Booth's next page of loved items: its page numbers, under the cards, are drawn by its script, not links (an address
+# with ?page=2 shows the first page again), so its arrow to the next page is chosen. False on the last page.
+BOOTH_NEXT_JS = r"""() => {
+  const arrow = [...document.querySelectorAll('pixiv-icon[name="24/ArrowOpenRight"]')].map(i => i.closest('.cursor-pointer'))
+    .find(el => el && el.offsetParent !== null);
+  if (!arrow) return false;
+  arrow.click();
+  return true;
+}"""
+# ...and the first card shown, to know when the next page has taken its place
+BOOTH_FIRST_JS = r"""() => { const a = document.querySelector('.item-card-wrapper a[href*="/items/"]');
+  const m = a && a.href.match(/\/items\/(\d+)/); return m ? m[1] : ''; }"""
 
 # Gumroad's wishlists (gumroad.com/wishlists): a row for each, its name and its own address.
 GUMROAD_INDEX_JS = r"""() => [...document.querySelectorAll('a[href*="/wishlists/"]')]
@@ -265,18 +278,24 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
     try:
         def read_all(url: str, label: str) -> list[dict]:
             found: dict[str, dict] = {}
+            goto(page, url)
+            settle(page, 900)
+            _signed_in(page, "accounts.booth.pm")
             for n in range(1, MAX_PAGES + 1):
-                goto(page, _with_page(url, n))
-                settle(page, 900)
-                _signed_in(page, "accounts.booth.pm")
                 new = 0
                 for c in page.evaluate(BOOTH_JS)["cards"]:
                     if c["id"] not in found:
                         found[c["id"]] = c
                         new += 1
                 progress(f"{label}, page {n}: {len(found)} items")
-                if not new:   # past the last page
+                first = page.evaluate(BOOTH_FIRST_JS)
+                if not new or not page.evaluate(BOOTH_NEXT_JS):   # the last page
                     break
+                try:   # the next page's cards in place of these (Booth reads them as you turn the page)
+                    page.wait_for_function(f"() => ({BOOTH_FIRST_JS})() !== {first!r}", timeout=20000)
+                except Exception:
+                    break
+                settle(page, 600)
                 time.sleep(delay)
             return booth_products(found.values())
         everything = read_all(BOOTH_WISHES, LIST_NAMES["booth"])

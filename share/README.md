@@ -7,7 +7,8 @@ only in the link, so this server can't read what it keeps.
 
 It's a [Cloudflare Worker](https://developers.cloudflare.com/workers/) (`worker.mjs`), with the sets kept in
 [Workers KV](https://developers.cloudflare.com/kv/), at `https://hoard-share.furryup.link`. Until it's set up,
-**Make a short link** in Hoard says it can't reach the share server, and the long link works as always.
+**Make a short link** in Hoard says it can't reach the share server. From Hoard 5.0 a short link is the only way to
+share a set; earlier versions also make a long link, which never needs this server.
 
 ## Setting it up
 
@@ -126,7 +127,7 @@ On Cloudflare's free plan, every day (resetting at midnight UTC), across everyon
 - 1,000 short links made or updated (KV writes),
 - 100,000 short links opened (Worker requests and KV reads).
 
-Past them, making a short link fails and Hoard says to share the long link, which always works. Workers Paid
+Past them, making a short link fails and Hoard says the share server is busy, to try again later. Workers Paid
 ($5 a month) has no daily limits (it includes 1 million KV writes and 10 million reads a month, and charges for
 more). A short link that runs out, or that its sharer deletes, says so in the viewer.
 

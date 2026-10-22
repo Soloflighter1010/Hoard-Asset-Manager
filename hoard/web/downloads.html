@@ -183,6 +183,23 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .side h2 { font: 700 13px var(--body); color: var(--dust); margin: 20px 0 10px; }
 .side h2:first-child { margin-top: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+/* your tags in the filters, by what they're about (issue #157): each kind's name on a line of its own */
+.chips .tgroup { flex-basis: 100%; margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--dust); }
+.chips .tgroup:first-child { margin-top: 0; }
+.tagrows select.ttype { width: auto; height: 32px; padding: 0 8px; font-size: 13px; }
+/* Mix and match (issue #156) */
+dialog.ask.mixdlg { width: min(560px, calc(var(--vw) - 32px)); }
+dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
+.mixlist { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mixlist li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; background: var(--cave);
+  box-shadow: inset 0 0 0 1px var(--seam); }
+.mixart { flex: none; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--stone); display: grid; place-items: center; }
+.mixart img, .mixart canvas { width: 100%; height: 100%; object-fit: cover; }
+.mixtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mixtext small { color: var(--dust); font-size: 11.5px; font-weight: 700; }
+.mixtext b { overflow-wrap: anywhere; }
+.mixtext .muted { font-size: 12.5px; }
+.mixlist label.check, .mixdlg > form > label.check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -424,7 +441,7 @@ body.selecting .toast { bottom: 96px; }
 .dupes .primary.danger { background: var(--warn); color: var(--gold-ink); }
 .dupes .primary.danger:disabled { opacity: .5; }
 /* the selection's bar: the count, what to do (a main button, then menus), Select all and Done, on one line */
-.bulk { flex-wrap: nowrap; width: auto; max-width: calc(var(--vw) - 24px); gap: 8px; }
+.bulk { flex-wrap: nowrap; width: max-content; max-width: calc(var(--vw) - 24px); gap: 8px; }   /* (max-content: centred at left 50%, "auto" would be half the window at most) */
 .bulk .bulk-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bulk .bulk-end { display: flex; gap: 8px; align-items: center; margin-left: 6px; white-space: nowrap; }
 .bulk .count-sel { white-space: nowrap; }
@@ -721,8 +738,8 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .inside .zipfiles .nm { overflow-wrap: anywhere; }
 .inside .more { font-size: 12px; color: var(--dust); margin: 6px 0; }
 
-/* Projects (issue #86): the Unity projects that use your assets, and their credits */
-.projects.win { width: min(960px, calc(var(--vw) - 48px)); }
+/* Projects (issue #86): what Hoard for Unity reports about a project (the products it uses), and its credits */
+.projects.win { width: min(1040px, calc(var(--vw) - 48px)); }
 .proj { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--stone); }
 .proj summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; cursor: pointer; list-style: none; }
 .proj summary::-webkit-details-marker { display: none; }
@@ -740,6 +757,96 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 12.5px/1.5 ui-monospace, monospace; }
 .proj .muted { font-size: 12px; color: var(--dust); }
 .projects .none { margin: 0; color: var(--dust); }
+/* Projects (hoard/vpm): the list shared with ALCOM and the Creator Companion, a project's packages and what from your
+   library is in it, a new project, repositories, and Unity and folders */
+.projects .hint { font-size: 13px; color: var(--dust); margin: 6px 0 12px; line-height: 1.5; }
+.projects .hint.bad, .pj-warn { color: var(--warn); }
+.projects h4 { margin: 18px 0 8px; font: 700 13px var(--body); color: var(--dust); }
+.projects .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.projects .row > button { width: auto; flex: none; margin: 0; }
+.projects .meta, .projects .muted { font-size: 12px; color: var(--dust); overflow-wrap: anywhere; }
+.projects input:not([type=checkbox]):not([type=radio]), .projects select:not([data-proj-style]), .projects textarea:not([readonly]) {
+  height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0; background: var(--cave); color: var(--bone);
+  box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; min-width: 0; box-sizing: border-box; }
+.projects textarea:not([readonly]) { height: auto; width: 100%; padding: 8px 12px; resize: vertical; font: 12.5px/1.5 ui-monospace, monospace; }
+.projects input:focus, .projects select:focus, .projects textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.pj-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.projects .primary, .projects .ghost { width: auto; margin-top: 0; }   /* (not a panel's one full-width button) */
+.pj-top input[type=search] { flex: 1 1 200px; }
+.pj-top > button { width: auto; flex: none; margin: 0; }
+.pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pj-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "star main acts" "star what acts"; gap: 2px 12px;
+  align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main acts" "what acts"; }
+.pj-row.gone { opacity: .7; }
+.pj-star { grid-area: star; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--seam); font-size: 17px; line-height: 1; }
+.pj-star[aria-pressed="true"] { color: var(--gold-text); }
+.pj-star:hover { color: var(--gold-text); background: var(--ledge); }
+.pj-star:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.pj-main { grid-area: main; display: flex; flex-direction: column; min-width: 0; }
+.pj-main b { overflow-wrap: anywhere; }
+.pj-what { grid-area: what; font-size: 12.5px; color: var(--dust); }
+.pj-row.gone .pj-what { color: var(--warn); }
+.pj-acts { grid-area: acts; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.pj-acts > button { width: auto; margin: 0; }
+@media (max-width: 640px) {
+  .pj-row, .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "what" "acts"; }
+  .pj-row .pj-star { position: absolute; }
+  .pj-row { position: relative; padding-right: 40px; }
+  .pj-row .pj-star { top: 8px; right: 8px; }
+  .pj-acts { justify-content: flex-start; margin-top: 6px; }
+}
+.pj-back { font-size: 13px; margin: 0 0 10px; }
+/* the backups panel: each backup with a box to choose it, the old ones marked */
+.pj-bk .pj-main.check { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+.pj-bk .pj-main.check > span { display: flex; flex-direction: column; min-width: 0; }
+.pj-bk.old .pj-what { color: var(--warn); font-weight: 700; }
+.pj-field.pj-bkrule { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.pj-field.pj-bkrule select { width: auto; }
+.pj-low .linkish { margin-left: 4px; }
+.projects h3.pj-h { margin: 0 0 2px; padding: 0; border: 0; font: 400 22px/1.25 var(--display); overflow-wrap: anywhere; }
+.pj-facts { margin: 6px 0; font-size: 13.5px; }
+.pj-warn { margin: 8px 0; font-size: 13.5px; line-height: 1.5; }
+.pj-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--ledge); color: var(--dust); }
+.pj-tag.warn { color: var(--warn); }
+.pj-pk { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pj-pk td { padding: 7px 6px; border-top: 1px solid var(--seam); vertical-align: middle; overflow-wrap: anywhere; }
+.pj-pk td.v { white-space: nowrap; text-align: right; }
+.pj-pk td.v > button { width: auto; margin: 0; }
+.pj-pk .pj-ver { min-width: 0; padding: 0 10px; font-variant-numeric: tabular-nums; }   /* a package's version: choose another (#160) */
+.pj-picklist .pj-pick-ver { margin: 4px 0 0 28px; max-width: calc(100% - 28px); }
+.pj-vers { max-height: min(50vh, 420px); }
+@media (max-width: 640px) {   /* each package a row of its own: its name, then its version and buttons */
+  .pj-pk, .pj-pk tbody { display: block; }
+  .pj-pk tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--seam); }
+  .pj-pk td { display: block; padding: 0; border: 0; }
+  .pj-pk td:first-child { flex: 1 1 100%; }
+  .pj-pk td.v:empty { display: none; }
+}
+.pj-pre { margin: 4px 0; padding-left: 18px; font-size: 13.5px; }
+.pj-pre li { margin: 4px 0; overflow-wrap: anywhere; }
+.pj-field { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 8px 0; }
+.pj-field label { font-size: 13.5px; color: var(--dust); }
+.pj-field > button { width: auto; margin: 0; }
+@media (max-width: 640px) { .pj-field { grid-template-columns: minmax(0, 1fr) auto; } .pj-field label { grid-column: 1 / -1; } }
+.pj-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.pj-chips .pill { color: var(--bone); cursor: pointer; }
+.pj-sugg { font-weight: 500; font-size: 13px; color: var(--dust); border: 1px dashed var(--seam); padding: 2px 9px; }
+.pj-sugg::before { content: "+ "; }
+.pj-sugg:hover { color: var(--gold-text); border-color: var(--gold); }
+.pj-go { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--seam); justify-content: flex-end; }
+.pj-more { margin: 10px 0; font-size: 13.5px; }
+.pj-more summary { cursor: pointer; color: var(--dust); font-weight: 700; }
+.projects label.check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
+dialog.ask.pj-dlg.wide { width: min(720px, calc(var(--vw) - 32px)); }
+dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc(var(--vh) - 72px); }
+.pj-picklist { list-style: none; margin: 0 0 10px; padding: 0; overflow: auto; min-height: 0; flex: 0 1 auto; font-size: 13.5px; }
+.pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.pj-picklist li:first-child { border-top: 0; }
+.pj-picklist label.check { display: flex; align-items: flex-start; gap: 10px; }
+.pj-picklist label.check input { margin-top: 3px; flex: none; }
+.pj-picklist .linkish { text-align: left; }
+.pj-desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dust); }
 /* Sets, a tab beside the stores: each set a big tile, its own picture or four of its products'; a set open is a folder
    of its products, the ones here as the usual tiles, then the rest (not downloaded, or not yours yet) */
 .setview { margin: 0 0 18px; }
@@ -781,7 +888,8 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .sets-top { margin: 0 0 16px; }
 dialog.ask.share { width: min(600px, calc(var(--vw) - 32px)); }   /* (wider than other questions: its link and four buttons) */
 dialog.ask .ask-row a.ghost { height: var(--btn-h); }   /* (a link among the buttons, the buttons' height) */
-dialog.ask.share .shortlink { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--seam); }   /* (its short link, apart from the long one) */
+dialog.ask.share .shortlink { margin-top: 4px; }   /* (its short link: the only link a set is shared by) */
+dialog.ask.share .shortlink p:first-child { font-weight: 400; }   /* (not a question's first line) */
 dialog.ask .ghost.danger { color: var(--warn); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
@@ -996,7 +1104,8 @@ body.less-motion .tour-try::before { animation: none; }
       <select id="sort">
         <option value="name">Name</option>
         <option value="creator">Creator</option>
-        <option value="newest">Recently added</option>
+        <option value="store">Store</option>
+        <option value="added">Recently added</option>
         <option value="size">Largest</option>
       </select>
     </label>
@@ -1051,7 +1160,7 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
-</g></svg><span>Hoard <span id="version"></span></span></div>
+</g></svg><span translate="no">Hoard <span id="version"></span></span></div>
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
@@ -1192,6 +1301,8 @@ body.less-motion .tour-try::before { animation: none; }
     <label><input type="radio" name="setMode" id="setModeDark" value="dark"> Dark</label>
   </div>
   <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
+  <p class="hint">Style: how Hoard lays everything out.</p>
+  <div id="styleChoices" class="style-choices" role="radiogroup" aria-label="Style"></div>
   <h3>Accessibility</h3>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
@@ -1429,10 +1540,12 @@ function matches(a, skip) {
   for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
   return true;
 }
+const storeRank = folder => { const i = Object.keys(STORE_NAMES).indexOf(String(folder).toLowerCase()); return i < 0 ? 99 : i; };   // Local last
 const SORTS = {
   name: (a, b) => coll.compare(a.name, b.name),
   creator: (a, b) => coll.compare(a.creator, b.creator) || coll.compare(a.name, b.name),
-  newest: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
+  store: (a, b) => storeRank(a.store) - storeRank(b.store) || coll.compare(a.name, b.name),   // as the Library's Store
+  added: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
   size: (a, b) => b.size - a.size,
 };
 const countBy = (list, key) => {
@@ -1734,7 +1847,7 @@ async function showView(v) {
     if (!(DATA.privacy || {}).unlocked) return;
   }
   if (v === "space" && state.view !== "space") { state.sort = "size"; state.space = ""; SPACE = null; loadSpace(); }
-  else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = "name";
+  else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = sortFrom("", SORTS);   // the one you chose
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
 $("#viewBar").addEventListener("click", async e => {
@@ -1799,15 +1912,23 @@ const slotHTML = a => {
     const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, storeName(a.store)), n > 1 && tr("{0} copies", n),
                   also.length && tr("also from {0}", listed(also))];
-    return `<button class="slot${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
+    return `<button class="slot ${a.store.toLowerCase()}${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
       `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
         `${n > 1 ? `<span class="flag count" aria-hidden="true">×${n}</span>` : ""}` +
         `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}` +
         `${state.view === "space" && copiesOf(a) ? '<span class="flag upd">Copies</span>' : ""}</span>` +
       `<span class="nm" translate="no">${esc(a.name)}</span><span class="cr">${state.view === "space" ? `${fmtSize(a.size)} · ` : ""}<span translate="no">${esc(a.creator)}</span></span>` +
-    `</button>`;
+      rowMeta(a) + `</button>`;
 };
+// The Workbench style's list (web/looks.css): each download's store, its files (or what's wrong), and when it came
+function rowMeta(a) {
+  const n = a.files.length;
+  const [state, how] = a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
+    : [tr(n === 1 ? "{0} file, {1}" : "{0} files, {1}", n, fmtSize(a.size)), ""];
+  return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)}</span>` +
+    `<span class="rm-state ${how}">${esc(state)}</span><span class="rm-when">${esc(shortDay(a.added || (a.modified && new Date(a.modified * 1000).toISOString())))}</span></span>`;
+}
 function renderGrid(list) {
   (cards = cards || lazyCards(grid)).show(list, slotHTML);
 
@@ -1946,10 +2067,12 @@ function showDetail(a, focus = true) {
   const storeLink = storeUrl(a.store, a.url) ? `<a href="${esc(storeUrl(a.store, a.url))}" target="_blank" rel="noopener noreferrer" title="${esc(storeUrl(a.store, a.url))}">Open on ${storeName(a.store)}</a>` : "";
   detail.innerHTML =
     `<button class="x" data-act="close" aria-label="Close details">×</button>` +
-    `<div class="d-art">${a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="">` : placeholder(a)}</div>` +
+    `<div class="d-art ${a.store.toLowerCase()}">${a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="">` : placeholder(a)}</div>` +
     `<h2 class="d-name" translate="no">${esc(a.name)}</h2>` +
     `<p class="d-by" translate="no">${esc(tr("by {0}", a.creator))}${a.variants ? esc(tr(", {0}", a.variants)) : ""}</p>` +
     `<p class="d-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)} ${storeLink}</p>` +
+    dStats([["Files", a.files.length], ["Size", esc(fmtSize(a.size))], ["Added", esc(shortDay(a.added)) || "—"],
+            ["Projects", (a.used_in || []).length]]) +
     ((a.used_in || []).length ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
     otherCopies(a).map(o => `<p class="also"><span translate="no">${esc(tr(o.store === a.store ? (o.creator !== a.creator ? "You also have this again (by {1})." : "You also have this again.")
@@ -2157,7 +2280,7 @@ function readHash() {
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";   // (a set's folder; and "Show in Downloads" from 4.1)
-  state.sort = SORTS[p.get("sort")] ? p.get("sort") : "name";
+  state.sort = sortFrom(p.get("sort"), SORTS);
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
   if (/^\d+$/.test(p.get("open") || "")) openId = +p.get("open");  // "Show it in Downloads" from the Library
@@ -2240,7 +2363,7 @@ function renderDrives() {
   if (html !== drivesShown) { $("#drives").innerHTML = html; drivesShown = html; }
   $("#drives").hidden = !html;
 }
-$("#sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
+$("#sort").addEventListener("change", e => { state.sort = e.target.value; if (state.view !== "space") uiSave({ sort: state.sort }); render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, keys) : startDownload(stores));
@@ -2517,6 +2640,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-
 const T = {
   slotKey: "id",
   id: a => String(a.id),
+  art: a => art(a),   // its picture (from its folder) or its initials
   byId: id => byId.get(+id),
   open: () => (openId != null ? byId.get(openId) : null),
   shown: () => DATA.assets.filter(a => matches(a)),
@@ -2531,7 +2655,7 @@ const T = {
     return a && (stackSize.get(a.id) || 0) > 1 ? (stackMembers.get(a.stack_key) || [a]).map(o => String(o.id)) : null;
   },
   actions: () => {   // what the selection bar and right-click offer here
-    const groups = [TAG_ACTIONS, SET_ACTIONS()];
+    const groups = [TAG_ACTIONS, SET_ACTIONS(), PROJECT_ACTIONS()];
     const libs = (DATA.libraries || []).filter(l => l.available);
     if ((DATA.libraries || []).length > 1 && libs.length)
       groups.push({ name: "Move", items: libs.map(l => ({ label: tr("Move to {0}", libText(l)), raw: true, run: () => bulkMove(l.n) })) });
@@ -2567,6 +2691,10 @@ function wireTags() {
   $("#tagsBtn").addEventListener("click", () => openTagPanel());
   $("#manageTags").addEventListener("click", () => openTagPanel(true));
   $("#tagPanel").addEventListener("click", e => { const b = e.target.closest("[data-tact]"); if (b) tagPanelAction(b); });
+  $("#tagPanel").addEventListener("change", e => {   // what a tag is about (issue #157)
+    const s = e.target.closest("[data-ttype]");
+    if (s) changeTags({ action: "type", name: s.dataset.ttype, type: s.value || null }, s.value ? tr("{0} is now about: {1}.", "#" + s.dataset.ttype, tr(TAG_TYPES[s.value])) : "");
+  });
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
   wireSelection();
@@ -2685,6 +2813,7 @@ function applyUi(ui) {   // once, when the page first has its data
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
   $("#stackCopies").checked = UI.stack !== false;   // the same choice as the Library's
+  if (state.view !== "space") state.sort = sortFrom(new URLSearchParams(location.hash.slice(1)).get("sort"), SORTS);   // the sort last chosen
 }
 $("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.checked }); render(); });
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
@@ -2693,8 +2822,8 @@ $("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.che
    leave the field. Only what changed is sent, so a setting a running job needs doesn't hold up the others. */
 /* ---------- a file downloading: how much has come in, how fast, and how long is left */
 /* ---------- Tasks: what's running, what's waiting its turn (issue #49), and what finished, with its progress */
-/* ---------- Projects (issue #86): the Unity projects that use your assets, as Hoard for Unity reports them, with
-   which have updates, and each project's credits list (the same one the Unity window makes) */
+/* ---------- Projects (shared.js): your Unity projects, the same list as ALCOM's and the Creator Companion's, with their
+   packages and your library in them; and what Hoard for Unity reports about each (its products, and credits) */
 const storeLabel = s => STORE_NAMES[s] || storeName(s);   // a store's id ("booth") or its folder ("Itch"), as people know it
 /* ---------- What's new: Hoard's changelog, in the app. Betas are left out unless you tick them (ticked to begin
    with when you get beta updates). The changelog's HTML is made from CHANGELOG.md with everything escaped first. */

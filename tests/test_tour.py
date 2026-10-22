@@ -127,7 +127,12 @@ class Tour(unittest.TestCase):
         page.fill("#tagInput", "tour-tag")
         page.locator('#detail [data-act="addtyped"]').click()
         self.title(page, "Sets")
+        page.click('#stores [data-store="Sets"]')   # opened: its wishlists and Mix and match are shown there
+        self.title(page, "Wishlists")
         self.nxt(page)
+        self.title(page, "Mix and match")
+        self.nxt(page)
+        page.wait_for_function("() => !inSets()")   # back to every store on the way out
         self.title(page, "Updates")
         self.nxt(page)
         self.title(page, "Disk space")

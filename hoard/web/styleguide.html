@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Hoard style guide</title>
+<!--@styles-->
+<style id="guide">
+/* The guide's own layout (sg-), after the page's stylesheet, the styles and the theme. Everything else on this page
+   is the pages' own: copy an example's markup and it looks the same in the Library or Downloads. */
+.sg { max-width: 1180px; margin: 0 auto; padding: 0 24px 80px; }
+.sg-top { position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  margin: 0 -24px 8px; padding: 12px 24px; background: var(--ledge); box-shadow: 0 1px 0 var(--seam); font-size: 13px; }
+.sg-top h1 { margin: 0 12px 0 0; font: 400 20px var(--display); }
+.sg-top label { display: inline-flex; align-items: center; gap: 6px; color: var(--dust); }
+.sg-top select { height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--stone); color: var(--bone); }
+.sg-nav { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.sg-nav a { color: var(--gold-text); }
+.sg h2.sg-h { margin: 44px 0 6px; padding-top: 16px; border-top: 1px solid var(--seam); font: 400 24px var(--display); }
+.sg h3.sg-h { margin: 26px 0 8px; font: 700 14px var(--body); color: var(--dust); text-transform: none; }
+.sg > p, .sg-about { max-width: 70ch; color: var(--dust); }
+.sg-ex { position: relative; padding: 18px; border-radius: 14px; background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam); }
+.sg-ex.on-ledge { background: var(--ledge); }
+.sg-code { margin-top: 6px; }
+.sg-item { min-width: 0; }
+.sg-code summary { cursor: pointer; font-size: 12.5px; color: var(--dust); }
+.sg-code pre { max-height: 320px; overflow: auto; margin: 6px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--ledge);
+  box-shadow: inset 0 0 0 1px var(--seam); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.sg-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sg-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
+.sg-toks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sg-tok { display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto auto auto; column-gap: 10px; align-items: center;
+  padding: 8px; border-radius: 10px; background: var(--ledge); font-size: 13px; }
+.sg-tok i { grid-row: 1 / 4; width: 40px; height: 40px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--seam); }
+.sg-tok small, .sg-val { color: var(--dust); font-size: 12px; }
+.sg-val { font: 12px ui-monospace, Menlo, Consolas, monospace; }
+/* the pages' floating parts (windows, the details, menus, the toast...) shown in place, not over the page */
+.sg-ex .bar, .sg-ex .shelf, .sg-ex .win, .sg-ex .detail, .sg-ex .stores, .sg-ex .toast, .sg-ex .selmenu, .sg-ex .tour-card,
+.sg-ex .bulk, .sg-ex dialog.ask { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto;
+  transform: none; z-index: auto; max-height: none; }
+.sg-ex .win, .sg-ex .stores, .sg-ex .detail { width: min(470px, 100%); }
+.sg-ex .detail { visibility: visible; display: block; }
+.sg-ex .toast { display: inline-block; opacity: 1; }
+.sg-ex dialog.ask { display: block; margin: 0; max-width: 100%; box-sizing: border-box; }
+.sg-ex .bulk { width: auto; max-width: 100%; }
+.sg-ex .setup { position: relative; inset: auto; z-index: auto; display: block; padding: 0; background: none; }
+.sg-ex .setup-card { width: auto; max-height: none; }
+</style>
+</head>
+<body>
+<div class="sg">
+<div class="sg-top" id="sgBar"><h1>Hoard style guide</h1><!--@bar--></div>
+<p class="sg-about">Every part of Hoard's pages, drawn with the page's own stylesheet, the styles and the theme chosen in
+  the bar above, as the app serves them, so this page is always as the app is. Copy an example's markup (under
+  <b>Markup</b>) and it looks the same on the page. Use the colours by name (<code>var(--gold)</code>), never as
+  values: every theme, Light and Dark, and the colour-blind store colours change them. The Treasure and Workbench
+  styles (web/looks.css) restyle the same markup: a part needs nothing more to work in all three. Everything here is
+  made up.</p>
+<ul class="sg-nav">
+  <li><a href="#colours">Colours</a></li><li><a href="#stores">Stores</a></li><li><a href="#type">Text</a></li>
+  <li><a href="#buttons">Buttons</a></li><li><a href="#inputs">Fields</a></li><li><a href="#chips">Chips and tags</a></li>
+  <li><a href="#bar">Top bar and shelf</a></li><li><a href="#tiles">Tiles</a></li><li><a href="#details">Details</a></li>
+  <li><a href="#windows">Windows</a></li><li><a href="#dialogs">Questions and menus</a></li>
+  <li><a href="#tasks">Tasks</a></li><li><a href="#projects">Projects</a></li><li><a href="#sets">Sets and wishlists</a></li>
+  <li><a href="#guides">Setup and the tour</a></li>
+</ul>
+
+<h2 class="sg-h" id="colours">Colours</h2>
+<p>A theme is these colours, dark and light (hoard/themes.py). Each theme keeps to the same promises: text 4.5:1 on
+  its backgrounds, the accent as text 4.5:1, text on the accent 4.5:1, and each store's colour 3:1 on the page.</p>
+<ul class="sg-toks"><!--@tokens--></ul>
+
+<h2 class="sg-h" id="stores">Stores</h2>
+<p>Each store has its colour, used for its dot, a tile's spine (its notch) and its tab. The class is the store's own
+  name in small letters: <code>booth</code>, <code>gumroad</code>, <code>jinxxy</code>, <code>payhip</code>,
+  <code>itch</code>, <code>local</code>.</p>
+<div class="sg-ex"><div class="sg-row">
+  <span><span class="dot booth"></span> Booth</span><span><span class="dot gumroad"></span> Gumroad</span>
+  <span><span class="dot jinxxy"></span> Jinxxy</span><span><span class="dot payhip"></span> Payhip</span>
+  <span><span class="dot itch"></span> itch.io</span><span><span class="dot local"></span> Local</span>
+</div></div>
+
+<h2 class="sg-h" id="type">Text</h2>
+<div class="sg-ex on-ledge">
+  <h2 style="font: 400 26px var(--display); margin: 0 0 6px">A heading in the display font</h2>
+  <h3 style="margin: 12px 0 6px">A section's heading</h3>
+  <p>Body text: plain words, sentences that say what happens. Settings save as they're changed.</p>
+  <p class="hint">A hint: what something does, in a quieter colour.</p>
+  <p class="sub">A sub-heading inside a panel</p>
+  <p class="none">An empty state: nothing here yet, and what to do about it.</p>
+  <p><span class="muted">Muted, for what matters less</span> · <kbd>/</kbd> a key to press · <button class="linkish">A link that's a button</button></p>
+  <p class="pj-warn">A warning that needs doing something about.</p>
+</div>
+
+<h2 class="sg-h" id="buttons">Buttons</h2>
+<p>Gold (<code>primary</code>) is the one thing to do; plain (<code>ghost</code>) is the rest. <code>sm</code> is the
+  size beside fields and in panels. A danger button says what it does ("Delete"), never just "OK".</p>
+<div class="sg-ex"><div class="sg-row">
+  <button class="primary">Sync</button><button class="ghost">Settings</button>
+  <button class="primary sm">Open in Unity</button><button class="ghost sm">Manage</button>
+  <button class="ghost sm" disabled>Not now</button><button class="linkish">Show all copies</button>
+  <button class="win-x" aria-label="Close panel">×</button>
+</div></div>
+<div class="sg-ex on-ledge" style="margin-top: 10px"><div class="ask-row" style="margin: 0">
+  <button class="ghost" value="no">Cancel</button><button class="primary danger" value="yes">Delete</button>
+</div></div>
+
+<h2 class="sg-h" id="inputs">Fields</h2>
+<div class="sg-cols">
+  <div class="sg-ex on-ledge">
+    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
+      <input type="search" placeholder="Search your hoard" aria-label="Search your hoard" autocomplete="off"><kbd aria-hidden="true">/</kbd></label>
+  </div>
+  <div class="sg-ex on-ledge">
+    <div class="newtag"><input maxlength="40" placeholder="New tag" aria-label="New tag"><button class="ghost sm">Create</button></div>
+  </div>
+  <div class="sg-ex on-ledge">
+    <div class="shelf-tools" style="margin: 0"><label>Sort <select><option>Name</option><option>Creator</option><option>Store</option><option>Recently added</option></select></label>
+      <label class="stack-toggle"><input type="checkbox" checked> Stack copies</label></div>
+  </div>
+  <div class="sg-ex on-ledge">
+    <div class="projects"><label class="check"><input type="checkbox" checked> Offer prerelease versions of packages</label>
+    <div class="pj-field"><label for="sgFolder">New projects go in</label><input id="sgFolder" value="C:\Users\you\ALCOM\Projects" translate="no"></div></div>
+  </div>
+</div>
+
+<h2 class="sg-h" id="chips">Chips and tags</h2>
+<p>Filters are chips: pressed is on (<code>aria-pressed="true"</code>). A tag on a product is a pill with its own
+  remove button; a suggested tag is a chip with <code>add</code>.</p>
+<div class="sg-ex on-ledge">
+  <div class="chips"><button class="chip" aria-pressed="true">Downloaded<span class="n">128</span></button>
+    <button class="chip" aria-pressed="false">Not yet<span class="n">12</span></button>
+    <button class="chip" aria-pressed="false">New<span class="n">3</span></button></div>
+  <div class="chips" style="margin-top: 12px"><span class="tagpill"><button class="chip" aria-pressed="false">hoodie</button><button class="untag" aria-label="Remove the tag hoodie">×</button></span>
+    <span class="tagpill"><button class="chip" aria-pressed="false">Rusk</button><button class="untag" aria-label="Remove the tag Rusk">×</button></span>
+    <button class="chip add" aria-label="Add the tag winter">winter</button></div>
+</div>
+
+<h2 class="sg-h" id="bar">Top bar and shelf</h2>
+<div class="sg-ex">
+  <header class="bar">
+    <nav class="apptabs" aria-label="Views"><a href="#bar" aria-current="page">Library</a><a href="#bar">Downloads</a><a href="#bar">Local</a><a href="#bar">Sets</a><button>Tasks<span class="tab-n">2</span></button><button>Projects</button></nav>
+    <div class="tools"><button class="ghost">Tags</button><button class="ghost stores-btn">Stores<span class="warn-dot"></span></button><button class="ghost">Settings</button><button class="primary">Sync</button></div>
+  </header>
+  <div class="shelf">
+    <div class="seg" role="radiogroup" aria-label="Store"><button role="radio" aria-checked="false">Everything<span class="n">140</span></button><button role="radio" class="booth" aria-checked="true"><span class="dot booth"></span>Booth<span class="n">72</span></button><button role="radio" class="gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad<span class="n">41</span></button><button role="radio" class="jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy<span class="n">27</span></button><button role="radio" class="sets" aria-checked="false">Sets<span class="n">4</span></button></div>
+  </div>
+</div>
+
+<h2 class="sg-h" id="tiles">Tiles</h2>
+<p>A product is a tile: its picture (or a lettered stand-in, <code>ph</code>), its store's spine (<code>notch</code>,
+  striped with another store's colour when you own it there too), and its name and creator. Workbench shows the same
+  tiles as rows, from <code>row-meta</code>; Treasure frames each picture in its store's colour, named from the
+  notch's <code>data-s</code>.</p>
+<div class="sg-ex">
+  <div class="grid">
+    <button class="slot booth" aria-label="Rusk, by Kitsu, from Booth, downloaded, new"><span class="art"><span class="ph" style="--h:24"><b>RU</b></span><i class="notch booth" data-s="Booth"></i><i class="tick" aria-hidden="true"></i><span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span><span class="badges"><span class="badge new">New</span></span></span><span class="nm-t" translate="no">Rusk</span><span class="cr" translate="no">Kitsu</span><span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot booth"></span>Booth</span><span class="rm-state ok">Downloaded</span><span class="rm-when">12 Oct 2026</span></span></button>
+    <button class="slot gumroad stacked" aria-label="Winter Hoodie, by Mochi, from Gumroad, 2 copies"><span class="art"><span class="ph" style="--h:300"><b>WH</b></span><i class="notch gumroad dup" data-s="Gumroad" style="--c2: var(--booth)"></i><i class="tick" aria-hidden="true"></i><span class="badges"><span class="badge count" aria-hidden="true">×2</span><span class="badge">Gift</span></span></span><span class="nm-t" translate="no">Winter Hoodie</span><span class="cr" translate="no">Mochi</span><span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot gumroad"></span>Gumroad</span><span class="rm-state new">New</span><span class="rm-when">3 Oct 2026</span></span></button>
+    <button class="slot jinxxy" aria-label="Fox Ears, by Tails, from Jinxxy"><span class="art"><span class="ph" style="--h:190"><b>FE</b></span><i class="notch jinxxy" data-s="Jinxxy"></i><i class="tick" aria-hidden="true"></i><span class="badges"></span></span><span class="nm-t" translate="no">Fox Ears</span><span class="cr" translate="no">Tails</span><span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot jinxxy"></span>Jinxxy</span><span class="rm-state">Not downloaded yet</span><span class="rm-when">28 Sep 2026</span></span></button>
+    <button class="slot payhip" aria-label="Shader Pack, by Lumen, from Payhip, with an update" aria-current="true"><span class="art"><span class="ph" style="--h:240"><b>SP</b></span><i class="notch payhip" data-s="Payhip"></i><i class="tick" aria-hidden="true"></i><span class="badges"><span class="badge">Archived</span></span></span><span class="nm-t" translate="no">Shader Pack</span><span class="cr" translate="no">Lumen</span><span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot payhip"></span>Payhip</span><span class="rm-state upd">Update</span><span class="rm-when">1 Aug 2026</span></span></button>
+  </div>
+</div>
+<h3 class="sg-h">On the Downloads page: flags</h3>
+<div class="sg-ex">
+  <div class="grid">
+    <button class="slot itch" aria-label="Pixel Props, by Nib, from itch.io, with an update"><span class="art"><span class="ph" style="--h:120"><b>PP</b></span><i class="notch itch" data-s="itch.io"></i><span class="flag upd">Update</span><span class="flag">Missing files</span></span><span class="nm-t" translate="no">Pixel Props</span><span class="cr" translate="no">Nib</span></button>
+    <button class="slot local" aria-label="My Texture Set, by you, in Local"><span class="art"><span class="ph" style="--h:45"><b>MT</b><small>Local</small></span><i class="notch local" data-s="Local"></i></span><span class="nm-t" translate="no">My Texture Set</span><span class="cr" translate="no">You</span></button>
+  </div>
+</div>
+
+<h2 class="sg-h" id="details">Details</h2>
+<p>A product's details: its picture, name, creator and store, one gold button for the thing to do, the store's
+  own pages beside it, then its marks, tags and sets. Treasure adds the row of facts (<code>d-stats</code>).</p>
+<div class="sg-ex">
+  <aside class="detail open" aria-label="Asset details">
+    <button class="x" aria-label="Close details">×</button>
+    <div class="d-art booth"><span class="ph" style="--h:24"><b>RU</b></span></div>
+    <h2 class="d-name" translate="no">Rusk</h2>
+    <p class="d-by" translate="no">by <a href="#details">Kitsu</a></p>
+    <p class="d-store"><span class="dot booth"></span>Booth</p>
+    <div class="d-stats"><span><small>Store</small><b><span class="dot booth"></span>Booth</b></span><span><small>Files</small><b>3</b></span><span><small>Added</small><b>12 Oct 2026</b></span><span><small>Tags</small><b>2</b></span></div>
+    <div class="actions"><a class="primary" href="#details">Show in Downloads</a><a class="ghost" href="#details">See the update</a></div>
+    <p class="copy"><span class="ondisk">On disk, with an update</span></p>
+    <div class="actions links"><a class="ghost" href="#details">Store page<span class="visually-hidden"> (opens in your browser)</span></a></div>
+    <h3>Organise</h3><div class="marks"><button class="ghost sm">Archive</button><button class="ghost sm">Hide</button><button class="ghost sm">Remove</button></div>
+    <h3>Tags</h3><div class="chips"><span class="tagpill"><button class="chip" aria-pressed="false">avatar</button><button class="untag" aria-label="Remove the tag avatar">×</button></span></div>
+    <h3>Files</h3><ul class="files"><li><span class="fn">Rusk_v2.1.unitypackage</span><a class="ghost sm" href="#details">Download</a></li></ul>
+  </aside>
+</div>
+
+<h2 class="sg-h" id="windows">Windows</h2>
+<p>A window is a <code>section</code> with an <code>h2</code>; the page's script (makeWindow) gives it its bar and
+  close button, as below. It opens over the page, one at a time.</p>
+<div class="sg-ex">
+  <section class="stores tagpanel win" role="dialog" aria-labelledby="sgWinTitle">
+    <div class="win-bar"><h2 id="sgWinTitle">Tags</h2><span class="win-extra" aria-live="polite">Saved</span><button class="win-x" aria-label="Close Tags">×</button></div>
+    <div class="win-body">
+      <p>Your tags are yours to name and use.</p>
+      <div class="newtag"><input maxlength="40" placeholder="New tag" aria-label="New tag"><button class="ghost sm">Create</button></div>
+      <h3>Your tags</h3>
+      <p class="hint">Saved in tags.json.</p>
+    </div>
+  </section>
+</div>
+
+<h2 class="sg-h" id="dialogs">Questions, menus and messages</h2>
+<p>Ask before what can't be undone, in Hoard's own dialog (ask() in shared.js), never the browser's. A menu
+  (openSelMenu) holds a group's actions; a toast says what just happened.</p>
+<div class="sg-ex"><dialog class="ask" open aria-labelledby="sgAsk"><div id="sgAsk"><p>Delete 2 backups (1.3 GB)? They can't be got back.</p></div>
+    <div class="ask-row"><button class="ghost" value="no">Cancel</button><button class="primary danger" value="yes">Delete</button></div></dialog></div>
+<div class="sg-cols" style="margin-top: 16px">
+  <div class="sg-ex"><div class="selmenu" role="menu"><p class="selmenu-h" role="presentation">Sets</p><button role="menuitem">New set from these...</button><button role="menuitem" translate="no">Add to Rusk, winter</button><hr role="separator"><button role="menuitem" class="danger">Remove</button></div></div>
+  <div class="sg-ex"><div class="toast show" role="status">Made the set Rusk, winter, with 2 products in it.</div></div>
+</div>
+<h3 class="sg-h">The selection bar</h3>
+<div class="sg-ex"><div class="bulk"><span class="count-sel">3 chosen</span><div class="bulk-acts"><button class="primary sm">Download</button><button class="ghost sm">Sets</button><button class="ghost sm">Projects</button></div><div class="bulk-end"><button class="linkish">Select all</button><button class="ghost sm">Done</button></div></div></div>
+
+<h2 class="sg-h" id="tasks">Tasks</h2>
+<div class="sg-ex on-ledge">
+  <h3>Running</h3>
+  <div class="task run"><div class="task-top"><span class="spin" aria-hidden="true"></span><b>Download: Booth (3 items)</b><button class="ghost sm">Stop</button><button class="ghost sm">Force stop</button></div><p class="task-msg">Downloading Rusk_v2.1.unitypackage</p></div>
+  <h3>Waiting <span class="n">1</span></h3>
+  <ol class="tasklist"><li class="task"><span>Refresh: Gumroad</span><button class="untag" aria-label="Take Refresh: Gumroad off the queue">×</button></li></ol>
+  <h3>Finished</h3>
+  <details class="task done-ok" open><summary><span class="outcome">Done</span><b>Sync: every store</b><span class="when">Today, 09:12 · took 2 minutes</span></summary><p class="task-msg">Downloaded 3 new files.</p></details>
+</div>
+
+<h2 class="sg-h" id="projects">Projects</h2>
+<p>The Projects window is <code>projects</code>: its fields, buttons and lists take their look from inside it.</p>
+<div class="sg-ex on-ledge"><div class="projects">
+  <ul class="pj-list">
+    <li class="pj-row"><button class="pj-star" aria-pressed="true" aria-label="Favourite">★</button><span class="pj-main"><b translate="no">Rusk Avatar</b><span class="meta" translate="no">C:\Users\you\ALCOM\Projects\Rusk Avatar</span></span><span class="pj-what">Avatar · <span translate="no">Unity 2022.3.22f1</span> · opened 2 hours ago</span><span class="pj-acts"><button class="primary sm">Open in Unity</button><button class="ghost sm">Manage</button></span></li>
+    <li class="pj-row gone"><button class="pj-star" aria-pressed="false" aria-label="Favourite">★</button><span class="pj-main"><b translate="no">Old World</b><span class="meta" translate="no">D:\Unity\Old World</span></span><span class="pj-what">The folder isn't there</span><span class="pj-acts"><button class="ghost sm">Take off the list</button></span></li>
+  </ul>
+  <h3 class="sg-h">Backups</h3>
+  <ul class="pj-list">
+    <li class="pj-row pj-bk"><label class="pj-main check"><input type="checkbox"><span><b translate="no">Rusk Avatar</b><span class="meta">20 Oct 2026, 01:47 · 1.3 GB</span></span></label><span class="pj-what"></span></li>
+    <li class="pj-row pj-bk old"><label class="pj-main check"><input type="checkbox"><span><b translate="no">Rusk Avatar</b><span class="meta">5 Apr 2026, 01:47 · 1.3 GB</span></span></label><span class="pj-what">Old</span></li>
+  </ul>
+</div></div>
+
+<h2 class="sg-h" id="sets">Sets and wishlists</h2>
+<div class="sg-ex">
+  <div class="grid setgrid">
+    <button class="slot settile" aria-label="Rusk, winter: 3 products"><span class="art"><span class="collage n2"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%2356D1DC'/%3E%3C/svg%3E" alt=""><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%23FF8AD8'/%3E%3C/svg%3E" alt=""></span><i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">Rusk, winter</span><span class="cr">3 products, all yours</span></button>
+    <div class="slot ext wanted"><a class="ext-main" href="#sets"><span class="art"><span class="ph" style="--h:330" translate="no"><b>FE</b></span><i class="notch jinxxy" data-s="Jinxxy"></i></span><span class="nm-t" translate="no">Fox Ears</span><span class="cr" translate="no">by Tails · Jinxxy</span></a><span class="ext-price"><span class="price down" translate="no">$8.00</span> <s class="was" translate="no"><span class="visually-hidden">was </span>$12.00</s></span><span class="ext-row"><span class="ext-what">Buy on Jinxxy</span></span></div>
+  </div>
+  <h3 class="sg-h">Mix and match</h3>
+  <ul class="mixlist"><li><span class="mixart"><span class="ph" style="--h:24"><b>RU</b></span></span><span class="mixtext"><small>Avatar</small><b translate="no">Rusk</b><span class="muted" translate="no">Kitsu</span></span><label class="check"><input type="checkbox" checked> Keep</label></li>
+    <li><span class="mixart"><span class="ph" style="--h:300"><b>WH</b></span></span><span class="mixtext"><small>tops</small><b translate="no">Winter Hoodie</b><span class="muted" translate="no">Mochi</span></span><label class="check"><input type="checkbox"> Keep</label></li></ul>
+</div>
+
+<h2 class="sg-h" id="guides">Setup and the tour</h2>
+<div class="sg-cols">
+  <div class="sg-ex"><div class="setup"><div class="setup-card">
+    <div class="setup-steps"><span class="done"></span><span class="done"></span><span></span><span></span></div>
+    <h2>Choose a style</h2><p>How Hoard lays everything out. Change it later in Settings, under Appearance.</p>
+    <p class="status ok">Saved</p>
+    <div class="actions"><button class="ghost">Back</button><button class="primary">Next</button></div>
+  </div></div></div>
+  <div class="sg-ex"><div class="tour-card" role="dialog" aria-labelledby="sgTour"><p class="tour-n">3 of 22</p><h2 id="sgTour">Sets</h2><p>Products you use together, downloaded or not.</p>
+    <div class="tour-go"><button class="linkish">End the tour</button><span><button class="ghost sm">Back</button> <button class="primary sm">Next</button></span></div></div></div>
+</div>
+</div>
+<script>
+// The bar: each choice is in the address, so a link shows the guide as it was chosen
+const bar = document.getElementById("sgBar");
+bar.addEventListener("change", () => {
+  const q = new URLSearchParams();
+  for (const el of bar.querySelectorAll("select, input")) {
+    if (el.type === "checkbox") { if (el.checked) q.set(el.name, el.value); } else q.set(el.name, el.value);
+  }
+  location.search = q.toString();
+});
+// each colour's value, as the theme has it now
+for (const el of document.querySelectorAll("[data-token]")) {
+  el.textContent = getComputedStyle(document.documentElement).getPropertyValue("--" + el.dataset.token).trim();
+}
+// each example's markup, to copy
+const indent = html => html.replace(/^\n+|\s+$/g, "").replace(/></g, ">\n<");
+for (const ex of document.querySelectorAll(".sg-ex")) {
+  const d = document.createElement("details"), s = document.createElement("summary"), pre = document.createElement("pre");
+  d.className = "sg-code"; s.textContent = "Markup"; pre.textContent = indent(ex.innerHTML);
+  d.append(s, pre);
+  const item = document.createElement("div");   // (an example and its markup, side by side with the next in a grid)
+  item.className = "sg-item";
+  ex.replaceWith(item);
+  item.append(ex, d);
+}
+</script>
+</body>
+</html>

@@ -183,7 +183,8 @@ Actions**. Pages only deploys from `main`, so a listing build started by a relea
 `https://hoard-share.furryup.link`. No workflow deploys it: set it up once, and deploy a change to
 `share/worker.mjs`, with `npx wrangler deploy` from that folder, as [share/README.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/share/README.md)
 says. It runs on Cloudflare, so nothing has to stay running on your computer. Deploy it before releasing a version
-of Hoard that needs a change to it: a Hoard that can't reach it says so, and the long link still works.
+of Hoard that needs a change to it: a Hoard that can't reach it says so, and can't share a set until it can (from
+5.0, a set is shared only by a short link).
 
 ## The website
 

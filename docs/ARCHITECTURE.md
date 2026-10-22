@@ -36,7 +36,10 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   notify.py            a notification from the system when the routine check finds something to download
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
-  web/                 library.html, downloads.html, shared.js (what both pages share) and the bundled fonts
+  vpm/                 Projects: the Unity projects shared with ALCOM and the Creator Companion, their VPM packages,
+                       and your library in them (see "Projects" below); templates/ holds vrc-get's VRChat templates
+  web/                 library.html, downloads.html, shared.js (what both pages share), looks.css (the styles),
+                       styleguide.html (every part of the pages, at /styleguide) and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
@@ -258,7 +261,9 @@ Both servers share the rules in their "web safety" section:
 
 ## Short links (`shortlinks.py`, `share/`)
 
-A shared set's long link holds the set itself. A short link (`set.html#S1.<id>.<key>`) holds only an id and a key:
+From 5.0 a set is shared only by a short link (issue #162): `/api/sets` (`share`) gives the page the set's code to
+lock, never a long link. A long link (`set.html#H1.…`, from Hoard before 5.0) holds the set itself, and the viewer
+and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`) holds only an id and a key:
 
 - **Making one:** the page locks the set's code with AES-GCM under a new random 128-bit key (`lockSet` in
   `shared.js`) and posts the locked set, with the key and the code it locked, to `/api/sets` (`short`). The
@@ -276,6 +281,47 @@ A shared set's long link holds the set itself. A short link (`set.html#S1.<id>.<
   the token. Backups leave short links out; a restore keeps this computer's.
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
+
+## Projects (`vpm/`)
+
+Projects is a project manager that works as [vrc-get and ALCOM](https://github.com/vrc-get/vrc-get) do, written in
+Python from vrc-get's Rust (MIT): the same versions chosen, the same files kept, so Hoard, ALCOM and the VRChat
+Creator Companion can be used side by side on one set of projects.
+
+```
+vpm/
+  version.py       versions, npm-style ranges (with vrc-get's prerelease rules) and Unity versions
+  manifest.py      a package's package.json, checked; which Unity versions it fits (unity_compatible)
+  environment.py   the Creator Companion's folder (HOARD_VCC_DIR in tests), its settings.json (every key kept),
+                   ALCOM's own settings, and vcc.liteDb, read only
+  litedb.py        reads LiteDB 5 files (vcc.liteDb), never writes them
+  fetch.py         repository listings and package downloads, through egress.fetch
+  repos.py         repositories: their cached listings in Repos/, adding, removing and refreshing them; finding a
+                   package version (Selector) across them and your package folders
+  project.py       a Unity project: its vpm-manifest.json, its installed and embedded packages, its Unity version
+  resolve.py       package changes, as vrc-get works them out: add, upgrade, remove, repair; legacy packages and
+                   files; then made with everything staged and moved aside first, so a failure (or Stop) puts the
+                   project back as it was
+  templates.py     VRChat's avatar and world templates (vrc-get's, in templates/), Blank, ALCOM's .alcomtemplate
+                   files, and making a project from one
+  unitypackage.py  puts a .unitypackage's files straight into a project (as ALCOM does), never over one already there
+  preload.py       your library in a project: which .unitypackage and VPM package files a download has, and putting
+                   them in; the VPM packages for the tools What it needs knows
+  listing.py       the project list (settings.json's userProjects, or vcc.liteDb's), and Hoard's notes on each
+                   (vpm-projects.json)
+  presets.py       presets for new projects (vpm-presets.json), and writing one as an ALCOM template
+  unity.py         the Unity editors Unity Hub knows, which one a project opens with, and whether it has it open
+  backup.py        a project's backup zip
+  api.py           what the server answers about all of this, and the work it hands to a "project" job
+```
+
+Every change to a project is a job (`jobs.py`, task "project"), so it's in Tasks and Stop stops it; the page asks
+the server what a change will do first (`/api/vpm/preview`) and shows it. Only projects on the list are changed:
+`api.Service.listed()` checks each path the page sends. Downloads go through `egress.fetch` like everything else:
+public addresses only, a repository's headers sent to its own host only, and a package's SHA-256 checked when its
+listing gives one. `tests/test_vpm_resolve.py` is vrc-get's own resolver tests, ported; `tests/test_vpm_version.py`
+has its (and node-semver's) range cases; `tests/data/vcc-sample.liteDb.gz` is a Creator Companion database made with
+vrc-get's LiteDB writer.
 
 ## Data files
 
@@ -323,8 +369,8 @@ Nothing a page needs comes from outside the computer:
 - Before refreshing, signing in or syncing, `reachable(store)` opens a connection to that store only. An
   unreachable store gets `unreachable_message()`, and its saved data is left alone. Browser errors that
   mean the connection dropped part-way (`is_network_error`, `NETWORK_ERRORS`) are reported the same way.
-- Short links (Sets, **Share...**) need Hoard's share server: without it, Hoard says so, and the long link
-  works offline as ever.
+- Sharing a set (Sets, **Share...**) needs Hoard's share server: without it, Hoard says so. A long link from
+  before 5.0 opens offline as ever.
 - The pages show a notice while the browser reports being offline, and Hoard's Refresh and Sign in
   buttons explain instead of trying. Sign out works offline because it only touches local files.
 
@@ -338,6 +384,18 @@ The script both pages share (windows, Settings, Tasks, Projects, choosing what t
 Content-Security-Policy.
 Script state lives in a single `state` object that's mirrored in the address bar, so views can be
 bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`.
+
+The three styles (Standard, Treasure and Workbench, Settings, Appearance) are `web/looks.css`, put into both
+pages after their own stylesheet; the page is marked with the one chosen (`<html data-style>`). Standard has no
+mark: it's the pages as written. A style changes how the same markup is laid out, so a new part needs no markup
+of its own for each style.
+
+**The style guide** is at `/styleguide` on a running Hoard (`web/styleguide.html`, `server.guide_source`): every
+part of the pages (colours, buttons, fields, chips, tiles, details, windows, questions, menus, Tasks, Projects,
+sets, setup and the tour), each with its markup to copy, drawn with the Library's or Downloads' own stylesheet,
+`looks.css` and a theme, so it's always as the pages are. Its bar chooses the page, style, theme, Light or Dark,
+font, text size, store colours and spacing, kept in its address. It holds nothing of yours and needs no access
+key. `tests/test_styles.py` checks that every class it uses is still one of the pages'.
 
 ## Releasing
 

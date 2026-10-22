@@ -478,6 +478,7 @@ class Tab(unittest.TestCase):
         self.assertNotIn("Secret", json.dumps(view))
         shared = self.api("/api/sets", {"action": "share", "id": made})
         self.assertEqual((shared["count"], shared["left_out"]), (1, 1))
+        self.assertNotIn("link", shared, "a set is shared only by a short link (issue #162): its code is for locking")
         self.assertNotIn("Secret", json.dumps(sets.from_code(shared["code"])), "never in a code, locked or not")
         self.assertNotIn(secret, self.api("/api/library")["sets"][0]["items"])
         self.assertEqual(self.api("/api/sets", {"action": "add", "id": made, "items": [secret]}).get("ok"), True)
@@ -495,6 +496,74 @@ class Tab(unittest.TestCase):
         self.assertEqual(bad["status"], 400)
         self.assertIn("couldn't find a picture", bad["error"])
         self.assertEqual(sets.SetStore().load()["sets"][0]["photos"], ["https://i.imgur.com/fOJAk3L.jpeg"], "unchanged")
+
+    def test_mix_and_match(self):
+        """Issue #156: an avatar from the Avatar tags and one product from each Clothing tag, only clothes that share a
+        tag with the avatar when asked; a kept pick stays (and isn't picked again for another slot), and the picks
+        make a set."""
+        from playwright.sync_api import sync_playwright
+        from hoard import library
+        names = {"4": "Rusk Cap", "5": "Rusk Cap and Tee", "6": "Plain Tee", "7": "Other Avatar"}
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] += [library.item("booth", k, name=n, creator="Mochi", url=f"https://booth.pm/ja/items/{k}")
+                                           for k, n in names.items()]
+        key = {n: tag_key("Booth", n) for n in ["Rusk", "Hoodie for Rusk", *names.values()]}
+        for keys, add in (([key["Rusk"], key["Other Avatar"]], ["avatars"]), ([key["Rusk"]], ["rusk"]),
+                          ([key["Hoodie for Rusk"], key["Rusk Cap and Tee"], key["Plain Tee"]], ["tops"]),
+                          ([key["Rusk Cap"], key["Rusk Cap and Tee"]], ["hats"]),
+                          ([key["Hoodie for Rusk"], key["Rusk Cap"], key["Rusk Cap and Tee"]], ["rusk"])):
+            self.assertEqual(self.api("/api/tags", {"action": "assign", "keys": keys, "add": add}).get("ok"), True)
+        for name, kind in (("avatars", "avatar"), ("tops", "clothing"), ("hats", "clothing")):
+            self.assertEqual(self.api("/api/tags", {"action": "type", "name": name, "type": kind}).get("ok"), True)
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.locator("#grid .slot").first.wait_for()
+            picks = page.evaluate("""() => {   // the rules, with the dice fixed
+                const avatar = T.all().find(a => a.name === 'Rusk'), both = T.all().find(a => a.name === 'Rusk Cap and Tee');
+                const hats = T.all().filter(a => a.name.startsWith('Rusk Cap')).map(a => a.name);
+                const rnd = Math.random; Math.random = () => hats[0] === both.name ? 0 : 0.99;   // the kept one, were it allowed
+                MIX.fit = true; MIX.held = new Set(['tops']);
+                MIX.picks = [{ slot: '', item: avatar }, { slot: 'tops', label: 'tops', item: both }];
+                mixRoll();
+                const kept = MIX.picks.map(p => [p.slot, p.item.name]);
+                MIX.held = new Set(); MIX.fit = false; mixRoll();
+                const loose = MIX.picks.map(p => p.slot);
+                Math.random = rnd;
+                return { kept, loose };
+            }""")
+            slots = dict(picks["kept"])
+            self.assertEqual(slots["tops"], "Rusk Cap and Tee", "a kept pick stays")
+            self.assertEqual(slots["hats"], "Rusk Cap", "and isn't picked again for another slot")
+            self.assertNotIn(slots[""], ("Rusk Cap", "Rusk Cap and Tee"))
+            self.assertEqual(picks["loose"], ["", "hats", "tops"], "an avatar, then a pick from each Clothing tag")
+            # on the page: the Sets tab's Mix and match, a pick kept, the rest picked again, a set made of them
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("[data-setx=mix]").click()
+            dlg = page.locator("dialog.mixdlg[open]")
+            dlg.wait_for()
+            self.assertEqual(dlg.locator(".mixlist li").count(), 3)
+            self.assertEqual(dlg.locator(".mixlist small").all_inner_texts(), ["Avatar", "hats", "tops"])
+            avatar = dlg.locator(".mixlist .mixtext b").first.inner_text()
+            self.assertIn(avatar, ("Rusk", "Other Avatar"))
+            dlg.locator('[data-mixhold=""]').check()
+            for _ in range(4):
+                dlg.locator("[data-mix=again]").click()
+                self.assertEqual(dlg.locator(".mixlist .mixtext b").first.inner_text(), avatar, "the kept avatar stays")
+            chosen = dlg.locator(".mixlist .mixtext b").all_inner_texts()
+            self.assertEqual(len(set(chosen)), 3, "three different products")
+            dlg.locator("button[value=yes]").click()
+            page.fill("dialog[open] #askName", "Mixed")
+            page.keyboard.press("Enter")
+            page.get_by_text("Made the set Mixed, with 3 products in it.").wait_for()
+            self.assertEqual(errors, [])
+            browser.close()
+        [s] = sets.SetStore().load()["sets"]
+        self.assertEqual((s["name"], sorted(s["items"])), ("Mixed", sorted(key[n] for n in chosen)))
 
     def test_make_share_and_add_a_set(self):
         from playwright.sync_api import sync_playwright
@@ -527,11 +596,14 @@ class Tab(unittest.TestCase):
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")   # both are yours
             self.assertIn("store=Sets&set=", page.url)
             self.assertEqual(page.locator("#setMore .slot").count(), 0)
-            # shared: the link holds the set
+            # shared: only by a short link (issue #162), made when it's asked for (tests/test_shortlinks.py), and
+            # never the long link that holds the set itself
             page.click('#setView [data-setx="share"]')
-            link = page.locator("dialog.share input").input_value()
-            self.assertTrue(link.startswith("https://hoard.furryup.link/set.html#H1."))
-            self.assertEqual(sets.from_code(link)["items"], [RUSK, HOODIE])
+            dialog = page.locator("dialog.share")
+            dialog.get_by_role("button", name="Make a short link").wait_for()
+            self.assertEqual(dialog.locator("input").count(), 0)
+            self.assertNotIn("H1.", dialog.inner_html())
+            self.assertIn("14 days", dialog.inner_text())
             page.locator("dialog.share button", has_text="Close").click()
             # its own picture, on its tile and in its folder
             with page.expect_file_chooser() as chosen:

@@ -493,12 +493,15 @@ def self_test() -> int:
         if not ok:
             problems.append(name)
 
-    check("pages", all((WEB / f).is_file() for f in ("library.html", "downloads.html", "shared.js")), str(WEB))
+    check("pages", all((WEB / f).is_file() for f in ("library.html", "downloads.html", "shared.js", "looks.css", "styleguide.html")), str(WEB))
     check("fonts", len(list((WEB / "fonts").glob("*.woff2"))) >= 3)
     from .marks import WORDS
     check("recovery words", len(WORDS) == 2048)
     from .changelog import changelog_file
     check("changelog (What's new)", changelog_file().is_file(), str(changelog_file()))
+    from .vpm.templates import BUILTIN, VRCHAT_UNITY
+    check("Projects' templates", all((BUILTIN / f"{kind}-{unity}.tar.gz").is_file() for kind in ("avatars", "worlds")
+                                     for unity in VRCHAT_UNITY), str(BUILTIN))
     try:
         from playwright._impl._driver import compute_driver_executable
         node, cli = compute_driver_executable()

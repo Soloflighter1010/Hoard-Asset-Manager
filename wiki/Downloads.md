@@ -195,7 +195,8 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
 ## The Downloads view
 
 - **Search** matches names, creators, tags and file names. Filter by store, creator, tag or **File types**, and
-  sort by name, creator, newest or size.
+  sort by name, creator, store, **Recently added** or **Largest**. The sort you choose is the Library's too, and Hoard
+  remembers it next time it starts (5.0); **Largest** is only here, so the Library sorts by name meanwhile.
 - Open a product to see its files, sizes and folder. **Open folder** opens it in Explorer (or Finder), **Show in
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
@@ -253,7 +254,8 @@ it takes, and how much they take in all. Two ways to narrow it down:
   [Projects](Hoard-for-Unity#projects-in-hoard)).
 
 Choose several (tick their boxes, Ctrl- or Shift-click, or **Select** on a touch screen), then use the selection
-bar or right-click: **Tags**, **Sets**, **Move** (to another library folder), and under **More**, **Archive** (as in
+bar or right-click: **Tags**, **Sets**, **Projects** (put them in a Unity project, or start a new one with them: see
+[Projects](Projects#from-anywhere-in-your-library)), **Move** (to another library folder), and under **More**, **Archive** (as in
 the Library; the files stay) or **Delete downloaded files** (after you confirm; anything of your own in their folders
 stays, and what's in your library can be downloaded again). Those work in every view, not just this one. Your
 own folders listed in Local where they are aren't counted: they aren't Hoard's to free.

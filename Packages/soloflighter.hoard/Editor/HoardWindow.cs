@@ -37,6 +37,7 @@ namespace SoloFlighter.Hoard.Editor
         readonly Dictionary<HoardAsset, InProject> statusOf = new Dictionary<HoardAsset, InProject>();
         readonly Dictionary<HoardAsset, string> newerOf = new Dictionary<HoardAsset, string>();   // a newer download to import, or ""
         readonly Dictionary<HoardAsset, List<HoardNeed>> missingOf = new Dictionary<HoardAsset, List<HoardNeed>>();   // its needs not in the project
+        readonly Dictionary<ImportLog.Entry, List<string>> stillHere = new Dictionary<ImportLog.Entry, List<string>>();   // what the app added that's still here
         Dictionary<string, int> pending = new Dictionary<string, int>();   // updates Hoard's last check found, by Updates.Key
         volatile Dictionary<string, int> loadedPending;
         DateTime pendingRead;      // when asset-updates.json was last read, to read it again only when it's changed
@@ -279,7 +280,7 @@ namespace SoloFlighter.Hoard.Editor
             return best;
         }
 
-        void Forget() { statusOf.Clear(); newerOf.Clear(); missingOf.Clear(); }
+        void Forget() { statusOf.Clear(); newerOf.Clear(); missingOf.Clear(); stillHere.Clear(); }
 
         void Forget(HoardAsset a) { statusOf.Remove(a); newerOf.Remove(a); missingOf.Remove(a); }
 
@@ -1118,9 +1119,46 @@ namespace SoloFlighter.Hoard.Editor
                 GUILayout.EndVertical();
             }
 
+            float inner = width - 24;   // inside a box
+            var putIn = ImportLog.PutInByHoard(a, log);
+            if (putIn.Count > 0)   // what the Hoard app put in this project (issue #155): when, from which file, and where
+            {
+                GUILayout.Space(6);
+                GUILayout.Label("Put in by Hoard", Look.Style(Look.Styles.Section));
+                for (int n = putIn.Count - 1; n >= Math.Max(0, putIn.Count - 3); n--)   // the latest three, newest first
+                {
+                    var e = putIn[n];
+                    var small = Look.Style("putin", Look.Styles.Small);
+                    GUILayout.BeginVertical(Look.Box("putin", Look.Cave, Look.Seam), GUILayout.Width(width));
+                    GUILayout.Label(ImportLog.When(e) + (string.IsNullOrEmpty(e.File) ? "" : ", from " + e.File), Look.Style(Look.Styles.Wrapped), GUILayout.Width(inner));
+                    var went = e.Package != null ? new List<string> { "Packages/" + e.Package } : e.Added;
+                    if (went.Count > 0)
+                        GUILayout.Label((e.Package != null ? "The package " : "Added ") + string.Join(", ", went.ToArray()), small, GUILayout.Width(inner));
+                    if (e.Left > 0)
+                        GUILayout.Label(e.Left.ToString("N0") + (e.Left == 1 ? " of its assets was" : " of its assets were") +
+                                        " already in the project, so " + (e.Left == 1 ? "it was" : "they were") + " left as they were.", small, GUILayout.Width(inner));
+                    List<string> here;
+                    if (!stillHere.TryGetValue(e, out here))   // looked for once, until the project changes
+                        stillHere[e] = here = went.FindAll(p => Directory.Exists(p) || System.IO.File.Exists(p));
+                    if (here.Count > 0)
+                    {
+                        GUILayout.Space(4);
+                        GUILayout.BeginHorizontal(GUILayout.Width(inner));
+                        GUILayout.FlexibleSpace();
+                        if (Look.LayoutButton("Select", Look.Kind.Ghost, "Select what it added in the Project window")) SelectPaths(here);
+                        GUILayout.EndHorizontal();
+                    }
+                    else if (went.Count > 0)
+                        GUILayout.Label("Not in the project now: moved, renamed or deleted since.", small, GUILayout.Width(inner));
+                    GUILayout.EndVertical();
+                }
+                if (putIn.Count > 3)
+                    GUILayout.Label("And " + (putIn.Count - 3) + " more times before: see Hoard imports.md, beside Assets.",
+                                    Look.Style("putin", Look.Styles.Small), GUILayout.Width(width));
+            }
+
             GUILayout.Space(6);
             GUILayout.Label("Files", Look.Style(Look.Styles.Section));
-            float inner = width - 24;   // inside a file's box
             var body = Look.Style(Look.Styles.Body);
             foreach (var entry in files)
             {
@@ -1278,6 +1316,19 @@ namespace SoloFlighter.Hoard.Editor
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
             }
             catch (Exception) { return a == b; }
+        }
+
+        /// <summary>The folders (or files) the Hoard app noted it added, selected in the Project window.</summary>
+        static void SelectPaths(List<string> paths)
+        {
+            var found = new List<UnityEngine.Object>();
+            foreach (string p in paths)
+            {
+                var o = AssetDatabase.LoadMainAssetAtPath(p);
+                if (o != null) found.Add(o);
+            }
+            Selection.objects = found.ToArray();
+            if (found.Count > 0) EditorGUIUtility.PingObject(found[0]);
         }
 
         void SelectInProject(string packagePath)

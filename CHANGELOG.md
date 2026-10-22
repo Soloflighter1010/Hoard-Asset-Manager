@@ -1,5 +1,93 @@
 # Changelog
 
+## 5.0.0
+
+- **Projects is now a project manager, with your library in it.** **Projects** (at the top of either page) is your
+  Unity projects, the same list as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the VRChat Creator
+  Companion's. A project added in any of the three shows in all of them, and Hoard keeps the Creator Companion's
+  other settings as they are. Hoard works as ALCOM does, from its own code (it doesn't need ALCOM or the Creator
+  Companion installed), and only reads the Creator Companion's own database, never writing to it. See
+  [Projects](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Projects) in the wiki.
+- **A new project, ready to use.** **New project** makes one from VRChat's avatar or world template (Unity
+  2022.3.22f1, the VRChat SDK's own, or 2022.3.6f1 or 2019.4.31f1), a blank one, or an ALCOM template, with the VPM
+  packages you choose, and with products from your library already in it: a .unitypackage is put straight in
+  (each file of one with several variants chosen with a tick), and a VPM package in a .zip goes into `Packages`, with
+  what it needs. What your products need (lilToon, Poiyomi, Modular Avatar, VRCFury, NDMF, Avatar Optimizer, the
+  VRChat SDK) is offered with a tick, its repository added for you. Put in a whole set at once with **Put in a set**.
+- **Presets.** **Save as a preset** keeps a project to start from again: its template, Unity, packages and products
+  ("my avatar base"). **Save it for ALCOM too** writes it as an ALCOM template, so ALCOM makes the same project
+  (leaving out any package inside a .zip, which ALCOM can't open).
+- **A project's packages.** **Manage** lists them, with each one's update; add packages from your repositories,
+  update one or all, remove one (with what only it needed), or **Put it right** when they aren't installed the way
+  the project says. A package's version is a button
+  ([#160](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/160)): it lists every version that works in
+  the project's Unity, newest first (prereleases too when **Offer prerelease versions of packages** is on), and
+  installs the one you choose, an older one included, with what it needs changed to match. **Add packages** can
+  choose a version too. Every change is shown before it's made, and made as a task, so it shows in **Tasks** and
+  **Stop** puts everything back as it was. Hoard chooses versions exactly as ALCOM does (its own tests are among
+  Hoard's), and checks each download against the SHA-256 its repository gives.
+- **Your library in your projects.** Choose products in the Library or Downloads (or right-click one), then
+  **Projects**: **Put in a project...** puts them in one of your projects, and **New project with these...** starts a
+  new one with them already in it; **Manage** puts more in later. Nothing already in the project is replaced (by its
+  asset ID or its path).
+- **What went into a project, and where**
+  ([#155](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/155)). Each time Hoard puts products in a
+  project, it adds them to `Hoard imports.md`, beside the project's `Assets`: each product, its file, when, and the
+  folders it added (or its package), and what was left as it was. They're added to Hoard for Unity's own list of
+  imports too (`ProjectSettings/Hoard/imports.json`). **Manage** lists the folders each one added, and Hoard for
+  Unity 0.9.0 shows them under each product (**Put in by Hoard**, with **Select** to select them).
+- **Open in Unity**, with the Unity version the project needs (found as ALCOM finds them, through Unity Hub), or
+  another one you choose. **Back up** zips a project, without what Unity makes again by itself, into your backups
+  folder.
+- **Old project backups, kept in hand.** **Backups**, in Projects, lists every project backup with its size, marks
+  the old ones (past the newest 3 of a project, and older than a month, unless you choose otherwise), and deletes
+  them, or moves them to a folder on another drive, copied and checked before they go. When the drive your backups
+  are on is low on room, Projects says so, with how much the old ones take.
+- **Repositories** and **Unity and folders** have views of their own: add a repository (with headers for a private
+  one, sent only to its own address), refresh them all, and choose where new projects and backups go, kept in the
+  Creator Companion's settings.
+- **What Hoard for Unity reports** about a project shows with it, as before: what it uses, which has updates, and
+  its credits. A project it reported that isn't on the list shows below the list, with **Add to the list**.
+- **Three styles: Standard, Treasure and Workbench**
+  ([#159](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/159)). Choose how Hoard lays everything
+  out, in the setup assistant or in Settings, under **Appearance**. **Standard** is Hoard as it has always looked.
+  **Treasure** shows bigger pictures, each in a frame of its store's colour with the store's name on it, round
+  buttons and tabs, and a product's details with its picture large and a row of what it is. **Workbench** makes the
+  Library, Downloads and sets close-set lists, each product a row with a small picture, its store, whether it's
+  downloaded and when it came, in your computer's own font, with lower bars and closer-set panels and tables. A
+  style shows as you choose it, on both pages and from the first moment a page opens, and it's kept with your other
+  settings, so it stays when Hoard starts again or updates, and in a backup. Every theme, Light or Dark, and the
+  accessibility settings work with all three, in English, Japanese and Korean.
+- **Kinds of tags** ([#157](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/157)). A tag can say
+  what it's about: Avatar, World, Clothing, Gimmick, Script, Texture or Other, chosen beside it in **Tags**. Your
+  tags in the filters are grouped by kind, and the downloads folder's `tags.json` says each tag's kind, for other
+  programs.
+- **Mix and match** ([#156](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/156)). In the Sets tab,
+  **Mix and match...** picks an avatar and an outfit at random from what you own, one product from each of your
+  Clothing tags, and only clothes tagged for that avatar if you like. Keep the picks you like, pick the rest again,
+  and make a set of them.
+- **Sets are shared by short link only** ([#162](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/162)).
+  **Share...** makes a short link (about 70 characters, for 14 days) instead of the long link that held the whole
+  set, which was too long to pass around. **Update the link** keeps it 14 days from today, so a set can stay shared
+  for as long as you like; Hoard doesn't renew it by itself. Long links shared from earlier versions still open, in
+  the viewer and in **Add a shared set...**.
+- **Your sort stays.** The sort you choose (**Sort**, beside the store tabs) is kept when you go between the Library
+  and Downloads, and next time Hoard starts. Downloads can sort by store too, as the Library does; **Largest** is
+  only in Downloads, so the Library sorts by name while it's chosen. A link with its own sort still shows that one.
+- **Booth wishlists: every loved item.** Reading your loved items on Booth stopped at the first 20; Hoard now turns
+  every page. Each item's link opens its page for everyone (`booth.pm/en/items/...`); links kept from before, in a
+  wishlist or a set, do too.
+- Smaller things put right: in Projects, what you've typed in **Repositories** or **Unity and folders** and not saved
+  stays when a task ends, and a save that's refused keeps it to put right. **Mix and match** never picks a product
+  you kept for one slot again for another. A backup made into a folder inside the project leaves that folder out. A
+  tag's remove button and a suggestion's "in N names" are translated, and backups show their date in your language.
+  Workbench's list keeps its words whole (in OpenDyslexic too), and its rows fit the space the list has. A page
+  whose request to Hoard couldn't be sent for a moment tries again, rather than saying Hoard isn't running.
+- Faster with a large library: a product's contents are read once for each version of its file, products are found
+  by key from one map, and the backups folder without listing every project.
+- For anyone working on Hoard's pages: **the style guide**, at `/styleguide` on a running Hoard, shows every part of
+  the pages with its markup, in any page, style, theme, font and text size.
+
 ## 4.4.0
 
 - **Wishlists** ([#158](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/158)). The Sets tab now has

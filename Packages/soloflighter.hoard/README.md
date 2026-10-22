@@ -30,7 +30,9 @@ Unity. Open **Hoard › Open Hoard** (Hoard's own menu in Unity's menu bar) to:
   project with its assets, their updates and its credits list.
 
 Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a project remembers where its
-assets came from. The credits list's settings are kept beside it, in `credits.json`.
+assets came from. The credits list's settings are kept beside it, in `credits.json`. Products the Hoard app put in
+the project (its Projects, 5.0) are on the same list, and a product's details show them under **Put in by Hoard**:
+when, from which file, and the folders it added, with **Select** to select them.
 
 ## What it needs
 

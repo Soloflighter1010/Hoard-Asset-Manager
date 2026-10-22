@@ -2464,9 +2464,12 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     for entry in catalog:
         for t in entry["tags"]:
             yours.setdefault(t, []).append(entry["folder"])
+    from .tags import TagStore
+    kinds = {t: info["type"] for t, info in TagStore().load()["tags"].items() if info.get("type")}   # (issue #157)
     write_file_safely(root / "tags.json", json.dumps(seal({
         **CATALOG_FORMAT["tags"], "generated_at": now_iso(), "total_assets": len(catalog),
-        "tags": {t: {"count": len(v), "assets": v} for t, v in sorted(yours.items(), key=lambda kv: (-len(kv[1]), kv[0]))},
+        "tags": {t: {"count": len(v), "assets": v, **({"type": kinds[t]} if t in kinds else {})}
+                 for t, v in sorted(yours.items(), key=lambda kv: (-len(kv[1]), kv[0]))},
         "suggested": {t: {"count": len(v), "assets": v} for t, v in ordered.items()},
     }), indent=2, ensure_ascii=False), root)
 
