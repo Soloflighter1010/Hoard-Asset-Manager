@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 import webbrowser
+from shutil import rmtree
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -29,7 +30,7 @@ from .browser import SigninsUnprotected, signin_protection, signins_root, use_ch
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
                          restore_previous,
-                         last_integrity, make_editable_copy, reseal_catalog)
+                         edits_root, last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import is_network_error
@@ -37,7 +38,7 @@ from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, c
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
-                     fetch_public, header_safe, network_tls, open_under, safe_join, store_sites, UnsafePath)
+                     fetch_public, header_safe, network_tls, open_under, safe_join, safe_name, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
@@ -57,7 +58,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
-           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside",
+           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
            "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
            # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
@@ -1134,6 +1135,52 @@ class Handler(BaseHTTPRequestHandler):
         sizes, as they're left out of what's shared."""
         return sets.share_parts(s, self._product_details(), leave_out=MarkStore().keys("hidden"))
 
+    def _extract(self, body: dict):
+        """Look inside's Extract (packages.extract): the chosen files of a downloaded .unitypackage or .zip, or all of
+        them, into a new folder named after it in Extracted, in the folder for editable copies (never in a library
+        folder, so Hoard's checks leave them alone); then that folder opened, when asked."""
+        srv = self.server
+        target = open_target(srv.cfg, str(body.get("path", "")))
+        if not target or not packages.can_look_inside(target.name) or not target.is_file():
+            return self._json({"error": "That file isn't on disk anymore."}, 404)
+        picks = body.get("picks")
+        if not isinstance(picks, list) or not picks or len(picks) > 100_000 or \
+                not all(isinstance(p, str) and len(p) <= 2100 for p in picks):
+            return self._json({"error": "Choose what to take out first."}, 400)
+        try:
+            base = edits_root(srv.cfg, root_dir(srv.cfg)) / "Extracted"
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        name, n = safe_name(target.name.rsplit(".", 1)[0], 80), 1
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            while True:   # (made here, not just looked for: two at once never share one, nor delete the other's)
+                dest = base / (name if n == 1 else f"{name} ({n})")
+                try:
+                    dest.mkdir()
+                    break
+                except FileExistsError:
+                    n += 1
+        except OSError as e:
+            return self._json({"error": f"Couldn't make a folder in {base}: {e.strerror or e}."}, 500)
+        try:
+            done = packages.extract(target, dest, picks, metas=body.get("metas") is True)
+        except (packages.CantExtract, packages.NotAPackage, OSError) as e:
+            rmtree(dest, ignore_errors=True)   # (what was taken out before it stopped goes with it)
+            said = str(e) if isinstance(e, packages.CantExtract) else (f"Couldn't take them out: {e.strerror or e}."
+                                                                       if isinstance(e, OSError) else "That file couldn't be read.")
+            return self._json({"error": said}, 400 if isinstance(e, packages.CantExtract) else 500)
+        print(f"Took {done['files']} files out of {target.name} into {dest}"
+              + (f" ({len(done['skipped'])} left out)" if done["skipped"] else ""), flush=True)
+        opened = None
+        if body.get("open"):
+            try:
+                opened = reveal(dest)
+            except OSError:
+                pass
+        return self._json({"ok": True, "folder": str(dest), "files": done["files"], "bytes": done["bytes"],
+                           "skipped": [{"name": n, "why": w} for n, w in done["skipped"]], "opened_in": opened})
+
     def _split_set(self, sid: str):
         """Split into...: a set too big for one short link, as new sets that each fit (sets.SetStore.split). The set
         stays as it is."""
@@ -1703,6 +1750,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(packages.look_inside(target), compress=True)
             except (packages.NotAPackage, OSError):
                 return self._json({"error": "That file couldn't be read."}, 500)
+        if path == "/api/look-inside/extract":   # Look inside: the chosen files taken out, into a folder of their own
+            return self._extract(body)
         if path == "/api/previous/restore":   # Downloads: put a previous version of a file back (hoard/previous.py)
             if srv.jobs.state.get("running"):
                 return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)

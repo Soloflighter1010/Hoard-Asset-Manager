@@ -730,16 +730,22 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .inside details > summary { cursor: pointer; padding: 4px 0; overflow-wrap: anywhere; }
 .inside summary .n, .inside .sz { font-size: 12px; color: var(--dust); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .inside summary .n { margin-left: 6px; }
-.inside li.f { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 3px 0; font-size: 13px; }
+.inside li.f { display: grid; grid-template-columns: auto 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 3px 0; font-size: 13px; }
 .inside li.f .nm { overflow-wrap: anywhere; }
 .inside li.f .nm small { display: block; color: var(--dust); }
 .inside .pv { width: 40px; height: 40px; border-radius: 6px; background: var(--stone); object-fit: contain; display: grid; place-items: center;
   font-size: 10px; color: var(--dust); text-transform: uppercase; overflow: hidden; }
 .inside .pkg { margin: 8px 0; padding: 8px 12px; border-radius: 12px; background: var(--stone); }
 .inside .pkg .pv { background: var(--ledge); }
-.inside .zipfiles li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 4px 0; border-top: 1px solid var(--seam); font-size: 13px; }
+.inside .zipfiles li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 4px 0; border-top: 1px solid var(--seam); font-size: 13px; }
 .inside .zipfiles .nm { overflow-wrap: anywhere; }
 .inside .more { font-size: 12px; color: var(--dust); margin: 6px 0; }
+/* Extract: a box to choose each file and folder, and what to do with them, above the list */
+.inside input.pick { width: 16px; height: 16px; margin: 0; accent-color: var(--gold); cursor: pointer; }
+.inside summary input.pick { margin: 0 8px 0 2px; vertical-align: -2px; }
+.inside .inside-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 12px; }
+.inside .inside-bar .primary { width: auto; margin: 0; }   /* (a window's own .primary fills its width: not this one) */
+.inside .inside-bar .check { font-size: 13px; color: var(--dust); }
 
 /* Projects (issue #86): what Hoard for Unity reports about a project (the products it uses), and its credits */
 /* Projects takes the whole window below the bar (it's a place of its own, not a panel over the page) */
@@ -2202,18 +2208,18 @@ async function lookInside(path) {
       body.innerHTML = `<p class="file-name" translate="no">${esc(name)}</p><p class="note">${esc(tr((r.data && r.data.error) || "That file couldn't be read."))}</p>`;
       return;
     }
-    INSIDE = { ...r.data, name, nodes: [] };
+    INSIDE = { ...r.data, name, path, nodes: [], pick: new Map() };   // pick: what's chosen to take out, and how many files each is
     drawInside();
   }
 }
 // a package's assets as folders (each drawn when it's opened, so a package of thousands opens at once)
 function insideTree(items) {
-  const root = { dirs: new Map(), files: [], count: 0, size: 0 };
+  const root = { dirs: new Map(), files: [], count: 0, size: 0, path: "" };
   for (const it of items) {
     const parts = it.path.split("/");
     let node = root;
     for (const part of parts.slice(0, it.size == null ? parts.length : -1)) {
-      if (!node.dirs.has(part)) node.dirs.set(part, { dirs: new Map(), files: [], count: 0, size: 0 });
+      if (!node.dirs.has(part)) node.dirs.set(part, { dirs: new Map(), files: [], count: 0, size: 0, path: (node.path ? node.path + "/" : "") + part });
       node = node.dirs.get(part);
     }
     if (it.size != null) node.files.push({ ...it, name: parts[parts.length - 1] });
@@ -2233,10 +2239,10 @@ function insideFolder(node, n) {   // one folder's contents: its folders (closed
   const dirs = [...node.dirs.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   return `<ul>` + dirs.map(([name, d]) => {
     INSIDE.nodes.push({ node: d, n });
-    return `<li><details data-node="${INSIDE.nodes.length - 1}"><summary><span translate="no">${esc(name)}</span>` +
+    return `<li><details data-node="${INSIDE.nodes.length - 1}"><summary>${pickBox(`d:${n}:${d.path}`, d.count, name)}<span translate="no">${esc(name)}</span>` +
       `<span class="n">${esc(tr(d.count === 1 ? "{0} file, {1}" : "{0} files, {1}", d.count.toLocaleString(), sizeText(d.size)))}</span></summary></details></li>`;
   }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
-    `<li class="f">${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
+    `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
 }
 function insidePackage(items, n, open) {
   const tree = insideTree(items);
@@ -2255,7 +2261,8 @@ function insideFound(q) {   // searching: every file whose path has these words,
     for (const f of INSIDE.files) if (words.every(w => f.name.toLowerCase().includes(w))) found.push({ path: f.name, size: f.size, zip: true });
   if (!found.length) return `<p class="sum">${esc(tr("Nothing in it matches."))}</p>`;
   return `<p class="sum">${esc(tr(found.length === 1 ? "{0} file matches." : "{0} files match.", found.length.toLocaleString()))}</p>` +
-    `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${f.zip ? `<span class="pv" aria-hidden="true">zip</span>` : previewImg(f, f.n)}` +
+    `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${pickBox(f.zip ? `z:${f.path}` : `p:${f.n}:${f.path}`, 1, f.path)}` +
+      `${f.zip ? `<span class="pv" aria-hidden="true">zip</span>` : previewImg(f, f.n)}` +
       `<span class="nm" translate="no">${esc(f.path)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
     (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
 }
@@ -2274,11 +2281,58 @@ function drawInside(q = "") {
       I.packages.map((p, n) => `<details class="pkg"${I.packages.length === 1 ? " open" : ""} data-pkg="${n}"><summary translate="no">${esc(p.name)}</summary>` +
         (p.error ? `<p class="note">${esc(tr(p.error))}</p>` : insidePackage(p.items, n, false)) + `</details>`).join("") +
       `<details><summary>${esc(tr("Every file in the zip"))}</summary><ul class="zipfiles">${I.files.map(f =>
-        `<li><span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+        `<li>${pickBox(`z:${f.name}`, 1, f.name)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
       (I.more ? `<p class="more">${esc(tr("And {0} more.", I.more.toLocaleString()))}</p>` : "") + `</details>`;
   } else html = insidePackage(I.items, 0, true);
-  body.innerHTML = head + (I.kind === "zip" && !I.files.length ? html : search + html);
+  body.innerHTML = head + (I.kind === "zip" && !I.files.length ? html : search + insideBar() + html);
   for (const d of body.querySelectorAll("details.pkg[open]")) fillPackage(d);
+}
+// Extract: what's chosen (a file "p:<package>:<path>", a folder and everything in it "d:...", a zip's file "z:<name>")
+// taken out into a folder of its own in Hoard Edits (hoard/packages.py, extract), which opens when it's done
+function pickedUnder(key) {   // in a folder that's chosen (so chosen with it)
+  const [kind, n, ...rest] = key.split(":"), path = rest.join(":");
+  return kind !== "z" && [...INSIDE.pick.keys()].some(k => k !== key && k.startsWith(`d:${n}:`) && path.startsWith(k.slice(`d:${n}:`.length) + "/"));
+}
+function pickBox(key, count, name) {
+  const under = pickedUnder(key), on = under || INSIDE.pick.has(key);
+  return `<input type="checkbox" class="pick" data-pick="${esc(key)}" data-count="${count}"${on ? " checked" : ""}${under ? " disabled" : ""}` +
+    ` aria-label="${esc(tr("Choose {0}", name))}">`;
+}
+function insideBar() {
+  const n = [...INSIDE.pick.values()].reduce((t, c) => t + c, 0), packaged = INSIDE.kind !== "zip" || INSIDE.packages.length;
+  return `<div class="inside-bar"><button class="primary sm" data-x="extract" data-what="chosen"${n ? "" : " disabled"}>` +
+    `${esc(n ? tr(n === 1 ? "Extract the chosen file" : "Extract the {0} chosen files", n.toLocaleString()) : tr("Choose files to extract"))}</button>` +
+    `<button class="ghost sm" data-x="extract" data-what="all">${esc(tr("Extract everything"))}</button>` +
+    (packaged ? `<label class="check"><input type="checkbox" id="insideMetas"${INSIDE.metas ? " checked" : ""}> ${esc(tr("With Unity's .meta files"))}</label>` : "") + `</div>`;
+}
+function pickChanged(box) {
+  const key = box.dataset.pick;
+  if (box.checked) INSIDE.pick.set(key, +box.dataset.count || 1); else INSIDE.pick.delete(key);
+  if (key.startsWith("d:")) {   // a folder: what's in it comes with it (and is no longer chosen on its own)
+    const n = key.split(":")[1], under = key.slice(`d:${n}:`.length) + "/";
+    for (const k of [...INSIDE.pick.keys()]) if (/^[pd]:/.test(k) && k.split(":")[1] === n && k.slice(`d:${n}:`.length).startsWith(under)) INSIDE.pick.delete(k);
+    const d = box.closest("details");
+    for (const b of d.querySelectorAll("input.pick")) {
+      if (b === box) continue;
+      INSIDE.pick.delete(b.dataset.pick);
+      b.checked = box.checked; b.disabled = box.checked;
+    }
+  }
+  const bar = $("#insideBody .inside-bar");
+  if (bar) bar.outerHTML = insideBar();
+}
+async function extractInside(what, button) {
+  const picks = what === "all" ? ["all"] : [...INSIDE.pick.keys()];
+  if (!picks.length) return;
+  for (const b of document.querySelectorAll("#insideBody [data-x=extract]")) b.disabled = true;
+  button.textContent = tr("Taking them out...");
+  const r = await apiPost("/api/look-inside/extract", { path: INSIDE.path, picks, metas: !!INSIDE.metas, open: true });
+  const bar = $("#insideBody .inside-bar");
+  if (bar) bar.outerHTML = insideBar();
+  if (!r.ok) { toast(r.data.error || "Those files couldn't be taken out."); return; }
+  toast(tr(r.data.files === 1 ? "Took 1 file out, into {1}." : "Took {0} files out, into {1}.", r.data.files.toLocaleString(), r.data.folder) +
+    (r.data.skipped.length ? " " + tr(r.data.skipped.length === 1 ? "1 file was left out: {0}." : "{0} files were left out.",
+      r.data.skipped.length === 1 ? `${r.data.skipped[0].name} (${tr(r.data.skipped[0].why)})` : r.data.skipped.length) : ""));
 }
 function fillPackage(d) {
   const slot = d.querySelector("[data-pkg-node]");
@@ -2296,6 +2350,16 @@ function wireInside() {
       d.insertAdjacentHTML("beforeend", insideFolder(node, n));
     } else if (d.classList.contains("pkg")) fillPackage(d);
   }, true);
+  w.addEventListener("change", e => {
+    if (!INSIDE) return;
+    if (e.target.matches("input.pick")) pickChanged(e.target);
+    else if (e.target.id === "insideMetas") INSIDE.metas = e.target.checked;
+  });
+  w.addEventListener("click", e => {
+    const x = e.target.closest("[data-x=extract]");
+    if (x && INSIDE && !x.disabled) extractInside(x.dataset.what, x);
+    if (e.target.matches("summary input.pick")) e.stopPropagation();   // (choosing a folder doesn't open or close it)
+  });
   let t;
   w.addEventListener("input", e => {
     if (e.target.id !== "insideQ" || !INSIDE) return;

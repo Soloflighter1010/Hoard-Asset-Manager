@@ -211,6 +211,15 @@ from when that shop isn't in the user's list (it's only added when the user conf
   them, or a count of the rest. `/api/assets` gives each asset's `needs` (leaving out hidden products while locked),
   and `build_catalog` writes them into `catalog.json` (`needs.add_to_catalog`), checked by `valid_needs`. After a
   read finds something new, the catalog is written again if no job is running.
+- Look inside's **Extract** (`POST /api/look-inside/extract`, `packages.extract`): the page sends what's ticked
+  (`p:<package>:<path>`, `d:<package>:<folder>`, `z:<zip member>`, or `all`), and the server writes it into a new
+  folder in `edits_root(cfg, root)/Extracted` (the folder editable copies go in), named after the file. A package
+  is read once, in order (`read_unitypackage(on_asset=...)`), each asset streamed to a temp file beside where it goes
+  and moved into place. `out_parts` makes each path's parts names every system allows and refuses `..`; `Writer`
+  makes folders one level at a time and refuses a link or a file in the way, so nothing lands outside the folder,
+  gives a name already taken " (2)", and stops (`CantExtract`) before the disk has less than `ROOM_TO_SPARE`
+  left. A zip member locked with a password, or one that can't be read, is skipped and named in the answer; a
+  failure part way deletes the half-made folder.
 
 ## Tags
 

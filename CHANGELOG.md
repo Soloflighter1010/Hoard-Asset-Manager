@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.2.0
+## 5.1.1
 
 - **A set too big for one short link can be split.** A short link holds about 500 products, and a longer set or
   wishlist (Booth's Loved items can run to hundreds) couldn't be shared at all. **Share...** now says when a set is
@@ -10,6 +10,10 @@
 - **Projects uses the whole window**, not a column down its middle.
 - **A press kit**, on Hoard's website: what Hoard is, the facts, its logo and colours, and its screenshots, to download
   in one go. Every page of the site links it.
+- **Look inside takes files out.** Tick the files and folders you want in a Unity package or a zip (a folder brings
+  everything in it) and choose **Extract the N chosen files**, or **Extract everything**. They go in a new folder,
+  named after the file, in **Extracted** beside your editable copies, in the folders their paths say, with Unity's
+  `.meta` files too if you like, and the folder opens. Nothing is written outside it, whatever a package's paths say.
 - Put right: a wishlist you'd filtered stayed on show below the list of sets after you went back to it.
 
 ## 5.1.0
