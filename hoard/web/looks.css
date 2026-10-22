@@ -190,9 +190,12 @@
   [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 110px 192px; }
   [data-style="workbench"] .grid .row-meta .rm-when { display: none; }
 }
-@container (max-width: 560px) {
-  [data-style="workbench"] .grid .row-meta { grid-template-columns: auto; }
+@container (max-width: 560px) {   /* (in either font: the OpenDyslexic columns above don't hold here) */
+  [data-style="workbench"] .grid .row-meta, [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: auto; }
   [data-style="workbench"] .grid .row-meta > :not(.rm-state) { display: none; }
+  /* a product you don't have yet: its price over where to buy it, beside the name */
+  [data-style="workbench"] .grid .slot.ext { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main price" "main row"; }
+  [data-style="workbench"] .slot.ext :is(.ext-price, .ext-row) { justify-self: end; }
 }
 @container (max-width: 360px) { [data-style="workbench"] .grid .row-meta { display: none; } }
 /* a product's details: a smaller picture, close-set, the parts' names in capitals */

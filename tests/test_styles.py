@@ -216,13 +216,16 @@ class Guide(unittest.TestCase):
                 self.assertGreater(page.locator(".sg-code").count(), 20, "each example's markup, to copy")
                 self.assertEqual(page.locator("[data-token=gold]").inner_text().lower(), themes.THEMES["hoard"]["dark" if page.evaluate(
                     "matchMedia('(prefers-color-scheme: dark)').matches") else "light"]["gold"].lower())
-            for font in ("standard", "dyslexic"):   # Workbench's list: each column's words whole, in either font
-                for width in (1280, 900):
+            for font in ("standard", "dyslexic"):   # Workbench's list: each column's words whole, in either font,
+                for width in (1280, 900, 700, 520):   # and the name keeps its room as the list narrows
                     page.set_viewport_size({"width": width, "height": 800})
                     page.goto(f"{base}/styleguide?style=workbench&font={font}")
                     cut = page.evaluate("() => [...document.querySelectorAll('#tiles ~ .sg-item .row-meta > span')]"
                                         ".filter(s => s.offsetParent && s.scrollWidth > s.clientWidth + 1).map(s => s.textContent)")
                     self.assertEqual(cut, [], f"{font}, {width} wide")
+                    squeezed = page.evaluate("() => [...document.querySelectorAll('#tiles ~ .sg-item .grid .slot')].filter(r => r.offsetParent)"
+                                             ".filter(r => r.querySelector('.nm-t').clientWidth < r.clientWidth * 0.3).map(r => r.querySelector('.nm-t').textContent)")
+                    self.assertEqual(squeezed, [], f"{font}, {width} wide: the names have room")
             page.select_option("select[name=style]", "treasure")   # the bar: chosen in the address
             page.wait_for_url("**style=treasure**")
             self.assertEqual(errors, [])
