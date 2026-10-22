@@ -1,8 +1,7 @@
 # Projects
 
 **Projects** (at the top of either page) is your Unity projects: make one ready to use, with the packages and the
-products from your library it needs, open it in Unity, and change its packages. It's new in Hoard 5.0, a beta for
-now: turn on **Get beta updates** in **Settings › Updates** to try it.
+products from your library it needs, open it in Unity, and change its packages. It's new in Hoard 5.0.
 
 It's the same list of projects as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the VRChat Creator
 Companion's. A project you add or take off in any of the three is added or taken off in all of them, and Hoard keeps
