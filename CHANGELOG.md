@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.1.2
+
+- Put right: a set or wishlist of about 370 to 500 products was called too big for one short link, so it couldn't
+  be shared, and a link it had couldn't be updated to keep it going. Hoard now measures a set as the share server
+  does, and these share, and keep their links going, again.
+- Put right: Look inside and **Extract** opened a hidden product's file while your hidden library was locked. They
+  ask you to unlock it first, as **Make an editable copy** does.
+- **Extract takes files out more carefully.**
+  - With Unity's .meta files, a folder's `.meta` comes out too, and each file's `.meta` is always beside it under
+    the name Unity looks for, even when the file was renamed " (2)" because its name was taken.
+  - Nothing already there is ever written over.
+  - A file that can't be written (a path too long for your system, say) is left out, and Hoard says which and why;
+    the rest still come out. If nothing could be, it says why instead of opening an empty folder.
+  - A Unity package in a zip goes in its own folder, where it is in the zip, so two of the same name stay apart.
+  - Files get the permissions any new file does, and taking a few files out of a large package is quicker.
+- Put right: closing Look inside while it was taking files out showed an error, and ticking a box meanwhile could
+  start a second extraction.
+- Put right: a wishlist's tags and creators could show nothing after you'd set a price range on another wishlist,
+  and a tag chosen on a set could carry over into a wishlist.
+- Put right: **Split into sets** could make a part a little too big for its short link when the set's name was
+  long and in a script such as Japanese, and could leave out a product added just before splitting. Share... and
+  Split are also quicker on long sets.
+- Put right: **Share...** gave no answer for a set holding a product too big for a short link on its own.
+
 ## 5.1.1
 
 - **A set too big for one short link can be split.** A short link holds about 500 products, and a longer set or

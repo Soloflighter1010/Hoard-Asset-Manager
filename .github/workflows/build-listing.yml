@@ -29,6 +29,7 @@ on:
     paths: ["site/**", "Website/**", "source.json", "CHANGELOG.md", "scripts/build_site_changelog.py",
             "hoard/changelog.py", "hoard/versions.py",   # (the changelog page's renderer and its beta rule)
             "wiki/**", "scripts/build_site_docs.py", "scripts/site_chrome.py",   # (the docs, and every page's bar)
+            "scripts/build_press_kit.py",   # (the press kit's download)
             ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
