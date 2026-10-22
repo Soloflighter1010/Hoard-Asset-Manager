@@ -158,13 +158,15 @@ class AccessKey(unittest.TestCase):
                                             "Hoard-Asset-Manager/releases/tag/v99.0.0", "notes": "", "published": "",
                                             "has_installer": True}
         self.addCleanup(self.srv.updates.state.update, latest=None)
+        self.addCleanup(self.srv.cfg.update, check_for_updates=bool(self.srv.cfg.get("check_for_updates")))
+        self.srv.cfg["check_for_updates"] = True   # (not whatever another test's settings left in the shared folder)
         page, refused = self.open(self.srv.entry_url())
         page.get_by_role("button", name="Update to 99.0.0").wait_for()
         page.click("#updateNote")
         page.get_by_text("Hoard 99.0.0 is available").wait_for()
         self.assertTrue(page.locator("#updInstall").is_hidden(), "only the installed app installs it")
         self.assertTrue(page.locator("#updLink").is_visible())
-        self.assertFalse(page.locator("#setUpdates").is_checked(), "automatic checks are off unless turned on")
+        self.assertTrue(page.locator("#setUpdates").is_checked(), "Settings shows automatic checks as they are")
         self.assertEqual(refused, [])
         page.close()
 

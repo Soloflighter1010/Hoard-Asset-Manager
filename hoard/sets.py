@@ -449,6 +449,28 @@ class SetStore:
                 _tidy_pictures(data["sets"])
         return {**data, **({"made": made} if made else {})}
 
+    def add_products(self, sid: str, products: list[dict]) -> dict:
+        """Products added to a set or wishlist by their links (wishlists.from_product_page's shape), each with what's
+        known of it, as a wishlist read from a store holds them. Returns the sets after it."""
+        with _lock:
+            data = self.load()
+            s = next((x for x in data["sets"] if x["id"] == sid), None)
+            if s is None:
+                raise ValueError("That set isn't there anymore.")
+            known = s.setdefault("products", {})
+            for p in products:
+                clean = clean_product(p)
+                if clean:
+                    key = tag_key(clean["store"], clean["name"])
+                    known[key] = clean
+                    s["items"] = list(dict.fromkeys(s["items"] + [key]))
+            most = MAX_WISH_ITEMS if s.get("kind") == "wishlist" else MAX_ITEMS
+            if len(s["items"]) > most:
+                raise ValueError(f"A set holds up to {most} products.")
+            data = self.sanitize(data)
+            self._save(data)
+        return data
+
     def set_short(self, sid: str, rec: dict | None) -> None:
         """Keep a set's short link (clean_short's shape), or forget it (None). Not one of change()'s: only Hoard's
         server, which made the link, sets it."""

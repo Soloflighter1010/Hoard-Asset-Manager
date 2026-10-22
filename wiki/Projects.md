@@ -1,7 +1,9 @@
 # Projects
 
 **Projects** (at the top of either page) is your Unity projects: make one ready to use, with the packages and the
-products from your library it needs, open it in Unity, and change its packages. It's new in Hoard 5.0.
+products from your library it needs, open it in Unity, and change its packages. It's new in Hoard 5.0. From 5.1 it
+takes the whole window, with its views as tabs along its top: **Projects**, **Repositories**, **Backups**, and **Unity
+and folders**. Rows alternate in colour, and the one under the pointer is outlined.
 
 It's the same list of projects as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the VRChat Creator
 Companion's. A project you add or take off in any of the three is added or taken off in all of them, and Hoard keeps
@@ -14,8 +16,9 @@ Each project shows its kind (avatars or worlds), its Unity version, and when you
 favourite, at the top of the list. **Open in Unity** opens it; **Manage** shows its packages and more. A project whose
 folder has gone (moved, or on a drive that isn't connected) says so, with **Take off the list**.
 
-**Add a project** lists one you already have, by its folder's full path. **Take off the list** leaves its folder as it
-is.
+**Add a project...** lists one you already have: in Hoard's own window it opens your computer's folder picker, in your
+projects folder (in a web browser, you type the folder's full path). **Take off the list** leaves its folder as it is;
+to delete a project from your computer, see [Managing a project](#managing-a-project).
 
 Projects you've opened Hoard's window in ([Hoard for Unity](Hoard-for-Unity)) that aren't on the list show below it,
 with what they use and their credits, and **Add to the list**.
@@ -34,14 +37,17 @@ A Unity version marked ✕ isn't installed on this computer: the project is made
 that version to open it. The name is checked as you type, as ALCOM checks it (a name Windows can't use as a folder
 name, one already there).
 
-**Add packages** adds VPM packages from your repositories. **Put in products from your library** chooses products
+[Hoard for Unity](Hoard-for-Unity) is in a new project to begin with (its repository is added for you if you haven't
+got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
+that works in the project's Unity, to tick (with a version, if you'd rather not have the newest), then **Add the
+chosen packages**. **Put in products from your library** chooses products
 you've downloaded, and which of their files: a product with several packages (one for PC, one for Quest, a few
 variants) asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
 What the products need ([What it needs](Downloads#the-downloads-view): lilToon, Poiyomi Toon, Modular Avatar, VRCFury,
 NDMF, Avatar Optimizer, the VRChat SDK) is offered beside them, to add with a click; the repository it comes from is
 added for you.
 
-**Make the project** makes it as a task (in **Tasks**, where **Stop** stops it): the template, its packages, then
+**Make the project** makes it as a task (see [Projects' tasks](#projects-tasks)): the template, its packages, then
 your products. A `.unitypackage` goes straight into the project (as ALCOM puts one in, without opening Unity), a VPM
 package in a `.zip` goes into `Packages`, and whatever those packages need is installed with them.
 
@@ -66,9 +72,12 @@ template, so ALCOM can make the same project. ALCOM can't open a package inside 
 
 ## Managing a project
 
-**Manage** shows a project's packages, each with its version and any update. From there:
+**Manage** shows a project, with tabs of its own: **Packages** (each with its version and any update), **Add
+packages**, **From your library**, and, when [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) has reported on it,
+what it found. From there:
 
-- **Add packages**, **Update** one or all of them, or **Remove** one (with what only it needed).
+- **Add packages** (its tab: tick them, then **Add the chosen packages**), **Update** one or all of them, or
+  **Remove** one (with what only it needed).
 - **Another version of a package**: choose a package's version (the button with its number on it) to see every
   version that works in the project's Unity, newest first, and install any of them, an older one too. The packages
   it needs change to match. **Add packages** can choose a version as well, instead of the newest.
@@ -87,18 +96,31 @@ template, so ALCOM can make the same project. ALCOM can't open a package inside 
   downloaded again.
 - What [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) reports about it: the products it uses, which have
   updates, and its credits.
+- **Delete from this computer...**: the project's folder is deleted, and it's taken off the list. It's backed up into
+  your backups folder first, unless you untick that (without a backup, it can't be got back), and only once you've
+  typed its name. Hoard won't delete a project Unity has open, or one that holds its own folders (the downloads
+  folder, or your backups folder).
 
 Every change to packages is shown before it's made: what's installed, what's removed and why, and anything old the
-new packages replace. It's made as a task; **Stop** puts everything back as it was. If Unity has the project open,
+new packages replace. It's made as a task (see [Projects' tasks](#projects-tasks)); **Stop** puts everything back as
+it was. If Unity has the project open,
 Hoard says so: close it first, so nothing it has open is replaced under it.
 
 Each package download is checked against the SHA-256 its repository lists for it, and downloads are kept where ALCOM
 keeps them, so neither downloads one twice.
 
+## Projects' tasks
+
+Making a project, changing its packages, putting products in it, backing it up or deleting it, and refreshing the
+repositories are Projects' tasks, and they run on their own, beside the rest of Hoard's: a project's change never
+waits behind a sync or a download, and they never wait behind it. Projects' tasks wait their turn after each other.
+What Projects is doing shows at its top, with **Stop**, and in **Tasks**. **Stop** stops a task at its next step, and
+puts back what it was changing; it never closes a store's browser that a download is using.
+
 ## Repositories
 
 Where packages come from: VRChat's own (Official and Curated) and any you add, the same list ALCOM and the Creator
-Companion use. **Add a repository** takes its address; for a private one, **For a private repository** takes the
+Companion use. **Add a repository**, at the top, takes its address; for a private one, **For a private repository** takes the
 headers it asks for, sent only to its own address. **Refresh them all** fetches the newest listing of each.
 
 ## Unity and folders

@@ -25,6 +25,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   needs.py             What it needs: the GUIDs each package names and has, read in the background; known_tools.json
   previous.py          Previous versions: the file an update replaces, kept in the product's folder, and Restore
   sets.py              Sets: products grouped to use together (sets.json), listed in catalog.json for Import set
+  wishlists.py         wishlists: reading them from the stores and saved pages, and a product from its store link
   shortlinks.py        short links for shared sets: Hoard's share server (share/), through egress.send
   backup.py            Backup and restore: settings, tags, sets, choices and the library list in one file
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
@@ -282,6 +283,26 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 
+## Sets and wishlists (`sets.py`, `wishlists.py`)
+
+Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with sets, in **Sets and wishlists**.
+
+- **A product's picture** in a set is `/setpic/<set>/<place>?p=<hash>` (`server.pic_for`: the first 12 hex digits
+  of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture
+  only when `p` names the product at that place now, and the browser never shows one it kept for another.
+- **Suggested tags:** `library.common_words()` (the same words Hoard suggests for a store's products) over a
+  wishlist's product names gives `words` in `/api/sets`; the page filters by them, by price range (in one currency)
+  and folds what you own and what you don't.
+- **Add products by link** (`/api/sets`, `add-links`, at most 30): `wishlists.from_product_page()` takes only a
+  product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io (`LINK_HOSTS`) and reads it through
+  `server.read_store_page()`, which is `fetch_public` held to that store's hosts, redirects included, sending no
+  sign-in. Booth's item JSON (`booth.pm/<lang>/items/<id>.json`) gives a Booth product; other pages give it from
+  their schema.org Product (JSON-LD) or their Open Graph tags. `SetStore.add_products()` keeps what's read through
+  `clean_product()`, the same check as a set's other products (a link only to the store's own public page). The answer says for each link what was
+  added or why not.
+- **Reading wishlists again** is a job (`wishlists`); when it ends, the page loads the sets again
+  (`jobEnded` in `shared.js`), so the lists it changed show at once.
+
 ## Projects (`vpm/`)
 
 Projects is a project manager that works as [vrc-get and ALCOM](https://github.com/vrc-get/vrc-get) do, written in
@@ -316,7 +337,13 @@ vpm/
 ```
 
 Every change to a project is a job (`jobs.py`, task "project"), so it's in Tasks and Stop stops it; the page asks
-the server what a change will do first (`/api/vpm/preview`) and shows it. Only projects on the list are changed:
+the server what a change will do first (`/api/vpm/preview`) and shows it. Projects' jobs run in a lane of their own
+(`srv.project_jobs`, a second `Jobs` with `lane=PROJECTS`; see [The job queue and Tasks](#the-job-queue-and-tasks)),
+so they never wait behind a sync or a download. New projects get Hoard for Unity (`api.HOARD_PACKAGE`) unless the
+page leaves it out, its repository (`api.HOARD_REPO`) added first when it isn't there. Deleting a project
+(`/api/vpm/delete-project`, only with its name as `confirm`) is a project job too: `api.Service.deletable()` refuses a
+folder that isn't a listed Unity project, that Unity has open, that's too high up, or that holds Hoard's data,
+downloads or backups folder; then it's backed up (unless asked not to), taken off the list, and deleted. Only projects on the list are changed:
 `api.Service.listed()` checks each path the page sends. Downloads go through `egress.fetch` like everything else:
 public addresses only, a repository's headers sent to its own host only, and a package's SHA-256 checked when its
 listing gives one. `tests/test_vpm_resolve.py` is vrc-get's own resolver tests, ported; `tests/test_vpm_version.py`
@@ -420,6 +447,16 @@ current job, the queue and the history; `POST /api/queue/remove`, `/api/queue/cl
 change them. While the hidden library is locked, `public_job()` masks hidden products' names in job state, logs
 and labels (`/api/status`, `/api/library`, `/api/assets`, `/api/tasks`).
 
+Projects' tasks have a second `Jobs`, `lane=PROJECTS` (`server.project_jobs`): its own queue, runner, thread and
+history (`project-tasks.json`, job ids starting with `p`), so a project's change and a download run side by side. Each
+lane's progress stays its own: `common.set_lane()` marks a job's thread, and `capture_log` and `log`/`tick` pass a
+message only to the sinks of the lane it was said in (a thread never marked is the main lane's). `GET /api/tasks`
+gives both lanes (`current` and `project`, the queues together, the history merged newest first); `/api/status` adds
+`project_job`; `POST /api/cancel` takes `{"lane": "projects"}`; a waiting job's id says its lane. Projects' Stop
+(`cancel` and `force_stop` alike) only asks its job to stop at its next step, which puts back what it was changing:
+it never ends the store browsers or a sign-in window, which are the main lane's. Closing or quitting Hoard waits for,
+or stops, both lanes (`app._lanes`).
+
 `downloader.with_retries()` wraps each file download (Booth, Gumroad, itch.io, and Jinxxy's click-to-download):
 a failure is tried again `download_retries` times after `RETRY_WAITS`, except for refusals that can't change
 (`worth_retrying`: 4xx answers such as 404/403, `NotLoggedIn`, `UnsafeRequest`, `UnsafePath`). A Stop is still
@@ -455,8 +492,10 @@ is running, `make_way` stops it safely and queues it again after yours. Tasks sh
 
 `updater.py` asks `api.github.com/repos/<repo>/releases` (through egress) and picks the highest published
 `vX.Y.Z` release: drafts, pre-releases and `unity-v` tags are ignored. It asks when **Check now** is chosen
-(`POST /api/update/check`), and at start once a day only when `check_for_updates` is on; the last answer is kept in
-`update.json`. A copy that can't install an update gets `how` in `/api/update` (`updater.how_to_update`): the
+(`POST /api/update/check`) and, while `check_for_updates` is on, in the background each time the desktop app starts
+and once a day after that (`Updates.check_in_background`, a daemon thread); the last answer is kept in
+`update.json`. `check_for_updates` is on for new installs (5.1.0); a settings file that already says `false` keeps
+it off. A copy that can't install an update gets `how` in `/api/update` (`updater.how_to_update`): the
 Mac app's `.pkg` for its chip, the Flatpak's `.flatpak` (`paths.in_flatpak`), or the releases page.
 `POST /api/update/install` works only in the installed Windows app (an `unins*.exe` beside
 `Hoard.exe`) and never during a job: it downloads `Hoard-Setup-<version>.exe` into `updates/`, requires its SHA-256

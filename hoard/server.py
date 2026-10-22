@@ -9,6 +9,7 @@ Content-Security-Policy; everything else is sandboxed.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -30,9 +31,9 @@ from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_do
                          restore_previous,
                          last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
-from .jobs import MAX_SKIP, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
+from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import is_network_error
-from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
+from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, common_words, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
@@ -64,7 +65,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite",
            "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
            "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
-           "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show")
+           "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show", "/api/vpm/delete-project")
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
@@ -141,6 +142,13 @@ def public_job(job: dict, hidden_names: list[str] | None = None) -> dict:
             out["report"] = {k: [mask_names(str(x), hidden_names) for x in v] if isinstance(v, list) else v
                              for k, v in out["report"].items()}
     return out
+
+
+def pic_for(key: str) -> str:
+    """Which product a set's picture address is for (/setpic/<set>/<place>?p=...): a place in a list is another
+    product's once one before it is taken out, so the address names the product too, and a picture kept by the
+    browser for that place is never shown for the next one."""
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
 
 
 def mask_names(text: str, names: list[str]) -> str:
@@ -422,6 +430,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.lib = Library(LIBRARY_FILE)
         forget_deleted_signins(cfg, self.lib)   # a sign-in folder deleted while Hoard was closed (issue #31)
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index)
+        self.project_jobs = Jobs(cfg, self.lib, lane=PROJECTS)   # Projects' tasks: a lane of their own (see Jobs)
         # The downloads index: rebuilt outside the lock, one rebuild at a time (review finding P-07). _wanted counts
         # "the downloads changed"; _built_for is the count the current index was built for.
         self._index, self._index_lock = None, threading.Lock()
@@ -438,7 +447,25 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
         self._by_key = (None, {})       # (asset_by_key's map, and the index it was made from)
         self.vpm = vpm_api.Service()   # Projects (hoard/vpm): the repositories, loaded once
-        self.jobs.project_runner = lambda what: self.vpm.run(what, self.asset_by_key)
+        self.project_jobs.project_runner = lambda what: self.vpm.run(what, self.asset_by_key)
+
+    def lane(self, name) -> Jobs:
+        """The jobs of a lane: Projects' (PROJECTS), else the main one."""
+        return self.project_jobs if name == PROJECTS else self.jobs
+
+    def lanes(self) -> tuple[Jobs, Jobs]:
+        return self.jobs, self.project_jobs
+
+    def working(self) -> bool:
+        """Is a task running, or waiting its turn, in either lane? (Closing Hoard asks first.)"""
+        return any(jobs.state.get("running") or jobs.state.get("queue") for jobs in self.lanes())
+
+    def tasks(self) -> dict:
+        """The Tasks tab, both lanes: what's running in each, what's waiting, and what finished, newest first."""
+        main, pj = self.jobs.tasks(), self.project_jobs.tasks()
+        history = sorted(main["history"] + pj["history"], key=lambda h: h.get("ended") or "", reverse=True)
+        return {"current": main["current"], "project": pj["current"], "queue": main["queue"] + pj["queue"],
+                "history": history}
 
     def asset_by_key(self, key) -> dict | None:
         """A downloaded product, by its tag key (Projects: your library in a project). The keys are looked up in a
@@ -726,7 +753,7 @@ class Handler(BaseHTTPRequestHandler):
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
             keys = {i["tag_key"] for i in shown}
             hidden_now = set() if unlocked else set(marks["hidden"])
-            mine = [{"id": x["id"], "name": x["name"], "items": [k for k in x["items"] if k not in hidden_now],
+            mine = [{"id": x["id"], "name": x["name"], "kind": x.get("kind"), "items": [k for k in x["items"] if k not in hidden_now],
                      "owned": len([k for k in x["items"] if k in keys])} for x in sets.SetStore().load()["sets"]]
             return self._json({"items": shown, "tagset": tag_overview(tagdata, counted), "stores": stores,
                                "privacy": privacy, "sets": mine,
@@ -744,15 +771,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
             return self._json(self._download_choices(), compress=True)
         if path == "/api/tasks":   # the Tasks tab: running, waiting and finished jobs
-            tasks, hidden = srv.jobs.tasks(), self._hidden_names()
+            tasks, hidden = srv.tasks(), self._hidden_names()
             if hidden:
                 def mask(job):
                     return {**job, **public_job({k: job.get(k) for k in ("message", "log", "report", "label", "transfer") if k in job}, hidden)}
                 tasks = {"current": mask(tasks["current"]) if tasks["current"] else None,
+                         "project": mask(tasks["project"]) if tasks["project"] else None,
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
         if path == "/api/status":
             return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
+                               "project_job": public_job(srv.project_jobs.state, self._hidden_names()),
                                "routine": routine_record()["found"]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
@@ -829,6 +858,8 @@ class Handler(BaseHTTPRequestHandler):
             sid, _, n = path[len("/setpic/"):].partition("/")
             s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
             key = s["items"][int(n)] if s and n.isdigit() and int(n) < len(s["items"]) else None
+            if key and parse_qs(u.query).get("p", [""])[0] != pic_for(key):
+                key = None   # an address from before a product was taken out: that place is another product's now
             p = (s.get("products") or {}).get(key) if key else None
             hidden = key in MarkStore().keys("hidden") and not self._unlocked()
             url = sets.product_picture(p["store"], p.get("thumbnail")) if p and not hidden else None
@@ -1014,8 +1045,8 @@ class Handler(BaseHTTPRequestHandler):
                     pic = "/thumb/" + quote(i["key"], safe=":")
                 elif a and a.get("thumb"):
                     pic = "/files/" + quote(a["thumb"]) + (f"?v={a['thumb_v']}" if a.get("thumb_v") else "")
-                elif p.get("thumbnail"):
-                    pic = f"/setpic/{s['id']}/{n}"
+                elif p.get("thumbnail"):   # (with the product it's for: a place in the list is another's once one goes)
+                    pic = f"/setpic/{s['id']}/{n}?p={pic_for(key)}"
                 else:
                     pic = None
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
@@ -1027,11 +1058,40 @@ class Handler(BaseHTTPRequestHandler):
                              "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
                              "local": store == "local", "mark": mark,
                              **{k: p[k] for k in ("price", "was") if p.get(k)}})   # on a wishlist: what it costs
+            if s.get("kind") == "wishlist":   # suggested tags, from words its products' names share, to narrow it down
+                block = {str(w).lower() for w in (srv.cfg.get("tags") or {}).get("blocklist", [])}
+                for row, words in zip(rows, common_words([r["name"] for r in rows], 2, 0.5, block)):
+                    row["words"] = sorted(words)
             out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                         "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
                         "short": (s.get("short") or {}).get("expires"), "items": rows,
                         **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
+
+    def _add_links(self, sid: str, links):
+        """Products added to a set or wishlist by their store links (at most 30): each one's public page read
+        (wishlists.from_product_page), what was added and what wasn't, and why."""
+        from . import wishlists
+        if not isinstance(links, list) or not links:
+            return self._json({"error": "Paste a product's link."}, 400)
+        if not any(x["id"] == sid for x in sets.SetStore().load()["sets"]):
+            return self._json({"error": "That set isn't there anymore."}, 404)
+        got, said = [], []
+        for link in [str(x)[:2000] for x in links[:30]]:
+            try:
+                p = wishlists.from_product_page(link, read_store_page)
+            except wishlists.LinkError as e:
+                said.append({"link": link[:200], "error": str(e)})
+                continue
+            got.append(p)
+            said.append({"link": link[:200], "added": p["name"]})
+        try:
+            if got:
+                sets.SetStore().add_products(sid, got)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        threading.Thread(target=rebuild_catalog_quietly, args=(self.server,), daemon=True).start()
+        return self._json({"ok": True, "links": said})
 
     def _set_code(self, sid: str):
         """A set and its share code: (set, code, how many products are in it), or a Response saying why not. Hidden
@@ -1214,7 +1274,7 @@ class Handler(BaseHTTPRequestHandler):
         one = lambda k: (query.get(k) or [""])[0][:2000]  # noqa: E731
         try:
             if path == "/api/vpm":
-                return self._json({**srv.vpm.overview(), "job": public_job(srv.jobs.state, self._hidden_names())},
+                return self._json({**srv.vpm.overview(), "job": public_job(srv.project_jobs.state, self._hidden_names())},
                                   compress=True)
             if path == "/api/vpm/project":
                 found = srv.vpm.project(one("path"))
@@ -1247,7 +1307,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, b"Not found", "text/plain")
 
     def _vpm_job(self, what: dict):
-        started = self.server.jobs.start("project", [], project=what)
+        started = self.server.project_jobs.start("project", [], project=what)
         if not started:
             return self._json({"error": "That's already waiting its turn."}, 409)
         return self._json({"ok": True, "queued": started == "queued"})
@@ -1341,6 +1401,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if path == "/api/vpm/remove-project":
                 return self._json({"ok": listing.remove(srv.vpm.listed(body.get("path")))})
+            if path == "/api/vpm/delete-project":   # from this computer: only with its name typed, as a task
+                where = srv.vpm.listed(body.get("path"))
+                if str(body.get("confirm") or "") != Path(where).name:
+                    return self._json({"error": "Type the project's name to delete it."}, 400)
+                srv.vpm.deletable(where)   # (said now when it can't be: Unity has it open, say)
+                return self._vpm_job({"op": "delete", "path": where, "name": Path(where).name, "backup": body.get("backup") is not False})
             if path == "/api/vpm/favorite":
                 listing.note(srv.vpm.listed(body.get("path")), favorite=body.get("on") is True)
                 return self._json({"ok": True})
@@ -1688,6 +1754,8 @@ class Handler(BaseHTTPRequestHandler):
                                                for u in body["photos"][:sets.MAX_PHOTOS + 1]]}
                 except ValueError as e:
                     return self._json({"error": str(e)}, 400)
+            if body.get("action") == "add-links":   # Add products by link: each product's public page, read
+                return self._add_links(str(body.get("id", "")), body.get("links"))
             if body.get("action") == "share":
                 return self._share_set(str(body.get("id", "")))
             if body.get("action") == "short":   # Make a short link, or update the one it has
@@ -1735,16 +1803,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._import_wishlists(body)
         if path == "/api/itch-key":
             return self._itch_key(body)
-        if path == "/api/cancel":
-            return self._json({"ok": srv.jobs.cancel()})
+        if path == "/api/cancel":   # lane: "projects" for Projects' task
+            return self._json({"ok": srv.lane(body.get("lane")).cancel()})
         if path == "/api/force-stop":   # any task, now (Tasks: Force stop)
-            return self._json({"ok": srv.jobs.force_stop()})
-        if path == "/api/queue/remove":   # a job waiting its turn (issue #49)
-            return self._json({"ok": srv.jobs.remove(str(body.get("id") or "")[:20])})
+            return self._json({"ok": srv.lane(body.get("lane")).force_stop()})
+        if path == "/api/queue/remove":   # a job waiting its turn (issue #49); Projects' ids start with "p"
+            job_id = str(body.get("id") or "")[:20]
+            return self._json({"ok": srv.lane(PROJECTS if job_id.startswith("p") else None).remove(job_id)})
         if path == "/api/queue/clear":
-            return self._json({"ok": True, "removed": srv.jobs.clear_queue()})
+            return self._json({"ok": True, "removed": sum(jobs.clear_queue() for jobs in srv.lanes())})
         if path == "/api/tasks/clear":
-            srv.jobs.clear_history()
+            for jobs in srv.lanes():
+                jobs.clear_history()
             return self._json({"ok": True})
         if path == "/api/update/check":
             try:
@@ -1767,8 +1837,16 @@ class Handler(BaseHTTPRequestHandler):
             kind = "file" if body.get("kind") == "file" else "folder"
             if not srv.picking.acquire(blocking=False):   # one picker at a time, over the window
                 return self._json({"error": "A picker is already open."}, 409)
-            # It opens in the downloads folder, Hoard's own setting: never a path the request names
+            # It opens in the downloads folder, or Projects' projects or backups folder: Hoard's own settings, never a
+            # path the request names
             start = root_dir(srv.cfg)
+            try:
+                if body.get("start") == "projects":
+                    start = Path(srv.vpm.settings().default_project_path() or start)
+                elif body.get("start") == "backups":
+                    start = srv.vpm.backups_folder()
+            except vpm_api.ProjectsError:
+                pass
             try:
                 chosen = srv.pick_path(kind, str(start) if start.is_dir() else str(Path.home()))
             except Exception as e:   # the window went away, or the system has no picker
@@ -1857,7 +1935,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/quit":
             if not srv.quit_app:
                 return self._json({"error": "Hoard is running as a server; stop it where it was started."}, 409)
-            if (srv.jobs.state.get("running") or srv.jobs.state.get("queue")) and not body.get("anyway"):
+            if srv.working() and not body.get("anyway"):
                 return self._json({"busy": True, "error": "Hoard is still working."}, 409)   # the page asks what to do
             threading.Timer(0.3, srv.quit_app).start()   # after this answer is on its way
             return self._json({"ok": True})
@@ -2036,6 +2114,17 @@ def read_photo_page(url: str) -> str | None:
                                            "like Gecko) Chrome/140.0 Safari/537.36", "Accept": "text/html"},
                        sets.MAX_PHOTO_PAGE, hosts=sets.PAGE_HOSTS)
     return got[0].decode("utf-8", "replace") if got and got[1] in ("text/html", "application/xhtml+xml") else None
+
+
+def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:
+    """A store's public page (or Booth's item JSON), for Add products by link: only from those hosts (https,
+    redirects included), at public addresses, sending no sign-in. (Its text, its content type), or None."""
+    from .wishlists import MAX_PRODUCT_PAGE
+    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
+                                           "like Gecko) Chrome/140.0 Safari/537.36",
+                             "Accept": "application/json" if url.endswith(".json") else "text/html"},
+                       MAX_PRODUCT_PAGE, hosts=hosts)
+    return (got[0].decode("utf-8", "replace"), got[1]) if got else None
 
 
 def forget_short_links(records: list[dict]) -> None:

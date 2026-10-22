@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -81,6 +82,77 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 
+    def test_the_whole_window_and_its_tabs(self):
+        """Projects is a place of its own, the whole window below the bar, with its views as tabs; its rows alternate;
+        Add a repository comes before the list; Add a project opens the system's folder picker; a project can be
+        deleted from this computer, only with its name typed; and its task shows at the top, with Stop."""
+        page = self.page
+        box = page.locator("#projectsWin").bounding_box()
+        bar = page.evaluate("() => document.querySelector('header').getBoundingClientRect().bottom")
+        self.assertEqual((box["x"], box["width"]), (0, 1280), "the whole width")
+        self.assertLessEqual(abs(box["y"] - bar), 2, "from the bar down")
+        self.assertGreaterEqual(box["y"] + box["height"], 899, "to the bottom")
+        self.assertEqual(page.locator(".pj-tabs .pj-tab").all_inner_texts(), ["Projects", "Repositories", "Backups", "Unity and folders"])
+        rows = page.locator("#projectsBody .pj-list > li")
+        colour = lambda n: rows.nth(n).evaluate("e => getComputedStyle(e).backgroundColor")  # noqa: E731
+        self.assertNotEqual(colour(0), colour(1), "rows alternate")
+        page.click(".pj-tabs [data-pj=repos]")
+        page.locator("#pjRepoUrl").wait_for()
+        order = page.evaluate("() => [document.querySelector('#pjRepoUrl'), document.querySelector('#projectsBody .pj-list')]"
+                              ".map(e => e.getBoundingClientRect().top)")
+        self.assertLess(order[0], order[1], "Add a repository first, then the list")
+        page.click(".pj-tabs [data-pj=back]")
+        # Add a project...: the system's own folder picker, opening in the projects folder
+        mine = self.tmp / "Unity" / "Picked Project"
+        for sub in ("Assets", "Packages", "ProjectSettings"):
+            (mine / sub).mkdir(parents=True)
+        asked = []
+        self.srv.pick_path = lambda kind, start: asked.append((kind, start)) or str(mine)
+        page.reload()
+        page.wait_for_function("() => DATA && DATA.can_pick")
+        page.click("#projectsTab")
+        page.click("[data-pj=add]")
+        page.locator(".pj-row", has_text="Picked Project").wait_for()
+        self.assertEqual(asked[0][0], "folder")
+        # Delete from this computer: the button waits for its name
+        ran = []
+        self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
+        page.locator(".pj-row", has_text="Picked Project").locator("[data-pj=manage]").click()
+        page.click("[data-pj=delete]")
+        sure = page.locator("dialog.pj-dlg", has_text="Delete Picked Project from this computer?")
+        self.assertTrue(sure.locator("#pjDelBackup").is_checked(), "backed up first, unless you untick it")
+        self.assertTrue(sure.locator("#pjDelGo").is_disabled())
+        sure.locator("#pjDelName").fill("Picked")
+        self.assertTrue(sure.locator("#pjDelGo").is_disabled())
+        sure.locator("#pjDelName").fill("Picked Project")
+        sure.locator("#pjDelGo").click()
+        for _ in range(100):
+            if ran:
+                break
+            page.wait_for_timeout(100)
+        self.assertEqual((ran[0]["op"], ran[0]["name"], ran[0]["backup"]), ("delete", "Picked Project", True))
+        # what Projects' own lane is doing: at the top, with Stop
+        from hoard.common import log
+        going = threading.Event()
+
+        def slow(what):
+            while not going.is_set():
+                log("Backing up, slowly")
+                time.sleep(0.05)
+            return "Done."
+        self.addCleanup(going.set)
+        self.srv.project_jobs.project_runner = slow
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        page.click("[data-pj=backup]")
+        page.locator("dialog.pj-dlg button[value=yes]").click()
+        strip = page.locator("#pjJob")
+        # (its message, not only Stop: the delete before may still show as it ended, until the next look 1.5s on)
+        strip.locator(".pj-job-msg", has_text="Backing up, slowly").wait_for()
+        self.assertTrue(strip.locator("[data-pj=stopjob]").is_visible())
+        strip.locator("[data-pj=stopjob]").click()
+        strip.wait_for(state="hidden")
+        self.assertEqual(self.srv.project_jobs.history[-1]["outcome"], "stopped")
+
     def test_a_project(self):
         page = self.page
         page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
@@ -88,7 +160,13 @@ class ProjectsPanel(unittest.TestCase):
         text = page.locator("#projectsBody").inner_text()
         self.assertIn("Some packages aren't installed the way the project says.", text)
         self.assertIn("Unity 2022.3.22f1 isn't installed", text)
-        self.assertIn("What Hoard for Unity found in it", text, "its report, with its credits")
+        # its tabs: Packages, Add packages, From your library, and what Hoard for Unity reported of it
+        tabs = page.locator(".pj-subs .pj-tab")
+        self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report"])
+        page.click(".pj-subs [data-sub=report]")
+        page.locator(".proj", has_text="What Hoard for Unity found in it").wait_for()
+        page.click(".pj-subs [data-sub=packages]")
+        page.locator(".pj-pk").wait_for()
         avatars = page.locator(".pj-pk tr", has_text="com.vrchat.avatars")
         self.assertIn("Not installed", avatars.inner_text())
         self.assertIn("Update to 3.10.5", avatars.inner_text())
@@ -137,15 +215,21 @@ class ProjectsPanel(unittest.TestCase):
         page.locator("dialog.pj-dlg .linkish", has_text="Rusk").click()
         page.locator("dialog.pj-dlg", has_text="rusk.unitypackage").locator("button[value=yes]").click()
         page.locator(".pj-pre", has_text="rusk.unitypackage").wait_for()
+        # Hoard for Unity is in a new project unless you leave it out
+        self.assertIn("Hoard for Unity", page.locator(".pj-chips").inner_text())
+        # Add packages: a view of its own (not a window over the page), and back to the new project
         page.click("[data-pj=addpkg]")
-        page.locator("dialog.pj-dlg input[value='com.vrchat.avatars']").check()
+        page.locator(".pj-addlist input[value='com.vrchat.avatars']").check()
+        self.assertEqual(page.locator("dialog[open]").count(), 0)
         # the newest unless another version is chosen (#160)
-        pick = page.locator("dialog.pj-dlg .pj-pick-ver")
-        page.locator("dialog.pj-dlg .pj-pick-ver option[value='3.7.0']").wait_for(state="attached")
+        pick = page.locator(".pj-addlist .pj-pick-ver")
+        page.locator(".pj-addlist .pj-pick-ver option[value='3.7.0']").wait_for(state="attached")
         self.assertEqual(pick.locator("option").evaluate_all("l => l.map(o => o.value)"), ["", "3.10.5", "3.7.0"])
         pick.select_option("3.7.0")
-        page.locator("dialog.pj-dlg button[value=yes]").click()
+        self.assertIn("1 chosen", page.locator(".pj-addbar").inner_text())
+        page.click("[data-pj=addchosen]")
         self.assertIn("3.7.0", page.locator(".pj-chips .pill", has_text="com.vrchat.avatars").inner_text())
+        self.assertEqual(page.input_value("#pjName"), "CON", "what was typed is kept")
 
     def test_unity_and_folders(self):
         page = self.page
@@ -170,7 +254,7 @@ class ProjectsPanel(unittest.TestCase):
         """Right-click a downloaded product (or choose several with Select): Projects, Put in a project..."""
         page = self.page
         ran = []
-        self.srv.jobs.project_runner = lambda what: ran.append(what) or "Done."   # (what the task is asked to do)
+        self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."   # (Projects' own lane)
         page.keyboard.press("Escape")
         page.locator("#projectsWin").wait_for(state="hidden")
         page.locator(".slot", has_text="Rusk").first.click(button="right")

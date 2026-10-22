@@ -48,8 +48,9 @@ is in [PRIVACY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/
 ## Your privacy
 
 - **Nothing is sent to the developer.** No accounts, no tracking, no analytics, no ads. Hoard only talks to the
-  stores you use, the servers that host their pictures, GitHub when it checks for updates (when you ask,
-  or daily if you turn that on), a photo site when you add a set's [photo](Sets#photos) by its page there, and
+  stores you use, the servers that host their pictures, GitHub when it checks for updates (when you ask, and
+  each time it starts and daily while it's open, unless you turn that off), a store's product page when you add a
+  product to a set or wishlist by its link (as anyone sees it, without your sign-in), a photo site when you add a set's [photo](Sets#photos) by its page there, and
   Hoard's share server when you make or open a [short link](Sets#short-links) for a set, which it can't read: the
   set is locked on your computer first.
 - **Updates are checked before they run.** Hoard only runs an installer whose SHA-256 matches both the

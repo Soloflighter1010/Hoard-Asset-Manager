@@ -102,6 +102,102 @@ def _store_of(url: str) -> str | None:
     return None
 
 
+# ----------------------------------------------------------------------------- a product by its link
+
+# each store's own site, which a product's page may send you on to (besides the page's own host, a creator's)
+LINK_HOSTS = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com", "www.jinxxy.com"),
+              "payhip": ("payhip.com", "www.payhip.com"), "itch": ()}
+MAX_PRODUCT_PAGE = 3 * 1024 * 1024
+
+
+class LinkError(ValueError):
+    """A link that isn't a product's page on a store, or whose page couldn't be read: why, in words to show."""
+
+
+def from_product_page(link: str, fetch) -> dict:
+    """A product added to a set or wishlist by its link (Add products by link): read from its public page, as anyone
+    can see it (no sign-in is sent). fetch(url, hosts) gives (text, content type) or None, from those hosts only.
+    Booth's item has its JSON beside its page; the other stores' pages say what they sell in their JSON-LD or Open
+    Graph tags. Returns product()'s shape; raises LinkError saying why not."""
+    import json
+    from .sets import product_link   # (here: sets uses this module's shapes)
+    store = _store_of(link if isinstance(link, str) else "")
+    url = product_link(store, (link or "").strip()) if store else None
+    path = urlparse(url or "").path
+    is_product = url and (store == "booth" and "/items/" in path or store == "gumroad" and "/l/" in path
+                          or store == "jinxxy" and path.count("/") == 2 or store == "payhip" and "/b/" in path
+                          or store == "itch" and len(path) > 1)
+    if not is_product:
+        raise LinkError("not a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io")
+    host = urlparse(url).hostname
+    if store == "booth":   # https://booth.pm/en/items/<id>.json: its name, price, shop and pictures
+        item = re.search(r"/items/(\d+)", path).group(1)
+        got = fetch(f"https://booth.pm/en/items/{item}.json", ("booth.pm",))
+        try:
+            data = json.loads(got[0]) if got else None
+        except ValueError:
+            data = None
+        if not isinstance(data, dict) or not data.get("name"):
+            raise LinkError("Booth didn't show that item (it may be gone, or for adults only)")
+        pics = [x.get("original") or x.get("resized") for x in data.get("images") or [] if isinstance(x, dict)]
+        return product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
+                       url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
+    got = fetch(url, tuple(dict.fromkeys((host,) + LINK_HOSTS[store])))
+    if not got or "html" not in got[1]:
+        raise LinkError("its page couldn't be read")
+    page = got[0]
+    found = _ld_product(page) or {}
+    meta = lambda prop: _meta(page, prop)  # noqa: E731
+    name = found.get("name") or meta("og:title")
+    if not name:
+        raise LinkError("its page doesn't say what it is")
+    creator = found.get("creator") or (host.split(".")[0] if store in ("gumroad", "itch") and host.count(".") == 2 else "") \
+        or (path.split("/")[1] if store == "jinxxy" else "") or meta("og:site_name")
+    amount, currency = found.get("price"), found.get("currency")
+    if amount is None:
+        amount, currency = meta("product:price:amount"), meta("product:price:currency")
+    price = parse_price(f"{amount} {currency}") if amount not in (None, "") and currency else None
+    if price is None and amount not in (None, "") and str(amount).strip() in ("0", "0.0", "0.00"):
+        price = {"text": "Free", "amount": 0.0, "currency": ""}
+    return product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+
+
+def _meta(page: str, prop: str) -> str:
+    """A <meta property|name="prop" content="..."> tag's content (either order), unescaped, or ""."""
+    import html as html_text
+    for pat in (rf'<meta[^>]+(?:property|name)=["\']{re.escape(prop)}["\'][^>]*\bcontent=["\']([^"\']*)',
+                rf'<meta[^>]+\bcontent=["\']([^"\']*)["\'][^>]*(?:property|name)=["\']{re.escape(prop)}["\']'):
+        m = re.search(pat, page, re.I)
+        if m:
+            return clean_text(html_text.unescape(m.group(1)), 300)
+    return ""
+
+
+def _ld_product(page: str) -> dict | None:
+    """The Product a page describes in its JSON-LD: name, image, creator, price and currency (its lowest offer)."""
+    import json
+    for block in re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', page, re.S | re.I)[:10]:
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue
+        for item in (data if isinstance(data, list) else data.get("@graph", [data]) if isinstance(data, dict) else []):
+            if not isinstance(item, dict) or "Product" not in str(item.get("@type")):
+                continue
+            offers = item.get("offers")
+            offers = [offers] if isinstance(offers, dict) else offers if isinstance(offers, list) else []
+            priced = [o for o in offers if isinstance(o, dict) and o.get("price") not in (None, "")]
+            image = item.get("image")
+            image = image[0] if isinstance(image, list) and image else image
+            who = item.get("brand") or item.get("author") or item.get("seller") or {}
+            return {"name": item.get("name") if isinstance(item.get("name"), str) else "",
+                    "image": image.get("url") if isinstance(image, dict) else image if isinstance(image, str) else None,
+                    "creator": who.get("name", "") if isinstance(who, dict) else who if isinstance(who, str) else "",
+                    "price": priced[0].get("price") if priced else None,
+                    "currency": priced[0].get("priceCurrency") if priced else None}
+    return None
+
+
 # ----------------------------------------------------------------------------- what's on a page
 
 # Booth's loved items (accounts.booth.pm/wish_lists): a card for each item, 20 to a page; above them, a button for

@@ -119,10 +119,65 @@ class Server(unittest.TestCase):
 
     def wait(self):
         for _ in range(300):
-            if not self.srv.jobs.state["running"] and not self.srv.jobs.state["queue"]:
-                return self.srv.jobs.history[0] if self.srv.jobs.history else None
+            jobs = self.srv.project_jobs   # (Projects' tasks: a lane of their own)
+            if not jobs.state["running"] and not jobs.state["queue"]:
+                return jobs.history[-1] if jobs.history else None   # (the newest)
             time.sleep(0.05)
         self.fail("the job didn't finish")
+
+    def test_projects_tasks_run_in_a_lane_of_their_own(self):
+        """A project's task never waits behind a sync or a download (or they behind it): Projects has its own queue
+        and thread. Tasks shows both, Stop stops a project's task without touching the store browsers, and a
+        project's task waiting its turn is taken off its own queue."""
+        from hoard import jobs as jobs_module
+        from hoard.common import capture_log, log
+        busy, ended, heard = threading.Event(), [], []
+        self.addCleanup(busy.set)
+
+        def verify(stores):   # a long job in the main lane, saying how it's going as it goes
+            with capture_log(heard.append):
+                while not busy.wait(0.02):
+                    log("the main lane's own")
+        self.srv.jobs._verify = verify
+        self.assertEqual(self.srv.jobs.start("verify", []), "started")
+        step = threading.Event()
+
+        def project(what):   # Projects' work, step by step, as hoard/vpm reports it
+            for n in range(400):
+                log(f"step {n}")
+                step.set()
+                time.sleep(0.02)
+            return "Done."
+        runs = []
+        self.srv.project_jobs.project_runner = lambda what: runs.append(what) or ("Refreshed." if len(runs) == 1 else project(what))
+        self.assertEqual(self.call("POST", "/api/vpm/refresh", {})[0], 200)
+        done = self.wait()
+        self.assertEqual((done["outcome"], done["message"], done["lane"]), ("done", "Refreshed.", "projects"),
+                         "done while the main lane's job still runs")
+        self.assertTrue(self.srv.jobs.state["running"])
+        with mock.patch.object(jobs_module, "end_browsers", lambda: ended.append(1) or True):
+            self.assertEqual(self.call("POST", "/api/vpm/refresh", {})[0], 200)   # (this one goes step by step)
+            self.assertTrue(step.wait(10))
+            self.assertEqual(self.call("POST", "/api/vpm/refresh", {})[1], {"ok": True, "queued": True})
+            status = self.call("GET", "/api/status")[1]
+            self.assertTrue(status["job"]["running"] and status["project_job"]["running"])
+            tasks = self.call("GET", "/api/tasks")[1]
+            self.assertEqual((tasks["current"]["task"], tasks["project"]["task"]), ("verify", "project"))
+            waiting = [q for q in tasks["queue"] if q["lane"] == "projects"]
+            self.assertTrue(waiting and waiting[0]["id"].startswith("p"))
+            self.assertEqual(self.call("POST", "/api/queue/remove", {"id": waiting[0]["id"]})[1], {"ok": True})
+            self.assertEqual(self.call("POST", "/api/cancel", {"lane": "projects"})[1], {"ok": True})
+            stopped = self.wait()
+        self.assertEqual(stopped["outcome"], "stopped")
+        self.assertIn("step 0", stopped["log"])
+        self.assertNotIn("the main lane's own", stopped["log"], "each lane hears its own job only")
+        self.assertTrue(heard and not any(str(x).startswith("step") for x in heard))
+        self.assertEqual(ended, [], "the store browsers are the main lane's: left alone")
+        self.assertTrue(self.srv.jobs.state["running"], "the main lane's job carries on")
+        self.assertEqual(len(self.srv.project_jobs.history), 2, "the refresh waiting its turn was taken off")
+        busy.set()
+        history = self.call("GET", "/api/tasks")[1]["history"]
+        self.assertEqual({h["lane"] for h in history}, {"projects", "main"} if any(h["task"] == "verify" for h in history) else {"projects"})
 
     def test_the_backups_panel(self):
         """Projects' backups: listed with which are old, the rule changed, old ones moved to another drive as a task,
@@ -207,6 +262,34 @@ class Server(unittest.TestCase):
         self.assertEqual(self.wait()["outcome"], "done")
         self.assertFalse((project / "Packages" / "com.vrchat.avatars").exists())
 
+    def test_hoard_for_unity_in_a_new_project(self):
+        """New project has Hoard for Unity in it unless you leave it out: its repository is added first when you
+        haven't got it (and a project is still made when it can't be reached, without it)."""
+        from hoard.vpm import api as vpm_api
+        data = _zip({"package.json": json.dumps({"name": "soloflighter.hoard", "version": "0.9.0", "displayName": "Hoard for Unity"})})
+        _Repo.files["/hoard.zip"] = data
+        _Repo.files["/hoard.json"] = json.dumps({"name": "Hoard", "id": "link.furryup.hoard", "url": f"{self.origin}/hoard.json",
+                                                 "packages": {"soloflighter.hoard": {"versions": {"0.9.0": {
+                                                     "name": "soloflighter.hoard", "version": "0.9.0", "url": f"{self.origin}/hoard.zip",
+                                                     "zipSHA256": hashlib.sha256(data).hexdigest()}}}}}).encode()
+        overview = self.call("GET", "/api/vpm")[1]
+        self.assertEqual(overview["hoard_for_unity"]["package"], "soloflighter.hoard")
+        self.assertFalse(overview["hoard_for_unity"]["repo_added"])
+        make = {"location": str(self.tmp / "Projects"), "template": "com.anatawa12.vrc-get.vrchat.avatars",
+                "unity": "2022.3.22f1", "packages": {"soloflighter.hoard": "*"}}
+        with mock.patch.object(vpm_api, "HOARD_REPO", f"{self.origin}/nowhere.json"):   # (can't be reached)
+            self.assertEqual(self.call("POST", "/api/vpm/create", {**make, "name": "Offline"})[0], 200)
+            done = self.wait()
+        self.assertEqual(done["outcome"], "done", done)
+        self.assertTrue((self.tmp / "Projects" / "Offline" / "Packages" / "com.vrchat.avatars").is_dir())
+        self.assertIn("made without it", "\n".join(done["log"]))
+        with mock.patch.object(vpm_api, "HOARD_REPO", f"{self.origin}/hoard.json"):
+            self.assertEqual(self.call("POST", "/api/vpm/create", {**make, "name": "With Hoard"})[0], 200)
+            done = self.wait()
+            self.assertEqual(done["outcome"], "done", done)
+            self.assertTrue(self.call("GET", "/api/vpm")[1]["hoard_for_unity"]["repo_added"])
+        self.assertTrue((self.tmp / "Projects" / "With Hoard" / "Packages" / "soloflighter.hoard" / "package.json").is_file())
+
     def test_only_listed_projects_are_touched(self):
         elsewhere = self.tmp / "NotListed"
         for sub in ("Assets", "Packages", "ProjectSettings"):
@@ -220,6 +303,55 @@ class Server(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": "relative"})[0], 400)
         self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(elsewhere)})[0], 200)
         self.assertEqual(self.call("GET", f"/api/vpm/project?path={quote(str(elsewhere))}")[0], 200)
+
+    def test_delete_a_project_from_this_computer(self):
+        """Only a listed project, only with its name typed, backed up first unless you say not to; never one that
+        holds Hoard's own folders (the backups folder, here)."""
+        project = self.tmp / "Unity" / "Old Idea"
+        for sub in ("Assets/Scenes", "Packages", "ProjectSettings"):
+            (project / sub).mkdir(parents=True)
+        (project / "Assets" / "Scenes" / "Main.unity").write_text("scene")
+        (project / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        os.chmod(project / "Assets" / "Scenes" / "Main.unity", 0o444)   # (read-only, as Unity or git can leave one)
+        body = {"path": str(project), "confirm": "Old Idea"}
+        self.assertEqual(self.call("POST", "/api/vpm/delete-project", body)[0], 400, "not on the list")
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(project)})[0], 200)
+        status, answer = self.call("POST", "/api/vpm/delete-project", {**body, "confirm": "old idea"})
+        self.assertEqual((status, answer["error"]), (400, "Type the project's name to delete it."))
+        # a backups folder inside the project would go with it: refused, and nothing deleted
+        settings = json.loads((self.vcc / "settings.json").read_text())
+        (self.vcc / "settings.json").write_text(json.dumps({**settings, "projectBackupPath": str(project / "Backups")}))
+        status, answer = self.call("POST", "/api/vpm/delete-project", body)
+        self.assertEqual(status, 400)
+        self.assertIn("inside this project", answer["error"])
+        backups = self.tmp / "Backups"
+        (self.vcc / "settings.json").write_text(json.dumps({**settings, "projectBackupPath": str(backups)}))
+        self.assertEqual(self.call("POST", "/api/vpm/delete-project", body)[1], {"ok": True, "queued": False})
+        done = self.wait()
+        self.assertEqual((done["outcome"], done["label"]), ("done", "Projects: Delete Old Idea from this computer"), done["message"])
+        self.assertFalse(project.exists())
+        self.assertEqual([z.name.startswith("Old Idea-") for z in backups.glob("*.zip")], [True], "backed up first")
+        self.assertNotIn(str(project), [p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"]])
+
+    def test_a_deleted_project_listed_by_another_name_comes_off_the_list(self):
+        """On Windows the list can hold a short name (C:\\Users\\RUNNER~1\\...) that resolves to a longer one: the
+        project was deleted but stayed on the list. A link to its folder stands in for a short name here."""
+        project = self.tmp / "Unity" / "Real Name"
+        for sub in ("Assets", "Packages", "ProjectSettings"):
+            (project / sub).mkdir(parents=True)
+        (project / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        try:
+            (self.tmp / "Linked").symlink_to(self.tmp / "Unity", target_is_directory=True)
+        except OSError:
+            self.skipTest("links can't be made here")
+        listed = str(self.tmp / "Linked" / "Real Name")
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": listed})[0], 200)
+        body = {"path": listed, "confirm": "Real Name", "backup": False}
+        self.assertEqual(self.call("POST", "/api/vpm/delete-project", body)[1], {"ok": True, "queued": False})
+        done = self.wait()
+        self.assertEqual(done["outcome"], "done", done["message"])
+        self.assertFalse(project.exists())
+        self.assertEqual([p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"] if "Real Name" in p["path"]], [])
 
     def test_versions_to_choose_from(self):
         """Manage project's and Add packages' version choice (#160): newest first, only those that work in the

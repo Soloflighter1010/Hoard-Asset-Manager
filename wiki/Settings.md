@@ -79,8 +79,9 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
     for each store (and Local) that you pick. Choose **Standard** again to go back.
 
   These apply to both views straight away.
-- **Updates:** **Check for updates automatically** (off unless you turn it on): once a day, when Hoard starts,
-  it asks GitHub whether there's a newer version. **Check now** asks straight away, and **Update to** installs
+- **Updates:** **Check for updates automatically** (on unless you turn it off, from 5.1; a Hoard you had before
+  keeps your choice): each time Hoard starts, and once a day while it's open, it asks GitHub in the background
+  whether there's a newer version. **Check now** asks straight away, and **Update to** installs
   it (in the app installed with `Hoard-Setup`). See [Installing Hoard](Installing-Hoard#updating). While an
   update is waiting (from 3.1.1), the Hoard logo at the top glows (and shakes now and then, unless motion is
   reduced): choose it to come straight here.
@@ -145,7 +146,7 @@ and keep it valid JSON.
 | `display.style` | `"standard"` | The style: `"standard"`, `"treasure"` or `"workbench"` (**Appearance** in Settings) |
 | `display.language` | `"system"` | `"system"` (match your computer), `"en"`, `"ja"` or `"ko"` (**Appearance** in Settings) |
 | `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
-| `check_for_updates` | `false` | Ask GitHub once a day, when Hoard starts, whether there's a newer version (the **Updates** checkbox in Settings) |
+| `check_for_updates` | `true` | Ask GitHub, in the background each time Hoard starts and once a day while it's open, whether there's a newer version (the **Updates** checkbox in Settings) |
 | `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |
 | `close_to_taskbar` | `true` | Closing Hoard's window minimizes it to the taskbar, and Hoard carries on (**Closing the window minimizes Hoard to the taskbar** in Settings) |
 | `local_copy` | `true` | Whether **Add your own** offers to copy into Hoard (`true`) or to list where it is (`false`). Set by your last choice |

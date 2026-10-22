@@ -1,6 +1,7 @@
 """The tour: offered once in the Library, then walked through on your own items, from the Library on to Downloads,
 each step that asks you to try something going on once you have; and from Settings, any time."""
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -126,9 +127,9 @@ class Tour(unittest.TestCase):
         self.title(page, "Tags")
         page.fill("#tagInput", "tour-tag")
         page.locator('#detail [data-act="addtyped"]').click()
-        self.title(page, "Sets")
+        self.title(page, "Sets and wishlists")
         page.click('#stores [data-store="Sets"]')   # opened: its wishlists and Mix and match are shown there
-        self.title(page, "Wishlists")
+        self.title(page, re.compile(r"^Wishlists$"))   # (not "Sets and wishlists", which has_text would match too)
         self.nxt(page)
         self.title(page, "Mix and match")
         self.nxt(page)

@@ -6,8 +6,9 @@ someone shared with you lists what it needs, and where to buy each.
 
 ## The Sets tab
 
-**Sets** is a tab beside the stores, in the [Library](Library) and in [Downloads](Downloads) (and **Sets** in the bar
-at the top of every page opens it in the Library). Each set is a big square tile: the picture you chose for it (see
+**Sets and wishlists** (called **Sets** before 5.1) is a tab beside the stores, in the [Library](Library) and in
+[Downloads](Downloads), with a colour and a heart of its own (and **Sets and wishlists** in the bar at the top of every
+page opens it in the Library). Each set is a big square tile: the picture you chose for it (see
 [Its picture](#its-picture)), or four of its products' pictures, with how many products it has and how many are
 downloaded, yours to download, or still to buy.
 
@@ -38,6 +39,10 @@ how to put it together) and **Photos** (below).
 - A product's details, in the Library or in Downloads, list its sets: **Add** puts it in another, **×** takes it
   out, and a set's name opens it in the Sets tab.
 - **Make a set** in **Projects** makes one of the products a Unity project uses.
+- **Add products by link...**, in an open set or wishlist (from 5.1): paste products' links on Booth, Gumroad,
+  Jinxxy, Payhip or itch.io, one a line. Hoard reads each one's page as anyone sees it (no sign-in is sent), from the
+  store's own site, for its name, creator, price and picture, and adds it, owned or not. A link that isn't a
+  product's page, or whose page can't be read, is left out, and Hoard says why.
 
 A set remembers what each product is when it's added (its name, creator, store page and picture), so it can be
 shown and shared whether or not the product is in your library now. Products are known by the same key tags use
@@ -140,7 +145,19 @@ already in your library show as yours.
 - Each time a wishlist is read again, it holds what the store's list does now, and a product whose price changed
   shows the new price with the old one struck through; one that's cheaper than before is marked, and **Tasks** lists
   them. A name, note or picture you gave a wishlist stays.
-- **New wishlist** makes one of your own, which you add products to as you would to a set.
+- **New wishlist** makes one of your own, which you add products to as you would to a set, or with **Add products by
+  link...**.
+
+An open wishlist (from 5.1) shows its products in two groups: **Not yours yet**, with what each costs, and **Yours
+already**. Click a group's heading to fold it away; it stays folded next time. Above them:
+
+- **Suggested tags**: words several of its products' names share, with how many have each. Click some to show only
+  the products whose names have them all.
+- **Price**: a range, from and to, in one of the wishlist's currencies (the one most of its prices are in, to begin
+  with; choose another beside it). A product priced in another currency, or with no price, is left out while a range
+  is set. **Clear** clears the tags and the range.
+
+The search box at the top narrows it down too.
 
 Hoard for Unity's **Sets** pill doesn't list wishlists: they're what you want, not what you use together.
 

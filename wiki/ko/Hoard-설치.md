@@ -1,4 +1,4 @@
-<!-- Translated from Installing-Hoard (English baad1192cc72). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Installing-Hoard (English 9ab876e03205). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Installing-Hoard">English</a> · <a href="Hoardのインストール">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 Hoard는 Windows, macOS, Linux(Flatpak)용 앱이에요. 세 가지 모두에서 소스로 실행할 수도 있어요.
@@ -19,7 +19,7 @@ Hoard는 Windows, macOS, Linux(Flatpak)용 앱이에요. 세 가지 모두에서
 
 **설정**의 **업데이트**에서 **지금 확인**을 고르세요. 새 버전이 있으면 **(버전)(으)로 업데이트**를 고르세요. Hoard가 GitHub 릴리스에서 설치 프로그램을 다운로드하고, 확인한 다음 닫고(진행 중인 다운로드는 다음에 이어서 해요), 설치하고 다시 열어요. 설치 프로그램의 SHA-256이 릴리스의 `SHA256SUMS-windows.txt`와 GitHub에 나온 파일 체크섬 둘 다와 맞을 때만 실행하고, 맞지 않으면 지워요. 새로고침이나 다운로드 중에는 업데이트하지 않아요. 끝날 때까지 기다리거나 **중지**하세요.
 
-**업데이트 자동 확인**(켜지 않으면 꺼져 있어요)을 켜면 Hoard가 시작할 때 하루에 한 번 GitHub에 물어봐요. 새 버전이 있으면 페이지 아래에 **(버전)(으)로 업데이트**가 보여요. 확인할 때 GitHub에 보내는 건 요청 자체뿐이에요. [보안과 개인정보](보안과-개인정보)를 보세요.
+**업데이트 자동 확인**(5.1부터는 끄지 않으면 켜져 있어요. 전부터 쓰던 Hoard는 내가 고른 그대로예요)이 켜져 있으면 Hoard가 시작할 때마다, 그리고 열려 있는 동안 하루에 한 번 백그라운드에서 GitHub에 물어봐요. 새 버전이 있으면 페이지 아래에 **(버전)(으)로 업데이트**가 보여요. 확인할 때 GitHub에 보내는 건 요청 자체뿐이에요. [보안과 개인정보](보안과-개인정보)를 보세요.
 
 Hoard가 업데이트를 직접 설치하는 건 `Hoard-Setup`으로 설치했을 때뿐이에요. 포터블 zip에서 꺼낸 사본, Mac 앱, Flatpak, Python으로 실행한 Hoard는 새 버전이 있다는 것과 어떤 파일을 받으면 되는지 알려 주고, 그 링크를 보여 줘요. 새 설치 프로그램은 언제든 직접 실행해도 돼요. 먼저 제거할 필요는 없고, 업데이트는 프로그램 파일을 모두 바꾸기 때문에 예전 버전의 흔적이 남지 않아요.
 

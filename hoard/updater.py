@@ -287,18 +287,21 @@ class Updates:
         return self.state
 
     def due(self) -> bool:
-        return bool(self.cfg.get("check_for_updates")) and time.time() - self.state["checked"] > DAY
+        """Are automatic checks on (Settings, Updates: on unless you turn them off)?"""
+        return bool(self.cfg.get("check_for_updates"))
 
-    def check_in_background(self) -> None:
-        """At start, when automatic checks are on and the last was over a day ago."""
-        if not self.due():
-            return
-
+    def check_in_background(self, every: float = DAY) -> None:
+        """When Hoard starts, while automatic checks are on: a check, in the background so nothing waits for GitHub,
+        then one a day for as long as Hoard stays open (it often does, in the taskbar). A check that fails (offline,
+        say) is said in Hoard's log, and tried again next time."""
         def run():
-            try:
-                self.check()
-            except Exception as e:
-                print(f"Couldn't check for updates ({type(e).__name__}: {e})")
+            while True:
+                if self.due():
+                    try:
+                        self.check()
+                    except Exception as e:
+                        print(f"Couldn't check for updates ({type(e).__name__}: {e})")
+                time.sleep(every)
         threading.Thread(target=run, daemon=True, name="update-check").start()
 
     def start_install(self, on_ready) -> str | None:

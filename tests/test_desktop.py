@@ -114,6 +114,12 @@ class _Harness(unittest.TestCase):
         app.has_console = lambda: True
         self.messages, self.opened = [], []
         app.running_file().unlink(missing_ok=True)
+        # no test asks GitHub: the check each start (on in a new Hoard) is test_updater's, and an answer kept in
+        # update.json would change what the other tests' pages say
+        from hoard import updater
+        quiet = unittest.mock.patch.object(updater.Updates, "check_in_background", lambda self, every=0: None)
+        quiet.start()
+        self.addCleanup(quiet.stop)
 
     def tearDown(self):
         webview, app.message, app.webbrowser.open, app.has_console = self.saved

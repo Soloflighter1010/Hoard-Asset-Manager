@@ -469,6 +469,77 @@ class Tab(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return {"status": e.code, **json.loads(e.read() or b"{}")}
 
+    def test_a_picture_follows_its_product_when_one_is_taken_out(self):
+        """A wishlist's products that aren't yours had their pictures at /setpic/<set>/<place>. Taking one out moved
+        every product after it up a place, so the browser, which keeps those pictures, showed each of them with the
+        picture of the one that had been there. The address names the product too, and an old one shows nothing."""
+        from hoard import server
+        pic = "https://booth.pximg.net/{}.jpg".format
+        made = sets.SetStore().put_wishlists([{"store": "booth", "list": "Loved items", "products": [
+            {"store": "booth", "name": f"Hat {n}", "url": f"https://booth.pm/en/items/{n}", "thumbnail": pic(n)}
+            for n in (1, 2, 3)]}])
+        sid = made["sets"][0]["id"]
+        self.addCleanup(mock.patch.stopall)
+        mock.patch.object(server, "fetch_picture", lambda url, referer=None: (url.encode(), "image/jpeg")).start()
+
+        def pictures():
+            return {i["name"]: i["pic"] for i in next(s for s in self.api("/api/sets")["sets"] if s["id"] == sid)["items"]}
+
+        def served(address):
+            import urllib.error
+            import urllib.request
+            try:
+                with urllib.request.urlopen(self.srv.entry_url().split("/#")[0] + address + f"&k={self.srv.key}") as r:
+                    return r.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code
+        before = pictures()
+        self.assertEqual(len(set(before.values())), 3)
+        self.assertEqual(served(before["Hat 2"]), pic(2))
+        self.api("/api/sets", {"action": "remove", "id": sid, "items": [tag_key("booth", "Hat 1")]})
+        after = pictures()
+        self.assertNotEqual(after["Hat 2"], before["Hat 2"], "Hat 2's picture has an address of its own")
+        self.assertNotEqual(after["Hat 2"], before["Hat 1"], "never the address Hat 1's picture was kept under")
+        self.assertEqual(served(after["Hat 2"]), pic(2))
+        self.assertEqual(served(after["Hat 3"]), pic(3))
+        self.assertEqual(served(before["Hat 1"]), 404, "Hat 1's old address: Hat 2 is in its place now, not shown for it")
+
+    def test_add_products_by_link(self):
+        """A list of your own can hold what you don't own yet: each product's link, read from its public page (Booth's
+        item JSON; JSON-LD, or Open Graph tags, on the others), from the store's own site only."""
+        from hoard import server
+        made = self.api("/api/sets", {"action": "create", "name": "Want", "items": [], "kind": "wishlist"})
+        pages = {
+            "https://booth.pm/en/items/4242.json": (json.dumps({"name": "Fox Hoodie", "price": "¥ 1,200", "shop": {"name": "Mochi Works"},
+                                                                "images": [{"original": "https://booth.pximg.net/c/fox.jpg"}]}), "application/json"),
+            "https://mochi.gumroad.com/l/snowcap": ('<html><head><script type="application/ld+json">{"@type": "Product", "name": "Snow Cap", '
+                                                    '"image": "https://public-files.gumroad.com/cap.png", "brand": {"name": "Mochi"}, '
+                                                    '"offers": {"price": "12.50", "priceCurrency": "USD"}}</script></head></html>', "text/html"),
+            "https://kitsu.itch.io/tail-pack": ('<meta property="og:title" content="Tail Pack &amp; More">'
+                                                '<meta content="https://img.itch.zone/tail.png" property="og:image">', "text/html"),
+        }
+        asked = []
+
+        def read(url, hosts):
+            asked.append((url, hosts))
+            return pages.get(url)
+        with mock.patch.object(server, "read_store_page", read):
+            got = self.api("/api/sets", {"action": "add-links", "id": made["made"], "links": [
+                "https://booth.pm/ja/items/4242", "https://mochi.gumroad.com/l/snowcap", "https://kitsu.itch.io/tail-pack",
+                "https://example.com/items/1", "https://booth.pm/en/items/999"]})
+        self.assertEqual([x.get("added") for x in got["links"]], ["Fox Hoodie", "Snow Cap", "Tail Pack & More", None, None])
+        self.assertIn("not a product's page", got["links"][3]["error"])
+        self.assertIn("Booth didn't show that item", got["links"][4]["error"])
+        self.assertEqual(asked[0], ("https://booth.pm/en/items/4242.json", ("booth.pm",)), "from the store's own site only")
+        self.assertEqual(asked[1][1], ("mochi.gumroad.com", "gumroad.com"))
+        wish = next(s for s in self.api("/api/sets")["sets"] if s["id"] == made["made"])
+        items = {i["name"]: i for i in wish["items"]}
+        self.assertEqual((items["Fox Hoodie"]["price"]["amount"], items["Fox Hoodie"]["price"]["currency"]), (1200, "JPY"))
+        self.assertEqual((items["Fox Hoodie"]["creator"], items["Fox Hoodie"]["url"]), ("Mochi Works", "https://booth.pm/ja/items/4242"), "(a link naming its language keeps it)")
+        self.assertEqual((items["Snow Cap"]["price"]["amount"], items["Snow Cap"]["creator"]), (12.5, "Mochi"))
+        self.assertEqual(items["Tail Pack & More"]["creator"], "kitsu")
+        self.assertTrue(all(i["pic"] for i in items.values()), "each with its picture, from its store's own image host")
+
     def test_hidden_products_stay_out_while_locked(self):
         secret = tag_key("booth", "Secret Thing")
         made = sets.SetStore().change({"action": "create", "name": "s", "items": [RUSK, secret]})["made"]

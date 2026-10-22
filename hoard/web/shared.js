@@ -1522,15 +1522,16 @@ function renderTasks(t) {
   const place = new Map([...document.querySelectorAll("#tasksBody details[data-id] pre")].map(pre =>
     [pre.closest("details").dataset.id, { top: pre.scrollTop, atEnd: pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4 }]));
   const win = $("#tasksWin"), winTop = win ? win.scrollTop : 0;
-  const cur = t.current;
+  const cur = t.current, pj = t.project;   // (Projects' tasks run in a lane of their own, beside the rest)
   const problems = h => ((h.report && h.report.problems) || []);
+  const running = (c, lane) => `<div class="task run"><div class="task-top"><span class="spin" aria-hidden="true"></span><b>${esc(c.label)}</b>` +
+      (lane ? `<button class="ghost sm" data-task="stop" data-lane="${lane}" title="${esc(tr("Stop it at its next step: what it was changing is put back as it was"))}">Stop</button>`
+        : (STOPPABLE.includes(c.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") +
+          `<button class="ghost sm" data-task="force" title="End it now, whatever it's doing">Force stop</button>`) + `</div>` +
+      (c.transfer ? transferHtml(c.transfer) : `<p class="task-msg">${esc(c.message || "Starting")}</p>`) +
+      `<details class="live" data-id="${esc(c.id)}"${open.has(c.id) ? " open data-kept" : ""}><summary>Progress</summary><pre>${esc((c.log || []).join("\n"))}</pre></details></div>`;
   $("#tasksBody").innerHTML =
-    `<h3>Running</h3>` + (cur
-      ? `<div class="task run"><div class="task-top"><span class="spin" aria-hidden="true"></span><b>${esc(cur.label)}</b>` +
-        (STOPPABLE.includes(cur.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") +
-        `<button class="ghost sm" data-task="force" title="End it now, whatever it's doing">Force stop</button></div>` +
-        (cur.transfer ? transferHtml(cur.transfer) : `<p class="task-msg">${esc(cur.message || "Starting")}</p>`) +
-        `<details class="live" data-id="${esc(cur.id)}"${open.has(cur.id) ? " open data-kept" : ""}><summary>Progress</summary><pre>${esc((cur.log || []).join("\n"))}</pre></details></div>`
+    `<h3>Running</h3>` + (cur || pj ? (cur ? running(cur) : "") + (pj ? running(pj, "projects") : "")
       : `<p class="none">Nothing is running.</p>`) +
     `<h3>Waiting <span class="n">${t.queue.length || ""}</span>${t.queue.length > 1 ? `<button class="linkish" data-task="clear-queue">Clear</button>` : ""}</h3>` +
     (t.queue.length
@@ -1552,7 +1553,7 @@ function renderTasks(t) {
     pre.scrollTop = d.classList.contains("live") && (!was || was.atEnd) ? pre.scrollHeight : was ? was.top : 0;
   }
   if (win) win.scrollTop = winTop;
-  taskCount((cur ? 1 : 0) + t.queue.length);
+  taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + t.queue.length);
 }
 // opening what's running shows its newest lines (while it was closed, it had no size to scroll)
 document.addEventListener("toggle", e => {
@@ -1562,6 +1563,12 @@ document.addEventListener("toggle", e => {
   const pre = d.querySelector("pre");
   if (pre) pre.scrollTop = pre.scrollHeight;
 }, true);
+// What's running and waiting, in both lanes: Projects' tasks have a lane of their own (/api/status's project_job)
+const jobCount = st => [st.job || {}, st.project_job || {}].reduce((n, j) => n + (j.running ? 1 : 0) + (j.queue || []).length, 0);
+// A job the page was watching has ended: what it changed is read again (both pages' watchers call this)
+function jobEnded(was, j) {
+  if (was === "wishlists" && j.task !== "wishlists") loadSets();   // (the wishlists read show without a reload)
+}
 function taskCount(n) {
   const b = $("#tasksCount");
   if (b) { b.hidden = !n; b.textContent = n || ""; }
@@ -1591,7 +1598,11 @@ function askName(title, value = "", opts = {}) {   // opts: {list: a datalist's 
    reports about a project (what it uses, its credits) shows with it. Changes are shown before they're made, and made
    as a task, so they show in Tasks and Stop stops them. */
 const PJ = { view: "list", data: null, project: null, find: "", form: null, assets: null, busy: false, watching: false,
-  reports: [], report: null, hiddenLeftOut: false };
+  reports: [], report: null, hiddenLeftOut: false,
+  sub: "packages",       // a project's tab: packages, add (Add packages), library (From your library) or report
+  pick: new Map(),       // Add packages: the ones ticked, each with the version chosen ("" for the newest)
+  pkgs: null, pkFind: "", vers: {},   // the packages there are to add (for one Unity), and each one's versions
+  job: {} };             // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
 const PJ_KINDS = { 0: "Unknown", 1: "Legacy SDK2", 2: "Legacy Worlds", 3: "Legacy Avatars", 4: "UPM Worlds", 5: "UPM Avatars",
   6: "UPM Starter", 7: "Worlds", 8: "Avatars", 9: "VPM Starter" };
 const PJ_WHY = { requested: "Removed", legacy: "Replaced by a newer package", unused: "Nothing uses it any more" };
@@ -1599,11 +1610,11 @@ const PROJECT_STATUS = { yes: "In the project", partly: "Partly in the project",
 const CREDIT_STYLES = { List: "List", Markdown: "Markdown", ByCreator: "By creator" };
 const pjKind = n => tr(PJ_KINDS[n] || "Unknown");
 const pjQ = path => `?path=${encodeURIComponent(path)}`;
-function openProjects(open) {
+function openProjects(open) {   // Projects takes the whole window below the bar, until it's closed
   const w = $("#projectsWin"), show = open ?? w.hidden;
   w.hidden = !show;
   $("#projectsTab").setAttribute("aria-expanded", String(show));
-  if (show) loadProjects();
+  if (show) { loadProjects(); pjWatch(); }
 }
 async function loadProjects(view) {
   if (view) PJ.view = view;
@@ -1629,7 +1640,8 @@ let pjDrawn = "";
 const pjTicks = el => el.type === "checkbox";
 function drawProjects() {
   const body = $("#projectsBody");
-  const views = { list: pjList, project: pjProject, new: pjNew, repos: pjRepos, settings: pjSettings, report: pjReportView, backups: pjBackups };
+  const views = { list: pjList, project: pjProject, new: pjNew, repos: pjRepos, settings: pjSettings, report: pjReportView, backups: pjBackups,
+                  addnew: pjAddNew };
   // what you've typed or ticked in Repositories or Unity and folders and not saved yet stays when it's drawn again
   // (as it is when a task ends, or a save is refused)
   const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
@@ -1644,16 +1656,29 @@ function drawProjects() {
   if (PJ.view === "new") pjFillNew();
   const find = $("#pjFind");
   if (find) { find.value = PJ.find; find.addEventListener("input", () => { PJ.find = find.value; pjFilter(); }); pjFilter(); }
+  const pkFind = $("#pjPkFind");
+  if (pkFind) { pkFind.addEventListener("input", () => { PJ.pkFind = pkFind.value; pjPkFilter(); }); pjPkFilter(); }
+}
+// Projects' views, as tabs along its top; a project, a new one, and Add packages open below them, with a way back
+const PJ_TABS = [["list", "Projects"], ["repos", "Repositories"], ["backups", "Backups"], ["settings", "Unity and folders"]];
+const pjTabs = () => `<nav class="pj-tabs" aria-label="${esc(tr("Projects"))}">${PJ_TABS.map(([v, label]) =>
+  `<button class="pj-tab" data-pj="${v === "list" ? "back" : v}"${PJ.view === v ? ' aria-current="page"' : ""}>${esc(tr(label))}</button>`).join("")}</nav>`;
+// What Projects' own lane is doing now, above every view: its task, with Stop (what it was changing is put back)
+function pjShowJob() {
+  const box = $("#pjJob"), j = PJ.job || {};
+  if (!box) return;
+  const waiting = (j.queue || []).length;
+  box.hidden = !j.running && !waiting;
+  box.innerHTML = box.hidden ? "" : (j.running ? `<span class="spin" aria-hidden="true"></span><span class="pj-job-msg">${esc(j.message || j.job_label || "")}</span>` +
+      `<button class="ghost sm" data-pj="stopjob">${esc(tr("Stop"))}</button>` : "") +
+    (waiting ? `<span class="muted">${esc(tr("{0} more waiting", waiting))}</span>` : "");
 }
 const pjBack = () => `<button class="linkish pj-back" data-pj="back">${esc(tr("‹ All projects"))}</button>`;
 function pjList() {
   const d = PJ.data, list = d.projects || [];
-  const top = `<div class="pj-top"><input type="search" id="pjFind" placeholder="${esc(tr("Find a project"))}" aria-label="${esc(tr("Find a project"))}">` +
+  const top = pjTabs() + `<div class="pj-top"><input type="search" id="pjFind" placeholder="${esc(tr("Find a project"))}" aria-label="${esc(tr("Find a project"))}">` +
     `<button class="primary sm" data-pj="new">${esc(tr("New project"))}</button>` +
-    `<button class="ghost sm" data-pj="add">${esc(tr("Add a project"))}</button>` +
-    `<button class="ghost sm" data-pj="repos">${esc(tr("Repositories"))}</button>` +
-    `<button class="ghost sm" data-pj="backups">${esc(tr("Backups"))}</button>` +
-    `<button class="ghost sm" data-pj="settings">${esc(tr("Unity and folders"))}</button></div>`;
+    `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button></div>`;
   const bk = d.backups || {}, room = bk.room || {};
   const note = (room.low && bk.old_count ? `<p class="pj-warn pj-low">${esc(tr(bk.old_count === 1
       ? "The drive your project backups are on has {0} left, and {1} old backup takes {2}." : "The drive your project backups are on has {0} left, and {1} old backups take {2}.",
@@ -1726,23 +1751,93 @@ function pjProject() {
     `<td class="v">${x.latest ? `<button class="ghost sm" data-pj="update" data-version="${esc(x.latest)}">${esc(tr("Update to {0}", x.latest))}</button>` : ""}</td>` +
     `<td class="v">${x.own ? "" : `<button class="ghost sm" data-pj="remove">${esc(tr("Remove"))}</button>`}</td></tr>`).join("");
   const pre = (p.preloaded || []).slice().reverse();
+  const subs = [["packages", tr("Packages")], ["add", tr("Add packages")], ["library", tr("From your library")],
+                ...(p.report ? [["report", tr("What Hoard for Unity found")]] : [])];
+  if (!subs.some(([k]) => k === PJ.sub)) PJ.sub = "packages";
+  const part = {
+    packages: () => (p.needs_repair ? `<p class="pj-warn">${esc(tr("Some packages aren't installed the way the project says."))} <button class="ghost sm" data-pj="repair">${esc(tr("Put it right"))}</button></p>` : "") +
+      (updates ? `<div class="row"><button class="ghost sm" data-pj="updateall">${esc(tr(updates === 1 ? "Update {0} package" : "Update {0} packages", updates))}</button></div>` : "") +
+      (pk.length ? `<table class="pj-pk">${rows}</table>` : `<p class="none">${esc(tr("No VPM packages in it yet. Add some in Add packages."))}</p>`),
+    add: () => pjAddList(p.unity, new Set(pk.map(x => x.name))),
+    library: () => `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
+      (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
+      (pre.length ? `<ul class="pj-pre pj-rows">${pre.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span>` +
+        (x.when ? ` <span class="muted">${esc(ago(x.when))}</span>` : "") +
+        ((x.added || []).length ? `<br><span class="muted">${esc(tr("Added:"))} <span translate="no">${esc(x.added.join(", "))}</span></span>` : "") + `</li>`).join("")}</ul>`
+        : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`),
+    report: () => pjReport(p.report) };
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-facts">${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}</p>` +
     (p.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it before changing packages, so nothing it has open is replaced under it."))}</p>` : "") +
     `<div class="row">${unity}<button class="ghost sm" data-pj="folder">${esc(tr("Open folder"))}</button>` +
     `<button class="ghost sm" data-pj="backup">${esc(tr("Back up"))}</button>` +
-    `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button></div>` +
-    (p.needs_repair ? `<p class="pj-warn">${esc(tr("Some packages aren't installed the way the project says."))} <button class="ghost sm" data-pj="repair">${esc(tr("Put it right"))}</button></p>` : "") +
-    `<h4>${esc(tr("Packages"))}</h4><div class="row"><button class="ghost sm" data-pj="addpkg">${esc(tr("Add packages"))}</button>` +
-    (updates ? `<button class="ghost sm" data-pj="updateall">${esc(tr(updates === 1 ? "Update {0} package" : "Update {0} packages", updates))}</button>` : "") + `</div>` +
-    (pk.length ? `<table class="pj-pk">${rows}</table>` : `<p class="none">${esc(tr("No VPM packages in it yet."))}</p>`) +
-    `<h4>${esc(tr("From your library"))}</h4><div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
-    (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
-    (pre.length ? `<ul class="pj-pre">${pre.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span>` +
-      (x.when ? ` <span class="muted">${esc(ago(x.when))}</span>` : "") +
-      ((x.added || []).length ? `<br><span class="muted">${esc(tr("Added:"))} <span translate="no">${esc(x.added.join(", "))}</span></span>` : "") + `</li>`).join("")}</ul>`
-      : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`) +
-    (p.report ? pjReport(p.report) : "");
+    `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>` +
+    `<button class="ghost sm danger" data-pj="delete">${esc(tr("Delete from this computer..."))}</button></div>` +
+    `<nav class="pj-tabs pj-subs" aria-label="${esc(tr("This project"))}">${subs.map(([k, label]) =>
+      `<button class="pj-tab" data-pj="sub" data-sub="${k}"${PJ.sub === k ? ' aria-current="page"' : ""}>${esc(label)}${k === "packages" ? ` <span class="n">${pk.length}</span>` : ""}</button>`).join("")}</nav>` +
+    `<div class="pj-part">${part[PJ.sub]()}</div>`;
+}
+// ---- Add packages: a tab of its own (a project's, or New project's), every package from your repositories that works
+// in its Unity, each with a tick and, once ticked, the version to put in (the newest unless you choose another, #160)
+const pjPkgKey = unityVersion => `${unityVersion || ""}|${(PJ.data.settings || {}).prerelease ? 1 : 0}`;
+async function pjLoadPkgs(unityVersion) {
+  const key = pjPkgKey(unityVersion);
+  if (PJ.pkgs && (PJ.pkgs.for === key || PJ.pkgs.loading === key)) return;
+  PJ.pkgs = { loading: key };
+  const r = await api(`/api/vpm/packages?unity=${encodeURIComponent(unityVersion || "")}&pre=${(PJ.data.settings || {}).prerelease ? 1 : 0}`);
+  PJ.pkgs = { for: key, list: r.ok ? (await r.json()).packages : [] };
+  if (PJ.view === "addnew" || (PJ.view === "project" && PJ.sub === "add")) drawProjects();
+}
+function pjAddList(unityVersion, have) {
+  const k = PJ.pkgs;
+  if (!k || k.for !== pjPkgKey(unityVersion)) { pjLoadPkgs(unityVersion); return `<p class="none">${esc(tr("Reading the packages..."))}</p>`; }
+  if (!k.list.length) return `<p class="none">${esc(tr("No packages yet: refresh the repositories first (Repositories, Refresh them all)."))}</p>`;
+  const chosen = PJ.pick.size;
+  return `<div class="pj-top"><input type="search" id="pjPkFind" value="${esc(PJ.pkFind)}" placeholder="${esc(tr("Find a package"))}" aria-label="${esc(tr("Find a package"))}"></div>` +
+    `<ul class="pj-picklist pj-rows pj-addlist">${k.list.map(x => {
+      const on = PJ.pick.has(x.name), already = have.has(x.name);
+      return `<li data-hay="${esc(norm([x.label, x.name, x.author, x.description, ...(x.keywords || [])].join(" ")))}" data-name="${esc(x.name)}">` +
+        `<label class="check"><input type="checkbox" value="${esc(x.name)}"${on ? " checked" : ""}${already ? " disabled" : ""}> <span><b translate="no">${esc(x.label)}</b> <span class="muted" translate="no">${esc(x.version)}</span>` +
+        (already ? ` <span class="pj-tag">${esc(tr("In it already"))}</span>` : "") + `<br>` +
+        `<span class="muted" translate="no">${esc(x.name)} · ${esc(x.repo)}</span>` +
+        (x.description ? `<br><span class="pj-desc">${esc(x.description)}</span>` : "") + `</span></label>` +
+        (on ? pjVerPick(x.name, x.label) : "") + `</li>`;
+    }).join("")}</ul>` +
+    `<div class="pj-addbar"><span class="muted" id="pjChosen">${esc(tr(chosen === 1 ? "{0} chosen" : "{0} chosen", chosen))}</span>` +
+    `<button class="primary sm" data-pj="addchosen"${chosen ? "" : " disabled"}>${esc(tr("Add the chosen packages"))}</button></div>`;
+}
+function pjVerPick(name, label) {   // which version of a ticked package: the newest, unless you choose another
+  const versions = PJ.vers[name] || [], picked = PJ.pick.get(name) || "";
+  return `<select class="pj-pick-ver" data-name="${esc(name)}" aria-label="${esc(tr("Version of {0}", label))}"><option value="">${esc(tr("Newest"))}</option>` +
+    versions.map(v => `<option value="${esc(v.version)}"${v.version === picked ? " selected" : ""} translate="no">${esc(v.version)}${v.pre ? ` (${esc(tr("prerelease"))})` : ""}</option>`).join("") + `</select>`;
+}
+function pjPkFilter() {
+  const words = norm(PJ.pkFind).split(/\s+/).filter(Boolean);
+  for (const li of document.querySelectorAll(".pj-addlist li")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
+}
+async function pjPickChanged(box) {   // a package ticked or not, in place (the list isn't drawn again, so it keeps its place)
+  const li = box.closest("li"), name = box.value, unityVersion = PJ.view === "addnew" ? PJ.form.unity : PJ.project.unity;
+  if (box.checked) {
+    PJ.pick.set(name, "");
+    li.insertAdjacentHTML("beforeend", pjVerPick(name, li.querySelector("b").textContent));
+    if (!PJ.vers[name]) {
+      PJ.vers[name] = await pjVersions(name, unityVersion);
+      const sel = li.querySelector(".pj-pick-ver");
+      if (sel && PJ.pick.has(name)) sel.outerHTML = pjVerPick(name, li.querySelector("b").textContent);
+    }
+  } else {
+    PJ.pick.delete(name);
+    li.querySelector(".pj-pick-ver")?.remove();
+  }
+  const n = PJ.pick.size, go = $("[data-pj=addchosen]");
+  $("#pjChosen").textContent = tr(n === 1 ? "{0} chosen" : "{0} chosen", n);
+  if (go) go.disabled = !n;
+}
+function pjAddNew() {   // New project's Add packages
+  const f = PJ.form;
+  return `<button class="linkish pj-back" data-pj="backnew">${esc(tr("‹ The new project"))}</button><h3 class="pj-h">${esc(tr("Add packages"))}</h3>` +
+    `<p class="hint">${esc(tr("For Unity {0}. Each one ticked goes into the new project, with what it needs.", f.unity || "?"))}</p>` +
+    pjAddList(f.unity, new Set(Object.keys(f.packages)));
 }
 // What Hoard for Unity reported about the project: what it uses, with updates, and its credits list
 const inSet = p => [...new Set(p.assets.filter(a => a.tag_key && (a.status === "yes" || a.status === "partly")).map(a => a.tag_key))];
@@ -1764,8 +1859,10 @@ function pjReport(p) {
 function pjNewForm(preset) {
   const d = PJ.data, t = (d.templates || []).filter(x => x.available);
   const base = preset ? preset.template : (t.find(x => x.id.endsWith(".vrchat.avatars")) || t[0] || {}).id;
+  const hoard = (d.hoard_for_unity || {}).package;   // Hoard for Unity: in every new project, unless you leave it out
   return { name: "", location: d.settings.projects_folder, template: base, unity: preset ? preset.unity : null,
-           packages: { ...(preset ? preset.packages : {}) }, picks: (preset ? preset.products : []).map(x => ({ ...x })), preset: preset ? preset.id : "" };
+           packages: { ...(preset ? preset.packages : hoard ? { [hoard]: "*" } : {}) }, picks: (preset ? preset.products : []).map(x => ({ ...x })),
+           preset: preset ? preset.id : "" };
 }
 function pjNew() {
   const d = PJ.data, f = PJ.form;
@@ -1786,7 +1883,7 @@ function pjNew() {
       `<option value="${esc(u)}"${u === f.unity ? " selected" : ""} translate="no">${esc(u)}${installed.has(u) ? "" : " ✕"}</option>`).join("")}</select></div>` +
     `<p class="hint">${esc(tr("✕: not installed here. The project is made either way; install that Unity with Unity Hub to open it."))}</p>` +
     `<h4>${esc(tr("Packages"))}</h4><div class="pj-chips">${Object.entries(f.packages).map(([n, v]) =>
-      `<button class="pill" data-pj="unpkg" data-name="${esc(n)}" title="${esc(tr("Leave out"))}"><span translate="no">${esc(n)}</span> <b translate="no">${esc(v)}</b><span aria-hidden="true">×</span></button>`).join("") ||
+      `<button class="pill" data-pj="unpkg" data-name="${esc(n)}" title="${esc(tr("Leave out"))}"><span translate="no">${esc(n === (d.hoard_for_unity || {}).package ? "Hoard for Unity" : n)}</span> <b translate="no">${esc(v)}</b><span aria-hidden="true">×</span></button>`).join("") ||
       `<span class="muted">${esc(tr("Only the template's own."))}</span>`}</div>` +
     `<div class="row"><button class="ghost sm" data-pj="addpkg">${esc(tr("Add packages"))}</button></div>` +
     `<div id="pjSuggest"></div>` +
@@ -1842,21 +1939,21 @@ async function pjSuggest() {
 // ---- repositories, and Unity and folders
 function pjRepos() {
   const rs = PJ.data.repos || [];
-  return pjBack() + `<h3 class="pj-h">${esc(tr("Repositories"))}</h3>` +
-    `<p class="hint">${esc(tr("Where packages come from. The same list ALCOM and the Creator Companion use."))}</p>` +
+  return pjTabs() + `<p class="hint">${esc(tr("Where packages come from. The same list ALCOM and the Creator Companion use."))}</p>` +
+    `<h4>${esc(tr("Add a repository"))}</h4><div class="pj-field"><label for="pjRepoUrl">${esc(tr("Its address"))}</label>` +
+    `<input id="pjRepoUrl" placeholder="https://" translate="no"><button class="primary sm" data-pj="addrepo">${esc(tr("Add"))}</button></div>` +
+    `<details class="pj-more"><summary>${esc(tr("For a private repository"))}</summary><p class="hint">${esc(tr("Headers it asks for, one a line (Name: value). They're sent to its own address only."))}</p>` +
+    `<textarea id="pjRepoHeaders" rows="3" translate="no"></textarea></details>` +
+    `<h4>${esc(tr(rs.length === 1 ? "{0} repository" : "{0} repositories", rs.length))}</h4>` +
     `<ul class="pj-list">${rs.map(r => `<li class="pj-row"><span class="pj-main"><b translate="no">${esc(r.label)}</b><span class="meta" translate="no">${esc(r.url || r.path)}</span>` +
       (r.error ? `<span class="pj-warn">${esc(r.error)}</span>` : "") + `</span>` +
       `<span class="pj-what">${r.loaded ? esc(tr(r.packages === 1 ? "{0} package" : "{0} packages", r.packages)) : esc(tr("Not fetched yet"))}</span>` +
       `<span class="pj-acts">${r.builtin ? `<span class="muted">${esc(tr("VRChat's"))}</span>` : `<button class="ghost sm" data-pj="unrepo" data-path="${esc(r.path)}">${esc(tr("Remove"))}</button>`}</span></li>`).join("")}</ul>` +
-    `<div class="row"><button class="ghost sm" data-pj="refresh">${esc(tr("Refresh them all"))}</button></div>` +
-    `<h4>${esc(tr("Add a repository"))}</h4><div class="pj-field"><label for="pjRepoUrl">${esc(tr("Its address"))}</label>` +
-    `<input id="pjRepoUrl" placeholder="https://" translate="no"><button class="primary sm" data-pj="addrepo">${esc(tr("Add"))}</button></div>` +
-    `<details class="pj-more"><summary>${esc(tr("For a private repository"))}</summary><p class="hint">${esc(tr("Headers it asks for, one a line (Name: value). They're sent to its own address only."))}</p>` +
-    `<textarea id="pjRepoHeaders" rows="3" translate="no"></textarea></details>`;
+    `<div class="row"><button class="ghost sm" data-pj="refresh">${esc(tr("Refresh them all"))}</button></div>`;
 }
 function pjSettings() {
   const d = PJ.data, s = d.settings, eds = d.editors || [];
-  return pjBack() + `<h3 class="pj-h">${esc(tr("Unity and folders"))}</h3>` +
+  return pjTabs() +
     `<h4>${esc(tr("Unity editors"))}</h4>` + (eds.length ? `<ul class="pj-pre">${eds.map(e => `<li translate="no"><b>Unity ${esc(e.version)}</b> <span class="muted">${esc(e.path)}</span></li>`).join("")}</ul>`
       : `<p class="none">${esc(tr("No Unity found. Install Unity with Unity Hub (the VRChat SDK's own version is 2022.3.22f1)."))}</p>`) +
     `<p class="hint">${esc(tr("Found the way ALCOM finds them: those Unity Hub installed or was told about."))}</p>` +
@@ -1883,10 +1980,10 @@ function pjBackupRow(b) {
 }
 function pjBackups() {
   const k = PJ.backups;
-  if (!k) return pjBack() + `<p class="none">${esc(tr("Reading your backups..."))}</p>`;
+  if (!k) return pjTabs() + `<p class="none">${esc(tr("Reading your backups..."))}</p>`;
   const room = k.room || {}, list = k.backups || [], moved = k.moved || [];
   const sel = (id, opts, value) => `<select id="${id}">${opts.map(([v, label]) => `<option value="${v}"${v === value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
-  return pjBack() + `<h3 class="pj-h">${esc(tr("Backups"))}</h3>` +
+  return pjTabs() +
     `<p class="hint">${esc(tr(list.length === 1 ? "{0} backup, {1}, in" : "{0} backups, {1}, in", list.length, sizeText(k.size)))} <span translate="no">${esc(k.folder)}</span>` +
     (room.total ? `. ${esc(tr("Its drive has {0} free of {1}.", sizeText(room.free), sizeText(room.total)))}` : "") +
     ` <button class="linkish" data-pj="bkopen">${esc(tr("Open folder"))}</button></p>` +
@@ -1968,42 +2065,6 @@ async function pjChooseVersion(name, label, current, unityVersion) {
   const res = await dlgP;
   const picked = res.ok ? (res.dlg.querySelector(".pj-vers input:checked") || {}).value || "" : "";
   return picked === current ? "" : picked;
-}
-async function pjPickPackages(unityVersion) {   // [{name, version}]: version "" for the newest
-  const pre = !!(PJ.data.settings || {}).prerelease;
-  const r = await api(`/api/vpm/packages?unity=${encodeURIComponent(unityVersion || "")}&pre=${pre ? 1 : 0}`);
-  const list = r.ok ? (await r.json()).packages : [];
-  if (!list.length) { toast(tr("No packages yet: refresh the repositories first (Repositories, Refresh them all).")); return []; }
-  const chosen = new Set();
-  const dlgP = pjDialog(`<p><b>${esc(tr("Add packages"))}</b></p><p><input type="search" id="pjPkFind" placeholder="${esc(tr("Find a package"))}" style="width:100%;box-sizing:border-box"></p>` +
-    `<ul class="pj-picklist">${list.map(p => `<li data-hay="${esc(norm([p.label, p.name, p.author, p.description, ...(p.keywords || [])].join(" ")))}">` +
-      `<label class="check"><input type="checkbox" value="${esc(p.name)}"> <span><b translate="no">${esc(p.label)}</b> <span class="muted" translate="no">${esc(p.version)}</span><br>` +
-      `<span class="muted" translate="no">${esc(p.name)} · ${esc(p.repo)}</span>` +
-      (p.description ? `<br><span class="pj-desc">${esc(p.description)}</span>` : "") + `</span></label></li>`).join("")}</ul>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Add"))}</button></div>`, "wide");
-  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
-  dlg.querySelector("#pjPkFind").addEventListener("input", e => {
-    const words = norm(e.target.value).split(/\s+/).filter(Boolean);
-    for (const li of dlg.querySelectorAll(".pj-picklist li")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
-  });
-  dlg.addEventListener("change", async e => {
-    if (e.target.type !== "checkbox") return;
-    const li = e.target.closest("li"), name = e.target.value;
-    if (!e.target.checked) { chosen.delete(name); li.querySelector(".pj-pick-ver")?.remove(); return; }
-    chosen.add(name);
-    const label = li.querySelector("b").textContent;
-    const pick = document.createElement("select");   // which version: the newest unless you choose another (issue #160)
-    pick.className = "pj-pick-ver";
-    pick.setAttribute("aria-label", tr("Version of {0}", label));
-    pick.innerHTML = `<option value="">${esc(tr("Newest"))}</option>`;
-    li.appendChild(pick);
-    const versions = await pjVersions(name, unityVersion);
-    if (pick.isConnected) pick.insertAdjacentHTML("beforeend", versions.map(v =>
-      `<option value="${esc(v.version)}" translate="no">${esc(v.version)}${v.pre ? ` (${esc(tr("prerelease"))})` : ""}</option>`).join(""));
-  });
-  const res = await dlgP;
-  return res.ok ? [...chosen].map(name => ({ name,
-    version: (res.dlg.querySelector(`.pj-picklist input[value="${CSS.escape(name)}"]`)?.closest("li").querySelector(".pj-pick-ver") || {}).value || "" })) : [];
 }
 async function pjAssets() {
   if (PJ.assets) return PJ.assets;
@@ -2160,22 +2221,28 @@ async function pjShowChanges(body) {
 async function pjRun(url, body) {   // a task: started (or waiting its turn), and the project shown again when it's done
   const r = await apiPost(url, body);
   if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return false; }
-  toast(tr(r.data.queued ? "It waits its turn in Tasks." : "Started. Tasks shows how it's going."));
+  toast(tr(r.data.queued ? "It waits its turn after Projects' task that's running now." : "Started. It shows at the top of Projects, and in Tasks."));
+  PJ.ran = true;
   pjWatch();
   return true;
 }
+// While Projects' own lane has a task running or waiting: shown at the top of Projects; then Projects is read again
 async function pjWatch() {
   if (PJ.watching) return;
   PJ.watching = true;
+  let changed = false;
   try {
     for (let n = 0; n < 7200; n++) {
+      const st = await (await api("/api/status", { cache: "no-store" })).json(), j = st.project_job || {};
+      PJ.job = j;
+      pjShowJob();
+      if (!j.running && !(j.queue || []).length) break;
+      changed = true;
       await new Promise(res => setTimeout(res, 1500));
-      const st = await (await api("/api/status", { cache: "no-store" })).json(), j = st.job || {};
-      if (!(j.running && j.task === "project") && !(j.queue || []).some(q => q.task === "project")) break;
     }
   } catch (e) { /* the next look shows it */ }
   PJ.watching = false;
-  if (!$("#projectsWin").hidden) loadProjects();
+  if ((changed || PJ.ran) && !$("#projectsWin").hidden) { PJ.ran = false; PJ.pkgs = null; loadProjects(); }
 }
 function pjHeaders(text) {
   const out = {};
@@ -2190,7 +2257,14 @@ async function pjAct(b) {
   const act = b.dataset.pj, row = b.closest("[data-path]"), path = row ? row.dataset.path : (PJ.project || {}).path;
   const f = PJ.form;
   if (act === "back") { PJ.view = "list"; PJ.project = null; return loadProjects(); }
-  if (act === "new") { PJ.form = pjNewForm(); PJ.view = "new"; return drawProjects(); }
+  if (act === "new") { PJ.form = pjNewForm(); PJ.view = "new"; PJ.pick.clear(); return drawProjects(); }
+  if (act === "sub") { PJ.sub = b.dataset.sub; return drawProjects(); }   // a project's tab
+  if (act === "backnew") { PJ.view = "new"; return drawProjects(); }
+  if (act === "stopjob") {
+    const r = await apiPost("/api/cancel", { lane: "projects" });
+    if (r.ok && r.data.ok) toast(tr("Stopping: what it was changing is put back as it was."));
+    return;
+  }
   if (act === "repos" || act === "settings") { PJ.view = act; return drawProjects(); }
   if (act === "backups") { PJ.backups = null; PJ.view = "backups"; drawProjects(); if (await pjLoadBackups()) drawProjects(); return; }
   if (act === "bkopen") { const r = await apiPost("/api/vpm/backups/show", {}); if (!r.ok) toast(r.data.error || tr("That folder couldn't be opened.")); return; }
@@ -2202,7 +2276,7 @@ async function pjAct(b) {
     const chosen = [...document.querySelectorAll("#projectsBody .pj-bkpick:checked")].map(x => x.value);
     return act === "bkdel" ? pjBackupsDelete(chosen) : pjBackupsMove(chosen);
   }
-  if (act === "manage") return openProject(path);
+  if (act === "manage") { PJ.sub = "packages"; PJ.pick.clear(); return openProject(path); }
   if (act === "report") { PJ.report = PJ.reports.find(x => x.id === row.dataset.report); PJ.view = "report"; return drawProjects(); }
   if (act === "list") {   // a project Hoard for Unity reported, onto the shared list
     const r = await apiPost("/api/vpm/add-project", { path });
@@ -2240,8 +2314,13 @@ async function pjAct(b) {
     PJ.view = "list"; PJ.project = null;
     return loadProjects();
   }
-  if (act === "add") {
-    const where = await askName("The project's folder (its full path)", "", { max: 1000 });
+  if (act === "add") {   // a project you have: chosen with the system's folder picker (typed, in a web browser)
+    let where = "";
+    if (canPick()) {
+      const r = await apiPost("/api/pick", { kind: "folder", start: "projects" });
+      if (!r.ok) { toast(r.data.error || tr("The picker didn't open. Type the path instead.")); return; }
+      where = r.data.path || "";
+    } else where = await askName("The project's folder (its full path)", "", { max: 1000 });
     if (!where) return;
     const r = await apiPost("/api/vpm/add-project", { path: where });
     if (!r.ok) { toast(r.data.error || tr("That folder isn't a Unity project.")); return; }
@@ -2263,12 +2342,25 @@ async function pjAct(b) {
     return version ? pjShowChanges({ path, add: [{ name, version }] }) : undefined;
   }
   if (act === "remove") return pjShowChanges({ path, remove: [b.closest("tr").dataset.name] });
-  if (act === "addpkg") {
-    const picked = await pjPickPackages(PJ.view === "new" ? f.unity : PJ.project.unity);
-    if (!picked.length) return;
-    if (PJ.view === "new") { for (const x of picked) f.packages[x.name] = x.version || f.packages[x.name] || "*"; return drawProjects(); }
-    return pjShowChanges({ path, add: picked.map(x => x.version ? x : { name: x.name }), prerelease: !!PJ.data.settings.prerelease });
+  if (act === "addpkg") {   // New project's Add packages: a view of its own
+    f.name = $("#pjName").value; f.location = $("#pjWhere").value; f.unity = $("#pjUnity").value;
+    PJ.pick.clear(); PJ.view = "addnew";
+    return drawProjects();
   }
+  if (act === "addchosen") {
+    const picked = [...PJ.pick].map(([name, version]) => ({ name, version }));
+    if (!picked.length) return;
+    if (PJ.view === "addnew") {
+      for (const x of picked) f.packages[x.name] = x.version || f.packages[x.name] || "*";
+      PJ.pick.clear(); PJ.view = "new";
+      return drawProjects();
+    }
+    if (await pjShowChanges({ path, add: picked.map(x => x.version ? x : { name: x.name }), prerelease: !!PJ.data.settings.prerelease })) {
+      PJ.pick.clear(); PJ.sub = "packages"; drawProjects();
+    }
+    return;
+  }
+  if (act === "delete") return pjDelete(PJ.project);
   if (act === "unpkg") { delete f.packages[b.dataset.name]; return drawProjects(); }
   if (act === "sugg") {
     const names = await pjAddSuggested([{ package: b.dataset.name, repo: b.dataset.repo || null, repo_added: b.dataset.added === "true" }]);
@@ -2371,12 +2463,34 @@ async function pjAct(b) {
     return loadProjects();   // (saved: as the settings have it now)
   }
 }
+// Delete a project from this computer: only with its name typed, backed up first unless you untick it; a task
+async function pjDelete(p) {
+  const shown = pjDialog(`<p><b>${esc(tr("Delete {0} from this computer?", p.name))}</b></p>` +
+    `<p>${esc(tr("Its folder, and everything in it, is deleted:"))} <span translate="no">${esc(p.path)}</span></p>` +
+    `<label class="check"><input type="checkbox" id="pjDelBackup" checked> ${esc(tr("Back it up first, into your backups folder"))}</label>` +
+    `<p class="hint">${esc(tr("Without a backup, it can't be got back."))}</p>` +
+    `<p><label for="pjDelName">${esc(tr("Type its name to delete it: {0}", p.name))}</label></p>` +
+    `<p><input id="pjDelName" autocomplete="off" spellcheck="false" translate="no" style="width:100%;box-sizing:border-box"></p>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
+    `<button class="primary danger" value="yes" id="pjDelGo" disabled>${esc(tr("Delete it"))}</button></div>`);
+  const dlg = [...document.querySelectorAll("dialog.pj-dlg")].pop(), name = dlg.querySelector("#pjDelName");
+  name.addEventListener("input", () => { dlg.querySelector("#pjDelGo").disabled = name.value.trim() !== p.name; });
+  name.focus();
+  const res = await shown;
+  if (!res.ok || name.value.trim() !== p.name) return;
+  if (await pjRun("/api/vpm/delete-project", { path: p.path, confirm: p.name, backup: res.dlg.querySelector("#pjDelBackup").checked })) {
+    PJ.view = "list"; PJ.project = null;
+    drawProjects();
+  }
+}
 function wireProjects() {
   makeWindow($("#projectsWin"));
   WINDOWS.projectsWin = () => openProjects(false);
   $("#projectsTab").addEventListener("click", () => openProjects());
   const win = $("#projectsWin");
   win.addEventListener("change", async e => {
+    if (e.target.matches(".pj-addlist input[type=checkbox]")) return pjPickChanged(e.target);   // Add packages
+    if (e.target.matches(".pj-addlist .pj-pick-ver")) { PJ.pick.set(e.target.dataset.name, e.target.value); return; }
     const sel = e.target.closest("[data-proj-style]");
     if (sel) { sel.closest(".proj").querySelector("textarea").value = pjShownReport().credits_text[sel.value]; return; }
     if (e.target.id === "pjOther" && e.target.value) {
@@ -2539,8 +2653,9 @@ const SET_ACTIONS = () => ({ name: "Sets", items: [
 let SETS = null;   // the sets as /api/sets has them, each product as it is here (downloaded, yours, or where to buy it)
 let setExtraOpen = true, setViewShown = "", setMoreShown = "", setKeysFor = null, setKeys = new Set();
 const inSets = () => state.store === "Sets";
-function setHas(a) {   // the open set has this product (by the key tags use)
+function setHas(a) {   // the open set has this product (by the key tags use); a wishlist's are in its own groups
   const s = setById(state.set);
+  if (s && s.kind === "wishlist") return false;
   if (s !== setKeysFor) { setKeysFor = s; setKeys = new Set(s ? s.items : []); }
   return setKeys.has(a.tag_key);
 }
@@ -2613,7 +2728,7 @@ function setsRoot() {
 }
 function setHead(s) {
   const c = setCounts(s);
-  return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">Sets</button>` +
+  return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and wishlists"))}</button>` +
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
     `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
@@ -2621,6 +2736,7 @@ function setHead(s) {
         `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
       (s.note ? `<p class="setnote" translate="no">${esc(s.note)}</p>` : "") +
       `<div class="row"><button class="primary sm" data-setx="share">Share...</button>` +
+      `<button class="ghost sm" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>` +
       (c.owned ? `<button class="ghost sm" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>` : "") +
       `<button class="ghost sm" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>` +
       (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
@@ -2637,6 +2753,7 @@ function setHead(s) {
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
 // Downloads); in Downloads, ones not downloaded. Each says where it is, or where to buy it.
 function setMoreHTML(s) {
+  if (isWish(s)) return wishBar(s) + `<div id="wishGroups">${wishGroups(s)}</div>`;
   const here = new Set(T.all().map(a => a.tag_key)), words = norm(state.q).split(/\s+/).filter(Boolean);
   const rest = s.items.filter(i => !here.has(i.key) && words.every(w => norm([i.name, i.creator, i.store].join(" ")).includes(w)));
   const groups = [[tr("In your library, not downloaded"), rest.filter(i => i.owned)], [tr("Not yours yet"), rest.filter(i => !i.owned && !i.local)],
@@ -2644,6 +2761,56 @@ function setMoreHTML(s) {
   return groups.filter(([, list]) => list.length).map(([title, list]) =>
     `<h3 class="setmore-h">${esc(title)} <span class="n">${list.length.toLocaleString()}</span></h3>` +
     `<div class="grid">${list.map(i => setExtraTile(s, i)).join("")}</div>`).join("");
+}
+// A wishlist open: its products in two groups that fold away, what isn't yours yet and what is, narrowed by its
+// suggested tags (words its products' names share) and a price range, in one of its currencies
+const WISH = { set: "", tags: new Set(), cur: "", min: "", max: "" };
+function wishCurrencies(s) {   // the currencies its prices are in, the most used first
+  const n = new Map();
+  for (const i of s.items) if (i.price) n.set(i.price.currency, (n.get(i.price.currency) || 0) + 1);
+  return [...n].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+}
+function wishFits(i, words) {
+  if (!words.every(w => norm([i.name, i.creator, i.store].join(" ")).includes(w))) return false;
+  for (const tag of WISH.tags) if (!(i.words || []).includes(tag)) return false;
+  const lo = parseFloat(WISH.min), hi = parseFloat(WISH.max);
+  if (isNaN(lo) && isNaN(hi)) return true;
+  if (!i.price || i.price.currency !== WISH.cur) return false;   // (a range is in one currency: others aren't in it)
+  return !(i.price.amount < lo) && !(i.price.amount > hi);
+}
+function wishBar(s) {
+  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, tags: new Set(), cur: "", min: "", max: "" });
+  const counts = new Map();
+  for (const i of s.items) for (const w of i.words || []) counts.set(w, (counts.get(w) || 0) + 1);
+  const tags = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 30);
+  const curs = wishCurrencies(s);
+  if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
+  const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" value="${esc(WISH[k])}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
+  return `<div class="wishbar">` +
+    (tags.length ? `<div class="wish-tags" role="group" aria-label="${esc(tr("Suggested tags"))}"><span class="wish-l">${esc(tr("Suggested tags"))}</span>` +
+      tags.map(([w, n]) => `<button class="chip" data-setx="wtag" data-tag="${esc(w)}" aria-pressed="${WISH.tags.has(w)}" translate="no">${esc(w)}<span class="n">${n}</span></button>`).join("") + `</div>` : "") +
+    (curs.length ? `<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
+      num("min", tr("From"), tr("Lowest price")) + `<span aria-hidden="true">–</span>` + num("max", tr("To"), tr("Highest price")) +
+      (curs.length > 1 ? `<select data-wish="cur" aria-label="${esc(tr("Currency"))}">${curs.map(c => `<option value="${esc(c)}"${c === WISH.cur ? " selected" : ""} translate="no">${esc(c)}</option>`).join("")}</select>`
+        : `<span translate="no">${esc(curs[0])}</span>`) +
+      `<button class="linkish" data-setx="wclear"${WISH.tags.size || WISH.min || WISH.max ? "" : " hidden"}>${esc(tr("Clear"))}</button></div>` : "") + `</div>`;
+}
+function wishGroups(s) {
+  const words = norm(state.q).split(/\s+/).filter(Boolean), shown = s.items.filter(i => wishFits(i, words));
+  const group = (id, title, list) => {
+    const open = (UI.sections || {})[`wish-${id}`] !== false;
+    return `<details class="wishgroup" data-fold="wish-${id}"${open ? " open" : ""}><summary>${esc(title)} <span class="n">${list.length.toLocaleString()}</span></summary>` +
+      (list.length ? `<div class="grid">${list.map(i => setExtraTile(s, i)).join("")}</div>` : `<p class="none">${esc(tr("Nothing here matches."))}</p>`) + `</details>`;
+  };
+  return group("buy", tr("Not yours yet"), shown.filter(i => !i.owned && !i.local)) + group("yours", tr("Yours already"), shown.filter(i => i.owned || i.local));
+}
+function wishChanged() {   // a filter changed: the groups again (the bar stays as it is, so typing isn't interrupted)
+  const s = SETS && SETS.sets.find(x => x.id === state.set), box = $("#wishGroups");
+  if (!s || !box) return;
+  box.innerHTML = wishGroups(s);
+  setMoreShown = "";   // (drawn again whole next time)
+  const clear = $('#setMore [data-setx="wclear"]');
+  if (clear) clear.hidden = !(WISH.tags.size || WISH.min || WISH.max);
 }
 function setExtraTile(s, i) {
   const store = STORE_NAMES[i.store] || (i.local ? "Local" : i.store), buy = !i.owned && !i.local ? storeUrl(i.store, i.url) : "";
@@ -2676,7 +2843,7 @@ function drawSets() {
   if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; }
   if (rest !== setMoreShown) { more.innerHTML = rest; setMoreShown = rest; }
 }
-const setsCountText = () => { const n = (DATA.sets || []).length; return tr(n === 1 ? "1 set" : "{0} sets", n.toLocaleString()); };
+const setsCountText = () => { const n = (DATA.sets || []).filter(s => !isWish(s)).length; return tr(n === 1 ? "1 set" : "{0} sets", n.toLocaleString()); };
 // A picture from this computer, made small enough to keep (at most 640 pixels across): a data: address, or "". PNG when
 // it has see-through parts, else JPEG: both show in Hoard for Unity too.
 async function choosePicture() {
@@ -2874,6 +3041,18 @@ async function setAct(e) {
     return;
   }
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
+  if (act === "wtag") {   // a wishlist's suggested tag: shows only its products with that word, as well as any chosen
+    WISH.tags.has(b.dataset.tag) ? WISH.tags.delete(b.dataset.tag) : WISH.tags.add(b.dataset.tag);
+    b.setAttribute("aria-pressed", String(WISH.tags.has(b.dataset.tag)));
+    return wishChanged();
+  }
+  if (act === "wclear") {
+    Object.assign(WISH, { tags: new Set(), min: "", max: "" });
+    for (const x of document.querySelectorAll('#setMore [data-setx="wtag"]')) x.setAttribute("aria-pressed", "false");
+    for (const x of document.querySelectorAll("#setMore input[data-wish]")) x.value = "";
+    return wishChanged();
+  }
+  if (act === "addlinks") return addByLinks(s);
   if (act === "share") shareSet(s);
   else if (act === "download") { const keys = notDownloaded([s]); if (keys.length) T.download(keys); }
   else if (act === "picture") setPicture(s);
@@ -2917,6 +3096,20 @@ async function readWishlists(only) {
   const r = await apiPost("/api/wishlists/read", { stores });
   if (!r.ok) { toast(r.data.error || "Hoard is busy. Try again when it's done."); return; }
   toast(r.data.started === "queued" ? "Reading your wishlists after what Hoard is doing now. See Tasks." : "Reading your wishlists. See Tasks for how it's going.");
+  const done = await whenTaskEnds("wishlists");   // then they show as read, without opening them again
+  await loadSets();
+  if (done && done.message) toast(done.message);
+}
+// Waits for a task (running or waiting its turn) to end, then gives how it went (Tasks' finished entry), or null
+async function whenTaskEnds(task, every = 1500) {
+  for (let n = 0; n < 4800; n++) {
+    await new Promise(ok => setTimeout(ok, every));
+    let t;
+    try { t = await (await api("/api/tasks", { cache: "no-store" })).json(); } catch (e) { return null; }
+    const busy = [t.current, t.project].some(c => c && c.task === task) || (t.queue || []).some(q => q.task === task);
+    if (!busy) return (t.history || []).find(h => h.task === task) || null;
+  }
+  return null;
 }
 // Import saved wishlist pages: wishlist pages you saved from your own browser, read on this computer
 async function importWishlists() {
@@ -2961,6 +3154,42 @@ function wireSets() {
     }, true);
   }
   $("#setView").addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.setextra")) setExtraOpen = e.target.open; }, true);
+  $("#setMore").addEventListener("toggle", e => {   // a wishlist's groups: folded or not, kept with your other folds
+    const d = e.target;
+    if (!d.matches || !d.matches("details.wishgroup") || ((UI.sections || {})[d.dataset.fold] !== false) === d.open) return;
+    uiSave({ sections: { [d.dataset.fold]: d.open } });
+  }, true);
+  $("#setMore").addEventListener("input", e => {   // a wishlist's price range
+    const k = e.target.dataset && e.target.dataset.wish;
+    if (!k) return;
+    WISH[k] = e.target.value.trim();
+    wishChanged();
+  });
+}
+// Add products by link: store pages pasted, one a line; Hoard reads each one's public page (its name, creator, price
+// and picture) and adds it to the set or wishlist, so a list of your own can hold what you don't own yet
+async function addByLinks(s) {
+  const d = document.createElement("dialog");
+  d.className = "ask";
+  d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Add products by link"))}</b></p>` +
+    `<p class="hint">${esc(tr("Paste the links of products on Booth, Gumroad, Jinxxy, Payhip or itch.io, one a line. Hoard reads each product's page, as anyone can see it, for its name, creator, price and picture."))}</p>` +
+    `<p><textarea id="addLinks" rows="6" translate="no" style="width:100%;box-sizing:border-box" placeholder="https://booth.pm/en/items/..."></textarea></p>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Add them"))}</button></div></form>`;
+  document.body.appendChild(d);
+  const links = await new Promise(resolve => {
+    d.addEventListener("close", () => {
+      const got = d.returnValue === "yes" ? d.querySelector("textarea").value.split(/\s+/).map(x => x.trim()).filter(Boolean) : [];
+      d.remove(); resolve(got);
+    }, { once: true });
+    d.showModal();
+  });
+  if (!links.length) return;
+  toast(tr(links.length === 1 ? "Reading the product's page..." : "Reading the {0} products' pages...", links.length));
+  const done = await changeSets({ action: "add-links", id: s.id, links: links.slice(0, 30) });
+  if (!done) return;
+  const added = (done.links || []).filter(x => x.added), failed = (done.links || []).filter(x => x.error);
+  toast([added.length ? tr(added.length === 1 ? "Added {0}." : "Added {0} products.", added.length === 1 ? added[0].added : added.length) : "",
+         failed.length ? tr("Not added: {0}", failed.map(x => `${x.link} (${tr(x.error)})`).join("; ")) : ""].filter(Boolean).join(" "));
 }
 function openNews() {
   const w = $("#newsWin");
@@ -2991,7 +3220,7 @@ function wireTasks() {
     const b = e.target.closest("[data-task]"); if (!b) return;
     const act = b.dataset.task;
     if (act === "stop") {   // (Hoard not answering isn't the job refusing to stop)
-      const r = await apiPost("/api/cancel");
+      const r = await apiPost("/api/cancel", { lane: b.dataset.lane || "" });
       if (!r.ok) toast(r.data.error || "Hoard didn't answer. Try again."); else if (!r.data.ok) toast("That job can't be stopped part-way.");
     }
     else if (act === "force") {   // any task, now: its store browser or sign-in window is closed at once
@@ -3014,10 +3243,11 @@ let lastTask = null;   // a check of the downloads that just ended: the Download
 async function askClose() {
   const d = $("#closeDialog");
   if (!d || d.open) return;
-  let j = {};
-  try { j = (await (await api("/api/status", { cache: "no-store" })).json()).job || {}; } catch (e) { /* stopped */ }
-  const waiting = (j.queue || []).length;
-  $("#closeWhat").textContent = (j.running ? `${j.job_label || "A job"} is running` : "Nothing is running")
+  let st = {};
+  try { st = await (await api("/api/status", { cache: "no-store" })).json(); } catch (e) { /* stopped */ }
+  const lanes = [st.job || {}, st.project_job || {}], on = lanes.filter(j => j.running);   // (and a project's task)
+  const waiting = lanes.reduce((n, j) => n + (j.queue || []).length, 0);
+  $("#closeWhat").textContent = (on.length ? `${on.map(j => j.job_label || "A job").join(" and ")} ${on.length === 1 ? "is" : "are"} running` : "Nothing is running")
     + (waiting ? `, and ${waiting} more ${waiting === 1 ? "is" : "are"} waiting their turn.` : ".");
   $("#closeChoices").hidden = false;
   d.querySelector('[data-close="wait"]').hidden = false;
@@ -3061,7 +3291,7 @@ async function afterQueuedJob(r, task, reload) {
     await new Promise(ok => setTimeout(ok, 1500));
     let t = {};
     try { t = await (await api("/api/tasks", { cache: "no-store" })).json(); } catch (e) { return; }
-    if ((t.current && t.current.task === task) || (t.queue || []).some(q => q.task === task)) continue;
+    if ([t.current, t.project].some(c => c && c.task === task) || (t.queue || []).some(q => q.task === task)) continue;
     await reload();
     const done = (t.history || []).find(h => h.task === task);   // how it went (newest first)
     if (done && done.message) toast(done.message);
@@ -3253,9 +3483,9 @@ const TOUR_STEPS = [
     done: () => ((tourOpen() || {}).tags || []).length > TOUR.tags },
   { id: "sets", page: "downloads", at: () => $('#stores [data-store="Sets"]'),
     enter: () => T.closeDetail(),
-    title: () => tr("Sets"),
+    title: () => tr("Sets and wishlists"),
     body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a short link that shows what's in it and where to buy each, for 14 days. Hoard for Unity imports a whole set at once.")) +
-      " " + esc(tr("Try it: open Sets.")),
+      " " + esc(tr("Try it: open Sets and wishlists.")),
     done: inSets },
   // in the Sets tab, once it's open (else these two are passed by)
   { id: "wishlists", page: "downloads", at: () => { const b = $('[data-setx="readwish"]'); return b && b.closest(".sets-top"); }, when: inSets,
