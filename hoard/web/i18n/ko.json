@@ -1931,5 +1931,6 @@
  "from {0}": "{0}에서",
  "Already in the project: {0}.": "프로젝트에 이미 있어요: {0}.",
  "Package": "패키지",
- "Comes from": "출처"
+ "Comes from": "출처",
+ "{0} more": "외 {0}개"
 }

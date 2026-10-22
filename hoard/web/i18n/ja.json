@@ -1931,5 +1931,6 @@
  "from {0}": "{0}から",
  "Already in the project: {0}.": "プロジェクトにすでにあります: {0}。",
  "Package": "パッケージ",
- "Comes from": "入手元"
+ "Comes from": "入手元",
+ "{0} more": "ほか{0}件"
 }

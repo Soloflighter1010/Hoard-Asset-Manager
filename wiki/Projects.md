@@ -90,7 +90,9 @@ what it found. From there:
 - **Put in products from your library**, later: Downloads opens in **Select** mode for this project, with nothing to
   do there but **Add to project** or **Cancel**. What's chosen is shown before it goes in, with what it needs.
   Nothing already in the project is replaced: a file that's there (with the same asset ID, or at the same path) is
-  left as it is.
+  left as it is. **From your library** shows what Hoard has put in the project, each product as its library tile, with
+  the files that went in and when (rest the pointer on a file for the folders it added); choose a tile to see the
+  product in your library.
 - **What went in, and where.** Each time Hoard puts products in a project (making it, or later), it adds them to
   `Hoard imports.md`, beside the project's `Assets` folder: each product, its file, when, and the folders it added
   (or the package, in `Packages`), with anything left as it was because the project already had it. Unity doesn't
@@ -101,8 +103,9 @@ what it found. From there:
 - **Open folder**, and **Back up**: everything in the project but what Unity makes again by itself (`Library`,
   `Temp`, `Logs`, `obj`) in a zip, in your backups folder. Packages from repositories can be left out, since they're
   downloaded again.
-- What [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) reports about it: the products it uses, which have
-  updates, and its credits.
+- What [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) reports about it: the products it uses, as their library
+  tiles (with how each is in it, and which have updates), and its credits. Choose a tile to see the product in your
+  library.
 - **Delete from this computer...**: the project's folder is deleted, and it's taken off the list. It's backed up into
   your backups folder first, unless you untick that (without a backup, it can't be got back), and only once you've
   typed its name. Hoard won't delete a project Unity has open, or one that holds its own folders (the downloads

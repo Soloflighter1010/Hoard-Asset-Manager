@@ -234,6 +234,16 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report"])
         page.click(".pj-subs [data-sub=report]")
         page.locator(".proj", has_text="What Hoard for Unity found in it").wait_for()
+        # what it found: as their library tiles, with how each is in it; choosing one shows it in the library
+        tile = page.locator(".proj .pj-tile", has_text="Rusk")
+        self.assertIn("In the project", tile.inner_text())
+        self.assertEqual(tile.locator(".art img, .art .ph").count(), 1)
+        tile.locator("button.ext-main").click()
+        page.locator("#detail.open", has_text="Rusk").wait_for()
+        self.assertTrue(page.locator("#projectsWin").is_hidden())
+        page.keyboard.press("Escape")
+        page.click("#projectsTab")
+        page.locator(".pj-subs [data-sub=report]").wait_for()
         page.click(".pj-subs [data-sub=packages]")
         page.locator(".pj-pk").wait_for()
         avatars = page.locator(".pj-pk tr", has_text="com.vrchat.avatars")
@@ -364,6 +374,21 @@ class ProjectsPanel(unittest.TestCase):
             page.wait_for_timeout(100)
         self.assertEqual((ran[0]["op"], ran[0]["name"]), ("preload", "Rusk Avatar"))
         self.assertEqual([x["file"] for x in ran[0]["picks"]], ["rusk.unitypackage"])
+        # what went in, as their library tiles: each product once, with its files and when
+        from hoard.vpm import listing
+        key = page.evaluate("T.all().find(a => a.name === 'Rusk').tag_key")
+        project = self.tmp / "Unity" / "Rusk Avatar"
+        listing.add_preloaded(str(project), [{"tag_key": key, "name": "Rusk", "file": "rusk.unitypackage", "label": "rusk.unitypackage",
+                                              "added": ["Assets/Rusk"]},
+                                             {"tag_key": key, "name": "Rusk", "file": "rusk-quest.unitypackage", "label": "rusk-quest.unitypackage"}])
+        page.evaluate("loadProjects()")
+        tile = page.locator(".pj-part .pj-tile", has_text="Rusk")
+        tile.wait_for()
+        self.assertEqual(page.locator(".pj-part .pj-tile").count(), 1, "one tile a product")
+        self.assertIn("rusk.unitypackage", tile.inner_text())
+        self.assertIn("rusk-quest.unitypackage", tile.inner_text())
+        self.assertIn("just now", tile.inner_text())
+        self.assertEqual(tile.locator(".pj-file", has_text="rusk.unitypackage").first.get_attribute("title"), "Added: Assets/Rusk")
         # Escape, while choosing, goes back too
         page.click("[data-pj=addprod]")
         bar.locator("[data-main]").wait_for()

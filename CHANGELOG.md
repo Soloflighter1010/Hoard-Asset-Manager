@@ -20,6 +20,8 @@
 - **Add packages** shows packages in groups by the repository they come from (VRChat's own first), each folding away.
 - A project's **Packages** has its columns named (Package, Installed, Update, Comes from), and says which repository
   each package comes from.
+- In a project, **From your library** and **What Hoard for Unity found** show products as their library tiles, with
+  the files that went in (or how each is in the project) beneath. Choose one to see it in your library.
 
 ## 5.1.2
 

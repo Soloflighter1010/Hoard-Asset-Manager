@@ -898,6 +898,18 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
   .pj-pk td.v:empty { display: none; }
 }
 .pj-pre { margin: 4px 0; padding-left: 18px; font-size: 13.5px; }
+/* Projects' tiles: what went into a project, and what Hoard for Unity found in one, as their library tiles */
+.pj-tiles { --slot-size: 150px; margin: 12px 0 4px; }
+.pj-tile .ext-main { padding: 0; border: 0; background: none; text-align: left; font: inherit; cursor: pointer; }
+.pj-tile button.ext-main:hover .art { transform: translateY(-3px); }
+.pj-tile button.ext-main:focus-visible { outline: none; }
+.pj-tile button.ext-main:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 3px; }
+.pj-below { display: flex; flex-direction: column; gap: 2px; margin-top: -3px; font-size: 12px; color: var(--dust); }
+.pj-below .pj-file { color: var(--bone); overflow-wrap: anywhere; }
+.pj-below .st { font-weight: 700; }
+.pj-below .st.yes { color: #4CC38A; }
+.pj-below .st.imported { color: var(--warn); }
+.pj-below .upd { align-self: flex-start; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--gold); color: var(--gold-ink); }
 .pj-pre li { margin: 4px 0; overflow-wrap: anywhere; }
 .pj-field { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 8px; align-items: center; margin: 8px 0; }
 .pj-field label { font-size: 13.5px; color: var(--dust); }

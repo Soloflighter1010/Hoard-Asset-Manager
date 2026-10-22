@@ -1789,10 +1789,7 @@ function pjProject() {
     add: () => pjAddList(p.unity, new Set(pk.map(x => x.name))),
     library: () => `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
       (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
-      (pre.length ? `<ul class="pj-pre pj-rows">${pre.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span>` +
-        (x.when ? ` <span class="muted">${esc(ago(x.when))}</span>` : "") +
-        ((x.added || []).length ? `<br><span class="muted">${esc(tr("Added:"))} <span translate="no">${esc(x.added.join(", "))}</span></span>` : "") + `</li>`).join("")}</ul>`
-        : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`),
+      (pre.length ? pjPutInTiles(pre) : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`),
     report: () => pjReport(p.report) };
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-facts">${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}</p>` +
@@ -1882,12 +1879,39 @@ function pjAddNew() {   // New project's Add packages
 }
 // What Hoard for Unity reported about the project: what it uses, with updates, and its credits list
 const inSet = p => [...new Set(p.assets.filter(a => a.tag_key && (a.status === "yes" || a.status === "partly")).map(a => a.tag_key))];
+// ---- products as their library tiles, in Projects (what went into a project, and what Hoard for Unity found in one):
+// the page's own item for each, found by its tag key and drawn as its tile is (its picture, name and creator, its
+// store's colour), with a word beneath; choosing one shows it on the page. One that isn't in your library now is drawn
+// from what's known of it, and only shown.
+function pjItemsByKey() {
+  const by = new Map();
+  for (const a of T.all() || []) if (a.tag_key && !by.has(a.tag_key)) by.set(a.tag_key, a);
+  return by;
+}
+function pjTile(item, known, below) {
+  const name = item ? item.name : known.name || "", creator = item ? item.creator : known.creator || "";
+  const fromKey = String(known.tag_key || "").split("/")[0];   // (one not in your library now: its store, from its key)
+  const store = String((item || known).store || (STRIPE_STORES.includes(fromKey) ? fromKey : "local")).toLowerCase();
+  const inner = `<span class="art">${item ? T.art(item) : setPlaceholder(name, creator)}${notch(store, [])}</span>` +
+    `<span class="nm-t" translate="no">${esc(name)}</span><span class="cr" translate="no">${esc(creator ? tr("by {0}", creator) : "")}</span>`;
+  return `<div class="slot ext pj-tile">` + (item ? `<button class="ext-main" data-pj="showitem" data-id="${esc(T.id(item))}">${inner}</button>`
+    : `<span class="ext-main">${inner}</span>`) + (below ? `<span class="pj-below">${below}</span>` : "") + `</div>`;
+}
+// What went into a project from your library, newest first: a tile for each product, with its files and when beneath
+// (and the folders each added, for a pointer that rests on it)
+function pjPutInTiles(pre) {
+  const items = pjItemsByKey(), by = new Map();
+  for (const x of pre) { if (!by.has(x.tag_key)) by.set(x.tag_key, []); by.get(x.tag_key).push(x); }
+  return `<div class="grid pj-tiles">${[...by.values()].map(xs => pjTile(items.get(xs[0].tag_key), xs[0],
+    xs.slice(0, 3).map(x => `<span class="pj-file" translate="no"${(x.added || []).length ? ` title="${esc(tr("Added:") + " " + x.added.join(", "))}"` : ""}>${esc(x.label || x.file)}</span>`).join("") +
+    (xs.length > 3 ? `<span class="muted">${esc(tr("{0} more", xs.length - 3))}</span>` : "") +
+    (xs[0].when ? `<span class="muted">${esc(ago(xs[0].when))}</span>` : ""))).join("")}</div>`;
+}
 function pjReport(p) {
-  const used = p.assets.length, style = p.credits.style;
+  const used = p.assets.length, style = p.credits.style, items = pjItemsByKey();
   return `<div class="proj"><h4>${esc(tr("What Hoard for Unity found in it"))}</h4>` +
-    (used ? `<table>${p.assets.map(a => `<tr><td>${a.download != null
-        ? `<a href="/downloads#open=${a.download}" translate="no">${esc(a.name)}</a>` : `<span translate="no">${esc(a.name)}</span>`}<br><span class="muted" translate="no">${esc(a.creator)} · ${esc(storeLabel(a.store))}</span></td>` +
-      `<td class="st ${esc(a.status)}">${esc(tr(PROJECT_STATUS[a.status] || ""))}${a.update ? ` <span class="upd">${esc(tr("Update"))}</span>` : ""}</td></tr>`).join("")}</table>`
+    (used ? `<div class="grid pj-tiles">${p.assets.map(a => pjTile(items.get(a.tag_key), a,
+        `<span class="st ${esc(a.status)}">${esc(tr(PROJECT_STATUS[a.status] || ""))}</span>${a.update ? ` <span class="upd">${esc(tr("Update"))}</span>` : ""}`)).join("")}</div>`
       : `<p class="none">${esc(tr("Nothing from Hoard is in it yet."))}</p>`) +
     `<h4>${esc(tr("Credits"))}</h4><div class="row"><select data-proj-style aria-label="${esc(tr("Credits style"))}">${Object.entries(CREDIT_STYLES).map(([k, v]) =>
       `<option value="${k}"${k === style ? " selected" : ""}>${esc(tr(v))}</option>`).join("")}</select>` +
@@ -2427,6 +2451,13 @@ async function pjAct(b) {
     PJLOG.follow = !PJLOG.follow;
     b.setAttribute("aria-pressed", String(PJLOG.follow));
     if (PJLOG.follow) pjLogRows();
+    return;
+  }
+  if (act === "showitem") {
+    const item = T.byId(b.dataset.id);
+    if (!item) return;
+    openProjects(false);
+    showDetail(item);
     return;
   }
   if (act === "logfolder") {
