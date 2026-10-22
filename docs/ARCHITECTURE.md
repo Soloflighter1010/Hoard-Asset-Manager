@@ -211,6 +211,15 @@ from when that shop isn't in the user's list (it's only added when the user conf
   them, or a count of the rest. `/api/assets` gives each asset's `needs` (leaving out hidden products while locked),
   and `build_catalog` writes them into `catalog.json` (`needs.add_to_catalog`), checked by `valid_needs`. After a
   read finds something new, the catalog is written again if no job is running.
+- Look inside's **Extract** (`POST /api/look-inside/extract`, `packages.extract`): the page sends what's ticked
+  (`p:<package>:<path>`, `d:<package>:<folder>`, `z:<zip member>`, or `all`), and the server writes it into a new
+  folder in `edits_root(cfg, root)/Extracted` (the folder editable copies go in), named after the file. A package
+  is read once, in order (`read_unitypackage(on_asset=...)`), each asset streamed to a temp file beside where it goes
+  and moved into place. `out_parts` makes each path's parts names every system allows and refuses `..`; `Writer`
+  makes folders one level at a time and refuses a link or a file in the way, so nothing lands outside the folder,
+  gives a name already taken " (2)", and stops (`CantExtract`) before the disk has less than `ROOM_TO_SPARE`
+  left. A zip member locked with a password, or one that can't be read, is skipped and named in the answer; a
+  failure part way deletes the half-made folder.
 
 ## Tags
 
@@ -280,6 +289,12 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
   (`open-short`), unlocks it in the page, and adds the code as any other.
 - **Deleting one:** **Delete the short link** (`unshort`), and deleting the set, delete it from the server with
   the token. Backups leave short links out; a restore keeps this computer's.
+- **Too big for one:** the share server takes a locked set of up to 48 KiB of base64url (`shortlinks.MAX_DATA`,
+  `MAX_BYTES` in the Worker); `shortlinks.fits(code)` says whether a code locks to that. `/api/sets` (`share`) says
+  `fits`, and when it doesn't, how many `parts` it takes: `sets.share_parts()` cuts the set's products, in order,
+  into parts each as full as fits (a binary search on each part's length, measured with `share_code` and a name of
+  the longest "(N of N)"), hidden products taking no room. `split` makes them new sets (`SetStore.split`): a
+  wishlist's are wishlists without a `source`, so reading the store's list again changes only the wishlist itself.
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 
@@ -291,8 +306,11 @@ Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with 
   of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture
   only when `p` names the product at that place now, and the browser never shows one it kept for another.
 - **Suggested tags:** `library.common_words()` (the same words Hoard suggests for a store's products) over a
-  wishlist's product names gives `words` in `/api/sets`; the page filters by them, by price range (in one currency)
-  and folds what you own and what you don't.
+  wishlist's product names gives `words` in `/api/sets`. With a wishlist open (`openWish()`), the filters beside it
+  are its own: `renderTagFacets` and the pages' Creators count its products (`wishTagItems`, `wishCreators`), with
+  your tags on those in your library (`wishOwnTags`, by tag key), and `wishFits` filters by `state.tags` and
+  `state.creator` as the page does, plus a price range (in one currency); `wishScope()` starts them again on the way
+  into or out of one. The page's sort orders its two groups (`WISH_SORTS`; Recently added keeps the store's order).
 - **Add products by link** (`/api/sets`, `add-links`, at most 30): `wishlists.from_product_page()` takes only a
   product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io (`LINK_HOSTS`) and reads it through
   `server.read_store_page()`, which is `fetch_public` held to that store's hosts, redirects included, sending no

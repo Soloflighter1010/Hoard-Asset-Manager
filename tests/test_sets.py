@@ -113,6 +113,68 @@ class Pictures(unittest.TestCase):
         self.assertIsNone(sets.picture_file(clean[1]), "named, but not there: none (a backup brings the set, not its picture)")
 
 
+def long_wishlist(count: int) -> list[dict]:
+    """A store's wishlist of made-up products, as a long Booth list reads: names, creators, pages, pictures, prices."""
+    import random
+    r = random.Random(7)
+    word = lambda: "".join(r.choice("abcdefghijklmnopqrstuvwxyzアバターモデル衣装") for _ in range(r.randint(4, 9)))  # noqa: E731
+    return [{"store": "booth", "id": str(1000 + n), "name": f"【VRChat】{word()} {word()} {word()} #{n}",
+             "creator": f"{word()} studio", "url": f"https://booth.pm/ja/items/{1000 + n}",
+             "thumbnail": f"https://booth.pximg.net/c/300x300_a2_g5/{r.getrandbits(64):016x}/i/{1000 + n}/"
+                          f"{r.getrandbits(128):032x}_base_resized.jpg",
+             "price": {"text": "¥500", "amount": 500, "currency": "JPY"}} for n in range(count)]
+
+
+class Splitting(unittest.TestCase):
+    """A set too big for one short link (Booth's Loved items of 808 products, say) is split into sets that each fit,
+    in its order, each as full as it can be; the set stays as it is."""
+
+    def setUp(self):
+        self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
+        self.store.put_wishlists([{"store": "booth", "list": "Loved items", "products": long_wishlist(900)}])
+        wish = self.store.load()["sets"][0]
+        self.store.change({"action": "note", "id": wish["id"], "note": "For later"})
+        self.wish = self.store.load()["sets"][0]
+
+    def test_in_parts_that_each_fit_a_short_link(self):
+        from hoard import shortlinks
+        self.assertFalse(shortlinks.fits(sets.share_code(self.wish)[0]), "too big for one")
+        parts = sets.share_parts(self.wish)
+        self.assertGreaterEqual(len(parts), 2)
+        self.assertEqual([k for part in parts for k in part], self.wish["items"], "every product, once, in order")
+        for n, part in enumerate(parts):
+            named = {**self.wish, "name": f"{self.wish['name']} ({n + 1} of {len(parts)})", "items": part}
+            self.assertTrue(shortlinks.fits(sets.share_code(named)[0]), f"part {n + 1} fits")
+            if n < len(parts) - 1:   # as full as it can be: one more wouldn't fit
+                more = {**named, "items": part + [parts[n + 1][0]]}
+                self.assertFalse(shortlinks.fits(sets.share_code({**more, "name": more["name"][:50] + " (99 of 99)"})[0]))
+        hidden = set(self.wish["items"][:300])   # hidden products aren't shared, so they take no room
+        self.assertLess(len(sets.share_parts(self.wish, leave_out=hidden)), len(parts) + 1)
+        self.assertEqual(sets.share_parts({**self.wish, "items": self.wish["items"][:20]}), [self.wish["items"][:20]], "one that fits: one part")
+
+    def test_split_into_new_sets(self):
+        parts = sets.share_parts(self.wish)
+        made = self.store.split(self.wish["id"], parts)["made"]
+        after = {s["id"]: s for s in self.store.load()["sets"]}
+        self.assertEqual(after[self.wish["id"]], self.wish, "the set stays as it is")
+        for n, (sid, part) in enumerate(zip(made, parts), 1):
+            s = after[sid]
+            self.assertEqual(s["name"], f"Booth: Loved items ({n} of {len(parts)})")
+            self.assertEqual((s["items"], s["note"], s["kind"]), (part, "For later", "wishlist"))
+            self.assertNotIn("source", s, "a wishlist of your own: reading Booth's list again changes only the list itself")
+            self.assertEqual(s["products"][part[0]]["price"]["amount"], 500, "with what's known of its products")
+        self.store.put_wishlists([{"store": "booth", "list": "Loved items", "products": long_wishlist(3)}])
+        self.assertEqual(len(self.store.load()["sets"]), 1 + len(parts), "read again: no new wishlist, the parts left alone")
+        with self.assertRaises(ValueError):
+            self.store.split(self.wish["id"], [self.wish["items"]])   # (one part: nothing to split)
+
+    def test_a_long_name_keeps_its_part_number(self):
+        made = self.store.change({"action": "create", "name": "A" * 60, "items": [RUSK, HOODIE]})["made"]
+        parts = self.store.split(made, [[RUSK], [HOODIE]])["made"]
+        names = [s["name"] for s in self.store.load()["sets"] if s["id"] in parts]
+        self.assertEqual([len(n) <= 60 and n.endswith(f"({i} of 2)") for i, n in enumerate(names, 1)], [True, True])
+
+
 class Sharing(unittest.TestCase):
     """A set shared as a code: the set itself, in a link to the viewer on Hoard's website, never uploaded."""
 

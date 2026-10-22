@@ -302,13 +302,17 @@ class InHoard(unittest.TestCase):
         self.assertEqual(errors, [])
 
     def test_groups_tags_prices_and_links(self):
-        """A wishlist open: what isn't yours yet and what is, in two groups that fold away (and stay folded); its
-        suggested tags, from the words its names share, narrow it down; so does a price range, in one currency;
-        and products are added by their links."""
+        """A wishlist open: what isn't yours yet and what is, in two groups that fold away (and stay folded), in the
+        page's sort; the filters beside it are its own: its suggested tags, from the words its names share, your tags
+        on what you have, and its creators; a price range above it narrows it down too, in one currency; and
+        products are added by their links."""
         from hoard import server
+        from hoard.tags import tag_key
         sets.SetStore().put_wishlists([{"store": "booth", "list": "Loved items", "url": "u", "products": [
-            product("Fox Hoodie", "1,200 JPY"), product("Fox Ears", "800 JPY"), product("Wolf Hoodie", "3,000 JPY"),
-            product("Mochi Boots", "500 JPY", id_="1002"), product("Snow Cap", "12.50 USD", "gumroad")]}])
+            product("Fox Hoodie", "1,200 JPY"), product("Fox Ears", "800 JPY", creator="Ash Atelier"),
+            product("Wolf Hoodie", "3,000 JPY"), product("Mochi Boots", "500 JPY", id_="1002"),
+            product("Snow Cap", "12.50 USD", "gumroad", creator="")]}])
+        self.api("/api/tags", {"action": "assign", "keys": [tag_key("booth", "Mochi Boots")], "add": ["boots"]})
         page_json = json.dumps({"name": "Fox Tail", "price": "¥ 600", "shop": {"name": "Mochi Works"}, "images": []})
         from playwright.sync_api import sync_playwright
         with mock.patch.object(server, "read_store_page", lambda url, hosts: (page_json, "application/json")), sync_playwright() as p:
@@ -328,22 +332,57 @@ class InHoard(unittest.TestCase):
             self.assertEqual(buy.locator(".slot.ext").count(), 4)
             self.assertEqual(yours.locator(".nm-t").all_inner_texts(), ["Mochi Boots"], "yours already: in its own group")
             self.assertEqual(page.locator("#grid .slot").count(), 0, "a wishlist's products are all in its groups")
+            # the page's sort: Recently added keeps the list's own order; Creator, those with none last
+            page.select_option("#sort", "added")
+            self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Fox Hoodie", "Fox Ears", "Wolf Hoodie", "Snow Cap"])
+            page.select_option("#sort", "creator")
+            self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Fox Ears", "Fox Hoodie", "Wolf Hoodie", "Snow Cap"])
+            page.select_option("#sort", "name")
+            self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Fox Ears", "Fox Hoodie", "Snow Cap", "Wolf Hoodie"])
+            # its creators, beside it
+            self.assertEqual(page.locator("#creators button").evaluate_all("l => l.map(b => b.dataset.creator + ' ' + b.querySelector('.n').textContent)"),
+                             ["Ash Atelier 1", "Kitsu 2", "Mochi Works 1"], "its own, with how many (none for one without)")
+            page.click('#creators [data-creator="Kitsu"]')
+            self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Fox Hoodie", "Wolf Hoodie"])
+            self.assertEqual(yours.locator(".nm-t").count(), 0, "Mochi Works' boots aren't Kitsu's")
+            page.click('#status [data-clear="creator"]')
+            self.assertEqual(buy.locator(".slot.ext").count(), 4)
+            self.assertEqual(page.locator(".wish-tags").count(), 0, "no tags above it: they're beside it")
+            # your tags on what you have
+            page.click('#myTags [data-tag="boots"]')
+            self.assertEqual(yours.locator(".nm-t").all_inner_texts(), ["Mochi Boots"])
+            self.assertEqual(buy.locator(".slot.ext").count(), 0)
+            page.click('#myTags [data-tag="boots"]')
             yours.locator("summary").click()
             page.wait_for_function("() => !document.querySelector('details[data-fold=\"wish-yours\"]').open")
             # its suggested tags: words several names share
-            tags = page.locator(".wish-tags .chip")
+            tags = page.locator("#tags .chip")
             self.assertIn("hoodie2", tags.evaluate_all("l => l.map(b => b.textContent)"))
-            page.click('.wish-tags [data-tag="fox"]')
+            page.click('#tags [data-tag="fox"]')
             self.assertEqual(sorted(buy.locator(".nm-t").all_inner_texts()), ["Fox Ears", "Fox Hoodie"])
+            self.assertEqual(page.locator("#creators button").evaluate_all("l => l.map(b => b.dataset.creator + ' ' + b.querySelector('.n').textContent)"),
+                             ["Ash Atelier 1", "Kitsu 1"], "the creators of what the tag leaves")
             # a price range, in one of its currencies (the one most of its prices are in, to begin with)
             page.fill('[data-wish="min"]', "1000")
             self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Fox Hoodie"])
+            self.assertEqual(page.locator("#creators button").evaluate_all("l => l.map(b => b.dataset.creator)"), ["Kitsu"],
+                             "beside it, too")
             page.click('[data-setx="wclear"]')
+            self.assertEqual(sorted(buy.locator(".nm-t").all_inner_texts()), ["Fox Ears", "Fox Hoodie"], "Clear: the price range")
+            page.click('#tags [data-tag="fox"]')
             self.assertEqual(buy.locator(".slot.ext").count(), 4)
             page.select_option('[data-wish="cur"]', "USD")
             page.fill('[data-wish="max"]', "20")
             self.assertEqual(buy.locator(".nm-t").all_inner_texts(), ["Snow Cap"])
             page.click('[data-setx="wclear"]')
+            # back to every set: the wishlist goes with it (its groups stayed below the sets, after a filter), and so do
+            # the tags chosen in it
+            page.click('[data-setx="back"]')
+            page.locator(".settile", has_text="Booth: Loved items").wait_for()
+            self.assertEqual(page.locator("#setMore .wishgroup, #setMore .wishbar").count(), 0, "nothing of the wishlist left")
+            self.assertEqual(page.locator('#status [data-clear="tag"]').count(), 0, "its tag isn't a filter anymore")
+            page.locator(".settile", has_text="Booth: Loved items").click()
+            buy.wait_for()
             # added by its link
             page.click('[data-setx="addlinks"]')
             page.fill("#addLinks", "https://booth.pm/en/items/4242")

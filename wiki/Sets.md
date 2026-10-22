@@ -100,8 +100,14 @@ already shows as theirs, and what they don't says where to buy it.
   its short link too. Whoever opens a deleted or run-out link is told it's gone.
 - **Opening one:** the viewer fetches the locked set from the share server by the link's id, and unlocks it in
   the page. **Add a shared set...** does the same.
-- **Limits:** a short link holds a set of up to about 500 products. The share server can make a limited number
-  a day: if it can't, or can't be reached, Hoard says so, and you can try again later.
+- **Limits:** a short link holds a set of up to about 500 products (more or fewer, as their names and links are
+  short or long). The share server can make a limited number a day: if it can't, or can't be reached, Hoard says
+  so, and you can try again later.
+- **Too big for one link** (a long wishlist, say): **Share...** says so, and offers **Split into N sets**. That
+  makes new sets of its products, in its order, each as full as one short link holds: "Booth: Loved items (1 of
+  2)", "(2 of 2)", and so on, each with the set's note and photos. Share each one. The set itself stays as it
+  is, so a wishlist read from a store is still brought up to date when you read it again; its parts are
+  wishlists of your own, as they were when you split it.
 
 ## Its picture
 
@@ -149,13 +155,22 @@ already in your library show as yours.
   link...**.
 
 An open wishlist (from 5.1) shows its products in two groups: **Not yours yet**, with what each costs, and **Yours
-already**. Click a group's heading to fold it away; it stays folded next time. Above them:
+already**. Click a group's heading to fold it away; it stays folded next time. From 5.1.1 they're in the order
+**Sort** says: **Name**, **Creator** (those with none last) or **Store**; **Recently added** keeps the wishlist's own
+order, as the store lists it.
 
-- **Suggested tags**: words several of its products' names share, with how many have each. Click some to show only
-  the products whose names have them all.
+The filters on the left are the wishlist's own (from 5.1.1; before, its tags were above it):
+
+- **Suggested**: words several of its products' names share, with how many have each. Click some to show only the
+  products whose names have them all.
+- **Your tags**: the tags you gave those of its products that are in your library.
+- **Creators**: who made its products, with how many each. Click one to show only theirs.
+
+They start again when you open another wishlist, or leave it. Above the groups:
+
 - **Price**: a range, from and to, in one of the wishlist's currencies (the one most of its prices are in, to begin
   with; choose another beside it). A product priced in another currency, or with no price, is left out while a range
-  is set. **Clear** clears the tags and the range.
+  is set. **Clear** clears the range.
 
 The search box at the top narrows it down too.
 

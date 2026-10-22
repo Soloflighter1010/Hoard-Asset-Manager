@@ -571,3 +571,30 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 .9rem var(--body); }
 .sv-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 @media (max-width: 460px) { .sv-items { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+
+/* Press kit (press.html): words to copy, the facts, the logo on its own backgrounds, colours, and screenshots */
+.press h3 { margin: 1.2em 0 .4em; font-size: 1rem; color: var(--dust); }
+.press-copy { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 14px 18px;
+  margin: 0; max-width: 48em; }
+.press-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 24px; margin: 0; max-width: 56em; }
+.press-facts dt { font-weight: 700; color: var(--dust); }
+.press-facts dd { margin: 0; }
+.press-list { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; max-width: 56em; }
+.press-logos, .press-shots, .press-swatches { list-style: none; padding: 0; margin: 0 0 14px; }
+.press-logos { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.press-logos li { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 14px; }
+.press-logos .plate { display: grid; place-items: center; height: 120px; border-radius: 10px; padding: 0 16px; }
+.press-logos .on-dark .plate { background: #211C18; }
+.press-logos .on-light .plate { background: #FFFFFF; border: 1px solid var(--seam); }
+.press-logos img { height: 64px; width: auto; max-width: 100%; }
+.press-logos p, .press-shots p { margin: 10px 0 0; font-size: .95rem; }
+.press-swatches { display: flex; flex-wrap: wrap; gap: 14px 24px; }
+.press-swatches li { display: flex; align-items: center; gap: 10px; }
+.swatch { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--seam); flex: none; }
+.press-shots { display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.press-shots img { display: block; width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--seam); }
+@media (max-width: 760px) {
+  .press-logos, .press-shots { grid-template-columns: minmax(0, 1fr); }
+  .press-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .press-facts dd { margin-bottom: 10px; }
+}

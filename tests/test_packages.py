@@ -226,6 +226,101 @@ class LookInside(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class Extract(unittest.TestCase):
+    """Look inside's Extract: the chosen files, or all of them, taken out of a package or a zip into a folder of
+    their own, where their paths say, and never anywhere else, whatever a package's paths claim."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name)
+        self.env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(self.home / "data")})   # (Look inside's cache)
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def package(self, assets: dict) -> Path:
+        path = self.home / "Hoodie.unitypackage"
+        path.write_bytes(unitypackage(assets))
+        return path
+
+    def out(self, name="out") -> Path:
+        dest = self.home / name
+        dest.mkdir()
+        return dest
+
+    def files(self, dest: Path) -> dict:
+        return {p.relative_to(dest).as_posix(): p.read_bytes() for p in sorted(dest.rglob("*")) if p.is_file()}
+
+    def test_chosen_files_and_folders(self):
+        path = self.package(SAMPLE)
+        dest = self.out()
+        done = packages.extract(path, dest, ["p:0:Assets/Creator/Hoodie.prefab"])
+        self.assertEqual(self.files(dest), {"Assets/Creator/Hoodie.prefab": SAMPLE[G2][1]})
+        self.assertEqual((done["files"], done["bytes"]), (1, len(SAMPLE[G2][1])))
+        dest = self.out("out2")
+        packages.extract(path, dest, ["d:0:Assets/Creator/Textures"], metas=True)
+        self.assertEqual(self.files(dest), {"Assets/Creator/Textures/hoodie.png": SAMPLE[G3][1],
+                                            "Assets/Creator/Textures/hoodie.png.meta": b"fileFormatVersion: 2\nguid: " + G3.encode() + b"\n"})
+        dest = self.out("out3")
+        packages.extract(path, dest, ["all"])
+        self.assertEqual(set(self.files(dest)), {"Assets/Creator/Hoodie.prefab", "Assets/Creator/Textures/hoodie.png"}, "no .meta unless asked")
+        with self.assertRaises(packages.CantExtract):
+            packages.extract(path, self.out("none"), ["p:0:Assets/Not/There.png"])
+
+    def test_a_path_never_leads_out(self):
+        """A package is a file anyone could make: "../", an absolute path, a drive, a name Windows can't have, the
+        same path twice: each lands inside the folder, under a safe name, and nothing is overwritten."""
+        evil = {"1" * 32: ("../../escaped.txt", b"climb"), "2" * 32: ("/etc/cron.d/evil", b"absolute"),
+                "3" * 32: ("C:\\Windows\\evil.dll", b"drive"), "4" * 32: ("Assets/CON.txt", b"reserved"),
+                "5" * 32: ("Assets/same.txt", b"one"), "6" * 32: ("Assets/same.txt", b"two")}
+        path = self.package(evil)
+        dest = self.out()
+        packages.extract(path, dest, ["all"])
+        got = self.files(dest)
+        self.assertFalse((self.home / "escaped.txt").exists())
+        self.assertNotIn("escaped", " ".join(got), "a path that climbs out isn't taken out at all")
+        self.assertEqual(got["etc/cron.d/evil"], b"absolute")
+        self.assertEqual(got["C_/Windows/evil.dll"], b"drive")
+        self.assertEqual(got["Assets/_CON.txt"], b"reserved")
+        self.assertEqual(sorted(v for k, v in got.items() if k.startswith("Assets/same")), [b"one", b"two"])
+        self.assertTrue(all((dest / k).resolve().is_relative_to(dest.resolve()) for k in got))
+
+    def test_never_through_a_link(self):
+        outside = self.home / "outside"
+        outside.mkdir()
+        dest = self.out()
+        (dest / "Assets").symlink_to(outside, target_is_directory=True)   # (planted where it would write)
+        with self.assertRaises(packages.CantExtract):
+            packages.extract(self.package(SAMPLE), dest, ["all"])
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_only_with_room_for_it(self):
+        with mock.patch.object(packages.shutil, "disk_usage", lambda p: mock.Mock(free=packages.ROOM_TO_SPARE + 10)):
+            with self.assertRaises(packages.CantExtract) as e:
+                packages.extract(self.package(SAMPLE), self.out(), ["all"])
+        self.assertIn("room", str(e.exception))
+
+    def test_a_zip_and_a_package_in_it(self):
+        path = self.home / "Hoodie.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("Hoodie/Hoodie_v2.unitypackage", unitypackage(SAMPLE))
+            zf.writestr("Hoodie/利用規約.txt", "terms")
+            zf.writestr("../evil.txt", "climb")
+        dest = self.out()
+        done = packages.extract(path, dest, ["z:Hoodie/利用規約.txt", "p:0:Assets/Creator/Hoodie.prefab"])
+        self.assertEqual(self.files(dest), {"Hoodie/利用規約.txt": "terms".encode(),
+                                            "Hoodie_v2/Assets/Creator/Hoodie.prefab": SAMPLE[G2][1]},
+                         "a zip's file where its name says; a package's assets in a folder named after it")
+        self.assertEqual(done["skipped"], [])
+        dest = self.out("all")
+        done = packages.extract(path, dest, ["all"])
+        self.assertEqual(set(self.files(dest)), {"Hoodie/Hoodie_v2.unitypackage", "Hoodie/利用規約.txt"}, "every file, as it is")
+        self.assertEqual(done["skipped"], [("../evil.txt", "its name leads outside the folder")])
+        self.assertFalse((self.home / "evil.txt").exists())
+
+
 class LookInsidePage(unittest.TestCase):
     """Downloads: Look inside on a product's .unitypackage, and on a .zip with one in it."""
 
@@ -300,15 +395,51 @@ class LookInsidePage(unittest.TestCase):
         win.locator("summary", has_text="Every file in the zip").click()
         win.get_by_text("Hoodie/利用規約.txt").wait_for()
 
+    def test_extract_what_you_choose(self):
+        """Look inside can take files out, not just list them: choose files and folders (a folder brings what's in
+        it), or Extract everything; they go in a folder of their own in Hoard Edits, which opens."""
+        from hoard import server
+        opened = []
+        edits = Path(self.tmp.name) / "Hoard Edits" / "Extracted"
+        with mock.patch.object(server, "reveal", lambda p: opened.append(p) or "your file manager"):
+            page = self.open_hoodie()
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.locator("#detail .files li", has_text="Hoodie.unitypackage").locator("[data-act='inside']").click()
+            win = page.locator("#insideWin")
+            win.locator(".sum", has_text="2 files, ").wait_for()
+            extract = win.locator("[data-x=extract][data-what=chosen]")
+            self.assertTrue(extract.is_disabled(), "nothing chosen yet")
+            win.locator("summary", has_text="Assets").click()
+            creator = win.locator("summary", has_text="Creator")
+            creator.locator("input.pick").check()   # a folder: everything in it
+            self.assertFalse(creator.evaluate("s => s.parentElement.open"), "choosing a folder doesn't open it")
+            self.assertEqual(extract.inner_text(), "Extract the 2 chosen files")
+            creator.locator("span", has_text="Creator").click()
+            self.assertTrue(win.locator("li.f", has_text="Hoodie.prefab").locator("input.pick").is_disabled(), "chosen with its folder")
+            extract.click()
+            page.get_by_text("Took 2 files out, into").wait_for()
+            first = edits / "Hoodie"
+            self.assertEqual(sorted(p.relative_to(first).as_posix() for p in first.rglob("*") if p.is_file()),
+                             ["Assets/Creator/Hoodie.prefab", "Assets/Creator/Textures/hoodie.png"])
+            self.assertEqual(opened, [first])
+            # again, every file, with Unity's .meta files: a new folder beside the first
+            page.locator("#insideMetas").check()
+            win.locator("[data-x=extract][data-what=all]").click()
+            page.get_by_text("Took 4 files out, into").wait_for()
+            self.assertTrue((edits / "Hoodie (2)" / "Assets" / "Creator" / "Hoodie.prefab.meta").is_file())
+            self.assertEqual(errors, [])
+
     def test_only_files_in_the_downloads(self):
         import json, urllib.request
         for path in ("../../etc/passwd.zip", "Booth/Kitsu Studio/Hoodie/readme.txt", "Booth/Kitsu Studio/Hoodie/gone.zip"):
-            req = urllib.request.Request(f"http://127.0.0.1:{self.srv.server_address[1]}/api/look-inside", method="POST",
-                                         data=json.dumps({"path": path}).encode(),
-                                         headers={"Content-Type": "application/json", "X-Hoard-Key": self.srv.key})
-            with self.subTest(path=path), self.assertRaises(urllib.error.HTTPError) as e:
-                urllib.request.urlopen(req)
-            self.assertEqual(e.exception.code, 404)
+            for action in ("/api/look-inside", "/api/look-inside/extract"):   # (taking files out, as reading them)
+                req = urllib.request.Request(f"http://127.0.0.1:{self.srv.server_address[1]}{action}", method="POST",
+                                             data=json.dumps({"path": path, "picks": ["all"]}).encode(),
+                                             headers={"Content-Type": "application/json", "X-Hoard-Key": self.srv.key})
+                with self.subTest(path=path, action=action), self.assertRaises(urllib.error.HTTPError) as e:
+                    urllib.request.urlopen(req)
+                self.assertEqual(e.exception.code, 404)
 
 
 if __name__ == "__main__":

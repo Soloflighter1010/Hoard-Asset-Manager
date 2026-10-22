@@ -38,6 +38,7 @@ from urllib.parse import quote, urlparse, urlsplit
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
 from .shortlinks import CODE as SHORT_CODE, ID as SHORT_ID, KEY as SHORT_KEY, PREFIX as SHORT_PREFIX, TOKEN as SHORT_TOKEN
+from .shortlinks import fits as fits_short_link
 from .tags import TAG_KEY_RX, tag_key
 
 MAX_SETS = 200
@@ -535,6 +536,66 @@ class SetStore:
             data = self.sanitize(data)
             self._save(data)
         return {**data, "lists": len(lists), "added": added, "cheaper": cheaper}
+
+
+    def split(self, sid: str, parts: list[list[str]]) -> dict:
+        """New sets from a set's products, a part each (share_parts' parts), for a set too big for one short link:
+        "<name> (1 of 2)" and so on, each with the set's note and photos, and what's known of its products. A
+        wishlist's parts are wishlists of your own (reading the store's list again changes only the wishlist itself).
+        The set stays as it is. Returns the sets after it, and the new sets' ids as "made"."""
+        with _lock:
+            data = self.load()
+            sets = data["sets"]
+            s = next((x for x in sets if x["id"] == sid), None)
+            if s is None:
+                raise ValueError("That set isn't there anymore.")
+            parts = [p for p in parts if p]
+            if len(parts) < 2:
+                raise ValueError("That set fits in one short link: it doesn't need splitting.")
+            if len(sets) + len(parts) > MAX_SETS:
+                raise ValueError(f"Hoard keeps up to {MAX_SETS} sets and wishlists, so this one can't be split into "
+                                 f"{len(parts)} more. Delete some first.")
+            known, made = s.get("products") or {}, []
+            for n, keys in enumerate(parts, 1):
+                tail = f" ({n} of {len(parts)})"
+                one = {"id": secrets.token_hex(4), "name": clean_name(s["name"][:NAME_LENGTH - len(tail)].rstrip() + tail),
+                       "items": [k for k in keys if k in s["items"]], **{k: s[k] for k in ("note", "photos") if s.get(k)},
+                       "products": {k: known[k] for k in keys if k in known}}
+                if s.get("kind") == "wishlist":
+                    one["kind"] = "wishlist"
+                sets.append(one)
+                made.append(one["id"])
+            data = self.sanitize(data)
+            self._save(data)
+        return {**data, "made": made}
+
+
+def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_link) -> list[list[str]]:
+    """A set's products in parts that each fit a short link (fits(code) says whether one does), in the set's order,
+    each as full as it can be: what Split into... makes sets of. Products that aren't shared (leave_out: hidden
+    ones; your own and unknown ones aren't in a code anyway) go along with the part they're in. A set that fits is
+    one part. Each part holds up to MAX_ITEMS products."""
+    items = s.get("items") or []
+    sized = {**s, "name": s.get("name", "")[:NAME_LENGTH - 10] + " (99 of 99)"}   # (as its parts' names will be, at most)
+
+    def fit(chunk) -> bool:
+        return fits(share_code({**sized, "items": [k for k in chunk if k not in leave_out]}, details)[0])
+    parts, start = [], 0
+    while start < len(items):
+        top = min(len(items), start + MAX_ITEMS)
+        if fit(items[start:top]):
+            end = top
+        else:   # the most that fits: halving, then going up a step at a time would be slow on a long list
+            low, high = start + 1, top - 1
+            if not fit(items[start:low]):
+                raise ValueError("A product in this set is too big for a short link on its own.")
+            while low < high:
+                mid = (low + high + 1) // 2
+                low, high = (mid, high) if fit(items[start:mid]) else (low, mid - 1)
+            end = low
+        parts.append(items[start:end])
+        start = end
+    return parts
 
 
 # ----------------------------------------------------------------------------- sharing a set

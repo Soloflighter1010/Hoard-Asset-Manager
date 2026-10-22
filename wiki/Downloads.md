@@ -201,13 +201,22 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
   say after you've tidied it yourself.
-- **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without extracting or
-  importing anything. A Unity package's files are listed in their folders (each opens as you choose it), with
+- **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without importing
+  anything, and takes nothing out until you choose **Extract** (below). A Unity package's files are listed in their folders (each opens as you choose it), with
   their sizes and the preview pictures Unity keeps inside the package; **Search in it** finds a file wherever it
   is. A `.zip` lists its files, and what each Unity package in it holds. One locked with a password says so (the
   store page usually gives the password), and one that isn't what its name says, or is damaged, says that. Hoard
   keeps what it read (in its `cache` folder) for the 40 files you looked inside most recently, so a second look
   is instant: up to 64 MB of preview pictures for one file (past that, the rest show their kind), and 512 MB in all.
+- **Extract** (from 5.1.1, in **Look inside**) takes files out. Tick the files and folders you want (a folder brings
+  everything in it, and searching lets you tick what it finds), then **Extract the N chosen files**, or **Extract
+  everything**. Hoard writes them into a new folder named after the package, in **Extracted** in your folder for
+  editable copies (**Hoard Edits** beside your downloads folder, or the one `edits_root` names), and opens it. A Unity
+  package's files go where their paths say (`Assets/...`); tick **With Unity's .meta files** to have each one's
+  `.meta` beside it. A zip's files go where their names say, and the files from a Unity package in a zip go in a
+  folder named after that package. Nothing is written outside that folder, whatever a package's paths say, a name
+  no system allows is changed to one that works, and Hoard checks there's room first. A file a zip locks with a
+  password is left out, and Hoard says so.
 - **What it needs** (from 4.0, in a product's details) lists what its packages use that isn't in them: tools such
   as lilToon, Poiyomi Toon (with the version its materials were made with), Modular Avatar, VRCFury, NDMF, Avatar
   Optimizer and the VRChat SDK, each with **Get it** (its own website); and whether it also uses files from other

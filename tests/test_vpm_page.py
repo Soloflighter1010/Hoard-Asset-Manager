@@ -96,6 +96,9 @@ class ProjectsPanel(unittest.TestCase):
         rows = page.locator("#projectsBody .pj-list > li")
         colour = lambda n: rows.nth(n).evaluate("e => getComputedStyle(e).backgroundColor")  # noqa: E731
         self.assertNotEqual(colour(0), colour(1), "rows alternate")
+        page.set_viewport_size({"width": 2000, "height": 900})   # a wide window: its rows use all of it, not a column
+        self.assertGreater(page.locator("#projectsBody .pj-list").first.bounding_box()["width"], 1900)
+        page.set_viewport_size({"width": 1280, "height": 900})
         page.click(".pj-tabs [data-pj=repos]")
         page.locator("#pjRepoUrl").wait_for()
         order = page.evaluate("() => [document.querySelector('#pjRepoUrl'), document.querySelector('#projectsBody .pj-list')]"

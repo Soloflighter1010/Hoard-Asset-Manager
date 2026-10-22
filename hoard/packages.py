@@ -30,7 +30,7 @@ import zlib
 from pathlib import Path
 
 from .paths import data_dir
-from .safety import clean_text
+from .safety import clean_text, safe_name
 
 MAX_ENTRIES = 500_000
 MAX_PATHNAME = 4096
@@ -121,12 +121,13 @@ def _scan(gz, size: int, refs: set) -> None:
         left -= len(chunk)
 
 
-def read_unitypackage(stream, on_preview=None, refs: set | None = None) -> dict:
+def read_unitypackage(stream, on_preview=None, refs: set | None = None, on_asset=None) -> dict:
     """What a .unitypackage holds, from a stream of its (gzipped) bytes: {GUID: {"path", "size" (None for a folder),
     "preview" (has one)}}. on_preview(guid, png bytes) gets each preview that's a real PNG of a sensible size, and
     returns False for one it doesn't keep (that asset then has no preview). refs,
-    when given, gets every GUID the package's text assets name (its own among them). Raises NotAPackage for anything
-    that isn't one."""
+    when given, gets every GUID the package's text assets name (its own among them). on_asset(guid, "asset" or
+    "asset.meta", size, stream), when given, is offered each asset's bytes (Extract): it reads exactly size of them
+    and returns True, or returns False to pass them by. Raises NotAPackage for anything that isn't one."""
     assets: dict[str, dict] = {}
     try:
         gz = gzip.GzipFile(fileobj=stream, mode="rb")
@@ -166,9 +167,12 @@ def read_unitypackage(stream, on_preview=None, refs: set | None = None) -> dict:
                 _skip(gz, pad)
                 if path:
                     assets.setdefault(guid, {"size": None, "preview": False})["path"] = path
-            elif part == "asset" and kind in ("0", "\x00"):
-                assets.setdefault(guid, {"size": None, "preview": False})["size"] = size
-                if refs is not None:
+            elif part in ("asset", "asset.meta") and kind in ("0", "\x00"):
+                if part == "asset":
+                    assets.setdefault(guid, {"size": None, "preview": False})["size"] = size
+                if on_asset is not None and on_asset(guid, part, size, gz):
+                    _skip(gz, pad)
+                elif part == "asset" and refs is not None:
                     _scan(gz, size, refs)
                     _skip(gz, pad)
                 else:
@@ -359,6 +363,195 @@ def look_inside(path: Path) -> dict:
     finally:
         if work.exists():
             shutil.rmtree(work, ignore_errors=True)
+
+
+# ----------------------------------------------------------------------------- taking files out (Look inside, Extract)
+
+ROOM_TO_SPARE = 256 << 20        # what extracting leaves free on the disk it writes to, at least
+CHUNK = 1 << 20
+
+
+class CantExtract(ValueError):
+    """Why files couldn't be taken out, in words for the page."""
+
+
+def out_parts(path: str) -> list[str] | None:
+    """A path from inside a package or zip as the folders and name it's written at, each a name that's safe on every
+    system (safety.safe_name); None for one that climbs out ("..") or has nothing in it. An absolute path, or one
+    with a drive, is taken as a path inside the folder it's written to."""
+    parts = [p for p in str(path or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if not parts or ".." in parts or len(parts) > 64:
+        return None
+    return [safe_name(p, 120) for p in parts]
+
+
+class Writer:
+    """Files written under one folder Hoard has just made: each where its path says (out_parts), a second at the same
+    place as "name (2).ext", only inside the folder, wherever a link might lead, and only while there's room."""
+
+    def __init__(self, dest: Path):
+        self.dest, self.real = dest, dest.resolve()
+        self.room = shutil.disk_usage(dest).free - ROOM_TO_SPARE
+        self.taken: set[str] = set()
+        self.files = self.bytes = 0
+
+    def _cant(self, e: OSError) -> CantExtract:   # (the disk's, not the package's: said as such)
+        return CantExtract(f"Couldn't write in {self.dest}: {e.strerror or e}.")
+
+    def _inside(self, folder: Path) -> None:
+        """folder (under dest) made a level at a time, never through a link: a folder that's a link already (planted
+        there, or made by something else since) stops it before anything is made where it leads."""
+        here = self.dest
+        for part in folder.relative_to(self.dest).parts:
+            here = here / part
+            if os.path.islink(here):
+                raise CantExtract("A path in it leads outside the folder it's taken out to, so it wasn't.")
+            try:
+                here.mkdir()
+            except FileExistsError:
+                if os.path.islink(here) or not here.is_dir():
+                    raise CantExtract("A path in it leads outside the folder it's taken out to, so it wasn't.") from None
+            except OSError as e:
+                raise self._cant(e) from e
+
+    def folder(self, parts: list[str]) -> None:
+        self._inside(self.dest.joinpath(*parts))
+
+    def place(self, parts: list[str]) -> Path:
+        target = self.dest.joinpath(*parts)
+        stem, suffix, n = target.stem, target.suffix, 2
+        while str(target).casefold() in self.taken or os.path.lexists(target):
+            target, n = target.with_name(f"{stem} ({n}){suffix}"), n + 1
+        self.taken.add(str(target).casefold())
+        self._inside(target.parent)
+        return target
+
+    def write(self, target: Path, stream, size: int) -> None:
+        """size bytes from stream, at target (from place): written beside it first, then put in its place."""
+        if size > self.room:
+            raise CantExtract("There isn't room for it on that disk.")
+        try:
+            fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".extracting-")
+        except OSError as e:
+            raise self._cant(e) from e
+        try:
+            with os.fdopen(fd, "wb") as out:
+                left = size
+                while left > 0:
+                    chunk = stream.read(min(left, CHUNK))   # (a damaged package's errors are its own)
+                    if not chunk:
+                        raise NotAPackage("the package ends partway")
+                    try:
+                        out.write(chunk)
+                    except OSError as e:
+                        raise self._cant(e) from e
+                    left -= len(chunk)
+            try:
+                os.replace(tmp, target)
+            except OSError as e:
+                raise self._cant(e) from e
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+        self.room -= size
+        self.files, self.bytes = self.files + 1, self.bytes + size
+
+
+def chosen(items: list[dict], picks: set, n: int, every: bool) -> dict[str, dict]:
+    """A package's assets that were chosen (Look inside's picks: "p:<n>:<path>" a file, "d:<n>:<path>" a folder and
+    everything in it), or all of them: {guid: item}."""
+    files = {p.split(":", 2)[2] for p in picks if p.startswith(f"p:{n}:")}
+    folders = tuple(p.split(":", 2)[2] for p in picks if p.startswith(f"d:{n}:"))
+    return {i["guid"]: i for i in items
+            if every or i["path"] in files or any(i["path"] == f or i["path"].startswith(f + "/") for f in folders)}
+
+
+def _take(stream, want: dict[str, dict], writer: Writer, under: list[str], metas: bool) -> None:
+    """The chosen assets of one package (chosen()), out of its stream, each at its path in the project, under
+    under; with its .meta beside it when metas."""
+    paths = {g: out_parts(i["path"]) for g, i in want.items()}
+    for g, i in want.items():
+        if i["size"] is None and paths[g]:
+            writer.folder(under + paths[g])
+    placed: dict[str, Path] = {}
+
+    def on_asset(guid: str, part: str, size: int, gz) -> bool:
+        parts = paths.get(guid)
+        if not parts or want[guid]["size"] is None or (part == "asset.meta" and not metas):
+            return False
+        if part == "asset":
+            placed[guid] = target = writer.place(under + parts)
+        else:   # beside its asset, as it was placed (a package lists an asset before its .meta)
+            target = placed[guid].with_name(placed[guid].name + ".meta") if guid in placed else \
+                writer.place(under + parts[:-1] + [parts[-1] + ".meta"])
+        writer.write(target, gz, size)
+        return True
+    read_unitypackage(stream, on_asset=on_asset)
+
+
+def extract(path: Path, dest: Path, picks: list[str], metas: bool = False) -> dict:
+    """Look inside's Extract: the chosen files (picks, as chosen() reads them, and "z:<name>" a file of a zip as it
+    is), or every one ("all"), out of a downloaded .unitypackage or .zip, into dest (a folder Hoard has just made).
+    A package's assets go where their paths say (Assets/...); a zip's files where theirs do, and the assets of a
+    package in a zip in a folder named after it. Returns {"files", "bytes", "skipped": [(name, why)]}. Raises
+    CantExtract, or NotAPackage for a file that can't be read."""
+    listing = look_inside(path)
+    if listing.get("error"):
+        raise CantExtract(listing["error"])
+    picks_set, every = set(picks), "all" in picks
+    writer, skipped = Writer(dest), []
+    try:
+        if listing["kind"] == "unitypackage":
+            want = chosen(listing["items"], picks_set, 0, every)
+            if not want:
+                raise CantExtract("Choose what to take out first.")
+            with open(path, "rb") as fh:
+                _take(fh, want, writer, [], metas)
+        else:
+            with zipfile.ZipFile(path) as zf:
+                members, packed = {}, []   # (as read_zip numbers them: the first packages in the zip's own order)
+                for info in zf.infolist()[:MAX_ZIP_MEMBERS]:
+                    if info.is_dir():
+                        continue
+                    name = clean_text(zip_name(info), 1000) or "(no name)"
+                    members.setdefault(name, info)
+                    if name.lower().endswith(".unitypackage") and len(packed) < MAX_ZIP_PACKAGES:
+                        packed.append((name, info))
+                names = list(members) if every else [p[2:] for p in picks if p.startswith("z:") and p[2:] in members]
+                jobs = [(n, name, info, chosen(listing["packages"][n]["items"], picks_set, n, False))
+                        for n, (name, info) in enumerate(packed) if n < len(listing["packages"])]
+                jobs = [j for j in jobs if j[3]]
+                if not names and not jobs:
+                    raise CantExtract("Choose what to take out first.")
+                unreadable = (NotAPackage, zipfile.BadZipFile, NotImplementedError, RuntimeError, OSError, zlib.error, EOFError)
+                for name in names:
+                    info, parts = members[name], out_parts(name)
+                    if info.flag_bits & 0x1:
+                        skipped.append((name, "locked with a password"))
+                    elif parts is None:
+                        skipped.append((name, "its name leads outside the folder"))
+                    else:
+                        try:
+                            with zf.open(info) as member:
+                                writer.write(writer.place(parts), member, info.file_size)
+                        except unreadable:   # one damaged file: the rest still come out
+                            skipped.append((name, "couldn't be read"))
+                for n, name, info, want in jobs:
+                    if info.flag_bits & 0x1:
+                        skipped.append((name, "locked with a password"))
+                        continue
+                    stem = name.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                    try:
+                        with zf.open(info) as member:
+                            _take(member, want, writer, [safe_name(stem, 120)], metas)
+                    except unreadable:
+                        skipped.append((name, "couldn't be read"))
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:   # (the zip itself, not one file in it)
+        raise NotAPackage("not a zip, or a damaged one") from e
+    return {"files": writer.files, "bytes": writer.bytes, "skipped": skipped}
 
 
 def preview(cid: str, name: str) -> bytes | None:

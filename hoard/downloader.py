@@ -2171,6 +2171,21 @@ as with any download.
 """
 
 
+def edits_root(cfg: dict, root: Path) -> Path:
+    """The folder for editable copies (config.edits_dir), and for what Look inside takes out of a package: outside
+    Hoard's care, so never inside a library folder. Raises ValueError for one that is."""
+    from .config import edits_dir
+    from . import libraries
+    dest_root = edits_dir(cfg)
+    rdest = dest_root.resolve()
+    for lib in libraries.roots(cfg, root):
+        rroot = lib.resolve()
+        if rdest == rroot or rroot in rdest.parents:
+            raise ValueError("The folder for editable copies can't be inside a library folder. Choose another in "
+                             "config.json (edits_root).")
+    return dest_root
+
+
 def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
     """Copy a product's downloaded files into a folder of their own under edits_dir (issue #82), for you to change.
 
@@ -2180,15 +2195,7 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
     and named, so a file changed behind Hoard's back isn't passed on as the store's. Nothing is read through a
     link. The copy goes in a new folder each time ("Name (2)" beside an earlier copy), and a note in it says what
     it is. Returns {"folder", "files", "bytes", "skipped": [(path, why)]}. Raises ValueError when there's nothing to copy."""
-    from .config import edits_dir
-    dest_root = edits_dir(cfg)
-    from . import libraries
-    rdest = dest_root.resolve()
-    for lib in libraries.roots(cfg, root):
-        rroot = lib.resolve()
-        if rdest == rroot or rroot in rdest.parents:
-            raise ValueError("The folder for editable copies can't be inside a library folder. Choose another in "
-                             "config.json (edits_root).")
+    dest_root = edits_root(cfg, root)
     for _base, store, sdir in library_store_dirs(cfg, root):
         for rec in Manifest(sdir).assets.values():
             if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
