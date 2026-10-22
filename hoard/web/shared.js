@@ -507,6 +507,8 @@ const tagChip = ([t, n], kind) =>
   `<button class="chip ${kind}" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}<span class="n">${n}</span></button>`;
 
 function renderTagFacets(list) {
+  const wish = openWish();   // (a wishlist open: its products', as they're narrowed down: wishTagItems)
+  if (wish) list = wishTagItems(wish);
   const mine = new Map(), sugg = new Map();
   for (const a of list) {
     for (const t of a.tags) mine.set(t, (mine.get(t) || 0) + 1);
@@ -2674,7 +2676,9 @@ async function loadSets() {
     got = await r.json();
   } catch (e) { got = { error: true, sets: [] }; }
   got.for = asked;
-  if (asked === DATA) { SETS = got; drawSets(); }   // (else the page has read everything again: it asks again)
+  if (asked !== DATA) return;   // (the page has read everything again: it asks again)
+  SETS = got;
+  if (openWish()) T.render(); else drawSets();   // (a wishlist's tags and creators are in the filters beside it)
 }
 const setPic = src => `<img src="${esc(keyed(src))}" alt="" loading="lazy" decoding="async">`;
 const setPlaceholder = (name, by) => `<span class="ph" style="--h:${hue(by || name)}" translate="no"><b>${esc(initials(name))}</b></span>`;
@@ -2762,41 +2766,68 @@ function setMoreHTML(s) {
     `<h3 class="setmore-h">${esc(title)} <span class="n">${list.length.toLocaleString()}</span></h3>` +
     `<div class="grid">${list.map(i => setExtraTile(s, i)).join("")}</div>`).join("");
 }
-// A wishlist open: its products in two groups that fold away, what isn't yours yet and what is, narrowed by its
-// suggested tags (words its products' names share) and a price range, in one of its currencies
-const WISH = { set: "", tags: new Set(), cur: "", min: "", max: "" };
+// A wishlist open: its products in two groups that fold away, what isn't yours yet and what is, in the page's sort,
+// narrowed by the filters beside it (its suggested tags, words its products' names share, your tags on the ones you
+// have, and its creators), the search and a price range above it, in one of its currencies
+const WISH = { set: "", cur: "", min: "", max: "" };
+const openWish = () => { const s = inSets() && state.set && SETS && !SETS.error ? SETS.sets.find(x => x.id === state.set) : null; return s && isWish(s) ? s : null; };
+let wishScoped;   // the wishlist the filters were last for ("" none, undefined not known yet)
+function wishScope() {   // into a wishlist or out of one, the tags and creator chosen start again: they were another list's
+  if (inSets() && state.set && !SETS) return;   // (not read yet: once it is, it's where the page was opened)
+  const w = openWish(), id = w ? w.id : "";
+  if (wishScoped !== undefined && id !== wishScoped && (id || wishScoped)) { state.tags.clear(); state.creator = ""; }
+  wishScoped = id;
+}
+let ownTagsFor = null, ownTags = new Map();
+function wishOwnTags(i) {   // your tags on a wishlist's product you have (by the key tags use)
+  if (ownTagsFor !== DATA) {
+    ownTagsFor = DATA; ownTags = new Map();
+    for (const a of T.all()) if (a.tags.length) ownTags.set(a.tag_key, [...new Set([...(ownTags.get(a.tag_key) || []), ...a.tags])]);
+  }
+  return ownTags.get(i.key) || [];
+}
+const wishShown = (s, skip) => { const words = norm(state.q).split(/\s+/).filter(Boolean); return s.items.filter(i => wishFits(i, words, skip)); };
+const wishTagItems = s => wishShown(s).map(i => ({ tags: wishOwnTags(i), suggested: i.words || [] }));
+function wishCreators(s) {   // the filters' Creators, for a wishlist: its products', with the other filters on
+  const n = new Map();
+  for (const i of wishShown(s, "creator")) if (i.creator) n.set(i.creator, (n.get(i.creator) || 0) + 1);
+  return n;
+}
+const wishStore = st => { const n = Object.keys(STORE_NAMES).indexOf(st); return n < 0 ? 99 : n; };
+const WISH_SORTS = {   // the page's Sort; Recently added (and Largest) keep the list's own order, as the store has it
+  name: (a, b) => coll.compare(a.name, b.name),
+  creator: (a, b) => !a.creator - !b.creator || coll.compare(a.creator, b.creator) || coll.compare(a.name, b.name),
+  store: (a, b) => wishStore(a.store) - wishStore(b.store) || coll.compare(a.name, b.name),
+};
 function wishCurrencies(s) {   // the currencies its prices are in, the most used first
   const n = new Map();
   for (const i of s.items) if (i.price) n.set(i.price.currency, (n.get(i.price.currency) || 0) + 1);
   return [...n].sort((a, b) => b[1] - a[1]).map(([c]) => c);
 }
-function wishFits(i, words) {
+function wishFits(i, words, skip) {
   if (!words.every(w => norm([i.name, i.creator, i.store].join(" ")).includes(w))) return false;
-  for (const tag of WISH.tags) if (!(i.words || []).includes(tag)) return false;
+  if (skip !== "creator" && state.creator && i.creator !== state.creator) return false;
+  for (const tag of state.tags) if (!(i.words || []).includes(tag) && !wishOwnTags(i).includes(tag)) return false;
   const lo = parseFloat(WISH.min), hi = parseFloat(WISH.max);
   if (isNaN(lo) && isNaN(hi)) return true;
   if (!i.price || i.price.currency !== WISH.cur) return false;   // (a range is in one currency: others aren't in it)
   return !(i.price.amount < lo) && !(i.price.amount > hi);
 }
 function wishBar(s) {
-  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, tags: new Set(), cur: "", min: "", max: "" });
-  const counts = new Map();
-  for (const i of s.items) for (const w of i.words || []) counts.set(w, (counts.get(w) || 0) + 1);
-  const tags = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 30);
+  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, cur: "", min: "", max: "" });
   const curs = wishCurrencies(s);
   if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
   const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" value="${esc(WISH[k])}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
-  return `<div class="wishbar">` +
-    (tags.length ? `<div class="wish-tags" role="group" aria-label="${esc(tr("Suggested tags"))}"><span class="wish-l">${esc(tr("Suggested tags"))}</span>` +
-      tags.map(([w, n]) => `<button class="chip" data-setx="wtag" data-tag="${esc(w)}" aria-pressed="${WISH.tags.has(w)}" translate="no">${esc(w)}<span class="n">${n}</span></button>`).join("") + `</div>` : "") +
-    (curs.length ? `<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
+  return !curs.length ? "" : `<div class="wishbar">` +
+    (`<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
       num("min", tr("From"), tr("Lowest price")) + `<span aria-hidden="true">–</span>` + num("max", tr("To"), tr("Highest price")) +
       (curs.length > 1 ? `<select data-wish="cur" aria-label="${esc(tr("Currency"))}">${curs.map(c => `<option value="${esc(c)}"${c === WISH.cur ? " selected" : ""} translate="no">${esc(c)}</option>`).join("")}</select>`
         : `<span translate="no">${esc(curs[0])}</span>`) +
-      `<button class="linkish" data-setx="wclear"${WISH.tags.size || WISH.min || WISH.max ? "" : " hidden"}>${esc(tr("Clear"))}</button></div>` : "") + `</div>`;
+      `<button class="linkish" data-setx="wclear"${WISH.min || WISH.max ? "" : " hidden"}>${esc(tr("Clear"))}</button></div>`) + `</div>`;
 }
 function wishGroups(s) {
-  const words = norm(state.q).split(/\s+/).filter(Boolean), shown = s.items.filter(i => wishFits(i, words));
+  const shown = wishShown(s);
+  if (WISH_SORTS[state.sort]) shown.sort(WISH_SORTS[state.sort]);
   const group = (id, title, list) => {
     const open = (UI.sections || {})[`wish-${id}`] !== false;
     return `<details class="wishgroup" data-fold="wish-${id}"${open ? " open" : ""}><summary>${esc(title)} <span class="n">${list.length.toLocaleString()}</span></summary>` +
@@ -2804,13 +2835,14 @@ function wishGroups(s) {
   };
   return group("buy", tr("Not yours yet"), shown.filter(i => !i.owned && !i.local)) + group("yours", tr("Yours already"), shown.filter(i => i.owned || i.local));
 }
-function wishChanged() {   // a filter changed: the groups again (the bar stays as it is, so typing isn't interrupted)
-  const s = SETS && SETS.sets.find(x => x.id === state.set), box = $("#wishGroups");
+function wishChanged() {   // the price range changed: the groups and filters again (the bar stays as it is, so typing
+  const s = openWish(), box = $("#wishGroups");   // isn't interrupted)
   if (!s || !box) return;
   box.innerHTML = wishGroups(s);
   setMoreShown = null;   // (drawn again whole next time, or emptied: "" is what the list of sets has there)
+  T.facets();
   const clear = $('#setMore [data-setx="wclear"]');
-  if (clear) clear.hidden = !(WISH.tags.size || WISH.min || WISH.max);
+  if (clear) clear.hidden = !(WISH.min || WISH.max);
 }
 function setExtraTile(s, i) {
   const store = STORE_NAMES[i.store] || (i.local ? "Local" : i.store), buy = !i.owned && !i.local ? storeUrl(i.store, i.url) : "";
@@ -3056,14 +3088,8 @@ async function setAct(e) {
     return;
   }
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
-  if (act === "wtag") {   // a wishlist's suggested tag: shows only its products with that word, as well as any chosen
-    WISH.tags.has(b.dataset.tag) ? WISH.tags.delete(b.dataset.tag) : WISH.tags.add(b.dataset.tag);
-    b.setAttribute("aria-pressed", String(WISH.tags.has(b.dataset.tag)));
-    return wishChanged();
-  }
-  if (act === "wclear") {
-    Object.assign(WISH, { tags: new Set(), min: "", max: "" });
-    for (const x of document.querySelectorAll('#setMore [data-setx="wtag"]')) x.setAttribute("aria-pressed", "false");
+  if (act === "wclear") {   // a wishlist's price range
+    Object.assign(WISH, { min: "", max: "" });
     for (const x of document.querySelectorAll("#setMore input[data-wish]")) x.value = "";
     return wishChanged();
   }

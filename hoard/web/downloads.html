@@ -885,10 +885,10 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .pj-picklist label.check input { margin-top: 3px; flex: none; }
 .pj-picklist .linkish { text-align: left; }
 .pj-desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dust); }
-/* a wishlist open: its suggested tags and a price range above its two groups (not yours yet, yours already), each of
-   which folds away */
+/* a wishlist open: a price range above its two groups (not yours yet, yours already), each of which folds away; its
+   tags and creators are in the filters beside it */
 .wishbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 16px; }
-.wish-tags, .wish-price { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; min-width: 0; }
+.wish-price { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; min-width: 0; }
 .wish-l { font-size: 12.5px; font-weight: 700; color: var(--dust); }
 .wish-price input { width: 96px; height: var(--btn-h-sm); padding: 0 10px; border-radius: 8px; border: 0; background: var(--cave);
   color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; box-sizing: border-box; }
@@ -1617,6 +1617,7 @@ const filtersActive = () => state.q || state.store || state.lib !== "" || state.
 function render() {
   if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
   if (!inSets()) state.set = "";
+  wishScope();
   const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
   drawSets();
@@ -2030,8 +2031,8 @@ function renderFacets(list) {
   $("#types").innerHTML = [...typeCounts].sort((x, y) => y[1] - x[1] || coll.compare(x[0], y[0])).map(([t, n]) =>
     `<button class="chip" data-type="${esc(t)}" aria-pressed="${state.types.has(t)}">.${esc(t)}<span class="n">${n}</span></button>`).join("");
 
-  const creatorCounts = new Map();
-  for (const a of DATA.assets) if (matches(a, "creator")) creatorCounts.set(a.creator, (creatorCounts.get(a.creator) || 0) + 1);
+  const wish = openWish(), creatorCounts = wish ? wishCreators(wish) : new Map();   // (a wishlist open: its products' creators)
+  if (!wish) for (const a of DATA.assets) if (matches(a, "creator")) creatorCounts.set(a.creator, (creatorCounts.get(a.creator) || 0) + 1);
   if (state.creator && !creatorCounts.has(state.creator)) creatorCounts.set(state.creator, 0);
   const f = norm(state.creatorFind);
   $("#creators").innerHTML = [...creatorCounts].filter(([c]) => !f || norm(c).includes(f))
@@ -2760,6 +2761,7 @@ const T = {
   byId: id => byId.get(+id),
   open: () => (openId != null ? byId.get(openId) : null),
   shown: () => DATA.assets.filter(a => matches(a)),
+  facets: () => renderFacets(DATA.assets.filter(a => matches(a))),   // the filters drawn again, and nothing else
   reload: () => load(),
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side

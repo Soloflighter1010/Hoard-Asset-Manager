@@ -14,6 +14,9 @@
   everything in it) and choose **Extract the N chosen files**, or **Extract everything**. They go in a new folder,
   named after the file, in **Extracted** beside your editable copies, in the folders their paths say, with Unity's
   `.meta` files too if you like, and the folder opens. Nothing is written outside it, whatever a package's paths say.
+- **A wishlist's tags and creators are in the filters beside it**, as everything else's are: its suggested tags,
+  your tags on what you have of it, and who made its products, each with how many. **Sort** orders it too: by name,
+  creator or store, or as the store lists it (Recently added).
 - Put right: a wishlist you'd filtered stayed on show below the list of sets after you went back to it.
 
 ## 5.1.0

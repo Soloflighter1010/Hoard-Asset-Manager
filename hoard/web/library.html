@@ -889,10 +889,10 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .pj-picklist label.check input { margin-top: 3px; flex: none; }
 .pj-picklist .linkish { text-align: left; }
 .pj-desc { display: block; margin-top: 2px; font-size: 12.5px; color: var(--dust); }
-/* a wishlist open: its suggested tags and a price range above its two groups (not yours yet, yours already), each of
-   which folds away */
+/* a wishlist open: a price range above its two groups (not yours yet, yours already), each of which folds away; its
+   tags and creators are in the filters beside it */
 .wishbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 16px; }
-.wish-tags, .wish-price { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; min-width: 0; }
+.wish-price { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; min-width: 0; }
 .wish-l { font-size: 12.5px; font-weight: 700; color: var(--dust); }
 .wish-price input { width: 96px; height: var(--btn-h-sm); padding: 0 10px; border-radius: 8px; border: 0; background: var(--cave);
   color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; box-sizing: border-box; }
@@ -1669,6 +1669,7 @@ function showCopies(a, field = "match_key") {
 }
 function render() {
   if (!inSets()) state.set = "";
+  wishScope();
   const list = DATA.items.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderStoreSeg(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
   drawSets();
@@ -1770,8 +1771,8 @@ function renderFacets(list) {
   $("#disk").innerHTML = Object.entries(DISK).map(([k, l]) =>
     `<button class="chip" data-disk="${k}" aria-pressed="${state.disk === k}">${l}<span class="n">${dn[k]}</span></button>`).join("") +
     (fresh || state.fresh ? `<button class="chip" data-fresh aria-pressed="${state.fresh}">New<span class="n">${fresh}</span></button>` : "");
-  const cc = new Map();
-  for (const a of DATA.items) if (matches(a, "creator")) cc.set(a.creator, (cc.get(a.creator) || 0) + 1);
+  const wish = openWish(), cc = wish ? wishCreators(wish) : new Map();   // (a wishlist open: its products' creators)
+  if (!wish) for (const a of DATA.items) if (matches(a, "creator")) cc.set(a.creator, (cc.get(a.creator) || 0) + 1);
   if (state.creator && !cc.has(state.creator)) cc.set(state.creator, 0);
   const f = norm(state.creatorFind);
   $("#creators").innerHTML = [...cc].filter(([c]) => !f || norm(c).includes(f)).sort((x, y) => coll.compare(x[0], y[0]))
@@ -2359,6 +2360,7 @@ const T = {
   byId: id => byKey.get(id),
   open: () => (openKey ? byKey.get(openKey) : null),
   shown: () => DATA.items.filter(a => matches(a)),
+  facets: () => renderFacets(DATA.items.filter(a => matches(a))),   // the filters drawn again, and nothing else
   reload: () => load(),
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side

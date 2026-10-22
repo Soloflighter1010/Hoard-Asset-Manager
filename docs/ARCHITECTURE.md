@@ -306,8 +306,11 @@ Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with 
   of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture
   only when `p` names the product at that place now, and the browser never shows one it kept for another.
 - **Suggested tags:** `library.common_words()` (the same words Hoard suggests for a store's products) over a
-  wishlist's product names gives `words` in `/api/sets`; the page filters by them, by price range (in one currency)
-  and folds what you own and what you don't.
+  wishlist's product names gives `words` in `/api/sets`. With a wishlist open (`openWish()`), the filters beside it
+  are its own: `renderTagFacets` and the pages' Creators count its products (`wishTagItems`, `wishCreators`), with
+  your tags on those in your library (`wishOwnTags`, by tag key), and `wishFits` filters by `state.tags` and
+  `state.creator` as the page does, plus a price range (in one currency); `wishScope()` starts them again on the way
+  into or out of one. The page's sort orders its two groups (`WISH_SORTS`; Recently added keeps the store's order).
 - **Add products by link** (`/api/sets`, `add-links`, at most 30): `wishlists.from_product_page()` takes only a
   product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io (`LINK_HOSTS`) and reads it through
   `server.read_store_page()`, which is `fetch_public` held to that store's hosts, redirects included, sending no

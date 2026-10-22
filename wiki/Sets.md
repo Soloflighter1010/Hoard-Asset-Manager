@@ -155,13 +155,22 @@ already in your library show as yours.
   link...**.
 
 An open wishlist (from 5.1) shows its products in two groups: **Not yours yet**, with what each costs, and **Yours
-already**. Click a group's heading to fold it away; it stays folded next time. Above them:
+already**. Click a group's heading to fold it away; it stays folded next time. From 5.1.1 they're in the order
+**Sort** says: **Name**, **Creator** (those with none last) or **Store**; **Recently added** keeps the wishlist's own
+order, as the store lists it.
 
-- **Suggested tags**: words several of its products' names share, with how many have each. Click some to show only
-  the products whose names have them all.
+The filters on the left are the wishlist's own (from 5.1.1; before, its tags were above it):
+
+- **Suggested**: words several of its products' names share, with how many have each. Click some to show only the
+  products whose names have them all.
+- **Your tags**: the tags you gave those of its products that are in your library.
+- **Creators**: who made its products, with how many each. Click one to show only theirs.
+
+They start again when you open another wishlist, or leave it. Above the groups:
+
 - **Price**: a range, from and to, in one of the wishlist's currencies (the one most of its prices are in, to begin
   with; choose another beside it). A product priced in another currency, or with no price, is left out while a range
-  is set. **Clear** clears the tags and the range.
+  is set. **Clear** clears the range.
 
 The search box at the top narrows it down too.
 
