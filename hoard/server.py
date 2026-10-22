@@ -1058,7 +1058,8 @@ class Handler(BaseHTTPRequestHandler):
                              "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
                              "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
                              "local": store == "local", "mark": mark,
-                             **{k: p[k] for k in ("price", "was") if p.get(k)}})   # on a wishlist: what it costs
+                             **{k: p[k] for k in ("price", "was", "elsewhere") if p.get(k)}})   # on a wishlist: what it
+                                                                                                # costs, and its page elsewhere
             if s.get("kind") == "wishlist":   # suggested tags, from words its products' names share, to narrow it down
                 block = {str(w).lower() for w in (srv.cfg.get("tags") or {}).get("blocklist", [])}
                 for row, words in zip(rows, common_words([r["name"] for r in rows], 2, 0.5, block)):
@@ -1124,11 +1125,15 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(got, tuple):
             return got
         s, code, count = got
-        fits = shortlinks.fits(code)
+        fits, more = shortlinks.fits(code), {}
+        if not fits:
+            try:
+                more = {"parts": len(self._share_parts(s))}
+            except ValueError as e:   # a product too big on its own: no split makes it fit, so say so (issue #178)
+                more = {"parts": 0, "why": str(e)}
         return self._json({"ok": True, "code": code, "count": count,
                            "left_out": len(s["items"]) - count, "short": self._short_view(s.get("short"), code),
-                           "short_days": shortlinks.LIFETIME_DAYS, "fits": fits,
-                           **({} if fits else {"parts": len(self._share_parts(s))})})
+                           "short_days": shortlinks.LIFETIME_DAYS, "fits": fits, **more})
 
     def _share_parts(self, s: dict) -> list[list[str]]:
         """A set's products in parts that each fit a short link (sets.share_parts), hidden ones left out of the
@@ -1143,6 +1148,8 @@ class Handler(BaseHTTPRequestHandler):
         target = open_target(srv.cfg, str(body.get("path", "")))
         if not target or not packages.can_look_inside(target.name) or not target.is_file():
             return self._json({"error": "That file isn't on disk anymore."}, 404)
+        if self._hidden_file(target):
+            return self._json({"error": "Unlock your hidden library first."}, 403)
         picks = body.get("picks")
         if not isinstance(picks, list) or not picks or len(picks) > 100_000 or \
                 not all(isinstance(p, str) and len(p) <= 2100 for p in picks):
@@ -1170,6 +1177,10 @@ class Handler(BaseHTTPRequestHandler):
             said = str(e) if isinstance(e, packages.CantExtract) else (f"Couldn't take them out: {e.strerror or e}."
                                                                        if isinstance(e, OSError) else "That file couldn't be read.")
             return self._json({"error": said}, 400 if isinstance(e, packages.CantExtract) else 500)
+        if not done["files"] and done["skipped"]:   # nothing at all came out: say why, not an empty folder (#174)
+            rmtree(dest, ignore_errors=True)
+            return self._json({"error": "Nothing could be taken out.",
+                               "skipped": [{"name": n, "why": w} for n, w in done["skipped"]]}, 400)
         print(f"Took {done['files']} files out of {target.name} into {dest}"
               + (f" ({len(done['skipped'])} left out)" if done["skipped"] else ""), flush=True)
         opened = None
@@ -1184,11 +1195,8 @@ class Handler(BaseHTTPRequestHandler):
     def _split_set(self, sid: str):
         """Split into...: a set too big for one short link, as new sets that each fit (sets.SetStore.split). The set
         stays as it is."""
-        s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
-        if s is None:
-            return self._json({"error": "That set isn't there anymore."}, 400)
-        try:
-            data = sets.SetStore().split(sid, self._share_parts(s))
+        try:   # (its parts worked out under the sets' lock, from what it holds then: issue #179)
+            data = sets.SetStore().split(sid, self._share_parts)
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
         threading.Thread(target=rebuild_catalog_quietly, args=(self.server,), daemon=True).start()   # (Unity's Import set)
@@ -1336,6 +1344,28 @@ class Handler(BaseHTTPRequestHandler):
 
     def _hidden_key(self, key) -> bool:
         return isinstance(key, str) and key in MarkStore().keys("hidden") and not self._unlocked()
+
+    def _hidden_file(self, target: Path) -> bool:
+        """Whether a file is in a hidden product's folder while the hidden library is locked (issue #171): Look inside
+        and Extract refuse it, as Make an editable copy does. Folders are compared as they resolve, so another
+        spelling of the same path is the same file."""
+        hidden = MarkStore().keys("hidden")
+        if not hidden or self._unlocked():
+            return False
+        try:
+            real = target.resolve()
+        except OSError:
+            return True
+        for a in self.server.index(stale_ok=True)["assets"]:
+            if a.get("tag_key") not in hidden:
+                continue
+            folder = open_target(self.server.cfg, a.get("folder") or "")
+            try:
+                if folder and (real == folder.resolve() or folder.resolve() in real.parents):
+                    return True
+            except OSError:
+                return True
+        return False
 
     def _vpm_get(self, path: str, query: dict):
         srv = self.server
@@ -1746,6 +1776,8 @@ class Handler(BaseHTTPRequestHandler):
             target = open_target(srv.cfg, str(body.get("path", "")))
             if not target or not packages.can_look_inside(target.name) or not target.is_file():
                 return self._json({"error": "That file isn't on disk anymore."}, 404)
+            if self._hidden_file(target):   # (what's in a hidden product, as its name, stays hidden: #171)
+                return self._json({"error": "Unlock your hidden library first."}, 403)
             try:
                 return self._json(packages.look_inside(target), compress=True)
             except (packages.NotAPackage, OSError):

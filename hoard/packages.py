@@ -16,6 +16,8 @@ second look is instant; the least recently looked at go once there are more than
 """
 from __future__ import annotations
 
+import contextlib
+import errno
 import gzip
 import hashlib
 import json
@@ -231,7 +233,7 @@ def read_zip(path: Path, on_preview=None) -> dict:
             for info in infos[:MAX_ZIP_MEMBERS]:
                 if info.is_dir():
                     continue
-                name = clean_text(zip_name(info), 1000) or "(no name)"
+                name = member_name(info)
                 locked = bool(info.flag_bits & 0x1)
                 entry = {"name": name, "size": info.file_size, "package": None, "locked": locked}
                 if name.lower().endswith(".unitypackage") and len(packages) < MAX_ZIP_PACKAGES:
@@ -371,8 +373,37 @@ ROOM_TO_SPARE = 256 << 20        # what extracting leaves free on the disk it wr
 CHUNK = 1 << 20
 
 
+def _new_file_mode() -> int:
+    """The permissions a new file gets here (0o666 less the umask): what extracted files are given, as a copy's are,
+    not mkstemp's owner-only 0o600 (issue #176). Read once, as the module loads."""
+    mask = os.umask(0)
+    os.umask(mask)
+    return 0o666 & ~mask
+
+
+FILE_MODE = _new_file_mode()
+
+
 class CantExtract(ValueError):
-    """Why files couldn't be taken out, in words for the page."""
+    """Why nothing more could be taken out (the disk is full, a link was planted where it writes), in words for the
+    page."""
+
+
+class _Skip(Exception):
+    """One file, or folder, that couldn't be written: it's left out, with why, and the rest carry on (issue #174)."""
+
+    def __init__(self, why: str):
+        super().__init__(why)
+        self.why = why
+
+
+class _Done(Exception):
+    """Every chosen file is out: the rest of the package needn't be read (issue #182)."""
+
+
+def member_name(info: zipfile.ZipInfo) -> str:
+    """A zip member's name as Look inside lists it (read_zip) and Extract finds it again: one spelling for both."""
+    return clean_text(zip_name(info), 1000) or "(no name)"
 
 
 def out_parts(path: str) -> list[str] | None:
@@ -385,22 +416,41 @@ def out_parts(path: str) -> list[str] | None:
     return [safe_name(p, 120) for p in parts]
 
 
+def _drain(stream, size: int) -> None:
+    """size bytes of stream read and dropped: what a file left out takes up, so a package's reader stays in step."""
+    while size > 0:
+        chunk = stream.read(min(size, CHUNK))
+        if not chunk:
+            raise NotAPackage("the package ends partway")
+        size -= len(chunk)
+
+
 class Writer:
-    """Files written under one folder Hoard has just made: each where its path says (out_parts), a second at the same
-    place as "name (2).ext", only inside the folder, wherever a link might lead, and only while there's room."""
+    """Files written under one folder Hoard has just made: each where its path says (out_parts), only inside the
+    folder, never through a link, and only while there's room. A name already taken gets " (2)"; a file and its
+    .meta are given names together, so they always pair (issue #172). One that can't be written is left out
+    (_Skip); a full disk stops it all (CantExtract)."""
 
     def __init__(self, dest: Path):
-        self.dest, self.real = dest, dest.resolve()
+        self.dest = dest
         self.room = shutil.disk_usage(dest).free - ROOM_TO_SPARE
         self.taken: set[str] = set()
         self.files = self.bytes = 0
 
-    def _cant(self, e: OSError) -> CantExtract:   # (the disk's, not the package's: said as such)
-        return CantExtract(f"Couldn't write in {self.dest}: {e.strerror or e}.")
+    def _failed(self, e: OSError, path: Path) -> Exception:
+        """What an error writing path means: the disk's (nothing more can be written), or that one file's."""
+        if e.errno in (errno.ENOSPC, getattr(errno, "EDQUOT", None), errno.EROFS):
+            return CantExtract(f"Couldn't write in {self.dest}: {e.strerror or e}.")
+        if e.errno == errno.ENAMETOOLONG or getattr(e, "winerror", None) == 206 or (os.name == "nt" and len(str(path)) >= 260):
+            return _Skip("its path is too long for this system")
+        print(f"Couldn't write {path}: {e}", flush=True)   # (the system's own words, for the log; the page's are fixed)
+        return _Skip("it couldn't be written")
 
     def _inside(self, folder: Path) -> None:
         """folder (under dest) made a level at a time, never through a link: a folder that's a link already (planted
-        there, or made by something else since) stops it before anything is made where it leads."""
+        there, or made by something else since) stops it all before anything is made where it leads. A file where a
+        folder should be (two names made the same by safe_name, or by a system that ignores case) leaves out what
+        would go in it."""
         here = self.dest
         for part in folder.relative_to(self.dest).parts:
             here = here / part
@@ -409,31 +459,55 @@ class Writer:
             try:
                 here.mkdir()
             except FileExistsError:
-                if os.path.islink(here) or not here.is_dir():
+                if os.path.islink(here):
                     raise CantExtract("A path in it leads outside the folder it's taken out to, so it wasn't.") from None
+                if not here.is_dir():
+                    raise _Skip("a file of the same name is in the way") from None
             except OSError as e:
-                raise self._cant(e) from e
+                raise self._failed(e, here) from e
 
     def folder(self, parts: list[str]) -> None:
         self._inside(self.dest.joinpath(*parts))
 
-    def place(self, parts: list[str]) -> Path:
+    def _free(self, path: Path) -> bool:
+        return str(path).casefold() not in self.taken and not os.path.lexists(path)
+
+    def place(self, parts: list[str], meta: bool = False) -> tuple[Path, Path | None]:
+        """Where a file goes, and with meta where its .meta goes beside it: a name free for both, "name (2).ext" if
+        the one its path says is taken, kept for them."""
         target = self.dest.joinpath(*parts)
         stem, suffix, n = target.stem, target.suffix, 2
-        while str(target).casefold() in self.taken or os.path.lexists(target):
+        pair = lambda p: p.with_name(p.name + ".meta") if meta else None  # noqa: E731
+        while not (self._free(target) and (not meta or self._free(pair(target)))):
             target, n = target.with_name(f"{stem} ({n}){suffix}"), n + 1
+        for p in (target, pair(target)):
+            if p is not None:
+                self.taken.add(str(p).casefold())
+        self._inside(target.parent)
+        return target, pair(target)
+
+    def exactly(self, parts: list[str]) -> Path:
+        """Where a file goes that only works under the name its path says (a folder's .meta, issue #173): kept for
+        it, or left out if that name is taken."""
+        target = self.dest.joinpath(*parts)
+        if not self._free(target):
+            raise _Skip("a file of the same name is in the way")
         self.taken.add(str(target).casefold())
         self._inside(target.parent)
         return target
 
     def write(self, target: Path, stream, size: int) -> None:
-        """size bytes from stream, at target (from place): written beside it first, then put in its place."""
+        """size bytes from stream at target (from place): written beside it, given a new file's permissions, then put
+        in its place. All size bytes are read even when the file can't be written, so a package's reader stays in
+        step with the package."""
         if size > self.room:
             raise CantExtract("There isn't room for it on that disk.")
         try:
             fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".extracting-")
         except OSError as e:
-            raise self._cant(e) from e
+            _drain(stream, size)
+            raise self._failed(e, target) from e
+        failed = None
         try:
             with os.fdopen(fd, "wb") as out:
                 left = size
@@ -441,21 +515,26 @@ class Writer:
                     chunk = stream.read(min(left, CHUNK))   # (a damaged package's errors are its own)
                     if not chunk:
                         raise NotAPackage("the package ends partway")
-                    try:
-                        out.write(chunk)
-                    except OSError as e:
-                        raise self._cant(e) from e
                     left -= len(chunk)
-            try:
+                    if failed is None:
+                        try:
+                            out.write(chunk)
+                        except OSError as e:
+                            failed = e
+            if failed is None:
+                if os.name != "nt":
+                    os.chmod(tmp, FILE_MODE)
                 os.replace(tmp, target)
-            except OSError as e:
-                raise self._cant(e) from e
+        except OSError as e:   # (closing, or putting it in place)
+            failed = e
         except BaseException:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp)
-            except OSError:
-                pass
             raise
+        if failed is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise self._failed(failed, target)
         self.room -= size
         self.files, self.bytes = self.files + 1, self.bytes + size
 
@@ -469,35 +548,76 @@ def chosen(items: list[dict], picks: set, n: int, every: bool) -> dict[str, dict
             if every or i["path"] in files or any(i["path"] == f or i["path"].startswith(f + "/") for f in folders)}
 
 
-def _take(stream, want: dict[str, dict], writer: Writer, under: list[str], metas: bool) -> None:
-    """The chosen assets of one package (chosen()), out of its stream, each at its path in the project, under
-    under; with its .meta beside it when metas."""
+def _take(stream, want: dict[str, dict], writer: Writer, under: list[str], metas: bool, skipped: list, label: str = "") -> None:
+    """The chosen assets of one package (chosen()), out of its stream, each at its path in the project, under under;
+    with metas, each one's .meta beside it, a folder's too (issue #173). One that can't be written is added to
+    skipped as (label + its path, why), and the rest carry on. Reading stops once every chosen file is out."""
     paths = {g: out_parts(i["path"]) for g, i in want.items()}
-    for g, i in want.items():
-        if i["size"] is None and paths[g]:
+    left_out: set[str] = set()
+
+    def leave(g: str, why: str) -> None:
+        if g not in left_out:
+            left_out.add(g)
+            skipped.append((label + want[g]["path"], why))
+    for g in want:
+        if paths[g] is None:   # ("..", or nothing in it: never written, and said, issue #174)
+            leave(g, "its path leads outside the folder")
+    for g in sorted((g for g, i in want.items() if i["size"] is None and paths[g]), key=lambda g: len(paths[g])):
+        try:   # (folders first, so a chosen empty one is there too)
             writer.folder(under + paths[g])
-    placed: dict[str, Path] = {}
+        except _Skip as e:
+            leave(g, e.why)
+    todo = {(g, "asset") for g, i in want.items() if i["size"] is not None and g not in left_out}
+    if metas:
+        todo |= {(g, "asset.meta") for g in want if g not in left_out}
+    spots: dict[str, tuple] = {}
+
+    def spot(g: str) -> tuple[Path | None, Path | None]:
+        """Where a chosen asset and its .meta go: kept for both at the first sight of either, so they pair."""
+        if g not in spots:
+            parts = under + paths[g]
+            try:
+                spots[g] = ((None, writer.exactly(parts[:-1] + [parts[-1] + ".meta"])) if want[g]["size"] is None
+                            else writer.place(parts, metas))
+            except _Skip as e:
+                spots[g] = e
+        if isinstance(spots[g], _Skip):
+            raise spots[g]
+        return spots[g]
 
     def on_asset(guid: str, part: str, size: int, gz) -> bool:
-        parts = paths.get(guid)
-        if not parts or want[guid]["size"] is None or (part == "asset.meta" and not metas):
+        if (guid, part) not in todo:
             return False
-        if part == "asset":
-            placed[guid] = target = writer.place(under + parts)
-        else:   # beside its asset, as it was placed (a package lists an asset before its .meta)
-            target = placed[guid].with_name(placed[guid].name + ".meta") if guid in placed else \
-                writer.place(under + parts[:-1] + [parts[-1] + ".meta"])
-        writer.write(target, gz, size)
+        todo.discard((guid, part))
+        try:
+            target, meta = spot(guid)
+        except _Skip as e:
+            leave(guid, e.why)
+            if not todo:
+                raise _Done from None
+            return False
+        try:
+            writer.write(meta if part == "asset.meta" else target, gz, size)
+        except _Skip as e:
+            leave(guid, e.why)
+        if not todo:
+            raise _Done
         return True
-    read_unitypackage(stream, on_asset=on_asset)
+    if not todo:
+        return
+    try:
+        read_unitypackage(stream, on_asset=on_asset)
+    except _Done:
+        pass
 
 
 def extract(path: Path, dest: Path, picks: list[str], metas: bool = False) -> dict:
     """Look inside's Extract: the chosen files (picks, as chosen() reads them, and "z:<name>" a file of a zip as it
     is), or every one ("all"), out of a downloaded .unitypackage or .zip, into dest (a folder Hoard has just made).
     A package's assets go where their paths say (Assets/...); a zip's files where theirs do, and the assets of a
-    package in a zip in a folder named after it. Returns {"files", "bytes", "skipped": [(name, why)]}. Raises
-    CantExtract, or NotAPackage for a file that can't be read."""
+    package in a zip in a folder named after it, where it is in the zip (issue #175). A file that can't be written
+    is left out, with why, and the rest still come out (issue #174). Returns {"files", "bytes", "skipped": [(name,
+    why)]}. Raises CantExtract when nothing more could be written, or NotAPackage for a file that can't be read."""
     listing = look_inside(path)
     if listing.get("error"):
         raise CantExtract(listing["error"])
@@ -509,44 +629,55 @@ def extract(path: Path, dest: Path, picks: list[str], metas: bool = False) -> di
             if not want:
                 raise CantExtract("Choose what to take out first.")
             with open(path, "rb") as fh:
-                _take(fh, want, writer, [], metas)
+                _take(fh, want, writer, [], metas, skipped)
         else:
             with zipfile.ZipFile(path) as zf:
-                members, packed = {}, []   # (as read_zip numbers them: the first packages in the zip's own order)
+                by_name: dict[str, list] = {}   # (the members Look inside listed, by the names it gave them, issue #182)
                 for info in zf.infolist()[:MAX_ZIP_MEMBERS]:
-                    if info.is_dir():
-                        continue
-                    name = clean_text(zip_name(info), 1000) or "(no name)"
-                    members.setdefault(name, info)
-                    if name.lower().endswith(".unitypackage") and len(packed) < MAX_ZIP_PACKAGES:
-                        packed.append((name, info))
-                names = list(members) if every else [p[2:] for p in picks if p.startswith("z:") and p[2:] in members]
-                jobs = [(n, name, info, chosen(listing["packages"][n]["items"], picks_set, n, False))
-                        for n, (name, info) in enumerate(packed) if n < len(listing["packages"])]
-                jobs = [j for j in jobs if j[3]]
-                if not names and not jobs:
+                    if not info.is_dir():
+                        by_name.setdefault(member_name(info), []).append(info)
+                plain = ([(n, i) for n, infos in by_name.items() for i in infos] if every
+                         else [(p[2:], by_name[p[2:]][0]) for p in dict.fromkeys(picks) if p.startswith("z:") and p[2:] in by_name])
+                jobs, seen = [], {}
+                for n, pkg in enumerate(listing["packages"]):   # (the k-th package of a name is its k-th member)
+                    k = seen[pkg["name"]] = seen.get(pkg["name"], -1) + 1
+                    want = chosen(pkg["items"], picks_set, n, False)
+                    if want and k < len(by_name.get(pkg["name"], [])):
+                        jobs.append((pkg["name"], by_name[pkg["name"]][k], want))
+                if not plain and not jobs:
                     raise CantExtract("Choose what to take out first.")
                 unreadable = (NotAPackage, zipfile.BadZipFile, NotImplementedError, RuntimeError, OSError, zlib.error, EOFError)
-                for name in names:
-                    info, parts = members[name], out_parts(name)
+                for name, info in plain:
+                    parts = out_parts(name)
                     if info.flag_bits & 0x1:
                         skipped.append((name, "locked with a password"))
                     elif parts is None:
                         skipped.append((name, "its name leads outside the folder"))
                     else:
                         try:
+                            target, _ = writer.place(parts)
                             with zf.open(info) as member:
-                                writer.write(writer.place(parts), member, info.file_size)
+                                writer.write(target, member, info.file_size)
+                        except _Skip as e:
+                            skipped.append((name, e.why))
                         except unreadable:   # one damaged file: the rest still come out
                             skipped.append((name, "couldn't be read"))
-                for n, name, info, want in jobs:
+                folders: set[str] = set()
+                for name, info, want in jobs:
                     if info.flag_bits & 0x1:
                         skipped.append((name, "locked with a password"))
                         continue
-                    stem = name.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                    under = out_parts(name[:-len(".unitypackage")] if name.lower().endswith(".unitypackage") else name)
+                    if under is None:
+                        skipped.append((name, "its name leads outside the folder"))
+                        continue
+                    base, n = under[-1], 2   # (two packages of the same name, in the same place: one folder each)
+                    while "/".join(under).casefold() in folders:
+                        under, n = under[:-1] + [f"{base} ({n})"], n + 1
+                    folders.add("/".join(under).casefold())
                     try:
                         with zf.open(info) as member:
-                            _take(member, want, writer, [safe_name(stem, 120)], metas)
+                            _take(member, want, writer, under, metas, skipped, label=name + ": ")
                     except unreadable:
                         skipped.append((name, "couldn't be read"))
     except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:   # (the zip itself, not one file in it)

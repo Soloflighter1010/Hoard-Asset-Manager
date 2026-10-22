@@ -2677,8 +2677,8 @@ async function loadSets() {
   } catch (e) { got = { error: true, sets: [] }; }
   got.for = asked;
   if (asked !== DATA) return;   // (the page has read everything again: it asks again)
-  SETS = got;
-  if (openWish()) T.render(); else drawSets();   // (a wishlist's tags and creators are in the filters beside it)
+  SETS = got;   // (where the page is is known now, a set or a wishlist: #180)
+  if (wishScope() || openWish()) T.render(); else drawSets();   // (a wishlist's tags and creators are in the filters beside it)
 }
 const setPic = src => `<img src="${esc(keyed(src))}" alt="" loading="lazy" decoding="async">`;
 const setPlaceholder = (name, by) => `<span class="ph" style="--h:${hue(by || name)}" translate="no"><b>${esc(initials(name))}</b></span>`;
@@ -2772,11 +2772,15 @@ function setMoreHTML(s) {
 const WISH = { set: "", cur: "", min: "", max: "" };
 const openWish = () => { const s = inSets() && state.set && SETS && !SETS.error ? SETS.sets.find(x => x.id === state.set) : null; return s && isWish(s) ? s : null; };
 let wishScoped;   // the wishlist the filters were last for ("" none, undefined not known yet)
-function wishScope() {   // into a wishlist or out of one, the tags and creator chosen start again: they were another list's
-  if (inSets() && state.set && !SETS) return;   // (not read yet: once it is, it's where the page was opened)
+function wishScope() {   // into a wishlist or out of one, the tags and creator chosen start again: they were another list's.
+  if (inSets() && state.set && !SETS) return false;   // (not read yet: once it is, it's where the page was opened)
   const w = openWish(), id = w ? w.id : "";
-  if (wishScoped !== undefined && id !== wishScoped && (id || wishScoped)) { state.tags.clear(); state.creator = ""; }
+  // its price range too, before anything of it is counted: another list's would empty its filters (issue #180)
+  if (w && WISH.set !== id) Object.assign(WISH, { set: id, cur: "", min: "", max: "" });
+  const changed = wishScoped !== undefined && id !== wishScoped && !!(id || wishScoped);
+  if (changed) { state.tags.clear(); state.creator = ""; }
   wishScoped = id;
+  return changed;
 }
 let ownTagsFor = null, ownTags = new Map();
 function wishOwnTags(i) {   // your tags on a wishlist's product you have (by the key tags use)
@@ -2844,8 +2848,18 @@ function wishChanged() {   // the price range changed: the groups and filters ag
   const clear = $('#setMore [data-setx="wclear"]');
   if (clear) clear.hidden = !(WISH.min || WISH.max);
 }
+// A product's page on a site that isn't one of the stores (a Jinxxy list can send you to one): plain https on a
+// public name, as Hoard keeps it (sets.outside_link)
+const outsideUrl = u => {
+  const s = safeUrl(u); if (!s) return "";
+  const x = new URL(s);
+  return x.protocol === "https:" && !x.username && !x.password && (!x.port || x.port === "443") && x.hostname.includes(".") &&
+    !/^[\d.]+$/.test(x.hostname) && !x.hostname.startsWith("[") ? s : "";
+};
 function setExtraTile(s, i) {
-  const store = STORE_NAMES[i.store] || (i.local ? "Local" : i.store), buy = !i.owned && !i.local ? storeUrl(i.store, i.url) : "";
+  const away = !i.owned && !i.local && !storeUrl(i.store, i.url) ? outsideUrl(i.elsewhere) : "";
+  const store = away ? new URL(away).hostname.replace(/^www\./, "") : STORE_NAMES[i.store] || (i.local ? "Local" : i.store);
+  const buy = !i.owned && !i.local ? storeUrl(i.store, i.url) || away : "";
   const href = i.download != null ? `/downloads#open=${+i.download}`   // (Hoard's own pages, or the store's, checked)
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
   const what = i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
@@ -2853,7 +2867,7 @@ function setExtraTile(s, i) {
   const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
   return `<div class="slot ext${buy ? " wanted" : ""}">` +
-    (href === buy && buy ? `<a class="ext-main" href="${esc(storeUrl(i.store, i.url))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+    (href === buy && buy ? `<a class="ext-main" href="${esc(safeUrl(buy))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
     (price ? `<span class="ext-price">${price}</span>` : "") +
     `<span class="ext-row"><span class="ext-what">${esc(what)}${href === buy && buy ? `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span>` : ""}</span>` +
@@ -2953,9 +2967,11 @@ function showShare(s, got) {
   const drawShort = () => {
     const sh = got.short, days = got.short_days || 14, big = got.fits === false;
     // too big for one short link: split into sets that each fit (the set itself stays), and share each of those
-    const split = big ? `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ` +
+    const split = !big ? "" : got.why   // (one product too big on its own: splitting wouldn't help, issue #178)
+      ? `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ${esc(tr(got.why))}</p>`
+      : `<p class="share-big"><b>${esc(tr("This set is too big for one short link."))}</b> ` +
         `${esc(tr("A short link holds about 500 products, depending on their names and links. Split it into {0} sets that each fit, and share each one. This set stays as it is.", got.parts))}</p>` +
-        `<div class="ask-row"><button class="primary" type="button" data-short="split">${esc(tr("Split into {0} sets", got.parts))}</button></div>` : "";
+        `<div class="ask-row"><button class="primary" type="button" data-short="split">${esc(tr("Split into {0} sets", got.parts))}</button></div>`;
     box.innerHTML = sh
       ? `<p><input readonly value="${esc(sh.link)}" aria-label="${esc(tr("The set's short link"))}" style="width:100%;box-sizing:border-box" translate="no"></p>` +
         `<p class="hint">${esc(tr("It works until {0}.", day(sh.expires)))} ${esc(big ? "" : tr(sh.changed
@@ -3011,7 +3027,7 @@ function showShare(s, got) {
   });
   d.addEventListener("close", () => d.remove(), { once: true });
   d.showModal();
-  (box.querySelector("input") || box.querySelector("button")).focus();
+  (box.querySelector("input") || box.querySelector("button") || d.querySelector('button[value="no"]')).focus();   // (nothing to do: Close)
 }
 async function shareSet(s) {
   const r = await apiPost("/api/sets", { action: "share", id: s.id });

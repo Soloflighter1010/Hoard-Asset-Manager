@@ -213,10 +213,14 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   everything**. Hoard writes them into a new folder named after the package, in **Extracted** in your folder for
   editable copies (**Hoard Edits** beside your downloads folder, or the one `edits_root` names), and opens it. A Unity
   package's files go where their paths say (`Assets/...`); tick **With Unity's .meta files** to have each one's
-  `.meta` beside it. A zip's files go where their names say, and the files from a Unity package in a zip go in a
-  folder named after that package. Nothing is written outside that folder, whatever a package's paths say, a name
-  no system allows is changed to one that works, and Hoard checks there's room first. A file a zip locks with a
-  password is left out, and Hoard says so.
+  `.meta` beside it, a folder's too, under the name Unity looks for even when a file was renamed " (2)" for a name
+  already taken (from 5.1.2). A zip's files go where their names say, and the files from a Unity package in a zip
+  go in a folder named after that package, where it is in the zip, so two of the same name stay apart. Nothing is
+  written outside that folder, whatever a package's paths say, nothing already there is written over, a name no
+  system allows is changed to one that works, and files get the permissions any new file does. Hoard checks
+  there's room first, and stops if the disk fills. A file it can't write (a path too long for your system, or a
+  file of the same name where a folder should go), one a zip locks with a password, and one whose path leads
+  outside the folder are left out, and Hoard says which and why; the rest still come out.
 - **What it needs** (from 4.0, in a product's details) lists what its packages use that isn't in them: tools such
   as lilToon, Poiyomi Toon (with the version its materials were made with), Modular Avatar, VRCFury, NDMF, Avatar
   Optimizer and the VRChat SDK, each with **Get it** (its own website); and whether it also uses files from other

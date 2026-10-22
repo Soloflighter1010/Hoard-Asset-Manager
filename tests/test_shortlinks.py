@@ -124,6 +124,15 @@ class Client(unittest.TestCase):
         for text in (f"S1.{sid}.{key}x", f"S1.{sid[:-1]}.{key}", "H1.abc", "", None, f"S2.{sid}.{key}", "S1." + "x" * 3000):
             self.assertIsNone(shortlinks.parse(text))
 
+    def test_how_much_a_short_link_holds(self):
+        """The share server takes a locked set (a 12-byte nonce, the code, a 16-byte tag) of up to MAX_BYTES once it's
+        decoded: fits() measures the same, not its base64url, which is a third longer (issue #170)."""
+        room = shortlinks.MAX_DATA - 12 - 16
+        self.assertTrue(shortlinks.fits("H1." + "x" * (room - 3)))
+        self.assertFalse(shortlinks.fits("H1." + "x" * (room - 2)))
+        self.assertTrue(shortlinks.fits("H1." + "x" * (room * 3 // 4)), "what 5.1.1 wrongly called too big")
+        self.assertIn(f"const MAX_BYTES = {shortlinks.MAX_DATA // 1024} * 1024;", (REPO / "share" / "worker.mjs").read_text("utf-8"))
+
 
 class Kept(unittest.TestCase):
     """A set's short link in sets.json: checked as it's read, and gone when it has run out."""
@@ -412,6 +421,39 @@ class EndToEnd(unittest.TestCase):
             page.click('[data-setx="back"]')
             page.locator("#setView .settile", has_text=f"Booth: Loved items (1 of {parts})").click()
             page.click('#setView [data-setx="share"]')
+            dialog.get_by_role("button", name="Make a short link").click()
+            page.get_by_text("Made a short link. It works until").wait_for()
+            browser.close()
+        self.assertEqual(errors, [])
+
+    def test_a_set_nearly_as_big_as_the_server_takes_has_a_short_link(self):
+        """A set of about 450 products locks to 40-odd KB: more than 48 KiB in base64url, but the share server measures
+        what it's sent once decoded, and takes it. 5.1.1 called it too big, and offered only to split it (#170)."""
+        import random
+        r = random.Random(5)
+        word = lambda: "".join(r.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(r.randint(4, 9)))  # noqa: E731
+        products = [{"store": "booth", "id": str(7000 + n), "name": f"{word()} {word()} {word()}", "creator": word(),
+                     "url": f"https://booth.pm/ja/items/{7000 + n}",
+                     "thumbnail": f"https://booth.pximg.net/c/300x300_a2_g5/{r.getrandbits(64):016x}/i/{7000 + n}/{r.getrandbits(128):032x}_base_resized.jpg"}
+                    for n in range(450)]
+        sets.SetStore().put_wishlists([{"store": "booth", "list": "Loved items", "products": products}])
+        wish = sets.SetStore().load()["sets"][0]
+        locked = 12 + len(sets.share_code(wish)[0].encode()) + 16
+        self.assertGreater(-(-locked * 4 // 3), shortlinks.MAX_DATA, "longer than 48 KiB in base64url: what 5.1.1 refused")
+        self.assertLessEqual(locked, shortlinks.MAX_DATA)
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Booth: Loved items").click()
+            page.click('#setView [data-setx="share"]')
+            dialog = page.locator("dialog.share")
+            self.assertEqual(dialog.locator('[data-short="split"]').count(), 0)
             dialog.get_by_role("button", name="Make a short link").click()
             page.get_by_text("Made a short link. It works until").wait_for()
             browser.close()

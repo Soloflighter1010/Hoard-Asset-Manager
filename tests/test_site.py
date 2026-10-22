@@ -231,6 +231,19 @@ class TheSite(unittest.TestCase):
         self.assertIn("@media (max-width: 760px)", (SITE / "styles.css").read_text("utf-8"))
 
 
+class Deploying(unittest.TestCase):
+    """The site's workflow: a push that changes what builds it builds it again."""
+
+    def test_every_script_it_runs_is_in_its_paths(self):
+        """A commit changing only a script the deploy runs (the press kit's, say) deploys the site (issue #184)."""
+        flow = (REPO / ".github" / "workflows" / "build-listing.yml").read_text("utf-8")
+        paths = re.search(r"push:\s*\n\s*branches: \[main\]\s*\n\s*paths: \[(.*?)\]", flow, re.S)[1]
+        listed = set(re.findall(r'"([^"]+)"', paths))
+        run = set(re.findall(r"python3? (scripts/[\w.]+\.py)", flow))
+        self.assertTrue(run, "it runs scripts")
+        self.assertEqual(run - listed, set(), "every script it runs, in its paths")
+
+
 class TheOtherPages(unittest.TestCase):
 
     def test_every_tester_is_thanked(self):

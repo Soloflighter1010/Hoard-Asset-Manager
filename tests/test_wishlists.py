@@ -109,6 +109,39 @@ class Kept(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class JinxxyElsewhere(unittest.TestCase):
+    """A Jinxxy list can send you to a product on a site that isn't one of the stores: it keeps that page as its link,
+    instead of showing No store link; one on a store Hoard knows is that store's, as before."""
+
+    def test_kept_as_its_link(self):
+        got = wishlists.jinxxy_products([
+            {"url": "https://ko-fi.com/s/abc123?ref=jinxxy#top", "name": "Fox Tail", "creator": "Kitsu", "price": "5.00 USD"},
+            {"url": "https://snowy.gumroad.com/l/flakes?ref=jinxxy", "name": "Flakes", "creator": "Snowy"},
+            {"url": "https://jinxxy.com/kitsu/FoxEars", "name": "Fox Ears", "creator": "Kitsu"}])
+        tail, flakes, ears = got
+        self.assertEqual((tail["store"], tail.get("url"), tail["elsewhere"]), ("jinxxy", None, "https://ko-fi.com/s/abc123?ref=jinxxy"))
+        self.assertEqual((flakes["store"], flakes["url"], flakes.get("elsewhere")), ("gumroad", "https://snowy.gumroad.com/l/flakes", None))
+        self.assertEqual((ears["store"], ears["url"], ears.get("elsewhere")), ("jinxxy", "https://jinxxy.com/kitsu/FoxEars", None))
+        kept = sets.clean_product(tail)
+        self.assertEqual(kept["elsewhere"], "https://ko-fi.com/s/abc123?ref=jinxxy")
+
+    def test_only_a_public_https_page(self):
+        for bad in ("http://ko-fi.com/s/abc", "https://user:pw@ko-fi.com/s/abc", "https://ko-fi.com:8443/s/abc",
+                    "https://127.0.0.1/s/abc", "https://localhost/s/abc", "https://printer.local/x", "https://[::1]/x",
+                    "javascript:alert(1)", "https://" + "a" * 700 + ".com/"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(sets.outside_link(bad))
+                self.assertNotIn("elsewhere", sets.clean_product({"store": "jinxxy", "name": "X", "elsewhere": bad}))
+
+    def test_never_shared(self):
+        """A shared set's viewer opens only the stores' own pages: a page elsewhere stays in Hoard."""
+        s = {"name": "Likes", "items": ["jinxxy:fox tail"],
+             "products": {"jinxxy:fox tail": {"store": "jinxxy", "name": "Fox Tail", "elsewhere": "https://ko-fi.com/s/abc123"}}}
+        code, count = sets.share_code(s)
+        self.assertEqual(count, 1)
+        self.assertNotIn("ko-fi", json.dumps(sets.from_code(code)))
+
+
 class SavedPages(unittest.TestCase):
     def test_each_stores_page(self):
         got = {r["filename"]: r for r in wishlists.from_saved_pages(saved("booth.html", "gumroad.html", "jinxxy-likes.html", "payhip.html"))}
@@ -392,6 +425,77 @@ class InHoard(unittest.TestCase):
             page.reload()
             page.locator('details[data-fold="wish-buy"]').wait_for()
             self.assertFalse(page.locator('details[data-fold="wish-yours"]').evaluate("d => d.open"))
+            browser.close()
+        self.assertEqual(errors, [])
+
+    def test_a_wishlists_filters_are_its_own(self):
+        """The filters beside a wishlist count its products under its own price range, never the last one's; and a
+        tag chosen elsewhere doesn't carry into it, even coming back to it after a reload on a set (issue #180)."""
+        sets.SetStore().put_wishlists([
+            {"store": "booth", "list": "Loved items", "url": "u", "products": [
+                product("Fox Hoodie", "1,200 JPY"), product("Fox Ears", "800 JPY", creator="Ash Atelier"),
+                product("Wolf Hoodie", "3,000 JPY"), product("Snow Cap", "500 JPY")]},
+            {"store": "gumroad", "list": "Winter", "url": "w", "products": [
+                product("Scarf", "12.00 USD", "gumroad", creator="Snow Co"), product("Mittens", "8.00 USD", "gumroad", creator="Snow Co")]}])
+        made = sets.SetStore().change({"action": "create", "name": "Rusk, winter", "items": ["booth:rusk"]},
+                                      lambda key: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"})["made"]
+        ids = {s["name"]: s["id"] for s in sets.SetStore().load()["sets"]}
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            base = self.srv.entry_url().split("/#")[0]
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(base + "/#store=Sets")
+            page.locator(".settile", has_text="Booth: Loved items").click()
+            page.locator('details[data-fold="wish-buy"]').wait_for()
+            page.fill('[data-wish="min"]', "1000")
+            page.click('[data-setx="back"]')
+            page.locator(".settile", has_text="Gumroad: Winter").click()
+            page.locator('details[data-fold="wish-buy"] .nm-t', has_text="Scarf").wait_for()
+            self.assertEqual(page.locator("#creators button").evaluate_all("l => l.map(b => b.dataset.creator + ' ' + b.querySelector('.n').textContent)"),
+                             ["Snow Co 2"], "its own creators, not none for the last one's price range")
+            # a tag chosen on a set, the page reloaded there, then Back to a wishlist: the tag stays with the set
+            page.goto(base + f"/#store=Sets&set={ids['Booth: Loved items']}")
+            page.locator('details[data-fold="wish-buy"]').wait_for()
+            page.goto(base + f"/#store=Sets&set={made}&tags=fox")
+            page.reload()
+            page.locator(".sethead h2", has_text="Rusk, winter").wait_for()
+            page.go_back()
+            page.locator(".sethead h2", has_text="Booth: Loved items").wait_for()
+            buy = page.locator('details[data-fold="wish-buy"]')
+            buy.locator(".nm-t", has_text="Wolf Hoodie").wait_for()
+            self.assertEqual(buy.locator(".slot.ext").count(), 4)
+            self.assertEqual(page.locator('#status [data-clear="tag"]').count(), 0)
+            browser.close()
+        self.assertEqual(errors, [])
+
+    def test_a_product_on_another_site_links_there(self):
+        """A Jinxxy list's product on a site that isn't one of the stores: Buy on that site, to its page, not No
+        store link."""
+        sets.SetStore().put_wishlists([{"store": "jinxxy", "list": "Likes", "url": "u", "products": wishlists.jinxxy_products([
+            {"url": "https://ko-fi.com/s/abc123", "name": "Fox Tail", "creator": "Kitsu", "price": "5.00 USD"},
+            {"url": "https://jinxxy.com/kitsu/FoxEars", "name": "Fox Ears", "creator": "Kitsu", "price": "3.00 USD"}])}])
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
+            page.locator(".settile", has_text="Jinxxy: Likes").click()
+            tail = page.locator(".slot.ext", has_text="Fox Tail")
+            tail.wait_for()
+            self.assertEqual(tail.locator(".ext-main").get_attribute("href"), "https://ko-fi.com/s/abc123")
+            self.assertIn("Buy on ko-fi.com", tail.locator(".ext-what").inner_text())
+            self.assertIn("ko-fi.com", tail.locator(".cr").inner_text())
+            self.assertIn("Buy on Jinxxy", page.locator(".slot.ext", has_text="Fox Ears").locator(".ext-what").inner_text())
+            self.assertEqual(page.locator(".ext-what", has_text="No store link").count(), 0)
             browser.close()
         self.assertEqual(errors, [])
 

@@ -143,13 +143,20 @@ class Splitting(unittest.TestCase):
         self.assertGreaterEqual(len(parts), 2)
         self.assertEqual([k for part in parts for k in part], self.wish["items"], "every product, once, in order")
         for n, part in enumerate(parts):
-            named = {**self.wish, "name": f"{self.wish['name']} ({n + 1} of {len(parts)})", "items": part}
+            named = {**self.wish, "name": sets.part_name(self.wish["name"], n + 1, len(parts)), "items": part}
+            self.assertEqual(named["name"], f"{self.wish['name']} ({n + 1} of {len(parts)})")
             self.assertTrue(shortlinks.fits(sets.share_code(named)[0]), f"part {n + 1} fits")
-            if n < len(parts) - 1:   # as full as it can be: one more wouldn't fit
-                more = {**named, "items": part + [parts[n + 1][0]]}
-                self.assertFalse(shortlinks.fits(sets.share_code({**more, "name": more["name"][:50] + " (99 of 99)"})[0]))
-        hidden = set(self.wish["items"][:300])   # hidden products aren't shared, so they take no room
-        self.assertLess(len(sets.share_parts(self.wish, leave_out=hidden)), len(parts) + 1)
+            if n < len(parts) - 1:   # as full as it can be: one more wouldn't fit, under the name it's sized by
+                more = {**named, "name": sets.part_name(self.wish["name"], 1, 1), "items": part + [parts[n + 1][0]]}
+                self.assertFalse(shortlinks.fits(sets.share_code(more)[0]))
+        # hidden products aren't shared, so they take no room: with a hundred or so a part, hiding a third of three
+        # hundred saves one (issue #183)
+        few = {**self.wish, "items": self.wish["items"][:300]}
+        room = len(sets.share_code({**few, "items": few["items"][:100]})[0]) + 64
+        small = lambda code: len(code) <= room   # noqa: E731
+        whole = sets.share_parts(few, fits=small)
+        self.assertGreaterEqual(len(whole), 3)
+        self.assertLess(len(sets.share_parts(few, leave_out=set(few["items"][:100]), fits=small)), len(whole))
         self.assertEqual(sets.share_parts({**self.wish, "items": self.wish["items"][:20]}), [self.wish["items"][:20]], "one that fits: one part")
 
     def test_split_into_new_sets(self):
@@ -167,6 +174,55 @@ class Splitting(unittest.TestCase):
         self.assertEqual(len(self.store.load()["sets"]), 1 + len(parts), "read again: no new wishlist, the parts left alone")
         with self.assertRaises(ValueError):
             self.store.split(self.wish["id"], [self.wish["items"]])   # (one part: nothing to split)
+
+    def test_a_long_name_in_any_script(self):
+        """Parts are sized under the longest name, in bytes, any of them can have, not a shorter one: with a name of
+        60 characters of three bytes each, every part fits under its real name; and a set too big only for its own
+        name splits in two, never into one part (issue #179)."""
+        import random
+        r = random.Random(7)
+        name = "".join(chr(r.randint(0x4E00, 0x9FFF)) for _ in range(60))   # (no two alike: they don't pack)
+        s = {**self.wish, "name": name}
+        parts = sets.share_parts(s)
+        from hoard import shortlinks
+        for n, part in enumerate(parts, 1):
+            self.assertTrue(shortlinks.fits(sets.share_code({**s, "name": sets.part_name(name, n, len(parts)), "items": part})[0]))
+        for n, total in ((1, 1), (1, 9), (9, 9), (1, 10), (10, 10), (100, 100)):   # (never longer than the sizing name)
+            self.assertLessEqual(len(sets.part_name(name, n, total).encode()), len(sets.part_name(name, 1, 1).encode()))
+        few = {**s, "items": s["items"][:40]}
+        own = len(sets.share_code(few)[0])
+        sized = len(sets.share_code({**few, "name": sets.part_name(name, 1, 1)})[0])
+        self.assertLess(sized, own, "under a part's name it's smaller")
+        halves = sets.share_parts(few, fits=lambda code: len(code) < own)   # (too big under its own name alone)
+        self.assertEqual(halves, [few["items"][:20], few["items"][20:]])
+
+    def test_split_takes_the_set_as_it_is_then(self):
+        """Split works out its parts as it splits, under the lock, so a product added since Share... is in one
+        (issue #179)."""
+        sid = self.wish["id"]
+        stale = sets.share_parts(self.wish)
+        self.store.change({"action": "add", "id": sid, "items": [RUSK]},
+                          lambda key: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"})
+        made = self.store.split(sid, lambda s: sets.share_parts(s))["made"]
+        after = {s["id"]: s for s in self.store.load()["sets"]}
+        self.assertIn(RUSK, after[sid]["items"])
+        self.assertEqual([k for m in made for k in after[m]["items"]], after[sid]["items"], "every product, the new one too")
+        self.assertNotIn(RUSK, [k for p in stale for k in p], "(as the parts worked out before it was added didn't have it)")
+
+    def test_the_same_parts_are_kept(self):
+        """Share... on the same set again: its parts are kept, not worked out again (issue #181)."""
+        tries = []
+
+        def counted(code):
+            tries.append(code)
+            return len(code) < 9000
+        first = sets.share_parts(self.wish, fits=counted)
+        n = len(tries)
+        self.assertEqual(sets.share_parts(self.wish, fits=counted), first)
+        self.assertLessEqual(len(tries) - n, 1, "at most whether the whole set fits is asked again")
+        changed = {**self.wish, "note": "Changed"}
+        sets.share_parts(changed, fits=counted)
+        self.assertGreater(len(tries), n + 2, "a changed set is worked out again")
 
     def test_a_long_name_keeps_its_part_number(self):
         made = self.store.change({"action": "create", "name": "A" * 60, "items": [RUSK, HOODIE]})["made"]
@@ -480,6 +536,42 @@ class Page(unittest.TestCase):
             browser.close()
         [s] = sets.SetStore().load()["sets"]
         self.assertEqual((s["name"], s["items"]), ("Rusk, winter", [RUSK]))
+
+    def test_a_product_too_big_for_a_short_link_on_its_own(self):
+        """Share... on a set with a product no short link could hold, whatever the split: it says so, and offers no
+        split, rather than getting no answer at all (issue #178)."""
+        import threading
+        from playwright.sync_api import sync_playwright
+        from hoard import config, server, shortlinks
+        tmp = Path(tempfile.mkdtemp())
+        env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})
+        env.start()
+        self.addCleanup(env.stop)
+        (tmp / "dl").mkdir()
+        sets.SetStore().change({"action": "create", "name": "Rusk, winter", "items": [RUSK]},
+                               lambda key: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"})
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(tmp / "dl"), "setup_done": True,
+                                                  "ui": {"toured": True}}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        too_big = ValueError("A product in this set is too big for a short link on its own.")
+        with mock.patch.object(shortlinks, "fits", lambda code: False), \
+                mock.patch.object(sets, "share_parts", mock.Mock(side_effect=too_big)), sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator("#setView .settile", has_text="Rusk, winter").click()
+            page.click('#setView [data-setx="share"]')
+            dialog = page.locator("dialog.share")
+            self.assertIn("A product in this set is too big for a short link on its own.", dialog.locator(".shortlink").inner_text())
+            self.assertEqual(dialog.locator('[data-short="split"], [data-short="make"]').count(), 0)
+            browser.close()
+        self.assertEqual(errors, [])
 
 
 

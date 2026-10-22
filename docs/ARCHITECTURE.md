@@ -214,12 +214,17 @@ from when that shop isn't in the user's list (it's only added when the user conf
 - Look inside's **Extract** (`POST /api/look-inside/extract`, `packages.extract`): the page sends what's ticked
   (`p:<package>:<path>`, `d:<package>:<folder>`, `z:<zip member>`, or `all`), and the server writes it into a new
   folder in `edits_root(cfg, root)/Extracted` (the folder editable copies go in), named after the file. A package
-  is read once, in order (`read_unitypackage(on_asset=...)`), each asset streamed to a temp file beside where it goes
-  and moved into place. `out_parts` makes each path's parts names every system allows and refuses `..`; `Writer`
-  makes folders one level at a time and refuses a link or a file in the way, so nothing lands outside the folder,
-  gives a name already taken " (2)", and stops (`CantExtract`) before the disk has less than `ROOM_TO_SPARE`
-  left. A zip member locked with a password, or one that can't be read, is skipped and named in the answer; a
-  failure part way deletes the half-made folder.
+  is read once, in order (`read_unitypackage(on_asset=...)`), and no further than its last chosen file (`_Done`),
+  each asset streamed to a temp file beside where it goes, given `FILE_MODE` (a new file's permissions, not
+  mkstemp's 0600) and moved into place. `out_parts` makes each path's parts names every system allows and refuses
+  `..`; `Writer` makes folders one level at a time and never through a link (that stops it all), gives a name
+  already taken " (2)", keeps an asset's name and its `.meta`'s as a pair (`place(meta=True)`) so they always match,
+  a folder's `.meta` its exact name (`exactly`), and stops (`CantExtract`) when the disk is full or would have less
+  than `ROOM_TO_SPARE` left. One file that can't be written (`_Skip`: a file in the way, a path too long, a path
+  that climbs out) is left out with why and the rest carry on, the bytes it would have taken read past so the
+  package's reader stays in step. A zip's members are found by the names Look inside gave them (`member_name`,
+  shared with `read_zip`), and a package in a zip goes under its own path in the zip. Nothing written at all says
+  why (`Nothing could be taken out.`, with what was left out); a failure part way deletes the half-made folder.
 
 ## Tags
 
@@ -289,12 +294,18 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
   (`open-short`), unlocks it in the page, and adds the code as any other.
 - **Deleting one:** **Delete the short link** (`unshort`), and deleting the set, delete it from the server with
   the token. Backups leave short links out; a restore keeps this computer's.
-- **Too big for one:** the share server takes a locked set of up to 48 KiB of base64url (`shortlinks.MAX_DATA`,
-  `MAX_BYTES` in the Worker); `shortlinks.fits(code)` says whether a code locks to that. `/api/sets` (`share`) says
-  `fits`, and when it doesn't, how many `parts` it takes: `sets.share_parts()` cuts the set's products, in order,
-  into parts each as full as fits (a binary search on each part's length, measured with `share_code` and a name of
-  the longest "(N of N)"), hidden products taking no room. `split` makes them new sets (`SetStore.split`): a
-  wishlist's are wishlists without a `source`, so reading the store's list again changes only the wishlist itself.
+- **Too big for one:** the share server takes a locked set of up to 48 KiB, measured once it's decoded from
+  base64url (`shortlinks.MAX_DATA`, `MAX_BYTES` in the Worker; sent, it's up to 64 KiB of base64url);
+  `shortlinks.fits(code)` says whether a code locks to that. `/api/sets` (`share`) says `fits`, and when it doesn't,
+  how many `parts` it takes, or `why` none would do (one product too big on its own): `sets.share_parts()` cuts the
+  set's products, in order, into parts each as full as fits, hidden products taking no room. Each product is packed
+  once (`share_rows`, `_pack`); each part's end is searched for from the last part's length, in growing steps then
+  halving; each part is sized under `part_name(name, 1, 1)`, the longest in bytes any part's real name can be (a
+  longer "(n of N)" leaves fewer of the name's characters, each a byte or more); a set that doesn't fit under its
+  own name is at least two parts; and the last few answers are kept, by what they were worked out from. `split`
+  makes them new sets (`SetStore.split`, named with `part_name`), working the parts out under the sets' lock from
+  what the set holds then: a wishlist's are wishlists without a `source`, so reading the store's list again
+  changes only the wishlist itself.
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 
@@ -305,6 +316,9 @@ Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with 
 - **A product's picture** in a set is `/setpic/<set>/<place>?p=<hash>` (`server.pic_for`: the first 12 hex digits
   of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture
   only when `p` names the product at that place now, and the browser never shows one it kept for another.
+- **Pages elsewhere:** a Jinxxy list's product on a site that isn't a store keeps that page as `elsewhere`
+  (`wishlists.jinxxy_products`, checked by `sets.outside_link`: plain https on a public name), served with the set
+  and opened by the tile (`outsideUrl`), but never put in a share code: the viewer opens only the stores' own pages.
 - **Suggested tags:** `library.common_words()` (the same words Hoard suggests for a store's products) over a
   wishlist's product names gives `words` in `/api/sets`. With a wishlist open (`openWish()`), the filters beside it
   are its own: `renderTagFacets` and the pages' Creators count its products (`wishTagItems`, `wishCreators`), with
