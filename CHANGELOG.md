@@ -1,6 +1,6 @@
 # Changelog
 
-## 5.0.0
+## 5.0.1
 
 - **Projects is now a project manager, with your library in it.** **Projects** (at the top of either page) is your
   Unity projects, the same list as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the VRChat Creator
@@ -85,6 +85,8 @@
   whose request to Hoard couldn't be sent for a moment tries again, rather than saying Hoard isn't running.
 - Faster with a large library: a product's contents are read once for each version of its file, products are found
   by key from one map, and the backups folder without listing every project.
+- Secure connections are checked against the newest list of trusted certificate authorities (certifi
+  2026.10.19).
 - For anyone working on Hoard's pages: **the style guide**, at `/styleguide` on a running Hoard, shows every part of
   the pages with its markup, in any page, style, theme, font and text size.
 
