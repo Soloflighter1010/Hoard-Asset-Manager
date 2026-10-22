@@ -1909,5 +1909,9 @@
  "Nothing could be taken out.": "아무것도 꺼내지 못했어요.",
  "Choose what to take out first.": "먼저 꺼낼 것을 선택하세요.",
  "There isn't room for it on that disk.": "그 디스크에 공간이 부족해요.",
- "A path in it leads outside the folder it's taken out to, so it wasn't.": "안에 있는 경로가 꺼낼 폴더 밖을 가리켜서 꺼내지 않았어요."
+ "A path in it leads outside the folder it's taken out to, so it wasn't.": "안에 있는 경로가 꺼낼 폴더 밖을 가리켜서 꺼내지 않았어요.",
+ "Add to project": "프로젝트에 추가",
+ "{0} selected for {1}": "{1}에 넣을 {0}개 선택함",
+ "1 selected for {1}": "{1}에 넣을 1개 선택됨",
+ "the new project": "새 프로젝트"
 }

@@ -2787,6 +2787,11 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  pickHere: () => {   // Projects' Put in products from your library: what's downloaded, to choose from (pickStart)
+    if (state.store === "Sets") { state.store = ""; state.set = ""; }
+    state.view = "downloads";
+    closeDetail();
+  },
   all: () => DATA.assets,
   download: keys => startDownload(storesOf(keys), null, keys),   // (the Sets tab)
   membersOf: id => {   // a stack's copies, all chosen together
@@ -3039,7 +3044,8 @@ wireTags();
 wireApp();
 wireTour();
 readHash();
-load().finally(() => hideSplash()).then(() => tourResume());   // the tour, carried on from the Library
+load().finally(() => hideSplash()).then(() => { tourResume(); pickResume(); });   // the tour, carried on from the Library,
+// or choosing products for a project there (Projects' Put in products from your library)
 </script>
 </body>
 </html>

@@ -31,8 +31,7 @@ STEPS = {
           "[data-pj=manage] >> nth=0", "[data-pj=versions] >> nth=0", "dialog.pj-dlg button[value=no]",
           "[data-pj=repair]", "dialog.pj-dlg button[value=no]", "[data-pj=backup]",
           "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=report] >> nth=0", "[data-pj=back]", "[data-pj=new]",
-          "[data-pj=addpkg]", "dialog.pj-dlg .pj-picklist input >> nth=0", "dialog.pj-dlg button[value=no]", "[data-pj=addprod]", "dialog.pj-dlg .linkish >> nth=0",
-          "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=repos]", ".pj-more summary", "[data-pj=back]",
+          "[data-pj=addpkg]", "dialog.pj-dlg .pj-picklist input >> nth=0", "dialog.pj-dlg button[value=no]", "[data-pj=back]", "[data-pj=repos]", ".pj-more summary", "[data-pj=back]",
           "[data-pj=settings]", "[data-pj=back]", "[data-pj=backups]", "[data-pj=bkmoveold]",
           "dialog.pj-dlg button[value=no]", "[data-pj=back]", "Escape", '#storeSeg [data-store="Sets"]',
           "[data-setopen] >> nth=0", ".setextra summary", '#storeSeg [data-store=""]', "#selectBtn", "#selectBtn",
@@ -41,7 +40,9 @@ STEPS = {
           "#settingsBtn", "#setupAgain", *["#setupNext"] * 8, "Escape"],
     "/downloads": ["", ".slot >> nth=0", "Escape", '[data-view="updates"]', '[data-view="archive"]', '[data-view="removed"]',
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
-                   "Escape", '#stores [data-store="Sets"]', "[data-setopen] >> nth=0", '#stores [data-store=""]', "#settingsBtn"],
+                   # a project's Put in products from your library: Downloads, choosing for it, and Cancel
+                   "[data-pj=manage] >> nth=0", "[data-pj=sub][data-sub=library]", "[data-pj=addprod]", ".slot >> nth=0",
+                   "[data-pickcancel]", "Escape", '#stores [data-store="Sets"]', "[data-setopen] >> nth=0", '#stores [data-store=""]', "#settingsBtn"],
 }
 
 

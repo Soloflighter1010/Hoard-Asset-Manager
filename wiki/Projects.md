@@ -40,9 +40,10 @@ name, one already there).
 [Hoard for Unity](Hoard-for-Unity) is in a new project to begin with (its repository is added for you if you haven't
 got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
 that works in the project's Unity, to tick (with a version, if you'd rather not have the newest), then **Add the
-chosen packages**. **Put in products from your library** chooses products
-you've downloaded, and which of their files: a product with several packages (one for PC, one for Quest, a few
-variants) asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
+chosen packages**. **Put in products from your library** opens Downloads in **Select** mode, for this project: tick
+the products you want, then **Add to project**, and you're back at the new project as you left it, with them in
+(**Cancel** goes back without them). A product with several packages (one for PC, one for Quest, a few variants)
+asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
 What the products need ([What it needs](Downloads#the-downloads-view): lilToon, Poiyomi Toon, Modular Avatar, VRCFury,
 NDMF, Avatar Optimizer, the VRChat SDK) is offered beside them, to add with a click; the repository it comes from is
 added for you.
@@ -82,8 +83,10 @@ what it found. From there:
   version that works in the project's Unity, newest first, and install any of them, an older one too. The packages
   it needs change to match. **Add packages** can choose a version as well, instead of the newest.
 - **Put it right**, when the project's packages aren't installed the way it says (after cloning it from Git, say).
-- **Put in products from your library**, later. Nothing already in the project is replaced: a file that's there
-  (with the same asset ID, or at the same path) is left as it is.
+- **Put in products from your library**, later: Downloads opens in **Select** mode for this project, with nothing to
+  do there but **Add to project** or **Cancel**. What's chosen is shown before it goes in, with what it needs.
+  Nothing already in the project is replaced: a file that's there (with the same asset ID, or at the same path) is
+  left as it is.
 - **What went in, and where.** Each time Hoard puts products in a project (making it, or later), it adds them to
   `Hoard imports.md`, beside the project's `Assets` folder: each product, its file, when, and the folders it added
   (or the package, in `Packages`), with anything left as it was because the project already had it. Unity doesn't

@@ -276,11 +276,17 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.locator("#pjUnity").input_value(), "2022.3.22f1")
         page.fill("#pjName", "CON")
         page.wait_for_function("() => document.querySelector('#pjNameNote').textContent.includes(\"can't be used\")")
-        # a product from the library, chosen file by file
+        # a product from the library: chosen in Downloads (from the Library page, it goes there), then back to the
+        # new project as it was, with it in
         page.click("[data-pj=addprod]")
-        page.locator("dialog.pj-dlg .linkish", has_text="Rusk").click()
-        page.locator("dialog.pj-dlg", has_text="rusk.unitypackage").locator("button[value=yes]").click()
+        page.wait_for_url("**/downloads*")
+        page.locator("#bulk [data-main]", has_text="Add to project").wait_for()
+        self.assertIn("for CON", page.locator("#bulkCount").inner_text())
+        page.locator(".slot", has_text="Rusk").click()
+        page.locator("#bulk [data-main]").click()
         page.locator(".pj-pre", has_text="rusk.unitypackage").wait_for()
+        self.assertEqual(page.input_value("#pjName"), "CON")
+        self.assertTrue(page.locator("#bulk").is_hidden(), "and choosing is over")
         # Hoard for Unity is in a new project unless you leave it out
         self.assertIn("Hoard for Unity", page.locator(".pj-chips").inner_text())
         # Add packages: a view of its own (not a window over the page), and back to the new project
@@ -296,6 +302,59 @@ class ProjectsPanel(unittest.TestCase):
         page.click("[data-pj=addchosen]")
         self.assertIn("3.7.0", page.locator(".pj-chips .pill", has_text="com.vrchat.avatars").inner_text())
         self.assertEqual(page.input_value("#pjName"), "CON", "what was typed is kept")
+
+    def test_put_in_products_from_your_library(self):
+        """A project's Put in products from your library opens Downloads (from the Library page, it goes there) in
+        Select mode for that project, where all there is to do is Add to project or Cancel; both go back to it."""
+        page = self.page
+        ran = []
+        self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        page.click("[data-pj=sub][data-sub=library]")
+        page.click("[data-pj=addprod]")
+        page.wait_for_url("**/downloads*")
+        bar = page.locator("#bulk")
+        bar.locator("[data-main]").wait_for()
+        self.assertTrue(page.locator("#projectsWin").is_hidden())
+        self.assertEqual(bar.locator("button:visible").all_inner_texts(), ["Add to project", "Cancel"], "nothing else to do")
+        self.assertTrue(page.locator("#selectBtn").is_hidden(), "not even Select's Done")
+        self.assertTrue(bar.locator("[data-main]").is_disabled(), "until something's chosen")
+        self.assertEqual(bar.locator("#bulkCount").inner_text(), "0 selected for Rusk Avatar")
+        page.locator(".slot", has_text="Rusk").click()   # (a tap ticks: Select mode)
+        self.assertEqual(bar.locator("#bulkCount").inner_text(), "1 selected for Rusk Avatar")
+        self.assertEqual(page.locator("#detail.open").count(), 0)
+        # right-click: the same, and nothing more
+        page.locator(".slot", has_text="Rusk").click(button="right")
+        self.assertEqual(page.locator(".selmenu [role=menuitem]").all_inner_texts(), ["Add to project"])
+        page.keyboard.press("Escape")
+        # Cancel: back to the project, as it was
+        bar.locator("[data-pickcancel]").click()
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        self.assertEqual(page.locator(".pj-subs [aria-current=page]").inner_text(), "From your library")
+        self.assertTrue(bar.is_hidden())
+        self.assertEqual(page.locator("#selectBtn").inner_text(), "Select", "Select mode is over")
+        self.assertTrue(page.locator("#selectBtn").is_visible())
+        # again, on the Downloads page: chosen, shown before it goes in, and put in as a task
+        page.click("[data-pj=addprod]")
+        bar.locator("[data-main]").wait_for()
+        page.locator(".slot", has_text="Rusk").click()
+        bar.locator("[data-main]").click()
+        sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
+        self.assertIn("rusk.unitypackage", sure.inner_text())
+        sure.locator("button[value=yes]").click()
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        for _ in range(100):
+            if ran:
+                break
+            page.wait_for_timeout(100)
+        self.assertEqual((ran[0]["op"], ran[0]["name"]), ("preload", "Rusk Avatar"))
+        self.assertEqual([x["file"] for x in ran[0]["picks"]], ["rusk.unitypackage"])
+        # Escape, while choosing, goes back too
+        page.click("[data-pj=addprod]")
+        bar.locator("[data-main]").wait_for()
+        page.keyboard.press("Escape")
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        self.assertTrue(bar.is_hidden())
 
     def test_unity_and_folders(self):
         page = self.page

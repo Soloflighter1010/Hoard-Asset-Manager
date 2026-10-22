@@ -5,6 +5,9 @@
 - **Projects opens with Hoard's splash,** the logo and "Opening your projects", while it reads your projects, as
   the Library does while it opens. The first time you open Projects it shows for a moment; after that, only when
   reading your projects takes a while.
+- **Put in products from your library** (a project's, and New project's) opens Downloads in **Select** mode for
+  that project, instead of a long list in a window: tick what goes in, then **Add to project**, the only other thing
+  to do there being **Cancel**. Either way you're back at the project.
 
 ## 5.1.2
 

@@ -567,7 +567,10 @@ function markSelected() {
     else s.removeAttribute("aria-pressed");
   }
   if (!on) { closeSelMenu(); return; }
-  $("#bulkCount").textContent = tr(sel.ids.size === 1 ? "1 selected" : "{0} selected", sel.ids.size.toLocaleString());
+  $("#bulkAll").hidden = $("#bulkDone").hidden = !!PJPICK.for;   // (choosing for a project: Add to project or Cancel)
+  $("#bulkCount").textContent = PJPICK.for
+    ? tr(sel.ids.size === 1 ? "1 selected for {1}" : "{0} selected for {1}", sel.ids.size.toLocaleString(), PJPICK.for.name)
+    : tr(sel.ids.size === 1 ? "1 selected" : "{0} selected", sel.ids.size.toLocaleString());
   renderBulk();
 }
 // a stacked tile stands for every copy in it: choosing it chooses them all
@@ -597,17 +600,19 @@ function selectAllShown() {
   markSelected();
 }
 function setSelecting(on) {   // the Select button: a mode where every tap ticks (and Done ends it, and the selection)
+  if (!on && PJPICK.for) return pickEnd();   // (Done or Escape while choosing for a project: back to it, as Cancel is)
   sel.on = on;
   if (!on) { sel.ids.clear(); sel.anchor = null; }
   $("#selectBtn").textContent = on ? tr("Done") : tr("Select");
   $("#selectBtn").setAttribute("aria-pressed", String(on));
+  $("#selectBtn").hidden = !!PJPICK.for;   // (choosing for a project: the bar's Add to project and Cancel are the way out)
   if (on) T.closeDetail();
   T.render();   // (stacks open while in Select mode, so each copy can be chosen)
   markSelected();
 }
 const clearSelection = () => setSelecting(false);
 const chosenItems = () => [...sel.ids].map(sel.kind === "sets" ? id => ((SETS || {}).sets || []).find(x => x.id === id) : T.byId).filter(Boolean);
-const actionsHere = () => sel.kind === "sets" ? SET_TILE_ACTIONS() : T.actions();
+const actionsHere = () => PJPICK.for ? (sel.kind === "items" ? PICK_ACTIONS() : {}) : sel.kind === "sets" ? SET_TILE_ACTIONS() : T.actions();
 
 /* what to do with the selection: the bar's buttons and menus, and the same menu on a right-click */
 function renderBulk() {
@@ -616,7 +621,8 @@ function renderBulk() {
   $("#bulkActs").innerHTML =
     main.map((m, i) => `<button class="${m.primary ? "primary" : "ghost"} sm" data-main="${i}"${none ? " disabled" : ""}>${esc(tr(m.label))}</button>`).join("") +
     groups.filter(g => g.items.length).map(g => `<button class="ghost sm menu-btn" data-group="${esc(g.name)}" aria-haspopup="menu" ` +
-      `aria-expanded="false"${none ? " disabled" : ""}>${esc(tr(g.name))}</button>`).join("");
+      `aria-expanded="false"${none ? " disabled" : ""}>${esc(tr(g.name))}</button>`).join("") +
+    (PJPICK.for ? `<button class="ghost sm" data-pickcancel>${esc(tr("Cancel"))}</button>` : "");
 }
 function runAction(item) {
   closeSelMenu();
@@ -677,7 +683,8 @@ function allActions() {
 function wireSelection() {
   $("#bulk").addEventListener("click", e => {
     const m = e.target.closest("[data-main]"), g = e.target.closest("[data-group]");
-    if (m) runAction(actionsHere().main[+m.dataset.main]);
+    if (e.target.closest("[data-pickcancel]")) pickEnd();
+    else if (m) runAction(actionsHere().main[+m.dataset.main]);
     else if (g) {
       if (selMenu && selMenu.from === g) { closeSelMenu(); return; }
       openSelMenu(actionsHere().groups.filter(x => x.name === g.dataset.group), g);
@@ -2075,12 +2082,6 @@ async function pjChooseVersion(name, label, current, unityVersion) {
   const picked = res.ok ? (res.dlg.querySelector(".pj-vers input:checked") || {}).value || "" : "";
   return picked === current ? "" : picked;
 }
-async function pjAssets() {
-  if (PJ.assets) return PJ.assets;
-  const r = await api("/api/assets", { cache: "no-store" });
-  PJ.assets = r.ok ? ((await r.json()).assets || []).filter(a => (a.files || []).some(f => /\.(unitypackage|zip)$/i.test(f.path)) || a.store === "Local") : [];
-  return PJ.assets;
-}
 // What to put in of one product: its .unitypackage files and VPM packages, each with a tick
 async function pjProductContents(key) {
   const r = await api(`/api/vpm/product?key=${encodeURIComponent(key)}`);
@@ -2088,24 +2089,53 @@ async function pjProductContents(key) {
   if (!r.ok) { toast(data.error || tr("That product couldn't be read.")); return null; }
   return data;
 }
-async function pjPickProducts() {
-  const assets = await pjAssets();
-  if (!assets.length) { toast(tr("Nothing downloaded has a Unity package in it yet.")); return []; }
-  const dlgP = pjDialog(`<p><b>${esc(tr("Put in products from your library"))}</b></p><p><input type="search" id="pjProdFind" placeholder="${esc(tr("Find a product"))}" style="width:100%;box-sizing:border-box"></p>` +
-    `<ul class="pj-picklist">${assets.map(a => `<li data-hay="${esc(norm([a.name, a.creator, a.store].join(" ")))}"><button class="linkish" value="${esc(a.tag_key)}" translate="no">${esc(a.name)}</button> ` +
-      `<span class="muted" translate="no">${esc(a.creator || "")} · ${esc(storeLabel(a.store))}</span></li>`).join("")}</ul>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button></div>`, "wide");
-  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
-  dlg.querySelector("#pjProdFind").addEventListener("input", e => {
-    const words = norm(e.target.value).split(/\s+/).filter(Boolean);
-    for (const li of dlg.querySelectorAll(".pj-picklist li")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
-  });
-  const res = await dlgP;
-  if (!res.value || res.value === "no" || res.value === "yes") return [];
-  const product = await pjProductContents(res.value);
-  if (!product || !product.contents.length) { if (product) toast(tr("There's no Unity package or VPM package in that one.")); return []; }
-  return await pjChooseContents(product) || [];
+// ---- Put in products from your library (a project's From your library, and New project's): the Downloads page, in
+// Select mode for that project, with nothing to do there but Add to project or Cancel. What's chosen goes in as Put in a
+// project... puts it; both go back to the project. From the Library page it's Downloads that opens (sessionStorage
+// carries what it's for, and a new project's form as far as it's filled in).
+const PJPICK = { for: null };   // what's being chosen for: {view: "project", path, name} or {view: "new", name, form}
+const PICK_KEY = "hoard-pick-for";
+const PICK_ACTIONS = () => ({ main: [{ label: "Add to project", primary: true, run: list => pickAdd(list) }] });
+function pjPickFromDownloads() {
+  const f = PJ.form;
+  if (PJ.view === "new") {   // (what's typed, as it is now)
+    if ($("#pjName")) f.name = $("#pjName").value;
+    if ($("#pjWhere")) f.location = $("#pjWhere").value;
+  }
+  const pick = PJ.view === "new" ? { view: "new", name: f.name.trim() || tr("the new project"), form: f }
+    : { view: "project", path: PJ.project.path, name: PJ.project.name };
+  if (T.pickHere) return pickStart(pick);
+  try { sessionStorage.setItem(PICK_KEY, JSON.stringify(pick)); }
+  catch (e) { toast(tr("That can't be done.")); return; }
+  location.href = "/downloads";
 }
+function pickResume() {   // the Downloads page, opened from the Library page to choose for a project
+  let pick = null;
+  try { pick = JSON.parse(sessionStorage.getItem(PICK_KEY) || "null"); sessionStorage.removeItem(PICK_KEY); } catch (e) { return; }
+  if (pick && (pick.view === "new" ? pick.form && Array.isArray(pick.form.picks) : typeof pick.path === "string")) pickStart(pick);
+}
+function pickStart(pick) {
+  PJPICK.for = pick;
+  openProjects(false);
+  T.pickHere();   // (what's downloaded: products, not sets)
+  setSelecting(true);
+}
+function pickEnd() {   // back to the project, or to the new one
+  const pick = PJPICK.for;
+  PJPICK.for = null;
+  setSelecting(false);
+  if (!pick) return;
+  if (pick.view === "new") { PJ.form = pick.form; PJ.view = "new"; }
+  else {
+    if (!PJ.project || PJ.project.path !== pick.path) PJ.project = { path: pick.path, name: pick.name };
+    PJ.view = "project"; PJ.sub = "library";
+  }
+  openProjects(true);
+}
+async function pickAdd(list) {
+  const pick = PJPICK.for;
+  if (pick && await (pick.view === "new" ? pjFormWith(pick.form, list) : pjPutIn(pick, list))) pickEnd();
+}   // (nothing could go in, or a question was cancelled: still choosing)
 // What to put in of one product: its .unitypackage files and VPM packages, each with a tick (one of several
 // variants left to choose), and the VPM packages it needs. null when it's cancelled.
 async function pjChooseContents(product) {
@@ -2171,9 +2201,13 @@ async function putInProject(list) {
     `<button class="ghost" value="new">${esc(tr("New project with these..."))}</button></div>`, "wide");
   if (res.value === "new") return newProjectWith(list);
   const project = projects.find(p => p.path === res.value);
-  if (!project) return;
+  if (project) await pjPutIn(project, list);
+}
+// These products into a project: what's in each (asked when one has several to choose from), shown before it's put
+// in, with what they need from their own repositories ticked to come too. True when it's started.
+async function pjPutIn(project, list) {
   const got = await pjPicksFor(list);
-  if (!got || !got.picks.length) return;
+  if (!got || !got.picks.length) return false;
   const ok = await pjDialog(`<p><b>${esc(tr("Put these in {0}?", project.name))}</b></p>` +
     `<ul class="pj-picklist">${got.picks.map(x => `<li><b translate="no">${esc(x.product)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span></li>`).join("")}</ul>` +
     (got.suggested.length ? `<p class="hint">${esc(tr("They need these too, from their own repositories:"))}</p><ul class="pj-picklist">${got.suggested.map((s, i) =>
@@ -2181,23 +2215,28 @@ async function putInProject(list) {
       (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>` : "") + `</label></li>`).join("")}</ul>` : "") +
     `<p class="hint">${esc(tr("Nothing already in the project is replaced."))}</p>` +
     `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put them in"))}</button></div>`, "wide");
-  if (!ok.ok) return;
+  if (!ok.ok) return false;
   const sugg = [...ok.dlg.querySelectorAll("input[data-sugg]:checked")].map(b => got.suggested[+b.dataset.sugg]);
   const extra = await pjAddSuggested(sugg);
   if (extra.length) await pjShowChanges({ path: project.path, add: extra.map(name => ({ name })) });
-  pjRun("/api/vpm/preload", { path: project.path, picks: got.picks });
+  return pjRun("/api/vpm/preload", { path: project.path, picks: got.picks });
 }
 async function newProjectWith(list) {   // Projects' New project, with these in it (and what they need)
   const d = await pjLoaded();
   if (!d) { toast(tr("Projects couldn't be read just now.")); return; }
-  const got = await pjPicksFor(list);
-  if (!got || !got.picks.length) return;
-  const extra = await pjAddSuggested(got.suggested);
-  PJ.form = pjNewForm();
-  PJ.form.picks.push(...got.picks);
-  for (const n of extra) PJ.form.packages[n] = PJ.form.packages[n] || "*";
+  const form = pjNewForm();
+  if (!await pjFormWith(form, list)) return;
+  PJ.form = form;
   PJ.view = "new";
   openProjects(true);
+}
+async function pjFormWith(form, list) {   // these products, and what they need, into New project's form
+  const got = await pjPicksFor(list);
+  if (!got || !got.picks.length) return false;
+  const extra = await pjAddSuggested(got.suggested);
+  form.picks.push(...got.picks);
+  for (const n of extra) form.packages[n] = form.packages[n] || "*";
+  return true;
 }
 async function pjAddSuggested(list) {   // a tool's repository, added first when you don't have it yet
   const names = [];
@@ -2376,19 +2415,7 @@ async function pjAct(b) {
     for (const n of names) f.packages[n] = "*";
     return drawProjects();
   }
-  if (act === "addprod") {
-    const got = await pjPickProducts();
-    if (!got || !got.picks || (!got.picks.length && !got.suggested.length)) return;
-    const extra = await pjAddSuggested(got.suggested);
-    if (PJ.view === "new") {
-      f.picks.push(...got.picks);
-      for (const n of extra) f.packages[n] = f.packages[n] || "*";
-      return drawProjects();
-    }
-    if (extra.length) await pjShowChanges({ path, add: extra.map(name => ({ name })) });
-    if (got.picks.length) pjRun("/api/vpm/preload", { path, picks: got.picks });
-    return;
-  }
+  if (act === "addprod") return pjPickFromDownloads();   // (Downloads, in Select mode for this project)
   if (act === "unpick") { f.picks.splice(+b.dataset.i, 1); return drawProjects(); }
   if (act === "addset") {
     const r = await api("/api/sets", { cache: "no-store" });
