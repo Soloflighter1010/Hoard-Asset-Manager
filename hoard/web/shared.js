@@ -216,18 +216,31 @@ const entered = (async () => {
   }
   try { ACCESS.key = given || localStorage.getItem("hoard-key") || ""; } catch (e) { ACCESS.key = given || ""; }
   if (once) {
-    try {
-      const r = await fetch("/api/enter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: once }) });
-      if (r.ok) ACCESS.key = (await r.json()).key || "";
-    } catch (e) { /* Hoard isn't running: the first request says so */ }
+    for (const wait of [300, 0]) {   // (once more if it couldn't be sent at all: the link isn't used until it arrives)
+      try {
+        const r = await fetch("/api/enter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: once }) });
+        if (r.ok) ACCESS.key = (await r.json()).key || "";
+        break;
+      } catch (e) { if (wait) await new Promise(res => setTimeout(res, wait)); }   // (Hoard isn't running: the first request says so)
+    }
   }
   try { if (ACCESS.key) localStorage.setItem("hoard-key", ACCESS.key); } catch (e) { /* no storage: this page still works */ }
 })();
 // Every request to Hoard's server goes through api(), with the key. Images, which the browser loads by itself,
-// carry it in their address instead (keyed()).
+// carry it in their address instead (keyed()). One that only reads, and couldn't be sent at all (the connection
+// refused or dropped for a moment, as on a computer short of network buffers), is sent again, twice at most: a page
+// isn't left saying Hoard isn't running over a moment's hiccup. A change is never sent twice.
 async function api(url, opts = {}) {
   await entered;
-  return fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Hoard-Key": ACCESS.key } });
+  const send = () => fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Hoard-Key": ACCESS.key } });
+  if ((opts.method || "GET").toUpperCase() !== "GET") return send();
+  for (const wait of [300, 1000]) {
+    try { return await send(); } catch (e) {
+      if (!(e instanceof TypeError)) throw e;   // (an abort isn't one)
+      await new Promise(res => setTimeout(res, wait));
+    }
+  }
+  return send();
 }
 const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
 const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";

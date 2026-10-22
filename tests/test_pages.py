@@ -1344,6 +1344,25 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.close()
 
 
+    def test_a_request_that_couldnt_be_sent_is_sent_again(self):
+        """A connection refused for a moment (a computer short of network buffers, as Windows CI was) doesn't leave
+        the page saying Hoard isn't running: a request that only reads is sent again. The sign-in exchange too."""
+        page = self.browser.new_page()
+        dropped = []
+
+        def once(route):
+            if route.request.url.split("?")[0].rsplit("/", 1)[-1] not in dropped:
+                dropped.append(route.request.url.split("?")[0].rsplit("/", 1)[-1])
+                return route.abort("connectionrefused")
+            return route.continue_()
+        page.route("**/api/enter", once)
+        page.route("**/api/library", once)
+        goto(page, self.srv.entry_url())
+        page.get_by_text("Mochi").first.wait_for(timeout=10000)
+        self.assertEqual(sorted(dropped), ["enter", "library"], "each was refused once, then sent again")
+        self.assertNotIn("isn't running", page.inner_text("body"))
+        page.close()
+
     def test_glow_and_store_colours(self):
         """Issue #112: the glow can be turned off, and store colours changed for colour blindness or to your own."""
         from unittest import mock
