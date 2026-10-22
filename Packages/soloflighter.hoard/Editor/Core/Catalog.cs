@@ -287,6 +287,8 @@ namespace SoloFlighter.Hoard
                 case "Itch": ok = Shop(host, "itch.io") && (path.Length == 0 || ItchProject.IsMatch(path)); break;
                 default: ok = false; break;
             }
+            // a Booth item's page that names no language doesn't open the item for everyone: its English page does
+            if (ok && store == "Booth" && On(host, "booth.pm") && path.StartsWith("/items/")) path = "/en" + path;
             return ok ? "https://" + host + path : null;
         }
 

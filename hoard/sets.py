@@ -212,7 +212,7 @@ def product_link(store, value) -> str | None:
     None. Never a page of the buyer's own: a Gumroad purchase's link is its download page (gumroad.com/d/...),
     which opens its files for whoever has it; Jinxxy's is the buyer's inventory; an itch.io download page carries
     its key. Only the stores' own websites (not a site added on one computer), so a shared link is the same
-    everywhere. site/set.js checks the same way."""
+    everywhere. A Booth item's page that names no language is its English one. site/set.js checks the same way."""
     if not isinstance(store, str) or store not in STORE_LINK_SITES or not isinstance(value, str) or len(value) > MAX_URL:
         return None
     try:
@@ -241,6 +241,8 @@ def product_link(store, value) -> str | None:
         ok = on("payhip.com") and re.fullmatch(r"/b/[A-Za-z0-9]{1,20}", path)
     else:   # itch.io: a project's page, or its creator's
         ok = shop("itch.io") and (not path or re.fullmatch(r"/[A-Za-z0-9_-]{1,120}", path))
+    if ok and store == "booth" and on("booth.pm") and path.startswith("/items/"):
+        path = "/en" + path   # booth.pm/items/<id> doesn't open the item for everyone: its English page does
     return f"https://{host}{path}" if ok else None
 
 

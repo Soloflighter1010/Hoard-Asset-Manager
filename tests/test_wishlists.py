@@ -115,8 +115,8 @@ class SavedPages(unittest.TestCase):
         (booth,) = got["booth.html"]["lists"]
         self.assertEqual((booth["store"], booth["list"]), ("booth", "Loved items"))
         self.assertEqual([(p["name"], p["creator"], p["price"]["text"], p["url"]) for p in booth["products"]],
-                         [("Fox Hoodie【5 avatars】", "Kitsu Studio", "1,500 JPY", "https://booth.pm/items/1001"),
-                          ("Mochi Boots", "Mochi Works", "800 JPY", "https://booth.pm/items/1002")],
+                         [("Fox Hoodie【5 avatars】", "Kitsu Studio", "1,500 JPY", "https://booth.pm/en/items/1001"),
+                          ("Mochi Boots", "Mochi Works", "800 JPY", "https://booth.pm/en/items/1002")],
                          "not the recently viewed items above them, nor a picture's Loading...")
         self.assertTrue(booth["products"][0]["thumbnail"].endswith("/one_base_resized.jpg"), "the picture shown")
         (gum,) = got["gumroad.html"]["lists"]
@@ -158,6 +158,77 @@ class SavedPages(unittest.TestCase):
         two = {"store": "booth", "list": "Loved items", "url": "u", "products": [product("B", "2 JPY"), product("C", "3 JPY")]}
         (both,) = wishlists.merge_lists([one, two])
         self.assertEqual([p["name"] for p in both["products"]], ["A", "B", "C"])
+
+
+class BoothLinks(unittest.TestCase):
+    def test_an_items_english_page(self):
+        """A Booth item's link that names no language (booth.pm/items/<id>, as 4.4.0 and the 5.0 betas kept a loved
+        item's) doesn't open the item for everyone: it's its English page, kept, shared and shown. One that names
+        a language, or is on its shop's own address, stays as it is."""
+        for given, kept in (("https://booth.pm/items/7", "https://booth.pm/en/items/7"),
+                            ("https://booth.pm/ja/items/7", "https://booth.pm/ja/items/7"),
+                            ("https://booth.pm/en/items/7", "https://booth.pm/en/items/7"),
+                            ("https://kitsu.booth.pm/items/7", "https://kitsu.booth.pm/items/7")):
+            self.assertEqual(sets.product_link("booth", given), kept, given)
+        stored = sets.SetStore.sanitize({"sets": [{"id": "ab", "name": "W", "kind": "wishlist", "items": ["booth:rusk"],
+                                                   "source": {"store": "booth", "list": "Loved items"},
+                                                   "products": {"booth:rusk": {"store": "booth", "name": "Rusk",
+                                                                               "url": "https://booth.pm/items/7"}}}]})
+        self.assertEqual(stored["sets"][0]["products"]["booth:rusk"]["url"], "https://booth.pm/en/items/7", "one kept from before")
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class BoothPages(unittest.TestCase):
+    """Booth's loved items, 20 to a page: its page numbers are drawn by its script (an address with ?page=2 shows the
+    first page again, so Hoard read only the first 20), and Hoard turns the pages with Booth's own arrow."""
+    PAGE = """<html><body><main>
+<div><button class="charcoal-tag-item" data-state="default"><span>all</span></button>
+<button class="charcoal-tag-item" data-state="inactive"><span>uncategorized</span></button></div>
+<div class="grid" id="grid"></div><div id="pager"></div>
+<script>
+const TOTAL = 45, PER = 20; let cur = 1;
+function draw() {
+  let h = '';
+  for (let i = (cur - 1) * PER + 1; i <= Math.min(TOTAL, cur * PER); i++)
+    h += `<div class="item-card-wrapper"><div class="pt-8"><a href="https://booth.pm/en/items/${5000 + i}"><span class="break-all">Item ${i}</span></a>` +
+         `<a href="https://kitsu.booth.pm/"><div>Kitsu</div></a><div class="flex"><div>${i * 100} JPY</div></div></div></div>`;
+  document.getElementById('grid').innerHTML = h;
+  const pages = Math.ceil(TOTAL / PER);
+  document.getElementById('pager').innerHTML = [...Array(pages).keys()].map(k =>
+    `<div class="${k + 1 === cur ? 'text-primary400' : 'cursor-pointer'}">${k + 1}</div>`).join('') +
+    (cur < pages ? '<div class="cursor-pointer flex"><pixiv-icon name="24/ArrowOpenRight">&gt;</pixiv-icon></div>' : '');
+}
+document.addEventListener('click', e => {   // a page is read a moment after it's chosen, and the address stays the same
+  const a = e.target.closest('.cursor-pointer');
+  if (a) setTimeout(() => { cur = a.querySelector('pixiv-icon') ? cur + 1 : +a.textContent; draw(); }, 300);
+});
+draw();
+</script></main></body></html>"""
+
+    def test_every_page_is_read(self):
+        import re
+        from playwright.sync_api import sync_playwright
+        asked, said = [], []
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            ctx = browser.new_context()
+
+            def route(r):
+                if r.request.url.startswith(wishlists.BOOTH_WISHES):
+                    asked.append(r.request.url)
+                    r.fulfill(status=200, content_type="text/html; charset=utf-8", body=self.PAGE)
+                else:
+                    r.abort()
+            ctx.route("**/*", route)
+            lists = wishlists.read_booth(ctx, {"request_delay": 0}, said.append)
+            browser.close()
+        (loved,) = lists
+        self.assertEqual(loved["list"], "Loved items")
+        self.assertEqual([x["name"] for x in loved["products"]], [f"Item {i}" for i in range(1, 46)], "all three pages, in order")
+        self.assertTrue(all(re.fullmatch(r"https://booth\.pm/en/items/50\d\d", x["url"]) for x in loved["products"]))
+        self.assertEqual(loved["products"][44]["price"]["amount"], 4500)
+        self.assertIn("page 3: 45 items", said[-1])
+        self.assertNotIn("page=", " ".join(asked), "the pages are turned, not asked for by address")
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")

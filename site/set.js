@@ -57,6 +57,7 @@
           && !JINXXY_NOT_A_CREATOR.has(segs[0].toLowerCase()) && (segs.length === 1 || !["products", "lists", "posts"].includes(segs[1].toLowerCase()))
       : store === "payhip" ? on("payhip.com") && /^\/b\/[A-Za-z0-9]{1,20}$/.test(path)
       : store === "itch" ? shop("itch.io") && (!path || /^\/[A-Za-z0-9_-]{1,120}$/.test(path)) : false;
+    if (ok && store === "booth" && on("booth.pm") && path.startsWith("/items/")) return `https://${host}/en${path}`;   // (as Hoard does)
     return ok ? `https://${host}${path}` : "";
   }
   const text = (v, n) => typeof v === "string" ? v.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
