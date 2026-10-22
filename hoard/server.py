@@ -690,6 +690,8 @@ class Handler(BaseHTTPRequestHandler):
             srv.accept_language = self.headers.get("Accept-Language")
             return self._send(200, page_source(PAGES[path], srv.cfg, srv.accept_language), "text/html; charset=utf-8",
                               {"Cache-Control": "no-store"})
+        if path == "/styleguide":   # every part of the pages, for making and checking them (nothing of yours in it)
+            return self._send(200, guide_source(parse_qs(u.query)), "text/html; charset=utf-8", {"Cache-Control": "no-store"})
         if path.startswith("/fonts/"):
             font = font_path(unquote(path[len("/fonts/"):]))
             if not font:
@@ -1958,6 +1960,58 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
         page = page.replace(f'<html lang="en"{marks}>'.encode(), f'<html lang="{lang}"{marks} data-i18n>'.encode(), 1)
         page = page.replace(b"\n<script>\n", b"\n" + i18n.page_script(lang).encode() + b"<script>\n", 1)
     return page
+
+
+GUIDE = "styleguide.html"
+GUIDE_PAGES = {"library": "library.html", "downloads": "downloads.html"}
+GUIDE_SIZES = (100, 115, 130, 150)
+_OWN_STYLE = re.compile(rb"<style[^>]*>(.*?)</style>", re.S)
+# what each of a theme's colours is for (hoard/themes.py), for the guide's swatches
+TOKEN_USES = {"cave": "the page", "ledge": "panels, and the ground under tiles", "stone": "hover, and boxes in panels",
+              "seam": "lines and edges", "bone": "text", "dust": "quieter text", "gold": "the accent: yours, or do this",
+              "gold-ink": "text on the accent", "gold-text": "the accent as text", "warn": "problems",
+              "booth": "Booth", "gumroad": "Gumroad", "jinxxy": "Jinxxy", "payhip": "Payhip", "itch": "itch.io",
+              "local": "Local (your own packages)"}
+
+
+def guide_source(query: dict) -> bytes:
+    """The style guide (/styleguide, web/styleguide.html): every part of the pages, drawn with one page's own
+    stylesheet (the Library's or Downloads'), web/looks.css and a theme, as the pages are served, so it never drifts
+    from them. What it's shown in (page, style, theme, Light or Dark, font, spacing, colours, text size) is in its
+    address, chosen in its own bar. Nothing of yours is in it: every product, project and file in it is made up."""
+    def one(k):
+        return (query.get(k) or [""])[0][:40]
+    page = one("page") if one("page") in GUIDE_PAGES else "library"
+    style, theme, mode = themes.style_id(one("style")), themes.theme_id(one("theme")), themes.mode_id(one("mode"))
+    size = int(one("size")) if one("size") in {str(s) for s in GUIDE_SIZES} else 100
+    font, spacing, colours = one("font") == "dyslexic", one("spacing") == "wide", one("colours") == "colourblind"
+    own = _OWN_STYLE.search((WEB / GUIDE_PAGES[page]).read_bytes())
+    styles = (b'<style id="page">' + (own.group(1) if own else b"") + b"</style>\n" +
+              b'<style id="looks">\n' + (WEB / "looks.css").read_bytes() + b"</style>\n" +
+              b'<style id="theme">\n' + themes.css(theme, mode).encode() + b"\n</style>\n")
+    marks = (f' data-page="{page}"' + (f' data-style="{style}"' if style != "standard" else "") +
+             (' data-font="dyslexic"' if font else "") + (' data-spacing="wide"' if spacing else "") +
+             (' data-colours="colourblind"' if colours else "") +
+             (f' style="zoom: {size / 100}; --zoom: {size / 100}"' if size != 100 else ""))
+
+    def choice(name, label, options, chosen):
+        opts = "".join(f'<option value="{v}"{" selected" if v == chosen else ""}>{text}</option>' for v, text in options)
+        return f'<label>{label} <select name="{name}">{opts}</select></label>'
+    bar = (choice("page", "Page", [("library", "Library"), ("downloads", "Downloads")], page) +
+           choice("style", "Style", [(s, s.title()) for s in themes.STYLES], style) +
+           choice("theme", "Theme", [(t["id"], t["name"]) for t in themes.choices()], theme) +
+           choice("mode", "Light or Dark", [("system", "Match my computer"), ("light", "Light"), ("dark", "Dark")], mode) +
+           choice("font", "Font", [("standard", "Standard"), ("dyslexic", "OpenDyslexic")], "dyslexic" if font else "standard") +
+           choice("size", "Text size", [(str(s), f"{s}%") for s in GUIDE_SIZES], str(size)) +
+           choice("colours", "Store colours", [("standard", "Standard"), ("colourblind", "Easier to tell apart")],
+                  "colourblind" if colours else "standard") +
+           f'<label class="check"><input type="checkbox" name="spacing" value="wide"{" checked" if spacing else ""}> Wider spacing</label>')
+    tokens = "".join(f'<li class="sg-tok"><i style="background: var(--{k})"></i><code>--{k}</code><small>{use}</small>'
+                     f'<span class="sg-val" data-token="{k}"></span></li>' for k, use in TOKEN_USES.items())
+    out = (WEB / GUIDE).read_bytes()
+    out = out.replace(b"<!--@styles-->", styles, 1).replace(b"<!--@bar-->", bar.encode(), 1)
+    out = out.replace(b"<!--@tokens-->", tokens.encode(), 1)
+    return out.replace(b'<html lang="en">', f'<html lang="en"{marks}>'.encode(), 1)
 
 
 def chosen_files(raw) -> dict[str, dict] | None:

@@ -38,7 +38,8 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
   vpm/                 Projects: the Unity projects shared with ALCOM and the Creator Companion, their VPM packages,
                        and your library in them (see "Projects" below); templates/ holds vrc-get's VRChat templates
-  web/                 library.html, downloads.html, shared.js (what both pages share) and the bundled fonts
+  web/                 library.html, downloads.html, shared.js (what both pages share), looks.css (the styles),
+                       styleguide.html (every part of the pages, at /styleguide) and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files (the wordmark is outlined, so no font is needed)
@@ -383,6 +384,18 @@ The script both pages share (windows, Settings, Tasks, Projects, choosing what t
 Content-Security-Policy.
 Script state lives in a single `state` object that's mirrored in the address bar, so views can be
 bookmarked. Rendering rebuilds the grid with `innerHTML`, always through `esc()`.
+
+The three styles (Standard, Treasure and Workbench, Settings, Appearance) are `web/looks.css`, put into both
+pages after their own stylesheet; the page is marked with the one chosen (`<html data-style>`). Standard has no
+mark: it's the pages as written. A style changes how the same markup is laid out, so a new part needs no markup
+of its own for each style.
+
+**The style guide** is at `/styleguide` on a running Hoard (`web/styleguide.html`, `server.guide_source`): every
+part of the pages (colours, buttons, fields, chips, tiles, details, windows, questions, menus, Tasks, Projects,
+sets, setup and the tour), each with its markup to copy, drawn with the Library's or Downloads' own stylesheet,
+`looks.css` and a theme, so it's always as the pages are. Its bar chooses the page, style, theme, Light or Dark,
+font, text size, store colours and spacing, kept in its address. It holds nothing of yours and needs no access
+key. `tests/test_styles.py` checks that every class it uses is still one of the pages'.
 
 ## Releasing
 

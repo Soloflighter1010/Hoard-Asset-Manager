@@ -160,3 +160,70 @@ class Chosen(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Guide(unittest.TestCase):
+    """The style guide (/styleguide): every part of the pages, drawn with a page's own stylesheet, the styles and a
+    theme as chosen in its address, so it keeps up with the pages; nothing of yours is in it."""
+
+    def test_served_as_chosen(self):
+        page = server.guide_source({"page": ["downloads"], "style": ["workbench"], "theme": ["geode"], "mode": ["light"],
+                                    "font": ["dyslexic"], "size": ["130"], "colours": ["colourblind"], "spacing": ["wide"]}).decode()
+        self.assertIn('<html lang="en" data-page="downloads" data-style="workbench" data-font="dyslexic" data-spacing="wide" '
+                      'data-colours="colourblind" style="zoom: 1.3; --zoom: 1.3">', page)
+        own = re.search(r"<style[^>]*>(.*?)</style>", (server.WEB / "downloads.html").read_text("utf-8"), re.S).group(1)
+        self.assertIn(own, page, "the Downloads page's own stylesheet, as it is")
+        self.assertIn((server.WEB / "looks.css").read_text("utf-8"), page)
+        self.assertIn(themes.css("geode", "light"), page)
+        self.assertIn('<option value="geode" selected>', page)
+        self.assertNotIn("<!--@", page, "every part filled in")
+        plain = server.guide_source({}).decode()
+        self.assertIn('<html lang="en" data-page="library">', plain, "the Library, Standard, as served by default")
+        for odd in ({"page": ["../config"]}, {"style": ["<b>"]}, {"size": ["999"]}, {"theme": ['"><script>']}):
+            self.assertEqual(server.guide_source(odd), server.guide_source({}), f"{odd}: as if not chosen")
+
+    def test_every_class_it_uses_is_the_pages(self):
+        """An example's classes all come from the pages' stylesheets (or the guide's own sg-): a part renamed in the
+        pages without the guide following would show here unstyled."""
+        guide = (server.WEB / server.GUIDE).read_text("utf-8")
+        css = "".join(re.search(r"<style[^>]*>(.*?)</style>", (server.WEB / f).read_text("utf-8"), re.S).group(1)
+                      for f in server.GUIDE_PAGES.values()) + (server.WEB / "looks.css").read_text("utf-8")
+        hooks = {"open", "show", "upd", "ok", "new", "sm", "add", "dup", "old", "gone", "run", "done-ok", "on-ledge",
+                 "booth", "gumroad", "jinxxy", "payhip", "itch", "local", "sets", "settile", "wanted", "count"}
+        body = guide[guide.index("<body>"):]
+        used = {c for m in re.finditer(r'class="([^"]+)"', body) for c in m.group(1).split()}
+        missing = sorted(c for c in used - hooks if not (c == "sg" or c.startswith("sg-"))
+                         and not re.search(r"\." + re.escape(c) + r"(?![\w-])", css))
+        self.assertEqual(missing, [])
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_drawn_in_every_style(self):
+        from playwright.sync_api import sync_playwright
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "setup_done": True}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        base = srv.entry_url().split("/#")[0].rstrip("/")
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1100, "height": 800})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            for style in themes.STYLES:
+                page.goto(f"{base}/styleguide?style={style}&page=library")
+                self.assertEqual(page.evaluate("document.documentElement.dataset.style || 'standard'"), style)
+                self.assertEqual(page.evaluate("document.documentElement.scrollWidth - innerWidth"), 0, f"{style}: nothing past the window's side")
+                self.assertGreater(page.locator(".sg-code").count(), 20, "each example's markup, to copy")
+                self.assertEqual(page.locator("[data-token=gold]").inner_text().lower(), themes.THEMES["hoard"]["dark" if page.evaluate(
+                    "matchMedia('(prefers-color-scheme: dark)').matches") else "light"]["gold"].lower())
+            for font in ("standard", "dyslexic"):   # Workbench's list: each column's words whole, in either font
+                for width in (1280, 900):
+                    page.set_viewport_size({"width": width, "height": 800})
+                    page.goto(f"{base}/styleguide?style=workbench&font={font}")
+                    cut = page.evaluate("() => [...document.querySelectorAll('#tiles ~ .sg-item .row-meta > span')]"
+                                        ".filter(s => s.offsetParent && s.scrollWidth > s.clientWidth + 1).map(s => s.textContent)")
+                    self.assertEqual(cut, [], f"{font}, {width} wide")
+            page.select_option("select[name=style]", "treasure")   # the bar: chosen in the address
+            page.wait_for_url("**style=treasure**")
+            self.assertEqual(errors, [])
+            browser.close()

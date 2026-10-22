@@ -158,8 +158,11 @@
 [data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .flag) { display: none; }
 [data-style="workbench"] .grid :is(.nm-t, .slot .nm) { grid-area: nm; align-self: end; font-size: 14px; -webkit-line-clamp: 1; }
 [data-style="workbench"] .grid .cr { grid-area: cr; align-self: start; margin-top: 0; font-size: 12.5px; }
-[data-style="workbench"] .grid .row-meta { grid-area: meta; display: grid; grid-template-columns: 110px 150px 104px; gap: 12px; align-items: center;
+/* the columns fit their longest words: "Not downloaded yet", and a date in Korean ("2026년 9월 28일"), whole; wider
+   in OpenDyslexic, whose letters are wider */
+[data-style="workbench"] .grid .row-meta { grid-area: meta; display: grid; grid-template-columns: 110px 152px 120px; gap: 12px; align-items: center;
   font-size: 12.5px; color: var(--dust); font-variant-numeric: tabular-nums; }
+[data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 120px 192px 128px; }
 [data-style="workbench"] .row-meta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-style="workbench"] .row-meta .rm-store { display: flex; align-items: center; gap: 7px; color: var(--bone); }
 [data-style="workbench"] .row-meta .rm-state { font-weight: 700; }
@@ -183,7 +186,8 @@
    its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */
 [data-style="workbench"] .grid { container-type: inline-size; }
 @container (max-width: 760px) {
-  [data-style="workbench"] .grid .row-meta { grid-template-columns: 96px 140px; gap: 10px; }
+  [data-style="workbench"] .grid .row-meta { grid-template-columns: 96px 152px; gap: 10px; }
+  [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 110px 192px; }
   [data-style="workbench"] .grid .row-meta .rm-when { display: none; }
 }
 @container (max-width: 560px) {
