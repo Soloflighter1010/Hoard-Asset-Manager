@@ -1194,11 +1194,8 @@ class Handler(BaseHTTPRequestHandler):
     def _split_set(self, sid: str):
         """Split into...: a set too big for one short link, as new sets that each fit (sets.SetStore.split). The set
         stays as it is."""
-        s = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
-        if s is None:
-            return self._json({"error": "That set isn't there anymore."}, 400)
-        try:
-            data = sets.SetStore().split(sid, self._share_parts(s))
+        try:   # (its parts worked out under the sets' lock, from what it holds then: issue #179)
+            data = sets.SetStore().split(sid, self._share_parts)
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
         threading.Thread(target=rebuild_catalog_quietly, args=(self.server,), daemon=True).start()   # (Unity's Import set)

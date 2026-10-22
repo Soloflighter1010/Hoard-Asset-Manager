@@ -295,11 +295,17 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
 - **Deleting one:** **Delete the short link** (`unshort`), and deleting the set, delete it from the server with
   the token. Backups leave short links out; a restore keeps this computer's.
 - **Too big for one:** the share server takes a locked set of up to 48 KiB, measured once it's decoded from
-  base64url (`shortlinks.MAX_DATA`, `MAX_BYTES` in the Worker; sent, it's up to 64 KiB of base64url); `shortlinks.fits(code)` says whether a code locks to that. `/api/sets` (`share`) says
-  `fits`, and when it doesn't, how many `parts` it takes: `sets.share_parts()` cuts the set's products, in order,
-  into parts each as full as fits (a binary search on each part's length, measured with `share_code` and a name of
-  the longest "(N of N)"), hidden products taking no room. `split` makes them new sets (`SetStore.split`): a
-  wishlist's are wishlists without a `source`, so reading the store's list again changes only the wishlist itself.
+  base64url (`shortlinks.MAX_DATA`, `MAX_BYTES` in the Worker; sent, it's up to 64 KiB of base64url);
+  `shortlinks.fits(code)` says whether a code locks to that. `/api/sets` (`share`) says `fits`, and when it doesn't,
+  how many `parts` it takes, or `why` none would do (one product too big on its own): `sets.share_parts()` cuts the
+  set's products, in order, into parts each as full as fits, hidden products taking no room. Each product is packed
+  once (`share_rows`, `_pack`); each part's end is searched for from the last part's length, in growing steps then
+  halving; each part is sized under `part_name(name, 1, 1)`, the longest in bytes any part's real name can be (a
+  longer "(n of N)" leaves fewer of the name's characters, each a byte or more); a set that doesn't fit under its
+  own name is at least two parts; and the last few answers are kept, by what they were worked out from. `split`
+  makes them new sets (`SetStore.split`, named with `part_name`), working the parts out under the sets' lock from
+  what the set holds then: a wishlist's are wishlists without a `source`, so reading the store's list again
+  changes only the wishlist itself.
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 

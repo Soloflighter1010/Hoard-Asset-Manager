@@ -538,9 +538,11 @@ class SetStore:
         return {**data, "lists": len(lists), "added": added, "cheaper": cheaper}
 
 
-    def split(self, sid: str, parts: list[list[str]]) -> dict:
-        """New sets from a set's products, a part each (share_parts' parts), for a set too big for one short link:
-        "<name> (1 of 2)" and so on, each with the set's note and photos, and what's known of its products. A
+    def split(self, sid: str, parts) -> dict:
+        """New sets from a set's products, a part each, for a set too big for one short link: "<name> (1 of 2)" and
+        so on (part_name), each with the set's note and photos, and what's known of its products. parts is
+        share_parts' parts, or better a function giving them for the set (parts(s)), which is called here, under the
+        lock, so they're always of what the set holds now, never of what it held a moment ago (issue #179). A
         wishlist's parts are wishlists of your own (reading the store's list again changes only the wishlist itself).
         The set stays as it is. Returns the sets after it, and the new sets' ids as "made"."""
         with _lock:
@@ -549,17 +551,16 @@ class SetStore:
             s = next((x for x in sets if x["id"] == sid), None)
             if s is None:
                 raise ValueError("That set isn't there anymore.")
-            parts = [p for p in parts if p]
+            parts = [p for p in (parts(s) if callable(parts) else parts) if p]
             if len(parts) < 2:
                 raise ValueError("That set fits in one short link: it doesn't need splitting.")
             if len(sets) + len(parts) > MAX_SETS:
                 raise ValueError(f"Hoard keeps up to {MAX_SETS} sets and wishlists, so this one can't be split into "
                                  f"{len(parts)} more. Delete some first.")
-            known, made = s.get("products") or {}, []
+            known, made, inside = s.get("products") or {}, [], set(s["items"])
             for n, keys in enumerate(parts, 1):
-                tail = f" ({n} of {len(parts)})"
-                one = {"id": secrets.token_hex(4), "name": clean_name(s["name"][:NAME_LENGTH - len(tail)].rstrip() + tail),
-                       "items": [k for k in keys if k in s["items"]], **{k: s[k] for k in ("note", "photos") if s.get(k)},
+                one = {"id": secrets.token_hex(4), "name": part_name(s["name"], n, len(parts)),
+                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos") if s.get(k)},
                        "products": {k: known[k] for k in keys if k in known}}
                 if s.get("kind") == "wishlist":
                     one["kind"] = "wishlist"
@@ -570,32 +571,76 @@ class SetStore:
         return {**data, "made": made}
 
 
+def part_name(name: str, n: int, total: int) -> str:
+    """A part's name, as Split into... names it and share_parts sizes it: "<name> (n of total)", the set's name cut
+    to leave room for the rest (issue #179)."""
+    tail = f" ({n} of {total})"
+    return clean_name(name[:NAME_LENGTH - len(tail)].rstrip() + tail)
+
+
+_parts_kept: dict[str, list[list[str]]] = {}   # (share_parts' last answers, by what they were worked out from)
+
+
 def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_link) -> list[list[str]]:
     """A set's products in parts that each fit a short link (fits(code) says whether one does), in the set's order,
     each as full as it can be: what Split into... makes sets of. Products that aren't shared (leave_out: hidden
     ones; your own and unknown ones aren't in a code anyway) go along with the part they're in. A set that fits is
-    one part. Each part holds up to MAX_ITEMS products."""
-    items = s.get("items") or []
-    sized = {**s, "name": s.get("name", "")[:NAME_LENGTH - 10] + " (99 of 99)"}   # (as its parts' names will be, at most)
+    one part; one that doesn't is at least two. Each part holds up to MAX_ITEMS products.
 
-    def fit(chunk) -> bool:
-        return fits(share_code({**sized, "items": [k for k in chunk if k not in leave_out]}, details)[0])
+    Each part is sized under part_name(name, 1, 1): a longer " (n of N)" leaves fewer of the name's characters, each
+    a byte or more, for one more byte a digit, so no part's real name is longer, in bytes, whatever N turns out to
+    be (issue #179). Each product is packed once, not at every try, and the search for each part's end starts from
+    the last part's length; the answer is kept for the same set, products and details (issue #181)."""
+    items = list(s.get("items") or [])
+    rows = [None if k in leave_out else r for k, r in zip(items, share_rows(s, details))]
+    whole = [r for r in rows if r]
+    if len(items) <= MAX_ITEMS and fits(_pack(s, whole)):
+        return [items] if items else []
+    sized = {**s, "name": part_name(s.get("name", ""), 1, 1)}
+    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), items, rows,
+                                      fits.__module__ + "." + fits.__qualname__], ensure_ascii=False).encode()).hexdigest()
+    if seen in _parts_kept:
+        return [list(p) for p in _parts_kept[seen]]
+
+    def fit(a: int, b: int) -> bool:
+        return fits(_pack(sized, [r for r in rows[a:b] if r]))
+
+    def most(start: int, low: int, high: int) -> int:   # the last end in low..high that fits, low's known to
+        while low < high:
+            mid = (low + high + 1) // 2
+            low, high = (mid, high) if fit(start, mid) else (low, mid - 1)
+        return low
     parts, start = [], 0
     while start < len(items):
         top = min(len(items), start + MAX_ITEMS)
-        if fit(items[start:top]):
-            end = top
-        else:   # the most that fits: halving, then going up a step at a time would be slow on a long list
-            low, high = start + 1, top - 1
-            if not fit(items[start:low]):
-                raise ValueError("A product in this set is too big for a short link on its own.")
-            while low < high:
-                mid = (low + high + 1) // 2
-                low, high = (mid, high) if fit(items[start:mid]) else (low, mid - 1)
-            end = low
+        guess, step = min(top, start + (len(parts[-1]) if parts else MAX_ITEMS)), 8   # (as long as the last part)
+        if fit(start, guess):   # up from it, in growing steps, to the first that doesn't fit; then halving
+            low, end = guess, top
+            while low < top:
+                ahead = min(top, low + step)
+                if not fit(start, ahead):
+                    end = most(start, low, ahead - 1)
+                    break
+                low, step = ahead, step * 2
+        else:   # down from it, in growing steps, to the first that fits; then halving
+            high = guess - 1
+            while True:
+                back = max(start + 1, high - step)
+                if fit(start, back):
+                    end = most(start, back, high)
+                    break
+                if back == start + 1:
+                    raise ValueError("A product in this set is too big for a short link on its own.")
+                high, step = back - 1, step * 2
         parts.append(items[start:end])
         start = end
-    return parts
+    if len(parts) == 1:   # (its own name is longer than a part's: two halves, each smaller, always fit)
+        half = (len(items) + 1) // 2
+        parts = [items[:half], items[half:]]
+    if len(_parts_kept) >= 8:
+        _parts_kept.pop(next(iter(_parts_kept)))
+    _parts_kept[seen] = parts
+    return [list(p) for p in parts]
 
 
 # ----------------------------------------------------------------------------- sharing a set
@@ -604,11 +649,10 @@ def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
-def share_code(s: dict, details=None) -> tuple[str, int]:
-    """A set as a code to share: CODE_PREFIX and its contents (name, note, photos, and each product's store, id,
-    name, creator, store page and picture), packed. details(key) fills in what the set doesn't remember of a
-    product. Products of your own (Local) aren't shared, and neither is one Hoard knows nothing about. Returns the
-    code and how many products are in it."""
+def share_rows(s: dict, details=None) -> list[list | None]:
+    """Each of a set's products as its share code holds it ([store, id, name, creator, store page, picture]), in the
+    set's order, or None for one that isn't shared: one of your own (Local), or one Hoard knows nothing about.
+    details(key) fills in what the set doesn't remember of a product."""
     details = details or (lambda key: None)
     known = s.get("products") or {}
     rows = []
@@ -616,6 +660,7 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
         remembered, now = clean_product(known.get(k)), clean_product(details(k))
         p = {**(now or {}), **(remembered or {})} if remembered or now else None   # (a link remembered from 4.2.0
         if not p or p["store"] not in STORES:                                        # was dropped: Hoard's, now)
+            rows.append(None)
             continue
         if now and now.get("url"):   # its page as Hoard knows it now: its own, once a refresh has found it, not
             p["url"] = now["url"]    # the creator's page remembered before then
@@ -623,6 +668,11 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
         while row and row[-1] == "":   # (what's left out at the end costs nothing)
             row.pop()
         rows.append(row)
+    return rows
+
+
+def _pack(s: dict, rows: list[list]) -> str:
+    """A set's name, note and photos, and these rows (share_rows'), as a share code."""
     doc = {"v": 1, "n": s.get("name", ""), "i": rows}
     if s.get("note"):
         doc["d"] = s["note"]
@@ -630,7 +680,16 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
         doc["p"] = s["photos"]
     raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode()
     packer = zlib.compressobj(9, zlib.DEFLATED, -15)   # raw deflate: what a browser's DecompressionStream reads
-    return CODE_PREFIX + _b64(packer.compress(raw) + packer.flush()), len(rows)
+    return CODE_PREFIX + _b64(packer.compress(raw) + packer.flush())
+
+
+def share_code(s: dict, details=None) -> tuple[str, int]:
+    """A set as a code to share: CODE_PREFIX and its contents (name, note, photos, and each product's store, id,
+    name, creator, store page and picture), packed. details(key) fills in what the set doesn't remember of a
+    product. Products of your own (Local) aren't shared, and neither is one Hoard knows nothing about. Returns the
+    code and how many products are in it."""
+    rows = [r for r in share_rows(s, details) if r]
+    return _pack(s, rows), len(rows)
 
 
 def share_link(code: str) -> str:
