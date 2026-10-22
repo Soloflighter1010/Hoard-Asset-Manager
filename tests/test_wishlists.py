@@ -109,6 +109,39 @@ class Kept(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class JinxxyElsewhere(unittest.TestCase):
+    """A Jinxxy list can send you to a product on a site that isn't one of the stores: it keeps that page as its link,
+    instead of showing No store link; one on a store Hoard knows is that store's, as before."""
+
+    def test_kept_as_its_link(self):
+        got = wishlists.jinxxy_products([
+            {"url": "https://ko-fi.com/s/abc123?ref=jinxxy#top", "name": "Fox Tail", "creator": "Kitsu", "price": "5.00 USD"},
+            {"url": "https://snowy.gumroad.com/l/flakes?ref=jinxxy", "name": "Flakes", "creator": "Snowy"},
+            {"url": "https://jinxxy.com/kitsu/FoxEars", "name": "Fox Ears", "creator": "Kitsu"}])
+        tail, flakes, ears = got
+        self.assertEqual((tail["store"], tail.get("url"), tail["elsewhere"]), ("jinxxy", None, "https://ko-fi.com/s/abc123?ref=jinxxy"))
+        self.assertEqual((flakes["store"], flakes["url"], flakes.get("elsewhere")), ("gumroad", "https://snowy.gumroad.com/l/flakes", None))
+        self.assertEqual((ears["store"], ears["url"], ears.get("elsewhere")), ("jinxxy", "https://jinxxy.com/kitsu/FoxEars", None))
+        kept = sets.clean_product(tail)
+        self.assertEqual(kept["elsewhere"], "https://ko-fi.com/s/abc123?ref=jinxxy")
+
+    def test_only_a_public_https_page(self):
+        for bad in ("http://ko-fi.com/s/abc", "https://user:pw@ko-fi.com/s/abc", "https://ko-fi.com:8443/s/abc",
+                    "https://127.0.0.1/s/abc", "https://localhost/s/abc", "https://printer.local/x", "https://[::1]/x",
+                    "javascript:alert(1)", "https://" + "a" * 700 + ".com/"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(sets.outside_link(bad))
+                self.assertNotIn("elsewhere", sets.clean_product({"store": "jinxxy", "name": "X", "elsewhere": bad}))
+
+    def test_never_shared(self):
+        """A shared set's viewer opens only the stores' own pages: a page elsewhere stays in Hoard."""
+        s = {"name": "Likes", "items": ["jinxxy:fox tail"],
+             "products": {"jinxxy:fox tail": {"store": "jinxxy", "name": "Fox Tail", "elsewhere": "https://ko-fi.com/s/abc123"}}}
+        code, count = sets.share_code(s)
+        self.assertEqual(count, 1)
+        self.assertNotIn("ko-fi", json.dumps(sets.from_code(code)))
+
+
 class SavedPages(unittest.TestCase):
     def test_each_stores_page(self):
         got = {r["filename"]: r for r in wishlists.from_saved_pages(saved("booth.html", "gumroad.html", "jinxxy-likes.html", "payhip.html"))}
@@ -437,6 +470,32 @@ class InHoard(unittest.TestCase):
             buy.locator(".nm-t", has_text="Wolf Hoodie").wait_for()
             self.assertEqual(buy.locator(".slot.ext").count(), 4)
             self.assertEqual(page.locator('#status [data-clear="tag"]').count(), 0)
+            browser.close()
+        self.assertEqual(errors, [])
+
+    def test_a_product_on_another_site_links_there(self):
+        """A Jinxxy list's product on a site that isn't one of the stores: Buy on that site, to its page, not No
+        store link."""
+        sets.SetStore().put_wishlists([{"store": "jinxxy", "list": "Likes", "url": "u", "products": wishlists.jinxxy_products([
+            {"url": "https://ko-fi.com/s/abc123", "name": "Fox Tail", "creator": "Kitsu", "price": "5.00 USD"},
+            {"url": "https://jinxxy.com/kitsu/FoxEars", "name": "Fox Ears", "creator": "Kitsu", "price": "3.00 USD"}])}])
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
+            page.locator(".settile", has_text="Jinxxy: Likes").click()
+            tail = page.locator(".slot.ext", has_text="Fox Tail")
+            tail.wait_for()
+            self.assertEqual(tail.locator(".ext-main").get_attribute("href"), "https://ko-fi.com/s/abc123")
+            self.assertIn("Buy on ko-fi.com", tail.locator(".ext-what").inner_text())
+            self.assertIn("ko-fi.com", tail.locator(".cr").inner_text())
+            self.assertIn("Buy on Jinxxy", page.locator(".slot.ext", has_text="Fox Ears").locator(".ext-what").inner_text())
+            self.assertEqual(page.locator(".ext-what", has_text="No store link").count(), 0)
             browser.close()
         self.assertEqual(errors, [])
 

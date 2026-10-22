@@ -67,8 +67,10 @@ def cents_price(cents, currency, more: bool = False) -> dict | None:
     return {"text": text, "amount": amount, "currency": cur}
 
 
-def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=None, price=None) -> dict | None:
-    """One product on a wishlist, cleaned: None without a name."""
+def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=None, price=None,
+            elsewhere=None) -> dict | None:
+    """One product on a wishlist, cleaned: None without a name. elsewhere: its page on a site that isn't one of the
+    stores (one a Jinxxy list sends you to), kept as it is but for anything after #."""
     name = clean_text(name if isinstance(name, str) else "", 300)
     if not name:
         return None
@@ -78,6 +80,9 @@ def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=Non
     if isinstance(url, str) and url:
         u = urlparse(url)
         out["url"] = urlunparse((u.scheme, u.netloc, u.path, "", "", ""))   # without a store's tracking (?ref=...)
+    if isinstance(elsewhere, str) and elsewhere:
+        u = urlparse(elsewhere)
+        out["elsewhere"] = urlunparse((u.scheme, u.netloc, u.path, "", u.query, ""))   # (another site may need its query)
     if safe_url(thumbnail):
         out["thumbnail"] = safe_url(thumbnail)
     if isinstance(price, dict) or isinstance(price, str):
@@ -305,9 +310,10 @@ def booth_products(cards) -> list[dict]:
 def jinxxy_products(cards) -> list[dict]:
     out = []
     for c in cards:
-        store = _store_of(c.get("url")) or "jinxxy"   # a product Jinxxy lists from another store is that store's
-        p = product(store, c.get("name"), creator=c.get("creator"), url=c.get("url"), thumbnail=c.get("thumbnail"),
-                    price=c.get("price"))
+        store = _store_of(c.get("url"))   # a product Jinxxy lists from another store is that store's; one on a site
+        away = store is None              # that isn't a store keeps that page as its link, elsewhere
+        p = product(store or "jinxxy", c.get("name"), creator=c.get("creator"), url=None if away else c.get("url"),
+                    thumbnail=c.get("thumbnail"), price=c.get("price"), elsewhere=c.get("url") if away else None)
         if p:
             out.append(p)
     return out

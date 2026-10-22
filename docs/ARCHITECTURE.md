@@ -316,6 +316,9 @@ Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with 
 - **A product's picture** in a set is `/setpic/<set>/<place>?p=<hash>` (`server.pic_for`: the first 12 hex digits
   of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture
   only when `p` names the product at that place now, and the browser never shows one it kept for another.
+- **Pages elsewhere:** a Jinxxy list's product on a site that isn't a store keeps that page as `elsewhere`
+  (`wishlists.jinxxy_products`, checked by `sets.outside_link`: plain https on a public name), served with the set
+  and opened by the tile (`outsideUrl`), but never put in a share code: the viewer opens only the stores' own pages.
 - **Suggested tags:** `library.common_words()` (the same words Hoard suggests for a store's products) over a
   wishlist's product names gives `words` in `/api/sets`. With a wishlist open (`openWish()`), the filters beside it
   are its own: `renderTagFacets` and the pages' Creators count its products (`wishTagItems`, `wishCreators`), with

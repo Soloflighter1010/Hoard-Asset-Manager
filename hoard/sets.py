@@ -33,7 +33,7 @@ import threading
 import time
 import zlib
 from pathlib import Path
-from urllib.parse import quote, urlparse, urlsplit
+from urllib.parse import quote, urlparse, urlsplit, urlunparse
 
 from .paths import data_dir
 from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
@@ -258,8 +258,27 @@ def clean_price(value) -> dict | None:
     return {"text": clean_text(text, 40), "amount": float(amount), "currency": cur}
 
 
+def outside_link(value) -> str | None:
+    """A product's page on a site that isn't one of the stores (one a Jinxxy list sends you to): a plain https
+    address on a public name (not a number address, nor this computer's), without anything after #; else None. Shown
+    in Hoard only: a shared set leaves it out, as its viewer opens only the stores' own pages."""
+    if not isinstance(value, str) or len(value) > MAX_URL:
+        return None
+    try:
+        u = urlparse(value.strip())
+        port = u.port
+    except ValueError:
+        return None
+    host = (u.hostname or "").rstrip(".").lower()
+    if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii() \
+            or "." not in host or ":" in host or re.fullmatch(r"[\d.]+", host) or host.endswith((".localhost", ".local")):
+        return None
+    return urlunparse(("https", host, u.path or "/", "", u.query, ""))
+
+
 def clean_product(p) -> dict | None:
-    """What a set remembers of one product, checked: its store, id, name, creator, store page and picture."""
+    """What a set remembers of one product, checked: its store, id, name, creator, store page and picture, and its
+    page elsewhere when it has none on its store (outside_link)."""
     if not isinstance(p, dict) or not isinstance(p.get("store"), str):
         return None
     store = p["store"].lower()
@@ -277,6 +296,8 @@ def clean_product(p) -> dict | None:
     url, picture = product_link(store, p.get("url")), product_picture(store, p.get("thumbnail"))
     if url:
         out["url"] = url
+    elif outside_link(p.get("elsewhere")):
+        out["elsewhere"] = outside_link(p.get("elsewhere"))
     if picture:
         out["thumbnail"] = picture
     for k in ("price", "was"):   # on a wishlist: what it costs, and what it cost before a change

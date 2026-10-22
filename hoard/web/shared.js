@@ -2848,8 +2848,18 @@ function wishChanged() {   // the price range changed: the groups and filters ag
   const clear = $('#setMore [data-setx="wclear"]');
   if (clear) clear.hidden = !(WISH.min || WISH.max);
 }
+// A product's page on a site that isn't one of the stores (a Jinxxy list can send you to one): plain https on a
+// public name, as Hoard keeps it (sets.outside_link)
+const outsideUrl = u => {
+  const s = safeUrl(u); if (!s) return "";
+  const x = new URL(s);
+  return x.protocol === "https:" && !x.username && !x.password && (!x.port || x.port === "443") && x.hostname.includes(".") &&
+    !/^[\d.]+$/.test(x.hostname) && !x.hostname.startsWith("[") ? s : "";
+};
 function setExtraTile(s, i) {
-  const store = STORE_NAMES[i.store] || (i.local ? "Local" : i.store), buy = !i.owned && !i.local ? storeUrl(i.store, i.url) : "";
+  const away = !i.owned && !i.local && !storeUrl(i.store, i.url) ? outsideUrl(i.elsewhere) : "";
+  const store = away ? new URL(away).hostname.replace(/^www\./, "") : STORE_NAMES[i.store] || (i.local ? "Local" : i.store);
+  const buy = !i.owned && !i.local ? storeUrl(i.store, i.url) || away : "";
   const href = i.download != null ? `/downloads#open=${+i.download}`   // (Hoard's own pages, or the store's, checked)
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
   const what = i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
@@ -2857,7 +2867,7 @@ function setExtraTile(s, i) {
   const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
   return `<div class="slot ext${buy ? " wanted" : ""}">` +
-    (href === buy && buy ? `<a class="ext-main" href="${esc(storeUrl(i.store, i.url))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+    (href === buy && buy ? `<a class="ext-main" href="${esc(safeUrl(buy))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
     (price ? `<span class="ext-price">${price}</span>` : "") +
     `<span class="ext-row"><span class="ext-what">${esc(what)}${href === buy && buy ? `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span>` : ""}</span>` +

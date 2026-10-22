@@ -151,6 +151,9 @@ already in your library show as yours.
 - Each time a wishlist is read again, it holds what the store's list does now, and a product whose price changed
   shows the new price with the old one struck through; one that's cheaper than before is marked, and **Tasks** lists
   them. A name, note or picture you gave a wishlist stays.
+- A product a Jinxxy list sends you to on a site that isn't one of the stores (the creator's own, say) shows **Buy
+  on** that site, and opens its page there (from 5.1.2). It stays in Hoard: a shared set leaves that link out, as its
+  page opens only the stores' own.
 - **New wishlist** makes one of your own, which you add products to as you would to a set, or with **Add products by
   link...**.
 

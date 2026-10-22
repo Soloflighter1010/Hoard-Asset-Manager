@@ -1058,7 +1058,8 @@ class Handler(BaseHTTPRequestHandler):
                              "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
                              "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
                              "local": store == "local", "mark": mark,
-                             **{k: p[k] for k in ("price", "was") if p.get(k)}})   # on a wishlist: what it costs
+                             **{k: p[k] for k in ("price", "was", "elsewhere") if p.get(k)}})   # on a wishlist: what it
+                                                                                                # costs, and its page elsewhere
             if s.get("kind") == "wishlist":   # suggested tags, from words its products' names share, to narrow it down
                 block = {str(w).lower() for w in (srv.cfg.get("tags") or {}).get("blocklist", [])}
                 for row, words in zip(rows, common_words([r["name"] for r in rows], 2, 0.5, block)):

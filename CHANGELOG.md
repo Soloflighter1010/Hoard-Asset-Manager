@@ -23,6 +23,9 @@
   long and in a script such as Japanese, and could leave out a product added just before splitting. Share... and
   Split are also quicker on long sets.
 - Put right: **Share...** gave no answer for a set holding a product too big for a short link on its own.
+- Put right: a product a Jinxxy list sends you to on a site that isn't one of the stores (the creator's own, say)
+  showed **No store link**. It shows **Buy on** that site, and opens its page there. A shared set leaves such links
+  out, as its page opens only the stores' own.
 
 ## 5.1.1
 
