@@ -1,15 +1,23 @@
 altgraph==0.17.5 \
     --hash=sha256:c87b395dd12fabde9c99573a9749d67da8d29ef9de0125c7f536699b4a9bc9e7 \
     --hash=sha256:f3a22400bce1b0c701683820ac4f3b159cd301acab067c51c653e06961600597
-    # via pyinstaller
+    # via
+    #   -c requirements-app.txt
+    #   macholib
+    #   pyinstaller
 bottle==0.13.4 \
     --hash=sha256:045684fbd2764eac9cdeb824861d1551d113e8b683d8d26e296898d3dd99a12e \
     --hash=sha256:787e78327e12b227938de02248333d788cfe45987edca735f8f88e03472c3f47
-    # via pywebview
+    # via
+    #   -c requirements-app.txt
+    #   pywebview
 certifi==2026.10.19 \
     --hash=sha256:035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae \
     --hash=sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b
-    # via requests
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   requests
 charset-normalizer==3.5.1 \
     --hash=sha256:00668ebb0609751758682eb0b5857e7c35b9f00e84dfdef062e103244ec94d45 \
     --hash=sha256:012a22b88a77ca2e59b98ac5889b0deb604147666032f45e6d6e217634d2550d \
@@ -183,11 +191,17 @@ charset-normalizer==3.5.1 \
     --hash=sha256:fd0350afdc3aabd5576f60ea109228bd5538139713c7b094c5cd27c73a98bc6f \
     --hash=sha256:fd0a274c0e5f9a21565cd9d3dd749b61f96b7aa1e20a93aa1ba4029518f2e5c0 \
     --hash=sha256:fdb8a068947befafba9952162645dc2fecaeb400e64584829ed5e9b2fbe21a7f
-    # via requests
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   requests
 colorama==0.4.6 \
     --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
     --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
-    # via -r requirements.in
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   -r requirements.in
 greenlet==3.5.6 \
     --hash=sha256:0616b8f878098c5681fd8f0dc92d887551717402342a70f0abcbfea5f5ad8a44 \
     --hash=sha256:06c0e933290fba8ffe53ead4ae1b8044b0e9754b75cebf381aa2bc3e50d82fac \
@@ -268,15 +282,26 @@ greenlet==3.5.6 \
     --hash=sha256:fdacf26402389bdd89857ad3c045a26fe8f3314f9a8b28226f82f88463a65b77 \
     --hash=sha256:fe3170a69fe039b18ad18171e66faa9a75f6fe9d78f968fd9b54e09fbd714d81 \
     --hash=sha256:fea4427d1ffdb3b523d7daa6712038428a4c16c450b9777bdd1221cfee0eab49
-    # via playwright
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   playwright
 idna==3.20 \
     --hash=sha256:a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44 \
     --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
-    # via requests
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   requests
+macholib==1.16.4 \
+    --hash=sha256:da1a3fa8266e30f0ce7e97c6a54eefaae8edd1e5f86f3eb8b95457cae90265ea \
+    --hash=sha256:f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362
+    # via pyinstaller
 packaging==26.3 \
     --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
     # via
+    #   -c requirements-app.txt
     #   pyinstaller
     #   pyinstaller-hooks-contrib
 playwright==1.63.0 \
@@ -288,14 +313,22 @@ playwright==1.63.0 \
     --hash=sha256:ad21bc07516b187965a7521c5cf0df0bd657b17482eaad74335272d35a2b07de \
     --hash=sha256:c89fc4736502a1f0fac2c8ca5d10c0cbc1c669f1f4774a2d8507a43140e4d53f \
     --hash=sha256:fd1aa00631d44d55e56e0975bf3f3f285fac4a9fd2813183f0c12a488f1a1b24
-    # via -r requirements.in
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   -r requirements.in
 proxy-tools==0.1.0 \
     --hash=sha256:ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010
-    # via pywebview
+    # via
+    #   -c requirements-app.txt
+    #   pywebview
 pyee==13.0.1 \
     --hash=sha256:0b931f7c14535667ed4c7e0d531716368715e860b988770fc7eb8578d1f67fc8 \
     --hash=sha256:af2f8fede4171ef667dfded53f96e2ed0d6e6bd7ee3bb46437f77e3b57689228
-    # via playwright
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   playwright
 pyinstaller==6.22.3 \
     --hash=sha256:020d4fe0627f5c73dfbcfad1a6578ef354d5fe4bdccd9d8e5a615528f5a45d2b \
     --hash=sha256:052f4a1cd4f81092ccb7a18fe8ebc9ecf832a5917317e39fb3775af4e959b253 \
@@ -309,32 +342,129 @@ pyinstaller==6.22.3 \
     --hash=sha256:a2b6fc26601e8c2596c3d54981566934a3382e85d05d0fe91b55b6a8dcc6b282 \
     --hash=sha256:ea240b5dfa831ff673c97505eee0ec24670bccf71396c83109440348944c83d0 \
     --hash=sha256:f82d0fb89f21c3ed6f482ee16f341bc59e8a31dbabb9bae9ef04e53ade4dc0d9
-    # via -r requirements-mac.in
+    # via
+    #   -c requirements-app.txt
+    #   -r requirements-mac.in
 pyinstaller-hooks-contrib==2026.7 \
     --hash=sha256:24257a04c7a5a7a034cf28e39dcee20fbeeb9f043076729480f2e1b69904408a \
     --hash=sha256:5fbcaacb22c4f4aac869a127dce283f67a4b4cfcc37d496f2446603e6d68aefa
     # via
+    #   -c requirements-app.txt
     #   -r requirements-mac.in
     #   pyinstaller
+pyobjc-core==12.2.2 \
+    --hash=sha256:122e6ad302a2abf5d4d4adb0156db751600ddf2768441696cba17b31323085e7 \
+    --hash=sha256:2062e8ad30a310441cd022544a897553408bebeaa7820d5edba3c96fd7fd693b \
+    --hash=sha256:2c7ef3d2f865b4b3ebb14ec3556f7a3e8abb6d130c67275cd9daa08dbd6e4e4e \
+    --hash=sha256:3772b406edb3ff78171530a17cda1c4a7817f87b87ded0d8715b3fa664df16db \
+    --hash=sha256:3906452339cd06a3bb07df103c2511d4cb0f7a22d8771c0b802eba15d9a642b6 \
+    --hash=sha256:56c6c39f1de059fcbb174ebca5525505fc8feaa89be2a28c329bf09b6b25ee75 \
+    --hash=sha256:59a77038ebe0ab1240f61c341e7fb67b8674f2b4cd41bc71a6472511a12b50f7 \
+    --hash=sha256:89acc6bc13aaa6e3f52b0ce652ede7e201edb6bf062741b246b0c5a44582f25f \
+    --hash=sha256:950bd2d9c74634398c4e3d24ef2f213d4e23d705083697464fa67afedc53c1ad \
+    --hash=sha256:b9cdd686e32db8e451feb19f8a85bc4cd52c2893103881d04aca51e1f35371d1
+    # via
+    #   pyobjc-framework-cocoa
+    #   pyobjc-framework-quartz
+    #   pyobjc-framework-security
+    #   pyobjc-framework-uniformtypeidentifiers
+    #   pyobjc-framework-webkit
+    #   pywebview
+pyobjc-framework-cocoa==12.2.2 \
+    --hash=sha256:0e8ace0d44a00d281281a723d17fcd05eea7544a38a6a512e1fd018ddb7aece2 \
+    --hash=sha256:5a751c8033a3b51f7996f0327e0675eb44dcfdfe7920fae01e3d78b662723fff \
+    --hash=sha256:600b1723184ca094931330e79355274949965460e23de38628d601b5a967baf9 \
+    --hash=sha256:851dca4c16e70b405e5cd5a8c166cf7c445ae54a4cdd95ce9a523803172f32d1 \
+    --hash=sha256:875f2aad73963faa81a6b36ae674fd494a4658d6d999e1075e0e2aca3d2391df \
+    --hash=sha256:889d7bbd4ba2d4941078bfbbfb882138e51dbead27df006abfe0f2e0d49b5b2e \
+    --hash=sha256:8fe5b2e79c9530f667b4e58a87a3a15ea62f86a5d19eec405517ecbd4f454868 \
+    --hash=sha256:c96c0ef69a71afbbb0e6a7d594b455c5fe47d62e0db376ee7a2b4b828c16ace9 \
+    --hash=sha256:de69c5933750f3a4599ed962eccd92b6a71914c7e4318dacc7895738a8ae60d7 \
+    --hash=sha256:e106f395531e67694376b0f1184612cbeea3ec8b9bf56b55ef41d026171d2a2d
+    # via
+    #   pyobjc-framework-quartz
+    #   pyobjc-framework-security
+    #   pyobjc-framework-uniformtypeidentifiers
+    #   pyobjc-framework-webkit
+    #   pywebview
+pyobjc-framework-quartz==12.2.2 \
+    --hash=sha256:0ec9751904ef975bf0789d760dc4fadcb400edc4ffe4a736eb54971968babe5c \
+    --hash=sha256:1f7f3d9010e38f03ea1fa266664c10ea349cd7492bd603b403584f49d713dbed \
+    --hash=sha256:4b01e325b0cdc121e78730dde9756e971b23069bf141cd62efbcaac76d7b6dbb \
+    --hash=sha256:63f6f0f3233dcf650aac1374781e78961b0b17b33e3351953bacf8bd0c430593 \
+    --hash=sha256:7f668979d0c7320bf8f7ed6e030da578f93ab0f5dd619b295ec735cd8d5faa34 \
+    --hash=sha256:810f97b210cfd93704d240860286dfd6df09f9f1c52525fc5c2166723aea3f9e \
+    --hash=sha256:8f58c589b5a76ba98f186b1f3b19fb1c8b730e82351f81fb62e6194f64a71622 \
+    --hash=sha256:cee63b891c2b6b7ccf98f233175411529f3e80286f58438793b3634af79858f1 \
+    --hash=sha256:d89a5f47c079b5c340d2b1cbb83eb6c4c92d4bb17cd4daf7d8c02c91a49f5399 \
+    --hash=sha256:ebf8167ca2096cf3a05199decfa517be0df4c56048f49cf132bd6b1a6ab9c086
+    # via pywebview
+pyobjc-framework-security==12.2.2 \
+    --hash=sha256:266f41995f2fc80660c8451bdb199a7e259a6cad02fbc1e0e2f69dd5576e2203 \
+    --hash=sha256:33efab1ff7d18570148f8f3ddd44eca305f733aee00b9115d5263bef81018f65 \
+    --hash=sha256:4cc2e7352f4ca67a43bcf65587a024fdafdea5f5fcae7264b896e39cd68d5718 \
+    --hash=sha256:54b9b7a03f2e4a7e1ac182239d63cb94bc3628293f39637c17d3ececd495a619 \
+    --hash=sha256:67655616bd0b9e05bd6a18fa353c5a7bc1743f79f1774644dbb180a2c62bf65b \
+    --hash=sha256:786da49c319318bb4cf168755d4a9324a6b3720a3dd7503990249c2a27b661ee \
+    --hash=sha256:a78b6945d4681e319e03757c8039ac4014833ede1d883aa793a286f48fa93bb7 \
+    --hash=sha256:c4726b41c96a611fa13880bcfcb38a32ac9256239adb5b48d559dc4d0c9d0b99 \
+    --hash=sha256:ca580d5f56e1222d63f1322a4fbf63be0bad77e77cca084290310df007b3fdde \
+    --hash=sha256:f5afda32efbfdef150e921563b94a799ea104e575f4a95b8c5cd71a2322413a8
+    # via pywebview
+pyobjc-framework-uniformtypeidentifiers==12.2.2 \
+    --hash=sha256:12f8ba77dcc949ffb9f0f48743cae326aebec8e69cb1ac55a1d1e04dca7bd59a \
+    --hash=sha256:1dc6a538df07c410e4bfd6457adcb0b663a5e0df331905dbe135bcfd3f89ae57
+    # via pywebview
+pyobjc-framework-webkit==12.2.2 \
+    --hash=sha256:0be3ed885100dd38c6b927c9a25a63f22fd624bc4c6bb3d3af14fab5dcdcfc97 \
+    --hash=sha256:147f0f18c0ddd70a1d05f88cf42a89b423b191957db6faf508cbbdb33092864c \
+    --hash=sha256:206f88451e1c3e152c72c16c2af2664646cd752a3007c9cda8029a9e3f0ec9a4 \
+    --hash=sha256:36bea435489daa20ead1390d6bf0b98659beac0fc5a281e502acc5da334ec9eb \
+    --hash=sha256:83a5c250125ecaaf680a405cf435a038e4b168d0305ba7ad14398d810a49cf87 \
+    --hash=sha256:88c896d89764675af1ef85c6bda8740e50451e31bcd1d1d2ef59323acc9916ed \
+    --hash=sha256:cf683310d9ea01bcc9e5d6b59c6cead25d2a5453f58cc2e18f41b82b1fef1d26 \
+    --hash=sha256:e4e5bba0529e791b2f249e4c1e93331cc78741577dd7bf2d4a207ecf50d20b86 \
+    --hash=sha256:e5588df2a73b377b59a994cc2a78b467e4341f4e4d28b52e8671e21a2811d3c1 \
+    --hash=sha256:ef37692f0280151bf8164a718e334a9b3cb0abfc5455be14172280de7e277505
+    # via pywebview
 pywebview==6.2.1 \
     --hash=sha256:71b7136752e40824655304d938efb62014218d1a90bd8e87e1cbdb1ce9c466af \
     --hash=sha256:9d07275f53894ab4d5e2e0e996227193e7187dec276d9b624dccbce029216b46
-    # via -r requirements-mac.in
+    # via
+    #   -c requirements-app.txt
+    #   -r requirements-mac.in
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
-    # via -r requirements.in
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   -r requirements.in
+setuptools==84.0.0 \
+    --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670 \
+    --hash=sha256:f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73
+    # via
+    #   -c requirements-app.txt
+    #   pyinstaller
 tqdm==4.70.1 \
     --hash=sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73 \
     --hash=sha256:cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4
-    # via -r requirements.in
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   -r requirements.in
 typing-extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
     --hash=sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5
     # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
     #   pyee
     #   pywebview
 urllib3==2.8.0 \
     --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3 \
     --hash=sha256:63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63
-    # via requests
+    # via
+    #   -c requirements-app.txt
+    #   -c requirements.txt
+    #   requests
