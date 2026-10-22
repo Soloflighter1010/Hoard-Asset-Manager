@@ -956,6 +956,7 @@
  "Couldn't read {0}. Each store's row in Stores says why.": "{0}을(를) 읽지 못했어요. 이유는 스토어의 각 줄에 있어요.",
  "Refresh: {0}": "새로고침: {0}",
  "Opening your hoard": "컬렉션을 여는 중",
+ "Opening your projects": "프로젝트를 여는 중",
  "Hidden": "숨긴 것",
  "The Japanese and Korean translations were made with AI help, so some wording may be off. <0>Tell us what reads wrong</0>.": "일본어와 한국어 번역은 AI의 도움을 받아 만들어서 어색한 표현이 있을 수 있어요. 이상한 곳은 <0>알려 주세요</0>.",
  "only Hoard's own server on this computer": "이 컴퓨터의 Hoard 자체 서버만",

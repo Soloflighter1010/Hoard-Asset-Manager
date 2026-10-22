@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.1.3
+
+- **Projects opens with Hoard's splash,** the logo and "Opening your projects", while it reads your projects, as
+  the Library does while it opens. The first time you open Projects it shows for a moment; after that, only when
+  reading your projects takes a while.
+
 ## 5.1.2
 
 - Put right: a set or wishlist of about 370 to 500 products was called too big for one short link, so it couldn't

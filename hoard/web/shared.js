@@ -184,12 +184,13 @@ delete document.documentElement.dataset.i18n;   // shown now: translated (or Eng
 
 /* ---------- splash (issue #50): the logo while the page first reads your library. It's in the markup, so it shows
    from the first paint; on the window's first page it stays at least a moment, and on later pages (Library to
-   Downloads and back) the stylesheet only fades it in if reading takes more than a moment. */
-const hideSplash = (() => {
-  const el = document.getElementById("splash");
+   Downloads and back) the stylesheet only fades it in if reading takes more than a moment. Projects has one of its
+   own, shown the same way while it first reads your projects (loadProjects). */
+function splash(el, seen) {   // el shown; what's returned takes it away, for good ("seen": whether it's been shown in this window)
   let first = true;
-  try { first = !sessionStorage.getItem("hoard-opened"); sessionStorage.setItem("hoard-opened", "1"); } catch (e) {}
-  if (first) el.classList.add("first");
+  try { first = !sessionStorage.getItem(seen); sessionStorage.setItem(seen, "1"); } catch (e) {}
+  el.classList.toggle("first", first);
+  el.hidden = false;
   const since = performance.now(), MIN = first ? 1200 : 0;
   let done = false;
   const hide = () => {
@@ -202,7 +203,8 @@ const hideSplash = (() => {
   };
   setTimeout(hide, 20000);   // never in the way for good, whatever happens
   return hide;
-})();
+}
+const hideSplash = splash(document.getElementById("splash"), "hoard-opened");
 const $ = s => document.querySelector(s);
 /* ---------- the access key. Hoard's server only answers requests that carry this run's key (see server.py).
    Hoard opens this page with a one-time link (#enter=...) that's traded for it; the address `hoard serve`
@@ -1618,9 +1620,13 @@ function openProjects(open) {   // Projects takes the whole window below the bar
   $("#projectsTab").setAttribute("aria-expanded", String(show));
   if (show) { loadProjects(); pjWatch(); }
 }
+let pjSplashing = null;
 async function loadProjects(view) {
   if (view) PJ.view = view;
-  const body = $("#projectsBody");
+  const body = $("#projectsBody"), logo = $("#pjSplash");
+  // the logo over Projects the first time it's opened on this page, until it's read them (as the page shows it while
+  // it reads your library); then it's gone
+  if (logo && !pjSplashing) pjSplashing = splash(logo, "hoard-projects-opened");
   try {
     // the shared list, and what Hoard for Unity reported (projects opened in Unity with Hoard, listed or not)
     const [r, rep] = await Promise.all([api("/api/vpm", { cache: "no-store" }), api("/api/projects", { cache: "no-store" })]);
@@ -1637,6 +1643,7 @@ async function loadProjects(view) {
     if (PJ.view === "backups") await pjLoadBackups();
     drawProjects();
   } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Projects couldn't be read just now."))} ${esc(e.message || "")}</p>`; }
+  finally { if (pjSplashing) pjSplashing(); }
 }
 let pjDrawn = "";
 const pjTicks = el => el.type === "checkbox";

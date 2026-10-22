@@ -50,6 +50,7 @@ class ProjectsPanel(unittest.TestCase):
         self.page = self.browser.new_page(viewport={"width": 1280, "height": 900})
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.page.add_init_script("sessionStorage.setItem('hoard-projects-opened', '1')")   # (its splash: test_the_splash)
         self.page.goto(self.srv.entry_url())
         self.page.wait_for_function("() => localStorage.getItem('hoard-key')")
         self.page.click("#projectsTab")
@@ -81,6 +82,68 @@ class ProjectsPanel(unittest.TestCase):
         page.locator("dialog.ask .primary").click()
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
+
+    SAMPLE_SPLASH = """window.__splash = 0;   // how visible Projects' splash got, sampled while it's on show
+        setInterval(() => { const e = document.getElementById("pjSplash");
+                            if (e && !e.hidden) window.__splash = Math.max(window.__splash, +getComputedStyle(e).opacity); }, 25);"""
+
+    def test_the_splash(self):
+        """The logo shows over Projects while it first reads your projects, as the page shows it while it reads your
+        library: the first time in a window straight away and for a moment, later only when reading takes a while;
+        it goes even when reading fails, and it doesn't come back once Projects has been read."""
+        page = self.browser.new_page(viewport={"width": 1280, "height": 900})
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.add_init_script(self.SAMPLE_SPLASH)
+        page.goto(self.srv.entry_url())
+        page.wait_for_function("() => localStorage.getItem('hoard-key')")
+        logo = page.locator("#pjSplash")
+        self.assertTrue(logo.is_hidden(), "not before Projects is opened")
+        page.click("#projectsTab")
+        began = time.monotonic()
+        self.assertIn("first", logo.get_attribute("class") or "")
+        self.assertIn("Opening your projects", logo.inner_text())
+        page.locator(".pj-row").first.wait_for(state="attached")   # drawn under it
+        logo.wait_for(state="detached")
+        self.assertGreater(time.monotonic() - began, 1.0, "on show for a moment, not a flicker")
+        self.assertEqual(page.evaluate("window.__splash"), 1)
+        box = page.locator("#projectsWin .win-bar").bounding_box()
+        self.assertGreater(box["height"], 0, "Projects' own bar, with its Close, stays above it")
+        page.locator("[data-pj=manage]").first.click()   # nothing in the way once it's gone
+        page.locator("[data-pj=back]").first.wait_for()
+
+        # the other page, in the same window: not straight away, and only once reading takes a while
+        page.goto(f"{self.srv.url}downloads")
+        page.click("#projectsTab")
+        self.assertNotIn("first", logo.get_attribute("class") or "")
+        page.locator(".pj-row").first.wait_for()
+        logo.wait_for(state="detached")
+
+        def slow(route):
+            time.sleep(1.0)
+            route.continue_()
+        page.route("**/api/vpm*", slow)
+        page.goto(self.srv.url)
+        page.click("#projectsTab")
+        logo.wait_for(state="detached", timeout=10000)
+        self.assertEqual(page.evaluate("window.__splash"), 1, "shown while reading took a while")
+        page.unroute("**/api/vpm*")
+        page.click("#projectsTab")   # closed and opened again: read again, with no splash
+        page.click("#projectsTab")
+        page.locator(".pj-row").first.wait_for()
+        self.assertEqual(logo.count(), 0)
+        page.close()
+
+        page = self.browser.new_page()   # a new window whose projects can't be read
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(self.srv.entry_url())
+        page.wait_for_function("() => localStorage.getItem('hoard-key')")
+        page.route("**/api/vpm*", lambda route: route.abort())
+        page.click("#projectsTab")
+        page.locator("#pjSplash").wait_for(state="detached", timeout=10000)
+        self.assertIn("Projects couldn't be read just now.", page.locator("#projectsBody").inner_text())
+        page.close()
+        self.assertEqual(errors, [])
 
     def test_the_whole_window_and_its_tabs(self):
         """Projects is a place of its own, the whole window below the bar, with its views as tabs; its rows alternate;

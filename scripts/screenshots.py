@@ -380,6 +380,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 page.keyboard.press("Escape")
             # Projects: the list, a project's packages, a new project, and the backups
             click("#projectsTab", "[data-pj=manage]")
+            page.locator("#pjSplash").wait_for(state="detached")   # (its splash, the first time it's opened)
             snap("projects", 900)
             for button, name in (("[data-pj=manage]", "project-manage"), ("[data-pj=new]", "project-new"),
                                  ("[data-pj=backups]", "project-backups")):

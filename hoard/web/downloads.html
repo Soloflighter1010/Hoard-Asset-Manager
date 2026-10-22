@@ -603,20 +603,24 @@ body.selecting .dlpanel { bottom: 96px; }
 body.dl-both .imppanel { bottom: calc(30px + var(--dl-h, 0px)); }
 body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 /* splash (issue #50): the logo while the page reads your library, the first time the window opens. Later
-   pages (Library to Downloads and back) only show it if reading takes a moment. */
-#splash { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: var(--cave);
+   pages (Library to Downloads and back) only show it if reading takes a moment. Projects shows it over its window
+   while it first reads your projects, the same way. */
+.splash { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: var(--cave);
   transition: opacity .35s ease; }
-#splash { animation: splash-show .2s ease .35s both; }   /* later pages: only when reading takes a moment */
-#splash.first { animation: none; }                          /* the window's first page: straight away */
-#splash.gone { animation: none; opacity: 0; pointer-events: none; }
+.splash { animation: splash-show .2s ease .35s both; }   /* later pages: only when reading takes a moment */
+.splash.first { animation: none; }                          /* the window's first page: straight away */
+.splash.gone { animation: none; opacity: 0; pointer-events: none; }
+.splash[hidden] { display: none; }
 @keyframes splash-show { from { opacity: 0; visibility: hidden; } to { opacity: 1; visibility: visible; } }
-#splash .splash-in { display: grid; justify-items: center; gap: 18px; }
-#splash svg { width: 132px; height: 132px; overflow: visible; }
-#splash .b { animation: splash-hop 1.6s ease-in-out infinite; }
-#splash .b2 { animation-delay: .18s; } #splash .b3 { animation-delay: .36s; }
-#splash p { margin: 0; font: 700 15px var(--body); color: var(--dust); letter-spacing: .02em; }
+.splash .splash-in { display: grid; justify-items: center; gap: 18px; }
+.splash svg { width: 132px; height: 132px; overflow: visible; }
+.splash .b { animation: splash-hop 1.6s ease-in-out infinite; }
+.splash .b2 { animation-delay: .18s; } .splash .b3 { animation-delay: .36s; }
+.splash p { margin: 0; font: 700 15px var(--body); color: var(--dust); letter-spacing: .02em; }
 @keyframes splash-hop { 0%, 60%, 100% { translate: 0 0; } 30% { translate: 0 -9px; } }
-@media (prefers-reduced-motion: reduce) { #splash .b { animation: none; } #splash:not(.first) { animation-duration: 0s; } #splash { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .splash .b { animation: none; } .splash:not(.first) { animation-duration: 0s; } .splash { transition: none; } }
+.projects.win > .win-body { position: relative; }
+.projects .splash { position: absolute; z-index: 3; }   /* (Projects' window below its bar, not the whole page) */
 /* ---------- a file downloading: its progress bar, speed and time left (the download panel and Tasks) */
 .xfer { margin: 8px 0 0; font-size: 12.5px; }
 .xfer-file { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1102,7 +1106,7 @@ body.less-motion .tour-try::before { animation: none; }
 </head>
 <body>
 <div id="glow" aria-hidden="true"><div class="glow-in"></div></div>
-<div id="splash" role="status" aria-live="polite">
+<div id="splash" class="splash" role="status" aria-live="polite">
   <div class="splash-in">
     <svg viewBox="0 0 64 64" aria-hidden="true">
       <rect class="b b1" x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
@@ -1427,6 +1431,17 @@ body.less-motion .tour-try::before { animation: none; }
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
   <h2 id="projectsTitle">Projects</h2>
+  <div id="pjSplash" class="splash" role="status" aria-live="polite" hidden>
+    <div class="splash-in">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <rect class="b b1" x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
+        <rect class="b b2" x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
+        <g class="b b3"><rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
+        <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/></g>
+      </svg>
+      <p>Opening your projects</p>
+    </div>
+  </div>
   <div id="pjJob" class="pj-job" hidden aria-live="polite"></div>
   <div id="projectsBody"></div>
 </section>
