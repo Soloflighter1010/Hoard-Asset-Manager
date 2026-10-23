@@ -77,7 +77,7 @@ class Tweaks(unittest.TestCase):
         page = self.downloads()
         page.click("#settingsBtn")
         jumps = page.locator(".setjump button")
-        self.assertEqual(jumps.count(), 8)
+        self.assertEqual(jumps.count(), 9)   # with Hoard's folders
         page.locator("#setStores input").first.wait_for()   # the stores' boxes are where they were (drawn once Settings loads)
         page.click("[data-jump='part-help']")
         page.wait_for_timeout(800)
