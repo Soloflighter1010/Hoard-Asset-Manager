@@ -365,6 +365,8 @@ vpm/
   presets.py       presets for new projects (vpm-presets.json), and writing one as an ALCOM template
   unity.py         the Unity editors Unity Hub knows, which one a project opens with, and whether it has it open
   backup.py        a project's backup zip
+  logbook.py       Projects' log, as ALCOM and the Creator Companion keep theirs: this run's entries for the Logs
+                   tab, and logs/projects-<date>_<time>.log (the newest 30 kept)
   api.py           what the server answers about all of this, and the work it hands to a "project" job
 ```
 
@@ -381,6 +383,14 @@ public addresses only, a repository's headers sent to its own host only, and a p
 listing gives one. `tests/test_vpm_resolve.py` is vrc-get's own resolver tests, ported; `tests/test_vpm_version.py`
 has its (and node-semver's) range cases; `tests/data/vcc-sample.liteDb.gz` is a Creator Companion database made with
 vrc-get's LiteDB writer.
+
+Projects' log (`logbook.py`, the Logs tab) has what a project job says as it goes (a line said as `logbook.Warn` is a
+warning) and how it ended (`Jobs._project`); what the server does for Projects outside a job (opened in Unity, put on
+the list or taken off, repositories, Unity and folders, presets, backups deleted); a repository that couldn't be read
+when they're loaded; and whatever a Projects request couldn't do: `_vpm_logged` notes the request's name
+(`server.VPM_ACTIONS`), and `_json` logs an error reply under it (a 409 as a warning). `GET /api/vpm/logs?after=<n>`
+gives this run's entries after the one numbered n, and `run` (when this run's log began), so a page that's open while
+Hoard starts again starts over.
 
 ## Data files
 

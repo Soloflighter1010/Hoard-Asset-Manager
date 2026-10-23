@@ -16,7 +16,8 @@ from pathlib import Path
 
 from ..common import log
 from ..safety import DataFileError
-from . import backup, environment, imports, listing, presets, repos, resolve, templates, unity
+from . import backup, environment, imports, listing, logbook, presets, repos, resolve, templates, unity
+from .logbook import Warn
 from .manifest import valid_name
 from .preload import apply as put_in
 from .preload import contents, suggested_packages
@@ -52,6 +53,9 @@ class Service:
         with self._lock:
             if self._collection is None or reload:
                 self._collection = repos.Collection.load(self.settings())
+                for r in self._collection.repos:   # (in Projects' log: a repository that couldn't be read)
+                    if r.error:
+                        logbook.warning(f"The repository {r.label()} couldn't be read: {r.error}")
             return self._collection
 
     def forget(self) -> None:
@@ -154,6 +158,7 @@ class Service:
             pk = info.package
             out.append({"name": pk.name, "label": pk.label(), "version": str(pk.version), "description": pk.description[:300],
                         "author": pk.author, "repo": info.repo.label() if info.repo else "your package folders",
+                        "source": ("vrchat" if info.repo.builtin else "repo") if info.repo else "folder",   # (to group them by)
                         "keywords": pk.keywords[:10], "changelog": pk.changelog_url})
         return out
 
@@ -166,12 +171,25 @@ class Service:
                         and (pre or not i.version.is_pre or str(i.version) == keep)}, reverse=True)
         return [{"version": str(v), "pre": v.is_pre} for v in found[:MAX_VERSIONS_LISTED]]
 
-    def product(self, asset: dict, needs: dict | None) -> dict:
-        """What in a downloaded product can go into a project, and the VPM packages for what it needs."""
+    def product(self, asset: dict, needs: dict | None, project: str | None = None) -> dict:
+        """What in a downloaded product can go into a project, and the VPM packages for what it needs: each with
+        whether a repository you have already gives it (in_repo: which; then its own isn't added again), and, for a
+        project on the list, the version the project already has of it (in_project)."""
         tools = [t["key"] for t in (needs or {}).get("tools", [])]
         coll = self.collection()
-        have_repo = {r.url for r in coll.repos if r.url}
-        suggested = [{**s, "repo_added": s["repo"] is None or s["repo"] in have_repo} for s in suggested_packages(tools)]
+        has = {}
+        if project:
+            try:
+                p = UnityProject.load(self.listed(project))
+                has = {**{n: "" for n in p.dependencies}, **{n: str(v) for n, (v, _) in p.locked.items()}}
+            except (ProjectsError, ProjectError):
+                pass   # (not one on the list: what it has isn't known)
+        suggested = []
+        for s in suggested_packages(tools):
+            source = coll.provides(s["package"]) or (coll.has_repo(s["repo"]) if s["repo"] else None)
+            suggested.append({**s, "repo_added": s["repo"] is None or source is not None,
+                              "in_repo": source.label() if source else None,
+                              "in_project": has.get(s["package"]) if s["package"] in has else None})
         return {"name": asset["name"], "key": asset["tag_key"], "contents": contents(asset), "suggested": suggested}
 
     # ---- changes, worked out (for the page to show before they're made) and made (in a job)
@@ -225,6 +243,8 @@ class Service:
         if op == "refresh":
             failed = self.collection().refresh()
             self.forget()
+            for why in failed:   # (each a warning in Projects' log)
+                log(Warn(f"Couldn't refresh {why}"))
             return "Repositories refreshed." if not failed else "Refreshed, except: " + "; ".join(failed)
         if op == "move-backups":
             paths, to = self.backups_chosen(what.get("paths")), Path(str(what.get("to") or ""))
@@ -233,6 +253,8 @@ class Service:
             count, freed, problems = backup.move(paths, to)
             if count:
                 listing.set_backup_prefs(moved_to=str(to))
+            for why in problems[:10]:
+                log(Warn(f"Not moved: {why}"))
             done = f"Moved {count} {'backup' if count == 1 else 'backups'} to {to}, {freed / (1 << 30):.1f} GB freed."
             return done + (" Not moved: " + "; ".join(problems[:10]) if problems else "")
         path = self.listed(what.get("path"))
@@ -311,7 +333,7 @@ class Service:
         if any(r.url and not r.loaded for r in coll.repos):
             log("Fetching the repositories")
             for failed in coll.fetch_missing():
-                log(f"Couldn't fetch {failed}")
+                log(Warn(f"Couldn't fetch {failed}"))
 
     def _create(self, what: dict, assets_by_key) -> str:
         settings = self.settings()
@@ -337,7 +359,7 @@ class Service:
                 repos.add_repo(settings, HOARD_REPO, "Hoard for Unity")
                 self.forget()
             except repos.RepoError as e:
-                log(f"Hoard for Unity's repository couldn't be added ({e}), so the project is made without it")
+                log(Warn(f"Hoard for Unity's repository couldn't be added ({e}), so the project is made without it"))
                 del extra[HOARD_PACKAGE]
         log(f"Making the project {name}")
         try:

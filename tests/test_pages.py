@@ -10,6 +10,7 @@ import os
 import re
 import struct
 import sys
+import shutil
 import tempfile
 import threading
 import time
@@ -1844,6 +1845,50 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertTrue(page.url.startswith(self.srv.url), "nothing ran in Hoard's page")
         self.assertEqual(self.errors, [])
         page.close()
+
+    def test_settings_is_a_page_with_hoards_folders(self):
+        """Settings is a page of its own, the whole window below the bar, its parts listed down the side (along the
+        top in a narrow window); and Hoard's folders lists every folder Hoard uses, each opened by its name: Hoard's own
+        made as it opens, never a path the page sends."""
+        from unittest import mock
+        from hoard.paths import logs_dir
+        opened = []
+        with mock.patch.object(server, "reveal", lambda p: opened.append(p) or "your file manager"):
+            page = self.open()
+            page.set_viewport_size({"width": 1280, "height": 800})
+            page.click("#settingsBtn")
+            page.locator("#settingsPanel").wait_for()
+            box = page.locator("#settingsPanel").bounding_box()
+            bar = page.evaluate("() => document.querySelector('header').getBoundingClientRect().bottom")
+            self.assertEqual((box["x"], box["width"]), (0, 1280), "the whole width")
+            self.assertLessEqual(abs(box["y"] - bar), 2, "from the bar down")
+            nav, body = page.locator(".setjump").bounding_box(), page.locator(".set-body").bounding_box()
+            self.assertLess(nav["x"] + nav["width"], body["x"], "its parts down the side")
+            self.assertGreater(page.locator(".setjump button").nth(1).bounding_box()["y"], nav["y"] + 10, "one under another")
+            rows = page.locator("#setPlaces .librow")
+            rows.first.wait_for()
+            ids = rows.evaluate_all("l => l.map(r => r.dataset.placeRow)")
+            for pid in ("downloads", "edits", "data", "logs", "backups", "reports", "signins"):
+                self.assertIn(pid, ids)
+            self.assertIn("Where downloaded files are saved.", rows.first.inner_text())
+            self.assertIn(self.tmp.name, rows.first.inner_text())
+            # Hoard's own: made as it opens
+            shutil.rmtree(logs_dir(), ignore_errors=True)
+            page.locator("#setPlaces [data-place=logs]").click()
+            page.wait_for_function("() => document.querySelector('#toast').textContent.includes('Opened in')")
+            self.assertEqual(opened[-1], logs_dir())
+            self.assertTrue(logs_dir().is_dir())
+            # by its name only
+            got = page.evaluate("apiPost('/api/folders/open', {id: '/etc'})")
+            self.assertEqual(got["data"]["error"], "That isn't one of Hoard's folders.")
+            self.assertEqual(len(opened), 1)
+            # a narrow window: its parts along the top again
+            page.set_viewport_size({"width": 700, "height": 800})
+            nav, body = page.locator(".setjump").bounding_box(), page.locator(".set-body").bounding_box()
+            self.assertGreater(nav["width"], 600, "across the top")
+            self.assertLess(abs(nav["x"] - body["x"]), 20, "not beside it")
+            self.assertEqual(self.errors, [])
+            page.close()
 
     def test_settings_save_as_they_change(self):
         from unittest import mock

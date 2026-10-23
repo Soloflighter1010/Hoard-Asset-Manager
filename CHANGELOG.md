@@ -1,5 +1,32 @@
 # Changelog
 
+## 5.1.3
+
+- **Projects opens with Hoard's splash,** the logo and "Opening your projects", while it reads your projects, as
+  the Library does while it opens. The first time you open Projects it shows for a moment; after that, only when
+  reading your projects takes a while.
+- **Put in products from your library** (a project's, and New project's) opens Downloads in **Select** mode for
+  that project, instead of a long list in a window: tick what goes in, then **Add to project**, the only other thing
+  to do there being **Cancel**. Either way you're back at the project.
+- **Logs in Projects,** as ALCOM and the Creator Companion have: what Hoard did to your projects, packages and
+  repositories, and what went wrong, each with its time and level (Info, Warning, Error). Find entries by their words,
+  show only some levels, and watch new ones come in. Each time Hoard starts, they're written to a log of their own in
+  the logs folder (**Open logs folder**).
+- Put right: putting products in a project offered what they need even when the project already had it, and could
+  add a repository you already had (VRCFury's, say, added in ALCOM or the Creator Companion with its address spelled
+  another way) a second time. What the project has is now only said, a repository that already gives a package is
+  used for it, and a repository already there, at any spelling of its address or another address for the same
+  listing, is never added again.
+- **Add packages** shows packages in groups by the repository they come from (VRChat's own first), each folding away.
+- A project's **Packages** has its columns named (Package, Installed, Update, Comes from), and says which repository
+  each package comes from.
+- In a project, **From your library** and **What Hoard for Unity found** show products as their library tiles, with
+  the files that went in (or how each is in the project) beneath. Choose one to see it in your library.
+- **Settings is a page of its own,** the whole window below the bar as Projects is, with its parts listed down the
+  side to jump to. A new part, **Hoard's folders**, lists every folder Hoard uses (your downloads and library
+  folders, editable copies, Hoard's own folder, logs, backups, support reports, store sign-ins, and Projects'),
+  what each is for and where it is, each with **Open**.
+
 ## 5.1.2
 
 - Put right: a set or wishlist of about 370 to 500 products was called too big for one short link, so it couldn't

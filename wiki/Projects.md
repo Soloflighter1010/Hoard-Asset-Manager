@@ -2,8 +2,8 @@
 
 **Projects** (at the top of either page) is your Unity projects: make one ready to use, with the packages and the
 products from your library it needs, open it in Unity, and change its packages. It's new in Hoard 5.0. From 5.1 it
-takes the whole window, with its views as tabs along its top: **Projects**, **Repositories**, **Backups**, and **Unity
-and folders**. Rows alternate in colour, and the one under the pointer is outlined.
+takes the whole window, with its views as tabs along its top: **Projects**, **Repositories**, **Backups**, **Unity and
+folders**, and (from 5.1.3) **Logs**. Rows alternate in colour, and the one under the pointer is outlined.
 
 It's the same list of projects as [ALCOM](https://vrc-get.anatawa12.com/en/alcom/)'s and the VRChat Creator
 Companion's. A project you add or take off in any of the three is added or taken off in all of them, and Hoard keeps
@@ -39,13 +39,17 @@ name, one already there).
 
 [Hoard for Unity](Hoard-for-Unity) is in a new project to begin with (its repository is added for you if you haven't
 got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
-that works in the project's Unity, to tick (with a version, if you'd rather not have the newest), then **Add the
-chosen packages**. **Put in products from your library** chooses products
-you've downloaded, and which of their files: a product with several packages (one for PC, one for Quest, a few
-variants) asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
+that works in the project's Unity, in groups by the repository it comes from (VRChat's own first, your package folders
+last; each folds away, and what you find opens its group), to tick (with a version, if you'd rather not have the newest), then **Add the
+chosen packages**. **Put in products from your library** opens Downloads in **Select** mode, for this project: tick
+the products you want, then **Add to project**, and you're back at the new project as you left it, with them in
+(**Cancel** goes back without them). A product with several packages (one for PC, one for Quest, a few variants)
+asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
 What the products need ([What it needs](Downloads#the-downloads-view): lilToon, Poiyomi Toon, Modular Avatar, VRCFury,
 NDMF, Avatar Optimizer, the VRChat SDK) is offered beside them, to add with a click; the repository it comes from is
-added for you.
+added for you, unless a repository you have already gives it (one added in ALCOM or the Creator Companion too, under
+any spelling of its address), which is used instead, so no repository is ever added twice. What the project already
+has isn't offered again: it's said, as **Already in the project**.
 
 **Make the project** makes it as a task (see [Projects' tasks](#projects-tasks)): the template, its packages, then
 your products. A `.unitypackage` goes straight into the project (as ALCOM puts one in, without opening Unity), a VPM
@@ -72,7 +76,8 @@ template, so ALCOM can make the same project. ALCOM can't open a package inside 
 
 ## Managing a project
 
-**Manage** shows a project, with tabs of its own: **Packages** (each with its version and any update), **Add
+**Manage** shows a project, with tabs of its own: **Packages** (in columns: each package, the version installed, any
+update, and the repository it comes from), **Add
 packages**, **From your library**, and, when [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) has reported on it,
 what it found. From there:
 
@@ -82,8 +87,12 @@ what it found. From there:
   version that works in the project's Unity, newest first, and install any of them, an older one too. The packages
   it needs change to match. **Add packages** can choose a version as well, instead of the newest.
 - **Put it right**, when the project's packages aren't installed the way it says (after cloning it from Git, say).
-- **Put in products from your library**, later. Nothing already in the project is replaced: a file that's there
-  (with the same asset ID, or at the same path) is left as it is.
+- **Put in products from your library**, later: Downloads opens in **Select** mode for this project, with nothing to
+  do there but **Add to project** or **Cancel**. What's chosen is shown before it goes in, with what it needs.
+  Nothing already in the project is replaced: a file that's there (with the same asset ID, or at the same path) is
+  left as it is. **From your library** shows what Hoard has put in the project, each product as its library tile, with
+  the files that went in and when (rest the pointer on a file for the folders it added); choose a tile to see the
+  product in your library.
 - **What went in, and where.** Each time Hoard puts products in a project (making it, or later), it adds them to
   `Hoard imports.md`, beside the project's `Assets` folder: each product, its file, when, and the folders it added
   (or the package, in `Packages`), with anything left as it was because the project already had it. Unity doesn't
@@ -94,8 +103,9 @@ what it found. From there:
 - **Open folder**, and **Back up**: everything in the project but what Unity makes again by itself (`Library`,
   `Temp`, `Logs`, `obj`) in a zip, in your backups folder. Packages from repositories can be left out, since they're
   downloaded again.
-- What [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) reports about it: the products it uses, which have
-  updates, and its credits.
+- What [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) reports about it: the products it uses, as their library
+  tiles (with how each is in it, and which have updates), and its credits. Choose a tile to see the product in your
+  library.
 - **Delete from this computer...**: the project's folder is deleted, and it's taken off the list. It's backed up into
   your backups folder first, unless you untick that (without a backup, it can't be got back), and only once you've
   typed its name. Hoard won't delete a project Unity has open, or one that holds its own folders (the downloads
@@ -144,6 +154,26 @@ the chosen ones** or **Move the chosen ones...**.
 - Only zips named as a backup is (`<project>-<date>T<time>.zip`, as Hoard and ALCOM name them), directly in your
   backups folder or the folder you moved them to, are ever listed, deleted or moved. Anything else there is left as it
   is.
+
+## Logs
+
+**Logs** shows what Hoard did to your projects, packages and repositories since it started, and what went wrong, as
+ALCOM's Logs page and the Creator Companion's Logs tab show theirs: each entry's time, its level (**Info**,
+**Warning** or **Error**) and what happened, the newest at the bottom. That's every step of Projects' tasks and how
+each ended; a project opened in Unity, put on the list or taken off it; a repository added or removed, or one that
+couldn't be read; **Unity and folders** saved; presets saved or deleted; backups deleted; and anything Projects
+couldn't do.
+
+- **Find in the log** finds entries by their words. Untick **Info**, **Warnings** or **Errors** to leave those out
+  (which ones you show is kept, in this browser).
+- New entries come in as they happen. **Follow new entries** keeps the newest in view; turn it off to read back
+  without being moved.
+- Each time Hoard starts, Projects' log is written to a file of its own, `projects-<date>_<time>.log`, in Hoard's logs
+  folder (**Open logs folder**), beside Hoard's own logs; the newest 30 are kept, as ALCOM keeps its own. **Logs**
+  shows this run's; earlier runs' are in those files.
+
+ALCOM and the Creator Companion keep logs of what they do: ALCOM's in `vrc-get/gui-logs` in the Creator Companion's
+folder, the Creator Companion's in its `Logs` folder. Hoard leaves those alone.
 
 ## Where it's kept
 

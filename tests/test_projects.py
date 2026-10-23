@@ -189,7 +189,7 @@ class ProjectsPage(unittest.TestCase):
             row.locator("[data-pj=report]").click()
             page.locator("#projectsWin .proj").wait_for()
             self.assertIn("My Avatar", page.locator("#projectsWin .pj-h").inner_text())
-            self.assertIn("Partly in the project", page.locator("#projectsWin table").inner_text())
+            self.assertIn("Partly in the project", page.locator("#projectsWin .pj-tiles").inner_text())
             box = page.locator("#projectsWin textarea")
             self.assertIn("## Assets used", box.input_value(), "the style chosen in Unity")
             page.select_option("#projectsWin [data-proj-style]", "ByCreator")

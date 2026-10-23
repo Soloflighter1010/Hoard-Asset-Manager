@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English 84c7ca2a4f67). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 261396ef58be). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <a href="Hoardの保存場所">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 Hoard가 보관하는 것은 두 가지로 나뉘어요. 내가 고른 폴더에 있는 다운로드와, 그 밖의 모든 것을 담은 내 사용자 계정 전용의 비공개 앱 데이터 폴더예요.
@@ -34,6 +34,7 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 | `local-pictures/` | 내 패키지 타일에 쓰려고 고른 이미지. Hoard가 그 옆에도 복사해요(4.2.0). [내 패키지](내-패키지#이미지)를 보세요 |
 | `package-needs.json` | 다운로드한 패키지마다 안에 있는 것과 쓰는 것의 ID. **필요한 것**이 다시 읽지 않고 알 수 있게 하려는 거예요(4.0) |
 | `logs/hoard-<date>_<time>.log` | 콘솔 없이 실행될 때 Hoard가 출력하는 내용. 무엇을 읽었는지, 무엇을 다운로드했는지, 오류(비밀번호, 쿠키, 페이지 내용은 없어요). Hoard를 시작할 때마다 하나씩, 30일 동안 남겨요(오래됐어도 최근 10개는 남겨요). 20 MB 넘게 쓰는 실행은 `-part2`로 이어져요. 설정의 **로그 폴더 열기**가 이 폴더를 열어요. (2.9.2 전에는 모든 실행에 `hoard.log` 하나였어요.) |
+| `logs/projects-<date>_<time>.log` | 프로젝트의 로그(5.1.3). ALCOM과 Creator Companion이 남기는 것처럼, Hoard가 내 프로젝트, 패키지, 저장소에 한 일과 잘 안 된 일을 시간과 수준과 함께 한 줄씩 써요. 프로젝트에 남길 것이 있을 때 Hoard를 시작할 때마다 하나씩 만들고, 최근 30개를 남겨요. 프로젝트의 **로그**에는 이번 실행의 것이 나와요. [프로젝트](프로젝트#로그)를 보세요 |
 | `diagnostics/incidents.jsonl` | 최근 오류와 충돌 트레이스백의 로컬 전용 비공개 기록. 지원 보고서를 만들 때 쓰고, 절대 자동으로 보내지 않아요 |
 | `window/` | 창 자체의 저장 공간 |
 | `window-place.json` | 마지막으로 닫았을 때 창의 크기와 위치, 최대화했는지 여부. 다음에도 거기서 열기 위해서예요. 지우면 보통 크기로 가운데에서 열려요 |

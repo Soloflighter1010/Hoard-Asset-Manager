@@ -16,6 +16,7 @@ import json
 import re
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .. import egress
 from ..safety import DataFileError, clean_text
@@ -197,6 +198,23 @@ class Info:
         return f"Info({self.name}@{self.version} from {self.repo.label() if self.repo else self.folder})"
 
 
+def same_address(a, b) -> bool:
+    """Two repository addresses that lead to the same listing, told apart only by the case of the scheme and host, a
+    port that's the scheme's own, or a slash at the end: https://vcc.vrcfury.com and https://VCC.vrcfury.com/ are one."""
+    return isinstance(a, str) and isinstance(b, str) and bool(a.strip()) and _address(a) == _address(b)
+
+
+def _address(url: str) -> str:
+    try:
+        u = urlsplit(url.strip())
+        port = u.port
+    except ValueError:
+        return url.strip().rstrip("/")
+    scheme = u.scheme.lower()
+    host = (u.hostname or "").lower() + (f":{port}" if port and port != {"https": 443, "http": 80}.get(scheme) else "")
+    return f"{scheme}://{host}{u.path.rstrip('/')}" + (f"?{u.query}" if u.query else "")
+
+
 class Collection:
     """Every package Hoard can install: the repositories' and your package folders'."""
 
@@ -242,6 +260,19 @@ class Collection:
 
     def loaded(self) -> list[Repo]:
         return [r for r in self.repos if r.loaded]
+
+    def has_repo(self, url: str | None, repo_id: str | None = None) -> Repo | None:
+        """The repository already here at this address (as it's listed, or as its listing gives its own), or with
+        this id: so one added in ALCOM or the Creator Companion under another spelling isn't added again."""
+        for r in self.repos:
+            own = r.raw.get("url") if r.raw else None
+            if same_address(url, r.url) or same_address(url, own) or (repo_id and r.id == repo_id):
+                return r
+        return None
+
+    def provides(self, name: str) -> Repo | None:
+        """A repository here that has this package, if any does."""
+        return next((r for r in self.loaded() if name in r.packages), None)
 
     def versions(self, name: str) -> list[Info]:
         out = [Info(p, repo=r) for r in self.loaded() for p in r.packages.get(name, {}).values()]
@@ -326,7 +357,7 @@ def add_repo(settings: Settings, url: str, name: str | None = None, headers: dic
     if not (url.startswith("https://") or egress._test_origin(url)) or len(url) > 2000 or any(c.isspace() for c in url):
         raise RepoError("Enter the repository's address, starting https://.")
     headers = check_headers(headers)
-    if url in (OFFICIAL_URL, CURATED_URL) or any(e.get("url") == url for e in settings.user_repos()):
+    if any(same_address(url, u) for u in (OFFICIAL_URL, CURATED_URL)) or any(same_address(e.get("url"), url) for e in settings.user_repos()):
         raise RepoError("That repository is already added.")
     try:
         data, etag = fetch.get_json_bytes(url, headers, None, MAX_LISTING)
@@ -339,7 +370,8 @@ def add_repo(settings: Settings, url: str, name: str | None = None, headers: dic
         listing["url"] = url
     repo_id = listing.get("id") if isinstance(listing.get("id"), str) else url
     listing.setdefault("id", repo_id)
-    if repo_id in (OFFICIAL_ID, CURATED_ID) or any(e.get("id") == repo_id for e in settings.user_repos()):
+    if repo_id in (OFFICIAL_ID, CURATED_ID) or any(e.get("id") == repo_id for e in settings.user_repos()) \
+            or Collection.load(settings).has_repo(listing["url"], repo_id):   # (its listing's own address, or id)
         raise RepoError("That repository is already added.")
     folder = settings.folder / "Repos"
     folder.mkdir(parents=True, exist_ok=True)

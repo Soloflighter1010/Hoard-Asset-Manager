@@ -50,6 +50,7 @@ class ProjectsPanel(unittest.TestCase):
         self.page = self.browser.new_page(viewport={"width": 1280, "height": 900})
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.page.add_init_script("sessionStorage.setItem('hoard-projects-opened', '1')")   # (its splash: test_the_splash)
         self.page.goto(self.srv.entry_url())
         self.page.wait_for_function("() => localStorage.getItem('hoard-key')")
         self.page.click("#projectsTab")
@@ -82,6 +83,68 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 
+    SAMPLE_SPLASH = """window.__splash = 0;   // how visible Projects' splash got, sampled while it's on show
+        setInterval(() => { const e = document.getElementById("pjSplash");
+                            if (e && !e.hidden) window.__splash = Math.max(window.__splash, +getComputedStyle(e).opacity); }, 25);"""
+
+    def test_the_splash(self):
+        """The logo shows over Projects while it first reads your projects, as the page shows it while it reads your
+        library: the first time in a window straight away and for a moment, later only when reading takes a while;
+        it goes even when reading fails, and it doesn't come back once Projects has been read."""
+        page = self.browser.new_page(viewport={"width": 1280, "height": 900})
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.add_init_script(self.SAMPLE_SPLASH)
+        page.goto(self.srv.entry_url())
+        page.wait_for_function("() => localStorage.getItem('hoard-key')")
+        logo = page.locator("#pjSplash")
+        self.assertTrue(logo.is_hidden(), "not before Projects is opened")
+        page.click("#projectsTab")
+        began = time.monotonic()
+        self.assertIn("first", logo.get_attribute("class") or "")
+        self.assertIn("Opening your projects", logo.inner_text())
+        page.locator(".pj-row").first.wait_for(state="attached")   # drawn under it
+        logo.wait_for(state="detached")
+        self.assertGreater(time.monotonic() - began, 1.0, "on show for a moment, not a flicker")
+        self.assertEqual(page.evaluate("window.__splash"), 1)
+        box = page.locator("#projectsWin .win-bar").bounding_box()
+        self.assertGreater(box["height"], 0, "Projects' own bar, with its Close, stays above it")
+        page.locator("[data-pj=manage]").first.click()   # nothing in the way once it's gone
+        page.locator("[data-pj=back]").first.wait_for()
+
+        # the other page, in the same window: not straight away, and only once reading takes a while
+        page.goto(f"{self.srv.url}downloads")
+        page.click("#projectsTab")
+        self.assertNotIn("first", logo.get_attribute("class") or "")
+        page.locator(".pj-row").first.wait_for()
+        logo.wait_for(state="detached")
+
+        def slow(route):
+            time.sleep(1.0)
+            route.continue_()
+        page.route("**/api/vpm*", slow)
+        page.goto(self.srv.url)
+        page.click("#projectsTab")
+        logo.wait_for(state="detached", timeout=10000)
+        self.assertEqual(page.evaluate("window.__splash"), 1, "shown while reading took a while")
+        page.unroute("**/api/vpm*")
+        page.click("#projectsTab")   # closed and opened again: read again, with no splash
+        page.click("#projectsTab")
+        page.locator(".pj-row").first.wait_for()
+        self.assertEqual(logo.count(), 0)
+        page.close()
+
+        page = self.browser.new_page()   # a new window whose projects can't be read
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(self.srv.entry_url())
+        page.wait_for_function("() => localStorage.getItem('hoard-key')")
+        page.route("**/api/vpm*", lambda route: route.abort())
+        page.click("#projectsTab")
+        page.locator("#pjSplash").wait_for(state="detached", timeout=10000)
+        self.assertIn("Projects couldn't be read just now.", page.locator("#projectsBody").inner_text())
+        page.close()
+        self.assertEqual(errors, [])
+
     def test_the_whole_window_and_its_tabs(self):
         """Projects is a place of its own, the whole window below the bar, with its views as tabs; its rows alternate;
         Add a repository comes before the list; Add a project opens the system's folder picker; a project can be
@@ -92,7 +155,7 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual((box["x"], box["width"]), (0, 1280), "the whole width")
         self.assertLessEqual(abs(box["y"] - bar), 2, "from the bar down")
         self.assertGreaterEqual(box["y"] + box["height"], 899, "to the bottom")
-        self.assertEqual(page.locator(".pj-tabs .pj-tab").all_inner_texts(), ["Projects", "Repositories", "Backups", "Unity and folders"])
+        self.assertEqual(page.locator(".pj-tabs .pj-tab").all_inner_texts(), ["Projects", "Repositories", "Backups", "Unity and folders", "Logs"])
         rows = page.locator("#projectsBody .pj-list > li")
         colour = lambda n: rows.nth(n).evaluate("e => getComputedStyle(e).backgroundColor")  # noqa: E731
         self.assertNotEqual(colour(0), colour(1), "rows alternate")
@@ -163,11 +226,24 @@ class ProjectsPanel(unittest.TestCase):
         text = page.locator("#projectsBody").inner_text()
         self.assertIn("Some packages aren't installed the way the project says.", text)
         self.assertIn("Unity 2022.3.22f1 isn't installed", text)
+        # its packages' columns, named; and where each comes from
+        self.assertEqual(page.locator(".pj-pk thead th").all_inner_texts(), ["Package", "Installed", "Update", "Comes from", "Remove"])
+        self.assertEqual(page.locator(".pj-pk tr[data-name='com.vrchat.avatars'] td.from").inner_text(), "Official")
         # its tabs: Packages, Add packages, From your library, and what Hoard for Unity reported of it
         tabs = page.locator(".pj-subs .pj-tab")
         self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report"])
         page.click(".pj-subs [data-sub=report]")
         page.locator(".proj", has_text="What Hoard for Unity found in it").wait_for()
+        # what it found: as their library tiles, with how each is in it; choosing one shows it in the library
+        tile = page.locator(".proj .pj-tile", has_text="Rusk")
+        self.assertIn("In the project", tile.inner_text())
+        self.assertEqual(tile.locator(".art img, .art .ph").count(), 1)
+        tile.locator("button.ext-main").click()
+        page.locator("#detail.open", has_text="Rusk").wait_for()
+        self.assertTrue(page.locator("#projectsWin").is_hidden())
+        page.keyboard.press("Escape")
+        page.click("#projectsTab")
+        page.locator(".pj-subs [data-sub=report]").wait_for()
         page.click(".pj-subs [data-sub=packages]")
         page.locator(".pj-pk").wait_for()
         avatars = page.locator(".pj-pk tr", has_text="com.vrchat.avatars")
@@ -213,15 +289,33 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.locator("#pjUnity").input_value(), "2022.3.22f1")
         page.fill("#pjName", "CON")
         page.wait_for_function("() => document.querySelector('#pjNameNote').textContent.includes(\"can't be used\")")
-        # a product from the library, chosen file by file
+        # a product from the library: chosen in Downloads (from the Library page, it goes there), then back to the
+        # new project as it was, with it in
         page.click("[data-pj=addprod]")
-        page.locator("dialog.pj-dlg .linkish", has_text="Rusk").click()
-        page.locator("dialog.pj-dlg", has_text="rusk.unitypackage").locator("button[value=yes]").click()
+        page.wait_for_url("**/downloads*")
+        page.locator("#bulk [data-main]", has_text="Add to project").wait_for()
+        self.assertIn("for CON", page.locator("#bulkCount").inner_text())
+        page.locator(".slot", has_text="Rusk").click()
+        page.locator("#bulk [data-main]").click()
         page.locator(".pj-pre", has_text="rusk.unitypackage").wait_for()
+        self.assertEqual(page.input_value("#pjName"), "CON")
+        self.assertTrue(page.locator("#bulk").is_hidden(), "and choosing is over")
         # Hoard for Unity is in a new project unless you leave it out
         self.assertIn("Hoard for Unity", page.locator(".pj-chips").inner_text())
         # Add packages: a view of its own (not a window over the page), and back to the new project
         page.click("[data-pj=addpkg]")
+        # in groups by the repository they come from, each folding away
+        group = page.locator(".pj-repo", has_text="Official")
+        self.assertEqual(" ".join(group.locator("summary").inner_text().split()), "Official 2")
+        self.assertTrue(group.evaluate("d => d.open"))
+        group.locator("summary").click()
+        self.assertFalse(group.evaluate("d => d.open"))
+        page.fill("#pjPkFind", "avatars")   # what you look for is shown, wherever it is
+        page.wait_for_function("() => document.querySelector('.pj-repo').open")
+        self.assertEqual(page.locator(".pj-addlist li:visible").count(), 1)
+        page.fill("#pjPkFind", "nothing like it")
+        self.assertTrue(group.is_hidden(), "a repository with nothing found is left out")
+        page.fill("#pjPkFind", "")
         page.locator(".pj-addlist input[value='com.vrchat.avatars']").check()
         self.assertEqual(page.locator("dialog[open]").count(), 0)
         # the newest unless another version is chosen (#160)
@@ -233,6 +327,169 @@ class ProjectsPanel(unittest.TestCase):
         page.click("[data-pj=addchosen]")
         self.assertIn("3.7.0", page.locator(".pj-chips .pill", has_text="com.vrchat.avatars").inner_text())
         self.assertEqual(page.input_value("#pjName"), "CON", "what was typed is kept")
+
+    def test_put_in_products_from_your_library(self):
+        """A project's Put in products from your library opens Downloads (from the Library page, it goes there) in
+        Select mode for that project, where all there is to do is Add to project or Cancel; both go back to it."""
+        page = self.page
+        ran = []
+        self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        page.click("[data-pj=sub][data-sub=library]")
+        page.click("[data-pj=addprod]")
+        page.wait_for_url("**/downloads*")
+        bar = page.locator("#bulk")
+        bar.locator("[data-main]").wait_for()
+        self.assertTrue(page.locator("#projectsWin").is_hidden())
+        self.assertEqual(bar.locator("button:visible").all_inner_texts(), ["Add to project", "Cancel"], "nothing else to do")
+        self.assertTrue(page.locator("#selectBtn").is_hidden(), "not even Select's Done")
+        self.assertTrue(bar.locator("[data-main]").is_disabled(), "until something's chosen")
+        self.assertEqual(bar.locator("#bulkCount").inner_text(), "0 selected for Rusk Avatar")
+        page.locator(".slot", has_text="Rusk").click()   # (a tap ticks: Select mode)
+        self.assertEqual(bar.locator("#bulkCount").inner_text(), "1 selected for Rusk Avatar")
+        self.assertEqual(page.locator("#detail.open").count(), 0)
+        # right-click: the same, and nothing more
+        page.locator(".slot", has_text="Rusk").click(button="right")
+        self.assertEqual(page.locator(".selmenu [role=menuitem]").all_inner_texts(), ["Add to project"])
+        page.keyboard.press("Escape")
+        # Cancel: back to the project, as it was
+        bar.locator("[data-pickcancel]").click()
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        self.assertEqual(page.locator(".pj-subs [aria-current=page]").inner_text(), "From your library")
+        self.assertTrue(bar.is_hidden())
+        self.assertEqual(page.locator("#selectBtn").inner_text(), "Select", "Select mode is over")
+        self.assertTrue(page.locator("#selectBtn").is_visible())
+        # again, on the Downloads page: chosen, shown before it goes in, and put in as a task
+        page.click("[data-pj=addprod]")
+        bar.locator("[data-main]").wait_for()
+        page.locator(".slot", has_text="Rusk").click()
+        bar.locator("[data-main]").click()
+        sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
+        self.assertIn("rusk.unitypackage", sure.inner_text())
+        sure.locator("button[value=yes]").click()
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        for _ in range(100):
+            if ran:
+                break
+            page.wait_for_timeout(100)
+        self.assertEqual((ran[0]["op"], ran[0]["name"]), ("preload", "Rusk Avatar"))
+        self.assertEqual([x["file"] for x in ran[0]["picks"]], ["rusk.unitypackage"])
+        # what went in, as their library tiles: each product once, with its files and when
+        from hoard.vpm import listing
+        key = page.evaluate("T.all().find(a => a.name === 'Rusk').tag_key")
+        project = self.tmp / "Unity" / "Rusk Avatar"
+        listing.add_preloaded(str(project), [{"tag_key": key, "name": "Rusk", "file": "rusk.unitypackage", "label": "rusk.unitypackage",
+                                              "added": ["Assets/Rusk"]},
+                                             {"tag_key": key, "name": "Rusk", "file": "rusk-quest.unitypackage", "label": "rusk-quest.unitypackage"}])
+        page.evaluate("loadProjects()")
+        tile = page.locator(".pj-part .pj-tile", has_text="Rusk")
+        tile.wait_for()
+        self.assertEqual(page.locator(".pj-part .pj-tile").count(), 1, "one tile a product")
+        self.assertIn("rusk.unitypackage", tile.inner_text())
+        self.assertIn("rusk-quest.unitypackage", tile.inner_text())
+        self.assertIn("just now", tile.inner_text())
+        self.assertEqual(tile.locator(".pj-file", has_text="rusk.unitypackage").first.get_attribute("title"), "Added: Assets/Rusk")
+        # Escape, while choosing, goes back too
+        page.click("[data-pj=addprod]")
+        bar.locator("[data-main]").wait_for()
+        page.keyboard.press("Escape")
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        self.assertTrue(bar.is_hidden())
+
+    def test_what_products_need_as_the_project_stands(self):
+        """Put in a project: what the products need that the project has already isn't offered again, only said; one a
+        repository you have gives already says so, and that repository isn't added again; only one you don't have is."""
+        page = self.page
+        asked, added = [], []
+
+        def product(route):   # (the sample's Rusk, as if it needed these)
+            asked.append(route.request.url)
+            reply = route.fetch()
+            data = reply.json()
+            data["suggested"] = [
+                {"package": "com.vrchat.avatars", "repo": None, "repo_added": True, "in_repo": "Official", "in_project": "3.7.0"},
+                {"package": "com.vrcfury.vrcfury", "repo": "https://vcc.vrcfury.com", "repo_added": True, "in_repo": "VRCFury Repo", "in_project": None},
+                {"package": "nadena.dev.modular-avatar", "repo": "https://vpm.nadena.dev/vpm.json", "repo_added": False, "in_repo": None, "in_project": None}]
+            route.fulfill(response=reply, json=data)
+        page.route("**/api/vpm/product*", product)
+        page.route("**/api/vpm/repos/add", lambda route: added.append(json.loads(route.request.post_data)["url"]) or route.fulfill(json={"ok": True}))
+        page.route("**/api/vpm/preview", lambda route: route.fulfill(status=400, json={"error": "(not in the sample)"}))
+        self.srv.project_jobs.project_runner = lambda what: "Done."
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        page.click("[data-pj=sub][data-sub=library]")
+        page.click("[data-pj=addprod]")
+        page.wait_for_url("**/downloads*")
+        page.locator("#bulk [data-main]").wait_for()
+        page.locator(".slot", has_text="Rusk").click()
+        page.locator("#bulk [data-main]").click()
+        sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
+        sure.wait_for()
+        text = sure.inner_text()
+        self.assertIn("path=", asked[0], "asked as the project stands")
+        self.assertIn("Already in the project: com.vrchat.avatars 3.7.0.", text)
+        self.assertEqual(sure.locator("input[data-sugg]").count(), 2, "not offered again")
+        self.assertIn("(from VRCFury Repo)", text)
+        self.assertNotIn("adds the repository https://vcc.vrcfury.com", text)
+        self.assertIn("adds the repository https://vpm.nadena.dev/vpm.json", text)
+        sure.locator("button[value=yes]").click()
+        page.locator("#projectsWin .pj-h", has_text="Rusk Avatar").wait_for()
+        self.assertEqual(added, ["https://vpm.nadena.dev/vpm.json"], "only the repository you don't have is added")
+
+    def test_logs(self):
+        """Projects' Logs, as ALCOM's and the Creator Companion's: what Hoard did and what went wrong, newest last,
+        each with its time and level; found by its words and by level (which levels is kept); new entries come in
+        while it's open; and Open logs folder opens the folder they're written to."""
+        from hoard.vpm import logbook
+        page = self.page
+        book = logbook.Logbook(self.tmp / "logs")
+        patch = mock.patch.object(logbook, "book", book)
+        patch.start()
+        self.addCleanup(patch.stop)
+        opened = []
+        reveal = mock.patch.object(server, "reveal", lambda p: opened.append(p) or str(p))
+        reveal.start()
+        self.addCleanup(reveal.stop)
+        page.click(".pj-tabs [data-pj=logs]")
+        page.locator("#pjLogNone", has_text="Nothing has been logged since Hoard started.").wait_for()
+        book.add("info", "Projects: Make Rusk Avatar")
+        book.add("warning", "Couldn't fetch Extra: it's gone")
+        page.evaluate("loadProjects()")   # (as when a task ends: drawn again, still reading what's new)
+        rows = page.locator("#pjLogRows tr")
+        rows.nth(1).wait_for()
+        # something that couldn't be done, from Projects itself
+        page.evaluate("apiPost('/api/vpm/open', {path: '/not/a/project'})")
+        page.locator("#pjLogRows tr", has_text="Open in Unity: That project isn't on the list any more.").wait_for()
+        self.assertEqual(page.locator("#pjLogRows td.lv").all_inner_texts(), ["Info", "Warning", "Error"])
+        self.assertEqual(page.locator(".pj-tabs [aria-current=page]").inner_text(), "Logs")
+        colour = lambda n: rows.nth(n).locator("td.m").evaluate("e => getComputedStyle(e).color")  # noqa: E731
+        self.assertEqual(len({colour(0), colour(1), colour(2)}), 3, "warnings and errors in their own colours")
+        box = page.locator("#pjLogBox")
+        self.assertTrue(box.evaluate("e => e.scrollTop + e.clientHeight >= e.scrollHeight - 2"), "the newest in view")
+        # by level, and by words
+        page.locator("[data-pjlevel=info]").uncheck()
+        self.assertEqual(page.locator("#pjLogRows td.lv").all_inner_texts(), ["Warning", "Error"])
+        page.fill("#pjLogFind", "UNITY list")
+        self.assertEqual(rows.count(), 1)
+        page.fill("#pjLogFind", "nothing like it")
+        self.assertTrue(page.locator("#pjLogNone", has_text="Nothing in the log matches.").is_visible())
+        page.fill("#pjLogFind", "")
+        page.reload()   # which levels is kept
+        page.click("#projectsTab")
+        page.click(".pj-tabs [data-pj=logs]")
+        rows.nth(1).wait_for()
+        self.assertFalse(page.locator("[data-pjlevel=info]").is_checked())
+        self.assertEqual(rows.count(), 2)
+        page.locator("[data-pjlevel=info]").check()
+        # Follow new entries: on, the newest comes into view; off, it's left where it is
+        follow = page.locator("[data-pj=logfollow]")
+        self.assertEqual(follow.get_attribute("aria-pressed"), "true")
+        follow.click()
+        self.assertEqual(follow.get_attribute("aria-pressed"), "false")
+        book.add("info", "Took Old World off the list")
+        page.locator("#pjLogRows tr", has_text="Took Old World off the list").wait_for()
+        page.click("[data-pj=logfolder]")
+        page.wait_for_function("() => document.querySelector('#toast').textContent.includes('Opened the logs folder')")
+        self.assertEqual(opened[-1].name, "logs")
 
     def test_unity_and_folders(self):
         page = self.page

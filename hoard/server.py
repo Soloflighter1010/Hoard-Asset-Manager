@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -43,7 +43,7 @@ from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
 from .tags import TagStore, tag_key, tag_overview
-from .vpm import api as vpm_api
+from .vpm import api as vpm_api, logbook as vpm_log
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
 FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenMaruGothic-Bold.woff2",
@@ -52,7 +52,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/force-stop", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
-           "/api/app/close", "/api/open-logs",
+           "/api/app/close", "/api/open-logs", "/api/folders/open",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
@@ -385,6 +385,22 @@ SERVED_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image
 MAX_CONNECTIONS = 64      # at once; more are closed straight away, so held-open connections can't pile up
 
 
+# Projects' requests, as Projects' log names one it couldn't do (hoard/vpm/logbook.py); those not here (a name checked
+# as it's typed, a product's contents, the log itself) aren't logged
+VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading a project",
+               "/api/vpm/packages": "Reading the packages", "/api/vpm/versions": "Reading a package's versions",
+               "/api/vpm/preview": "Working out the changes", "/api/vpm/apply": "Changing packages",
+               "/api/vpm/create": "New project", "/api/vpm/preload": "Putting products in", "/api/vpm/backup": "Back up",
+               "/api/vpm/refresh": "Refreshing the repositories", "/api/vpm/open": "Open in Unity",
+               "/api/vpm/open-folder": "Open folder", "/api/vpm/add-project": "Add a project",
+               "/api/vpm/remove-project": "Take off the list", "/api/vpm/delete-project": "Delete from this computer",
+               "/api/vpm/favorite": "Favourite", "/api/vpm/repos/add": "Add a repository",
+               "/api/vpm/repos/remove": "Remove a repository", "/api/vpm/settings": "Unity and folders",
+               "/api/vpm/presets": "Presets", "/api/vpm/backups": "Backups", "/api/vpm/backups/settings": "Backups",
+               "/api/vpm/backups/show": "Backups", "/api/vpm/backups/delete": "Delete backups",
+               "/api/vpm/backups/move": "Move backups"}
+
+
 class AppServer(TLSServerMixin, ThreadingHTTPServer):
     """Holds everything the pages work with: settings, your library, the downloads index and the job runner."""
     daemon_threads = True
@@ -677,6 +693,9 @@ class Handler(BaseHTTPRequestHandler):
         """Send obj as JSON that the browser won't cache. With compress, a large reply is gzipped for a browser that
         accepts it (the library and downloads lists: 5 MB for 10,000 items becomes about 0.2 MB, which matters when
         Hoard is opened from another device). Only for replies that carry no secrets."""
+        doing = getattr(self, "_vpm_doing", None)   # (a Projects request: what it couldn't do goes in its log too)
+        if doing and status >= 400 and isinstance(obj, dict) and obj.get("error"):
+            (vpm_log.warning if status == 409 else vpm_log.error)(f"{doing}: {obj['error']}")
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         headers = {"Cache-Control": "no-store"}
         if compress and len(body) > 64 * 1024 and "gzip" in (self.headers.get("Accept-Encoding") or "").lower():
@@ -837,7 +856,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"projects": projects.view(found, srv.index(stale_ok=True), updates),
                                "hidden_left_out": not self._unlocked() and bool(MarkStore().keys("hidden"))}, compress=True)
         if path.startswith("/api/vpm"):   # Projects (hoard/vpm)
-            return self._vpm_get(path, parse_qs(u.query))
+            return self._vpm_logged(path, self._vpm_get, parse_qs(u.query))
         if path == "/api/space":   # Downloads, Disk space: the same file kept more than once (hoard/space.py)
             hidden = frozenset() if self._unlocked() else frozenset(MarkStore().keys("hidden"))
             with srv.cfg_lock:
@@ -845,6 +864,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({**space.copies(roots, hidden), "projects": len(self._visible_projects())}, compress=True)
         if path == "/api/settings":
             return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
+        if path == "/api/folders":   # Settings' Hoard's folders: every one it uses, where it is, and whether it's there
+            return self._json({"folders": self._places()})
         if path == "/api/update":
             return self._json(srv.updates.view(srv.can_update()))
         if path == "/api/changelog":   # What's new, in the app: betas too when asked for (?betas=1)
@@ -1367,6 +1388,26 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _places(self) -> list[dict]:
+        """Every folder Hoard uses (places.py), Projects' too when the Creator Companion's settings can be read."""
+        try:
+            vpm_settings = self.server.vpm.settings()
+        except vpm_api.ProjectsError:
+            vpm_settings = None
+        return places.places(self.server.cfg, vpm_settings)
+
+    def _vpm_logged(self, path: str, handle, arg):
+        """A Projects request: what it couldn't do is said in Projects' log too (by _json), as ALCOM's log says it."""
+        self._vpm_doing = VPM_ACTIONS.get(path)
+        try:
+            return handle(path, arg)
+        except Exception as e:
+            if self._vpm_doing:
+                vpm_log.error(f"{self._vpm_doing}: {type(e).__name__}: {e}")
+            raise
+        finally:
+            self._vpm_doing = None
+
     def _vpm_get(self, path: str, query: dict):
         srv = self.server
         one = lambda k: (query.get(k) or [""])[0][:2000]  # noqa: E731
@@ -1374,6 +1415,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vpm":
                 return self._json({**srv.vpm.overview(), "job": public_job(srv.project_jobs.state, self._hidden_names())},
                                   compress=True)
+            if path == "/api/vpm/logs":   # Projects' log: this run's entries after the one numbered after
+                after = one("after")
+                return self._json({"run": vpm_log.book.run, "entries": vpm_log.book.entries(int(after) if after.isdigit() else 0),
+                                   "file": vpm_log.book.file.name if vpm_log.book.file else None})
             if path == "/api/vpm/project":
                 found = srv.vpm.project(one("path"))
                 report = next((r for r in projects.read_all() if r.get("path") and os.path.normcase(os.path.normpath(r["path"]))
@@ -1399,7 +1444,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self._hidden_key(key):
                     return self._json({"error": "Unlock your hidden library first."}, 403)
                 index = srv.index(stale_ok=True)
-                return self._json(srv.vpm.product(asset, srv.needs_view(index).get(asset["id"])))
+                return self._json(srv.vpm.product(asset, srv.needs_view(index).get(asset["id"]), one("path") or None))
         except vpm_api.ProjectsError as e:
             return self._json({"error": str(e)}, 400)
         return self._send(404, b"Not found", "text/plain")
@@ -1459,6 +1504,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vpm/backups/delete":
                 from .vpm import backup as vpm_backup
                 count, freed = vpm_backup.delete(srv.vpm.backups_chosen(body.get("paths")))
+                if count:
+                    vpm_log.info(f"Deleted {vpm_log.count(count, 'backup')}, freeing {vpm_log.size_text(freed)}")
                 return self._json({"ok": True, "deleted": count, "freed": freed})
             if path == "/api/vpm/backups/move":
                 paths = srv.vpm.backups_chosen(body.get("paths"))
@@ -1483,6 +1530,8 @@ class Handler(BaseHTTPRequestHandler):
                                                 "choose another version to open it in."}, 400)
                 vpm_unity.open_project(Path(editor), Path(found["path"]))
                 listing.note(found["path"], opened=time.strftime("%Y-%m-%dT%H:%M:%S"))
+                version = next((e["version"] for e in found["editors"] if e["path"] == editor), found["unity"])
+                vpm_log.info(f"Opened {found['name']} in Unity {version}")
                 return self._json({"ok": True})
             if path == "/api/vpm/open-folder":
                 where = Path(srv.vpm.listed(body.get("path")))
@@ -1496,9 +1545,14 @@ class Handler(BaseHTTPRequestHandler):
                 if not where or not Path(where).is_absolute() or not Path(where).is_dir() or not is_project(Path(where)):
                     return self._json({"error": "That folder isn't a Unity project."}, 400)
                 listing.add(str(Path(where)))
+                vpm_log.info(f"Added {Path(where).name} to the list ({Path(where)})")
                 return self._json({"ok": True})
             if path == "/api/vpm/remove-project":
-                return self._json({"ok": listing.remove(srv.vpm.listed(body.get("path")))})
+                where = srv.vpm.listed(body.get("path"))
+                ok = listing.remove(where)
+                if ok:
+                    vpm_log.info(f"Took {Path(where).name} off the list ({where})")
+                return self._json({"ok": ok})
             if path == "/api/vpm/delete-project":   # from this computer: only with its name typed, as a task
                 where = srv.vpm.listed(body.get("path"))
                 if str(body.get("confirm") or "") != Path(where).name:
@@ -1516,11 +1570,16 @@ class Handler(BaseHTTPRequestHandler):
                 except vpm_repos.RepoError as e:
                     return self._json({"error": str(e)}, 400)
                 srv.vpm.forget()
+                vpm_log.info(f"Added the repository {repo.label()} ({vpm_log.count(len(repo.packages), 'package')})")
                 return self._json({"ok": True, "label": repo.label(), "packages": len(repo.packages)})
             if path == "/api/vpm/repos/remove":
                 from .vpm import repos as vpm_repos
-                ok = vpm_repos.remove_repo(srv.vpm.settings(), str(body.get("path") or "")[:2000])
+                local = str(body.get("path") or "")[:2000]
+                label = next((r.label() for r in srv.vpm.collection().repos if str(r.path) == local), local)
+                ok = vpm_repos.remove_repo(srv.vpm.settings(), local)
                 srv.vpm.forget()
+                if ok:
+                    vpm_log.info(f"Removed the repository {label}")
                 return self._json({"ok": ok})
             if path == "/api/vpm/settings":
                 settings = srv.vpm.settings()
@@ -1532,19 +1591,30 @@ class Handler(BaseHTTPRequestHandler):
                 if isinstance(body.get("prerelease"), bool):
                     settings.set("showPrereleasePackages", body["prerelease"])
                 settings.save()
+                vpm_log.info("Saved Unity and folders: projects in " + str(settings.default_project_path() or "the usual folder") +
+                             ", backups in " + str(settings.project_backup_path() or "the usual folder") +
+                             (", prerelease packages shown" if settings.show_prerelease() else ""))
                 return self._json({"ok": True})
             if path == "/api/vpm/presets":
                 action = body.get("action")
                 if action == "save":
-                    return self._json({"ok": True, "preset": vpm_presets.save(body.get("preset") or {})})
+                    saved = vpm_presets.save(body.get("preset") or {})
+                    vpm_log.info(f"Saved the preset {saved['name']}")
+                    return self._json({"ok": True, "preset": saved})
                 if action == "delete":
-                    return self._json({"ok": vpm_presets.delete(str(body.get("id") or "")[:40])})
+                    gone = next((x["name"] for x in vpm_presets.load() if x["id"] == body.get("id")), None)
+                    ok = vpm_presets.delete(str(body.get("id") or "")[:40])
+                    if ok and gone:
+                        vpm_log.info(f"Deleted the preset {gone}")
+                    return self._json({"ok": ok})
                 if action == "export":
                     preset = next((x for x in vpm_presets.load() if x["id"] == body.get("id")), None)
                     if preset is None:
                         return self._json({"error": "That preset isn't there any more."}, 404)
                     assets = {x["key"]: srv.asset_by_key(x["key"]) for x in preset["products"]}
-                    return self._json({"ok": True, **vpm_presets.export_alcom(preset, assets, srv.vpm.settings().folder)})
+                    out = vpm_presets.export_alcom(preset, assets, srv.vpm.settings().folder)
+                    vpm_log.info(f"Saved the preset {preset['name']} for ALCOM too ({out['path']})")
+                    return self._json({"ok": True, **out})
                 return self._json({"error": "Bad request."}, 400)
         except vpm_presets.PresetError as e:
             return self._json({"error": str(e)}, 400)
@@ -1888,6 +1958,19 @@ class Handler(BaseHTTPRequestHandler):
                     kept_short = gone["short"]["expires"]   # (it runs out by itself)
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
             return self._json({"ok": True, "made": data.get("made"), **({"kept_short": kept_short} if kept_short else {})})
+        if path == "/api/folders/open":   # one of Settings' Hoard's folders, by its name: never a path the page sends
+            found = places.find(self._places(), body.get("id"))
+            if found is None:
+                return self._json({"error": "That isn't one of Hoard's folders."}, 400)
+            folder = Path(found["path"])
+            try:
+                if found["id"] in places.OWN:
+                    folder.mkdir(parents=True, exist_ok=True)
+                elif not folder.is_dir():
+                    return self._json({"error": "That folder isn't there yet."}, 404)
+                return self._json({"ok": True, "opened_in": reveal(folder)})
+            except OSError as e:
+                return self._json({"error": f"It didn't open ({e.strerror or e})."}, 500)
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)
@@ -1974,7 +2057,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/libraries/add", "/api/libraries/remove"):   # the other library folders, from Settings
             return self._library_folders(path, body)
         if path.startswith("/api/vpm/"):   # Projects (hoard/vpm)
-            return self._vpm_post(path, body)
+            return self._vpm_logged(path, self._vpm_post, body)
         if path == "/api/projects/forget":   # a Unity project out of Projects (issue #86); opening it again brings it back
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)

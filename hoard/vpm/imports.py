@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from ..safety import DataFileError, read_json_file, write_file_safely
+from .logbook import Warn
 
 LOG_FILE = ("ProjectSettings", "Hoard", "imports.json")
 NOTE_NAME = "Hoard imports.md"
@@ -123,7 +124,7 @@ def note(project, results: list[dict], log=None) -> None:
         _add_to_log(project, entries(results, time.strftime("%Y-%m-%dT%H:%M:%SZ", now)))
     except OSError as e:
         if log:
-            log(f"Couldn't add them to the project's list of imports ({e})")
+            log(Warn(f"Couldn't add them to the project's list of imports ({e})"))
     path = project / NOTE_NAME
     try:
         before = path.read_text("utf-8") if path.is_file() else ""
@@ -133,4 +134,4 @@ def note(project, results: list[dict], log=None) -> None:
         write_file_safely(path, (before or NOTE_HEAD) + section(results, time.strftime("%d %b %Y, %H:%M (UTC)", now)))
     except OSError as e:
         if log:
-            log(f"Couldn't write {NOTE_NAME} ({e})")
+            log(Warn(f"Couldn't write {NOTE_NAME} ({e})"))
