@@ -22,6 +22,10 @@
   each package comes from.
 - In a project, **From your library** and **What Hoard for Unity found** show products as their library tiles, with
   the files that went in (or how each is in the project) beneath. Choose one to see it in your library.
+- **Settings is a page of its own,** the whole window below the bar as Projects is, with its parts listed down the
+  side to jump to. A new part, **Hoard's folders**, lists every folder Hoard uses (your downloads and library
+  folders, editable copies, Hoard's own folder, logs, backups, support reports, store sign-ins, and Projects'),
+  what each is for and where it is, each with **Open**.
 
 ## 5.1.2
 

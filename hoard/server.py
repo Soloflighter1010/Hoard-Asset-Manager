@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -52,7 +52,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/download", "/api/sync", "/api/cancel", "/api/force-stop", "/api/settings", "/api/setup/browser", "/api/setup/done",
            "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
-           "/api/app/close", "/api/open-logs",
+           "/api/app/close", "/api/open-logs", "/api/folders/open",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
@@ -864,6 +864,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({**space.copies(roots, hidden), "projects": len(self._visible_projects())}, compress=True)
         if path == "/api/settings":
             return self._json({**public_settings(srv.cfg), "libraries": srv.library_view()})
+        if path == "/api/folders":   # Settings' Hoard's folders: every one it uses, where it is, and whether it's there
+            return self._json({"folders": self._places()})
         if path == "/api/update":
             return self._json(srv.updates.view(srv.can_update()))
         if path == "/api/changelog":   # What's new, in the app: betas too when asked for (?betas=1)
@@ -1385,6 +1387,14 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 return True
         return False
+
+    def _places(self) -> list[dict]:
+        """Every folder Hoard uses (places.py), Projects' too when the Creator Companion's settings can be read."""
+        try:
+            vpm_settings = self.server.vpm.settings()
+        except vpm_api.ProjectsError:
+            vpm_settings = None
+        return places.places(self.server.cfg, vpm_settings)
 
     def _vpm_logged(self, path: str, handle, arg):
         """A Projects request: what it couldn't do is said in Projects' log too (by _json), as ALCOM's log says it."""
@@ -1948,6 +1958,19 @@ class Handler(BaseHTTPRequestHandler):
                     kept_short = gone["short"]["expires"]   # (it runs out by itself)
             threading.Thread(target=rebuild_catalog_quietly, args=(srv,), daemon=True).start()   # (Unity's Import set)
             return self._json({"ok": True, "made": data.get("made"), **({"kept_short": kept_short} if kept_short else {})})
+        if path == "/api/folders/open":   # one of Settings' Hoard's folders, by its name: never a path the page sends
+            found = places.find(self._places(), body.get("id"))
+            if found is None:
+                return self._json({"error": "That isn't one of Hoard's folders."}, 400)
+            folder = Path(found["path"])
+            try:
+                if found["id"] in places.OWN:
+                    folder.mkdir(parents=True, exist_ok=True)
+                elif not folder.is_dir():
+                    return self._json({"error": "That folder isn't there yet."}, 404)
+                return self._json({"ok": True, "opened_in": reveal(folder)})
+            except OSError as e:
+                return self._json({"error": f"It didn't open ({e.strerror or e})."}, 500)
         if path == "/api/open-logs":   # Settings, Troubleshooting: a log for each time Hoard started, 30 days' worth
             from .paths import logs_dir
             logs_dir().mkdir(parents=True, exist_ok=True)

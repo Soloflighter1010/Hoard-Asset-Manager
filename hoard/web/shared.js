@@ -783,6 +783,37 @@ function renderLibs(list) {   // every library folder, the downloads folder firs
     (l.available ? `<button class="ghost sm" data-lib-open="${l.n}">Open</button>` : "") +
     (l.main ? "" : `<button class="ghost sm" data-lib-remove="${l.n}">Remove</button>`) + `</div>`).join("");
 }
+// Settings' Hoard's folders (hoard/places.py): every folder Hoard uses, what each is for, where it is, and Open. They're
+// opened by their name, never their path; Hoard's own are made when you open one that isn't there yet.
+const PLACES = {
+  downloads: ["Downloads folder", "Where downloaded files are saved."],
+  library: ["", "A library folder on another drive."],
+  edits: ["Editable copies", "Editable copies of downloads, and what Look inside takes out (in Extracted)."],
+  data: ["Hoard's own folder", "Your settings, library list, tags, sets, and what Hoard keeps track of."],
+  logs: ["Logs", "A log of each time Hoard runs, and Projects' logs."],
+  backups: ["Backups", "The backups you make (Backup, below)."],
+  reports: ["Support reports", "The support reports you create (Troubleshooting, below)."],
+  signins: ["Store sign-ins", "Hoard's own browser profiles for your stores, with your sign-ins. Never share what's in it."],
+  vcc: ["The Creator Companion's folder", "The project list, repositories and Unity settings Projects shares with ALCOM and the Creator Companion, and their logs."],
+  projects: ["New projects", "Where Projects makes new projects."],
+  "project-backups": ["Project backups", "Where Projects backs projects up."] };
+const PLACES_OWN = new Set(["data", "logs", "backups", "reports"]);
+const FOLDER_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 6.5a2 2 0 0 1 2-2h3.2l1.8 2h6a2 2 0 0 1 2 2v5.5a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z"/></svg>';
+async function loadPlaces() {
+  const box = $("#setPlaces");
+  if (!box) return;
+  let found = null;
+  try { const r = await api("/api/folders", { cache: "no-store" }); if (r.ok) found = (await r.json()).folders; } catch (e) { /* said below */ }
+  if (!found) { box.innerHTML = `<p class="hint">${esc(tr("Hoard's folders couldn't be read just now."))}</p>`; return; }
+  box.innerHTML = found.map(p => {
+    const [name, what] = PLACES[p.id.startsWith("library-") ? "library" : p.id] || [p.id, ""], opens = p.exists || PLACES_OWN.has(p.id);
+    return `<div class="librow${opens ? "" : " away"}" data-place-row="${esc(p.id)}">${FOLDER_ICON}<span class="lp">` +
+      `<b>${p.label ? `<span translate="no">${esc(p.label)}</span>` : esc(tr(name))}</b><small>${esc(tr(what))}</small>` +
+      `<small translate="no">${esc(p.path)}</small></span>` +
+      (opens ? `<button class="ghost sm" data-place="${esc(p.id)}">${esc(tr("Open"))}</button>`
+        : `<span class="muted">${esc(tr("Not there yet"))}</span>`) + `</div>`;
+  }).join("");
+}
 async function libraryChange(path, body) {
   $("#libMsg").textContent = "";
   const r = await apiPost(path, body);
@@ -790,6 +821,7 @@ async function libraryChange(path, body) {
   SETTINGS.libraries = r.data.libraries;
   if (typeof DATA === "object" && DATA) DATA.libraries = r.data.libraries;
   renderLibs(r.data.libraries);
+  loadPlaces();   // (a library folder added or taken off)
   await T.reload();
   return r.data.libraries;
 }
@@ -814,6 +846,13 @@ function wireLibs() {
   };
   $("#libAdd").addEventListener("click", add);
   $("#libPath").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+  $("#setPlaces").addEventListener("click", async e => {
+    const b = e.target.closest("[data-place]");
+    if (!b) return;
+    const r = await apiPost("/api/folders/open", { id: b.dataset.place });
+    toast(r.ok ? tr("Opened in {0}", tr(r.data.opened_in)) : r.data.error || tr("That folder didn't open."));
+    if (r.ok) loadPlaces();   // (one of Hoard's own, made as it opened)
+  });
   $("#setLibs").addEventListener("click", async e => {
     const open = e.target.closest("[data-lib-open]");
     if (open) {
@@ -1088,6 +1127,7 @@ function fillSettings() {   // the controls, as the settings are now
   syncBrowse();
   $("#setRoot").value = SETTINGS.root;
   renderLibs(SETTINGS.libraries);
+  loadPlaces();
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setPrevious").value = String(SETTINGS.keep_previous ?? 1);

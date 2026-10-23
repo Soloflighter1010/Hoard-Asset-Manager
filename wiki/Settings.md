@@ -1,10 +1,12 @@
 Everyday choices are in **Settings** (top right). A few rarer ones only live in `config.json`.
 
-## The Settings panel
+## The Settings page
 
-Settings opens in a panel over the page, like Tags, Stores and Tasks; one of them is open at a time. **×**,
-Escape or a click on the page around it closes it. Each change is **saved as you make it**: a box or a list
-straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
+Settings is a page of its own (from 5.1.3), the whole window below the bar, as [Projects](Projects) is: its parts
+are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Look**, **Sign-ins**,
+**Updates**, **Backup**, **Troubleshooting**) to jump to, or along the top in a narrow window. **×** or Escape
+closes it. Each change is **saved as you make it**: a box or a list straight away, a folder or the Payhip shops
+when you leave the field. The title bar says **Saved**.
 
 
 - **Downloads folder:** where downloaded files are saved. A `Hoard` folder in your Documents unless you choose
@@ -16,6 +18,12 @@ straight away, a folder or the Payhip shops when you leave the field. The title 
   its drive isn't connected), and **Open**. **Add a folder…** picks one and adds it (in Hoard's window), or type a
   path and choose **Add**. **Remove** only stops Hoard reading a folder: its files stay. Each folder gets a tab in
   Downloads. See [Downloads](Downloads#library-folders-on-other-drives).
+- **Hoard's folders:** every folder Hoard uses, what each is for and where it is, each with **Open**: the
+  downloads folder and your library folders, editable copies (and what Look inside takes out), Hoard's own folder
+  (your settings, library list, tags and sets), logs, backups, support reports, store sign-ins (Hoard's own browser
+  profiles: never share what's in it), and Projects' (the Creator Companion's folder, where new projects are made,
+  and project backups). One that isn't there yet says so; Hoard's own are made when you open them. See
+  [Where Hoard keeps things](Where-Hoard-Keeps-Things).
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.
   - Gumroad: **Include archived purchases**.
