@@ -1008,6 +1008,63 @@ function wireSearch() {
   m.addEventListener("click", e => { const o = e.target.closest(".qopt"); if (o) chooseSearchOffer(+o.dataset.i); });
 }
 
+/* ---------- back and forward (issue #211). Each place you go is a step in the page's history: a store's tab, Sets
+   and Wishlists, a set or wishlist, a view of Downloads, a product's details, and Settings, Tasks, Projects (and a
+   project in it), Stores and Tags. So the mouse's back and forward buttons, and Alt+Left and Alt+Right, go back and
+   forward through them, and Back closes a panel before it leaves the page. The search, the filters and the sort
+   change the address in place: they aren't places. */
+const PLACE_PARTS = ["store", "set", "view", "space", "open", "win", "project"];
+const WIN_PLACES = { settingsPanel: "settings", tasksWin: "tasks", projectsWin: "projects", stores: "stores", tagPanel: "tags" };
+const WIN_OPEN = { settings: () => openSettings(true), tasks: () => openTasks(true), projects: () => openProjects(true),
+                   stores: () => { if (typeof openStores === "function") openStores(true); }, tags: () => openTagPanel(true) };
+const NAV = { at: null, quiet: false, back: null };
+const placeOf = p => PLACE_PARTS.map(k => p.get(k) || "").join("|");
+const placeWindow = () => [...document.querySelectorAll(".win:not([hidden])")].find(el => WIN_PLACES[el.id]);
+/** The page's state (p, as its saveHash has it) and the open window into the address: a new step in the page's
+ *  history when the place changed, the same step when only the search or filters did. */
+function setAddress(p) {
+  if (NAV.quiet) return;   // (going Back or Forward: the address already says where)
+  const w = placeWindow();
+  if (w) p.set("win", WIN_PLACES[w.id]);
+  if (w && w.id === "projectsWin" && PJ.view === "project" && PJ.project) p.set("project", PJ.project.path);
+  const h = p.toString(), url = h ? "#" + h : location.pathname, place = placeOf(p);
+  if (place === NAV.at && (h ? "#" + h : "") === location.hash) return;   // (nothing changed: the page draws often)
+  if (NAV.at === null || place === NAV.at) history.replaceState(history.state, "", url);
+  else if ((history.state || {}).from === place) { NAV.back = url; history.back(); }   // where this step came from: as Back
+  else history.pushState({ from: NAV.at }, "", url);
+  NAV.at = place;
+}
+const addressNow = () => { if (typeof saveHash === "function" && NAV.at !== null) saveHash(); };
+function goToAddress() {   // Back or Forward: show the place the address names
+  if (NAV.back !== null) { history.replaceState(history.state, "", NAV.back); NAV.back = null; return; }   // (closed already)
+  const p = new URLSearchParams(location.hash.slice(1)), want = p.get("win") || "";
+  NAV.quiet = true;
+  try {
+    if (selMenu) closeSelMenu();
+    T.goTo();
+    const open = placeWindow();
+    if (open && WIN_PLACES[open.id] !== want) WINDOWS[open.id]();
+    if (want && (!open || WIN_PLACES[open.id] !== want) && WIN_OPEN[want]) WIN_OPEN[want]();
+    const project = p.get("project");
+    if (want === "projects" && project && !(PJ.view === "project" && PJ.project && PJ.project.path === project)) openProject(project);
+    else if (want === "projects" && !project && PJ.view === "project") { PJ.view = "list"; drawProjects(); }
+  } finally { NAV.quiet = false; }
+  NAV.at = placeOf(new URLSearchParams(location.hash.slice(1)));
+}
+addEventListener("popstate", goToAddress);
+// the mouse's back and forward buttons, and Alt+Left and Alt+Right, here as in a browser (Hoard's window too)
+addEventListener("mouseup", e => {
+  if (e.button !== 3 && e.button !== 4) return;
+  e.preventDefault();
+  if (e.button === 3) history.back(); else history.forward();
+});
+document.addEventListener("keydown", e => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName) || document.querySelector("dialog[open]")) return;
+  e.preventDefault();
+  if (e.key === "ArrowLeft") history.back(); else history.forward();
+});
+
 /* the tag manager */
 function openTagPanel(open) {
   const p = $("#tagPanel"), show = open ?? p.hidden;
@@ -1564,7 +1621,7 @@ let setSideFold = null;
 function uiSave(part) {
   uiPending = uiPending || {};
   for (const [k, v] of Object.entries(part)) {
-    const obj = v && typeof v === "object";
+    const obj = v && typeof v === "object" && !Array.isArray(v);   // (a list, as the sets used last, is one value)
     UI[k] = obj ? { ...(UI[k] || {}), ...v } : v;
     uiPending[k] = obj ? { ...(uiPending[k] || {}), ...v } : v;
   }
@@ -1594,6 +1651,7 @@ function winOpened(el) {   // one panel at a time: the others close as this one 
   el.scrollTop = 0;
   // The keyboard goes with it: into the panel now, and back to what opened it when it closes
   if (from && from !== document.body && !el.contains(from)) el._opener = from.closest(".win") ? from.closest(".win")._opener : from;
+  addressNow();
   requestAnimationFrame(() => {
     if (el.hidden || el.contains(document.activeElement) || document.querySelector("dialog[open]")) return;
     const first = winFocusables(el).find(n => !n.classList.contains("win-x")) || el.querySelector(".win-x");
@@ -1602,6 +1660,7 @@ function winOpened(el) {   // one panel at a time: the others close as this one 
 }
 function winClosed(el) {
   winShade();
+  addressNow();
   const back = el._opener;
   el._opener = null;
   const lost = !document.activeElement || document.activeElement === document.body || el.contains(document.activeElement);
@@ -1988,6 +2047,7 @@ async function loadProjects(view) {
 let pjDrawn = "";
 const pjTicks = el => el.type === "checkbox";
 function drawProjects() {
+  addressNow();   // (a project open, or the list: a place)
   const body = $("#projectsBody");
   const views = { list: pjList, project: pjProject, new: pjNew, repos: pjRepos, settings: pjSettings, report: pjReportView, backups: pjBackups,
                   addnew: pjAddNew, logs: pjLogs };
@@ -3081,10 +3141,33 @@ async function addToSet(list, id) {
     if (!name) return;
     const done = await changeSets({ action: "create", name, items });
     if (done) toast(tr(items.length === 1 ? "Made the set {0}, with this in it." : "Made the set {0}, with {1} products in it.", name, items.length));
+    if (done && done.made) setUsed(done.made);
     return;
   }
   const done = await changeSets({ action: "add", id, items });
   if (done) toast(tr(items.length === 1 ? "Added it to {0}." : "Added {1} products to {0}.", (setById(id) || {}).name || "", items.length));
+  if (done) setUsed(id);
+}
+// The right-click menu names the sets you added to last, five at most, and the newest when you haven't yet; the
+// rest are a search away, in Add to another set (issue #228: with every set, it grew taller than the window)
+const SETS_IN_MENU = 5;
+const setUsed = id => uiSave({ recent_sets: [id, ...(UI.recent_sets || []).filter(x => x !== id)].slice(0, 10) });
+function setsInMenu() {
+  const all = DATA.sets || [], byId = new Map(all.map(s => [s.id, s]));
+  const recent = (UI.recent_sets || []).map(id => byId.get(id)).filter(Boolean);
+  return [...new Set([...recent, ...[...all].reverse()])].slice(0, SETS_IN_MENU);
+}
+async function addToAnotherSet(list) {   // any set, by its name: the box offers them as you type
+  const all = DATA.sets || [];
+  let names = $("#setNames");
+  if (!names) { names = document.createElement("datalist"); names.id = "setNames"; document.body.appendChild(names); }
+  names.innerHTML = all.map(s => `<option value="${esc(s.name)}">`).join("");
+  const name = await askName("Add to which set?", "", { list: "setNames", max: 80 });
+  if (!name) return;
+  const exact = all.filter(s => norm(s.name) === norm(name)), near = all.filter(s => norm(s.name).includes(norm(name)));
+  const found = exact.length ? exact : near;
+  if (found.length === 1) return addToSet(list, found[0].id);
+  toast(found.length ? tr("More than one set has {0} in its name: type more of it.", name) : tr("There's no set called {0}.", name));
 }
 /* Mix and match (issue #156): an outfit picked at random from what you own, to try something new with what you have.
    An avatar from your tags whose kind is Avatar, and one product from each tag whose kind is Clothing (tops, shoes,
@@ -3161,7 +3244,8 @@ async function takeOutOfSet(list) {   // from the set that's open
 const SET_ACTIONS = () => ({ name: "Sets", items: [
   ...(inSets() && setById(state.set) ? [{ label: tr("Take out of {0}", setById(state.set).name), raw: true, run: takeOutOfSet }] : []),
   { label: "New set from these...", run: list => addToSet(list, "new") },
-  ...(DATA.sets || []).map(s => ({ label: tr("Add to {0}", s.name), raw: true, run: list => addToSet(list, s.id) }))] });
+  ...setsInMenu().map(s => ({ label: tr("Add to {0}", s.name), raw: true, run: list => addToSet(list, s.id) })),
+  ...((DATA.sets || []).length > SETS_IN_MENU ? [{ label: "Add to another set...", run: addToAnotherSet }] : [])] });
 
 let SETS = null;   // the sets as /api/sets has them, each product as it is here (downloaded, yours, or where to buy it)
 let setExtraOpen = true, setViewShown = "", setMoreShown = "", setKeysFor = null, setKeys = new Set();

@@ -1897,6 +1897,76 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_back_and_forward(self):
+        """Issue #211: each place is a step in the page's history (a set, a product's details, Settings...), so Back
+        and Forward (the mouse's buttons, Alt+Left and Alt+Right) go through them, and Back closes a panel first."""
+        page = self.open()
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        key = page.evaluate("DATA.items.find(a => a.name === 'Rusk').tag_key")
+        made = page.evaluate(post, ["/api/sets", {"action": "create", "name": "Spring", "items": [key]}])["made"]
+        try:
+            page.evaluate("load()")
+            page.wait_for_function("() => (DATA.sets || []).length === 1")
+            page.click("nav.apptabs a[href='/#store=Sets']")
+            page.locator("#setView .settile", has_text="Spring").click()
+            page.wait_for_function("id => state.set === id", arg=made)
+            page.go_back()   # the list of sets
+            page.wait_for_function("() => state.store === 'Sets' && state.set === ''")
+            page.go_forward()   # the set again
+            page.wait_for_function("id => state.set === id", arg=made)
+            page.go_back()
+            page.go_back()   # the tab before Sets
+            page.wait_for_function("() => state.store === ''")
+            page.locator(".slot", has_text="Mochi").click()   # a product's details, then Settings over them
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            page.go_back()   # Settings closes, the details stay
+            page.locator("#settingsPanel").wait_for(state="hidden")
+            self.assertTrue(page.evaluate("document.querySelector('#detail').classList.contains('open')"))
+            page.mouse.move(400, 400)
+            page.evaluate("dispatchEvent(new MouseEvent('mouseup', { button: 3, bubbles: true }))")   # the mouse's back button
+            page.wait_for_function("() => !document.querySelector('#detail').classList.contains('open')")
+            page.keyboard.press("Alt+ArrowRight")   # forward: the details again
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            page.locator("#detail .x").click()   # closed by its ×: a step back, not a new one
+            page.wait_for_function("() => !document.querySelector('#detail').classList.contains('open')")
+            page.go_forward()
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            self.assertEqual(self.errors, [])
+        finally:
+            page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])
+        page.close()
+
+    def test_the_right_click_menu_names_a_few_sets(self):
+        """Issue #228: the right-click menu named every set, taller than the window with 16 of them. Now it names the
+        five you added to last (the newest, before you have), and Add to another set... finds the rest by name."""
+        page = self.open()
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        made = [page.evaluate(post, ["/api/sets", {"action": "create", "name": f"Set {n:02}", "items": []}])["made"] for n in range(16)]
+        try:
+            page.evaluate("load()")
+            page.wait_for_function("() => (DATA.sets || []).length === 16")
+            page.locator(".slot", has_text="Anko").click(button="right")
+            adds = lambda: [t for t in page.locator(".selmenu [role=menuitem]").all_inner_texts() if t.startswith("Add to")]
+            page.locator(".selmenu").wait_for()
+            self.assertEqual(adds(), ["Add to Set 15", "Add to Set 14", "Add to Set 13", "Add to Set 12", "Add to Set 11",
+                                      "Add to another set..."], "the newest five, then the rest by name")
+            page.locator(".selmenu [role=menuitem]", has_text="Add to another set...").click()
+            page.locator("dialog.ask #askName").fill("set 03")
+            page.keyboard.press("Enter")
+            page.wait_for_function("id => (DATA.sets.find(s => s.id === id) || {}).items.length === 1", arg=made[3])
+            page.locator(".slot", has_text="Anko").click(button="right")
+            page.locator(".selmenu").wait_for()
+            self.assertEqual(adds()[:2], ["Add to Set 03", "Add to Set 15"], "the one you added to last, first")
+            page.keyboard.press("Escape")
+            self.assertEqual(self.errors, [])
+        finally:
+            for sid in made:
+                page.evaluate(post, ["/api/sets", {"action": "delete", "id": sid}])
+            self.srv.cfg.get("ui", {}).pop("recent_sets", None)
+        page.close()
+
     def test_sync_asks_first(self):
         """Issue #214: Sync says what it does, and on which stores, and starts only after Start."""
         page = self.open()

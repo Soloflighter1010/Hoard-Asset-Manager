@@ -2295,6 +2295,7 @@ function showDetail(a, focus = true) {
   detail.classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 820px)").matches;
   if (focus) detail.querySelector(".x").focus();
+  saveHash();
 }
 function closeDetail() {
   if (openId == null) return;
@@ -2303,6 +2304,7 @@ function closeDetail() {
   openId = null;
   markCurrent(null);
   if (back) back.focus();
+  saveHash();
 }
 async function reveal(path) {
   try {
@@ -2524,8 +2526,8 @@ function saveHash() {
   if (state.sort !== "name") p.set("sort", state.sort);
   if (state.view !== "downloads") p.set("view", state.view);
   if (state.view === "space" && state.space) p.set("space", state.space);
-  const h = p.toString();
-  history.replaceState(null, "", h ? "#" + h : location.pathname);
+  if (openId != null) p.set("open", openId);   // (a product's details: a place, for Back and Forward)
+  setAddress(p);
 }
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -2904,6 +2906,13 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  goTo: () => {   // Back or Forward (shared.js): the tab, view, filters and details the address names
+    const want = new URLSearchParams(location.hash.slice(1)).get("open"), was = openId;
+    readHash();
+    if (!want) { openId = was; closeDetail(); }
+    render();
+    if (want && byId.has(+want) && (+want !== was || !detail.classList.contains("open"))) showDetail(byId.get(+want), false);
+  },
   pickHere: () => {   // Projects' Put in products from your library: what's downloaded, to choose from (pickStart)
     if (state.store === "Sets") { state.store = ""; state.set = ""; }
     state.view = "downloads";

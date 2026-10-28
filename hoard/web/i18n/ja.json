@@ -1992,5 +1992,9 @@
  "Open this project": "このプロジェクトを開く",
  "In {0}": "{0}の中",
  "A part of Settings": "設定の項目",
- "Nothing by that name.": "その名前のものはありません。"
+ "Nothing by that name.": "その名前のものはありません。",
+ "Add to another set...": "別のセットに追加...",
+ "Add to which set?": "どのセットに追加しますか?",
+ "More than one set has {0} in its name: type more of it.": "名前に「{0}」を含むセットが複数あります。もう少し長く入力してください。",
+ "There's no set called {0}.": "「{0}」という名前のセットはありません。"
 }

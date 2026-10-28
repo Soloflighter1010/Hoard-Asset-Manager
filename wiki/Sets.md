@@ -35,7 +35,8 @@ how to put it together) and **Photos** (below).
 - **New set**, in the Sets tab, then add products to it.
 - Choose products in the **Library** or in **Downloads** (tick their boxes, Ctrl- or Shift-click, or **Select**
   on a touch screen), then **Sets** in the selection bar (or right-click): **New set from these...**, or **Add to**
-  a set you have. In the Library that works whether they're downloaded or not.
+  a set you have: the five you added to last (or the newest), and **Add to another set...** for the rest, by name
+  (5.2.0). In the Library that works whether they're downloaded or not.
 - A product's details, in the Library or in Downloads, list its sets: **Add** puts it in another, **×** takes it
   out, and a set's name opens it in the Sets tab.
 - **Make a set** in **Projects** makes one of the products a Unity project uses.

@@ -43,7 +43,11 @@ The **Library** shows everything you own on the stores you use, whether or not y
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
   library** in Settings). What was already there when Hoard first read a store isn't new.
 
-Your search, filters and sort are kept in the page's address, so going back returns you to the same view.
+Your search, filters and sort are kept in the page's address, so going back returns you to the same view. Each
+place you go is a step back and forward (5.2.0): a store's tab, Sets and Wishlists, a set or wishlist, a view of
+Downloads, a product's details, and Settings, Tasks, Projects (and a project in it), Stores and Tags. The mouse's
+back and forward buttons, or Alt+Left and Alt+Right, go through them, so Back closes a panel before it leaves the
+page.
 
 ## An item's details
 

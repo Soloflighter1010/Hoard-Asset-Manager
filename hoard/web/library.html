@@ -2070,12 +2070,14 @@ function showDetail(a, focus = true) {
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
   if (focus) $("#detail .x").focus();
+  saveHash();
 }
 function closeDetail() {
   if (!openKey) return;
   $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   const back = document.querySelector(`.slot[data-key="${CSS.escape(openKey)}"]`) || lastFocus;
   openKey = null; markCurrent(null); if (back) back.focus();
+  saveHash();
 }
 // Close the details and empty them, so nothing of the item stays in the page (it's only out of view once closed).
 function forgetDetail() {
@@ -2094,7 +2096,8 @@ function saveHash() {
   if (state.fresh) p.set("new", "1");
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.sort !== "name") p.set("sort", state.sort);
-  const h = p.toString(); history.replaceState(null, "", h ? "#" + h : location.pathname);
+  if (openKey) p.set("open", openKey);   // (a product's details: a place, for Back and Forward)
+  setAddress(p);
 }
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
@@ -2505,6 +2508,13 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  goTo: () => {   // Back or Forward (shared.js): the tab, set, filters and details the address names
+    const want = new URLSearchParams(location.hash.slice(1)).get("open"), was = openKey;
+    readHash();
+    if (!want) { openKey = was; closeDetail(); }
+    render();
+    if (want && byKey.has(want) && (want !== was || !$("#detail").classList.contains("open"))) showDetail(byKey.get(want), false);
+  },
   all: () => DATA.items,
   membersOf: key => {   // a stack's copies, all chosen together (as many as "Copies of" shows)
     const a = byKey.get(key), k = a && stackKey(a);
