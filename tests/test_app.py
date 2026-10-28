@@ -1004,6 +1004,54 @@ class ArchiveHideRemove(unittest.TestCase):
         with self.assertRaises(Exception):
             st.change("hidden", {"booth:rusk"}, True)   # no PIN yet
 
+    def test_a_renamed_product_keeps_its_choice(self):
+        """Issue #224: a choice is kept by the product's name (as tags are), so a store renaming it, or a newer Hoard
+        reading its name differently, brought a removed product back into view. Each choice also remembers the
+        store's own key of what it was made for, and follows it to its new name."""
+        st = self.store()
+        st.change("removed", {"booth:oldsuit"}, True, {"booth:1": "booth:oldsuit", "booth:9": "booth:other", "bad": "booth:oldsuit"})
+        self.assertEqual(st.load()["ids"]["removed"], {"booth:1": "booth:oldsuit"}, "only the products marked, with good keys")
+        renamed = [{"key": "booth:1", "tag_key": "booth:newsuit"}, {"key": "booth:2", "tag_key": "booth:hat"}]
+        self.assertTrue(st.follow(renamed))
+        again = type(st)(st.path).load()
+        self.assertEqual(again["removed"], {"booth:oldsuit", "booth:newsuit"})
+        self.assertEqual(again["ids"]["removed"], {"booth:1": "booth:newsuit"})
+        self.assertFalse(st.follow(renamed), "nothing more to change, so nothing is written")
+        st.change("removed", {"booth:newsuit"}, False)   # restored under its new name: it stays restored
+        self.assertFalse(st.follow(renamed))
+        self.assertNotIn("booth:newsuit", st.load()["removed"])
+        st.change("removed", {"booth:hat"}, True)   # marked before Hoard kept store keys: they're learned
+        self.assertTrue(st.follow(renamed))
+        self.assertEqual(st.load()["ids"]["removed"]["booth:2"], "booth:hat")
+        self.assertTrue(st.follow([{"key": "booth:2", "tag_key": "booth:tophat"}]))
+        self.assertIn("booth:tophat", st.load()["removed"])
+
+    def test_the_library_follows_a_renamed_product(self):
+        from hoard import marks, tags
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        lib = srv.lib
+        with lib.lock:
+            lib.data["items"] = [library.item("booth", "701", name="Fox Suit"), library.item("booth", "702", name="Plain Hat")]
+            lib.save()
+        self.addCleanup(lambda: marks.MarkStore().path.unlink(missing_ok=True))   # (the data folder is every test's)
+
+        def call(method, path, body=None):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request(method, path, body=json.dumps(body) if body is not None else None,
+                      headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: srv.key})
+            r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+            return data
+        self.assertTrue(call("POST", "/api/marks", {"kind": "removed", "keys": [tags.tag_key("booth", "Fox Suit")], "on": True}).get("ok"))
+        with lib.lock:   # the store renamed it
+            lib.data["items"] = [library.item("booth", "701", name="Fox Suit Deluxe Edition"), library.item("booth", "702", name="Plain Hat")]
+            lib.save()
+        got = {i["name"]: i["mark"] for i in call("GET", "/api/library")["items"]}
+        self.assertEqual(got, {"Fox Suit Deluxe Edition": "removed", "Plain Hat": None})
+        self.assertIn(tags.tag_key("booth", "Fox Suit Deluxe Edition"), marks.MarkStore().load()["removed"])
+
     def test_pin(self):
         from hoard import marks
         st = self.store()

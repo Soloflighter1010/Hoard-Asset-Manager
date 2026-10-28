@@ -752,6 +752,7 @@ class Handler(BaseHTTPRequestHandler):
             tagdata = TagStore().load()
             items = enrich(items, srv.cfg["tags"], tagdata)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
+            MarkStore().follow(items)   # a product renamed since it was removed (or hidden...) stays so (issue #224)
             marks, unlocked = MarkStore().view(), self._unlocked()
             updates = AssetUpdates().load()["items"]
             cutoff = new_cutoff(srv.cfg)
@@ -970,7 +971,9 @@ class Handler(BaseHTTPRequestHandler):
                 marks = store.load()
                 if (keys & marks["hidden"]) and not self._unlocked() and not (kind == "hidden" and on):
                     return self._json({"error": "Unlock your hidden library first."}, 403)
-                store.change(kind, keys, on)
+                # each product's own key on its store, so the choice stays with it if the store renames it
+                ids = {i["key"]: k for i in srv.lib.snapshot()[0] if (k := tag_key(i["store"], i["name"])) in keys} if on else {}
+                store.change(kind, keys, on, ids)
             elif path == "/api/purge":   # removed products, deleted from Hoard's list for good
                 keys &= store.load()["removed"]
                 gone = srv.lib.forget_products(keys)

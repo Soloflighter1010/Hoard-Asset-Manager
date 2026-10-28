@@ -2,6 +2,9 @@
 
 Kept in marks.json in Hoard's app-data folder, sealed like every other data file. Choices are keyed by product (the
 same keys tags use), so they apply in the Library and in Downloads, and no refresh or import ever undoes them.
+Those keys come from a product's name, so each choice also remembers the store's own keys (store:id) of the
+products it was made for ("ids"): when a store renames a product, or Hoard reads its name differently after an
+update, its new name is marked too (follow), rather than the product coming back into view.
 
 - archived: out of the main library, in the Archive. Gumroad's own archived purchases start there too, unless
   you've moved one back ("unarchived").
@@ -22,6 +25,7 @@ import hashlib
 import json
 import hmac
 import os
+import re
 import secrets
 import threading
 import time
@@ -32,6 +36,7 @@ from .safety import DataFileError, check_seal, read_json_file, seal, write_file_
 from .tags import TAG_KEY_RX
 
 KINDS = ("archived", "unarchived", "removed", "hidden")
+ITEM_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):\S{1,300}\Z")   # a store's own key: store:id
 PHRASE_WORDS = 6
 WORDS = (Path(__file__).with_name("recovery_words.txt")).read_text("utf-8").split()   # the BIP-39 English list
 _BY_PREFIX = {w[:4]: w for w in WORDS}   # every word is unique in its first four letters, as wallets rely on
@@ -79,7 +84,8 @@ class MarkStore:
     def load(self) -> dict:
         """Your choices, as sets of product keys, plus the PIN's hash and lockout state (if any). Yours to change."""
         data = self._cached()
-        return {k: (set(v) if isinstance(v, frozenset) else v) for k, v in data.items()}
+        return {k: (set(v) if isinstance(v, frozenset) else {kind: dict(m) for kind, m in v.items()} if k == "ids" else v)
+                for k, v in data.items()}
 
     def view(self) -> dict:
         """As load, to look in, not change (its sets are frozen): no copy is made."""
@@ -106,7 +112,8 @@ class MarkStore:
         return data
 
     def _read_file(self) -> dict:
-        empty = {k: set() for k in KINDS} | {"pin": None, "recovery": None, "failures": 0, "wait_until": 0.0}
+        empty = {k: set() for k in KINDS} | {"ids": {k: {} for k in KINDS}, "pin": None, "recovery": None,
+                                             "failures": 0, "wait_until": 0.0}
         try:
             raw = read_json_file(self.path, 16 * 1024 * 1024) if self.path.exists() else None
         except (DataFileError, OSError, ValueError):
@@ -116,9 +123,13 @@ class MarkStore:
         if check_seal(raw, self.path) == "changed":   # edited outside Hoard: keep the choices, drop PIN and phrase
             raw["pin"] = raw["recovery"] = None
         out = dict(empty)
+        ids = raw.get("ids") if isinstance(raw.get("ids"), dict) else {}
         for k in KINDS:
             values = raw.get(k) if isinstance(raw.get(k), list) else []
             out[k] = {v for v in values[:MAX_KEYS] if isinstance(v, str) and TAG_KEY_RX.match(v)}
+            kept = ids.get(k) if isinstance(ids.get(k), dict) else {}
+            out["ids"][k] = {i: t for i, t in list(kept.items())[:MAX_KEYS]
+                             if isinstance(i, str) and ITEM_KEY_RX.match(i) and isinstance(t, str) and TAG_KEY_RX.match(t)}
         for field in ("pin", "recovery"):
             h = raw.get(field)
             if (isinstance(h, dict) and isinstance(h.get("salt"), str) and isinstance(h.get("hash"), str)
@@ -130,33 +141,74 @@ class MarkStore:
 
     def _save(self, data: dict) -> None:
         body = {k: sorted(data[k]) for k in KINDS} | {
+            "ids": {k: dict(sorted(data["ids"][k].items())) for k in KINDS},
             "format": "hoard-marks", "version": 1, "pin": data["pin"], "recovery": data["recovery"],
             "failures": data["failures"], "wait_until": data["wait_until"]}
         write_file_safely(self.path, json.dumps(seal(body), indent=1, sort_keys=True))
         if os.name == "posix":
             os.chmod(self.path, 0o600)
 
-    def change(self, kind: str, keys, on: bool) -> dict:
-        """Mark (on) or unmark products. Returns the new choices."""
+    def change(self, kind: str, keys, on: bool, ids: dict | None = None) -> dict:
+        """Mark (on) or unmark products. ids: the store's own keys of the products marked ({store:id: product key}),
+        so the choice follows them if they're renamed (follow). Returns the new choices."""
         if kind not in KINDS:
             raise ValueError("unknown choice")
         keys = {k for k in keys if isinstance(k, str) and TAG_KEY_RX.match(k)}
+        ids = {i: t for i, t in (ids or {}).items() if isinstance(i, str) and ITEM_KEY_RX.match(i) and t in keys}
         with self._lock:
             data = self.load()
             if on:
                 if kind == "hidden" and not data["pin"]:
                     raise PinError("Set a PIN for your hidden library first.")
                 data[kind] |= keys
+                data["ids"][kind].update(ids)
                 if kind == "archived":
-                    data["unarchived"] -= keys
+                    self._unmark(data, "unarchived", keys)
                 if kind == "unarchived":
-                    data["archived"] -= keys
+                    self._unmark(data, "archived", keys)
             else:
-                data[kind] -= keys
-            if len(data[kind]) > MAX_KEYS:
+                self._unmark(data, kind, keys)
+            if len(data[kind]) > MAX_KEYS or len(data["ids"][kind]) > MAX_KEYS:
                 raise ValueError("That's more than Hoard can keep track of.")
             self._save(data)
             return data
+
+    @staticmethod
+    def _unmark(data: dict, kind: str, keys: set) -> None:
+        """Take keys out of one choice, and the store keys it remembered for them (so a restored product isn't
+        marked again when it's renamed)."""
+        data[kind] -= keys
+        data["ids"][kind] = {i: t for i, t in data["ids"][kind].items() if t not in keys}
+
+    def follow(self, items) -> bool:
+        """Keep each choice with its products as the library has them now (items: each with its "key", the store's
+        own, and its "tag_key"). A marked product's store key is remembered; a product whose store key was marked under
+        a name it no longer has (renamed on its store, or read differently by a newer Hoard) has its new name marked
+        too, while the old one still is. Saves only when something changed. Returns whether anything did."""
+        pairs = [(i["key"], i["tag_key"]) for i in items
+                 if isinstance(i.get("key"), str) and ITEM_KEY_RX.match(i["key"]) and isinstance(i.get("tag_key"), str)]
+        if not pairs:
+            return False
+        with self._lock:
+            data = self.load()
+            changed = False
+            for kind in KINDS:
+                marked, remembered = data[kind], data["ids"][kind]
+                for key, tkey in pairs:
+                    was = remembered.get(key)
+                    if tkey in marked:
+                        if was != tkey:
+                            remembered[key] = tkey   # marked as it's named now: remember its store key for that
+                            changed = True
+                    elif was is not None and was in marked and TAG_KEY_RX.match(tkey):
+                        marked.add(tkey)             # renamed since it was marked: its new name is marked too
+                        remembered[key] = tkey
+                        changed = True
+                if len(marked) > MAX_KEYS or len(remembered) > MAX_KEYS:
+                    return False
+            if changed:
+                self._save(data)
+            return changed
 
     # ---- the PIN
     def set_pin(self, pin: str, current: str | None = None) -> str | None:
