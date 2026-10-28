@@ -66,7 +66,8 @@ def _package_in_zip(zf: zipfile.ZipFile) -> tuple[str, Package] | None:
 
 def contents(asset: dict) -> list[dict]:
     """What in a downloaded product (an asset as the Downloads index has it) can go into a project:
-    [{"kind": "unitypackage" or "vpm", "file", "member", "label", "package", "version"}]."""
+    [{"kind": "unitypackage" or "vpm", "file", "member", "label", "package", "version", "size"}] (size: in bytes, as
+    it's packed, when known; issue #199 shows it)."""
     folder = Path(asset["abs_folder"])
     out = []
     if asset.get("linked") or asset.get("store") == "Local":
@@ -87,7 +88,7 @@ def contents(asset: dict) -> list[dict]:
             continue
         lower = rel.lower()
         if lower.endswith(".unitypackage"):
-            out.append({"kind": "unitypackage", "file": rel, "member": None, "label": Path(rel).name})
+            out.append({"kind": "unitypackage", "file": rel, "member": None, "label": Path(rel).name, "size": f.get("size")})
         elif lower.endswith(".zip"):
             try:
                 st = path.stat()
@@ -101,10 +102,10 @@ def contents(asset: dict) -> list[dict]:
 def _zip_contents(path: str, rel: str, _size: int, _mtime: int) -> tuple:
     """What's in one .zip, worked out once for each version of the file (its size and time are part of the key):
     choosing a product's contents, then putting them in, reads each zip, and the zips inside it, only once."""
-    return tuple(_read_zip_contents(Path(path), rel))
+    return tuple(_read_zip_contents(Path(path), rel, _size))
 
 
-def _read_zip_contents(path: Path, rel: str) -> list[dict]:
+def _read_zip_contents(path: Path, rel: str, size: int | None = None) -> list[dict]:
     out = []
     try:
         with zipfile.ZipFile(path) as zf:
@@ -112,13 +113,14 @@ def _read_zip_contents(path: Path, rel: str) -> list[dict]:
             if found is not None:
                 _prefix, p = found
                 return [{"kind": "vpm", "file": rel, "member": None, "label": p.label(), "package": p.name,
-                         "version": str(p.version)}]
+                         "version": str(p.version), "size": size}]
             for info in zf.infolist()[:MAX_ZIP_LISTED]:
                 name = zip_name(info)
                 if info.is_dir() or info.flag_bits & 0x1:
                     continue
                 if name.lower().endswith(".unitypackage"):
-                    out.append({"kind": "unitypackage", "file": rel, "member": info.filename, "label": Path(name).name})
+                    out.append({"kind": "unitypackage", "file": rel, "member": info.filename, "label": Path(name).name,
+                                "size": info.file_size})
                 elif name.lower().endswith(".zip") and info.file_size <= MAX_INNER_PEEK:
                     try:
                         with zipfile.ZipFile(io.BytesIO(zf.read(info))) as inner:
@@ -127,7 +129,7 @@ def _read_zip_contents(path: Path, rel: str) -> list[dict]:
                         found = None
                     if found is not None:
                         out.append({"kind": "vpm", "file": rel, "member": info.filename, "label": found[1].label(),
-                                    "package": found[1].name, "version": str(found[1].version)})
+                                    "package": found[1].name, "version": str(found[1].version), "size": info.file_size})
     except (zipfile.BadZipFile, OSError, NotImplementedError, RuntimeError):
         pass
     return out

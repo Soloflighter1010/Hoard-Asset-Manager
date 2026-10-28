@@ -3504,6 +3504,48 @@ class RoutineCheck(unittest.TestCase):
         self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 0), "damaged values read as defaults")
 
 
+class LoadingProgress(unittest.TestCase):
+    """Issue #200: how far Hoard has got reading what a page shows first, for its splash to count."""
+
+    def test_counting(self):
+        from hoard import loading
+        self.addCleanup(loading.finished, "library")
+        tick = loading.counter("library", "products", 60, every=25)
+        self.assertEqual(loading.view("library"), {"step": "products", "done": 0, "total": 60})
+        for n in range(1, 31):
+            tick(n)
+        self.assertEqual(loading.view("library")["done"], 25, "noted every so many")
+        tick(60)
+        self.assertEqual(loading.view("library")["done"], 60, "and the last")
+        self.assertEqual(loading.view("projects"), {})
+        loading.finished("library")
+        self.assertEqual(loading.view("library"), {})
+
+    def test_the_library_page_counts_its_products(self):
+        from unittest import mock
+        from hoard import loading
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tempfile.mkdtemp()}, lan=False)
+        with srv.lib.lock:
+            srv.lib.data["items"] = [library.item("booth", str(n), name=f"Product {n}", creator="Kitsu") for n in range(60)]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        steps = []
+        real = loading.step
+        with mock.patch.object(loading, "step", lambda *a: steps.append(a) or real(*a)):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("GET", "/api/library", headers={ACCESS_HEADER: srv.key})
+            self.assertEqual(c.getresponse().status, 200)
+            c.close()
+        self.assertIn(("library", "products", 60, 60), steps)
+        self.assertIn(("library", "downloads", 0, 0), steps, "what's on disk, read for the first time")
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+        c.request("GET", "/api/loading?part=library", headers={ACCESS_HEADER: srv.key})
+        r = c.getresponse()
+        self.assertEqual((r.status, json.loads(r.read())), (200, {}), "done: nothing to count")
+        c.close()
+
+
 class DownloadChoices(unittest.TestCase):
     """Issue #107: what Download new and Update all would get, to untick first; products always skipped, left out
     of every download and sync, unless chosen by name. Issue #106: several products chosen at once, as one job."""

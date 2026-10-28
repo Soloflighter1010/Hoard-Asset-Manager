@@ -1315,9 +1315,9 @@ def common_words(names: list[str], min_count: int, max_share: float, block=froze
     return [ts & keep for ts in toks]
 
 
-def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=frozenset()) -> list[dict]:
+def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=frozenset(), progress=None) -> list[dict]:
     """Add your tags, suggested tags (words shared by several names) and cross-store matches (apart: products you
-    said aren't copies of anything, stack_by_picture)."""
+    said aren't copies of anything, stack_by_picture). progress: called with how many are done (issue #200)."""
     tagdata = tagdata or TagStore.empty()
     block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
     suggestions = common_words([i["name"] for i in items], int(tcfg.get("min_count", 3)),
@@ -1326,7 +1326,9 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=fro
     groups: dict[str, list] = {}
     out = []
     matcher = TagMatcher(tagdata["tags"])
-    for i, ts in zip(items, suggestions):
+    for n, (i, ts) in enumerate(zip(items, suggestions), 1):
+        if progress:
+            progress(n)
         key = tag_key(i["store"], i["name"])
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         kind, known = product_type(tagdata, key, i["name"], mine, i.get("store_tags"))   # what it is (issue #223)

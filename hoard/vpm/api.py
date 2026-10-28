@@ -14,6 +14,7 @@ import threading
 import time
 from pathlib import Path
 
+from .. import loading
 from ..common import log
 from ..safety import DataFileError
 from . import backup, environment, imports, listing, logbook, presets, repos, resolve, templates, unity
@@ -70,7 +71,7 @@ class Service:
         editors = unity.find_editors(db["unityVersions"])
         coll = self.collection()
         return {
-            "projects": listing.projects(),
+            "projects": listing.projects(progress=lambda total: loading.counter("projects", "projects", total, every=1)),
             "editors": editors,
             "templates": templates.templates(settings.folder, sorted({e["version"] for e in editors}, reverse=True)),
             "settings": {"projects_folder": settings.default_project_path() or str(Path.home() / "ALCOM" / "Projects"),

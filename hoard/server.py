@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, backup, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -638,8 +638,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             fresh = None
             try:
                 try:
-                    fresh = build_index(Path(root), collect_catalog(self.cfg, Path(root))[0],
-                                        libraries.roots(self.cfg, Path(root)))
+                    catalog = collect_catalog(self.cfg, Path(root))[0]   # (how far it's got, for the splash: #200)
+                    fresh = build_index(Path(root), catalog, libraries.roots(self.cfg, Path(root)),
+                                        progress=loading.counter("library", "downloads", len(catalog)))
                 except Exception as e:  # show the problem in the page instead of a blank grid
                     fresh = {"root": root, "assets": [], "status": library_status(Path(root)),
                              "error": f"Couldn't read the downloads: {e}"}
@@ -803,8 +804,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/library":
             items, stores = srv.lib.snapshot()   # enrich() makes new items, so the library's own are never changed
             tagdata = TagStore().load()
-            items = enrich(items, srv.cfg["tags"], tagdata, apart=MarkStore().keys("apart"))
+            items = enrich(items, srv.cfg["tags"], tagdata, apart=MarkStore().keys("apart"),
+                           progress=loading.counter("library", "products", len(items)))   # (counted on the splash: #200)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
+            loading.finished("library")
             MarkStore().follow(items)   # a product renamed since it was removed (or hidden...) stays so (issue #224)
             marks, unlocked = MarkStore().view(), self._unlocked()
             updates = AssetUpdates().load()["items"]
@@ -855,12 +858,15 @@ class Handler(BaseHTTPRequestHandler):
                          "project": mask(tasks["project"]) if tasks["project"] else None,
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
+        if path == "/api/loading":   # issue #200: how far reading what a page shows first has got, for its splash
+            return self._json(loading.view((parse_qs(u.query).get("part") or [""])[0]))
         if path == "/api/status":
             return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
                                "project_job": public_job(srv.project_jobs.state, self._hidden_names()),
                                "routine": routine_record()["found"]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
+            loading.finished("library")   # (the splash's count: issue #200)
             # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
             # page has the same views (issue #29); hidden products' downloads stay out of view while it's locked
             marks, unlocked = MarkStore().view(), self._unlocked()
@@ -1479,8 +1485,11 @@ class Handler(BaseHTTPRequestHandler):
         one = lambda k: (query.get(k) or [""])[0][:2000]  # noqa: E731
         try:
             if path == "/api/vpm":
-                return self._json({**srv.vpm.overview(), "job": public_job(srv.project_jobs.state, self._hidden_names())},
-                                  compress=True)
+                try:
+                    return self._json({**srv.vpm.overview(), "job": public_job(srv.project_jobs.state, self._hidden_names())},
+                                      compress=True)
+                finally:
+                    loading.finished("projects")
             if path == "/api/vpm/logs":   # Projects' log: this run's entries after the one numbered after
                 after = one("after")
                 return self._json({"run": vpm_log.book.run, "entries": vpm_log.book.entries(int(after) if after.isdigit() else 0),

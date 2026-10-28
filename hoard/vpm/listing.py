@@ -137,9 +137,10 @@ def shared_paths(settings: environment.Settings | None = None) -> tuple[list[str
     return listed, records
 
 
-def projects() -> list[dict]:
+def projects(progress=None) -> list[dict]:
     """Every project for the page: name, folder, Unity, kind, favourite, when made and opened, whether the folder is
-    still there; most recently opened first."""
+    still there; most recently opened first. progress(how many there are) gives a function to call with how many
+    are read (issue #200: Projects' splash counts them)."""
     try:
         settings = environment.Settings.load()
     except DataFileError as e:
@@ -147,7 +148,10 @@ def projects() -> list[dict]:
     listed, records = shared_paths(settings)
     state = load_state()["projects"]
     out, seen = [], set()
-    for path in listed:
+    tick = progress(len(listed)) if progress else None
+    for n, path in enumerate(listed, 1):
+        if tick:
+            tick(n)
         k = _key(path)
         if k in seen:
             continue

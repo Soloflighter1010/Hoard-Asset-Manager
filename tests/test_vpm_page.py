@@ -123,6 +123,43 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => !document.querySelector('#projectsBody .pj-folders')")
         self.assertEqual(rusk.locator(".pj-tags").count(), 0)
 
+    def test_choosing_a_products_packages_in_steps(self):
+        """Issue #199: a product with several packages: first which of them (each with its size, a variant marked,
+        Select all or none), then, last, the packages it needs; a long package name breaks at its dots."""
+        page = self.page
+        page.evaluate("""() => { window.__got = undefined; pjChooseContents({ name: "Fox Outfits", key: "booth:foxoutfits", already: [],
+          contents: [{ kind: "unitypackage", file: "Fox.zip", member: "Fox/Fox_PC.unitypackage", label: "Fox_PC.unitypackage", size: 2500000 },
+                     { kind: "unitypackage", file: "Fox.zip", member: "Fox/Fox_Quest.unitypackage", label: "Fox_Quest.unitypackage", size: 1200000 },
+                     { kind: "vpm", file: "Fox.zip", member: "Fox/tool.zip", label: "Fox Tool", size: 40000 }],
+          suggested: [{ package: "com.vrcfury.vrcfury", repo: "https://vcc.vrcfury.com", repo_added: false }] }).then(g => window.__got = g); }""")
+        dlg = page.locator("dialog.pj-dlg[open]")
+        step1, step2 = dlg.locator("[data-step='1']"), dlg.locator("[data-step='2']")
+        self.assertIn("Step 1 of 2: its packages", step1.inner_text())
+        self.assertTrue(step2.is_hidden(), "what it needs comes last")
+        rows = step1.locator(".pj-contents li")
+        self.assertEqual(rows.count(), 3)
+        self.assertEqual([rows.nth(n).locator(".pj-tag").all_inner_texts() for n in range(3)], [["PC"], ["Quest"], []])
+        self.assertIn("Unity package · 2.4 MB", rows.nth(0).inner_text())
+        self.assertEqual([rows.nth(n).locator("input").is_checked() for n in range(3)], [False, False, True],
+                         "one of the variants to choose")
+        nxt = step1.locator(".primary")
+        step1.locator("[data-all='0']").click()
+        self.assertTrue(nxt.is_disabled(), "nothing ticked: nothing to go on with")
+        step1.locator("[data-all='1']").click()
+        rows.nth(1).locator("input").uncheck()
+        nxt.click()
+        self.assertTrue(step1.is_hidden())
+        self.assertIn("Step 2 of 2: what it needs", step2.inner_text())
+        self.assertIn("com.<wbr>vrcfury.<wbr>vrcfury", step2.locator(".pj-picklist").inner_html())
+        step2.locator("[data-step-go='1']").click()   # Back: the choice as it was
+        self.assertFalse(rows.nth(1).locator("input").is_checked())
+        nxt.click()
+        step2.locator(".primary").click()
+        page.wait_for_function("() => window.__got !== undefined")
+        got = page.evaluate("window.__got")
+        self.assertEqual([x["label"] for x in got["picks"]], ["Fox_PC.unitypackage", "Fox Tool"])
+        self.assertEqual([x["package"] for x in got["suggested"]], ["com.vrcfury.vrcfury"])
+
     SAMPLE_SPLASH = """window.__splash = 0;   // how visible Projects' splash got, sampled while it's on show
         setInterval(() => { const e = document.getElementById("pjSplash");
                             if (e && !e.hidden) window.__splash = Math.max(window.__splash, +getComputedStyle(e).opacity); }, 25);"""

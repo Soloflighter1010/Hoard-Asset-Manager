@@ -99,14 +99,16 @@ def _linked_folder(location: str) -> Path | None:
     return Path(location)
 
 
-def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = None) -> dict:
+def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = None, progress=None) -> dict:
     """The data behind the page: every downloaded asset with its files, sizes, image and matches. libraries: every
     library folder, the downloads folder (root) first (hoard/libraries.py); an asset in another one is named by its
     number there ("@1/Booth/...") wherever the page names a place, and one in a folder that isn't among them isn't
-    shown."""
+    shown. progress: called with how many records are read (issue #200)."""
     libraries = libraries or [root]
     assets, gone = [], 0
     for i, e in enumerate(catalog):
+        if progress:
+            progress(i + 1)
         linked = e.get("location")   # a Local item listed where it is (issue #80)
         lib = 0
         if e.get("library"):

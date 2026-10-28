@@ -70,8 +70,10 @@ Shift-click, or **Select**) or right-click one, then **Projects**:
   leave out with a tick), before it's put in. Nothing already in the project is replaced.
 - **New project with these...** opens **New project** with them already in it.
 
-A product with several packages to choose from (one for PC and one for Quest, say) asks which; one that isn't
-downloaded, or has no Unity or VPM package, is left out, and Hoard says which.
+A product with several packages to choose from (one for PC and one for Quest, say) asks which, in two steps (5.2.0):
+first its packages, each with its size and its variant (PC or Quest) marked, with **Select all** and **Select none**;
+then, after **Next**, what it needs, before **Put these in**. One that isn't downloaded, or has no Unity or VPM
+package, is left out, and Hoard says which.
 
 ### Presets
 

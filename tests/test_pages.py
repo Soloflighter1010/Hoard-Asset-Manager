@@ -1509,6 +1509,33 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.locator("#splash").wait_for(state="detached", timeout=10000)
         page.close()
 
+    def test_the_splash_talks_and_counts(self):
+        """Issue #200: while the page reads, a few friendly words that change, and how far Hoard has got (the
+        products read of all of them, then what's downloaded), from the server's own count."""
+        from hoard import loading
+        page = self.browser.new_page()
+        held = []
+        page.route("**/api/library*", lambda route: held.append(route))   # (reading takes a while)
+        loading.step("library", "products", 40, 100)
+        self.addCleanup(loading.finished, "library")
+        goto(page, self.srv.entry_url())
+        count = page.locator("#splash .splash-count .n")
+        count.wait_for()
+        self.assertEqual(count.inner_text(), "Reading your library: 40 of 100")
+        self.assertEqual(page.locator("#splash .splash-bar").get_attribute("aria-valuenow"), "40")
+        self.assertRegex(page.locator("#splash .splash-quote").inner_text(), r"\w.*\.\.\.$")
+        loading.step("library", "downloads", 3, 4)
+        page.wait_for_function("() => document.querySelector('#splash .splash-count .n').textContent"
+                               " === \"Looking at what's downloaded: 3 of 4\"")
+        for _ in range(100):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        held[0].continue_()
+        page.locator("#splash").wait_for(state="detached", timeout=10000)
+        page.get_by_text("Mochi").first.wait_for()
+        page.close()
+
     def test_the_open_item_is_marked(self):
         page = self.open()
         mochi = page.locator(".slot", has_text="Mochi")

@@ -186,16 +186,50 @@ delete document.documentElement.dataset.i18n;   // shown now: translated (or Eng
    from the first paint; on the window's first page it stays at least a moment, and on later pages (Library to
    Downloads and back) the stylesheet only fades it in if reading takes more than a moment. Projects has one of its
    own, shown the same way while it first reads your projects (loadProjects). */
-function splash(el, seen) {   // el shown; what's returned takes it away, for good ("seen": whether it's been shown in this window)
+// Issue #200: while it reads, a few friendly words that change, and how far it's got (GET /api/loading: the products
+// read of all of them, then what's downloaded; for Projects, the projects)
+const SPLASH_WORDS = {
+  library: ["Counting the treasure...", "Dusting off the shelves...", "Stacking the boxes neatly...", "Polishing the gems...",
+            "Checking every corner of the cave...", "Sorting things by sparkle..."],
+  projects: ["Opening the workshop...", "Laying out your projects...", "Sweeping the workbench...", "Finding Unity's tools..."] };
+const SPLASH_STEPS = { products: "Reading your library: {0} of {1}", downloads: "Looking at what's downloaded: {0} of {1}",
+                       projects: "Reading your projects: {0} of {1}" };
+function splashTalk(el, part) {   // what's returned stops it, the count (if it showed) at its end
+  const quote = el.querySelector(".splash-quote"), count = el.querySelector(".splash-count"), words = SPLASH_WORDS[part];
+  if (!quote || !count || !words) return () => {};
+  let n = Math.floor(Math.random() * words.length), live = true, timer = 0, last = null;
+  const say = () => { quote.textContent = tr(words[n++ % words.length]); };
+  say();
+  const turn = setInterval(say, 2800);
+  const show = (done, total, step) => {
+    const bar = count.querySelector(".splash-bar"), text = tr(SPLASH_STEPS[step] || "{0} of {1}", done.toLocaleString(), total.toLocaleString());
+    count.hidden = false;
+    bar.firstElementChild.style.width = `${Math.min(100, Math.round(100 * done / total))}%`;
+    bar.setAttribute("aria-valuemax", String(total)); bar.setAttribute("aria-valuenow", String(done)); bar.setAttribute("aria-valuetext", text);
+    count.querySelector(".n").textContent = text;
+  };
+  const poll = async () => {
+    try {
+      const r = await api(`/api/loading?part=${part}`, { cache: "no-store" });
+      const v = r.ok ? await r.json() : {};
+      if (live && v.total) { last = v; show(v.done, v.total, v.step); }
+    } catch (e) {}
+    if (live) timer = setTimeout(poll, 400);
+  };
+  timer = setTimeout(poll, 250);
+  return () => { live = false; clearInterval(turn); clearTimeout(timer); if (last) show(last.total, last.total, last.step); };
+}
+function splash(el, seen, part) {   // el shown; what's returned takes it away, for good ("seen": whether it's been shown in this window)
   let first = true;
   try { first = !sessionStorage.getItem(seen); sessionStorage.setItem(seen, "1"); } catch (e) {}
   el.classList.toggle("first", first);
   el.hidden = false;
-  const since = performance.now(), MIN = first ? 1200 : 0;
+  const since = performance.now(), MIN = first ? 1200 : 0, quiet = splashTalk(el, part);
   let done = false;
   const hide = () => {
     if (done) return;
     done = true;
+    quiet();
     setTimeout(() => {
       el.classList.add("gone");
       setTimeout(() => el.remove(), 400);
@@ -204,7 +238,7 @@ function splash(el, seen) {   // el shown; what's returned takes it away, for go
   setTimeout(hide, 20000);   // never in the way for good, whatever happens
   return hide;
 }
-const hideSplash = splash(document.getElementById("splash"), "hoard-opened");
+const hideSplash = splash(document.getElementById("splash"), "hoard-opened", "library");
 const $ = s => document.querySelector(s);
 /* ---------- the access key. Hoard's server only answers requests that carry this run's key (see server.py).
    Hoard opens this page with a one-time link (#enter=...) that's traded for it; the address `hoard serve`
@@ -2248,7 +2282,7 @@ async function loadProjects(view) {
   const body = $("#projectsBody"), logo = $("#pjSplash");
   // the logo over Projects the first time it's opened on this page, until it's read them (as the page shows it while
   // it reads your library); then it's gone
-  if (logo && !pjSplashing) pjSplashing = splash(logo, "hoard-projects-opened");
+  if (logo && !pjSplashing) pjSplashing = splash(logo, "hoard-projects-opened", "projects");
   try {
     // the shared list, and what Hoard for Unity reported (projects opened in Unity with Hoard, listed or not)
     const [r, rep] = await Promise.all([api("/api/vpm", { cache: "no-store" }), api("/api/projects", { cache: "no-store" })]);
@@ -2913,21 +2947,52 @@ async function pickAdd(list) {
   const pick = PJPICK.for;
   if (pick && await (pick.view === "new" ? pjFormWith(pick.form, list) : pjPutIn(pick, list))) pickEnd();
 }   // (nothing could go in, or a question was cancelled: still choosing)
-// What to put in of one product: its .unitypackage files and VPM packages, each with a tick (one of several
-// variants left to choose), and the VPM packages it needs. null when it's cancelled.
+// What to put in of one product, in steps (issue #199): first which of its .unitypackage files and VPM packages, each
+// with its size, a variant (PC, Quest) marked, and Select all or none; then, last, the VPM packages it needs. null when
+// it's cancelled.
+const PJ_VARIANTS = [["Quest", /quest|android/i], ["PC", /(^|[^a-z])pc([^a-z]|$)|windows|desktop/i]];
+const pjVariant = name => (PJ_VARIANTS.find(([, re]) => re.test(name)) || [""])[0];
+const pjBreaks = name => esc(name).replace(/([._/-])/g, "$1<wbr>");   // (a long name breaks after a dot, never mid-word)
 async function pjChooseContents(product) {
-  const many = product.contents.filter(c => c.kind === "unitypackage").length > 1;
-  const pick = await pjDialog(`<p><b translate="no">${esc(product.name)}</b></p>` +
-    (many ? `<p class="hint">${esc(tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant)."))}</p>` : "") +
-    `<ul class="pj-picklist">${product.contents.map((c, i) => `<li><label class="check"><input type="checkbox" value="${i}"${many && c.kind === "unitypackage" ? "" : " checked"}> ` +
-      `<span><span translate="no">${esc(c.label)}</span> <span class="muted">${esc(c.kind === "unitypackage" ? tr("Unity package") : tr("VPM package"))}${c.member ? ` · <span translate="no">${esc(c.file)}</span>` : ""}</span></span></label></li>`).join("")}</ul>` +
-    pjNeedsList(product.suggested, "It needs these too, from their own repositories:") + pjAlready(product.already || []) +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put these in"))}</button></div>`);
+  const many = product.contents.filter(c => c.kind === "unitypackage").length > 1, needs = product.suggested.length > 0;
+  const head = step => `<p><span class="pj-stepno">${esc(step)}</span><b translate="no">${esc(product.name)}</b></p>`;
+  const dlgP = pjDialog(`<div class="pj-step" data-step="1">` + head(needs ? tr("Step {0} of {1}: its packages", 1, 2) : tr("Its packages")) +
+      (many ? `<p class="hint">${esc(tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant)."))}</p>` : "") +
+      `<p class="pj-allnone"><button type="button" class="linkish" data-all="1">${esc(tr("Select all"))}</button>` +
+      `<button type="button" class="linkish" data-all="0">${esc(tr("Select none"))}</button></p>` +
+      `<ul class="pj-picklist pj-contents">${product.contents.map((c, i) => {
+        const v = pjVariant(c.member || c.label);
+        return `<li><label class="check"><input type="checkbox" value="${i}"${many && c.kind === "unitypackage" ? "" : " checked"}> ` +
+          `<span class="pj-c"><span translate="no">${pjBreaks(c.label)}</span>${v ? ` <span class="pj-tag" translate="no">${esc(v)}</span>` : ""}` +
+          `<span class="muted">${esc(c.kind === "unitypackage" ? tr("Unity package") : tr("VPM package"))}${c.size ? ` · ${esc(sizeText(c.size))}` : ""}` +
+          `${c.member ? ` · <span translate="no">${pjBreaks(c.file)}</span>` : ""}</span></span></label></li>`;
+      }).join("")}</ul>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
+      (needs ? `<button type="button" class="primary" data-step-go="2">${esc(tr("Next"))}</button>`
+        : `<button class="primary" value="yes">${esc(tr("Put these in"))}</button>`) + `</div></div>` +
+    (needs ? `<div class="pj-step" data-step="2" hidden>` + head(tr("Step {0} of {1}: what it needs", 2, 2)) +
+      pjNeedsList(product.suggested, "It needs these too, from their own repositories:") + pjAlready(product.already || []) +
+      `<div class="ask-row"><button type="button" class="ghost" data-step-go="1">${esc(tr("Back"))}</button>` +
+      `<button class="primary" value="yes">${esc(tr("Put these in"))}</button></div></div>` : ""), "wide");
+  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
+  const boxes = () => [...dlg.querySelectorAll(".pj-contents input")];
+  const ready = () => { dlg.querySelector('[data-step="1"] .primary').disabled = !boxes().some(b => b.checked); };
+  dlg.addEventListener("change", ready);
+  dlg.addEventListener("click", e => {
+    const all = e.target.closest("[data-all]"), go = e.target.closest("[data-step-go]");
+    if (all) { for (const b of boxes()) b.checked = all.dataset.all === "1"; ready(); }
+    if (go) {
+      for (const st of dlg.querySelectorAll(".pj-step")) st.hidden = st.dataset.step !== go.dataset.stepGo;
+      dlg.querySelector(".pj-step:not([hidden]) .primary").focus();
+    }
+  });
+  ready();
+  const pick = await dlgP;
   if (!pick.ok) return null;
-  const boxes = [...pick.dlg.querySelectorAll("input[type=checkbox]:checked")];
-  const picks = boxes.filter(b => !b.dataset.sugg).map(b => product.contents[+b.value]).map(c =>
+  const ticked = [...pick.dlg.querySelectorAll("input[type=checkbox]:checked")];
+  const picks = ticked.filter(b => !b.dataset.sugg).map(b => product.contents[+b.value]).map(c =>
     ({ key: product.key, kind: c.kind, file: c.file, member: c.member, label: c.label, product: product.name }));
-  const sugg = boxes.filter(b => b.dataset.sugg).map(b => product.suggested[+b.dataset.sugg]);
+  const sugg = ticked.filter(b => b.dataset.sugg).map(b => product.suggested[+b.dataset.sugg]);
   return { picks, suggested: sugg };
 }
 // What products need (/api/vpm/product), as the project stands: what it has already (or New project's form has) isn't
@@ -2941,7 +3006,7 @@ function pjSplitNeeds(product, have) {
   return product;
 }
 const pjNeedsList = (list, heading) => list.length ? `<p class="hint">${esc(tr(heading))}</p><ul class="pj-picklist">${list.map((s, i) =>
-  `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${esc(s.package)}</span>` +
+  `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${pjBreaks(s.package)}</span>` +
   (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>`
     : s.in_repo ? ` <span class="muted">(${trHTML("from {0}", `<span translate="no">${esc(s.in_repo)}</span>`)})</span>` : "") +
   `</label></li>`).join("")}</ul>` : "";

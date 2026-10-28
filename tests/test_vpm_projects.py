@@ -210,6 +210,9 @@ class ProjectList(Temp):
         self.assertEqual((listing.projects()[0]["folder"], listing.projects()[0]["tags"]), (None, []))
         listing.organize(project, tags=[f"t{n}" for n in range(30)])
         self.assertEqual(len(listing.projects()[0]["tags"]), listing.MAX_PROJECT_TAGS)
+        counted = []   # issue #200: each project counted as it's read, for Projects' splash
+        listing.projects(progress=lambda total: counted.append(total) or counted.append)
+        self.assertEqual(counted, [1, 1])
 
 
 class Library(Temp):
@@ -243,6 +246,10 @@ class Library(Temp):
         self.assertIn(("unitypackage", "Outfits.zip", "Outfits/Quest.unitypackage", None), kinds)
         self.assertIn(("vpm", "Outfits.zip", "Outfits/tool-1.2.0.zip", "com.creator.tool"), kinds)
         self.assertIn(("vpm", "Wrapped.zip", None, "com.creator.tool"), kinds)
+        sizes = {(c["file"], c["member"]): c["size"] for c in found}   # each one's size, as packed (issue #199)
+        self.assertEqual(sizes[("Avatar.unitypackage", None)], len(make_unitypackage(SAMPLE)))
+        self.assertEqual(sizes[("Outfits.zip", "Outfits/tool-1.2.0.zip")], len(vpm))
+        self.assertGreater(sizes[("Wrapped.zip", None)], 0)
 
     def test_putting_it_in(self):
         vpm = self.zipped({"tool/package.json": json.dumps({"name": "com.creator.tool", "version": "1.2.0",
