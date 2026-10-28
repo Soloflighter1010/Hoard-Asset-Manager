@@ -33,7 +33,7 @@ from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_do
                          edits_root, last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
-from .net import is_network_error
+from .net import blocked_here, blocked_message, is_network_error
 from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, common_words, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
@@ -1744,7 +1744,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "itch.io didn't accept that key. Check you copied all of it, and that it hasn't "
                                         "been deleted on itch.io."}, 400)
         except Exception as e:
-            return self._json({"error": "Couldn't reach itch.io. Check your connection and try again." if is_network_error(e)
+            return self._json({"error": blocked_message("itch.io") if blocked_here(e)
+                               else "Couldn't reach itch.io. Check your connection and try again." if is_network_error(e)
                                else f"itch.io didn't answer as expected: {e}"}, 502)
         finally:
             sess.close()
@@ -2010,6 +2011,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 srv.updates.check()
             except Exception as e:
+                if blocked_here(e):
+                    return self._json({"error": "Couldn't check for updates. " + blocked_message("GitHub")}, 502)
                 why = "you're offline, or GitHub can't be reached" if is_network_error(e) else str(e)[:200]
                 return self._json({"error": f"Couldn't check for updates: {why}."}, 502)
             return self._json({"ok": True, **srv.updates.view(srv.can_update())})

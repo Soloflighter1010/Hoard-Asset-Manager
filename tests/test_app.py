@@ -2049,6 +2049,40 @@ class ItchKeys(unittest.TestCase):
         self.assertIsNone(vault.load_key(cfg, "itch"))
         self.assertFalse(vault.forget_key(cfg, "itch"))
 
+    def test_a_connection_this_computer_refuses_says_so(self):
+        """Issue #196: saving the key said "itch.io didn't answer as expected: ('Connection aborted.',
+        PermissionError(13, 'Permission denied'))": Windows refusing the connection (WSAEACCES), as security software,
+        a firewall rule or a VPN's block does. It says that now, and what to do."""
+        from unittest import mock
+        import requests
+        from urllib3.exceptions import ProtocolError
+        from hoard import itch, net
+        refused = requests.exceptions.ConnectionError(ProtocolError("Connection aborted.", PermissionError(13, "Permission denied")))
+        self.assertTrue(net.blocked_here(refused))
+        self.assertTrue(net.blocked_here(OSError(10013, "An attempt was made to access a socket")))
+        self.assertTrue(net.is_network_error(refused), "a store that can't be reached, not one that failed")
+        for other in (requests.exceptions.ConnectionError(ProtocolError("Connection aborted.", ConnectionResetError(104, "reset"))),
+                      ValueError("Permission denied by the store"), RuntimeError("itch.io said: no")):
+            self.assertFalse(net.blocked_here(other), other)
+        self.assertIn("Something on this computer stopped Hoard connecting to itch.io", library.unreachable_message("itch", error=refused))
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "allow_unprotected_signins": True}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+
+        def failing(sess):
+            raise refused
+        with mock.patch.object(itch, "profile", failing):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", "/api/itch-key", body=json.dumps({"key": "GoodKey1234567890abcdef"}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse()
+            said = json.loads(r.read())
+            c.close()
+        self.assertEqual(r.status, 502)
+        self.assertIn("security software", said["error"])
+        self.assertNotIn("PermissionError", said["error"])
+
     @unittest.skipUnless(sys.platform.startswith("linux"), "the Linux keyring rule")
     def test_no_keyring_no_key(self):
         from unittest import mock

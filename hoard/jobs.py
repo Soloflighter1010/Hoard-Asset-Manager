@@ -1089,7 +1089,7 @@ class Jobs:
                             else f"{label} blocked the automated browser ({e}). Try again later.")
                     except Exception as e:
                         if not self._forced:   # (its browser was closed by Force stop: not the store's fault)
-                            self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
+                            self.lib.set_error(store, unreachable_message(store, error=e) if is_network_error(e)
                                                else f"Couldn't read the library: {plain_error(e)}")
                 finally:
                     if ctx:
@@ -1150,7 +1150,7 @@ class Jobs:
                                      f"browser instead, and choose Import saved pages in Wishlists.")
                 except Exception as e:
                     if not self._forced:
-                        failed[store] = unreachable_message(store, "read") if is_network_error(e) \
+                        failed[store] = unreachable_message(store, "read", e) if is_network_error(e) \
                             else f"Couldn't read {label}'s wishlists: {plain_error(e)}"
                 finally:
                     ctx.close()

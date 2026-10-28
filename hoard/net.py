@@ -26,7 +26,31 @@ def reachable(store: str, timeout: float = 5.0) -> bool:
 
 def is_network_error(error: Exception) -> bool:
     """True when an error means the store couldn't be reached, rather than something going wrong on it."""
-    return any(code in str(error) for code in NETWORK_ERRORS)
+    return any(code in str(error) for code in NETWORK_ERRORS) or blocked_here(error)
+
+
+def blocked_here(error: BaseException) -> bool:
+    """Did something on this computer refuse Hoard's connection (security software's web protection, a firewall rule,
+    a VPN's block), rather than the network or the store? Windows says so as WSAEACCES (10013), which Python shows as
+    PermissionError 13, however deep in the error it is (issue #196: requests' "Connection aborted.")."""
+    seen, stack = set(), [error]
+    while stack:
+        e = stack.pop()
+        if not isinstance(e, BaseException) or id(e) in seen:
+            continue
+        seen.add(id(e))
+        if isinstance(e, PermissionError) or getattr(e, "winerror", None) == 10013 or getattr(e, "errno", None) in (13, 10013):
+            return True
+        stack += [e.__cause__, e.__context__, *(getattr(e, "args", None) or ())]
+    text = str(error)
+    return "PermissionError(13" in text or "WinError 10013" in text
+
+
+def blocked_message(site: str) -> str:
+    """What to tell you when this computer refused Hoard's connection to site (blocked_here)."""
+    return (f"Something on this computer stopped Hoard connecting to {site}: usually security software (an "
+            "antivirus's web protection, or a firewall) or a VPN. Allow Hoard through it (Hoard.exe on Windows), then "
+            "try again. Your browser may still reach the site: the block can be for Hoard alone.")
 
 
 # Why a page didn't load, in plain words: the browser's own name for it, with the address and a log of each step,

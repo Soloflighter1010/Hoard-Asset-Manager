@@ -18,7 +18,7 @@ from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
 from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check, has_password_field, hops_text, settle
 from .common import NotLoggedIn, log, now_iso, pause
-from .net import STORE_HOSTS, plain_error
+from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
 from .tags import TagMatcher, TagStore, tag_key
@@ -1548,9 +1548,12 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
         items[n]["look_for"] = pic[n]
 
 
-def unreachable_message(store: str, what: str = "refreshed") -> str:
-    """What to tell you when a store's website can't be reached."""
+def unreachable_message(store: str, what: str = "refreshed", error: BaseException | None = None) -> str:
+    """What to tell you when a store's website can't be reached (error: why, when it's known: something on this
+    computer refusing the connection is said as that, net.blocked_message)."""
     host = STORE_HOSTS[store].replace("accounts.", "").replace("app.", "")
+    if error is not None and blocked_here(error):
+        return blocked_message(host.replace("api.", ""))
     return (f"Couldn't reach {host}, so {STORES[store]['label']} wasn't {what}. You may be offline, or the store may "
             "be down. Your saved list is unchanged; try again when you're connected.")
 

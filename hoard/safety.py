@@ -382,6 +382,7 @@ def _connect_public(host: str, port: int, timeout) -> socket.socket:
     can use (a name that answers with a public address for the check and a private one for the connection).
     """
     last: Exception | None = None
+    tried = []
     for family, sockaddr in _public_addresses(host, port):
         sock = socket.socket(family, socket.SOCK_STREAM)
         if timeout is not None and timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
@@ -391,7 +392,10 @@ def _connect_public(host: str, port: int, timeout) -> socket.socket:
             return sock
         except OSError as e:
             last = e
+            tried.append(f"{sockaddr[0]}: {type(e).__name__} {getattr(e, 'winerror', None) or e.errno or ''}".strip())
             sock.close()
+    if len(tried) > 1:   # (only the last one's error goes on: Hoard's log says how each went, for a support report)
+        print(f"Couldn't connect to {host} at any of its addresses: {'; '.join(tried)}", flush=True)
     raise last or OSError(f"couldn't connect to {host}")
 
 
