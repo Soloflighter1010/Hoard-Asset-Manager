@@ -3825,6 +3825,9 @@ class PageLayout(unittest.TestCase):
         # the sort, one for both pages: only one of theirs
         self.assertEqual(server.apply_settings(cfg, {"ui": {"sort": "added"}})["ui"], {"sort": "added"})
         self.assertEqual(server.apply_settings(cfg, {"ui": {"sort": "price"}})["ui"], {})
+        # the sets you added to last (issue #228): set ids only, ten at most
+        self.assertEqual(server.apply_settings(cfg, {"ui": {"recent_sets": ["a1", "../x", 5, "b2"] + ["c"] * 20}})["ui"],
+                         {"recent_sets": ["a1", "b2"] + ["c"] * 8})
         self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")
 
 

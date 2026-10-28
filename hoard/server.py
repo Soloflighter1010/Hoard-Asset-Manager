@@ -169,7 +169,7 @@ UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and D
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
     is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
-    and the sort, one for both pages."""
+    the sort, one for both pages, and the sets you added to last."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -187,6 +187,8 @@ def ui_settings(cfg: dict) -> dict:
             out[k] = ui[k]
     if ui.get("sort") in UI_SORTS:
         out["sort"] = ui["sort"]
+    if isinstance(ui.get("recent_sets"), list):   # the sets you added to last, first in the right-click menu (issue #228)
+        out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
     return out
 
 
