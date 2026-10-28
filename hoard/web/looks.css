@@ -238,3 +238,13 @@
 [data-style="workbench"] .projects h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
 [data-style="workbench"] .setjump button { border-radius: 4px; }
 [data-style="workbench"] .setup-card { padding: 22px 26px; }
+
+/* ---------- Settings, Accessibility (issue #222): each product's card stands apart from the page, on a faint background
+   of its own (--stone: a step from the page in every theme, with text on it 11:1 or more) inside an outline as clear as
+   quiet text (--dust: 4.6:1 or more against the card and the page, in every theme), with room inside it. Every card:
+   the Library, Downloads, sets, wishlists and Projects. (Last here, so it holds in every style.) */
+[data-cards="outlined"] .slot { padding: 8px; background: var(--stone); border: 1px solid var(--dust); border-radius: 14px; }
+[data-cards="outlined"][data-style="workbench"] .grid { row-gap: 6px; }
+[data-cards="outlined"][data-style="workbench"] .grid .slot { border: 1px solid var(--dust); border-radius: 8px; }
+[data-cards="outlined"][data-style="workbench"] .grid .slot:first-child { border-top: 1px solid var(--dust); }
+[data-cards="outlined"][data-style="workbench"] .grid .slot:hover { background: var(--seam); }

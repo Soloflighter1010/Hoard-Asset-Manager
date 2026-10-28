@@ -1437,6 +1437,7 @@ body.less-motion .tour-try::before { animation: none; }
       <option value="dyslexic">OpenDyslexic, for dyslexia</option>
     </select></label>
   <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
+  <label class="check"><input type="checkbox" id="setCardOutlines"> Give product cards an outline and a faint background</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
@@ -2772,6 +2773,7 @@ const SETUP_VIEWS = {
       <label><span>Light or dark</span><select id="setupMode">${opt("system", "Match my computer", d.mode || "system")}${opt("light", "Light", d.mode)}${opt("dark", "Dark", d.mode)}</select></label>
       <label><span>Store colours</span><select id="setupColours">${opt("standard", "Standard", d.colours === "custom" ? "standard" : d.colours)}${opt("colourblind", "Easier to tell apart (colour blindness)", d.colours)}</select></label>
       <label class="tick"><input type="checkbox" id="setupSpacing"${d.spacing ? " checked" : ""}> More space between letters, words and lines</label>
+      <label class="tick"><input type="checkbox" id="setupCardOutlines"${d.card_outlines ? " checked" : ""}> Give product cards an outline and a faint background</label>
       <label class="tick"><input type="checkbox" id="setupMotion"${d.reduce_motion ? " checked" : ""}> Reduce motion</label>
       <label class="tick"><input type="checkbox" id="setupPause"${d.pause_animations ? " checked" : ""}> Pause animated pictures</label>
     </div>
@@ -2865,6 +2867,7 @@ const SETUP_WIRES = {
   access: () => {
     const read = () => ({ text_size: Number($("#setupTextSize").value), font: $("#setupFont").value, mode: $("#setupMode").value,
                           colours: $("#setupColours").value, spacing: $("#setupSpacing").checked,
+                          card_outlines: $("#setupCardOutlines").checked,
                           reduce_motion: $("#setupMotion").checked, pause_animations: $("#setupPause").checked });
     $("#setupBody .access-pick").addEventListener("change", async () => {
       const display = read();

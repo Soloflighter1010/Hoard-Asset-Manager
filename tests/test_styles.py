@@ -162,6 +162,98 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class CardOutlines(unittest.TestCase):
+    """Issue #222 (Settings, Accessibility): each product's card can have an outline and a faint background of its own,
+    so it stands apart from the page, everywhere cards show, in every style and theme. Kept as display.card_outlines,
+    served with the page from its first moment, and changed at once in Settings and the setup assistant."""
+
+    def test_checked_kept_and_served(self):
+        self.assertIs(config.DEFAULT_CONFIG["display"]["card_outlines"], False)
+        self.assertIs(server.display_settings({})["card_outlines"], False)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "config.json"
+        cfg = config.load_config(path)
+        config.deep_merge(cfg, server.apply_settings(cfg, {"display": {"card_outlines": 1}}))
+        config.save_config(cfg, path)
+        self.assertIs(server.display_settings(config.load_config(path))["card_outlines"], True, "kept through a restart")
+        shown = server.public_settings(config.load_config(path))["display"]
+        again = {**config.load_config(), "display": {}}
+        config.deep_merge(again, server.apply_settings(again, {"display": shown}))   # as a restore puts it back
+        self.assertIs(again["display"]["card_outlines"], True)
+        for page in server.PAGES.values():
+            on = server.page_source(page, {"display": {"language": "en", "card_outlines": True}}).decode("utf-8")
+            self.assertIn('<html lang="en" data-cards="outlined">', on)
+            self.assertIn('id="setCardOutlines"', on)
+            self.assertIn('<html lang="en">', server.page_source(page, {"display": {"language": "en"}}).decode("utf-8"))
+        self.assertIn('data-cards="outlined"', server.guide_source({"cards": ["outlined"]}).decode())
+        self.assertIn('name="cards" value="outlined" checked', server.guide_source({"cards": ["outlined"]}).decode())
+
+    def test_the_outline_is_clear_in_every_theme(self):
+        """The outline (--dust) stands out at least 3:1 (WCAG's for a control's edge) from the card (--stone) and the
+        page (--cave), and the card is a step lighter or darker than the page, in every theme, Light and Dark."""
+        def lum(hex_):
+            c = [int(hex_.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+            c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+            return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+        def ratio(a, b):
+            hi, lo = sorted((lum(a), lum(b)), reverse=True)
+            return (hi + 0.05) / (lo + 0.05)
+        looks = (server.WEB / "looks.css").read_text("utf-8")
+        self.assertRegex(looks, r'\[data-cards="outlined"\] \.slot \{[^}]*background: var\(--stone\);[^}]*border: 1px solid var\(--dust\)')
+        for name, theme in themes.THEMES.items():
+            for mode, c in theme.items():
+                if isinstance(c, dict) and "dust" in c:
+                    with self.subTest(theme=name, mode=mode):
+                        self.assertGreaterEqual(min(ratio(c["dust"], c["stone"]), ratio(c["dust"], c["cave"])), 3)
+                        self.assertGreater(ratio(c["stone"], c["cave"]), 1.05)
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_in_settings_and_setup(self):
+        from playwright.sync_api import expect, sync_playwright
+        srv = Chosen.serve(self, {"setup_done": True, "display": {}, "ui": {"toured": True}})
+        mark = "() => document.documentElement.dataset.cards || ''"
+        card = "() => { const c = getComputedStyle(document.querySelector('#grid .slot')); return [c.borderTopWidth, c.paddingTop]; }"
+        with sync_playwright() as p, mock.patch.object(server, "save_config"):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(srv.entry_url())
+            page.locator("#grid .slot").first.wait_for()
+            self.assertEqual((page.evaluate(mark), page.evaluate(card)), ("", ["0px", "0px"]), "as it's always looked")
+            page.click("#settingsBtn")
+            page.check("#setCardOutlines")
+            page.wait_for_function(f"() => ({mark})() === 'outlined'")
+            self.assertIs(srv.cfg["display"]["card_outlines"], True, "saved")
+            self.assertEqual(page.evaluate(card), ["1px", "8px"], "an outline, with room inside it")
+            for style in ("treasure", "workbench"):   # (in every style: looks.css's last word)
+                page.evaluate(f"() => document.documentElement.dataset.style = '{style}'")
+                self.assertEqual(page.evaluate(card)[0], "1px", style)
+            page.close()
+            page = browser.new_page()   # opened again: outlined from the first moment, on both pages
+            page.goto(srv.entry_url().replace("/#", "/downloads#", 1))
+            self.assertEqual(page.evaluate(mark), "outlined")
+            page.click("#settingsBtn")
+            expect(page.locator("#setCardOutlines")).to_be_checked()
+            page.uncheck("#setCardOutlines")
+            page.wait_for_function(f"() => ({mark})() === ''")
+            self.assertIs(srv.cfg["display"]["card_outlines"], False)
+            page.close()
+            srv = Chosen.serve(self, {"setup_done": False, "display": {}}, items=False)   # someone new: setup offers it too
+            page = browser.new_page()
+            page.goto(srv.entry_url())
+            page.locator("#setupTitle", has_text="Choose your language").wait_for()
+            page.click("#setupNext")
+            page.locator("#setupTitle", has_text="Make Hoard easier to use").wait_for()
+            page.check("#setupCardOutlines")
+            page.wait_for_function(f"() => ({mark})() === 'outlined'")
+            self.assertIs(srv.cfg["display"]["card_outlines"], True)
+            self.assertEqual(errors, [])
+            browser.close()
+
+
 class Guide(unittest.TestCase):
     """The style guide (/styleguide): every part of the pages, drawn with a page's own stylesheet, the styles and a
     theme as chosen in its address, so it keeps up with the pages; nothing of yours is in it."""

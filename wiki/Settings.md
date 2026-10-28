@@ -76,6 +76,9 @@ when you leave the field. The title bar says **Saved**.
     letters; Japanese and Korean keep Hoard's own fonts.
   - **More space between letters, words and lines** (4.1.0): also easier to read for many, with or without
     OpenDyslexic.
+  - **Give product cards an outline and a faint background** (5.2.0): each product's card stands apart from the page,
+    in an outline as clear as quiet text, everywhere cards show (the Library, Downloads, sets, wishlists, Projects),
+    in every style and theme.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
     frame. Turn it off and they move again.
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
@@ -147,6 +150,7 @@ and keep it valid JSON.
 | `download_skip` | `[]` | Products to always skip when downloading, by tag key (**Always skip** in the list **Download new** shows; see [Downloads](Downloads)) |
 | `display.font` | `"standard"` | `"standard"` or `"dyslexic"` (OpenDyslexic; **Font** in Settings, **Accessibility**) |
 | `display.spacing` | `false` | More space between letters, words and lines (**Accessibility** in Settings) |
+| `display.card_outlines` | `false` | Product cards with an outline and a faint background (**Accessibility** in Settings) |
 | `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
 | `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |

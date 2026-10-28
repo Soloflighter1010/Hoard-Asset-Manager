@@ -119,6 +119,7 @@ def display_settings(cfg: dict) -> dict:
             "glow": d.get("glow") is not False,
             # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
             "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
+            "card_outlines": bool(d.get("card_outlines")),   # each card outlined, on a background of its own (#222)
             "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
             "custom_colours": custom_colours(d.get("custom_colours")),
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
@@ -317,7 +318,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing") if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines")
+                        if k in given})
         if "font" in given:
             if given["font"] not in FONTS:
                 raise ValueError("Choose a font from the list.")
@@ -2221,8 +2223,10 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     looks = '<style id="looks">\n' + (WEB / "looks.css").read_text("utf-8").replace("\r\n", "\n") + "</style>\n"
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
     page = page.replace(b"</head>", looks.encode() + style.encode() + b"</head>", 1)
-    # the font, spacing (Settings, Accessibility) and style (Appearance) you chose, on the page from its first moment
+    # the font, spacing, card outlines (Settings, Accessibility) and style (Appearance) you chose, on the page from its
+    # first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
+    marks += ' data-cards="outlined"' if d.get("card_outlines") is True else ""
     if themes.style_id(d.get("style")) != "standard":
         marks += f' data-style="{themes.style_id(d.get("style"))}"'
     if marks:
@@ -2250,20 +2254,22 @@ def guide_source(query: dict) -> bytes:
     """The style guide (/styleguide, web/styleguide.html): every part of the pages, drawn with one page's own
     stylesheet (the Library's or Downloads'), web/looks.css and a theme, as the pages are served, so it never drifts
     from them. What it's shown in (page, style, theme, Light or Dark, font, spacing, colours, text size) is in its
-    address, chosen in its own bar. Nothing of yours is in it: every product, project and file in it is made up."""
+    address, chosen in its own bar (and card outlines). Nothing of yours is in it: every product, project and file in it
+    is made up."""
     def one(k):
         return (query.get(k) or [""])[0][:40]
     page = one("page") if one("page") in GUIDE_PAGES else "library"
     style, theme, mode = themes.style_id(one("style")), themes.theme_id(one("theme")), themes.mode_id(one("mode"))
     size = int(one("size")) if one("size") in {str(s) for s in GUIDE_SIZES} else 100
     font, spacing, colours = one("font") == "dyslexic", one("spacing") == "wide", one("colours") == "colourblind"
+    outlined = one("cards") == "outlined"
     own = _OWN_STYLE.search((WEB / GUIDE_PAGES[page]).read_bytes())
     styles = (b'<style id="page">' + (own.group(1) if own else b"") + b"</style>\n" +
               b'<style id="looks">\n' + (WEB / "looks.css").read_bytes() + b"</style>\n" +
               b'<style id="theme">\n' + themes.css(theme, mode).encode() + b"\n</style>\n")
     marks = (f' data-page="{page}"' + (f' data-style="{style}"' if style != "standard" else "") +
              (' data-font="dyslexic"' if font else "") + (' data-spacing="wide"' if spacing else "") +
-             (' data-colours="colourblind"' if colours else "") +
+             (' data-cards="outlined"' if outlined else "") + (' data-colours="colourblind"' if colours else "") +
              (f' style="zoom: {size / 100}; --zoom: {size / 100}"' if size != 100 else ""))
 
     def choice(name, label, options, chosen):
@@ -2277,7 +2283,8 @@ def guide_source(query: dict) -> bytes:
            choice("size", "Text size", [(str(s), f"{s}%") for s in GUIDE_SIZES], str(size)) +
            choice("colours", "Store colours", [("standard", "Standard"), ("colourblind", "Easier to tell apart")],
                   "colourblind" if colours else "standard") +
-           f'<label class="check"><input type="checkbox" name="spacing" value="wide"{" checked" if spacing else ""}> Wider spacing</label>')
+           f'<label class="check"><input type="checkbox" name="spacing" value="wide"{" checked" if spacing else ""}> Wider spacing</label>'
+           f'<label class="check"><input type="checkbox" name="cards" value="outlined"{" checked" if outlined else ""}> Card outlines</label>')
     tokens = "".join(f'<li class="sg-tok"><i style="background: var(--{k})"></i><code>--{k}</code><small>{use}</small>'
                      f'<span class="sg-val" data-token="{k}"></span></li>' for k, use in TOKEN_USES.items())
     out = (WEB / GUIDE).read_bytes()

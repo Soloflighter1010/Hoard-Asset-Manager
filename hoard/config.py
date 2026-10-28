@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "routine_hours": None,         # issue #113: the routine check, every this many hours (0 = off); None: off, or Sync automatically's
     "download_skip": [],           # products to always skip when downloading, by tag key (issue #107)
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False, "font": "standard", "spacing": False,   # accessibility
+                "card_outlines": False,   # (and each card outlined, on a background of its own: issue #222)
                 "glow": True, "colours": "standard", "custom_colours": {},   # issue #112: the glow, store colours
                 "theme": "hoard", "mode": "system",   # Settings, Appearance: hoard/themes.py, and Light or Dark
                 "style": "standard",   # and the style (issue #159): standard, treasure or workbench (web/looks.css)
