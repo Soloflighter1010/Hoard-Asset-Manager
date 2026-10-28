@@ -3285,9 +3285,10 @@ function setArt(s) {   // the picture you chose for it, else up to four of its p
 // Wishlists (issue #158): sets of the kind "wishlist", most read from a store's own list, each product with its price
 const isWish = s => s.kind === "wishlist";
 const cheaper = i => i.was && i.price && i.was.currency === i.price.currency && i.price.amount < i.was.amount;
-function priceHTML(i) {   // what a product on a wishlist costs, and what it cost before, when that changed
+const dearer = i => i.was && i.price && i.was.currency === i.price.currency && i.price.amount > i.was.amount;
+function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed
   if (!i.price) return "";
-  return `<span class="price${cheaper(i) ? " down" : ""}" translate="no">${esc(i.price.text)}</span>` +
+  return `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
     (i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "");
 }
 function setCounts(s) {
@@ -3452,6 +3453,8 @@ const outsideUrl = u => {
   return x.protocol === "https:" && !x.username && !x.password && (!x.port || x.port === "443") && x.hostname.includes(".") &&
     !/^[\d.]+$/.test(x.hostname) && !x.hostname.startsWith("[") ? s : "";
 };
+const BIN_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6"/></svg>';
 function setExtraTile(s, i) {
   const away = !i.owned && !i.local && !storeUrl(i.store, i.url) ? outsideUrl(i.elsewhere) : "";
   const store = away ? new URL(away).hostname.replace(/^www\./, "") : STORE_NAMES[i.store] || (i.local ? "Local" : i.store);
@@ -3467,7 +3470,8 @@ function setExtraTile(s, i) {
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
     (price ? `<span class="ext-price">${price}</span>` : "") +
     `<span class="ext-row"><span class="ext-what">${esc(what)}${href === buy && buy ? `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span>` : ""}</span>` +
-    `<button class="untag" data-setx="out" data-key="${esc(i.key)}" aria-label="${esc(tr("Take {0} out of the set", i.name))}">×</button></span></div>`;
+    `<button class="ext-out" data-setx="out" data-key="${esc(i.key)}" title="${esc(tr(isWish(s) ? "Take it off this wishlist" : "Take it out of the set"))}" ` +
+      `aria-label="${esc(tr(isWish(s) ? "Take {0} off this wishlist" : "Take {0} out of the set", i.name))}">${BIN_ICON}<span>${esc(tr("Remove"))}</span></button></span></div>`;
 }
 // Drawn with the page (render): the set tiles, or the open set's head and the rest of its products. Each part is put
 // in again only when it changes, so a note being written isn't lost when the page is drawn again.
@@ -3721,7 +3725,9 @@ async function setAct(e) {
   else if (act === "unpicture") changeSets({ action: "picture", id: s.id, image: null });
   else if (act === "rename") renameSet(s);
   else if (act === "delete") deleteSets([s]);
-  else if (act === "out") {
+  else if (act === "out") {   // asked first (issue #213: the × was easy to hit by mistake, and nothing asked)
+    const it = s.items.find(i => i.key === b.dataset.key), name = it ? it.name : "";
+    if (!await ask(isWish(s) ? tr("Take {0} off this wishlist?", name) : tr("Take {0} out of {1}?", name, s.name), tr("Take it off"), true)) return;
     changeSets({ action: "remove", id: s.id, items: [b.dataset.key] });
   } else if (act === "note") {
     const done = await changeSets({ action: "note", id: s.id, note: $("#setView [data-setnote]").value });

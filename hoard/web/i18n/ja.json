@@ -1998,5 +1998,11 @@
  "More than one set has {0} in its name: type more of it.": "名前に「{0}」を含むセットが複数あります。もう少し長く入力してください。",
  "There's no set called {0}.": "「{0}」という名前のセットはありません。",
  "New project with this set...": "このセットで新しいプロジェクト...",
- "Nothing in {0} is downloaded yet.": "{0}の中で、まだダウンロードしたものはありません。"
+ "Nothing in {0} is downloaded yet.": "{0}の中で、まだダウンロードしたものはありません。",
+ "Take it off this wishlist": "ほしい物リストから外す",
+ "Take it out of the set": "セットから外す",
+ "Take {0} off this wishlist": "{0}をほしい物リストから外す",
+ "Take {0} off this wishlist?": "{0}をこのほしい物リストから外しますか?",
+ "Take {0} out of {1}?": "{0}を{1}から外しますか?",
+ "Take it off": "外す"
 }

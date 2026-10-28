@@ -1998,5 +1998,11 @@
  "More than one set has {0} in its name: type more of it.": "이름에 '{0}'이(가) 들어간 세트가 여러 개예요. 조금 더 입력하세요.",
  "There's no set called {0}.": "'{0}'(이)라는 세트가 없어요.",
  "New project with this set...": "이 세트로 새 프로젝트...",
- "Nothing in {0} is downloaded yet.": "{0}에서 아직 다운로드한 것이 없어요."
+ "Nothing in {0} is downloaded yet.": "{0}에서 아직 다운로드한 것이 없어요.",
+ "Take it off this wishlist": "위시리스트에서 빼기",
+ "Take it out of the set": "세트에서 빼기",
+ "Take {0} off this wishlist": "{0}을(를) 위시리스트에서 빼기",
+ "Take {0} off this wishlist?": "{0}을(를) 이 위시리스트에서 뺄까요?",
+ "Take {0} out of {1}?": "{0}을(를) {1}에서 뺄까요?",
+ "Take it off": "빼기"
 }

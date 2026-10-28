@@ -24,7 +24,8 @@ Open a set and it's a folder of its products. **Sets** above its name goes back 
   are all of its products here, whichever view (Library, Archive...) they're in.
 - **The rest** come after them, each with its picture and where it is. In the Library: **Not yours yet**, with
   **Buy on** its store (opens the product's page in your browser), and **Your own packages (Local)**. In Downloads,
-  also **In your library, not downloaded**, which opens it in the Library. **×** takes one out of the set.
+  also **In your library, not downloaded**, which opens it in the Library. **Remove** takes one out of the set (or off the wishlist), once you've said so
+  (5.2.0).
 
 A set also has **Share...**, **Download the N not downloaded** (every product of it that's yours and not downloaded,
 at once, as **Download** does in the Library), **New project with this set...**, **Choose a picture...**, **Rename** and **Delete** (deleting a set
@@ -152,8 +153,8 @@ already in your library show as yours.
   save as "Webpage, Single File"), on your computer, with nothing sent anywhere. A long wishlist saved a page at a
   time comes together as one. Save each Gumroad wishlist's or Jinxxy list's own page, not the page listing them.
 - Each time a wishlist is read again, it holds what the store's list does now, and a product whose price changed
-  shows the new price with the old one struck through; one that's cheaper than before is marked, and **Tasks** lists
-  them. A name, note or picture you gave a wishlist stays.
+  shows the new price with the old one struck through; one that's cheaper than before is marked (an arrow down,
+  in gold), and one that costs more has an arrow up, and **Tasks** lists the cheaper ones. A name, note or picture you gave a wishlist stays.
 - A product a Jinxxy list sends you to on a site that isn't one of the stores (the creator's own, say) shows **Buy
   on** that site, and opens its page there (from 5.1.2). It stays in Hoard: a shared set leaves that link out, as its
   page opens only the stores' own.

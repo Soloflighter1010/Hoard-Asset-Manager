@@ -1041,10 +1041,20 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .ext-what { color: var(--dust); }
 .slot.ext.wanted .ext-what { color: var(--warn); }
 /* a wishlist product's price, and what it was when it changed (struck through); cheaper than before stands out */
-.ext-price { display: block; margin-top: -2px; font-size: 13px; font-weight: 700; color: var(--bone); overflow-wrap: anywhere; }
+/* a wishlist product's price, as a badge; a drop in gold, a rise in the warning colour, the old price struck out (#213) */
+.ext-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: -2px; font-size: 13px; overflow-wrap: anywhere; }
+.ext-price .price { padding: 2px 9px; border-radius: 999px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
+  color: var(--bone); font-weight: 800; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .ext-price .was { font-weight: 500; color: var(--dust); }
-.ext-price .price.down { color: var(--gold-text); }
+.ext-price .price.down { color: var(--gold-text); box-shadow: inset 0 0 0 2px var(--gold); }
 .ext-price .price.down::before { content: "\2193 "; }
+.ext-price .price.up { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
+.ext-price .price.up::before { content: "\2191 "; }
+/* taking it off: a button that looks like one, red on hover, and asked first */
+.ext-out { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border: 0; border-radius: 7px; flex: none;
+  background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); color: var(--dust); font: 600 12px var(--body); cursor: pointer; }
+.ext-out svg { width: 13px; height: 13px; }
+.ext-out:hover, .ext-out:focus-visible { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); outline: none; }
 .wish-h { margin-top: 30px; }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
