@@ -753,7 +753,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/library":
             items, stores = srv.lib.snapshot()   # enrich() makes new items, so the library's own are never changed
             tagdata = TagStore().load()
-            items = enrich(items, srv.cfg["tags"], tagdata)
+            items = enrich(items, srv.cfg["tags"], tagdata, apart=MarkStore().keys("apart"))
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
             MarkStore().follow(items)   # a product renamed since it was removed (or hidden...) stays so (issue #224)
             marks, unlocked = MarkStore().view(), self._unlocked()
@@ -768,6 +768,7 @@ class Handler(BaseHTTPRequestHandler):
                 i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
                 i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                              else "archived" if is_archived(i, marks) else None)
+                i["apart"] = i["tag_key"] in marks["apart"]   # "Not a copy": never stacked (issue #217)
                 # hidden items never leave the server while it's locked: hidden by the mark itself, whatever else
                 # it's marked (a hidden product also removed is labelled removed, and was let out)
                 if i["tag_key"] not in marks["hidden"] or unlocked:
@@ -817,7 +818,7 @@ class Handler(BaseHTTPRequestHandler):
             used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
             stacks, looks = {}, []   # copies of one product stack here as in the Library: by its products (hoard/library.py)
             listed = [dict(i) for i in srv.lib.snapshot()[0]]
-            stack_by_picture(listed)
+            stack_by_picture(listed, apart=marks["apart"])
             for i in listed:
                 # a download's stack is its own product's (by store and name), even one that stacks with nothing:
                 # "Hair Pack 1" and "Hair Pack 2" share a product key (tag_key leaves numbers out), but the Library

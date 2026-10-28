@@ -2923,6 +2923,34 @@ class CopiesStack(unittest.TestCase):
             self.assertFalse(any(e.get("look_for") for e in out))
             self.assertEqual(len({keys[0], keys[2], keys[4]}), 3)
 
+    def test_names_alike_by_one_creator_stack(self):
+        """Issue #217: one creator's listings of a product on two stores stack when their names are alike once what
+        listings add around a name is left out ([Asset], versions, "for VRChat", Free, emoji), not only when they're the
+        same. Numbers and bases still tell products apart, a store's own listings aren't compared, each stack says why
+        it's together, and a product you said is "Not a copy" never stacks."""
+        from unittest import mock
+        rows = [("gumroad", "[Asset] Fox Tail v2", "Kitsu"), ("booth", "Fox Tail", "Kitsu"),
+                ("gumroad", "Hair Pack 1", "Kitsu"), ("booth", "Hair Pack 2", "Kitsu"),
+                ("gumroad", "Hoodie for Rusk", "Kitsu"), ("booth", "Hoodie for Mochi", "Kitsu"),
+                ("jinxxy", "🐺 Wolf Ears (Free!)", "Kitsu"), ("booth", "Wolf Ears", "Kitsu"),
+                ("booth", "Paw Gloves", "Kitsu"), ("booth", "Paw Gloves v2", "Kitsu"),
+                ("gumroad", "Fluffy Mane", "Sesilaso"), ("jinxxy", "Fluffy Mane", "Sesilaso"),
+                ("gumroad", "Cat Tail", "Kitsu"), ("booth", "Cat Tail", "Someone Else")]
+        items = [library.item(store, str(n), name=name, creator=creator) for n, (store, name, creator) in enumerate(rows)]
+        with mock.patch.object(library, "picture_looks", lambda: {}):
+            out = library.enrich(items, {})
+            keys = [e["stack_key"] for e in out]
+            self.assertTrue(keys[0] and keys[0] == keys[1], "[Asset] ... v2 on one store, the name alone on another")
+            self.assertEqual((out[0]["stack_why"], out[1]["stack_why"]), (["alike"], ["alike"]))
+            self.assertTrue(keys[6] and keys[6] == keys[7], "emoji and (Free!) left out")
+            self.assertEqual(keys[2:6], ["", "", "", ""], "Hair Pack 1 isn't 2; a hoodie for Rusk isn't one for Mochi")
+            self.assertEqual(keys[8:10], ["", ""], "one store's two listings: not compared by their names")
+            self.assertEqual(out[10]["stack_why"], ["name"])
+            self.assertEqual(keys[12:], ["", ""], "two creators' names alike: not by name alone")
+            out = library.enrich(items, {}, apart={tags.tag_key("booth", "Fox Tail")})
+        self.assertEqual([e["stack_key"] for e in out[:2]], ["", ""], "Not a copy: never stacked")
+        self.assertEqual(out[0]["stack_why"], [])
+
     def test_items_without_a_name_dont_stack(self):
         """Items whose names are only marks ("!!!", "★") have no name to stack by: by one creator, they're not all
         one product."""

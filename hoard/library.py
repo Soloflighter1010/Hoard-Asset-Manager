@@ -1310,8 +1310,9 @@ def common_words(names: list[str], min_count: int, max_share: float, block=froze
     return [ts & keep for ts in toks]
 
 
-def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
-    """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
+def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=frozenset()) -> list[dict]:
+    """Add your tags, suggested tags (words shared by several names) and cross-store matches (apart: products you
+    said aren't copies of anything, stack_by_picture)."""
     tagdata = tagdata or TagStore.empty()
     block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
     suggestions = common_words([i["name"] for i in items], int(tcfg.get("min_count", 3)),
@@ -1334,7 +1335,7 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
             e["payhip_shop"], e["payhip_shop_added"] = shop, bool(store_link("payhip", shop + "/"))
         out.append(e)
         groups.setdefault(e["match_key"], []).append(e)
-    stack_by_picture(out)
+    stack_by_picture(out, apart=apart)
     for g in groups.values():
         by_store: dict[str, set] = {}
         for e in g:
@@ -1473,7 +1474,7 @@ def _maker(creator: str) -> str:
     return "" if key in ("", "unknowncreator") else key
 
 
-def _names_alike(a: str, b: str) -> bool:
+def _names_alike(a: str, b: str, enough: float = 0.8) -> bool:
     """Two stack names that are probably one product's: the same, or nearly (a word more or less), with the same
     numbers in them."""
     if a == b:
@@ -1481,10 +1482,28 @@ def _names_alike(a: str, b: str) -> bool:
     if not a or not b or re.findall(r"\d+", a) != re.findall(r"\d+", b):
         return False
     from difflib import SequenceMatcher
-    return SequenceMatcher(None, a, b).ratio() >= 0.8
+    return SequenceMatcher(None, a, b).ratio() >= enough
 
 
-def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
+# words a store's listing adds around a product's name, not part of it (issue #217)
+_FILLER = re.compile(r"\b(?:for vrchat|vrchat|vrc|assets?|unitypackage|unity package|free|ver|version|edition|new|updated?)\b")
+_VERSION = re.compile(r"\bv\d+(?:\.\d+)*[a-z]?\b|\b\d+(?:\.\d+)+\b")   # v2, 1.0.3 (a plain number is the name's: Pack 2)
+
+
+def fuzzy_name(name: str) -> str:
+    """A product's name with what listings add around it left out, to tell two stores' listings of it apart from
+    other products (issue #217): no case, punctuation, emoji, 【store】 [labels], versions (v2, 1.0.3), or words like
+    VRChat, Asset or Free. Its other numbers stay, so "Hair Pack 1" isn't "Hair Pack 2"; and "for <base>" stays, as a
+    hoodie for one avatar isn't the hoodie for another."""
+    s = re.sub(r"【[^】]*】|\[[^\]]*\]", " ", unicodedata.normalize("NFKC", name or "").casefold())
+    s = _FILLER.sub(" ", _VERSION.sub(" ", s))
+    return re.sub(r"[\W_]+", "", s)
+
+
+STACK_WHY = ("picture", "name", "look", "alike")   # why copies stack: the same picture, name, a look-alike picture, names alike
+
+
+def stack_by_picture(items: list[dict], looks: dict | None = None, apart=frozenset()) -> None:
     """Give each item a stack_key: copies of one product show as one tile (issue #111), from any store. Copies are:
 
     - items with the same picture, byte for byte, when no other creator uses it (bought twice, or in versions);
@@ -1494,16 +1513,23 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
     - items with the same name by creators named differently (one shop under two names) whose pictures look the
       same (picture_looks): the same picture saved again by another store isn't the same bytes.
 
+    - items by the same creator on two stores whose names are alike once what listings add around a name is left
+      out (fuzzy_name: "[Asset] Fox Tail v2" and "Fox Tail"), with the same numbers in them (issue #217).
+
     "Hair Pack 1" and "Hair Pack 2" stay apart unless they have the same picture. An item that might stack, once
     it's known how its picture looks, gets look_for: its picture's SHA-256, for the page to work out (save_picture_looks).
     An item with nothing to stack with gets "", as does one whose picture isn't saved yet unless its name and
-    creator say it's a copy."""
+    creator say it's a copy. Each item in a stack gets stack_why: why its stack's copies were put together (STACK_WHY).
+    apart: product keys you said aren't copies of anything ("Not a copy"): they never stack."""
     looks = picture_looks() if looks is None else looks
     hashes = picture_hashes(i["thumbnail"] for i in items if i.get("thumbnail"))
     pic = [hashes.get(i.get("thumbnail") or "", "") for i in items]
     names = [stack_name(i.get("name") or "") for i in items]
     makers = [_maker(i.get("creator") or "") for i in items]
+    kept_apart = [bool(apart) and (i.get("tag_key") or tag_key(str(i.get("store") or ""), i.get("name") or "")) in apart
+                  for i in items]
     parent = list(range(len(items)))
+    why: dict[int, set] = {}   # a stack's root -> why its copies were put together
 
     def find(x: int) -> int:
         while parent[x] != x:
@@ -1511,10 +1537,14 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
             x = parent[x]
         return x
 
-    def union(a: int, b: int) -> None:
+    def union(a: int, b: int, reason: str = "picture") -> None:
+        if kept_apart[a] or kept_apart[b]:
+            return
         ra, rb = find(a), find(b)
         if ra != rb:
-            parent[max(ra, rb)] = min(ra, rb)
+            root, other = min(ra, rb), max(ra, rb)
+            parent[other] = root
+            why[root] = why.get(root, set()) | why.pop(other, set()) | {reason}
 
     by_pic: dict[str, list[int]] = {}
     for n, h in enumerate(pic):
@@ -1540,7 +1570,7 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
         for n in group:
             if makers[n]:
                 if makers[n] in first_by_maker:
-                    union(first_by_maker[makers[n]], n)
+                    union(first_by_maker[makers[n]], n, "name")
                 else:
                     first_by_maker[makers[n]] = n
         for x, a in enumerate(group):
@@ -1550,9 +1580,24 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
                 la, lb = looks.get(pic[a]), looks.get(pic[b])
                 if la and lb:
                     if bin(int(la, 16) ^ int(lb, 16)).count("1") <= LOOK_DISTANCE:
-                        union(a, b)
+                        union(a, b, "look")
                 else:
                     look_for.update(n for n, known in ((a, la), (b, lb)) if not known)
+    # issue #217: one creator's listings on two stores whose names are alike once what listings add is left out. Only
+    # names starting alike are compared, a creator's few at a time, so a big library stays quick to read
+    loose = [fuzzy_name(i.get("name") or "") for i in items]
+    by_start: dict[tuple, list[int]] = {}
+    for n, f in enumerate(loose):
+        if makers[n] and len(f) >= 4:
+            by_start.setdefault((makers[n], f[:4]), []).append(n)
+    for group in by_start.values():
+        if not 2 <= len(group) <= 60:
+            continue
+        for x, a in enumerate(group):
+            for b in group[x + 1:]:
+                if items[a].get("store") != items[b].get("store") and find(a) != find(b) \
+                        and _names_alike(loose[a], loose[b], 0.86):
+                    union(a, b, "alike")
     members: dict[int, list[int]] = {}
     for n in range(len(items)):
         members.setdefault(find(n), []).append(n)
@@ -1563,6 +1608,7 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
                                                    for n in group)).encode()).hexdigest()[:24]
         for n in group:
             items[n]["stack_key"] = key
+            items[n]["stack_why"] = [w for w in STACK_WHY if w in why.get(root, ())] if key else []
     for n in look_for:
         items[n]["look_for"] = pic[n]
 

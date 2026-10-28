@@ -10,6 +10,7 @@ update, its new name is marked too (follow), rather than the product coming back
   you've moved one back ("unarchived").
 - removed: out of everything but the Removed view. Kept out after refreshes, so a store can't bring it back.
 - hidden: out of view everywhere (library, Downloads, counts, tags) until unlocked with your PIN.
+- apart: not a copy of anything, whatever its name or picture: never stacked with other products (issue #217).
 
 The PIN is stored only as a slow, salted hash (scrypt). Wrong guesses lock the hidden library for longer each
 time, and that survives restarts. It's a privacy screen for the app, not encryption: anyone who can open your
@@ -35,7 +36,7 @@ from .paths import data_dir
 from .safety import DataFileError, check_seal, read_json_file, seal, write_file_safely
 from .tags import TAG_KEY_RX
 
-KINDS = ("archived", "unarchived", "removed", "hidden")
+KINDS = ("archived", "unarchived", "removed", "hidden", "apart")   # apart: "Not a copy", kept out of stacks (issue #217)
 ITEM_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):\S{1,300}\Z")   # a store's own key: store:id
 PHRASE_WORDS = 6
 WORDS = (Path(__file__).with_name("recovery_words.txt")).read_text("utf-8").split()   # the BIP-39 English list
