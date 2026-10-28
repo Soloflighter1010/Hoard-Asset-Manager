@@ -21,7 +21,7 @@ from .common import NotLoggedIn, log, now_iso, pause
 from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, is_video_address, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
-from .tags import TagMatcher, TagStore, tag_key
+from .tags import TagMatcher, TagStore, clean_tag, product_type, tag_key
 
 
 STORES = {
@@ -62,6 +62,9 @@ def item(store: str, id_, **fields) -> dict:
     d["archived"], d["gift"] = d["archived"] is True, d["gift"] is True
     added = d.get("added")
     d["added"] = added if isinstance(added, str) and ADDED_TIME.fullmatch(added) else None
+    if "store_tags" in d:   # the tags its creator gave it on its store's page (issue #206): read, even if none
+        tags = d["store_tags"] if isinstance(d["store_tags"], list) else []
+        d["store_tags"] = list(dict.fromkeys(c for c in (clean_tag(x) for x in tags[:60] if isinstance(x, str)) if c))[:30]
     return d
 
 
@@ -1151,7 +1154,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift", "added", "page")}
+                                             "variants", "archived", "gift", "added", "page", "store_tags")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:
@@ -1188,6 +1191,8 @@ class Library:
             i["added"] = before[i["key"]].get("added") if i["key"] in before else now
             if not i.get("page") and i["key"] in before:   # (its public page, found by an earlier refresh)
                 i["page"] = before[i["key"]].get("page")
+            if "store_tags" not in i and "store_tags" in before.get(i["key"], {}):   # (its store's tags, read before)
+                i["store_tags"] = before[i["key"]]["store_tags"]
         return first
 
     def replace_store(self, store: str, items: list[dict], keep_others: bool = False) -> None:
@@ -1324,8 +1329,9 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=fro
     for i, ts in zip(items, suggestions):
         key = tag_key(i["store"], i["name"])
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
+        kind, known = product_type(tagdata, key, i["name"], mine, i.get("store_tags"))   # what it is (issue #223)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted(ts - set(mine)),
-             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": ""}
+             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": "", "type": kind, "type_from": known}
         for k in ("creator_url", "url", "download_url", "page"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))
@@ -1611,6 +1617,42 @@ def stack_by_picture(items: list[dict], looks: dict | None = None, apart=frozens
             items[n]["stack_why"] = [w for w in STACK_WHY if w in why.get(root, ())] if key else []
     for n in look_for:
         items[n]["look_for"] = pic[n]
+
+
+STORE_TAG_PAGES = 40   # products' public pages read for their store's tags, at most, each time a store is read
+
+
+def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: None, delay: float = 0.0,
+                          limit: int = STORE_TAG_PAGES) -> int:
+    """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
+    from each product's public page as anyone sees it, a few each time the store is read, until every product has
+    been read once (each keeps "store_tags", empty when its page has none). A page that couldn't be reached is tried
+    again next time. Returns how many products' pages were read."""
+    from .wishlists import TAGGED_STORES, LinkError, from_product_page
+    if store not in TAGGED_STORES:
+        return 0
+    with lib.lock:
+        todo = [(i["key"], i.get("page") or i.get("url")) for i in lib.data["items"]
+                if i["store"] == store and "store_tags" not in i and (i.get("page") or i.get("url"))][:limit]
+    read: dict[str, list] = {}
+    for n, (key, page) in enumerate(todo, 1):
+        progress(f"The tags creators gave their products, {n} of {len(todo)}")
+        try:
+            read[key] = from_product_page(page, fetch).get("store_tags") or []
+        except LinkError as e:
+            if "couldn't be read" not in str(e):   # (its page is there, and isn't a product's: nothing to read later)
+                read[key] = []
+        except Exception as e:   # (anything else leaves it to try again next time)
+            print(f"Couldn't read the store's tags for {key!r}: {str(e)[:200]}", flush=True)
+        if n < len(todo):
+            pause(delay)
+    if read:
+        with lib.lock:
+            for i in lib.data["items"]:
+                if i["key"] in read:
+                    i["store_tags"] = item(i["store"], i["id"], store_tags=read[i["key"]])["store_tags"]
+            lib.save()
+    return len(read)
 
 
 def unreachable_message(store: str, what: str = "refreshed", error: BaseException | None = None) -> str:

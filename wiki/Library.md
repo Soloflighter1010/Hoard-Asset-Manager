@@ -13,7 +13,7 @@ The **Library** shows everything you own on the stores you use, whether or not y
 - **The store tabs** above the grid narrow it to one store, with a count for each. The tab you're looking at is
   raised, and the page glows up from the bottom in that store's colour (on **Everything**, the colours of the
   stores you're signed in to drift through it).
-- **Filters** on the left: your tags, suggested tags, **Show** (**Downloaded**, **Not downloaded yet** and
+- **Filters** on the left: your tags, suggested tags, **Product type** (see [Tags](Tags#product-types)), **Show** (**Downloaded**, **Not downloaded yet** and
   **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.

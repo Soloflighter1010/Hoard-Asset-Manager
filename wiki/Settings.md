@@ -32,7 +32,14 @@ when you leave the field. The title bar says **Saved**.
 - **Payhip shops:** the shops you've bought from on Payhip, one per line, such as `myshop.store` or
   `payhip.com/ShopName`. Importing a shop's saved page adds it for you. Hoard lists what you bought there, and
   you download it from Payhip yourself. See [Stores](Stores#payhip).
+- **Store tags:** **Read the tags creators give their products** (5.2.0, on unless you turn it off): on Booth,
+  Jinxxy and itch.io, a few products' public pages each time a store is read. See [Tags](Tags).
 - **Offline:** **Save product images, so the library works offline**.
+- **Files to leave out** (5.2.0): files to leave out of every download, from every store or one: a kind of file
+  (**Unity packages**, **Archives**, **Layered images** such as PSDs, **Pictures and textures**, **Blender files**,
+  **3D models**, **Sound**, **Video** or **Documents**), or files whose names have words you give (such as `quest,
+  android`). Sync, Download new and the routine check follow them; a file you tick in Download new's list is
+  downloaded all the same. One product's files are chosen in that list: see [Downloads](Downloads).
 - **New in your library:** how long something that appeared in your library after a refresh keeps its **New**
   badge: a day, 3 days, a week (unless you choose otherwise), 2 weeks or a month, or never. See
   [Library](Library#finding-things).

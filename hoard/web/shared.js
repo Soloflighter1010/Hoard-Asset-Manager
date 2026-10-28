@@ -532,14 +532,62 @@ function renderTagFacets(list) {
   const more = $("#moreTags"); more.hidden = s.length <= 36;
   more.textContent = state.allTags ? "Show fewer" : `Show all ${s.length}`;
   $("#tagList").innerHTML = [...yours].sort(coll.compare).map(t => `<option value="${esc(t)}">`).join("");
+  renderTypeFacet();
 }
 
+// Issue #206: the tags a product's creator gave it on its store join its suggestions (to add as yours, and to filter
+// and search by), shown apart from the words its name shares with others'
+function withStoreTags(a) {
+  const theirs = (a.store_tags || []).filter(t => !a.tags.includes(t));
+  if (theirs.length) a.suggested = [...new Set([...a.suggested, ...theirs])];
+  return a;
+}
+// What a product is (issue #223): a field of its own, not a tag. Hoard guesses it from the name and the store's tags
+// (or one of your tags' kinds says); you set it in the product's details, and filter by it beside the grid (or type:)
+const PRODUCT_TYPES = { avatar: "Avatar", clothing: "Clothing", accessory: "Accessory", hair: "Hair", texture: "Texture",
+  shader: "Shader", gimmick: "Gimmick", script: "Script", tool: "Tool", animation: "Animation", world: "World", other: "Other" };
+function typeSection(a) {
+  const how = { guess: tr("Hoard's guess"), tag: tr("from your tag's kind") }[a.type_from] || "";
+  const first = a.type_from === "yours" ? tr("Let Hoard guess") : a.type ? tr("{0} ({1})", tr(PRODUCT_TYPES[a.type] || a.type), how) : tr("Not known yet");
+  return `<h3>${esc(tr("Product type"))}</h3><div class="typepick"><select data-ptypeset aria-label="${esc(tr("What {0} is", a.name))}">` +
+    `<option value="">${esc(first)}</option>` + Object.entries(PRODUCT_TYPES).map(([k, label]) =>
+      `<option value="${k}"${a.type_from === "yours" && a.type === k ? " selected" : ""}>${esc(tr(label))}</option>`).join("") + `</select></div>`;
+}
+function renderTypeFacet() {   // beside the grid: each type, with how many of what the other filters leave
+  const box = $("#ptypes");
+  if (!box) return;
+  const n = new Map();
+  for (const a of T.all()) if (a.type && matches(a, "ptype")) n.set(a.type, (n.get(a.type) || 0) + 1);
+  if (state.ptype && !n.has(state.ptype)) n.set(state.ptype, 0);
+  box.innerHTML = Object.keys(PRODUCT_TYPES).filter(k => n.has(k)).map(k => `<button class="chip ptype" data-ptype="${k}" ` +
+    `aria-pressed="${state.ptype === k}">${esc(tr(PRODUCT_TYPES[k]))}<span class="n">${n.get(k)}</span></button>`).join("") ||
+    `<span class="none">${esc(tr("None known here"))}</span>`;
+}
+function wireTypes() {
+  document.addEventListener("change", async e => {   // a product's details: what it is
+    const pick = e.target.closest("select[data-ptypeset]"), a = pick && T.open();
+    if (!a) return;
+    const v = pick.value;
+    await changeTags({ action: "set-type", keys: keysOf([a]), type: v },
+                     v ? tr("{0} is {1} now.", a.name, tr(PRODUCT_TYPES[v]).toLowerCase()) : tr("Hoard guesses what {0} is again.", a.name));
+  });
+  $("#filters").addEventListener("click", e => {
+    const b = e.target.closest("[data-ptype]");
+    if (!b) return;
+    state.ptype = state.ptype === b.dataset.ptype ? "" : b.dataset.ptype;
+    T.render();
+  });
+}
 function tagSection(a) {
+  const fromStore = new Set(a.store_tags || []);
+  const chip = t => `<button class="chip add" data-act="addtag" data-tag="${esc(t)}" aria-label="${esc(tr("Add the tag {0}", t))}">${esc(t)}</button>`;
+  const theirs = a.suggested.filter(t => fromStore.has(t)).map(chip).join("");
   const mine = a.tags.map(t => `<span class="tagpill"><button class="chip" data-act="tag" data-tag="${esc(t)}" aria-pressed="${state.tags.has(t)}">${esc(t)}</button>` +
     `<button class="untag" data-act="untag" data-tag="${esc(t)}" aria-label="${esc(tr("Remove the tag {0}", t))}">×</button></span>`).join("");
-  const sugg = a.suggested.map(t => `<button class="chip add" data-act="addtag" data-tag="${esc(t)}" aria-label="Add the tag ${esc(t)}">${esc(t)}</button>`).join("");
-  return `<h3>Tags</h3><div class="chips">${mine || '<span class="none">No tags yet</span>'}</div>` +
+  const sugg = a.suggested.filter(t => !fromStore.has(t)).map(chip).join("");
+  return typeSection(a) + `<h3>Tags</h3><div class="chips">${mine || '<span class="none">No tags yet</span>'}</div>` +
     (sugg ? `<p class="sub">Suggested for this item</p><div class="chips">${sugg}</div>` : "") +
+    (theirs ? `<p class="sub">${esc(tr("Its creator's tags on {0}", STORE_NAMES[String(a.store).toLowerCase()] || a.store))}</p><div class="chips">${theirs}</div>` : "") +
     `<div class="tagadd"><input id="tagInput" list="tagList" maxlength="40" placeholder="Add a tag" aria-label="Add a tag">` +
     `<button class="ghost sm" data-act="addtyped">Add</button></div>` +
     ((a.copy_keys || []).length ? `<p class="sub">Tags apply to every copy of this product you own.</p>` : "");
@@ -850,7 +898,8 @@ function itemKinds(a) {
   const tags = DATA.tagset || {};
   if (kindsMemo.of !== tags) kindsMemo = { of: tags, map: tagTypes() };
   const kinds = [...(a.tags || []), ...(a.suggested || [])].map(t => kindsMemo.map.get(t)).filter(Boolean);
-  return [...kinds.flatMap(k => [k, norm(tr(TAG_TYPES[k] || k))]), ...(a.types || []).map(norm)];
+  return [...kinds.flatMap(k => [k, norm(tr(TAG_TYPES[k] || k))]), ...(a.types || []).map(norm),
+          ...(a.type ? [a.type, norm(tr(PRODUCT_TYPES[a.type] || a.type))] : [])];
 }
 /** Does a product answer the search box? Plain words anywhere in it; a prefix's value in that one part of it. */
 function searchMatches(a, q) {
@@ -906,7 +955,9 @@ async function searchOffers(tail) {   // [{ text, sub, fill (the box's new text)
   if (tail.kind === "tag") return counted(items.flatMap(a => [...new Set([...(a.tags || []), ...(a.suggested || [])])])).map(([t, n]) => ({ text: "#" + t, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("tag", t) }));
   if (tail.kind === "store") return counted(items.map(a => STORE_NAMES[String(a.store).toLowerCase()] || a.store)).map(([s, n]) => ({ text: s, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("store", s) }));
   if (tail.kind === "type") {
-    const kinds = Object.entries(TAG_TYPES).filter(([k, label]) => has(k) || has(tr(label))).map(([k, label]) => ({ text: tr(label), sub: tr("A kind of product"), fill: fill("type", k) }));
+    const n = new Map();   // the product types here (issue #223), with how many, by their names in either language
+    for (const a of items) if (a.type && (has(a.type) || has(tr(PRODUCT_TYPES[a.type] || a.type)))) n.set(a.type, (n.get(a.type) || 0) + 1);
+    const kinds = [...n].sort((a, b) => b[1] - a[1]).map(([k, c]) => ({ text: tr(PRODUCT_TYPES[k] || k), sub: tr(c === 1 ? "1 product" : "{0} products", c), fill: fill("type", k) }));
     const files = counted(items.flatMap(a => a.types || [])).map(([t, n]) => ({ text: "." + t, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("type", t) }));
     return [...kinds, ...files].slice(0, SEARCH_MORE);
   }
@@ -1217,6 +1268,10 @@ async function pickDownloads(title, verb, items, go, choices) {
   const skip = new Set((choices.skipped || []).map(e => e.key));
   Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb,
                         offFiles: new Map(), openFiles: new Set() });
+  for (const e of PICK.items) {   // (issue #225: what your rules, or an earlier choice, leave out comes unticked)
+    const out = (e.out || []).filter(n => fileNames(e).includes(n));
+    if (out.length) PICK.offFiles.set(e.key, new Set(out));
+  }
   if (!PICK.items.length && !PICK.skipped.length) { go(null); return; }   // nothing to choose from: as before
   $("#pickTitle").textContent = title;
   drawPick();
@@ -1298,7 +1353,8 @@ $("#pickDialog").addEventListener("click", e => {
     const files = {};
     for (const [k, off] of PICK.offFiles) {
       const item = PICK.items.find(x => x.key === k);
-      if (item && off.size && !PICK.off.has(k)) files[k] = { shown: fileNames(item), chosen: fileNames(item).filter(n => !off.has(n)) };
+      // (one left out before and ticked again goes too, so it's no longer left out)
+      if (item && (off.size || (item.out || []).length) && !PICK.off.has(k)) files[k] = { shown: fileNames(item), chosen: fileNames(item).filter(n => !off.has(n)) };
     }
     DL_FILES = Object.keys(files).length ? files : null;
     // the products chosen, even when that's all of them, so the download goes straight to each (issue #202: "all"
@@ -1464,6 +1520,8 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setPrevious").value = String(SETTINGS.keep_previous ?? 1);
   $("#setOffline").checked = SETTINGS.offline_images;
+  $("#setStoreTags").checked = SETTINGS.store_tags !== false;
+  drawFileRules();
   $("#setUpdates").checked = SETTINGS.check_for_updates;
   $("#setBetas").checked = !!SETTINGS.beta_updates;
   $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
@@ -1788,6 +1846,7 @@ function settingsPart(el) {
   switch (el.id) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
+    case "setStoreTags": return { store_tags: el.checked };
     case "setUpdates": return { check_for_updates: el.checked };
     case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
@@ -1813,7 +1872,9 @@ const RELOAD_AFTER = ["root", "stores", "payhip_shops", "new_days", "offline_ima
 let saving = Promise.resolve();
 function autosave(el) {
   const part = SETTINGS && settingsPart(el);
-  if (!part) return;
+  if (part) savePart(part);
+}
+function savePart(part) {
   saving = saving.then(async () => {   // one at a time, in the order they were made
     winNote("settingsPanel", "Saving…");
     const r = await apiPost("/api/settings", part);
@@ -1830,11 +1891,48 @@ function autosave(el) {
     if (part.display && "colours" in part.display) fillColours();
     if ("browser_channel" in part) showBrowserInUse();
     if ("beta_updates" in part) showUpdate();   // a beta found earlier shows, or stops showing, as an update
+    if ("file_rules" in part) drawFileRules();
     winNote("settingsPanel", "Saved", true);
     if (Object.keys(part).some(k => RELOAD_AFTER.includes(k))) T.reload();
   });
 }
+// Files to leave out of every download (issue #225): rules by kind of file, or words in its name, for every store or
+// one; each product's own are chosen in Download new's list, and remembered (hoard/downloader.py: left_out)
+const FILE_KINDS = { unitypackage: "Unity packages", archive: "Archives (ZIP, 7z, RAR)",
+  layered: "Layered images (Photoshop, Clip Studio, Krita, SAI)", picture: "Pictures and textures", blender: "Blender files",
+  model: "3D models (FBX, OBJ, VRM, glTF)", audio: "Sound", video: "Video", document: "Documents (PDF, text)" };
+const RULE_STORES = { all: "from every store", booth: "from Booth", gumroad: "from Gumroad", jinxxy: "from Jinxxy", itch: "from itch.io" };
+function drawFileRules() {
+  const box = $("#fileRules");
+  if (!box || !SETTINGS) return;
+  const rules = SETTINGS.file_rules || [];
+  box.innerHTML = rules.map((r, i) => `<li><span>${esc(r.kind ? tr(FILE_KINDS[r.kind] || r.kind) : tr("Files named with {0}", r.words))}, ` +
+    `${esc(tr(RULE_STORES[r.store] || r.store))}</span><button class="linkish" data-rule-out="${i}">${esc(tr("Remove"))}</button></li>`).join("") ||
+    `<li class="none">${esc(tr("None: every file is downloaded."))}</li>`;
+  const what = $("#ruleWhat");
+  if (!what.options.length) {
+    what.innerHTML = Object.entries(FILE_KINDS).map(([k, label]) => `<option value="kind:${k}">${esc(tr(label))}</option>`).join("") +
+      `<option value="words">${esc(tr("Files named with..."))}</option>`;
+    $("#ruleStore").innerHTML = Object.entries(RULE_STORES).map(([k, label]) => `<option value="${k}">${esc(tr(label))}</option>`).join("");
+  }
+  $("#ruleWords").hidden = what.value !== "words";
+}
+function wireFileRules() {
+  $("#ruleWhat").addEventListener("change", () => { $("#ruleWords").hidden = $("#ruleWhat").value !== "words"; if (!$("#ruleWords").hidden) $("#ruleWords").focus(); });
+  $("#ruleAdd").addEventListener("click", () => {
+    const what = $("#ruleWhat").value, store = $("#ruleStore").value, words = $("#ruleWords").value.trim();
+    if (what === "words" && !words) { toast(tr("Type the words to leave out, such as quest or android.")); $("#ruleWords").focus(); return; }
+    const rule = what === "words" ? { store, words } : { store, kind: what.slice(5) };
+    $("#ruleWords").value = "";
+    savePart({ file_rules: [...(SETTINGS.file_rules || []), rule] });
+  });
+  $("#fileRules").addEventListener("click", e => {
+    const b = e.target.closest("[data-rule-out]");
+    if (b) savePart({ file_rules: (SETTINGS.file_rules || []).filter((_, i) => i !== +b.dataset.ruleOut) });
+  });
+}
 function wireAutosave() {
+  wireFileRules();
   $("#setBrowser").addEventListener("change", showBrowserInUse);   // at once, before it's saved
   $("#settingsPanel").addEventListener("change", e => { if (e.target.matches("input, select, textarea")) autosave(e.target); });
   $("#setRootBrowse").addEventListener("click", async () => {

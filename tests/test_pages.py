@@ -1200,6 +1200,55 @@ class CopiesAndActions(unittest.TestCase):
             page.click("[data-pick-go='cancel']")
             page.close()
 
+    def test_files_left_out_come_unticked(self):
+        """Issue #225: the files your rules, or an earlier choice, leave out come unticked in Download new's list; ticked
+        again, they go with the download, so Hoard forgets having left them out."""
+        from unittest import mock
+        seen = self.started()
+        names = ["Avatar.unitypackage", "Avatar.psd", "Read me.txt"]
+        choices = {"new": [], "skipped": [], "updates": [{"key": "gumroad:ghostfollower", "store": "gumroad",
+                   "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3, "names": names,
+                   "out": ["Avatar.psd"]}]}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            menu(page, "#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            self.assertIn("Choose files (2 of 3)", dialog.locator(".pk-files summary").inner_text())
+            dialog.locator(".pk-files summary").click()
+            self.assertFalse(dialog.locator("input[data-file='Avatar.psd']").is_checked())
+            dialog.locator("input[data-file='Avatar.psd']").check()
+            page.click("#pickGo")
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": names}},
+                             "all ticked, said so: no longer left out")
+            page.close()
+
+    def test_rules_for_files_to_leave_out(self):
+        """Issue #225: Settings' Files to leave out: a kind of file, or words in a file's name, from every store or one."""
+        from unittest import mock
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            menu(page, "#settingsBtn")
+            rules = page.locator("#fileRules")
+            rules.locator("li.none").wait_for()
+            page.select_option("#ruleWhat", "kind:layered")
+            page.click("#ruleAdd")
+            rules.locator("li", has_text="Layered images").wait_for()
+            self.assertIn("from every store", rules.inner_text())
+            page.select_option("#ruleWhat", "words")
+            page.fill("#ruleWords", "Quest, android")
+            page.select_option("#ruleStore", "booth")
+            page.click("#ruleAdd")
+            rules.locator("li", has_text="quest android").wait_for()
+            self.assertEqual(self.srv.cfg["file_rules"], [{"store": "all", "kind": "layered"}, {"store": "booth", "words": "quest android"}])
+            rules.locator("li", has_text="Layered images").locator("[data-rule-out]").click()
+            page.wait_for_function("() => document.querySelectorAll('#fileRules li').length === 1 && !document.querySelector('#fileRules').textContent.includes('Layered')")
+            self.assertEqual(self.srv.cfg["file_rules"], [{"store": "booth", "words": "quest android"}])
+            self.srv.cfg["file_rules"] = []
+            page.close()
+
     def test_files_with_one_name_are_one_choice(self):
         """Two files a store names alike can't be told apart when downloading, so they're one choice, said so."""
         from unittest import mock
@@ -1965,6 +2014,57 @@ class WindowsTabsAndTasks(unittest.TestCase):
             for sid in made:
                 page.evaluate(post, ["/api/sets", {"action": "delete", "id": sid}])
             self.srv.cfg.get("ui", {}).pop("recent_sets", None)
+        page.close()
+
+    def test_the_creators_tags_on_a_product(self):
+        """Issue #206: the tags Rusk's creator gave it on Booth show in its details, apart from the suggestions from its
+        name, to add as yours; and you can filter and search by them."""
+        with self.srv.lib.lock:
+            rusk = next(i for i in self.srv.lib.data["items"] if i["name"] == "Rusk")
+            rusk["store_tags"] = ["fox", "vrchat"]
+        try:
+            page = self.open()
+            page.locator(".slot", has_text="Rusk").click()
+            theirs = page.locator("#detail p.sub", has_text="Its creator's tags on Booth")
+            theirs.wait_for()
+            self.assertEqual(page.locator("#detail p.sub:has-text(\"Its creator's tags\") + .chips .chip").all_inner_texts(), ["fox", "vrchat"])
+            page.click("#detail .x")
+            page.click('#tags [data-tag="vrchat"]')   # beside the grid, with the suggested tags
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            page.click('#tags [data-tag="vrchat"]')
+            page.fill("#q", "tag:fox")
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            self.assertEqual(self.errors, [])
+            page.close()
+        finally:
+            with self.srv.lib.lock:
+                rusk.pop("store_tags", None)
+
+    def test_a_products_type(self):
+        """Issue #223: what a product is, set in its details without a tag (Hoard guesses until you do), and a filter
+        beside the grid; the search's type: finds it too."""
+        page = self.open()
+        page.locator(".slot", has_text="Rusk").click()
+        pick = page.locator("#detail select[data-ptypeset]")
+        self.assertEqual(pick.locator("option").first.inner_text(), "Not known yet", "nothing in its name says")
+        with page.expect_response(lambda r: r.url.endswith("/api/tags") and r.request.method == "POST"):
+            pick.select_option("avatar")
+        page.wait_for_function("() => (DATA.items.find(a => a.name === 'Rusk') || {}).type === 'avatar'")
+        try:
+            self.assertEqual(page.evaluate("DATA.items.find(a => a.name === 'Rusk').tags"), [], "no tag added")
+            chip = page.locator('#ptypes [data-ptype="avatar"]')
+            self.assertIn("1", chip.inner_text())
+            chip.click()
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            self.assertIn("Product type", page.locator("#status").inner_text())
+            chip.click()
+            page.fill("#q", "type:avatar")
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            page.fill("#q", "")
+            self.assertEqual(self.errors, [])
+        finally:   # (Hoard's guess again, for the other tests)
+            page.evaluate("api('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
+                          "body: JSON.stringify({ action: 'set-type', keys: [DATA.items.find(a => a.name === 'Rusk').tag_key], type: '' }) })")
         page.close()
 
     def test_sync_asks_first(self):

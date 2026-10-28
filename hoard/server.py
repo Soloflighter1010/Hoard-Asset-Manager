@@ -29,7 +29,7 @@ from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
-                         restore_previous,
+                         restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED,
                          edits_root, last_integrity, make_editable_copy, reseal_catalog)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
@@ -43,7 +43,7 @@ from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, c
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
-from .tags import TagStore, tag_key, tag_overview
+from .tags import TagStore, product_type, tag_key, tag_overview
 from .vpm import api as vpm_api, logbook as vpm_log
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
@@ -236,6 +236,7 @@ def public_settings(cfg: dict) -> dict:
     return {
         "root": str(root_dir(cfg)), "default_root": str(default_downloads()), "libraries": libraries.view(cfg),
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
+        "store_tags": bool(cfg.get("store_tags", True)), "file_rules": file_rules(cfg),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "beta_updates": bool(cfg.get("beta_updates")),
@@ -286,6 +287,10 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["browser_channel"] = body["browser_channel"]
     if "offline_images" in body:
         change["offline_images"] = bool(body["offline_images"])
+    if "store_tags" in body:
+        change["store_tags"] = bool(body["store_tags"])
+    if "file_rules" in body:   # files to leave out of every download (issue #225), checked as downloads read them
+        change["file_rules"] = file_rules({"file_rules": body["file_rules"]})
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
     if "beta_updates" in body:
@@ -572,6 +577,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         enabled = {s for s in DOWNLOADABLE if srv.cfg[s].get("enabled", True)}
         out_of_view = lambda k: k in marks["removed"] or (k in marks["hidden"] and not unlocked)  # noqa: E731
         known, new = {}, {}
+        rules, kept = file_rules(srv.cfg), remembered_files(srv.cfg)   # what's left out, unticked to begin with (#225)
+        out = lambda store, key, names: sorted({n for n in names if n in kept.get(key, ()) or ruled_out(rules, store, n)})  # noqa: E731
         for i in srv.lib.snapshot()[0]:
             key = tag_key(i["store"], i["name"])
             if i["store"] not in DOWNLOADABLE or out_of_view(key):
@@ -579,9 +586,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or "",
                                    "names": [f["name"] for f in i.get("files") or [] if isinstance(f, dict) and f.get("name")][:500]})
             if i["store"] in enabled and key not in on_disk and key not in skip:
-                new.setdefault(key, known[key])
+                new.setdefault(key, {**known[key], "out": out(i["store"], key, known[key]["names"])})
         ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"]),
-                "names": [f["file"] for f in e["files"]][:500]}
+                "names": [f["file"] for f in e["files"]][:500], "out": out(e["store"], k, [f["file"] for f in e["files"]][:500])}
                for k, e in updates.items() if k in on_disk and k not in skip and e["store"] in enabled and not out_of_view(k)]
         skipped = [known.get(k) or {"key": k, "store": k.split(":", 1)[0], "name": k.split(":", 1)[-1], "creator": ""}
                    for k in sorted(skip) if not out_of_view(k)]
@@ -681,6 +688,17 @@ class Handler(BaseHTTPRequestHandler):
                 srv.unlocks[token] = now + UNLOCK_MINUTES * 60
                 return True
         return False
+
+    def _remember_files(self, chosen: dict | None) -> dict | None:
+        """The files you left out of a product, as you chose them to download, kept for its downloads from now on
+        (issue #225: Sync, Download new and the routine check leave them out too); one you ticked again is
+        forgotten. Returns chosen as it was."""
+        if chosen:
+            srv = self.server
+            with srv.cfg_lock:
+                srv.cfg["file_skip"] = remember_choice(remembered_files(srv.cfg), chosen)
+                srv.save_settings()
+        return chosen
 
     def _download_choices(self) -> dict:
         return self.server.download_choices(self._unlocked())
@@ -820,6 +838,8 @@ class Handler(BaseHTTPRequestHandler):
             used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
             stacks, looks = {}, []   # copies of one product stack here as in the Library: by its products (hoard/library.py)
             listed = [dict(i) for i in srv.lib.snapshot()[0]]
+            store_tags = {tag_key(i["store"], i["name"]): i["store_tags"] for i in listed if i.get("store_tags")}   # (#206)
+            tagdata = TagStore().load()   # (for each product's type, as the Library has it: issue #223)
             stack_by_picture(listed, apart=marks["apart"])
             for i in listed:
                 # a download's stack is its own product's (by store and name), even one that stacks with nothing:
@@ -839,7 +859,9 @@ class Handler(BaseHTTPRequestHandler):
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
+                    kind, known = product_type(tagdata, key, a["name"], a.get("tags") or [], store_tags.get(key, []))
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                                   "store_tags": store_tags.get(key, []), "type": kind, "type_from": known,
                                    "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
                                    "needs": needed.get(a["id"]),
                                    "own_picture": a.get("catalog_folder") in chosen,
@@ -2207,7 +2229,7 @@ class Handler(BaseHTTPRequestHandler):
         started = srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
                                  skip_imported=bool(body.get("all")), only=only, keys=keys,
                                  items=[item] if item and task in ("download", "check-updates") else None,
-                                 chosen=chosen_files(body.get("files")) if task == "download" else None)
+                                 chosen=self._remember_files(chosen_files(body.get("files"))) if task == "download" else None)
         if not started:
             return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
         self._json({"ok": True, "queued": started == "queued"}, 202)
@@ -2312,6 +2334,20 @@ def chosen_files(raw) -> dict[str, dict] | None:
         if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
+
+
+def remember_choice(kept: dict[str, set], chosen: dict) -> dict[str, list]:
+    """The files left out of each product from now on (config.json's "file_skip", issue #225), after choosing what
+    to download: those of the files shown that weren't ticked, and any left out before that weren't shown."""
+    kept = dict(kept)
+    for key, pick in chosen.items():
+        shown = set(pick["shown"])
+        left = (kept.get(key, set()) - shown) | (shown - set(pick["chosen"]))
+        if left:
+            kept[key] = left
+        else:
+            kept.pop(key, None)
+    return {k: sorted(v) for k, v in list(kept.items())[-MAX_REMEMBERED:]}
 
 
 def read_photo_page(url: str) -> str | None:

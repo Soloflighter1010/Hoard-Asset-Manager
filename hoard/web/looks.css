@@ -188,6 +188,7 @@
   gap: 0 12px; align-items: center; }
 [data-style="workbench"] .slot.ext .ext-price { grid-area: price; margin: 0; }
 [data-style="workbench"] .slot.ext .ext-row { grid-area: row; margin: 0; gap: 10px; }
+[data-style="workbench"] .ext-out span { display: none; }   /* (a list: the bin alone, its name said by its label) */
 [data-style="workbench"] .setview .sethead > .art { max-width: 160px; }
 /* as the list gets narrower (a smaller window, a larger text size, a product's details open beside it), the row keeps
    its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */

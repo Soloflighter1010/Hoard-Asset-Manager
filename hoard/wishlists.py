@@ -150,8 +150,9 @@ def from_product_page(link: str, fetch) -> dict:
         if not isinstance(data, dict) or not data.get("name"):
             raise LinkError("Booth didn't show that item (it may be gone, or for adults only)")
         pics = [x.get("original") or x.get("resized") for x in data.get("images") or [] if isinstance(x, dict)]
-        return product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
-                       url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
+        got = product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
+                      url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
+        return {**got, "store_tags": store_tags_in("booth", data)} if got else got
     address = page_address(store, url)
     got = fetch(address, tuple(dict.fromkeys((host,) + LINK_HOSTS[store]))) if address else None
     if not got or "html" not in got[1]:
@@ -170,7 +171,41 @@ def from_product_page(link: str, fetch) -> dict:
     price = parse_price(f"{amount} {currency}") if amount not in (None, "") and currency else None
     if price is None and amount not in (None, "") and str(amount).strip() in ("0", "0.0", "0.00"):
         price = {"text": "Free", "amount": 0.0, "currency": ""}
-    return product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+    got = product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+    return {**got, "store_tags": store_tags_in(store, page)} if got else got
+
+
+TAGGED_STORES = ("booth", "jinxxy", "itch")   # where a product's own page shows the tags its creator gave it
+MAX_STORE_TAGS = 30
+
+
+def store_tags_in(store: str, got) -> list[str]:
+    """Issue #206: the tags a product's creator gave it on its store, as Hoard keeps tags (clean_tag): Booth's, and its
+    category, from its item JSON (got, a dict); Jinxxy's from its page's data and itch.io's from its page's Tags row
+    (got, the page). Gumroad's and Payhip's pages don't show any. At most MAX_STORE_TAGS, in the store's order."""
+    import json
+    import html as html_text
+    from .tags import clean_tag
+    raw: list = []
+    if store == "booth" and isinstance(got, dict):
+        raw = [t.get("name") for t in got.get("tags") or [] if isinstance(t, dict)]
+        cat = got.get("category") if isinstance(got.get("category"), dict) else {}
+        raw += [cat.get("name"), (cat.get("parent") or {}).get("name") if isinstance(cat.get("parent"), dict) else None]
+    elif store == "jinxxy" and isinstance(got, str):   # (in the page's data, as JSON inside a script's string)
+        m = re.search(r'\\"tags\\":(\[[^\]]{0,4000}\])', got) or re.search(r'"tags":(\[[^\]]{0,4000}\])', got)
+        try:
+            raw = json.loads(m.group(1).replace('\\"', '"')) if m else []
+        except ValueError:
+            raw = []
+    elif store == "itch" and isinstance(got, str):   # the page's More information: <td>Tags</td><td><a>...</a>...</td>
+        m = re.search(r"<td>Tags</td>\s*<td>(.*?)</td>", got, re.S)
+        raw = [html_text.unescape(x) for x in re.findall(r"<a[^>]*>([^<]{1,80})</a>", m.group(1))] if m else []
+    out: list[str] = []
+    for t in raw if isinstance(raw, list) else []:
+        tag = clean_tag(t) if isinstance(t, str) else ""
+        if tag and tag not in out:
+            out.append(tag)
+    return out[:MAX_STORE_TAGS]
 
 
 def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:

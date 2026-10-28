@@ -421,9 +421,17 @@ body.less-motion .slot:hover .art { transform: none; }
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .tagadd input:focus, .bulk input:focus, .newtag input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 /* a product's "Add it to a set" (issue #218): as the Downloads page's, the theme's own colours, not the system's grey */
-.tagadd select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
+.typepick { display: flex; }
+/* Settings' Files to leave out (issue #225) */
+.file-rules { margin: 8px 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.file-rules li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 8px;
+  background: var(--stone); font-size: 13.5px; }
+.file-rules li.none { background: none; padding: 0; color: var(--dust); }
+.rule-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rule-add input { flex: 1 1 160px; min-width: 0; }
+.tagadd select, .typepick select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
   background-color: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
-.tagadd select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.tagadd select:focus, .typepick select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .headrow .ghost { flex: none; }
 #selectBtn { margin-left: auto; }   /* (on the right, with or without the count beside it) */
@@ -1196,7 +1204,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
 /* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
 .proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
-.settings select, .proj select, .tagadd select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+.settings select, .proj select, .tagadd select, .typepick select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
@@ -1352,6 +1360,8 @@ body.less-motion .tour-try::before { animation: none; }
     <datalist id="tagList"></datalist>
     <h2 data-sec="show">Show</h2>
     <div id="disk" class="chips" role="group" aria-label="Downloaded, not yet, or new"></div>
+    <h2 data-sec="product-type">Product type</h2>
+    <div id="ptypes" class="chips" role="group" aria-label="Product type"></div>
     <h2 data-sec="creators">Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
     <ul id="creators" class="creators" translate="no"></ul>
@@ -1428,8 +1438,19 @@ body.less-motion .tour-try::before { animation: none; }
     address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from
     every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for
     you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.</p>
+  <h3>Store tags</h3>
+  <label class="check"><input type="checkbox" id="setStoreTags"> Read the tags creators give their products</label>
+  <p class="hint">On Booth, Jinxxy and itch.io: a few products' public pages each time a store is read, until each one
+    has been read once. Their tags show as suggestions on them, and you can filter by them; they never change yours.</p>
   <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
+  <h3>Files to leave out</h3>
+  <p class="hint">Sync, Download new and the routine check leave these out of every download, from every store or one.
+    To leave out one product's files, untick them under Choose files in Download new's list: Hoard remembers.</p>
+  <ul id="fileRules" class="file-rules"></ul>
+  <div class="rule-add"><select id="ruleWhat" aria-label="What to leave out"></select>
+    <input id="ruleWords" maxlength="200" placeholder="quest, android" aria-label="Words in a file's name" hidden>
+    <select id="ruleStore" aria-label="From which store"></select><button class="ghost sm" id="ruleAdd">Add</button></div>
   <h3>New in your library</h3>
   <select id="setNewDays" aria-label="Mark new things as New for">
     <option value="0">Don't mark anything New</option>
@@ -1715,7 +1736,7 @@ const usedStores = () => STORE_ORDER.filter(shown);
 const importable = s => (DATA.importable || ["booth", "jinxxy", "payhip", "itch"]).includes(s);
 const downloadable = s => (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).includes(s);
 let importStore = null, importing = null;
-const state = { view: "library", q: "", store: "", set: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false };
+const state = { view: "library", q: "", store: "", set: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false, ptype: "" };
 // Downloaded, or not yet (issue #17): "yes", "no", or "" for both
 const DISK = { yes: "Downloaded", no: "Not downloaded yet" };
 const onDisk = a => a.on_disk != null;
@@ -1759,7 +1780,7 @@ async function load() {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
   }
   $("#version").textContent = DATA.version || "";
-  for (const a of DATA.items) a.hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
+  for (const a of DATA.items) withStoreTags(a).hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
   renderStores(); render(); showJob(DATA.job);
   if (DATA.job && DATA.job.running) startPolling();
@@ -1780,6 +1801,7 @@ function matches(a, skip) {
   if (skip !== "fresh" && state.fresh && !a.new) return false;
   if (state.store && !inSets() && a.store !== state.store) return false;   // (Sets: every set's tile, or the one open)
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
+  if (skip !== "ptype" && state.ptype && a.type !== state.ptype) return false;   // what it is (issue #223)
   if (!shown(a.store)) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   if (state.q && !searchMatches(a, state.q)) return false;   // (words, and prefixes: creator:, tag:...)
@@ -1792,7 +1814,7 @@ const SORTS = {
   // the newest first; items listed before Hoard kept the time they appeared go last (issue #18)
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || coll.compare(a.name, b.name),
 };
-const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
+const filtersActive = () => state.ptype || state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
 // issue #111: copies of the same product (bought more than once, in several versions, or on two stores, by the same
@@ -1946,6 +1968,7 @@ function renderStatus(list) {
   if (state.disk) pills.push(["disk", "", "Show", DISK[state.disk]]);
   if (state.fresh) pills.push(["fresh", "", "Show", "New"]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
+  if (state.ptype) pills.push(["ptype", "", "Product type", tr(PRODUCT_TYPES[state.ptype] || state.ptype)]);
   const total = DATA.items.filter(a => inView(a) && shown(a.store)).length;   // this view: Library, Archive, ...
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   for (const [a, here] of [[$('.apptabs a[href="/"]'), !inSets()], [$('.apptabs a[href="/#store=Sets"]'), inSets()]])
@@ -2112,6 +2135,7 @@ function saveHash() {
   if (state.fresh) p.set("new", "1");
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.sort !== "name") p.set("sort", state.sort);
+  if (state.ptype) p.set("type", state.ptype);
   if (openKey) p.set("open", openKey);   // (a product's details: a place, for Back and Forward)
   setAddress(p);
 }
@@ -2122,6 +2146,7 @@ function readHash() {
   state.disk = DISK[p.get("downloaded")] ? p.get("downloaded") : "";
   state.fresh = p.get("new") === "1";
   state.sort = sortFrom(p.get("sort"), SORTS);
+  state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";
   if (p.get("open")) openKey = p.get("open").slice(0, 400);   // a product, from a set's folder in Downloads
@@ -2447,12 +2472,13 @@ document.addEventListener("click", e => {
   if (e.target.closest("#openStores")) { openStores(true); return; }
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.copies = null; state.disk = ""; state.fresh = false; }
+  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.copies = null; state.disk = ""; state.fresh = false; state.ptype = ""; }
   else if (k === "fresh") state.fresh = false;
   else if (k === "copies") state.copies = null;
   else if (k === "disk") state.disk = "";
   else if (k === "q") state.q = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v);
+  else if (k === "ptype") state.ptype = "";
   render();
 });
 $("#grid").addEventListener("click", e => {
@@ -2583,6 +2609,7 @@ function wireTags() {
   wireSelection();
   wireBar();
   wireSearch();
+  wireTypes();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });

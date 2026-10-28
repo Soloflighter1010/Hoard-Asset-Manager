@@ -184,21 +184,88 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
                                  "file": file, "kind": "changed" if changed else "new"})
 
 
+# Files to leave out of every download (issue #225): a rule names a kind of file (by the end of its name) or words in
+# its name, for every store or one. config.json's "file_rules": [{"store": "all" or a store, "kind": ...} or
+# {"store": ..., "words": "quest android"}]. A product's own files you left out are remembered too ("file_skip").
+FILE_KINDS = {
+    "unitypackage": ("Unity packages", (".unitypackage",)),
+    "archive": ("Archives", (".zip", ".7z", ".rar", ".tar", ".gz")),
+    "layered": ("Layered images", (".psd", ".psb", ".clip", ".kra", ".sai", ".sai2", ".xcf")),
+    "picture": ("Pictures and textures", (".png", ".jpg", ".jpeg", ".tga", ".tif", ".tiff", ".exr", ".webp", ".dds", ".bmp")),
+    "blender": ("Blender files", (".blend", ".blend1")),
+    "model": ("3D models", (".fbx", ".obj", ".vrm", ".glb", ".gltf", ".dae", ".3ds", ".max", ".ma", ".mb")),
+    "audio": ("Sound", (".wav", ".mp3", ".ogg", ".flac", ".m4a")),
+    "video": ("Video", (".mp4", ".mov", ".webm", ".mkv", ".avi")),
+    "document": ("Documents", (".pdf", ".txt", ".md", ".rtf", ".docx")),
+}
+MAX_RULES = 50
+MAX_REMEMBERED = 5000   # products whose files you left out, remembered
+
+
+def file_rules(cfg: dict) -> list[dict]:
+    """Your rules for files to leave out, checked: each {"store": "all" or a store, "kind" or "words"}."""
+    out: list[dict] = []
+    raw = cfg.get("file_rules") if isinstance(cfg.get("file_rules"), list) else []
+    for r in raw[:MAX_RULES]:
+        if not isinstance(r, dict) or r.get("store") not in ("all", *DOWNLOADABLE):
+            continue
+        if r.get("kind") in FILE_KINDS:
+            out.append({"store": r["store"], "kind": r["kind"]})
+        elif isinstance(r.get("words"), str):
+            words = [w for w in re.split(r"[\s,]+", unicodedata.normalize("NFKC", r["words"]).lower()) if 0 < len(w) <= 40][:20]
+            if words:
+                out.append({"store": r["store"], "words": " ".join(dict.fromkeys(words))})
+    return out
+
+
+def ruled_out(rules: list[dict], store: str, file: str) -> str | None:
+    """Why one of your rules leaves this file out ("Layered images", or the word its name has), or None."""
+    name = unicodedata.normalize("NFKC", file or "").lower()
+    for r in rules:
+        if r["store"] not in ("all", store):
+            continue
+        if "kind" in r and name.endswith(FILE_KINDS[r["kind"]][1]):
+            return FILE_KINDS[r["kind"]][0]
+        for w in r.get("words", "").split():
+            if (re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", name) if w.isascii() else w in name):
+                return f"named with {w}"
+    return None
+
+
+def remembered_files(cfg: dict) -> dict[str, set]:
+    """The files you left out of each product (Download new's Choose files), by its tag key: left out from then on."""
+    raw = cfg.get("file_skip") if isinstance(cfg.get("file_skip"), dict) else {}
+    return {k: {n for n in v[:500] if isinstance(n, str) and n} for k, v in list(raw.items())[:MAX_REMEMBERED]
+            if isinstance(k, str) and 0 < len(k) <= 400 and isinstance(v, list)}
+
+
 def left_out(args, report: Report, store: str, name: str, file: str, *also: str) -> bool:
-    """A file you left out when choosing what to download (args.files: {tag_key: {"shown": the files listed,
-    "chosen": the ones ticked}}). Only a file that was listed and unticked is left out: one that wasn't listed (a
-    product whose name makes the same key, a file the creator added or relabelled since) is downloaded as usual.
-    also: other names the product goes by (a chosen Jinxxy item's name in your library, besides its page's). It's
-    named in the summary as skipped, and downloaded another time if you choose it. Checks for updates see every
-    file."""
+    """A file left out of this download. First what you chose for it now (args.files: {tag_key: {"shown": the files
+    listed, "chosen": the ones ticked}}): only a file that was listed and unticked is left out, and one you ticked is
+    downloaded whatever a rule says. Then a file you left out of the product before (args.remembered), and then one
+    your rules name (args.rules: issue #225). A file that wasn't listed (a product whose name makes the same key, a
+    file the creator added or relabelled since) is only left out by a rule. also: other names the product goes by (a
+    chosen Jinxxy item's name in your library, besides its page's). It's named in the summary as skipped. Checks for
+    updates see every file."""
+    if getattr(args, "dry_run", False):
+        return False
+    keys = [tag_key(store, n) for n in (name, *also) if n]
     chosen = getattr(args, "files", None)
-    if not isinstance(chosen, dict) or args.dry_run:
-        return False
-    pick = next((chosen[k] for k in (tag_key(store, n) for n in (name, *also) if n) if k in chosen), None)
-    if not isinstance(pick, dict) or file not in pick.get("shown", ()) or file in pick.get("chosen", ()):
-        return False
-    log(f"    left out, as you chose: {file}")
-    report.skipped.append(f"{STORES[store]['label'] if store in STORES else store}: {name} / {file} - left out, as you chose")
+    pick = next((chosen[k] for k in keys if k in chosen), None) if isinstance(chosen, dict) else None
+    label = STORES[store]["label"] if store in STORES else store
+    if isinstance(pick, dict) and file in pick.get("shown", ()):
+        if file in pick.get("chosen", ()):
+            return False
+        why = "left out, as you chose"
+    elif any(file in (getattr(args, "remembered", None) or {}).get(k, ()) for k in keys):
+        why = "left out, as you chose before"
+    else:
+        rule = ruled_out(getattr(args, "rules", None) or [], store, file)
+        if not rule:
+            return False
+        why = f"left out by your rule ({rule})"
+    log(f"    {why}: {file}")
+    report.skipped.append(f"{label}: {name} / {file} - {why}")
     return True
 
 

@@ -930,7 +930,7 @@ class Jobs:
         to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
         each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
         from types import SimpleNamespace
-        from .downloader import cmd_sync, direct_targets
+        from .downloader import cmd_sync, direct_targets, file_rules, remembered_files
         from .asset_updates import AssetUpdates
         task = "check-updates" if check else "download"
         stores = [s for s in stores if s in DOWNLOADABLE]
@@ -961,7 +961,8 @@ class Jobs:
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
                                targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
                                files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"])}
-                                      for k, v in (chosen or {}).items()} or None)   # the files you chose
+                                      for k, v in (chosen or {}).items()} or None,   # the files you chose
+                               rules=file_rules(self.cfg), remembered=remembered_files(self.cfg))   # and leave out (#225)
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
@@ -1101,6 +1102,16 @@ class Jobs:
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
             cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
+        if refreshed and self.cfg.get("store_tags", True) and not self._forced:   # the tags creators gave them (#206)
+            from .library import store_tags_from_pages
+            from .wishlists import read_store_page
+            for store in refreshed:
+                try:
+                    store_tags_from_pages(self.lib, store, read_store_page,
+                                          lambda m, l=STORES[store]["label"]: self._set(message=f"{l}: {m}"),
+                                          float(self.cfg.get("request_delay", 0.8)))
+                except Exception as e:   # (never fails the refresh)
+                    print(f"Couldn't read {store}'s product tags: {e}", flush=True)
         if refreshed:   # the public pages a refresh finds (Jinxxy's) reach catalog.json, for Hoard for Unity's credits
             from .config import root_dir
             from .downloader import build_catalog

@@ -197,6 +197,32 @@ class SavedPages(unittest.TestCase):
         self.assertIsNone(wishlists.product("jinxxy", "Clip", thumbnail="https://jinxxy-c.jinxxy-cdn.com/a/clip.MP4?x=1").get("thumbnail"))
         self.assertIsNone(library.item("jinxxy", "9", name="Clip", thumbnail="https://jinxxy-c.jinxxy-cdn.com/a/clip.webm")["thumbnail"])
 
+    def test_the_tags_creators_give_their_products(self):
+        """Issue #206: the tags a product's creator gave it on its store's page: Booth's item JSON (and its category),
+        Jinxxy's page data and itch.io's Tags row, kept as Hoard keeps tags. Gumroad's and Payhip's pages show none."""
+        booth = {"name": "Fox Tail", "price": "¥ 600", "shop": {"name": "Kitsu"}, "images": [],
+                 "tags": [{"name": "VRChat"}, {"name": "しっぽ"}, {"name": "VRChat"}, {"name": "#Fox, Tail"}],
+                 "category": {"name": "3D Accessories", "parent": {"name": "3D Models"}}}
+        jinxxy = ('<meta property="og:title" content="Fox Ears"><script>self.__next_f.push([1,"{\\"product\\":'
+                  '{\\"name\\":\\"Fox Ears\\",\\"tags\\":[\\"furry\\",\\"face_tracking\\",\\"Quest\\"]}}"])</script>')
+        itch = ('<meta property="og:title" content="Tail Pack"><table><tr><td>Category</td><td><a href="/x">Assets</a></td></tr>'
+                '<tr><td>Tags</td><td><a href="https://itch.io/game-assets/tag-3d">3D</a>, <a href="/t">Low-poly</a>, '
+                '<a href="/t">Tails &amp; Ears</a></td></tr></table>')
+        pages = {"https://booth.pm/en/items/77.json": (json.dumps(booth), "application/json"),
+                 "https://jinxxy.com/kitsu/FoxEars": (jinxxy, "text/html"),
+                 "https://kitsu.itch.io/tail-pack": (itch, "text/html"),
+                 "https://kitsu.gumroad.com/l/hat": ('<meta property="og:title" content="Hat">', "text/html")}
+        fetch = lambda url, hosts: pages.get(url)   # noqa: E731
+        got = {link: wishlists.from_product_page(link, fetch)["store_tags"] for link in
+               ("https://booth.pm/en/items/77", "https://jinxxy.com/kitsu/FoxEars", "https://kitsu.itch.io/tail-pack",
+                "https://kitsu.gumroad.com/l/hat")}
+        self.assertEqual(got, {"https://booth.pm/en/items/77": ["vrchat", "しっぽ", "fox tail", "3d accessories", "3d models"],
+                               "https://jinxxy.com/kitsu/FoxEars": ["furry", "face_tracking", "quest"],
+                               "https://kitsu.itch.io/tail-pack": ["3d", "low-poly", "tails & ears"],
+                               "https://kitsu.gumroad.com/l/hat": []})
+        self.assertEqual(len(wishlists.store_tags_in("booth", {"tags": [{"name": f"t{n}"} for n in range(80)]})), 30, "30 at most")
+        self.assertEqual(wishlists.store_tags_in("jinxxy", '"tags":[not json]'), [])
+
     def test_what_isnt_a_wishlist(self):
         (r,) = wishlists.from_saved_pages([("library.html", "<!-- saved from url=(0035)https://accounts.booth.pm/library -->"
                                                             "<html><body>Library</body></html>")])

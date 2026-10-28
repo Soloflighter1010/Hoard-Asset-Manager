@@ -876,7 +876,7 @@ class Tab(unittest.TestCase):
             page.click('#storeSeg [data-store="Sets"]')
             page.locator("#setView .settile", has_text="Rusk, winter").click(button="right")
             self.assertEqual(page.locator(".selmenu [role=menuitem]").all_inner_texts(),
-                             ["Open", "Share...", "Download the 1 not downloaded", "Choose a picture...", "Rename", "Delete"])
+                             ["Open", "Share...", "Download the 1 not downloaded", "New project with this set...", "Choose a picture...", "Rename", "Delete"])
             page.keyboard.press("Escape")
             page.locator("#setView .settile", has_text="Fox outfit").click(modifiers=["Control"])
             self.assertEqual(page.locator("#bulkCount").inner_text(), "2 selected")

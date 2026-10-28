@@ -22,8 +22,10 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
   don't want this time; left all ticked, it downloads everything new as before. Where Hoard knows a product's
   files before downloading (an update's new and changed files, and a Booth product's files), **Choose files**
-  under it lists them to untick one by one; what you leave out is listed as skipped, and downloaded another time
-  if you choose it. **Always skip** leaves a product
+  under it lists them to untick one by one; what you leave out is listed as skipped, and Hoard remembers it (5.2.0):
+  it's left out of that product's downloads from then on, Sync and the routine check included, and comes unticked
+  in this list, to tick again whenever you like. Files your rules leave out (**Files to leave out**, in
+  [Settings](Settings): PSDs, say, or files named with Quest) come unticked too. **Always skip** leaves a product
   out of every download and sync, including automatic ones, until you choose **Stop skipping** (under **Always
   skipped** in the same list). **Update all** lists the updates the same way.
 - **Download** in an item's details (in the Library) downloads just that product, and so do **Update** in

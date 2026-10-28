@@ -2859,6 +2859,40 @@ class CatalogSeal(unittest.TestCase):
             self.assertFalse(paths.store_python())
 
 
+class StoreTags(unittest.TestCase):
+    """Issue #206: the tags creators give their products on Booth, Jinxxy and itch.io, read from each product's public
+    page a few at a time as a store is read, kept with the product, and never read again once read."""
+
+    def test_a_few_at_a_time_kept_and_not_read_again(self):
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("jinxxy", [library.item("jinxxy", str(n), name=f"Paw {n}", creator="kitsu",
+                                                  page=f"https://jinxxy.com/kitsu/Paw{n}") for n in range(5)])
+        pages = {"/Paw0": ["Fox", "Quest"], "/Paw2": [], "/Paw3": ["Ears"]}
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url)
+            tags = next((v for k, v in pages.items() if url.endswith(k)), None)
+            return None if tags is None else ('<meta property="og:title" content="Paw">"tags":' + json.dumps(tags), "text/html")
+        self.assertEqual(library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3), 2, "Paw 1 couldn't be reached")
+        got = {i["name"]: i.get("store_tags") for i in lib.data["items"]}
+        self.assertEqual(got, {"Paw 0": ["fox", "quest"], "Paw 1": None, "Paw 2": [], "Paw 3": None, "Paw 4": None})
+        asked.clear()
+        library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
+        self.assertEqual([u.rsplit("/", 1)[1] for u in asked], ["Paw1", "Paw3", "Paw4"], "only those not read yet")
+        # read again from the store: each keeps its tags, and a reload keeps them too
+        lib.replace_store("jinxxy", [library.item("jinxxy", str(n), name=f"Paw {n}", creator="kitsu") for n in range(5)])
+        again = library.Library(lib.path)
+        self.assertEqual({i["name"]: i.get("store_tags") for i in again.data["items"]}["Paw 3"], ["ears"])
+        self.assertEqual(library.store_tags_from_pages(lib, "gumroad", fetch), 0, "Gumroad's pages show none")
+
+    def test_they_show_on_the_product_as_suggestions(self):
+        items = library.enrich([library.item("booth", "1", name="Fox Tail", creator="Kitsu", store_tags=["VRChat", "fox tail", 3])],
+                               {"min_count": 3, "max_share": 0.4})
+        self.assertEqual(items[0]["store_tags"], ["vrchat", "fox tail"], "as Hoard keeps tags")
+        self.assertEqual(items[0]["suggested"], [], "not the name's words: the page adds them, apart (shared.js)")
+
+
 class CopiesStack(unittest.TestCase):
     """Issue #111: copies of one product stack by their picture's hash, byte for byte, not by name: in beta 4's first
     build, "Hair Pack 1" and "Hair Pack 2" by one creator stacked into one tile."""
@@ -2994,6 +3028,48 @@ class TagKinds(unittest.TestCase):
             over = tags.tag_overview(store.load(), [{"tags": ["tops"], "suggested": []}])
             self.assertEqual(over["tags"], [{"name": "tops", "match": "hoodie", "type": "clothing", "count": 1}])
         self.assertEqual(tags.TAG_TYPES, ("avatar", "world", "clothing", "gimmick", "script", "texture", "other"))
+
+
+class ProductTypes(unittest.TestCase):
+    """Issue #223: what a product is, a field of its own: set by you, from one of your tags' kinds (how it was said
+    before 5.2.0), or Hoard's guess from its name and its store's tags; never by adding a tag."""
+
+    def test_hoards_guess(self):
+        guess = tags.guess_type
+        self.assertEqual(guess("Hoodie for Rusk Avatar"), "clothing", "the first that fits: a hoodie, not an avatar")
+        self.assertEqual(guess("Rusk Avatar Base"), "avatar")
+        self.assertEqual(guess("Fluffy Mane Hair"), "hair")
+        self.assertEqual(guess("Fox Ears & Tail"), "accessory")
+        self.assertEqual(guess("Earrings"), "accessory")
+        self.assertEqual(guess("Gearing Up"), None, "whole words: 'ring' isn't in 'gearing'")
+        self.assertEqual(guess("ふわふわ衣装セット"), "clothing", "Japanese, anywhere in the name")
+        self.assertEqual(guess("Quick Lighting", ["shader", "vrchat"]), "shader", "from its store's tags")
+        self.assertIsNone(guess("Mochi"))
+
+    def test_yours_first_then_a_tags_kind_then_the_guess(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = tags.TagStore(Path(tmp) / "tags.json")
+            hoodie, rusk = tags.tag_key("booth", "Hoodie"), tags.tag_key("booth", "Rusk")
+            store.change({"action": "create", "name": "bases"})
+            store.change({"action": "type", "name": "bases", "type": "avatar"})
+            data = store.load()
+            self.assertEqual(tags.product_type(data, rusk, "Rusk", ["bases"]), ("avatar", "tag"), "a type tag you have")
+            self.assertEqual(tags.product_type(data, hoodie, "Hoodie", []), ("clothing", "guess"))
+            self.assertEqual(tags.product_type(data, rusk, "Rusk", []), (None, None))
+            store.change({"action": "set-type", "keys": [hoodie, rusk], "type": "accessory"})
+            data = store.load()
+            self.assertEqual(tags.product_type(data, hoodie, "Hoodie", []), ("accessory", "yours"))
+            self.assertEqual(tags.product_type(data, rusk, "Rusk", ["bases"]), ("accessory", "yours"), "yours over a tag's")
+            self.assertEqual(data["tags"], {"bases": {"match": None, "type": "avatar"}}, "no tag added")
+            store.change({"action": "set-type", "keys": [hoodie], "type": ""})   # Hoard's guess again
+            self.assertEqual(tags.product_type(store.load(), hoodie, "Hoodie", []), ("clothing", "guess"))
+            for bad in ({"keys": [hoodie], "type": "vehicle"}, {"keys": [], "type": "hair"}, {"keys": ["x"], "type": "hair"}):
+                with self.assertRaises(ValueError):
+                    store.change({"action": "set-type", **bad})
+            self.assertEqual(tags.TagStore.sanitize({"types": {hoodie: "hair", "bad key": "hair", rusk: "<b>"}})["types"],
+                             {hoodie: "hair"})
+        items = library.enrich([library.item("booth", "1", name="Winter Coat", creator="Kitsu")], {"min_count": 3, "max_share": 0.4})
+        self.assertEqual((items[0]["type"], items[0]["type_from"]), ("clothing", "guess"))
 
 
 class TagMatching(unittest.TestCase):
@@ -3479,6 +3555,28 @@ class DownloadChoices(unittest.TestCase):
         self.assertEqual([e["names"] for e in c["new"]], [["Rusk.zip", "Rusk (Quest).zip"], []])
         self.assertEqual(c["updates"][0]["names"], ["Fox 1.1.zip"])
 
+    def test_files_left_out_by_your_rules_and_before(self):
+        """Issue #225: rules leave files out of every download (PSDs, and on Booth those named with Quest); they come
+        unticked in Download new's list, as do the files you left out of a product before."""
+        rusk = tags.tag_key("booth", "Rusk")
+        rules = [{"store": "booth", "words": "Quest, android"}, {"store": "all", "kind": "layered"},
+                 {"store": "payhip", "kind": "archive"}, {"store": "all", "kind": "nothing"}]
+        self.assertEqual(self.call("POST", "/api/settings", {"file_rules": rules})[0], 200)
+        self.assertEqual(self.srv.cfg["file_rules"], [{"store": "booth", "words": "quest android"}, {"store": "all", "kind": "layered"}],
+                         "only rules for stores Hoard downloads from, and kinds it knows")
+        self.assertEqual(self.call("GET", "/api/settings")[1]["file_rules"], self.srv.cfg["file_rules"])
+        c = self.call("GET", "/api/download-choices")[1]
+        self.assertEqual(c["new"][0]["out"], ["Rusk (Quest).zip"], "unticked to begin with")
+        self.assertEqual(c["updates"][0]["out"], [])
+        # what you leave out of a product is remembered; ticked again, it's forgotten
+        kept = server.remember_choice({}, {rusk: {"shown": ["Rusk.zip", "Rusk (Quest).zip"], "chosen": ["Rusk (Quest).zip"]}})
+        self.assertEqual(kept, {rusk: ["Rusk.zip"]})
+        self.srv.cfg["file_skip"], self.srv.cfg["file_rules"] = kept, []
+        self.assertEqual(self.call("GET", "/api/download-choices")[1]["new"][0]["out"], ["Rusk.zip"])
+        self.assertEqual(server.remember_choice({rusk: {"Rusk.zip", "Old.zip"}}, {rusk: {"shown": ["Rusk.zip"], "chosen": ["Rusk.zip"]}}),
+                         {rusk: ["Old.zip"]}, "one not shown this time stays left out")
+        self.srv.cfg["file_skip"] = {}
+
     def test_always_skip(self):
         mochi = tags.tag_key("gumroad", "Mochi")
         self.assertEqual(self.call("POST", "/api/download-skip", {"keys": [mochi]}), (200, {"ok": True, "skipped": 1}))
@@ -3672,6 +3770,27 @@ class ChosenFiles(unittest.TestCase):
         check = SimpleNamespace(dry_run=True, files=args.files)
         self.assertFalse(downloader.left_out(check, report, "booth", "Rusk", "Rusk (Quest).zip"), "a check sees every file")
         self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=False), report, "booth", "Rusk", "x"), "the command line")
+
+    def test_a_rule_leaves_psds_out_of_every_download(self):
+        """Issue #225: a rule to leave out layered images (PSDs) keeps them out of every store's downloads; a file you
+        ticked for this download wins; a file you left out of a product before stays out; a check sees them all."""
+        from types import SimpleNamespace
+        rules = downloader.file_rules({"file_rules": [{"store": "all", "kind": "layered"}, {"store": "gumroad", "words": "quest"}]})
+        args = SimpleNamespace(dry_run=False, rules=rules, remembered={tags.tag_key("itch", "Tail Pack"): {"Tail.blend"}},
+                               files={tags.tag_key("booth", "Rusk"): {"shown": {"Rusk.psd"}, "chosen": {"Rusk.psd"}}})
+        report = downloader.Report()
+        with common.capture_log(lambda line: None):
+            for store in ("booth", "gumroad", "jinxxy", "itch"):
+                self.assertTrue(downloader.left_out(args, report, store, "Fox Ears", "textures/Fox Ears.PSD"), store)
+                self.assertFalse(downloader.left_out(args, report, store, "Fox Ears", "Fox Ears.unitypackage"), store)
+            self.assertTrue(downloader.left_out(args, report, "gumroad", "Fox Ears", "Fox Ears (Quest).zip"))
+            self.assertFalse(downloader.left_out(args, report, "booth", "Fox Ears", "Fox Ears (Quest).zip"), "Gumroad's rule")
+            self.assertFalse(downloader.left_out(args, report, "booth", "Rusk", "Rusk.psd"), "ticked for this download")
+            self.assertTrue(downloader.left_out(args, report, "itch", "Tail Pack", "Tail.blend"), "left out before")
+        self.assertEqual(report.skipped[0], "Booth: Fox Ears / textures/Fox Ears.PSD - left out by your rule (Layered images)")
+        self.assertIn("Itch.io: Tail Pack / Tail.blend - left out, as you chose before".lower(), [s.lower() for s in report.skipped])
+        self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=True, rules=rules), report, "booth", "Fox", "Fox.psd"),
+                         "a check for updates sees every file")
 
 
 class TasksAPI(unittest.TestCase):
