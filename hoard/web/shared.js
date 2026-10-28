@@ -971,7 +971,9 @@ $("#pickDialog").addEventListener("click", e => {
       if (item && off.size && !PICK.off.has(k)) files[k] = { shown: fileNames(item), chosen: fileNames(item).filter(n => !off.has(n)) };
     }
     DL_FILES = Object.keys(files).length ? files : null;
-    PICK.go(PICK.off.size ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
+    // the products chosen, even when that's all of them, so the download goes straight to each (issue #202: "all"
+    // went as no list at all, which walked every product on the stores, as a whole sync does)
+    PICK.go(PICK.items.length ? PICK.items.filter(x => !PICK.off.has(x.key)).map(x => x.key) : null);
   }
 });
 

@@ -1091,11 +1091,28 @@ class CopiesAndActions(unittest.TestCase):
             dialog.get_by_role("button", name="Stop skipping").click()
             page.wait_for_function("() => document.querySelectorAll('#pickList input').length === 1")
             self.assertEqual(self.srv.cfg["download_skip"], [])
-            page.click("#pickGo")   # everything ticked: the download runs as it always has
+            page.click("#pickGo")   # everything ticked: still the products listed, each gone to straight away (#202)
             page.wait_for_function("() => !document.querySelector('#pickDialog').open")
             self.assertEqual(seen[-1][0], "download")
-            self.assertIn("gumroad", seen[-1][1], "every store you use, as always")
-            self.assertIsNone(seen[-1][2].get("keys"))
+            self.assertEqual(seen[-1][1], ["gumroad"], "the stores of what's chosen")
+            self.assertEqual(seen[-1][2].get("keys"), ["gumroad:ghostfollower"], "not a walk through every product")
+            page.close()
+
+    def test_the_routine_checks_downloads_go_straight_to_each(self):
+        """Issue #202: what the routine check found, downloaded with Choose what to download and Download all, was
+        downloaded as a sync does: every product on every store looked through. It's the products listed now."""
+        from unittest import mock
+        seen = self.started()
+        found = {"at": "2026-10-28T08:00:00+00:00", "new": 1, "updates": 0}
+        with mock.patch.object(server, "save_config"), mock.patch.object(server, "routine_record", lambda: {"last": 0, "found": found}):
+            self.srv.cfg["download_skip"] = []
+            page = self.open()
+            page.locator("#routineNote:not([hidden])").wait_for()
+            page.click("#routineChoose")
+            page.locator("#pickDialog").wait_for()
+            page.click("#pickGo")
+            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.assertEqual((seen[-1][0], seen[-1][2].get("keys")), ("download", ["gumroad:ghostfollower"]))
             page.close()
 
     def test_choose_each_file(self):
