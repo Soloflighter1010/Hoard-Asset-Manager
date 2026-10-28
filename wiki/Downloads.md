@@ -265,9 +265,20 @@ since. The first check reads each file in full and keeps its fingerprint (SHA-25
 size or modified time changed, so they're quick. A file downloaded since the last check isn't read until the
 next one: it was checked as it came in. It also checks the seal on Hoard's own records.
 
-The Downloads sidebar says when it last checked and what it found, with **Check now**. The check is a task like a
-sync, so Tasks lists it, with the files that are missing or changed. A file that changed may be your own edit;
-see the next section for editing safely. Delete a changed file and sync to download it again as the store has it.
+The Downloads sidebar says when it last checked and what it found, with **Check now**. When it found files changed
+or missing, **See what it found** (5.2.0) lists them by product, each with what you can do about it:
+
+- **Download again** gets it again as the store has it. A changed file is first moved to the product's
+  `_Previous versions` folder, so nothing of yours is lost. Several at once go as one task.
+- **Keep it as it is** (a changed file): it may be your own edit. Hoard takes its fingerprint again, so it's fine
+  from then on.
+- **Forget it** (a missing file): Hoard stops expecting it, and leaves it out of that product's downloads from then
+  on, so a sync doesn't bring it back. Tick it again when Hoard asks which files to save to get it back.
+- **Show in folder** opens its folder.
+
+**Keep every change** and **Download them all again** do the same for all of them. The check is a task like a
+sync, so Tasks lists it too, with its log. A file that changed may be your own edit; see the next section for
+editing safely.
 
 ### Disk space
 

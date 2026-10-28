@@ -340,6 +340,95 @@ class RoutineChecks(unittest.TestCase):
         self.assertIn("1 changed since Hoard downloaded it, 1 missing", downloader.integrity_summary(again))
         self.assertEqual(downloader.last_integrity()["changed"], ["Rusk (Booth): body.png"])
 
+    def test_dealing_with_what_it_found(self):
+        """Issue #231: each file a check finds changed or missing can be dealt with from its results: a change kept as
+        it is, a missing file forgotten, or either downloaded again (a changed one kept aside first)."""
+        png = self.folder / "body.png"
+        downloader.check_integrity(self.root)
+        png.write_bytes(b"mine")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 5_000_000_000))
+        found = downloader.check_integrity(self.root)
+        problems = downloader.last_integrity()["problems"]
+        self.assertEqual([(x["kind"], x["store"], x["path"], x["name"]) for x in problems],
+                         [("changed", "booth", "body.png", "Rusk"), ("missing", "booth", "gone.zip", "Rusk")])
+        self.assertEqual(problems, found["problems"])
+        changed, missing = problems
+        with self.assertRaises(ValueError):
+            downloader.resolve_problem(self.root, [], missing, "keep")   # (nothing there to keep)
+        with self.assertRaises(ValueError):
+            downloader.resolve_problem(self.root, [], {**changed, "base": "/elsewhere"}, "keep")
+        got = downloader.resolve_problem(self.root, [], changed, "keep")
+        self.assertEqual(got, {"key": tags.tag_key("booth", "Rusk"), "store": "booth", "name": "Rusk", "file": "body.png"})
+        self.assertEqual(downloader.last_integrity()["changed"], [], "off the results")
+        self.assertEqual(len(downloader.last_integrity()["problems"]), 1)
+        self.assertEqual(downloader.check_integrity(self.root)["changed"], [], "kept as it is: fine from now on")
+        downloader.resolve_problem(self.root, [], missing, "forget")
+        files = downloader.Manifest(self.root / "Booth").assets["111"]["files"]
+        self.assertNotIn("gone.zip", [f["path"] for f in files.values()])
+        self.assertEqual(downloader.check_integrity(self.root)["missing"], [])
+        # changed again: downloaded again, what's there kept aside first
+        png.write_bytes(b"also")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 9_000_000_000))
+        (again,) = downloader.check_integrity(self.root)["problems"]
+        downloader.resolve_problem(self.root, [], again, "again")
+        self.assertFalse(png.exists(), "for the download to bring back")
+        self.assertEqual([p.read_bytes() for p in (self.folder / "_Previous versions").rglob("body.png")], [b"also"])
+        with self.assertRaises(ValueError):
+            downloader.resolve_problem(self.root, [], again, "keep")
+
+    def test_the_results_in_the_page(self):
+        """Issue #231: the page lists what the check found and deals with it: a change kept, a missing file forgotten
+        (and left out of its product's downloads from now on), files downloaded again as one task; a hidden
+        product's files stay out of the list while the hidden library is locked."""
+        from unittest import mock
+        from hoard.marks import MarkStore
+        png = self.folder / "body.png"
+        downloader.check_integrity(self.root)
+        png.write_bytes(b"mine")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 5_000_000_000))
+        downloader.check_integrity(self.root)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(self.root), "file_skip": {}}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        started = []
+        for patch in (mock.patch.object(server, "save_config"),
+                      mock.patch.object(srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started")):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+        def call(method, path, body=None):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request(method, path, body=json.dumps(body) if body is not None else None,
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+            return r.status, data
+        status, got = call("GET", "/api/integrity")
+        self.assertEqual(status, 200)
+        changed, missing = got["problems"]
+        self.assertEqual((changed["kind"], changed["path"], changed["key"]), ("changed", "body.png", tags.tag_key("booth", "Rusk")))
+        self.assertEqual(call("GET", "/api/library")[0], 200)
+        self.assertEqual(call("GET", "/api/assets")[1]["integrity"]["listed"], 2)
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "keep", "problems": [missing]})[1]["ok"], False,
+                         "nothing there to keep")
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "forget", "problems": [missing]})[1],
+                         {"ok": True, "done": 1, "failed": [], "started": None})
+        self.assertEqual(srv.cfg["file_skip"], {tags.tag_key("booth", "Rusk"): ["gone.zip"]}, "and left out from now on")
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "again", "problems": [changed]})[1]["started"], "started")
+        self.assertEqual(started, [("download", ["booth"], {"keys": [tags.tag_key("booth", "Rusk")],
+                                    "chosen": {tags.tag_key("booth", "Rusk"): {"shown": ["body.png"], "chosen": ["body.png"]}}})])
+        self.assertEqual(call("GET", "/api/integrity")[1]["problems"], [], "dealt with")
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "delete", "problems": [changed]})[0], 400)
+        # a hidden product's: left out of the list, and nothing done to it, while it's locked
+        png.write_bytes(b"more")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 9_000_000_000))
+        downloader.check_integrity(self.root)
+        with mock.patch.object(MarkStore, "keys", lambda self, kind: {tags.tag_key("booth", "Rusk")} if kind == "hidden" else set()):
+            got = call("GET", "/api/integrity")[1]
+            self.assertEqual((got["problems"], got["hidden_left_out"]), ([], 1))
+            hidden = downloader.last_integrity()["problems"][0]
+            self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "keep", "problems": [hidden]})[0], 403)
+
     def test_an_unchanged_file_isnt_read_again(self):
         downloader.check_integrity(self.root)
         from unittest import mock
@@ -3190,7 +3279,7 @@ class DownloadsIndex(unittest.TestCase):
         self.builds, self.started, self.release = 0, threading.Event(), threading.Event()
         self.release.set()
 
-        def slow_build(root, catalog, libraries=None):
+        def slow_build(root, catalog, libraries=None, progress=None):
             self.builds += 1
             self.started.set()
             self.release.wait(10)

@@ -2118,5 +2118,21 @@
  "Reading your library: {0} of {1}": "ライブラリを読み込み中: {0} / {1}",
  "Looking at what's downloaded: {0} of {1}": "ダウンロードしたものを確認中: {0} / {1}",
  "Reading your projects: {0} of {1}": "プロジェクトを読み込み中: {0} / {1}",
- "1 package": "パッケージ1個"
+ "1 package": "パッケージ1個",
+ "What the check found": "チェックで見つかったもの",
+ "Keep every change": "変更をすべてそのままにする",
+ "Download them all again": "すべてもう一度ダウンロード",
+ "See what it found": "見つかったものを見る",
+ "Checked {0}.": "{0}にチェックしました。",
+ "Nothing left to deal with.": "対応が必要なものは残っていません。",
+ "Changed since Hoard downloaded it": "Hoardがダウンロードしたあとに変更されました",
+ "Missing": "見つかりません",
+ "Download again": "もう一度ダウンロード",
+ "Keep it as it is": "このままにする",
+ "Forget it": "忘れる",
+ "{0} more are named in the check's log, in Tasks.": "ほかの{0}個は、タスクのチェックのログにあります。",
+ "Forget {0}? Hoard stops expecting it, and leaves it out of that product's downloads from now on.": "{0}を忘れますか? Hoardはこのファイルを探さなくなり、これからはその商品のダウンロードから除外します。",
+ "Forget these {0} files? Hoard stops expecting them, and leaves them out of their products' downloads from now on.": "この{0}個のファイルを忘れますか? Hoardはこれらを探さなくなり、これからはそれぞれの商品のダウンロードから除外します。",
+ "Downloading them again: it starts when what's running now is done.": "もう一度ダウンロードします。実行中のものが終わってから始まります。",
+ "Downloading them again. Follow it in Tasks.": "もう一度ダウンロードしています。タスクで進み具合を見られます。"
 }

@@ -29,8 +29,8 @@ from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
-                         restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED,
-                         edits_root, last_integrity, make_editable_copy, reseal_catalog)
+                         restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED, MAX_PROBLEMS, STORE_DIRS,
+                         edits_root, last_integrity, make_editable_copy, reseal_catalog, resolve_problem)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import blocked_here, blocked_message, is_network_error
@@ -39,7 +39,7 @@ from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, c
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
-                     fetch_public, header_safe, network_tls, open_under, safe_join, safe_name, store_sites, UnsafePath)
+                     fetch_public, header_safe, network_tls, open_under, rel_to_path, safe_join, safe_name, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
@@ -59,6 +59,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip", "/api/product-files",
+           "/api/integrity/resolve",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
            "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
@@ -227,7 +228,7 @@ def integrity_view(cfg: dict) -> dict:
     if last:
         view.update(checked=last["checked"], files=last["files"], fine=last["fine"], changed=len(last["changed"]),
                     missing=len(last["missing"]), data_changed=len(last["data_changed"]), complete=last["complete"],
-                    summary=integrity_summary(last))
+                    summary=integrity_summary(last), listed=len(last["problems"]))   # (to deal with: issue #231)
     return view
 
 
@@ -720,6 +721,54 @@ class Handler(BaseHTTPRequestHandler):
             busy = bool(stores) and bool(srv.jobs.start("list-files", stores, keys=missing))
         return {"files": files, "reading": bool(missing and busy)}
 
+    def _resolve_integrity(self, body: dict):
+        """Issue #231: files the last check found changed or missing, dealt with: "keep" (a change, as it is now),
+        "forget" (a missing file, which is left out of its product's downloads from now on, so a sync doesn't bring it
+        back), "again" (downloaded again, all of them as one task), or "show" (one file, in its folder)."""
+        srv = self.server
+        action = body.get("action")
+        problems = [x for x in (body.get("problems") if isinstance(body.get("problems"), list) else [])[:MAX_PROBLEMS]
+                    if isinstance(x, dict)]
+        if action not in ("keep", "forget", "again", "show") or not problems:
+            return self._json({"error": "Nothing to do."}, 400)
+        root = root_dir(srv.cfg)
+        others = libraries.other_folders(srv.cfg)
+        if any(self._hidden_key(tag_key(str(x.get("store")), str(x.get("name")))) for x in problems):
+            return self._json({"error": "Unlock your hidden library first."}, 403)
+        if action == "show":
+            x = problems[0]
+            bases = {str(b): b for b in (root, *others)}
+            try:
+                if bases.get(x.get("base")) is None or x.get("store") not in STORE_DIRS:
+                    raise UnsafePath("not a library folder")
+                folder = rel_to_path(bases[x["base"]] / STORE_DIRS[x["store"]], str(x.get("folder")))
+                target = rel_to_path(folder, str(x.get("path")))
+                return self._json({"ok": True, "in": reveal(target if target.is_file() else folder if folder.is_dir() else folder.parent)})
+            except (UnsafePath, OSError):
+                return self._json({"error": "That folder couldn't be opened."}, 400)
+        done, failed, again = 0, [], {}
+        for x in problems:
+            try:
+                got = resolve_problem(root, others, x, action)
+            except (ValueError, OSError) as e:
+                failed.append({"path": str(x.get("path"))[:300], "error": str(e)[:300]})
+                continue
+            done += 1
+            if action == "forget":
+                with srv.cfg_lock:
+                    kept = remembered_files(srv.cfg)
+                    kept.setdefault(got["key"], set()).add(got["file"])
+                    srv.cfg["file_skip"] = {k: sorted(v) for k, v in kept.items()}
+                    srv.save_settings()
+            elif action == "again":
+                pick = again.setdefault(got["key"], {"store": got["store"], "shown": [], "chosen": []})
+                pick["shown"].append(got["file"]); pick["chosen"].append(got["file"])
+        started = None
+        if again:   # one download for all of them: those files, whatever was left out of them before
+            started = srv.jobs.start("download", sorted({v["store"] for v in again.values()}), keys=sorted(again),
+                                     chosen={k: {"shown": v["shown"], "chosen": v["chosen"]} for k, v in again.items()})
+        return self._json({"ok": not failed, "done": done, "failed": failed[:50], "started": started})
+
     def _remember_files(self, chosen: dict | None) -> dict | None:
         """The files you left out of a product, as you chose them to download, kept for its downloads from now on
         (issue #225: Sync, Download new and the routine check leave them out too); one you ticked again is
@@ -858,6 +907,14 @@ class Handler(BaseHTTPRequestHandler):
                          "project": mask(tasks["project"]) if tasks["project"] else None,
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
+        if path == "/api/integrity":   # issue #231: the files the last check found, each to deal with
+            last = last_integrity() or {"problems": [], "changed": [], "missing": [], "data_changed": [], "checked": None}
+            hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
+            listed = [{**x, "key": tag_key(x["store"], x["name"])} for x in last["problems"]]
+            shown = [x for x in listed if x["key"] not in hidden]
+            return self._json({"checked": last["checked"], "problems": shown, "hidden_left_out": len(listed) - len(shown),
+                               "more": max(0, len(last["changed"]) + len(last["missing"]) - len(listed)),
+                               "data_changed": last["data_changed"]})
         if path == "/api/loading":   # issue #200: how far reading what a page shows first has got, for its splash
             return self._json(loading.view((parse_qs(u.query).get("part") or [""])[0]))
         if path == "/api/status":
@@ -2177,6 +2234,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})
+        if path == "/api/integrity/resolve":   # issue #231: deal with what the last check found
+            return self._resolve_integrity(body)
         if path == "/api/product-files":   # issue #225: what products have, to choose their files from before downloading
             return self._json(self._product_files(body))
         if path == "/api/download-skip":   # issue #107: always skip these products when downloading, or stop

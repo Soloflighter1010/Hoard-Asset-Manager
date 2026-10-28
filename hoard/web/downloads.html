@@ -551,6 +551,19 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-files span { overflow-wrap: anywhere; }
 /* What files do you want to save? (issue #225): what a product contains, then everything or the files you tick */
 .files-dialog { width: min(560px, calc(var(--vw) - 32px)); }
+/* issue #231: what the check found, each file with what can be done about it */
+.check-dialog { width: min(720px, calc(var(--vw) - 32px)); }
+.check-list { max-height: min(56vh, 520px); overflow: auto; margin: 0 0 12px; }
+.check-list h3 { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; font: 700 14px var(--body); overflow-wrap: anywhere; }
+.check-list h3:first-child { margin-top: 0; }
+.check-list ul { list-style: none; margin: 0; padding: 0; }
+.check-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 10px; border-radius: 9px; background: var(--stone); margin-bottom: 4px; }
+.check-list .cf { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; }
+.check-list .cf b { font-weight: 600; overflow-wrap: anywhere; }
+.check-list .cf .warn { font-size: 12.5px; }
+.check-list .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.check-list .acts button { width: auto; margin: 0; }
+.check-list .none { color: var(--dust); }
 .files-of { margin: 0 0 4px; overflow-wrap: anywhere; }
 .files-has { margin: 0 0 12px; color: var(--dust); }
 .files-list { max-height: min(46vh, 420px); overflow: auto; margin: 0 0 12px; padding: 4px 10px 8px; border-radius: 10px; background: var(--stone); }
@@ -1703,6 +1716,14 @@ body.less-motion .tour-try::before { animation: none; }
     <button class="ghost" data-files="pick" id="filesPick">Choose files</button>
     <button class="primary" data-files="go" id="filesAll">Download everything</button></div>
 </dialog>
+<dialog id="checkDialog" class="support-dialog check-dialog" aria-labelledby="checkTitle">
+  <h2 id="checkTitle">What the check found</h2>
+  <p id="checkWhen" class="muted"></p>
+  <div id="checkList" class="check-list"></div>
+  <div class="pick-go"><button class="ghost" data-check-all="keep" id="checkKeepAll">Keep every change</button>
+    <button class="ghost" data-check-all="again" id="checkAgainAll">Download them all again</button>
+    <button class="primary" data-check-close>Done</button></div>
+</dialog>
 <dialog id="pickDialog" class="support-dialog pick-dialog" aria-labelledby="pickTitle">
   <h2 id="pickTitle">Download</h2>
   <p class="muted">Untick anything you don't want this time. <strong>Always skip</strong> leaves a product out of every
@@ -2293,10 +2314,60 @@ function renderIntegrity() {
   const when = !v.checked ? tr("Not checked yet.") : !v.complete ? tr("Checked {0} (stopped part way).", ago(v.checked))
     : tr("Checked {0}:", ago(v.checked));
   const found = !v.checked || !v.complete ? "" : (v.changed || v.missing || v.data_changed)
-    ? ` <strong class="warn">${esc(v.summary)}</strong> ${esc(tr("Which files is in Tasks."))}` : ` ${esc(v.summary)}`;
+    ? ` <strong class="warn">${esc(v.summary)}</strong> ` + (v.listed ? `<button class="linkish" data-check-open>${esc(tr("See what it found"))}</button>`
+      : esc(tr("Which files is in Tasks."))) : ` ${esc(v.summary)}`;
   el.innerHTML = `${esc(when)}${found} ${esc(every ? tr("Hoard checks {0}, in its routine check (Settings).", tr(every)) : tr("Hoard checks only when you ask (Settings)."))} ` +
     `<button class="linkish" id="checkNow">Check now</button>`;
 }
+// Issue #231: the files the last check found changed or missing, each with what can be done about it: a change kept as
+// it is (it's fine from then on), a missing file forgotten (and left out of its product's downloads), either
+// downloaded again (a changed one kept in _Previous versions first), or shown in its folder
+const CHECK = { list: [], hidden: 0, more: 0 };
+async function openCheck() {
+  const r = await api("/api/integrity", { cache: "no-store" });
+  if (!r.ok) { toast(tr("That can't be done.")); return; }
+  const v = await r.json();
+  Object.assign(CHECK, { list: v.problems || [], hidden: v.hidden_left_out || 0, more: v.more || 0 });
+  $("#checkWhen").textContent = v.checked ? tr("Checked {0}.", ago(v.checked)) + (CHECK.hidden ? " " +
+    tr("Hidden items are left out while your hidden library is locked.") : "") : "";
+  drawCheck();
+  if (!$("#checkDialog").open) $("#checkDialog").showModal();
+}
+function drawCheck() {
+  const by = new Map();
+  CHECK.list.forEach((x, i) => { const k = `${x.store}:${x.name}`; if (!by.has(k)) by.set(k, []); by.get(k).push([x, i]); });
+  $("#checkList").innerHTML = !CHECK.list.length ? `<p class="none">${esc(tr("Nothing left to deal with."))}</p>`
+    : [...by.values()].map(xs => `<h3><span class="dot ${esc(xs[0][0].store)}"></span><span translate="no">${esc(xs[0][0].name)}</span></h3><ul>` +
+      xs.map(([x, i]) => `<li><span class="cf"><b translate="no">${esc(x.path)}</b><span class="warn">${esc(x.kind === "changed"
+          ? tr("Changed since Hoard downloaded it") : tr("Missing"))}</span></span><span class="acts">` +
+        `<button class="ghost sm" data-check="again" data-i="${i}">${esc(tr("Download again"))}</button>` +
+        (x.kind === "changed" ? `<button class="ghost sm" data-check="keep" data-i="${i}">${esc(tr("Keep it as it is"))}</button>`
+          : `<button class="ghost sm" data-check="forget" data-i="${i}">${esc(tr("Forget it"))}</button>`) +
+        `<button class="ghost sm" data-check="show" data-i="${i}">${esc(tr("Show in folder"))}</button></span></li>`).join("") + `</ul>`).join("") +
+    (CHECK.more ? `<p class="muted">${esc(tr("{0} more are named in the check's log, in Tasks.", CHECK.more))}</p>` : "");
+  $("#checkKeepAll").hidden = !CHECK.list.some(x => x.kind === "changed");
+  $("#checkAgainAll").hidden = CHECK.list.length < 2;
+}
+async function resolveCheck(action, list) {
+  if (action === "forget" && !await ask(tr(list.length === 1 ? "Forget {0}? Hoard stops expecting it, and leaves it out of that product's downloads from now on."
+      : "Forget these {0} files? Hoard stops expecting them, and leaves them out of their products' downloads from now on.",
+      list.length === 1 ? list[0].path : list.length), tr("Forget"))) return;
+  const r = await apiPost("/api/integrity/resolve", { action, problems: list });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  if (action === "show") return;
+  if (r.data.failed && r.data.failed.length) toast(r.data.failed[0].error);
+  else if (action === "again") toast(r.data.started === "queued" ? tr("Downloading them again: it starts when what's running now is done.")
+    : tr("Downloading them again. Follow it in Tasks."));
+  await openCheck();
+  load();
+}
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-check-open]")) { openCheck(); return; }
+  if (e.target.closest("[data-check-close]")) { $("#checkDialog").close(); return; }
+  const one = e.target.closest("[data-check]"), all = e.target.closest("[data-check-all]");
+  if (one) resolveCheck(one.dataset.check, [CHECK.list[+one.dataset.i]]);
+  else if (all) resolveCheck(all.dataset.checkAll, all.dataset.checkAll === "keep" ? CHECK.list.filter(x => x.kind === "changed") : CHECK.list);
+});
 async function checkDownloads() {
   const r = await apiPost("/api/verify");
   if (!r.ok) { toast(r.data.error || "The check didn't start."); return; }

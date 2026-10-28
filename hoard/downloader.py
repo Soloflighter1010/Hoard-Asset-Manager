@@ -2332,7 +2332,22 @@ def last_integrity() -> dict | None:
     texts = lambda k: [str(x)[:500] for x in raw[k][:200]] if isinstance(raw.get(k), list) else []  # noqa: E731
     return {"checked": raw["checked"][:40], "products": num("products"), "files": num("files"), "fine": num("fine"),
             "changed": texts("changed"), "missing": texts("missing"), "data_changed": texts("data_changed"),
-            "complete": raw.get("complete") is not False}
+            "complete": raw.get("complete") is not False,
+            "problems": [p for p in (_problem(x) for x in (raw.get("problems") or [])[:MAX_PROBLEMS]
+                                     if isinstance(raw.get("problems"), list)) if p]}
+
+
+MAX_PROBLEMS = 1000   # the files a check lists to deal with (issue #231): the counts go on past it
+
+
+def _problem(x) -> dict | None:
+    """One file a check found changed or missing, as integrity.json keeps it (each field checked: it's a file on disk)."""
+    if not isinstance(x, dict) or x.get("kind") not in ("changed", "missing") or x.get("store") not in STORE_DIRS:
+        return None
+    text = lambda k, n: x[k][:n] if isinstance(x.get(k), str) else ""  # noqa: E731
+    out = {"kind": x["kind"], "store": x["store"], "base": text("base", 1000), "folder": text("folder", 1000),
+           "path": text("path", 1000), "name": text("name", 300)}
+    return out if out["base"] and out["folder"] and out["path"] else None
 
 
 def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since: str | None = None) -> dict:
@@ -2349,7 +2364,16 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
     from .safety import _is_link
     say = progress or (lambda line: None)
     result = {"checked": now_iso(), "products": 0, "files": 0, "fine": 0, "changed": [], "missing": [],
-              "data_changed": [], "complete": True, "away": []}
+              "data_changed": [], "complete": True, "away": [], "problems": []}
+    store_ids = {d: s for s, d in STORE_DIRS.items()}
+
+    def found(kind: str, shown: str, base: Path, store: str, rec: dict, rel: str) -> None:
+        """A file that isn't as Hoard downloaded it: named in the summary's list, and kept with what it takes to
+        deal with it from the check's results (issue #231)."""
+        result[kind].append(shown)
+        if len(result["problems"]) < MAX_PROBLEMS:
+            result["problems"].append({"kind": kind, "base": str(base), "store": store_ids.get(store, store.lower()),
+                                       "folder": rec["folder"], "path": rel, "name": str(rec.get("name") or "")[:300]})
     bases = [root]
     for lib in others:
         (bases.append(lib) if lib.is_dir() and not lib.is_symlink() else result["away"].append(str(lib)))
@@ -2390,10 +2414,10 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
                     target = rel_to_path(folder, rel)
                     st = os.stat(target, follow_symlinks=False)
                 except (UnsafePath, OSError):
-                    result["missing"].append(shown)
+                    found("missing", shown, base, store, rec, rel)
                     continue
                 if _is_link(st) or not _stat.S_ISREG(st.st_mode) or (f.get("size") is not None and st.st_size != f["size"]):
-                    result["changed"].append(shown)
+                    found("changed", shown, base, store, rec, rel)
                     continue
                 if f.get("sha256") and f.get("mtime_ns") == st.st_mtime_ns:
                     result["fine"] += 1
@@ -2407,10 +2431,10 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
                         for block in iter(lambda: fh.read(1024 * 1024), b""):
                             digest.update(block)
                 except (UnsafePath, OSError):
-                    result["missing"].append(shown)
+                    found("missing", shown, base, store, rec, rel)
                     continue
                 if f.get("sha256") and f["sha256"] != digest.hexdigest():
-                    result["changed"].append(shown)
+                    found("changed", shown, base, store, rec, rel)
                     continue
                 f.update(sha256=digest.hexdigest(), mtime_ns=st.st_mtime_ns)   # the fingerprint, taken once
                 result["fine"] += 1
@@ -2423,6 +2447,78 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
     except OSError as e:
         log(f"Couldn't save what the check found: {e}")
     return result
+
+
+def resolve_problem(root: Path, others, problem: dict, action: str) -> dict:
+    """Issue #231: deal with a file the last check found changed or missing (problem: as last_integrity lists it).
+    action: "keep" (a changed file as it is now: its fingerprint is taken again, so it's fine from now on), "forget"
+    (a missing file: taken off its product's record), or "again" (to be downloaded again: a changed file is moved to
+    _Previous versions first, so nothing of yours is lost). It's taken off the check's results. Returns the product
+    ({"key", "store", "name", "file"}) for what the caller does next (a download, a file to leave out); raises
+    ValueError when it can't be done (the file's record has gone, or it's back as it was)."""
+    import stat as _stat
+    from . import previous
+    from .safety import _is_link
+    bases = {str(b): b for b in (root, *others)}
+    base, store = bases.get(problem.get("base")), problem.get("store")
+    if base is None or store not in STORE_DIRS or action not in ("keep", "forget", "again"):
+        raise ValueError("That isn't something Hoard can do.")
+    sdir = base / STORE_DIRS[store]
+    manifest = Manifest(sdir)
+    rec = next((r for r in manifest.assets.values() if r.get("folder") == problem.get("folder") and not r.get("location")), None)
+    fkey = next((k for k, f in (rec or {}).get("files", {}).items() if f.get("path") == problem.get("path")), None)
+    if fkey is None:
+        _drop_problem(problem)
+        raise ValueError("Hoard has no record of that file now: check your downloads again.")
+    f, rel = rec["files"][fkey], rec["files"][fkey]["path"]
+    try:
+        target = rel_to_path(rel_to_path(sdir, rec["folder"]), rel)
+        st = os.stat(target, follow_symlinks=False)
+    except UnsafePath:
+        raise ValueError("That file's folder isn't one Hoard can use.") from None
+    except OSError:
+        st = None
+    plain = st is not None and not _is_link(st) and _stat.S_ISREG(st.st_mode)
+    if action == "keep":
+        if not plain:
+            raise ValueError("That file isn't there now: check your downloads again.")
+        digest = hashlib.sha256()
+        with open_under(base, f"{STORE_DIRS[store]}/{rec['folder']}/{rel}") as fh:
+            for block in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(block)
+        f.update(size=st.st_size, sha256=digest.hexdigest(), mtime_ns=st.st_mtime_ns)
+    elif action == "forget":
+        if st is not None:
+            raise ValueError("That file is there now: check your downloads again.")
+        del rec["files"][fkey]
+    elif st is not None:   # again: what's there now is kept aside, so the download is a whole new copy
+        if not plain or (previous.keep(target, max(1, previous.keeping())) is None and st.st_size):
+            raise ValueError("That file couldn't be moved aside, so it wasn't downloaded again.")
+        target.unlink(missing_ok=True)   # (an empty file: nothing to keep)
+    manifest.save()
+    _drop_problem(problem)
+    return {"key": tag_key(store, rec.get("name") or ""), "store": store, "name": rec.get("name") or "", "file": rel}
+
+
+def _drop_problem(problem: dict) -> None:
+    """Take a file dealt with off the last check's results (and its count)."""
+    try:
+        raw = read_json_file(integrity_file())
+    except (DataFileError, OSError):
+        return
+    same = lambda x: isinstance(x, dict) and all(x.get(k) == problem.get(k) for k in ("base", "store", "folder", "path"))  # noqa: E731
+    gone = [x for x in raw.get("problems") or [] if same(x)]
+    if not gone:
+        return
+    raw["problems"] = [x for x in raw["problems"] if not same(x)]
+    for x in gone:
+        shown = f"{x.get('name')} ({STORE_DIRS.get(x.get('store'), '')}): {x.get('path')}"
+        if shown in (raw.get(x["kind"]) or []):
+            raw[x["kind"]].remove(shown)
+    try:
+        write_file_safely(integrity_file(), json.dumps(raw, ensure_ascii=False))
+    except OSError as e:
+        log(f"Couldn't save what the check found: {e}")
 
 
 def integrity_summary(r: dict) -> str:

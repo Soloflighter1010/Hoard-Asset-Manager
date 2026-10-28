@@ -2118,5 +2118,21 @@
  "Reading your library: {0} of {1}": "라이브러리 읽는 중: {0} / {1}",
  "Looking at what's downloaded: {0} of {1}": "다운로드한 것 살피는 중: {0} / {1}",
  "Reading your projects: {0} of {1}": "프로젝트 읽는 중: {0} / {1}",
- "1 package": "패키지 1개"
+ "1 package": "패키지 1개",
+ "What the check found": "점검에서 찾은 것",
+ "Keep every change": "바뀐 것을 모두 그대로 두기",
+ "Download them all again": "모두 다시 다운로드",
+ "See what it found": "찾은 것 보기",
+ "Checked {0}.": "{0}에 점검했어요.",
+ "Nothing left to deal with.": "처리할 것이 남아 있지 않아요.",
+ "Changed since Hoard downloaded it": "Hoard가 다운로드한 뒤에 바뀌었어요",
+ "Missing": "없어요",
+ "Download again": "다시 다운로드",
+ "Keep it as it is": "그대로 두기",
+ "Forget it": "잊기",
+ "{0} more are named in the check's log, in Tasks.": "나머지 {0}개는 작업의 점검 기록에 있어요.",
+ "Forget {0}? Hoard stops expecting it, and leaves it out of that product's downloads from now on.": "{0}을(를) 잊을까요? Hoard는 이 파일을 더 찾지 않고, 앞으로 그 상품의 다운로드에서 빼요.",
+ "Forget these {0} files? Hoard stops expecting them, and leaves them out of their products' downloads from now on.": "이 파일 {0}개를 잊을까요? Hoard는 이 파일들을 더 찾지 않고, 앞으로 각 상품의 다운로드에서 빼요.",
+ "Downloading them again: it starts when what's running now is done.": "다시 다운로드해요. 지금 실행 중인 것이 끝나면 시작해요.",
+ "Downloading them again. Follow it in Tasks.": "다시 다운로드하고 있어요. 작업에서 진행 상황을 볼 수 있어요."
 }

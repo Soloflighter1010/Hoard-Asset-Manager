@@ -315,6 +315,36 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_what_the_check_found(self):
+        """Issue #231: what the check of the downloads found, each file with what can be done about it, from the
+        Downloads page's summary (it said "Which files is in Tasks")."""
+        from hoard import downloader
+        where = downloader.integrity_file()
+        self.addCleanup(where.unlink, missing_ok=True)
+        root = str(self.srv.cfg["root"])
+        where.parent.mkdir(parents=True, exist_ok=True)
+        where.write_text(json.dumps({"checked": "2026-10-28T10:00:00+00:00", "products": 1, "files": 1, "fine": 0,
+                                     "changed": ["Rusk (Booth): rusk.zip"], "missing": [], "data_changed": [], "complete": True,
+                                     "problems": [{"kind": "changed", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
+                                                   "path": "rusk.zip", "name": "Rusk"}]}))
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        goto(page, f"{self.srv.url}downloads")
+        page.locator("#integrity [data-check-open]").click()
+        dialog = page.locator("#checkDialog")
+        dialog.wait_for()
+        row = dialog.locator(".check-list li")
+        self.assertIn("rusk.zip", row.inner_text())
+        self.assertIn("Changed since Hoard downloaded it", row.inner_text())
+        self.assertEqual(row.locator("button").all_inner_texts(), ["Download again", "Keep it as it is", "Show in folder"])
+        self.assertIn("Rusk", dialog.locator(".check-list h3").inner_text())
+        row.get_by_role("button", name="Keep it as it is").click()
+        dialog.get_by_text("Nothing left to deal with.").wait_for()
+        self.assertEqual(downloader.last_integrity()["changed"], [])
+        dialog.locator("[data-check-close]").click()
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_downloaded_or_not_yet(self):
         """Issue #17: in the Library, what's on disk is marked on its card and in its label, and Downloaded / Not
         downloaded yet filter the library, with counts, kept in the address like the other filters."""
