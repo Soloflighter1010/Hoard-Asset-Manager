@@ -3326,6 +3326,23 @@ function setsRoot() {
     (wishes.length ? `<div class="grid setgrid">${wishes.map(setTile).join("")}</div>`
       : `<p class="none">${esc(tr("Your wishlists from Booth (your loved items), Gumroad, Jinxxy (your wishlist, likes and lists) and Payhip, with what each product costs. Read them from the stores you're signed in to, or import wishlist pages you saved from your own browser. Each time they're read again, a price that changed shows what it was."))}</p>`);
 }
+// Finding more for a wishlist (issue #187): your words searched on Nexyy (a search across the stores) and on the stores'
+// own sites, in your browser; you copy a product's link from there into Add products by link. Hoard doesn't read these
+// searches itself: Nexyy has no API for apps to use.
+const STORE_SEARCHES = [
+  ["nexyy", "Nexyy", q => q ? `https://nexyy.com/browse?q=${q}` : "https://nexyy.com/browse"],
+  ["booth", "Booth", q => `https://booth.pm/${["ja", "ko"].includes(document.documentElement.lang) ? document.documentElement.lang : "en"}/` + (q ? `search/${q}` : "items")],
+  ["gumroad", "Gumroad", q => q ? `https://gumroad.com/discover?query=${q}` : "https://gumroad.com/discover"],
+  ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search=${q}` : "https://jinxxy.com/market/browse"],
+  ["itch", "itch.io", q => q ? `https://itch.io/search?q=${q}` : "https://itch.io/game-assets"]];
+const storeSearch = (key, words) => STORE_SEARCHES.find(x => x[0] === key)[2](encodeURIComponent(String(words || "").trim().slice(0, 100)));
+function wishFindHTML() {
+  return `<div class="wish-find"><input type="search" data-wishfind maxlength="100" placeholder="${esc(tr("Find more to add"))}" ` +
+      `aria-label="${esc(tr("Words to search the stores for"))}" autocomplete="off">` +
+      STORE_SEARCHES.map(([k, name]) => `<a class="ghost sm" data-findon="${k}" href="${esc(safeUrl(storeSearch(k, "")))}" target="_blank" ` +
+        `rel="noopener noreferrer" translate="no">${esc(name)}</a>`).join("") + `</div>` +
+    `<p class="hint">${esc(tr("Searches in your browser. Copy the link of a product you want there, then add it here with Add products by link."))}</p>`;
+}
 function setHead(s) {
   const c = setCounts(s);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
@@ -3341,7 +3358,8 @@ function setHead(s) {
       (c.owned ? `<button class="ghost sm" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>` : "") +
       `<button class="ghost sm" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>` +
       (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
-      `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div></div></div>` +
+      `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div>` +
+      (isWish(s) ? wishFindHTML() : "") + `</div></div>` +
     `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>` +
       `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
       `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(s.note || "")}</textarea>` +
@@ -3822,6 +3840,13 @@ function wireSets() {
     }, true);
   }
   $("#setView").addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.setextra")) setExtraOpen = e.target.open; }, true);
+  $("#setView").addEventListener("input", e => {   // a wishlist's Find more to add: each site's search, with your words
+    if (!e.target.matches("[data-wishfind]")) return;
+    for (const a of document.querySelectorAll("#setView [data-findon]")) a.href = storeSearch(a.dataset.findon, e.target.value);
+  });
+  $("#setView").addEventListener("keydown", e => {   // Enter: Nexyy, which searches them all
+    if (e.key === "Enter" && e.target.matches("[data-wishfind]") && e.target.value.trim()) { e.preventDefault(); $("#setView [data-findon=nexyy]").click(); }
+  });
   $("#setMore").addEventListener("toggle", e => {   // a wishlist's groups: folded or not, kept with your other folds
     const d = e.target;
     if (!d.matches || !d.matches("details.wishgroup") || ((UI.sections || {})[d.dataset.fold] !== false) === d.open) return;

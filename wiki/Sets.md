@@ -47,6 +47,10 @@ how to put it together) and **Photos** (below).
   Jinxxy, Payhip or itch.io, one a line. Hoard reads each one's page as anyone sees it (no sign-in is sent), from the
   store's own site, for its name, creator, price and picture, and adds it, owned or not. A link that isn't a
   product's page, or whose page can't be read, is left out, and Hoard says why.
+- **Find more to add**, on an open wishlist (5.2.0): type what you're after, then choose **Nexyy** (a search
+  across the stores) or **Booth**, **Gumroad**, **Jinxxy** or **itch.io**: the search opens in your browser. Copy
+  the link of a product you want there and add it with **Add products by link...** (a link from Nexyy works too).
+  Hoard doesn't read these searches itself.
 
 A set remembers what each product is when it's added (its name, creator, store page and picture), so it can be
 shown and shared whether or not the product is in your library now. Products are known by the same key tags use

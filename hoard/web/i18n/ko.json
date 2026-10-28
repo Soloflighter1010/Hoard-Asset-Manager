@@ -2004,5 +2004,8 @@
  "Take {0} off this wishlist": "{0}을(를) 위시리스트에서 빼기",
  "Take {0} off this wishlist?": "{0}을(를) 이 위시리스트에서 뺄까요?",
  "Take {0} out of {1}?": "{0}을(를) {1}에서 뺄까요?",
- "Take it off": "빼기"
+ "Take it off": "빼기",
+ "Find more to add": "추가할 것 찾기",
+ "Words to search the stores for": "스토어에서 검색할 말",
+ "Searches in your browser. Copy the link of a product you want there, then add it here with Add products by link.": "브라우저에서 검색해요. 거기서 원하는 상품의 링크를 복사한 다음, 여기서 '링크로 상품 추가'로 추가하세요."
 }

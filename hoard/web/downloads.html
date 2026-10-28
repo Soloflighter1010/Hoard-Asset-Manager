@@ -1054,6 +1054,12 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .ext-out { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border: 0; border-radius: 7px; flex: none;
   background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); color: var(--dust); font: 600 12px var(--body); cursor: pointer; }
 .ext-out svg { width: 13px; height: 13px; }
+/* a wishlist's Find more to add (#187): your words, then the sites to search them on, in your browser */
+.wish-find { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.wish-find input { flex: 1 1 200px; min-width: 0; height: var(--btn-h-sm); padding: 0 12px; border: 0; border-radius: 8px;
+  background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.wish-find input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.wish-find + .hint { margin: 6px 0 0; }
 .ext-out:hover, .ext-out:focus-visible { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); outline: none; }
 .wish-h { margin-top: 30px; }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }

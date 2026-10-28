@@ -448,9 +448,15 @@ class InHoard(unittest.TestCase):
             self.assertEqual(page.locator('#status [data-clear="tag"]').count(), 0, "its tag isn't a filter anymore")
             page.locator(".settile", has_text="Booth: Loved items").click()
             buy.wait_for()
-            # added by its link
+            # more to add, found in the browser (issue #187): Nexyy and the stores' own searches, with your words
+            page.fill("[data-wishfind]", "fox tail")
+            finds = page.locator("[data-findon]").evaluate_all("l => l.map(a => [a.textContent, a.href, a.target])")
+            self.assertEqual([f[0] for f in finds], ["Nexyy", "Booth", "Gumroad", "Jinxxy", "itch.io"])
+            self.assertEqual(finds[0][1:], ["https://nexyy.com/browse?q=fox%20tail", "_blank"])
+            self.assertEqual(finds[3][1], "https://jinxxy.com/market/browse?search=fox%20tail")
+            # added by its link: the one Nexyy gave (its ?ref=nexyy left off)
             page.click('[data-setx="addlinks"]')
-            page.fill("#addLinks", "https://booth.pm/en/items/4242")
+            page.fill("#addLinks", "https://booth.pm/en/items/4242?ref=nexyy")
             page.locator("dialog.ask button[value=yes]").click()
             buy.locator(".slot.ext", has_text="Fox Tail").wait_for()
             self.assertEqual(buy.locator(".slot.ext", has_text="Fox Tail").locator(".ext-price .price").inner_text(), "¥ 600",
