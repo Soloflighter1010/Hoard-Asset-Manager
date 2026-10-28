@@ -13,9 +13,9 @@ import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
 from .browser import goto, goto_past_check, has_password_field, settle
-from .common import NotLoggedIn
+from .common import NotLoggedIn, pause
 from .config import payhip_shops
-from .safety import clean_text, inert_html, offline_page, safe_url
+from .safety import clean_text, fetch_public, inert_html, is_video_address, offline_page, safe_url
 
 MAX_PAGES = 200            # pages of one list (Booth shows 20 on each: 4,000 products)
 MAX_LISTS = 50             # lists from one store
@@ -83,7 +83,7 @@ def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=Non
     if isinstance(elsewhere, str) and elsewhere:
         u = urlparse(elsewhere)
         out["elsewhere"] = urlunparse((u.scheme, u.netloc, u.path, "", u.query, ""))   # (another site may need its query)
-    if safe_url(thumbnail):
+    if safe_url(thumbnail) and not is_video_address(thumbnail):   # (a video isn't a picture: issue #212)
         out["thumbnail"] = safe_url(thumbnail)
     if isinstance(price, dict) or isinstance(price, str):
         p = price if isinstance(price, dict) else parse_price(price)
@@ -171,6 +171,43 @@ def from_product_page(link: str, fetch) -> dict:
     if price is None and amount not in (None, "") and str(amount).strip() in ("0", "0.0", "0.00"):
         price = {"text": "Free", "amount": 0.0, "currency": ""}
     return product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+
+
+def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:
+    """A store's public page (or Booth's item JSON), as Add products by link reads it: only from those hosts (https,
+    redirects included), at public addresses, sending no sign-in. (Its text, its content type), or None."""
+    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
+                                           "like Gecko) Chrome/140.0 Safari/537.36",
+                             "Accept": "application/json" if url.endswith(".json") else "text/html"},
+                       MAX_PRODUCT_PAGE, hosts=hosts)
+    return (got[0].decode("utf-8", "replace"), got[1]) if got else None
+
+
+PICTURE_PAGES = 60   # products' public pages read for their pictures, at most, each time a store is read
+
+
+def pictures_from_pages(items: list[dict], fetch, progress=lambda m: None, delay: float = 0.0, page_of=None,
+                        limit: int = PICTURE_PAGES) -> int:
+    """Issue #212: products that came with no picture (a store showing a video first: the video isn't one), given the
+    picture their public page shows (from_product_page: its JSON-LD, Open Graph tag, or Booth's item JSON). Changes
+    items' "thumbnail" in place; page_of(item) is its public page (its "url"). At most limit pages, delay apart.
+    Returns how many were found."""
+    page_of = page_of or (lambda x: x.get("url"))
+    todo = [x for x in items if (not x.get("thumbnail") or is_video_address(x.get("thumbnail"))) and page_of(x)][:limit]
+    found = 0
+    for n, x in enumerate(todo, 1):
+        progress(f"Pictures, {n} of {len(todo)}")
+        try:
+            still = from_product_page(page_of(x), fetch).get("thumbnail")
+        except Exception as e:   # (a page that can't be read leaves its product as it was)
+            print(f"Couldn't read the picture of {x.get('name')!r}: {str(e)[:200]}", flush=True)
+            still = None
+        if still:
+            x["thumbnail"] = still
+            found += 1
+        if n < len(todo):
+            pause(delay)
+    return found
 
 
 def page_address(store: str, url: str) -> str | None:
@@ -287,11 +324,14 @@ JINXXY_JS = r"""(base) => {
     const creator = [...card.querySelectorAll('a[href]')].find(x => x !== a && abs(x) !== url && path.length > 1
       && abs(x) && new URL(abs(x)).pathname.replace(/\/$/, '') === '/' + path[0]);
     const name = h.textContent.trim();
-    // its picture is the one in the other link to the same product (beside the name, not in the box around it)
+    // its picture is the one in the other link to the same product (beside the name, not in the box around it), or the
+    // still of the video it shows first (issue #212)
     const img = [...document.querySelectorAll('a[href] img')].find(i => abs(i.closest('a')) === url && !/profile picture/i.test(i.alt || ''));
+    const vid = [...document.querySelectorAll('a[href] video[poster]')].find(v => abs(v.closest('a')) === url);
     const price = [...card.querySelectorAll('span')].map(s => s.textContent.trim())
       .find(t => /^(\d[\d.,]*(\s*-\s*\d[\d.,]*)?\s*[A-Z]{3}|Free)$/.test(t));
-    cards.push({url, name, creator: creator ? creator.textContent.trim() : '', thumbnail: img ? img.src : '', price: price || ''});
+    cards.push({url, name, creator: creator ? creator.textContent.trim() : '', thumbnail: img ? img.src : vid ? vid.poster : '',
+                price: price || ''});
   }
   const lists = [...document.querySelectorAll('a[href*="/my/lists/"]')].map(a => ({url: abs(a),
     name: (a.querySelector('h3') || {}).textContent || ''})).filter(l => l.name.trim());

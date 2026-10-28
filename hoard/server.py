@@ -34,6 +34,7 @@ from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_do
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import blocked_here, blocked_message, is_network_error
+from .wishlists import read_store_page   # (Add products by link: tests stand in for it here)
 from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, common_words, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
@@ -2307,17 +2308,6 @@ def read_photo_page(url: str) -> str | None:
                                            "like Gecko) Chrome/140.0 Safari/537.36", "Accept": "text/html"},
                        sets.MAX_PHOTO_PAGE, hosts=sets.PAGE_HOSTS)
     return got[0].decode("utf-8", "replace") if got and got[1] in ("text/html", "application/xhtml+xml") else None
-
-
-def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:
-    """A store's public page (or Booth's item JSON), for Add products by link: only from those hosts (https,
-    redirects included), at public addresses, sending no sign-in. (Its text, its content type), or None."""
-    from .wishlists import MAX_PRODUCT_PAGE
-    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
-                                           "like Gecko) Chrome/140.0 Safari/537.36",
-                             "Accept": "application/json" if url.endswith(".json") else "text/html"},
-                       MAX_PRODUCT_PAGE, hosts=hosts)
-    return (got[0].decode("utf-8", "replace"), got[1]) if got else None
 
 
 def forget_short_links(records: list[dict]) -> None:

@@ -313,6 +313,15 @@ def safe_url(value) -> str | None:
     return value.strip() if u.scheme in ("http", "https") and u.netloc else None
 
 
+_VIDEO_FILE = re.compile(r"\.(?:mp4|m4v|webm|mov|mkv|ogv|avi)\Z", re.I)
+
+
+def is_video_address(value) -> bool:
+    """Is this the address of a video rather than a picture (a store whose first picture of a product is a video,
+    issue #212)? Hoard never fetches those for a tile: it looks for the product's still instead."""
+    return isinstance(value, str) and bool(_VIDEO_FILE.search(urlparse(value.strip()).path))
+
+
 def _is_public(ip) -> bool:
     """True for addresses on the public internet (not this computer, your network, or reserved ranges)."""
     return ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast

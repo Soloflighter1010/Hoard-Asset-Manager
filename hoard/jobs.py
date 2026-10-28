@@ -1058,7 +1058,9 @@ class Jobs:
                         # before (not read again), and hands back what it found besides: none of it is a setting
                         with self.lib.lock:
                             run_cfg = {**self.cfg, "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
-                                                                    if i["store"] == store and i.get("page")}}
+                                                                    if i["store"] == store and i.get("page")},
+                                       "_known_pictures": {i["key"]: i["thumbnail"] for i in self.lib.data["items"]
+                                                           if i["store"] == store and i.get("thumbnail")}}
                         items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
                         shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
@@ -1121,7 +1123,7 @@ class Jobs:
         """Read your wishlists from each store (issue #158), in its own signed-in browser as a refresh reads your
         library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists)."""
         from .sets import SetStore
-        from .wishlists import READERS
+        from .wishlists import READERS, pictures_from_pages, read_store_page
         stores = [s for s in stores if s in READERS]
         self._set(task="wishlists", message="Checking your connection")
         online = [s for s in stores if reachable(s)]
@@ -1142,7 +1144,12 @@ class Jobs:
                     failed[store] = str(e)
                     continue
                 try:
-                    got += READERS[store](ctx, self.cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                    said = lambda m, l=label: self._set(message=f"{l}: {m}")   # noqa: E731
+                    lists = READERS[store](ctx, self.cfg, said)
+                    for one in lists:   # a product with no picture on the list (a video first): its page's (issue #212)
+                        pictures_from_pages(one.get("products") or [], read_store_page, said,
+                                            float(self.cfg.get("request_delay", 0.8)))
+                    got += lists
                 except NotLoggedIn:
                     failed[store] = f"Not signed in to {label}. Choose Sign in on its row in Stores, then read your wishlists again."
                 except Blocked as e:

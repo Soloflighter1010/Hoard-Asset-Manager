@@ -13,7 +13,7 @@ from unittest import mock
 
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
-from hoard import sets, wishlists
+from hoard import library, sets, wishlists
 from hoard.tags import tag_key
 
 try:
@@ -162,11 +162,40 @@ class SavedPages(unittest.TestCase):
         self.assertEqual(likes["list"], "Likes", "a page saved as HTML only: its own address from its canonical link")
         self.assertEqual([(p["store"], p["name"], p["url"]) for p in likes["products"]],
                          [("jinxxy", "Fox Ears", "https://jinxxy.com/kitsu/FoxEars"),
+                          ("jinxxy", "Paw Grab", "https://jinxxy.com/kitsu/PawGrab"),
+                          ("jinxxy", "Tail Wag", "https://jinxxy.com/kitsu/TailWag"),
                           ("gumroad", "Snowflakes", "https://snowy.gumroad.com/l/flakes")])
         self.assertEqual(likes["products"][0]["creator"], "kitsu")
         self.assertIn("foxears.png", likes["products"][0]["thumbnail"], "its picture, not its creator's")
+        # issue #212: a product shown by its video: the video's still, or (none given) no picture rather than the video
+        self.assertTrue(likes["products"][1]["thumbnail"].endswith("/pawgrab-still.png"))
+        self.assertNotIn("thumbnail", likes["products"][2])
         (pay,) = got["payhip.html"]["lists"]
         self.assertEqual((pay["list"], pay["products"][0]["name"], pay["products"][0]["price"]["amount"]), ("citrus.example: Summer", "Citrus Hat", 5.0))
+
+    def test_a_product_shown_by_a_video_gets_its_pages_picture(self):
+        """Issue #212: a product whose first picture is a video (Jinxxy's IK Grab) had no picture, so its tile showed its
+        initials and its wishlist's cover a gap. Its public page gives one (Open Graph), which Hoard takes instead."""
+        page = ('<meta property="og:title" content="Tail Wag"><meta property="og:image" '
+                'content="https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto/aaa/3/tailwag.webp">'
+                '<video src="https://jinxxy-c.jinxxy-cdn.com/aaa/3/tailwag.mp4"></video>')
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url)
+            return (page, "text/html") if url.endswith("/TailWag") else None
+        items = [{"store": "jinxxy", "name": "Tail Wag", "url": "https://jinxxy.com/kitsu/TailWag"},
+                 {"store": "jinxxy", "name": "Video Only", "url": "https://jinxxy.com/kitsu/Gone", "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/a/b.mp4"},
+                 {"store": "jinxxy", "name": "Has One", "url": "https://jinxxy.com/kitsu/Has", "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/a/has.png"},
+                 {"store": "jinxxy", "name": "Elsewhere", "elsewhere": "https://ko-fi.com/s/x"}]
+        self.assertEqual(wishlists.pictures_from_pages(items, fetch), 1)
+        self.assertEqual(items[0]["thumbnail"], "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto/aaa/3/tailwag.webp")
+        self.assertTrue(sets.product_picture("jinxxy", items[0]["thumbnail"]), "from Jinxxy's own picture host, so it shows")
+        self.assertEqual(items[1]["thumbnail"], "https://jinxxy-c.jinxxy-cdn.com/a/b.mp4", "a page that can't be read: left as it was")
+        self.assertEqual(asked, ["https://jinxxy.com/kitsu/TailWag", "https://jinxxy.com/kitsu/Gone"], "only those without a picture")
+        self.assertEqual(wishlists.pictures_from_pages([dict(items[0], thumbnail=None)] * 3, fetch, limit=2), 2)
+        self.assertIsNone(wishlists.product("jinxxy", "Clip", thumbnail="https://jinxxy-c.jinxxy-cdn.com/a/clip.MP4?x=1").get("thumbnail"))
+        self.assertIsNone(library.item("jinxxy", "9", name="Clip", thumbnail="https://jinxxy-c.jinxxy-cdn.com/a/clip.webm")["thumbnail"])
 
     def test_what_isnt_a_wishlist(self):
         (r,) = wishlists.from_saved_pages([("library.html", "<!-- saved from url=(0035)https://accounts.booth.pm/library -->"
@@ -273,6 +302,9 @@ class InHoard(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})
         env.start()
         self.addCleanup(env.stop)
+        offline = mock.patch.object(wishlists, "read_store_page", lambda url, hosts: None)   # (no store's page is read)
+        offline.start()
+        self.addCleanup(offline.stop)
         (tmp / "dl").mkdir()
         self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(tmp / "dl"), "setup_done": True,
                                                       "ui": {"toured": True}}, lan=False)

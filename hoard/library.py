@@ -20,7 +20,7 @@ from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check,
 from .common import NotLoggedIn, log, now_iso, pause
 from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
-from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
+from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, is_video_address, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
 from .tags import TagMatcher, TagStore, tag_key
 
 
@@ -52,6 +52,8 @@ def item(store: str, id_, **fields) -> dict:
     for k in ("creator_url", "url", "download_url", "page"):  # links you can open: only to this store's own website
         d[k] = store_link(store, d[k])
     d["thumbnail"] = safe_url(d["thumbnail"])       # images come from the stores' image hosts
+    if is_video_address(d["thumbnail"]):            # (a video's address isn't a picture: issue #212)
+        d["thumbnail"] = None
     d["files"] = [{"name": clean_text(f.get("name"), 200) or "File", "url": store_link(store, f.get("url"))}
                   for f in d["files"][:500] if store_link(store, f.get("url"))]
     d["name"] = clean_text(d["name"], 300) or "Untitled"
@@ -385,11 +387,11 @@ JX_CARDS_JS = r"""
     if (!creator && byLine) creator = byLine.replace(/^by\s+/i, '');
     const heading = [...c.querySelectorAll('h1, h2, h3, h4, h5, h6, [class*="title" i]')]
       .map(h => linesOf(h)[0]).find(t => t && !GENERIC.test(t));
-    const img = c.querySelector('img');
+    const img = c.querySelector('img'), vid = c.querySelector('video');   // (a product shown by its video: its still)
     const name = heading || lines.find(s => s !== byLine && s !== creator) || (img && img.alt) || '';
     if (!creator) creator = lines.find(s => s !== name && s !== byLine) || '';
     out.push({ key: keyOf(a), url: a.href.split(/[?#]/)[0], name, creator, creator_url: creatorUrl, page: productUrl,
-               thumbnail: img ? (img.currentSrc || img.src || '') : '', lines });
+               thumbnail: img ? (img.currentSrc || img.src || '') : vid ? vid.poster : '', video: !img && !!vid, lines });
   }
   return out;
 }
@@ -459,7 +461,7 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
                 for c in page.evaluate(JX_CARDS_JS, pattern):
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
-                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail", "page")}
+                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail", "page", "video")}
                 for href in jinxxy_inventory_pages(page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")):
                     if href not in visited and href not in pending:
                         pending.append(href)
@@ -487,8 +489,12 @@ def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
     JX_PAGE_VISITS in one refresh, with the usual pause between pages. An item whose page can't be read keeps its
     creator's page."""
     known = cfg.pop("_known_pages", None) or {}
+    pictures = cfg.pop("_known_pictures", None) or {}   # (each product's picture a refresh found before)
+    stillless = lambda c: c.get("video") and (not c.get("thumbnail") or is_video_address(c["thumbnail"]))  # noqa: E731
     for c in found.values():
         c["page"] = c.get("page") or known.get(jinxxy_key(c))
+        if stillless(c) and pictures.get(jinxxy_key(c)):
+            c["thumbnail"] = pictures[jinxxy_key(c)]
     todo = [c for c in found.values() if not c.get("page") and store_link("jinxxy", c.get("url"))][:JX_PAGE_VISITS]
     delay = float(cfg.get("request_delay", 0.8))
     for n, c in enumerate(todo, 1):
@@ -497,9 +503,22 @@ def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
             goto(page, c["url"])
             settle(page)
             c["page"] = jinxxy_product_page(page.evaluate(JX_PRODUCT_JS), c.get("creator_url"))
+            if stillless(c):   # (shown by its video: the video's still, while here)
+                c["thumbnail"] = page.evaluate(STILL_JS) or c.get("thumbnail")
         except Exception as e:   # (one page that won't open never stops the refresh)
             print(f"Jinxxy: couldn't read the product page of {c.get('name')!r}: {str(e)[:200]}", flush=True)
         pause(delay)
+    # a product its card showed by a video, with no still: the picture its public page gives (issue #212)
+    from .wishlists import pictures_from_pages, read_store_page
+    pictures_from_pages([c for c in found.values() if stillless(c) and c.get("page")], read_store_page, progress, delay,
+                        page_of=lambda c: c["page"])
+
+
+# An inventory item's video still, when its first picture is a video (issue #212): a still the page gives the video
+STILL_JS = r"""() => {
+  const vid = document.querySelector('video[poster]');
+  return vid ? vid.poster : '';
+}"""
 
 
 def jinxxy_key(c: dict) -> str:
