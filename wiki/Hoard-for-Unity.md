@@ -19,7 +19,14 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   From 0.8.1, Poiyomi's `OptimizedShaders` folders (written when a material is locked, deleted when it's unlocked)
   don't count either, and the window works this out again only when a change can alter it.
   A product with nothing of its own (the same package from another store) still counts by all its files.
+  From 0.10.0, a stray file or two of a big package doesn't count (another product could have brought them): part
+  of it counts once enough of its own files are there, and all but a few files of a big one (a sample scene or a
+  read-me you deleted) counts as **In this project**.
   **Select** finds their assets in your Project window.
+- **Take it out of this project...** (0.10.0), in a product's details while it's in the project: deletes what its
+  packages put in `Assets/` (to your system's trash, where Unity can) and the folders that leaves empty, but not a
+  file another product in the project also uses (a creator's shared shader, say). It lists what goes and asks
+  first.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 - **Packages that came in a .zip** (0.8.0). Many products, on Booth especially, come as a `.zip` with the

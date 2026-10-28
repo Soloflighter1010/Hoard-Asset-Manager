@@ -156,7 +156,8 @@ namespace SoloFlighter.Hoard.Editor
             string[] list;
             if (!PackageFile.Exists(path) || !guids.TryGetValue(Stamp(path), out list)) return c;
             ProjectShare.Count(list, shared, ProjectWatch.PathOf, out c.Have, out c.Total);   // its own files, in Assets/ (issue #114)
-            if (c.Total > 0) c.Status = c.Have == 0 ? InProject.No : c.Have == c.Total ? InProject.Yes : InProject.Partly;
+            int level = ProjectShare.Level(c.Have, c.Total);   // (a stray file or two of a big package isn't it: issue #188)
+            if (c.Total > 0) c.Status = level == 2 ? InProject.Yes : level == 1 ? InProject.Partly : InProject.No;
             return c;
         }
 

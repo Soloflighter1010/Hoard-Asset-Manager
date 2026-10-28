@@ -223,6 +223,27 @@ public static class CoreTests
         Check("shared: nothing of its own: told by all its files", have == 2 && total == 2, have + " of " + total);
         ProjectShare.Count(new[] { "coq", "x" }, null, fileOf, out have, out total);
         Check("shared: none known: every file counts", have == 1 && total == 2, have + " of " + total);
+
+        // issue #188: a stray file or two of a big package isn't the product being here; all but a few of a big one is
+        Check("level: none", ProjectShare.Level(0, 40) == 0 && ProjectShare.Level(0, 0) == 0 && ProjectShare.Level(3, 0) == 0);
+        Check("level: one file of a big package isn't it", ProjectShare.Level(1, 120) == 0 && ProjectShare.Level(2, 120) == 0);
+        Check("level: enough of it is part of it", ProjectShare.Level(12, 120) == 1 && ProjectShare.Level(2, 20) == 1);
+        Check("level: a small package's one file is part of it", ProjectShare.Level(1, 3) == 1 && ProjectShare.Level(1, 2) == 1);
+        Check("level: all of it, or all but a sample of a big one", ProjectShare.Level(5, 5) == 2 && ProjectShare.Level(96, 100) == 2
+            && ProjectShare.Level(9, 10) == 1);
+
+        // issue #189: taking a product out removes its files in Assets/, not those another product here still uses
+        var where = new Dictionary<string, string> { { "fox", "Assets/Kitsu/Fox/Fox.prefab" }, { "mat", "Assets\\Kitsu\\Fox\\Fox.mat" },
+            { "shader", "Assets/Kitsu/Shared/Fur.shader" }, { "sdk", "Packages/com.vrchat.base/x.cs" } };
+        Func<string, string> at = g => where.ContainsKey(g) ? where[g] : "";
+        var gone = ProjectShare.Removable(new[] { "fox", "mat", "shader", "sdk", "missing" }, new HashSet<string> { "shader" }, at);
+        Check("remove: its own files, in Assets/ only", string.Join("|", gone) == "Assets/Kitsu/Fox/Fox.mat|Assets/Kitsu/Fox/Fox.prefab", string.Join("|", gone));
+        var empty = new HashSet<string> { "Assets/Kitsu/Fox" };
+        var folders = ProjectShare.EmptiedFolders(gone, f => empty.Contains(f));
+        Check("remove: the folders it leaves empty, not one still in use", string.Join("|", folders) == "Assets/Kitsu/Fox", string.Join("|", folders));
+        empty.Add("Assets/Kitsu");
+        folders = ProjectShare.EmptiedFolders(new[] { "Assets/Kitsu/Fox/a/b.png", "Assets/Kitsu/Fox/c.png" }, f => empty.Contains(f) || f.EndsWith("/a"));
+        Check("remove: deepest first, never Assets itself", string.Join("|", folders) == "Assets/Kitsu/Fox/a|Assets/Kitsu/Fox|Assets/Kitsu", string.Join("|", folders));
     }
 
     static void Check(string name, bool ok, string detail = "")
