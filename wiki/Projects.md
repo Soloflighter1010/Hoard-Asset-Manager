@@ -16,6 +16,12 @@ Each project shows its kind (avatars or worlds), its Unity version, and when you
 favourite, at the top of the list. **Open in Unity** opens it; **Manage** shows its packages and more. A project whose
 folder has gone (moved, or on a drive that isn't connected) says so, with **Take off the list**.
 
+**Folder and tags...** (5.2.0) puts a project in a folder of your own and gives it tags: words to find it by, such
+as `quest` or `poiyomi`, with commas between them. They're Hoard's own (the Creator Companion and ALCOM have only a
+favourite). Once a project is in a folder, the folders show above the list: choose one to see just its projects,
+**Not in a folder** for the rest, or **All projects**. Choose a tag on a project to see those that have it, and choose
+it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
+
 **Add a project...** lists one you already have: in Hoard's own window it opens your computer's folder picker, in your
 projects folder (in a web browser, you type the folder's full path). **Take off the list** leaves its folder as it is;
 to delete a project from your computer, see [Managing a project](#managing-a-project).
@@ -179,7 +185,7 @@ folder, the Creator Companion's in its `Logs` folder. Hoard leaves those alone.
 
 The project list, repositories and these settings are the Creator Companion's, in its folder: `%LOCALAPPDATA%\VRChatCreatorCompanion`
 on Windows, `~/.local/share/VRChatCreatorCompanion` on macOS and Linux. Hoard reads the Creator Companion's database
-there (`vcc.liteDb`) and never writes to it. Favourites, when you opened a project from Hoard, and what you put in
+there (`vcc.liteDb`) and never writes to it. Favourites, folders and tags, when you opened a project from Hoard, and what you put in
 each from your library are Hoard's own, in `vpm-projects.json`, with which backups count as old and where you last moved
 some; presets are in `vpm-presets.json` (see
 [Where Hoard keeps things](Where-Hoard-Keeps-Things)).

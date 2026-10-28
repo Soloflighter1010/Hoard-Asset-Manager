@@ -2091,5 +2091,13 @@
  "1 document": "文書1個",
  "{0} documents": "文書{0}個",
  "1 other file": "その他のファイル1個",
- "{0} other files": "その他のファイル{0}個"
+ "{0} other files": "その他のファイル{0}個",
+ "Folder and tags...": "フォルダーとタグ...",
+ "Folder and tags": "フォルダーとタグ",
+ "All projects": "すべてのプロジェクト",
+ "Not in a folder": "フォルダーなし",
+ "Stop showing only {0}": "{0}だけの表示をやめる",
+ "No projects here.": "ここにはプロジェクトがありません。",
+ "Projects in a folder are shown together. Leave it empty for none.": "フォルダーに入れたプロジェクトは、まとめて表示されます。入れないときは空のままにします。",
+ "Words to find it by, with commas between them (up to 12).": "探すときの言葉。カンマで区切ります(12個まで)。"
 }

@@ -942,6 +942,15 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-row.gone .pj-what { color: var(--warn); }
 .pj-acts { grid-area: acts; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .pj-acts > button { width: auto; margin: 0; }
+/* issue #190: the list's folders, one shown at a time, and each project's tags */
+.pj-folders { margin: 2px 0 10px; }
+.pj-tags { display: flex; flex-wrap: wrap; gap: 0 10px; }
+.pj-tags .chip { font-size: 12.5px; font-weight: 600; }
+.pj-in { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; }
+.pj-in svg { width: 14px; height: 14px; flex: none; }
+dialog.ask .pj-orgf { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-weight: 700; font-size: 13.5px; }
+dialog.ask .pj-orgf input { font-weight: 400; }
+dialog.ask .pj-orgf + .hint { margin: 4px 0 0; font-size: 13px; color: var(--dust); }
 @media (max-width: 640px) {
   .pj-row, .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "what" "acts"; }
   .pj-row .pj-star { position: absolute; }

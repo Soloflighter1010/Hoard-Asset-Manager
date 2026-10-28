@@ -2227,7 +2227,8 @@ const PJ = { view: "list", data: null, project: null, find: "", form: null, asse
   pick: new Map(),       // Add packages: the ones ticked, each with the version chosen ("" for the newest)
   pkgs: null, pkFind: "", vers: {},   // the packages there are to add (for one Unity), and each one's versions
   repoShut: new Set(),   // Add packages' repositories you folded away
-  job: {} };             // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
+  job: {},               // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
+  folder: null, tag: "" };   // issue #190: the list's folder shown (null: all of them, "": those in none) and tag
 const PJ_KINDS = { 0: "Unknown", 1: "Legacy SDK2", 2: "Legacy Worlds", 3: "Legacy Avatars", 4: "UPM Worlds", 5: "UPM Avatars",
   6: "UPM Starter", 7: "Worlds", 8: "Avatars", 9: "VPM Starter" };
 const PJ_WHY = { requested: "Removed", legacy: "Replaced by a newer package", unused: "Nothing uses it any more" };
@@ -2318,15 +2319,66 @@ function pjList() {
     `<p class="hint">${esc(tr("The same list as ALCOM's and the VRChat Creator Companion's: a project added in any of them shows in all three."))}</p>`;
   const others = pjUnlisted();
   if (!list.length) return top + note + `<p class="none">${esc(tr("No projects yet. Make one with New project, or add one you have."))}</p>` + others;
-  const fav = list.filter(p => p.favorite), rest = list.filter(p => !p.favorite);
-  return top + note + `<ul class="pj-list">${[...fav, ...rest].map(p => `<li class="pj-row${p.exists ? "" : " gone"}" data-path="${esc(p.path)}" data-hay="${esc(norm(p.name + " " + p.path))}">` +
+  const shown = pjOrganised(list), fav = shown.filter(p => p.favorite), rest = shown.filter(p => !p.favorite);
+  const tags = p => (p.tags || []).length ? `<span class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
+    `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</span>` : "";
+  return top + note + pjFolderBar(list) + (shown.length ? "" : `<p class="none">${esc(tr("No projects here."))}</p>`) +
+    `<ul class="pj-list">${[...fav, ...rest].map(p => `<li class="pj-row${p.exists ? "" : " gone"}" data-path="${esc(p.path)}" ` +
+    `data-hay="${esc(norm([p.name, p.path, p.folder || "", ...(p.tags || [])].join(" ")))}">` +
     `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
-    `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span></span>` +
-    `<span class="pj-what">${p.exists ? `${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}` +
+    `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span>${tags(p)}</span>` +
+    `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
+      `${p.exists ? `${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}` +
       `${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
     `<span class="pj-acts">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
       `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>`
-      : `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>`}</span></li>`).join("")}</ul>` + others;
+      : `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>`}` +
+      `<button class="ghost sm" data-pj="organize">${esc(tr("Folder and tags..."))}</button></span></li>`).join("")}</ul>` + others;
+}
+// Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have only a
+// favourite): one folder shown at a time, or all of them, and a tag on a project shows those that have it
+function pjFolders(list) {   // [[folder, how many projects]], by name
+  const n = new Map();
+  for (const p of list) if (p.folder) n.set(p.folder, (n.get(p.folder) || 0) + 1);
+  return [...n].sort((a, b) => a[0].localeCompare(b[0]));
+}
+const pjOrganised = list => list.filter(p => (PJ.folder == null || (p.folder || "") === PJ.folder) && (!PJ.tag || (p.tags || []).includes(PJ.tag)));
+function pjFolderBar(list) {
+  const folders = pjFolders(list), loose = list.filter(p => !p.folder).length;
+  if (PJ.folder && !folders.some(([f]) => f === PJ.folder)) PJ.folder = null;   // (its last project was moved out)
+  if (PJ.folder === "" && (!loose || !folders.length)) PJ.folder = null;
+  if (PJ.tag && !list.some(p => (p.tags || []).includes(PJ.tag))) PJ.tag = "";
+  if (!folders.length && !PJ.tag) return "";
+  const chip = (i, label, n, on, raw) => `<button class="chip" data-pj="folderpick" data-i="${i}" aria-pressed="${on}"` +
+    `${raw ? ' translate="no"' : ""}>${esc(label)}<span class="n">${n}</span></button>`;
+  return `<div class="pj-folders chips" role="group" aria-label="${esc(tr("Folders"))}">` +
+    (folders.length ? chip(-1, tr("All projects"), list.length, PJ.folder == null) +
+      folders.map(([f, n], i) => chip(i, f, n, PJ.folder === f, true)).join("") +
+      (loose ? chip(-2, tr("Not in a folder"), loose, PJ.folder === "") : "") : "") +
+    (PJ.tag ? `<button class="chip" data-pj="tagpick" data-tag="${esc(PJ.tag)}" aria-pressed="true" translate="no" ` +
+      `aria-label="${esc(tr("Stop showing only {0}", PJ.tag))}">${esc(PJ.tag)} ×</button>` : "") + `</div>`;
+}
+async function pjOrganize(p) {   // a project's folder and tags, as a dialog
+  const folders = pjFolders(PJ.data.projects || []).map(([f]) => f);
+  const dlgP = pjDialog(`<p><b translate="no">${esc(p.name)}</b> <span class="muted">${esc(tr("Folder and tags"))}</span></p>` +
+    `<label class="pj-orgf">${esc(tr("Folder"))}<input id="pjOrgFolder" list="pjOrgFolders" maxlength="60" autocomplete="off" value="${esc(p.folder || "")}">` +
+    `<datalist id="pjOrgFolders">${folders.map(f => `<option value="${esc(f)}">`).join("")}</datalist></label>` +
+    `<p class="hint">${esc(tr("Projects in a folder are shown together. Leave it empty for none."))}</p>` +
+    `<label class="pj-orgf">${esc(tr("Tags"))}<input id="pjOrgTags" maxlength="600" autocomplete="off" value="${esc((p.tags || []).join(", "))}"></label>` +
+    `<p class="hint">${esc(tr("Words to find it by, with commas between them (up to 12)."))}</p>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Save"))}</button></div>`);
+  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
+  dlg.querySelectorAll("input").forEach(el => el.addEventListener("keydown", e => {   // (Enter saves, not Cancel)
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); dlg.close("yes"); }
+  }));
+  const res = await dlgP;
+  if (!res.ok) return;
+  const folder = res.dlg.querySelector("#pjOrgFolder").value.trim();
+  const tags = res.dlg.querySelector("#pjOrgTags").value.split(/[,、，]/).map(t => t.trim()).filter(Boolean);
+  const r = await apiPost("/api/vpm/organize", { path: p.path, folder, tags });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  if (r.data.folder && PJ.folder != null && PJ.folder !== r.data.folder) PJ.folder = r.data.folder;   // (shown where it went)
+  return loadProjects();
 }
 // Projects Hoard for Unity reported (opened in Unity with Hoard's window) that aren't on the list: what's in them,
 // and their credits, with a button to list them
@@ -3097,6 +3149,17 @@ async function pjAct(b) {
     if (!await ask(tr("Forget {0}? It comes back next time you open it in Unity with Hoard's window.", name), tr("Forget"))) return;
     await apiPost("/api/projects/forget", { id: row.dataset.report });
     return loadProjects();
+  }
+  if (act === "folderpick") {   // issue #190: one folder of the list, all of them, or those in none
+    const i = +b.dataset.i, folders = pjFolders(PJ.data.projects || []);
+    PJ.folder = i === -1 ? null : i === -2 ? "" : (folders[i] || [null])[0];
+    return drawProjects();
+  }
+  if (act === "tagpick") { PJ.tag = PJ.tag === b.dataset.tag ? "" : b.dataset.tag; return drawProjects(); }
+  if (act === "organize") {
+    const p = (PJ.data.projects || []).find(x => x.path === path) || PJ.project;
+    if (p) await pjOrganize(p);
+    return;
   }
   if (act === "star") {
     const on = b.getAttribute("aria-pressed") !== "true";

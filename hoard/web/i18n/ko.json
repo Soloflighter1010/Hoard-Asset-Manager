@@ -2091,5 +2091,13 @@
  "1 document": "문서 1개",
  "{0} documents": "문서 {0}개",
  "1 other file": "다른 파일 1개",
- "{0} other files": "다른 파일 {0}개"
+ "{0} other files": "다른 파일 {0}개",
+ "Folder and tags...": "폴더와 태그...",
+ "Folder and tags": "폴더와 태그",
+ "All projects": "모든 프로젝트",
+ "Not in a folder": "폴더 없음",
+ "Stop showing only {0}": "{0}만 보기 그만하기",
+ "No projects here.": "여기에는 프로젝트가 없어요.",
+ "Projects in a folder are shown together. Leave it empty for none.": "폴더에 넣은 프로젝트는 함께 보여요. 넣지 않으려면 비워 두세요.",
+ "Words to find it by, with commas between them (up to 12).": "찾을 때 쓸 말. 쉼표로 나눠요(12개까지)."
 }

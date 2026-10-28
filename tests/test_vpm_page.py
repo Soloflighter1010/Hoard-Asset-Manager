@@ -83,6 +83,46 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 
+    def test_folders_and_tags(self):
+        """Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have
+        only a favourite): one folder shown at a time, a project's tags on its row, and each tag shows those with it."""
+        page = self.page
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=organize]").click()
+        dlg = page.locator("dialog.ask[open]")
+        dlg.locator("#pjOrgFolder").fill("Avatars WIP")
+        dlg.locator("#pjOrgTags").fill("Quest, poiyomi,, quest")
+        dlg.locator("#pjOrgTags").press("Enter")   # (Enter saves)
+        bar = page.locator("#projectsBody .pj-folders")
+        bar.wait_for()
+        self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])
+        rusk = page.locator(".pj-row", has_text="Rusk Avatar")
+        self.assertEqual(rusk.locator(".pj-tags .chip").all_inner_texts(), ["quest", "poiyomi"], "as tags are kept")
+        self.assertIn("Avatars WIP", rusk.locator(".pj-what").inner_text())
+        bar.locator(".chip", has_text="Avatars WIP").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 1")
+        self.assertEqual(page.locator(".pj-list").first.locator(".pj-row b").all_inner_texts(), ["Rusk Avatar"])
+        self.assertNotIn("Avatars WIP", rusk.locator(".pj-what").inner_text(), "not said again in its own folder")
+        bar.locator(".chip", has_text="Not in a folder").click()
+        page.wait_for_function("() => document.querySelector('.pj-list:first-of-type .pj-row b').textContent === 'Old World'")
+        bar.locator(".chip", has_text="All projects").click()
+        # a tag: the projects that have it
+        rusk.locator(".pj-tags .chip", has_text="poiyomi").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 1")
+        self.assertEqual(bar.locator(".chip[aria-pressed=true]").all_inner_texts(), ["All projects2", "poiyomi ×"])
+        page.fill("#pjFind", "wip")   # Find a project looks at its folder and tags too
+        self.assertEqual(page.locator(".pj-list").first.locator(".pj-row:visible").count(), 1)
+        page.fill("#pjFind", "")
+        bar.locator(".chip", has_text="poiyomi ×").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 2")
+        # emptied: out of the folder, and with no folder left, no folders to choose from
+        rusk.locator("[data-pj=organize]").click()
+        self.assertEqual(dlg.locator("#pjOrgFolder").input_value(), "Avatars WIP")
+        dlg.locator("#pjOrgFolder").fill("")
+        dlg.locator("#pjOrgTags").fill("")
+        dlg.locator(".primary").click()
+        page.wait_for_function("() => !document.querySelector('#projectsBody .pj-folders')")
+        self.assertEqual(rusk.locator(".pj-tags").count(), 0)
+
     SAMPLE_SPLASH = """window.__splash = 0;   // how visible Projects' splash got, sampled while it's on show
         setInterval(() => { const e = document.getElementById("pjSplash");
                             if (e && !e.hidden) window.__splash = Math.max(window.__splash, +getComputedStyle(e).opacity); }, 25);"""
