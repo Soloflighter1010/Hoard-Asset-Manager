@@ -93,7 +93,7 @@
 [data-style="treasure"] .win-bar { padding: 12px 14px 12px 22px; }
 [data-style="treasure"] .win-x { border-radius: 999px; }
 [data-style="treasure"] :is(.task, .proj, .pj-row, .librow, .note, .also, .update, .viewbar, .routine-note) { border-radius: 18px; }
-[data-style="treasure"] .bulk, [data-style="treasure"] .dlpanel, [data-style="treasure"] .selmenu { border-radius: 20px; }
+[data-style="treasure"] .bulk, [data-style="treasure"] .dlpanel, [data-style="treasure"] .selmenu, [data-style="treasure"] .barmenu, [data-style="treasure"] .qmenu { border-radius: 20px; }
 [data-style="treasure"] .chip[aria-pressed="true"], [data-style="treasure"] .pill { border-radius: 999px; }
 [data-style="treasure"] .theme-choice, [data-style="treasure"] .style-choice { border-radius: 16px; }
 
@@ -123,10 +123,10 @@
 [data-style="workbench"] :is(.ghost, .btn, .primary).sm { padding: 0 10px; font-size: 12.5px; }
 [data-style="workbench"] :is(.search input, .tools select, .shelf-tools select, .find, .settings .field input, .settings select,
   .settings textarea, .setup .field input, .setup textarea, .tagadd input, .newtag input, .bulk input, dialog.ask input, dialog.pin input) { border-radius: 6px; }
-[data-style="workbench"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card, .bulk, .dlpanel, .selmenu) { border-radius: 10px; }
+[data-style="workbench"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card, .bulk, .dlpanel, .selmenu, .barmenu, .qmenu) { border-radius: 10px; }
 [data-style="workbench"] :is(.task, .proj, .librow, .note, .also, .update, .viewbar, .routine-note, .saver, .support-safe, .support-result,
   .setup .status, .setup details, .setup .storepick label, .setup .closepick label, .setup .access-pick label, .theme-choice, .style-choice) { border-radius: 6px; }
-[data-style="workbench"] .selmenu button, [data-style="workbench"] .views button, [data-style="workbench"] .creators button { border-radius: 4px; }
+[data-style="workbench"] .selmenu button, [data-style="workbench"] .barmenu button, [data-style="workbench"] .qopt, [data-style="workbench"] .views button, [data-style="workbench"] .creators button { border-radius: 4px; }
 /* the bar: lower, the search box and buttons smaller */
 [data-style="workbench"] .bar { min-height: 56px; padding: 8px 20px; gap: 12px; }
 [data-style="workbench"] .brand svg { height: 28px; }

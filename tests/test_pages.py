@@ -24,6 +24,7 @@ os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, library, server, themes  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -184,7 +185,7 @@ class AccessKey(unittest.TestCase):
                 if url:
                     goto(page, url)
                     page.get_by_text("Rusk").first.wait_for()
-                page.click("#settingsBtn")
+                menu(page, "#settingsBtn")
                 page.locator("#settingsPanel:not([hidden])").wait_for()
                 page.select_option("#setBrowser", "chrome")
                 self.assertEqual(page.locator("#browserInUse").inner_text(),
@@ -313,7 +314,7 @@ class AccessKey(unittest.TestCase):
             page.get_by_text("Rusk").first.wait_for()
             goto(page, f"{self.srv.url}downloads")
             page.get_by_text("Rusk").first.wait_for()
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#setUpdates").wait_for()
             page.get_by_text("You have Hoard").wait_for()   # its status, as on the Library page
             expect(page.locator("#setUpdates")).not_to_be_checked()
@@ -407,7 +408,7 @@ class AccessKey(unittest.TestCase):
                 page.wait_for_url("**/downloads**")
                 page.get_by_text("Rusk").first.wait_for()
             page.evaluate("DATA.can_pick = true; syncBrowse()")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#libAdd").wait_for()
             box = lambda sel: page.locator(sel).bounding_box()
             panel, pick, field, add = box("#settingsPanel"), box("#libPick"), box("#libPath"), box("#libAdd")
@@ -416,16 +417,38 @@ class AccessKey(unittest.TestCase):
             self.assertLessEqual(add["x"] + add["width"], panel["x"] + panel["width"], path or "library")
             page.close()
 
-    def test_both_pages_end_their_header_with_sync(self):
-        """The gold Sync is the last button in the header on both pages, as the one thing to press."""
+    def test_each_page_ends_its_header_with_its_one_thing_to_press(self):
+        """The gold button is the last in the header, as the one thing to press: Sync in the Library, and Download new
+        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, and Settings are in the Menu (#219)."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
-        last = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).pop().id"
-        self.assertEqual(page.evaluate(last), "syncBtn")
+        shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
+        self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
+        page.click("#menuBtn")
+        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Stores", "Settings"])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
-        self.assertEqual(page.evaluate(last), "syncBtn")
+        self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
+        self.assertEqual(page.locator("#syncBtn").count(), 0)
+        page.click("#menuBtn")
+        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
+        page.close()
+
+    def test_search_prefixes_in_downloads(self):
+        """Issue #220 in Downloads: type: is a kind of file there too, and store: and by: filter as in the Library."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        q = page.locator("#q")
+        q.fill("type:")
+        page.locator("#qMenu .qopt", has_text=".zip").wait_for()
+        for text, count in (("type:zip", 1), ("type:unitypackage", 0), ("store:booth by:kitsu", 1), ("store:gumroad", 0)):
+            with self.subTest(text):
+                q.fill(text)
+                page.wait_for_function(f"() => document.querySelectorAll('#grid .slot').length === {count}")
         page.close()
 
     def test_a_link_to_a_download_opens_its_details(self):
@@ -630,8 +653,10 @@ class StackingAcrossStores(unittest.TestCase):
         with mock.patch.object(server, "save_config"):   # (the choice is kept with the Library's: not in your config)
             page.click("#stackCopies")   # every copy, as before
             page.wait_for_function("() => document.querySelectorAll('.slot').length === 6")
+            self.assertEqual(page.get_attribute("#stackCopies", "aria-pressed"), "false", "a button, not pressed while off (#215)")
             page.click("#stackCopies")
             page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+            self.assertEqual(page.get_attribute("#stackCopies", "aria-pressed"), "true")
             page.evaluate("uiFlush()")
             page.wait_for_timeout(300)
         page.close()
@@ -875,7 +900,7 @@ class ImportingFromTheLibrary(unittest.TestCase):
         asked = []
         page.on("dialog", lambda d: (asked.append(d.message), d.accept()))   # (there should be none: Hoard asks itself)
         goto(page, srv.entry_url())
-        page.locator("#storesBtn").click()
+        menu(page, "#storesBtn")
         page.locator("#importPages").wait_for()
         page.set_input_files("#importFile", [
             {"name": "Dashboard - Test Shop.mhtml", "mimeType": "multipart/related",
@@ -1062,7 +1087,7 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
             page.click("#selectBtn")
             with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
-                page.locator("#stackCopies").uncheck()   # turned off, and kept (saved here, not a later test's config)
+                page.click("#stackCopies")   # turned off, and kept (saved here, not a later test's config)
             page.wait_for_function("() => document.querySelectorAll('.slot.stacked').length === 0")
             self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
             page.close()
@@ -1102,7 +1127,7 @@ class CopiesAndActions(unittest.TestCase):
         with mock.patch.object(server, "save_config"):
             self.srv.cfg["download_skip"] = []
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog = page.locator("#pickDialog")
             dialog.wait_for()
@@ -1149,7 +1174,7 @@ class CopiesAndActions(unittest.TestCase):
                    "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3, "names": names}]}
         with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog = page.locator("#pickDialog")
             dialog.wait_for()
@@ -1164,7 +1189,7 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": [names[0], names[2]]}})
             # every file unticked: the product itself is unticked
             if not page.locator("#downloadAll").is_visible():   # (Stores stays open after a download starts)
-                page.click("#storesBtn")
+                menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog.wait_for()
             dialog.locator(".pk-files summary").click()
@@ -1184,7 +1209,7 @@ class CopiesAndActions(unittest.TestCase):
                    "names": ["Avatar.zip", "Avatar.zip", "Read me.txt"]}]}
         with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog = page.locator("#pickDialog")
             dialog.wait_for()
@@ -1223,7 +1248,8 @@ class CopiesAndActions(unittest.TestCase):
         """Issue #106: the selected products, downloaded as one job."""
         seen = self.started()
         page = self.open()
-        page.locator("#stackCopies").uncheck() if page.locator("#stackCopies").is_checked() else None
+        if page.get_attribute("#stackCopies", "aria-pressed") == "true":
+            page.click("#stackCopies")
         page.click("#selectBtn")
         page.locator(".slot", has_text="Someone Else").click()
         page.locator(".slot", has_text="Mochi").click()   # Payhip's: listed, not downloaded
@@ -1374,7 +1400,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         self.assertEqual(page.locator(".slot img").count(), 0, "every picture is a still")
         # turned off from Settings: the pictures move again, straight away
         from playwright.sync_api import expect
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         # uncheck() reads the box straight away, so wait for Settings to have filled it in first
         expect(page.locator("#setPause")).to_be_checked()
         page.locator("#setPause").uncheck()
@@ -1415,7 +1441,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         with mock.patch.object(server, "save_config"):
             page = self.open()
             standard = page.evaluate(colour)
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator("#setGlowOn")).to_be_checked()
             page.locator("#setGlowOn").uncheck()
             page.wait_for_function("() => document.body.classList.contains('no-glow')")
@@ -1442,7 +1468,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         cave = "() => getComputedStyle(document.documentElement).getPropertyValue('--cave').trim().toUpperCase()"
         with mock.patch.object(server, "save_config"):
             page = self.open()
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator('input[name="setTheme"][value="hoard"]')).to_be_checked()
             self.assertEqual(page.locator('input[name="setTheme"]').count(), len(themes.THEMES))
             expect(page.locator("#setModeSystem")).to_be_checked()
@@ -1483,7 +1509,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         with mock.patch.object(server, "save_config"):
             page = self.open()
             page.set_viewport_size({"width": 1000, "height": 640})
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.wait_for_function("() => document.querySelector('#setTextSize').value === '100'")
             page.select_option("#setTextSize", "150")   # saved and applied as it's chosen
             page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
@@ -1492,7 +1518,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
                     goto(page, f"{self.srv.url}downloads")
                     page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
                 if page.locator("#settingsPanel").is_hidden():
-                    page.click("#settingsBtn")
+                    menu(page, "#settingsBtn")
                 page.locator("#setTextSize").wait_for()
                 self.assertEqual(page.evaluate(fits), [], where)
             page.select_option("#setTextSize", "100")   # and the text size can be put back from there
@@ -1717,7 +1743,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
         shade = page.locator("#winShade")
         for button, win in (("#settingsBtn", "#settingsPanel"), ("#storesBtn", "#stores"), ("#tagsBtn", "#tagPanel"),
                             ("#tasksTab", "#tasksWin")):
-            page.click(button)   # the title bar stays above the dimmed page, so its buttons swap the panel
+            # the title bar stays above the dimmed page, so its buttons (and its Menu's) swap the panel
+            page.click(button) if button == "#tasksTab" else menu(page, button)
             page.locator(win + ".win:not([hidden])").wait_for()
             self.assertEqual(page.locator(".win:not([hidden])").count(), 1, f"{win}: only it is open")
             self.assertTrue(shade.is_visible(), win)
@@ -1727,12 +1754,12 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.keyboard.press("Escape")
         self.assertEqual(page.locator(".win:not([hidden])").count(), 0)
         self.assertTrue(shade.is_hidden())
-        page.click("#tagsBtn")
+        menu(page, "#tagsBtn")
         page.locator("#tagPanel.win:not([hidden])").wait_for()
         page.mouse.click(30, 700)   # around it
         self.assertTrue(page.locator("#tagPanel").is_hidden())
         self.assertTrue(shade.is_hidden())
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.locator("#settingsPanel .win-x").click()
         self.assertTrue(page.locator("#settingsPanel").is_hidden())
         self.assertEqual(self.errors, [])
@@ -1765,7 +1792,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         from unittest import mock
         with mock.patch.object(server, "signed_in", lambda cfg, s: s == "booth"):
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.locator("#storeRows [data-logout='booth']").wait_for()
             self.assertEqual(page.locator("#storeRows [data-login='booth']").count(), 0, "signed in: no Sign in")
             self.assertEqual(page.locator("#storeRows [data-logout='gumroad']").count(), 0, "signed out: no Sign out")
@@ -1780,7 +1807,11 @@ class WindowsTabsAndTasks(unittest.TestCase):
         inside = "id => document.getElementById(id).contains(document.activeElement)"
         for button, win in (("#settingsBtn", "settingsPanel"), ("#storesBtn", "stores")):
             with self.subTest(win):
-                page.focus(button)
+                page.focus("#menuBtn")
+                page.keyboard.press("Enter")   # the Menu opens, with the keyboard in it
+                page.wait_for_function("() => document.querySelector('#barMenu').contains(document.activeElement)")
+                while page.evaluate("document.activeElement.id") != button[1:]:
+                    page.keyboard.press("ArrowDown")
                 page.keyboard.press("Enter")
                 page.wait_for_function(inside, arg=win)
                 for _ in range(60):   # more than the panel has: round and round, never out
@@ -1790,7 +1821,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
                 self.assertTrue(page.evaluate(inside, win))
                 self.assertEqual(page.get_attribute(f"#{win}", "aria-modal"), "true")
                 page.keyboard.press("Escape")
-                page.wait_for_function(f"() => document.activeElement === document.querySelector('{button}')")
+                page.wait_for_function("() => document.activeElement === document.querySelector('#menuBtn')")   # (its item is out of sight)
         self.assertEqual(self.errors, [])
         page.close()
 
@@ -1810,6 +1841,122 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.set_viewport_size({"width": 330, "height": 800})   # a phone: they scroll, and a fade shows there are more
         page.evaluate("document.documentElement.style.zoom = '1.5'")
         page.wait_for_function("() => document.querySelector('.shelf .seg').classList.contains('more-right')")
+        page.close()
+
+    def test_search_prefixes(self):
+        """Issues #220 and #221: the empty search box shows the prefixes, each with an example, and choosing one puts
+        it in the box; then what it could be is offered. creator:, by:, store:, # and set: filter the products; a
+        set or a setting is a place to go."""
+        page = self.open()
+        self.assertEqual(page.evaluate("parseSearch('by:\"Kitsu Studio\" #Hoodie https://booth.pm/x set: hello')"),
+                         {"words": ["https://booth.pm/x", "hello"], "creator": ["kitsu studio"], "tag": ["hoodie"], "store": [],
+                          "type": [], "set": [], "project": [], "settings": []}, "an address's https: isn't a prefix")
+        q, guide = page.locator("#q"), page.locator("#qMenu")
+        q.focus()
+        guide.wait_for()
+        self.assertEqual(guide.locator(".qopt code").first.inner_text(), "creator:")
+        self.assertEqual(guide.locator(".qopt").count(), 7, "every prefix")
+        self.assertEqual(q.get_attribute("aria-expanded"), "true")
+        page.keyboard.press("ArrowDown")
+        page.keyboard.press("Enter")   # creator:, and then the creators
+        self.assertEqual(q.input_value(), "creator:")
+        guide.locator(".qopt", has_text="Kitsu Studio").wait_for()
+        page.keyboard.type("kit")
+        self.assertEqual(guide.locator(".qopt").all_inner_texts()[0].split("\n")[0], "Kitsu Studio")
+        guide.locator(".qopt", has_text="Kitsu Studio").click()
+        self.assertEqual(q.input_value(), 'creator:"Kitsu Studio" ')
+        self.assertTrue(guide.is_hidden(), "a space after it: nothing more to offer")
+        page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")
+        self.assertEqual(page.locator("#grid .slot", has_text="Mochi").count(), 0)
+        for text, count in (("by:mochi", 1), ("store:gumroad", 1), ("store:booth anko", 1), ("#nothing-tagged", 0), ("https://", 0)):
+            with self.subTest(text):
+                q.fill(text)
+                page.wait_for_function(f"() => document.querySelectorAll('#grid .slot').length === {count}")
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        key = page.evaluate("DATA.items.find(a => a.name === 'Rusk').tag_key")
+        made = page.evaluate(post, ["/api/sets", {"action": "create", "name": "Winter", "items": [key]}])["made"]
+        try:
+            page.evaluate("load()")
+            page.wait_for_function("() => (DATA.sets || []).length === 1")
+            q.fill("set:win")
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            guide.locator(".qopt", has_text="Go to this set").wait_for()
+            page.keyboard.press("ArrowDown")
+            page.keyboard.press("Enter")
+            page.wait_for_function("id => state.store === 'Sets' && state.set === id", arg=made)
+            self.assertEqual(q.input_value(), "", "gone there: the box is empty again")
+        finally:
+            page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])
+        q.focus()
+        q.fill("settings:langu")
+        guide.locator(".qopt", has_text="Language").first.wait_for()
+        page.keyboard.press("ArrowDown")
+        page.keyboard.press("Enter")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        page.wait_for_function("() => document.activeElement && document.activeElement.id === 'setLanguage'")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_sync_asks_first(self):
+        """Issue #214: Sync says what it does, and on which stores, and starts only after Start."""
+        page = self.open()
+        asked = []
+        page.route("**/api/sync", lambda route: (asked.append(route.request.post_data),
+                                                  route.fulfill(status=400, json={"error": "Not in this test."})))
+        page.click("#syncBtn")
+        dialog = page.locator("#askDialog[open]")
+        dialog.wait_for()
+        self.assertRegex(dialog.inner_text(),   # (the list in the language's own way: Intl.ListFormat)
+                         r"Sync reads what you own on Booth, Gumroad, Jinxxy, Payhip,? and itch\.io, then downloads anything new\.")
+        dialog.locator('button[value="no"]').click()
+        page.wait_for_timeout(200)
+        self.assertEqual(asked, [], "Cancel: no sync")
+        page.click("#syncBtn")
+        dialog.wait_for()
+        dialog.locator('button[value="yes"]', has_text="Start").click()
+        page.locator(".toast", has_text="Not in this test.").wait_for()
+        self.assertEqual(len(asked), 1, "Start: it starts")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_the_search_is_in_the_middle(self):
+        """Issue #203: the search box is in the middle of the bar, Library, Downloads and Local to its left and Sets
+        and Wishlists, Tasks, Projects and the tools to its right, at every width, text size and style; when there
+        isn't room, it goes under them, still in the middle, and nothing hides or overlaps."""
+        page = self.open()
+        check = """() => {
+          const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
+          const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .tools > *')]
+            .filter(el => el.getClientRects().length).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
+          const over = [];
+          for (const [i, [a, ra]] of parts.entries()) {
+            if (ra.left < bar.left - 1 || ra.right > bar.right + 1) over.push(a + ' is out of the bar');
+            for (const [b, rb] of parts.slice(i + 1))
+              if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
+          }
+          return { off: Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2), wide: search.width, over,
+                   fit: document.querySelector('.bar').dataset.fit || 'one' };
+        }"""
+        seen = set()
+        for path in ("", "downloads"):
+            if path:
+                goto(page, self.srv.url + path)
+                page.locator("#menuBtn").wait_for()   # (nothing downloaded here)
+                page.wait_for_load_state("networkidle")
+            for style in ("", "treasure", "workbench"):
+                for width, zoom in ((1800, 1), (1350, 1), (1000, 1), (700, 1), (420, 1), (1800, 1.5), (1000, 1.5)):
+                    with self.subTest(path=path or "library", style=style or "standard", width=width, zoom=zoom):
+                        page.set_viewport_size({"width": width, "height": 800})
+                        page.evaluate(f"""() => {{ document.documentElement.style.zoom = '{zoom}';
+                          if ('{style}') document.documentElement.dataset.style = '{style}'; else delete document.documentElement.dataset.style; }}""")
+                        page.wait_for_timeout(120)
+                        got = page.evaluate(check)
+                        seen.add(got["fit"])
+                        self.assertLess(got["off"], 2, got)
+                        self.assertGreater(got["wide"], 150, got)
+                        self.assertEqual(got["over"], [], got)
+        self.assertEqual(seen, {"one", "rows", "stack"}, "each way the bar fits was tried")
+        self.assertEqual(self.errors, [])
         page.close()
 
     def test_the_top_bar_shrinks_back(self):
@@ -1875,7 +2022,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         out of Hoard's window into another browser), or copied from here, as Hoard makes it."""
         from urllib.parse import unquote
         page = self.open()
-        page.click("#storesBtn")
+        menu(page, "#storesBtn")
         link = page.locator("#payhipSaver")
         link.wait_for()
         self.assertEqual(link.get_attribute("href"), "https://hoard.furryup.link/save-for-hoard.html")
@@ -1897,7 +2044,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         with mock.patch.object(server, "reveal", lambda p: opened.append(p) or "your file manager"):
             page = self.open()
             page.set_viewport_size({"width": 1280, "height": 800})
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#settingsPanel").wait_for()
             box = page.locator("#settingsPanel").bounding_box()
             bar = page.evaluate("() => document.querySelector('header').getBoundingClientRect().bottom")
@@ -1936,7 +2083,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))
         with mock.patch.object(server, "save_config"):
             page = self.open()
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.wait_for_function("() => document.querySelector('#setNewDays').value === '7'")
             self.assertEqual(page.locator("#setSave").count(), 0, "there's nothing to save")
             page.select_option("#setNewDays", "14")
@@ -2136,7 +2283,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(hidden, [1], "the window went to the taskbar; Hoard carries on")
             self.assertEqual(closed, [])
             # Quit Hoard in Settings asks the same, while it's working
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#backgroundRow").wait_for(state="visible")   # the setting, in Hoard's own window
             self.assertTrue(page.is_checked("#setBackground"), "on unless you turn it off")
             page.uncheck("#setBackground")

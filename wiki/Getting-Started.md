@@ -78,10 +78,11 @@ Other ways in:
 
 ## After setup
 
-- **Sync** (top right) reads what you own from each store, then downloads anything new, in one go. See
-  [Downloads](Downloads).
+- **Sync** (top right in the Library) reads what you own from each store, then downloads anything new, in one
+  go, once you've said **Start**. See [Downloads](Downloads).
 - **Library** shows everything you own; **Downloads** shows what's on your computer. See
   [Your library](Library).
+- **Menu** (top right) holds **Tags**, **Stores** (**Rescan** in Downloads) and **Settings**.
 - **Stores** is where you sign in again, refresh one store, or sign out. See [Stores](Stores).
 - **Tags** organises things your way. See [Tags](Tags).
 - Want your assets in Unity? See [Hoard for Unity](Hoard-for-Unity).

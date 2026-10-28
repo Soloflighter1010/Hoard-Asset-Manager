@@ -723,6 +723,67 @@ function wireSelection() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !typing) { e.preventDefault(); selectAllShown(); }
   });
 }
+
+/* the bar (issues #203 and #219): its Menu (Tags, Stores or Rescan, and Settings), and fitting it to the window */
+function closeBarMenu(refocus = false) {
+  const m = $("#barMenu");
+  if (!m || m.hidden) return;
+  m.hidden = true;
+  $("#menuBtn").setAttribute("aria-expanded", "false");
+  $(".bar").classList.remove("menu-up");
+  if (refocus) $("#menuBtn").focus();
+}
+function openBarMenu(first = false) {
+  const m = $("#barMenu");
+  m.hidden = false;
+  $("#menuBtn").setAttribute("aria-expanded", "true");
+  $(".bar").classList.add("menu-up");   // (above an open panel and its shade, which the menu drops over)
+  if (first) m.querySelector("button").focus();
+}
+/** Which way the bar fits: "" (the search in the middle, a side either side of it), "rows" (the sides on one row,
+ *  the search under them) or "stack" (each side on a row of its own, then the search). Worked out from how wide each
+ *  side is on one line, which doesn't change with the way it's laid out, so it doesn't flip back and forth. */
+function fitBar() {
+  const bar = $(".bar");
+  if (!bar || !bar.offsetWidth) return;
+  const scale = pageZoom();   // (the parts' sizes are in the window's pixels, the bar's own lengths in the page's: see pageZoom)
+  const px = (el, ...props) => props.reduce((n, p) => n + (parseFloat(getComputedStyle(el)[p]) || 0), 0) * scale;
+  const wide = el => {
+    if (el.hidden || getComputedStyle(el).display === "none") return 0;
+    if (!el.matches(".bar-side, .apptabs, .tools")) return el.getBoundingClientRect().width + px(el, "marginLeft", "marginRight");
+    const parts = [...el.children].map(wide).filter(w => w > 0);
+    return parts.reduce((n, w) => n + w, 0) + px(el, "columnGap") * Math.max(0, parts.length - 1);
+  };
+  const [left, right] = [...bar.querySelectorAll(":scope > .bar-side")].map(wide);
+  const room = bar.getBoundingClientRect().width - px(bar, "paddingLeft", "paddingRight"), gap = px(bar, "columnGap");
+  const fit = 2 * Math.max(left, right) + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
+  bar.style.setProperty("--bar-side", Math.ceil(Math.max(left, right) / scale + 1) + "px");   // each side at least as wide as the wider
+  if ((bar.dataset.fit || "") !== fit) { if (fit) bar.dataset.fit = fit; else delete bar.dataset.fit; }
+}
+function wireBar() {
+  const btn = $("#menuBtn"), menu = $("#barMenu"), wrap = btn.parentElement;
+  btn.addEventListener("click", e => menu.hidden ? openBarMenu(e.detail === 0) : closeBarMenu());   // (detail 0: Enter or Space)
+  btn.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); openBarMenu(true); }
+    else if (e.key === "Escape" && !menu.hidden) { e.preventDefault(); e.stopPropagation(); closeBarMenu(); }
+  });
+  menu.addEventListener("click", e => { if (e.target.closest("button")) closeBarMenu(true); });   // (after the item's own)
+  menu.addEventListener("keydown", e => {
+    const all = [...menu.querySelectorAll("button")], i = all.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1)) % all.length].focus(); }
+    else if (e.key === "Home" || e.key === "End") { e.preventDefault(); all[e.key === "Home" ? 0 : all.length - 1].focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeBarMenu(true); }
+  });
+  wrap.addEventListener("focusout", e => { if (!wrap.contains(e.relatedTarget)) closeBarMenu(); });
+  document.addEventListener("pointerdown", e => { if (!wrap.contains(e.target)) closeBarMenu(); }, true);
+  // the bar, and each part of it that grows with its words (the language, the Tasks count, the text size)
+  let soon = 0;
+  const refit = () => { cancelAnimationFrame(soon); soon = requestAnimationFrame(fitBar); };
+  const sizes = new ResizeObserver(refit);
+  for (const el of [$(".bar"), ...document.querySelectorAll(".bar .brand, .bar .apptabs, .bar .tools")]) sizes.observe(el);
+  if (document.fonts) document.fonts.ready.then(refit);
+  fitBar();
+}
 async function bulkTag(mode) {   // a tag to add to, or take off, what's selected
   const chosen = chosenItems();
   if (!chosen.length) { toast("Select some items first."); return; }
@@ -735,6 +796,217 @@ async function bulkTag(mode) {   // a tag to add to, or take off, what's selecte
 }
 const TAG_ACTIONS = { name: "Tags", items: [{ label: "Add a tag...", run: () => bulkTag("add") },
                                             { label: "Remove a tag...", run: () => bulkTag("remove") }] };
+
+/* ---------- the search's prefixes (issue #220): one kind of thing, as creator:mochi, tag:hoodie or settings:language.
+   Products are filtered by creator, tag, store, type and set; a set, a project or a setting is a place to go, offered
+   under the box as you type it (with the prefixes' guide while the box is empty: issue #221). */
+const SEARCH_KINDS = [   // [kind, its prefixes (the first is the one shown), what it finds, an example]
+  ["creator", ["creator", "by"], "Products by a creator", "creator:mochi"],
+  ["tag", ["tag", "#"], "Products with a tag", "tag:hoodie"],
+  ["store", ["store", "on"], "Products from a store", "store:booth"],
+  ["type", ["type", "kind"], "Products of a kind: avatars, clothing, or a kind of file", "type:avatar"],
+  ["set", ["set", "in"], "A set or wishlist: go to it, or see what's in it", "set:winter"],
+  ["project", ["project", "pj"], "A project, to open", "project:my avatar"],
+  ["settings", ["settings", "s"], "A setting, to change", "settings:language"],
+];
+const SEARCH_PREFIX = new Map(SEARCH_KINDS.flatMap(([kind, names]) => names.map(n => [n, kind])));
+const SEARCH_TOKEN = /([a-z]+):("([^"]*)"?|(\S*))|"([^"]*)"?|(\S+)/gi;
+/** What a search asks for: its plain words, and each kind's values (all lower case, as norm has them). */
+function parseSearch(q) {
+  const out = { words: [] };
+  for (const [kind] of SEARCH_KINDS) out[kind] = [];
+  for (const m of String(q || "").matchAll(SEARCH_TOKEN)) {
+    const kind = m[1] && SEARCH_PREFIX.get(m[1].toLowerCase());
+    if (kind) { const v = norm(m[3] ?? m[4]).trim(); if (v) out[kind].push(v); continue; }
+    const word = norm(m[5] ?? m[6] ?? m[0]).trim();   // (an address's https: isn't a prefix: it's a word)
+    if (word.length > 1 && word.startsWith("#")) out.tag.push(word.slice(1));
+    else if (word) out.words.push(word);
+  }
+  return out;
+}
+/** The prefixed part being typed at the end of the box, if any: { kind, value, at (where it starts) }. */
+function searchTail(q) {
+  let last = null;
+  for (const m of String(q).matchAll(SEARCH_TOKEN)) last = m;
+  if (!last || last.index + last[0].length !== q.length || /\s$/.test(q)) return null;
+  const kind = last[1] ? SEARCH_PREFIX.get(last[1].toLowerCase())
+    : last[6] && last[6].startsWith("#") ? "tag" : null;
+  if (!kind) return null;
+  return { kind, value: norm(last[1] ? (last[3] ?? last[4]) : last[6].slice(1)).trim(), at: last.index };
+}
+let searchMemo = { q: null, of: null, s: null }, kindsMemo = { of: null, map: null };
+function searchFor(q) {   // (once for each search, not each product)
+  if (searchMemo.q !== q || searchMemo.of !== DATA.sets) {
+    const s = parseSearch(q);
+    s.sets = s.set.map(v => new Set((DATA.sets || []).filter(x => norm(x.name).includes(v)).flatMap(x => x.items || [])));
+    searchMemo = { q, of: DATA.sets, s };
+  }
+  return searchMemo.s;
+}
+const storeWords = a => [norm(a.store), norm(STORE_NAMES[String(a.store).toLowerCase()] || a.store)];
+/** A product's kinds: its tags' kinds (Avatar, Clothing...: in the tag manager), in English and as shown, and its
+ *  kinds of file (Downloads). */
+function itemKinds(a) {
+  const tags = DATA.tagset || {};
+  if (kindsMemo.of !== tags) kindsMemo = { of: tags, map: tagTypes() };
+  const kinds = [...(a.tags || []), ...(a.suggested || [])].map(t => kindsMemo.map.get(t)).filter(Boolean);
+  return [...kinds.flatMap(k => [k, norm(tr(TAG_TYPES[k] || k))]), ...(a.types || []).map(norm)];
+}
+/** Does a product answer the search box? Plain words anywhere in it; a prefix's value in that one part of it. */
+function searchMatches(a, q) {
+  const s = searchFor(q);
+  for (const w of s.words) if (!a.hay.includes(w)) return false;
+  for (const v of s.creator) if (!norm(a.creator).includes(v)) return false;
+  for (const v of s.tag) if (![...(a.tags || []), ...(a.suggested || [])].some(t => norm(t).includes(v))) return false;
+  for (const v of s.store) if (!storeWords(a).some(w => w.includes(v))) return false;
+  for (const v of s.type) if (!itemKinds(a).some(k => k.includes(v))) return false;
+  for (const keys of s.sets) if (!keys.has(a.tag_key)) return false;
+  return true;   // (project: and settings: are places to go, under the box: they don't filter products)
+}
+
+// what's offered under the box: the prefixes' guide, or the things the prefix being typed could be
+const SEARCH_MORE = 8;
+let searchProjects = null;   // Projects' list, read when project: is first typed
+function settingsPlaces() {   // each part and setting of Settings, by the words it shows (in the page's language)
+  const panel = $("#settingsPanel"), out = [];
+  if (!panel) return out;
+  let part = "";
+  for (const el of panel.querySelectorAll("h3, label, [role=radiogroup][aria-label]")) {
+    const shut = el.closest("[hidden]");
+    if (shut && shut !== panel) continue;   // (not on this computer, or not now)
+    if (el.tagName === "H3") { part = el.textContent.trim(); out.push({ el, name: part, part: "" }); continue; }
+    if (el.tagName === "LABEL" && el.closest("[role=radiogroup]")) continue;   // (one choice of a group: the group is enough)
+    const words = el.cloneNode(true);
+    for (const n of words.querySelectorAll("select, option, textarea, .hint, button")) n.remove();
+    const name = (el.getAttribute("aria-label") || words.textContent).replace(/\s+/g, " ").trim();
+    if (name && name.length <= 90) out.push({ el, name, part });
+  }
+  return out;
+}
+async function openSettingsAt(el) {
+  await openSettings(true);
+  if ($("#settingsPanel").hidden) return;
+  el.scrollIntoView({ block: "center" });
+  const control = el.matches("input, select, textarea") ? el : el.querySelector("input:not([type=hidden]), select, textarea");
+  if (control) control.focus({ preventScroll: true });
+  el.classList.add("found");
+  setTimeout(() => el.classList.remove("found"), 2400);
+}
+async function searchOffers(tail) {   // [{ text, sub, fill (the box's new text) or go (a place to go) }]
+  const v = tail.value, has = s => norm(s).includes(v);
+  const counted = values => {
+    const n = new Map();
+    for (const x of values) if (x && has(x)) n.set(x, (n.get(x) || 0) + 1);
+    return [...n].sort((a, b) => b[1] - a[1] || coll.compare(a[0], b[0])).slice(0, SEARCH_MORE);
+  };
+  const quote = s => /\s/.test(s) ? `"${s}"` : s;
+  const fill = (kind, value) => SEARCH_KINDS.find(k => k[0] === kind)[1][0] + ":" + quote(value) + " ";
+  const items = T.all();
+  if (tail.kind === "creator") return counted(items.map(a => a.creator)).map(([c, n]) => ({ text: c, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("creator", c) }));
+  if (tail.kind === "tag") return counted(items.flatMap(a => [...new Set([...(a.tags || []), ...(a.suggested || [])])])).map(([t, n]) => ({ text: "#" + t, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("tag", t) }));
+  if (tail.kind === "store") return counted(items.map(a => STORE_NAMES[String(a.store).toLowerCase()] || a.store)).map(([s, n]) => ({ text: s, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("store", s) }));
+  if (tail.kind === "type") {
+    const kinds = Object.entries(TAG_TYPES).filter(([k, label]) => has(k) || has(tr(label))).map(([k, label]) => ({ text: tr(label), sub: tr("A kind of product"), fill: fill("type", k) }));
+    const files = counted(items.flatMap(a => a.types || [])).map(([t, n]) => ({ text: "." + t, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("type", t) }));
+    return [...kinds, ...files].slice(0, SEARCH_MORE);
+  }
+  if (tail.kind === "set") return (DATA.sets || []).filter(s => has(s.name)).slice(0, SEARCH_MORE)
+    .map(s => ({ text: s.name, raw: true, sub: s.kind === "wishlist" ? tr("Go to this wishlist") : tr("Go to this set"), go: () => showSet(s.id) }));
+  if (tail.kind === "project") {
+    if (!searchProjects) {
+      try { const r = await api("/api/vpm", { cache: "no-store" }); searchProjects = r.ok ? ((await r.json()).projects || []) : []; }
+      catch (e) { searchProjects = []; }
+    }
+    return searchProjects.filter(p => has(p.name || "") || has(p.path || "")).slice(0, SEARCH_MORE)
+      .map(p => ({ text: p.name || p.path, raw: true, sub: tr("Open this project"), go: () => { openProjects(true); openProject(p.path); } }));
+  }
+  if (tail.kind === "settings") {
+    const words = v.split(/\s+/).filter(Boolean);
+    return settingsPlaces().filter(x => words.every(w => norm(x.name + " " + x.part).includes(w)))
+      .sort((a, b) => Number(!norm(a.name).startsWith(words[0] || "")) - Number(!norm(b.name).startsWith(words[0] || "")))
+      .slice(0, SEARCH_MORE).map(x => ({ text: x.name, raw: true, sub: x.part ? tr("In {0}", x.part) : tr("A part of Settings"), go: () => openSettingsAt(x.el) }));
+  }
+  return [];
+}
+const QM = { offers: [], at: -1, asked: 0 };
+function closeSearchMenu() {
+  const m = $("#qMenu");
+  if (!m || m.hidden) return;
+  m.hidden = true; QM.offers = []; QM.at = -1;
+  $("#q").setAttribute("aria-expanded", "false"); $("#q").removeAttribute("aria-activedescendant");
+  if ($("#barMenu").hidden) $(".bar").classList.remove("menu-up");
+}
+function drawSearchMenu(head, offers) {
+  const m = $("#qMenu");
+  QM.offers = offers; QM.at = -1;
+  $("#q").removeAttribute("aria-activedescendant");
+  if (!offers.length && !head) return closeSearchMenu();
+  m.innerHTML = (head ? `<p class="qmenu-h">${esc(tr(head))}</p>` : "") + offers.map((o, i) =>
+    `<div class="qopt" role="option" id="qOpt${i}" aria-selected="false" data-i="${i}">` +
+    `<span class="qopt-t"${o.raw ? ' translate="no"' : ""}>${(o.code || []).map(c => `<code>${esc(c)}</code> `).join("")}${esc(o.text)}</span>` +
+    `<span class="qopt-s">${esc(o.sub || "")}</span></div>`).join("") +
+    (!offers.length ? `<p class="qmenu-none">${esc(tr("Nothing by that name."))}</p>` : "");
+  m.hidden = false;
+  $("#q").setAttribute("aria-expanded", "true");
+  $(".bar").classList.add("menu-up");
+}
+async function showSearchMenu() {
+  const q = $("#q"), text = q.value, asked = ++QM.asked;
+  if (document.activeElement !== q) return closeSearchMenu();
+  if (!text.trim()) {   // the guide: each prefix, with an example (issue #221)
+    return drawSearchMenu("Search for one kind of thing", SEARCH_KINDS.map(([kind, names, what, eg]) =>
+      ({ code: names.map(n => n === "#" ? n : n + ":"), text: tr(what), sub: tr("For example, {0}", eg), fill: names[0] + ":" })));
+  }
+  const tail = searchTail(text);
+  if (!tail) return closeSearchMenu();
+  const offers = await searchOffers(tail);
+  if (asked !== QM.asked) return;   // (typed on since)
+  drawSearchMenu("", offers.map(o => ({ ...o, fill: o.fill && text.slice(0, tail.at) + o.fill })));
+}
+function chooseSearchOffer(i) {
+  const o = QM.offers[i], q = $("#q");
+  if (!o) return;
+  if (o.fill != null) {
+    q.value = o.fill;
+    q.dispatchEvent(new Event("input", { bubbles: true }));
+    q.focus(); q.setSelectionRange(q.value.length, q.value.length);
+    showSearchMenu();
+    return;
+  }
+  q.value = ""; state.q = "";   // (now, not after the box's pause: going there draws the page)
+  q.dispatchEvent(new Event("input", { bubbles: true }));
+  closeSearchMenu();
+  o.go();
+}
+function markSearchOffer(i) {
+  const all = [...document.querySelectorAll("#qMenu .qopt")];
+  if (!all.length) return;
+  QM.at = (i + all.length) % all.length;
+  all.forEach((el, n) => el.setAttribute("aria-selected", String(n === QM.at)));
+  $("#q").setAttribute("aria-activedescendant", all[QM.at].id);
+  all[QM.at].scrollIntoView({ block: "nearest" });
+}
+function wireSearch() {
+  const q = $("#q"), box = q.closest(".search");
+  const m = document.createElement("div");
+  m.id = "qMenu"; m.className = "qmenu"; m.setAttribute("role", "listbox"); m.setAttribute("aria-label", tr("Search for one kind of thing"));
+  m.hidden = true;
+  box.appendChild(m);
+  q.setAttribute("role", "combobox"); q.setAttribute("aria-autocomplete", "list");
+  q.setAttribute("aria-controls", "qMenu"); q.setAttribute("aria-expanded", "false");
+  q.addEventListener("focus", showSearchMenu);
+  q.addEventListener("input", showSearchMenu);
+  q.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== q) closeSearchMenu(); }, 0));
+  q.addEventListener("keydown", e => {
+    if (m.hidden) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); markSearchOffer(QM.at + (e.key === "ArrowDown" ? 1 : QM.at < 0 ? 0 : -1)); }
+    else if (e.key === "Enter" && QM.at >= 0) { e.preventDefault(); chooseSearchOffer(QM.at); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSearchMenu(); }
+    else if (e.key === "Tab") closeSearchMenu();
+  });
+  m.addEventListener("pointerdown", e => e.preventDefault());   // (the box keeps the keyboard)
+  m.addEventListener("click", e => { const o = e.target.closest(".qopt"); if (o) chooseSearchOffer(+o.dataset.i); });
+}
 
 /* the tag manager */
 function openTagPanel(open) {
@@ -1216,6 +1488,14 @@ async function installUpdate() {
 }
 
 let dlFade;
+/** The bar's Sync (issue #214): what it does, and on which stores, before it starts. */
+async function confirmSync() {
+  const on = Object.keys(STORE_NAMES).filter(s => ((typeof DATA === "object" && DATA && DATA.enabled) || {})[s] !== false);
+  if (!on.length) { toast("No stores are switched on in Settings."); return; }
+  if (!await ask(tr("Sync reads what you own on {0}, then downloads anything new.", listed(on.map(s => STORE_NAMES[s]))) + "\n\n" +
+                 tr("It can take a while. You can keep using Hoard, and stop it from Tasks."), "Start")) return;
+  startSync();
+}
 async function startSync() {
   if (!navigator.onLine) { toast("You're offline. Syncing needs a connection."); return; }
   const r = await apiPost("/api/sync", {});
@@ -1307,7 +1587,8 @@ function uiFlush() {   // also as the page is left (to the other view, or closin
 addEventListener("pagehide", uiFlush);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") uiFlush(); });
 function winOpened(el) {   // one panel at a time: the others close as this one opens
-  const from = document.activeElement;
+  let from = document.activeElement;
+  if (from && from.closest && from.closest("#barMenu")) from = $("#menuBtn");   // (the Menu closes as its item opens a panel)
   for (const other of document.querySelectorAll(".win:not([hidden])")) if (other !== el) WINDOWS[other.id]();
   winShade();
   el.scrollTop = 0;
@@ -3736,7 +4017,7 @@ const TOUR_STEPS = [
     body: () => esc(tr("Archive puts away what you're done with, without losing it. Removed is for what doesn't belong: a sync never downloads it again. Hidden keeps things behind a PIN.")) },
   { id: "sync", page: "library", at: () => $("#syncBtn"),
     title: () => tr("Sync"),
-    body: () => esc(tr("Sync reads what you own from your stores, then downloads anything new. Stores is where you sign in, read one store again, or import saved pages instead. In Settings, a routine check can do this for you, and asks before it downloads anything.")) },
+    body: () => esc(tr("Sync reads what you own from your stores, then downloads anything new. Stores, in the Menu, is where you sign in, read one store again, or import saved pages instead. In Settings, a routine check can do this for you, and asks before it downloads anything.")) },
   { id: "to-downloads", page: "library", go: "downloads", at: () => $('.apptabs a[href="/downloads"]'),
     title: () => tr("On to your downloads"),
     body: () => esc(tr("Downloads is what Hoard has saved on this computer, with a lot more to do with each one. Click Downloads, or Next.")) },
@@ -3803,9 +4084,9 @@ const TOUR_STEPS = [
   { id: "tasks", page: "downloads", at: () => $("#tasksTab"),
     title: () => tr("Tasks"),
     body: () => esc(tr("Everything Hoard does, such as a sync or a download, shows here as it runs, and what it found. You can carry on meanwhile.")) },
-  { id: "settings", page: "downloads", at: () => $("#settingsBtn"),
-    title: () => tr("Settings"),
-    body: () => esc(tr("Your language, light or dark, themes, styles and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.")) },
+  { id: "settings", page: "downloads", at: () => $("#menuBtn"),
+    title: () => tr("Menu"),
+    body: () => esc(tr("Tags, Rescan and Settings. Settings has your language, light or dark, themes, styles and text size; the routine check; previous versions; more library folders; and Backup, for your tags, sets and settings. This tour is there too.")) },
   { id: "end", page: "downloads",
     title: () => tr("That's the tour"),
     body: () => esc(tr("You've seen the main things. Hoard's wiki has the rest, and What's new, in Settings, lists every change.")),
@@ -3982,4 +4263,6 @@ function wireTour() {
   });
   addEventListener("resize", () => { if (TOUR.i >= 0) tourPlace(); });
   document.addEventListener("scroll", () => { if (TOUR.i >= 0) tourPlace(); }, { capture: true, passive: true });
+  // the bar settling (fitBar) moves everything under it, a moment after the window or the text size changes
+  if ($(".bar")) new ResizeObserver(() => { if (TOUR.i >= 0) tourPlace(); }).observe($(".bar"));
 }

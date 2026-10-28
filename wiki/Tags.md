@@ -17,7 +17,7 @@ tagged in the other. Filter by any tag from the sidebar; filters combine.
 
 ## The Tags panel
 
-The **Tags** button opens a list of all your tags and the suggestions:
+**Tags** (in the **Menu**, top right) opens a list of all your tags and the suggestions:
 
 - **Keep** a suggestion to make it your tag on every item whose name has that word, including items you buy
   later. **Hide** one to stop it being suggested.

@@ -13,6 +13,7 @@ from unittest import mock
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import backup, config, server, themes  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 try:
     from tests.test_packages import BROWSER
@@ -109,7 +110,7 @@ class Chosen(unittest.TestCase):
             page.locator("#grid .slot").first.wait_for()
             self.assertEqual(page.evaluate(mark), "")
             self.assertFalse(page.locator("#grid .row-meta").first.is_visible(), "Standard: tiles")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator('input[name="setStyle"][value="standard"]')).to_be_checked()
             self.assertEqual(page.locator('input[name="setStyle"]').count(), 3)
             page.check('input[name="setStyle"][value="workbench"]')
@@ -122,7 +123,7 @@ class Chosen(unittest.TestCase):
             page = browser.new_page()   # opened again: in it from the first moment, on both pages
             page.goto(srv.entry_url().replace("/#", "/downloads#", 1))
             self.assertEqual(page.evaluate(mark), "workbench")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator('input[name="setStyle"][value="workbench"]')).to_be_checked()
             page.check('input[name="setStyle"][value="treasure"]')
             page.wait_for_function(f"() => ({mark})() === 'treasure'")
@@ -252,7 +253,7 @@ class CardOutlines(unittest.TestCase):
             page.goto(srv.entry_url())
             page.locator("#grid .slot").first.wait_for()
             self.assertEqual((page.evaluate(mark), page.evaluate(card)), ("", ["0px", "0px"]), "as it's always looked")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.check("#setCardOutlines")
             page.wait_for_function(f"() => ({mark})() === 'outlined'")
             self.assertIs(srv.cfg["display"]["card_outlines"], True, "saved")
@@ -264,7 +265,7 @@ class CardOutlines(unittest.TestCase):
             page = browser.new_page()   # opened again: outlined from the first moment, on both pages
             page.goto(srv.entry_url().replace("/#", "/downloads#", 1))
             self.assertEqual(page.evaluate(mark), "outlined")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator("#setCardOutlines")).to_be_checked()
             page.uncheck("#setCardOutlines")
             page.wait_for_function(f"() => ({mark})() === ''")

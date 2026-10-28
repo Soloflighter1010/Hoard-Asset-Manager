@@ -3,7 +3,13 @@ The **Library** shows everything you own on the stores you use, whether or not y
 
 ## Finding things
 
-- **Search** matches names, creators, stores, variants and tags.
+- **Search** (in the middle of the bar at the top) matches names, creators, stores, variants and tags. A prefix
+  searches one kind of thing (5.2.0): `creator:` (or `by:`), `tag:` (or `#`), `store:` (or `on:`) and `type:` (or
+  `kind:`: a tag's kind, such as avatar, or in Downloads a kind of file) narrow the products; `set:` (or `in:`)
+  narrows them to a set's and offers to go to it; `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)
+  a setting: `settings:language` opens Settings at Language. Put a name with spaces in quotes, as in
+  `creator:"Kitsu Studio"`. Click in the empty box, or press **/**, to see them all with an example: choose one and
+  it goes in the box, then what it could be is offered under it (the arrow keys and Enter work there too).
 - **The store tabs** above the grid narrow it to one store, with a count for each. The tab you're looking at is
   raised, and the page glows up from the bottom in that store's colour (on **Everything**, the colours of the
   stores you're signed in to drift through it).
@@ -31,8 +37,8 @@ The **Library** shows everything you own on the stores you use, whether or not y
 
   A picture several creators use for different names (a store's default banner) stacks nothing. Choose a stack to
   see every copy. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
-  it's shown on its own from then on (**Show it with its copies again** undoes it). Downloads stacks the same copies, and lists the others in a copy's details. Untick **Stack
-  copies**, beside **Sort** on either page, to show each on its own; Hoard remembers. While you're choosing
+  it's shown on its own from then on (**Show it with its copies again** undoes it). Downloads stacks the same copies, and lists the others in a copy's details. Turn off **Stack
+  copies** (a button beside **Sort** on either page, pressed while it's on) to show each on its own; Hoard remembers. While you're choosing
   several, and in Disk space, each copy shows.
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
   library** in Settings). What was already there when Hoard first read a store isn't new.

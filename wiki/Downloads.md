@@ -3,7 +3,8 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 
 ## Downloading
 
-- **Sync** (top right) reads what you own from each store you use, then downloads anything new, as one job.
+- **Sync** (top right in the Library) reads what you own from each store you use, then downloads anything new,
+  as one job. It says what it does, and on which stores, and starts when you choose **Start** (5.2.0).
 - **The routine check** (in **Settings**: off unless you choose every 6 or 12 hours, once a day, once a week or
   once a month) runs by itself while Hoard is open: it reads your stores, checks your downloads (see [Checking
   your downloads](#checking-your-downloads)) and checks for updates. It downloads nothing itself: when it found
@@ -15,7 +16,7 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   Turn that off in [Settings](Settings).
 - **Your tasks go first.** Start something while the routine check runs and the check stops safely to make way;
   Tasks says so, and it carries on after yours. Anything you start also waits ahead of automatic ones in Tasks.
-- **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
+- **Download new** (top right in Downloads) and **Download everything new** (in **Stores**) download without refreshing
   your Library list first, from the stores switched on in [Settings](Settings). A store's **Download** button does
   one store. Each first lists what it would get:
   what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
@@ -194,13 +195,14 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
 
 ## The Downloads view
 
-- **Search** matches names, creators, tags and file names. Filter by store, creator, tag or **File types**, and
+- **Search** matches names, creators, tags and file names, with the Library's prefixes (`type:zip` is a kind of
+  file here: see [Finding things](Library#finding-things)). Filter by store, creator, tag or **File types**, and
   sort by name, creator, store, **Recently added** or **Largest**. The sort you choose is the Library's too, and Hoard
   remembers it next time it starts (5.0); **Largest** is only here, so the Library sorts by name meanwhile.
 - Open a product to see its files, sizes and folder. **Open folder** opens it in Explorer (or Finder), **Show in
   folder** shows one file there, and **Copy path** copies the folder's location.
-- A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
-  say after you've tidied it yourself.
+- A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** (in the **Menu**) checks the
+  folder again, say after you've tidied it yourself.
 - **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without importing
   anything, and takes nothing out until you choose **Extract** (below). A Unity package's files are listed in their folders (each opens as you choose it), with
   their sizes and the preview pictures Unity keeps inside the package; **Search in it** finds a file wherever it

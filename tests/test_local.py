@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, downloads, jobs, library, local, server  # noqa: E402
 from hoard.safety import ACCESS_HEADER  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -458,7 +459,7 @@ class Browse(unittest.TestCase):
             self.assertTrue(page.locator("#localCopy").is_checked(), "a single file is copied in")
             self.assertEqual(asked, ["folder", "file"])
             page.keyboard.press("Escape")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#setRootBrowse").wait_for()
             self.assertTrue(page.locator("#setRootBrowse").is_visible())
             browser.close()

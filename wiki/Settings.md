@@ -1,4 +1,4 @@
-Everyday choices are in **Settings** (top right). A few rarer ones only live in `config.json`.
+Everyday choices are in **Settings** (in the **Menu**, top right; or search for one with `settings:`). A few rarer ones only live in `config.json`.
 
 ## The Settings page
 

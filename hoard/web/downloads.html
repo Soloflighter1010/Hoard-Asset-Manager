@@ -71,11 +71,23 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 [hidden] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
-/* top bar */
+/* top bar: the search in the middle, Library, Downloads and Local to its left, and Sets and Wishlists, Tasks,
+   Projects and the page's tools to its right (issue #203). The two sides are as wide as each other, so the search
+   is in the middle of the window. When they don't fit beside it, fitBar (shared.js) puts the search on a row of its
+   own under them, and when they don't fit side by side either, each side on a row of its own: nothing hides. */
 .bar {
   position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 24px; background: var(--cave);
+  display: grid; grid-template-columns: minmax(var(--bar-side, 0px), 1fr) minmax(220px, 560px) minmax(var(--bar-side, 0px), 1fr); align-items: center;
+  gap: 10px 18px; padding: 12px 24px; background: var(--cave);
 }
+.bar-side { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bar-end { justify-content: flex-end; }
+.bar[data-fit="rows"] { grid-template-columns: auto auto; justify-content: space-between; }
+.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: center; width: min(100%, 720px); }
+.bar[data-fit="stack"] { grid-template-columns: minmax(0, 1fr); }
+.bar[data-fit="stack"] .search { order: 1; }
+.bar[data-fit="stack"] :is(.bar-side, .apptabs, .tools) { flex-wrap: wrap; }
+.bar[data-fit="stack"] .bar-end { justify-content: flex-start; }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
@@ -95,7 +107,7 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 @keyframes confetti-fall { to { transform: translateY(calc(100vh + 32px)) rotate(var(--spin)); } }
 body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animation: none; }
 @media (prefers-reduced-motion: reduce) { .brand.has-update svg, .brand .boxes { animation: none; } }
-.search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
+.search { position: relative; display: block; min-width: 0; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
   width: 100%; height: 44px; padding: 0 44px; border-radius: 12px; border: 0;
@@ -107,9 +119,33 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font: 700 12px var(--body); color: var(--dust); background: var(--stone); border-radius: 6px; padding: 1px 7px;
 }
-/* The same room on both pages (Downloads has two more buttons), so the bar is laid out alike and doesn't jump, or
-   go to two rows on one page and not the other, when you switch */
-.tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; min-width: min(460px, 100%); }
+.tools { display: flex; align-items: center; gap: 10px; flex: none; }
+/* under the search box: the prefixes' guide, and what the prefix being typed could be (issues #220 and #221) */
+.qmenu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; max-height: min(440px, calc(var(--vh) - 120px));
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.qmenu[hidden] { display: none; }
+.qmenu-h, .qmenu-none { margin: 6px 10px 4px; font: 700 12px var(--body); color: var(--dust); }
+.qmenu-none { font-weight: 400; }
+.qopt { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.qopt:hover, .qopt[aria-selected="true"] { background: var(--stone); }
+.qopt[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.qopt-t { min-width: 0; color: var(--bone); font-size: 14px; overflow-wrap: anywhere; }
+.qopt-t code { padding: 1px 6px; border-radius: 5px; background: var(--cave); color: var(--gold-text); font: 700 12.5px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.qopt-s { flex: none; max-width: 45%; color: var(--dust); font-size: 12.5px; text-align: right; }
+.found { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 8px; }   /* a setting the search went to */
+/* the bar's Menu (issue #219): Tags, Stores or Rescan, and Settings */
+.barmenu-wrap { position: relative; }
+.bar.menu-up { z-index: 65; }   /* the Menu drops over an open panel (60) and its shade */
+.barmenu-btn svg { width: 16px; height: 16px; }
+.barmenu-btn .warn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.barmenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 6px; display: grid; gap: 2px;
+  border-radius: 12px; background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.barmenu[hidden] { display: none; }
+.barmenu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px;
+  background: none; color: var(--bone); font: 600 14px var(--body); text-align: left; white-space: nowrap; cursor: pointer; }
+.barmenu button:hover, .barmenu button:focus-visible { background: var(--stone); outline: none; }
+.barmenu button:focus-visible { box-shadow: inset 0 0 0 2px var(--gold); }
+.barmenu button[aria-expanded="true"]::after { content: ""; width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--gold); }
 .tools label { display: flex; align-items: center; gap: 8px; color: var(--dust); font-size: 13px; }
 .tools select {
   height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
@@ -325,9 +361,7 @@ a.ghost { height: 42px; }
 @media (max-width: 860px) {
   :root { --slot-size: 136px; }
   .bar { padding: 12px 16px; gap: 10px; position: static; }
-  .search { order: 5; flex-basis: 100%; max-width: none; }
   .search kbd, .tools .zoom { display: none; }
-  .tools { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
   .seg { position: static; padding: 0 12px; }
   .only-narrow { display: inline-flex; }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -364,7 +398,11 @@ body.less-motion .slot:hover .art { transform: none; }
 .slot.stacked .art { overflow: visible; min-height: 0; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
 .slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
 .flag.count { right: auto; left: 8px; background: var(--bone); color: var(--cave); }
-.stack-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dust); cursor: pointer; }
+/* Stack copies (issue #215): a button that stays pressed while it's on */
+.stack-toggle { gap: 6px; height: var(--btn-h-sm); color: var(--dust); cursor: pointer; }
+.stack-toggle svg { width: 16px; height: 16px; flex: none; }
+.stack-toggle[aria-pressed="true"] { color: var(--bone); box-shadow: inset 0 0 0 2px var(--gold); }
+.stack-toggle[aria-pressed="true"] svg { color: var(--gold); }
 .update { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
 .update ul { margin: 6px 0 10px; padding-left: 18px; overflow-wrap: anywhere; }
 .update .muted { display: block; margin-top: 8px; color: var(--dust); font-size: 13px; }
@@ -1143,9 +1181,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .stores-go { display: flex; gap: 8px; margin-top: 14px; }
 .stores-go > button { flex: 1 1 0; }
 .stores .stores-go .primary { margin-top: 0; width: auto; }
-/* the bar: the search box gives way first, so its buttons stay on the same row down to a narrower window */
-@media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
-.only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
+.only-narrow { display: none; }   /* (the rules above give every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
 /* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
 .tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
@@ -1185,27 +1221,35 @@ body.less-motion .tour-try::before { animation: none; }
   </div>
 </div>
 <header class="bar">
+<div class="bar-side">
   <a class="brand" href="/"><svg viewBox="0 0 226 64" role="img" aria-label="Hoard"><g class="boxes" transform="translate(0 0) scale(1.0)">
   <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
-  <label class="search">
+  <nav class="apptabs" aria-label="Your hoard"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
+</div>
+  <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search downloads" aria-label="Search your downloads: names, creators, tags and files" autocomplete="off">
     <kbd aria-hidden="true">/</kbd>
-  </label>
+  </div>
+<div class="bar-side bar-end">
+  <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <div class="tools">
-
-    <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
-    <button id="rescan" class="ghost" title="Re-read what's on disk">Rescan</button>
-    <button id="settingsBtn" class="ghost" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
-    <button id="downloadNew" class="ghost" title="Download anything new, without reading your stores first">Download new</button>
-    <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
+    <div class="barmenu-wrap">
+      <button id="menuBtn" class="ghost barmenu-btn" aria-expanded="false" aria-controls="barMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu</button>
+      <div id="barMenu" class="barmenu" hidden>
+        <button id="tagsBtn" aria-expanded="false" aria-controls="tagPanel">Tags</button>
+        <button id="rescan" title="Re-read what's on disk">Rescan</button>
+        <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+      </div>
+    </div>
+    <button id="downloadNew" class="primary" title="Download anything new, without reading your stores first">Download new</button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
+</div>
 </header>
 <div id="routineNote" class="routine-note" role="status" hidden>
   <span id="routineText"></span>
@@ -1236,7 +1280,7 @@ body.less-motion .tour-try::before { animation: none; }
         <option value="size">Largest</option>
       </select>
     </label>
-    <label class="stack-toggle" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
+    <button id="stackCopies" class="ghost sm stack-toggle" aria-pressed="true" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="2"/><path d="M5 3.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 3v6a1.5 1.5 0 0 1-1.5 1.5H12"/></svg>Stack copies</button>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -1683,7 +1727,7 @@ function matches(a, skip) {
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const t of state.types) if (!a.types.includes(t)) return false;
-  for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
+  if (state.q && !searchMatches(a, state.q)) return false;   // (words, and prefixes: creator:, tag:...)
   return true;
 }
 const storeRank = folder => { const i = Object.keys(STORE_NAMES).indexOf(String(folder).toLowerCase()); return i < 0 ? 99 : i; };   // Local last
@@ -2915,6 +2959,8 @@ function wireTags() {
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
   wireSelection();
+  wireBar();
+  wireSearch();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });
@@ -3029,10 +3075,14 @@ function applyUi(ui) {   // once, when the page first has its data
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
-  $("#stackCopies").checked = UI.stack !== false;   // the same choice as the Library's
+  $("#stackCopies").setAttribute("aria-pressed", String(UI.stack !== false));   // the same choice as the Library's
   if (state.view !== "space") state.sort = sortFrom(new URLSearchParams(location.hash.slice(1)).get("sort"), SORTS);   // the sort last chosen
 }
-$("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.checked }); render(); });
+$("#stackCopies").addEventListener("click", e => {
+  const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
+  e.currentTarget.setAttribute("aria-pressed", String(on));
+  uiSave({ stack: on }); render();
+});
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
    Both are remembered. */
 /* ---------- Settings save as you change them: a box or list straight away, a folder or the Payhip shops when you
@@ -3064,7 +3114,6 @@ async function watchJobs() {
 /* ---------- closing Hoard while it's working: stop it first, carry on in the background, or close at once */
 /* ---------- the download panels beside the details (issue #85): the page's styles place them by these */
 function wireApp() {
-  $("#syncBtn").addEventListener("click", startSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
   wireSupportReport();
   wireBackup();

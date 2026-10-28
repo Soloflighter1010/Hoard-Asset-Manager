@@ -10,6 +10,7 @@ from unittest import mock
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, downloader, library, server
+from tests.browsing import menu
 
 try:
     from tests.test_packages import BROWSER
@@ -75,7 +76,7 @@ class Tweaks(unittest.TestCase):
 
     def test_settings_jumps_to_its_parts(self):
         page = self.downloads()
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         jumps = page.locator(".setjump button")
         self.assertEqual(jumps.count(), 9)   # with Hoard's folders
         page.locator("#setStores input").first.wait_for()   # the stores' boxes are where they were (drawn once Settings loads)

@@ -21,6 +21,7 @@ sys.path.insert(0, str(REPO))
 from hoard import config, downloader, downloads, libraries, safety, server  # noqa: E402
 from hoard.safety import ACCESS_HEADER  # noqa: E402
 from hoard.tags import tag_key  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 
 def product(base: Path, store: str, key: str, creator: str, name: str, files: dict[str, bytes], picture: bool = True):
@@ -258,7 +259,7 @@ class Server(unittest.TestCase):
         page.goto(f"{self.srv.url}downloads#key={self.srv.key}")
         page.get_by_text("Rusk").first.wait_for()
         self.assertTrue(page.locator("#drives").is_hidden(), "no folder tabs with only the downloads folder")
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.locator("#setLibs .librow").get_by_text("Downloads folder").wait_for()
         self.assertEqual(page.locator("#setLibs .librow").count(), 1)
         self.assertIn("1 product", page.locator("#setLibs .librow").inner_text())
@@ -268,12 +269,12 @@ class Server(unittest.TestCase):
         self.srv.pick_path = lambda kind, start: str(self.drive)   # as Hoard's window does: one step
         page.reload()
         page.get_by_text("Rusk").first.wait_for()
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.click("#libPick")
         name = libraries.label(self.drive)   # "Drive E", or "Drive E (C:)" on Windows
         page.get_by_text(f"Added {name}: nothing downloaded there yet. It has a tab in Downloads.").wait_for()
         page.locator("#setLibs .librow").get_by_text(str(self.drive)).wait_for()
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.locator("#drives [data-lib='1']").wait_for()
         self.assertEqual([" ".join(t.split()) for t in page.locator("#drives [data-lib]").all_inner_texts()],
                          ["Downloads folder 1", f"{name} 0"])
@@ -307,7 +308,7 @@ class Server(unittest.TestCase):
             time.sleep(0.1)
         self.assertTrue(back.is_file() and not moved.exists())
         page.wait_for_function("() => DATA.assets.length === 1 && DATA.assets[0].library === 0", timeout=20000)
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.click("[data-lib-remove='1']")
         page.click("#askDialog button[value=yes]")
         page.get_by_text(f"{name} is no longer part of your library.").wait_for()

@@ -1,6 +1,6 @@
 Hoard reads your purchases from **Booth**, **Gumroad**, **Jinxxy**, **Payhip** and **itch.io**, signed in as you
 or from pages you save yourself, and keeps copies of your files from all of them but Payhip. Everything here
-happens in the **Stores** panel (top right).
+happens in the **Stores** panel (in the **Menu**, top right).
 
 ## The Stores panel
 
@@ -16,7 +16,7 @@ Each store you use has a row:
 - **Sign out** signs you out of that store in Hoard.
 
 At the top, **Refresh all stores** and **Download everything new** do every store at once. **Sync** (top
-right, outside the panel) does both in one go: it reads what you own, then downloads anything new.
+right in the Library, outside the panel) does both in one go: it reads what you own, then downloads anything new.
 
 Hoard only shows and reads the stores you use. Switch stores on or off in [Settings](Settings).
 

@@ -10,6 +10,7 @@ from unittest import mock
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, server  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 try:
     from tests.test_packages import BROWSER
@@ -85,7 +86,7 @@ class InSetup(unittest.TestCase):
             self.assertTrue(page.locator("#setupSpacing").is_checked(), "as chosen, coming back")
             page.goto(srv.entry_url().replace("/#", "/downloads#", 1))
             page.wait_for_function("() => document.documentElement.dataset.font === 'dyslexic'")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.wait_for_function("() => document.querySelector('#setFont').value === 'dyslexic'", timeout=5000)   # and in Settings
             page.select_option("#setFont", "standard")
             page.wait_for_function("() => !document.documentElement.dataset.font")

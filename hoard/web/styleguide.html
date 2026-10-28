@@ -121,7 +121,7 @@
   </div>
   <div class="sg-ex on-ledge">
     <div class="shelf-tools" style="margin: 0"><label>Sort <select><option>Name</option><option>Creator</option><option>Store</option><option>Recently added</option></select></label>
-      <label class="stack-toggle"><input type="checkbox" checked> Stack copies</label></div>
+      <button class="ghost sm stack-toggle" aria-pressed="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="2"/><path d="M5 3.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 3v6a1.5 1.5 0 0 1-1.5 1.5H12"/></svg>Stack copies</button></div>
   </div>
   <div class="sg-ex on-ledge">
     <div class="projects"><label class="check"><input type="checkbox" checked> Offer prerelease versions of packages</label>
@@ -144,8 +144,10 @@
 <h2 class="sg-h" id="bar">Top bar and shelf</h2>
 <div class="sg-ex">
   <header class="bar">
-    <nav class="apptabs" aria-label="Views"><a href="#bar" aria-current="page">Library</a><a href="#bar">Downloads</a><a href="#bar">Local</a><a href="#bar">Sets</a><button>Tasks<span class="tab-n">2</span></button><button>Projects</button></nav>
-    <div class="tools"><button class="ghost">Tags</button><button class="ghost stores-btn">Stores<span class="warn-dot"></span></button><button class="ghost">Settings</button><button class="primary">Sync</button></div>
+    <div class="bar-side"><nav class="apptabs" aria-label="Your hoard"><a href="#bar" aria-current="page">Library</a><a href="#bar">Downloads</a><a href="#bar">Local</a></nav></div>
+    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg><input type="search" placeholder="Search your hoard" aria-label="Search your hoard"></label>
+    <div class="bar-side bar-end"><nav class="apptabs" aria-label="Sets, tasks and projects"><a href="#bar">Sets and Wishlists</a><button>Tasks<span class="tab-n">2</span></button><button>Projects</button></nav>
+      <div class="tools"><button class="ghost barmenu-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu<span class="warn-dot"></span></button><button class="primary">Sync</button></div></div>
   </header>
   <div class="shelf">
     <div class="seg" role="radiogroup" aria-label="Store"><button role="radio" aria-checked="false">Everything<span class="n">140</span></button><button role="radio" class="booth" aria-checked="true"><span class="dot booth"></span>Booth<span class="n">72</span></button><button role="radio" class="gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad<span class="n">41</span></button><button role="radio" class="jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy<span class="n">27</span></button><button role="radio" class="sets" aria-checked="false">Sets<span class="n">4</span></button></div>
