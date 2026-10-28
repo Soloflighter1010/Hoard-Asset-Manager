@@ -127,9 +127,9 @@ class Tour(unittest.TestCase):
         self.title(page, "Tags")
         page.fill("#tagInput", "tour-tag")
         page.locator('#detail [data-act="addtyped"]').click()
-        self.title(page, "Sets and wishlists")
+        self.title(page, "Sets and Wishlists")
         page.click('#stores [data-store="Sets"]')   # opened: its wishlists and Mix and match are shown there
-        self.title(page, re.compile(r"^Wishlists$"))   # (not "Sets and wishlists", which has_text would match too)
+        self.title(page, re.compile(r"^Wishlists$"))   # (not "Sets and Wishlists", which has_text would match too)
         self.nxt(page)
         self.title(page, "Mix and match")
         self.nxt(page)

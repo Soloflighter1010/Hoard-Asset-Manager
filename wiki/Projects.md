@@ -107,7 +107,7 @@ what it found. From there:
   tiles (with how each is in it, and which have updates), and its credits. Choose a tile to see the product in your
   library.
 - **Delete from this computer...**: the project's folder is deleted, and it's taken off the list. It's backed up into
-  your backups folder first, unless you untick that (without a backup, it can't be got back), and only once you've
+  your backups folder first, unless you untick that (without a backup, it can't be restored), and only once you've
   typed its name. Hoard won't delete a project Unity has open, or one that holds its own folders (the downloads
   folder, or your backups folder).
 

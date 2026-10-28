@@ -388,7 +388,7 @@ class InHoard(unittest.TestCase):
             page.goto(self.srv.entry_url())
             page.wait_for_function("() => localStorage.getItem('hoard-key')")
             page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
-            self.assertIn("Sets and wishlists", page.locator('#storeSeg [data-store="Sets"]').inner_text())
+            self.assertIn("Sets and Wishlists", page.locator('#storeSeg [data-store="Sets"]').inner_text())
             page.locator(".settile", has_text="Booth: Loved items").wait_for()
             self.assertEqual(page.locator("#count").inner_text(), "0 sets", "a wishlist is counted under Wishlists")
             page.locator(".settile", has_text="Booth: Loved items").click()

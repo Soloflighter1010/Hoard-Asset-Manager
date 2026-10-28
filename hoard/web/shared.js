@@ -2182,7 +2182,7 @@ async function pjBackupsDelete(paths) {
   const all = [...(PJ.backups.backups || []), ...(PJ.backups.moved || [])].filter(b => paths.includes(b.path));
   if (!all.length) { toast(tr("Choose the backups first.")); return; }
   const size = sizeText(all.reduce((t, b) => t + b.size, 0));
-  if (!await ask(tr(all.length === 1 ? "Delete {0} backup ({1})? It can't be got back." : "Delete {0} backups ({1})? They can't be got back.", all.length, size), tr("Delete"))) return;
+  if (!await ask(tr(all.length === 1 ? "Delete {0} backup ({1})? It can't be restored." : "Delete {0} backups ({1})? They can't be restored.", all.length, size), tr("Delete"))) return;
   const r = await apiPost("/api/vpm/backups/delete", { paths: all.map(b => b.path) });
   if (!r.ok) { toast(r.data.error || tr("They couldn't be deleted.")); return; }
   toast(tr(r.data.deleted === 1 ? "Deleted {0} backup, freeing {1}." : "Deleted {0} backups, freeing {1}.", r.data.deleted, sizeText(r.data.freed)));
@@ -2700,7 +2700,7 @@ async function pjDelete(p) {
   const shown = pjDialog(`<p><b>${esc(tr("Delete {0} from this computer?", p.name))}</b></p>` +
     `<p>${esc(tr("Its folder, and everything in it, is deleted:"))} <span translate="no">${esc(p.path)}</span></p>` +
     `<label class="check"><input type="checkbox" id="pjDelBackup" checked> ${esc(tr("Back it up first, into your backups folder"))}</label>` +
-    `<p class="hint">${esc(tr("Without a backup, it can't be got back."))}</p>` +
+    `<p class="hint">${esc(tr("Without a backup, it can't be restored."))}</p>` +
     `<p><label for="pjDelName">${esc(tr("Type its name to delete it: {0}", p.name))}</label></p>` +
     `<p><input id="pjDelName" autocomplete="off" spellcheck="false" translate="no" style="width:100%;box-sizing:border-box"></p>` +
     `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
@@ -2962,7 +2962,7 @@ function setsRoot() {
 }
 function setHead(s) {
   const c = setCounts(s);
-  return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and wishlists"))}</button>` +
+  return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
     `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
@@ -3770,9 +3770,9 @@ const TOUR_STEPS = [
     done: () => ((tourOpen() || {}).tags || []).length > TOUR.tags },
   { id: "sets", page: "downloads", at: () => $('#stores [data-store="Sets"]'),
     enter: () => T.closeDetail(),
-    title: () => tr("Sets and wishlists"),
+    title: () => tr("Sets and Wishlists"),
     body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a short link that shows what's in it and where to buy each, for 14 days. Hoard for Unity imports a whole set at once.")) +
-      " " + esc(tr("Try it: open Sets and wishlists.")),
+      " " + esc(tr("Try it: open Sets and Wishlists.")),
     done: inSets },
   // in the Sets tab, once it's open (else these two are passed by)
   { id: "wishlists", page: "downloads", at: () => { const b = $('[data-setx="readwish"]'); return b && b.closest(".sets-top"); }, when: inSets,

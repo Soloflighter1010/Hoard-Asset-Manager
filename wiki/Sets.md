@@ -6,8 +6,8 @@ someone shared with you lists what it needs, and where to buy each.
 
 ## The Sets tab
 
-**Sets and wishlists** (called **Sets** before 5.1) is a tab beside the stores, in the [Library](Library) and in
-[Downloads](Downloads), with a colour and a heart of its own (and **Sets and wishlists** in the bar at the top of every
+**Sets and Wishlists** (called **Sets** before 5.1) is a tab beside the stores, in the [Library](Library) and in
+[Downloads](Downloads), with a colour and a heart of its own (and **Sets and Wishlists** in the bar at the top of every
 page opens it in the Library). Each set is a big square tile: the picture you chose for it (see
 [Its picture](#its-picture)), or four of its products' pictures, with how many products it has and how many are
 downloaded, yours to download, or still to buy.

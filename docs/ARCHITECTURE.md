@@ -309,9 +309,9 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 
-## Sets and wishlists (`sets.py`, `wishlists.py`)
+## Sets and Wishlists (`sets.py`, `wishlists.py`)
 
-Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with sets, in **Sets and wishlists**.
+Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with sets, in **Sets and Wishlists**.
 
 - **A product's picture** in a set is `/setpic/<set>/<place>?p=<hash>` (`server.pic_for`: the first 12 hex digits
   of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture

@@ -9,7 +9,7 @@ from unittest import mock
 
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
-from hoard import config, downloader, server
+from hoard import config, downloader, library, server
 
 try:
     from tests.test_packages import BROWSER
@@ -96,6 +96,25 @@ class Tweaks(unittest.TestCase):
         self.assertEqual(appearance, "none", "the app's own arrow, not the system's")
         self.assertEqual(height, add.evaluate(look)[1], "as tall as Add")
         self.assertEqual(size, add.evaluate(look)[2], "the same size text as Add")
+
+    def test_the_librarys_set_picker_matches_its_theme(self):
+        """Issue #218: the Library page's "Add it to a set" was still the system's own grey dropdown, in every theme."""
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] = [library.item("booth", "1", name="Rusk", creator="Kitsu")]
+        self.addCleanup(lambda: self.srv.lib.data.update(items=[]))
+        for scheme in ("dark", "light"):
+            page = self.browser.new_page(viewport={"width": 1280, "height": 820}, color_scheme=scheme)
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.click()
+            pick, add = page.locator("#setPick"), page.locator("#detail [data-act='toset']")
+            pick.wait_for()
+            look = "e => { const c = getComputedStyle(e); return [c.appearance, c.height, c.fontSize, c.backgroundColor, c.color]; }"
+            appearance, height, size, back, ink = pick.evaluate(look)
+            stone, bone = page.evaluate("() => ['--stone', '--bone'].map(k => { const t = document.createElement('i'); "
+                                        "t.style.color = `var(${k})`; document.body.append(t); const c = getComputedStyle(t).color; t.remove(); return c; })")
+            self.assertEqual((appearance, back, ink), ("none", stone, bone), f"the theme's own colours ({scheme})")
+            self.assertEqual((height, size), tuple(add.evaluate(look)[1:3]), "as tall as Add, the same size text")
+            page.close()
 
     def test_the_task_log_keeps_its_place(self):
         """Every new line drew the Tasks panel again, and the log went back to the top."""
