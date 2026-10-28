@@ -22,6 +22,7 @@ from .project import TYPE_NAMES, UNKNOWN, summary
 
 STATE = "vpm-projects.json"
 MAX_PRELOADED = 500
+MAX_PROJECT_TAGS = 12   # a project's tags (issue #190), and its folder: Hoard's own, never the Creator Companion's
 _lock = threading.RLock()
 
 
@@ -87,6 +88,20 @@ def note(path: str, **changes) -> dict:
         return entry
 
 
+def organize(path: str, folder=None, tags=None) -> dict:
+    """Issue #190: the folder a project is kept in on Hoard's list, and its tags, as you name them (ALCOM and the
+    Creator Companion have only a favourite). folder: a name, or "" for none; tags: words, as tags are kept."""
+    from ..tags import clean_tag
+    changes: dict = {}
+    if folder is not None:
+        name = clean_text(folder if isinstance(folder, str) else "", 60)
+        changes["folder"] = name or None
+    if tags is not None:
+        kept = list(dict.fromkeys(t for t in (clean_tag(x) for x in (tags if isinstance(tags, list) else [])[:40]) if t))
+        changes["tags"] = kept[:MAX_PROJECT_TAGS] or None
+    return note(path, **changes)
+
+
 def forget(path: str) -> None:
     """Forget what Hoard noted about a project (a deleted one): its favourite, what was put in it, ..."""
     with _lock:
@@ -148,6 +163,8 @@ def projects() -> list[dict]:
             "favorite": bool(mine["favorite"]) if "favorite" in mine else record.get("Favorite") is True,
             "created": _ms(record.get("CreatedAt")) or None, "opened": opened or None,
             "preloaded": len(mine.get("preloaded") or []),
+            "folder": clean_text(mine.get("folder") if isinstance(mine.get("folder"), str) else "", 60) or None,   # (#190)
+            "tags": [t for t in mine.get("tags") or [] if isinstance(t, str)][:MAX_PROJECT_TAGS] if isinstance(mine.get("tags"), list) else [],
         })
     out.sort(key=lambda p: (p["opened"] or 0), reverse=True)
     return out

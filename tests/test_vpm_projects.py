@@ -195,6 +195,22 @@ class ProjectList(Temp):
         self.assertTrue(state["favorite"])
         self.assertEqual(len(state["preloaded"]), 1)
 
+    def test_folders_and_tags(self):
+        """Issue #190: a project's folder and tags on Hoard's list, as you name them; its favourite stays."""
+        self.vcc.mkdir()
+        project = str(self.project("Rusk"))
+        (self.vcc / "settings.json").write_text(json.dumps({"userProjects": [project]}))
+        listing.note(project, favorite=True)
+        listing.organize(project, folder="  Avatars <b>", tags=["Quest", "PC", "quest", "#", 5])
+        (got,) = listing.projects()
+        self.assertEqual((got["folder"], got["tags"], got["favorite"]), ("Avatars <b>", ["quest", "pc"], True))
+        listing.organize(project, tags=["winter"])
+        self.assertEqual(listing.projects()[0]["folder"], "Avatars <b>", "the folder stays as it was")
+        listing.organize(project, folder="", tags=[])
+        self.assertEqual((listing.projects()[0]["folder"], listing.projects()[0]["tags"]), (None, []))
+        listing.organize(project, tags=[f"t{n}" for n in range(30)])
+        self.assertEqual(len(listing.projects()[0]["tags"]), listing.MAX_PROJECT_TAGS)
+
 
 class Library(Temp):
     def asset(self, files: dict, **extra) -> dict:
