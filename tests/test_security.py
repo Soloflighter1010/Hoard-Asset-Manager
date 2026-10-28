@@ -188,6 +188,38 @@ class PublicOnlyFetching(unittest.TestCase):
                 m._PublicRedirects().redirect_request(urllib.request.Request("https://a.example/"), None, 302, "Found",
                                                       {}, "file:///etc/passwd")
 
+    def test_force_stop_cuts_a_quiet_connection(self):
+        """Issue #201: a store that sends part of a file and goes quiet kept a task waiting until its connection timed
+        out. Force stop cuts the connections its lane opened, so the wait ends at once."""
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        self.addCleanup(listener.close)
+        held = []
+
+        def serve():   # half a picture, then nothing
+            conn, _ = listener.accept()
+            held.append(conn)
+            conn.recv(4096)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 100000\r\n\r\n\x89PNG")
+        threading.Thread(target=serve, daemon=True).start()
+        self.addCleanup(lambda: [c.close() for c in held])
+        here = [(socket.AF_INET, ("127.0.0.1", listener.getsockname()[1]))]
+        got = []
+        with mock.patch.object(safety, "_public_addresses", lambda host, port: here):
+            reader = threading.Thread(target=lambda: got.append(safety.fetch_public("http://quiet.example/a.png", {}, 1 << 20, timeout=30)))
+            reader.start()
+            for _ in range(200):
+                if held and safety._open_connections.get("main"):
+                    break
+                time.sleep(0.02)
+            started = time.monotonic()
+            self.assertGreaterEqual(safety.cut_connections("main"), 1)
+            reader.join(5)
+        self.assertFalse(reader.is_alive(), "still waiting on the quiet store")
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(got, [None])
+
     def test_kept_to_its_sites_when_given_them(self):
         """A photo site's page is read from that site only: not a link elsewhere, and not after a redirect elsewhere."""
         for m in WEB_SAFETY:

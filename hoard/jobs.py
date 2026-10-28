@@ -14,14 +14,14 @@ from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, 
 from .safety import store_link
 from .tags import tag_key
 from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
-from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane
+from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane, stoppable
 from . import diagnostics
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, payhip_unread_note, sign_in_urls, unreachable_message
 from .net import is_network_error, plain_error, reachable
 from .paths import data_dir
 from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
-from .safety import DataFileError, read_json_file, write_file_safely
+from .safety import DataFileError, cut_connections, read_json_file, write_file_safely
 from .common import now_iso
 
 
@@ -482,7 +482,11 @@ class Jobs:
         set_lane(self.lane)   # (what this job says goes to its own lane's progress, not the other's)
         try:
             self._set(running=True)
-            fn(stores)
+            with stoppable(self.stop):   # (a wait in this job ends at once on Stop and Force stop: common.pause)
+                fn(stores)
+        except Cancelled:   # stopped where the job itself doesn't catch it (a wait, say): it says so as it ends
+            if not str(self.state.get("message") or "").startswith(("Stopped", "Force stopp")):
+                self._set(message="Stopped.")
         except (ProfileBusy, SigninsUnprotected) as e:
             diagnostic = diagnostics.record_exception(e, area="job", task=self.state.get("task"),
                                                        store=self.state.get("store"), include_traceback=False)
@@ -667,6 +671,11 @@ class Jobs:
             logbook.warning(f"{label}: stopped. What was being changed was put back as it was.")
             return
         except (ProjectsError, ResolveError, ProjectError, FetchError, ValueError, OSError) as e:
+            if self.stop.is_set():   # a download cut by Force stop: stopped, not failed (put back all the same)
+                self.stop.clear()
+                self._set(message="Stopped. What was being changed was put back as it was.")
+                logbook.warning(f"{label}: stopped. What was being changed was put back as it was.")
+                return
             why = str(e) if not isinstance(e, OSError) else f"That couldn't be done ({e.strerror or e})."
             self._set(message=why, error=why)
             logbook.error(f"{label}: {why}")
@@ -853,7 +862,10 @@ class Jobs:
         away; anything else ends at its next step (a thread can't be ended from outside). What finished is kept, and
         a file part way through resumes next time where it can. False when nothing is running."""
         if self.lane == PROJECTS:   # (the store browsers and a sign-in window are the main lane's: left alone)
-            return self._stop_project()
+            stopped = self._stop_project()
+            if stopped:
+                cut_connections(self.lane)   # a package download waiting on a quiet server ends now, and is put back
+            return stopped
         if not self.state["running"]:
             return False
         self._forced = True
@@ -864,6 +876,7 @@ class Jobs:
             window.end()
         stop_install()
         end_browsers()
+        cut_connections(self.lane)   # a download or a page read that's waiting on a quiet store ends now too
         return True
 
     def _stop_project(self) -> bool:

@@ -742,6 +742,56 @@ class JobQueue(unittest.TestCase):
         self.assertEqual(self.ran, ["x"])
 
 
+class ForceStop(unittest.TestCase):
+    """Issue #201: Stop and Force stop end a task at once, not after a wait it was in the middle of (between a store's
+    pages, before trying a download again), nor when a quiet store's connection times out."""
+
+    def setUp(self):
+        from unittest import mock
+        self.job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        self.job.history = []
+        self.waiting = threading.Event()
+
+        def fake(stores, only, keys=None, check=False, **_kw):   # a download waiting to try again, saying nothing
+            self.job._set(task="download", message="Booth: trying again in 30 s")   # (as _download says)
+            self.waiting.set()
+            common.pause(30)
+            self.job._set(message="it carried on after the wait")
+        for patch in (mock.patch.object(self.job, "_download", fake),
+                      mock.patch.object(jobs, "tasks_file", lambda: Path(tempfile.mkdtemp()) / "tasks.json"),
+                      mock.patch.object(jobs, "end_browsers", lambda: False), mock.patch.object(jobs, "stop_install", lambda: None)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def ends_within(self, seconds):
+        started = time.monotonic()
+        while self.job.state["running"]:
+            if time.monotonic() - started > seconds:
+                self.fail(f"still running {seconds} s later")
+            time.sleep(0.02)
+        return self.job.history[-1]
+
+    def test_force_stop_ends_a_wait(self):
+        self.assertEqual(self.job.start("download", ["booth"], only="x"), "started")
+        self.assertTrue(self.waiting.wait(5))
+        self.assertTrue(self.job.force_stop())
+        done = self.ends_within(2)
+        self.assertEqual(done["outcome"], "stopped")
+        self.assertTrue(done["message"].startswith("Force stopped"), done["message"])
+        self.assertNotIn("carried on", done["message"])
+
+    def test_stop_ends_a_wait_too(self):
+        self.assertEqual(self.job.start("download", ["booth"], only="x"), "started")
+        self.assertTrue(self.waiting.wait(5))
+        self.assertTrue(self.job.cancel())
+        self.assertEqual(self.ends_within(2)["outcome"], "stopped")
+
+    def test_outside_a_job_a_pause_is_a_wait(self):
+        started = time.monotonic()
+        common.pause(0.05)
+        self.assertGreaterEqual(time.monotonic() - started, 0.04)
+
+
 class Retries(unittest.TestCase):
     """Issue #19: a file download that fails is tried again (download_retries more times) before it counts as
     failed, unless trying again can't help."""

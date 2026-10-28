@@ -28,7 +28,7 @@ from urllib3.connection import HTTPSConnection
 from urllib3.connectionpool import HTTPSConnectionPool
 
 from .browser import _on_sites
-from .safety import _connect_public, move_into_place, open_part
+from .safety import _connect_public, move_into_place, note_connection, open_part
 
 try:
     from tqdm import tqdm
@@ -52,8 +52,10 @@ class _PublicConnection(HTTPSConnection):
     for the host name as usual."""
 
     def _new_conn(self):
-        """Connect to exactly the checked public address."""
-        return _connect_public(self._dns_host, self.port, self.timeout)
+        """Connect to exactly the checked public address (noted as this lane's, for Force stop)."""
+        sock = _connect_public(self._dns_host, self.port, self.timeout)
+        note_connection(self)
+        return sock
 
 
 class _PublicPool(HTTPSConnectionPool):

@@ -16,8 +16,10 @@ import stat
 import ssl
 import sys
 import tempfile
+import threading
 import time
 import unicodedata
+import weakref
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
@@ -341,6 +343,38 @@ def public_http_url(url: str) -> bool:
         return False
 
 
+_open_connections: dict = {}   # lane -> its connections to the stores and their pictures (WeakSet), for Force stop
+_open_lock = threading.Lock()
+
+
+def note_connection(conn) -> None:
+    """Remember a connection Hoard opened (to a store, or for a picture) as its lane's, so Force stop can cut it:
+    a socket, or a connection that keeps its socket as .sock (urllib3's, while its answer is read)."""
+    from .common import _this_lane
+    with _open_lock:
+        _open_connections.setdefault(_this_lane(), weakref.WeakSet()).add(conn)
+
+
+def cut_connections(lane: str) -> int:
+    """Force stop (issue #201): end every connection lane's job has open, so one waiting on a store that went quiet
+    (a download part way through, a page being read) ends at once instead of when it times out. Returns how many
+    were cut. (Shut down rather than closed: closing doesn't wake a thread waiting to read from it.)"""
+    with _open_lock:
+        conns = list(_open_connections.pop(lane, ()))
+    cut = 0
+    for conn in conns:
+        # (a connection's socket as it is now: wrapped for TLS once it connected)
+        sock = conn if isinstance(conn, socket.socket) else getattr(conn, "sock", None)
+        if sock is None:
+            continue
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+            cut += 1
+        except OSError:
+            pass   # already closed
+    return cut
+
+
 def _connect_public(host: str, port: int, timeout) -> socket.socket:
     """Connect to one of the public addresses host resolved to, using exactly the address that was checked.
 
@@ -367,6 +401,7 @@ class _PublicHTTPConnection(http.client.HTTPConnection):
     def connect(self):
         """Connect to a checked public address instead of looking the host up again."""
         self.sock = _connect_public(self.host, self.port, self.timeout)
+        note_connection(self.sock)   # (the socket: urllib lets go of the connection's once the answer starts)
 
 
 class _PublicHTTPSConnection(http.client.HTTPSConnection):
@@ -376,6 +411,7 @@ class _PublicHTTPSConnection(http.client.HTTPSConnection):
         """Connect to a checked public address, then start TLS for the original host name."""
         sock = _connect_public(self.host, self.port, self.timeout)
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        note_connection(self.sock)
 
 
 class _PublicHTTPHandler(urllib.request.HTTPHandler):
@@ -455,6 +491,9 @@ def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20,
             data = r.read(max_bytes + 1)
             if len(data) > max_bytes:
                 return None
+            length = (r.headers.get("Content-Length") or "").strip()
+            if length.isdigit() and len(data) < int(length):
+                return None   # cut short (a dropped connection, or Force stop): never kept as if it were the picture
             return data, r.headers.get_content_type()
     except urllib.error.HTTPError:
         return None   # the store said no (a picture that's gone): nothing to note

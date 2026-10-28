@@ -16,7 +16,7 @@ from urllib.parse import unquote, urljoin, urlparse
 import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context, settle
-from .common import NotLoggedIn, log, now_iso, tick
+from .common import NotLoggedIn, log, now_iso, pause, tick
 from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards, scroll_inventory
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
@@ -233,7 +233,7 @@ def worth_retrying(e: BaseException) -> bool:
     return status not in NO_RETRY_STATUS
 
 
-def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
+def with_retries(report: "Report", what: str, attempt, sleep=None):
     """attempt(), tried again (up to download_retries more times, waiting a little longer each time) when it fails
     in a way that might go differently next time: a dropped connection, a timeout, a busy server, a checksum that
     didn't match. The last failure is raised as it was. A download stopped with Stop still stops at once."""
@@ -246,7 +246,7 @@ def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
                 raise
             wait = RETRY_WAITS[min(n, len(RETRY_WAITS) - 1)]
             log(f"    {what}: {e} - trying again in {wait:.0f} s ({n + 1} of {tries})")   # Stop is noticed here
-            sleep(wait)
+            (sleep or pause)(wait)   # (and during the wait)
 
 
 def amount(n: int) -> str:
@@ -366,7 +366,7 @@ def _pause(dl, seconds: float) -> None:
     try:
         dl.page.wait_for_timeout(seconds * 1000)
     except Exception:
-        time.sleep(seconds)
+        pause(seconds)
 
 
 SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
@@ -609,7 +609,7 @@ class Gumroad:
 
     def page(self, url: str, params: dict | None = None) -> dict:
         """Load a Gumroad page and return its embedded page data (component and props)."""
-        time.sleep(self.delay)
+        pause(self.delay)
         r = egress.get(self.sess, url, STORE_SITES["gumroad"], params=params, timeout=60)
         if "/login" in urlparse(r.url).path:
             raise NotLoggedIn("Gumroad session expired")
@@ -1291,7 +1291,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
             reopened = 0
             for n, url in enumerate(links, 1):
                 tick(f"Jinxxy: item {n} of {len(links)}")   # Stop is noticed here, even when items fail fast
-                time.sleep(delay)
+                pause(delay)
                 for again in (False, True):
                     if page.is_closed():
                         if reopened >= REOPENS:
@@ -1606,7 +1606,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         report.saved("booth", name, f["name"] or guess)
                         got_any = True
                         man.checkpoint()
-                        time.sleep(delay)
+                        pause(delay)
 
                     if got_any and is_new_asset:
                         report.new_assets.append(f"Booth: {creator} / {name}")
@@ -1658,7 +1658,7 @@ def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
                 continue
             if removed_product("itch", name, report) or man.away(str(g["id"]), f"itch.io: {name}", report):
                 continue
-            time.sleep(delay)
+            pause(delay)
             try:
                 _itch_project(sess, k, g, name, creator, man, store_dir, cfg["itch"], args, report)
             except NotLoggedIn:

@@ -8,7 +8,6 @@ import json
 import os
 import re
 import threading
-import time
 import unicodedata
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -18,7 +17,7 @@ from urllib.parse import urlparse
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
 from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check, has_password_field, hops_text, settle
-from .common import NotLoggedIn, log, now_iso
+from .common import NotLoggedIn, log, now_iso, pause
 from .net import STORE_HOSTS, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
@@ -120,7 +119,7 @@ def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_pag
             if page_no >= pages:
                 break
             page_no += 1
-            time.sleep(delay)
+            pause(delay)
 
 
 def gumroad_page(profile_url, permalink) -> str | None:
@@ -274,7 +273,7 @@ def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[
             progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
             if not new:   # past the last page
                 break
-            time.sleep(delay)
+            pause(delay)
     return list(cards.values())
 
 
@@ -500,7 +499,7 @@ def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
             c["page"] = jinxxy_product_page(page.evaluate(JX_PRODUCT_JS), c.get("creator_url"))
         except Exception as e:   # (one page that won't open never stops the refresh)
             print(f"Jinxxy: couldn't read the product page of {c.get('name')!r}: {str(e)[:200]}", flush=True)
-        time.sleep(delay)
+        pause(delay)
 
 
 def jinxxy_key(c: dict) -> str:
@@ -662,7 +661,7 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
         if not result["next"] or result["next"] == url:
             break
         url = result["next"]
-        time.sleep(float(cfg.get("request_delay", 0.8)))
+        pause(float(cfg.get("request_delay", 0.8)))
     return list(cards.values())
 
 
