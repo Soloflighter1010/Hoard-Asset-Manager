@@ -236,6 +236,7 @@
 [data-style="workbench"] .pj-row { padding: 8px 12px; border-radius: 0; background: none; box-shadow: none; border-top: 1px solid var(--seam); }
 [data-style="workbench"] .pj-row:first-child { border-top: 0; }
 [data-style="workbench"] .pj-row:hover { background: var(--stone); }
+[data-style="workbench"] .pj-row[class*="k-"] { box-shadow: inset 3px 0 0 var(--c); }   /* (its kind's colour: #198) */
 [data-style="workbench"] .pj-pk { border: 1px solid var(--seam); border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; }
 [data-style="workbench"] .pj-pk td { padding: 5px 8px; }
 [data-style="workbench"] .pj-pk tr:first-child td { border-top: 0; }

@@ -66,7 +66,14 @@ class ProjectsPanel(unittest.TestCase):
         page = self.page
         rows = page.locator("#projectsBody .pj-row")
         self.assertEqual(rows.count(), 3)
-        self.assertIn("Avatars · Unity 2022.3.22f1", rows.nth(0).inner_text())
+        self.assertEqual(rows.nth(0).locator(".pj-chip").all_inner_texts(), ["Avatars", "Unity 2022.3.22f1"])
+        # issue #198: in the Library's colours: each kind of project its own, down its row's side and on its chip
+        self.assertIn("k-avatars", rows.nth(0).get_attribute("class"))
+        side, chip = page.evaluate("""() => { const r = document.querySelector('.pj-row.k-avatars');
+          return [getComputedStyle(r).boxShadow, getComputedStyle(r.querySelector('.pj-chip')).backgroundColor]; }""")
+        self.assertIn("inset", side)
+        self.assertNotIn(chip, ("rgba(0, 0, 0, 0)", "transparent"))
+        self.assertEqual(page.locator(".pj-tab .dot").count(), 5, "each tab its colour")
         self.assertIn("The folder isn't there", rows.nth(1).inner_text(), "a project whose folder has gone")
         self.assertIn("Opened in Unity with Hoard, not on the list", page.locator("#projectsBody").inner_text())
         self.assertIn("1 asset from Hoard", rows.nth(2).inner_text())
@@ -462,9 +469,12 @@ class ProjectsPanel(unittest.TestCase):
         tile = page.locator(".pj-part .pj-tile", has_text="Rusk")
         tile.wait_for()
         self.assertEqual(page.locator(".pj-part .pj-tile").count(), 1, "one tile a product")
+        self.assertIn("2 packages · just now", tile.inner_text())
+        self.assertEqual(tile.locator(".cr").inner_text(), page.evaluate("T.all().find(a => a.name === 'Rusk').creator"),
+                         "the Library's own tile (#198): its creator as the Library shows it")
+        tile.locator(".pj-files summary").click()   # its packages, in its details
         self.assertIn("rusk.unitypackage", tile.inner_text())
         self.assertIn("rusk-quest.unitypackage", tile.inner_text())
-        self.assertIn("just now", tile.inner_text())
         self.assertEqual(tile.locator(".pj-file", has_text="rusk.unitypackage").first.get_attribute("title"), "Added: Assets/Rusk")
         # Escape, while choosing, goes back too
         page.click("[data-pj=addprod]")

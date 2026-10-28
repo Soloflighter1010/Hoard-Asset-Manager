@@ -2117,5 +2117,6 @@
  "Finding Unity's tools...": "Unity 도구를 찾는 중...",
  "Reading your library: {0} of {1}": "라이브러리 읽는 중: {0} / {1}",
  "Looking at what's downloaded: {0} of {1}": "다운로드한 것 살피는 중: {0} / {1}",
- "Reading your projects: {0} of {1}": "프로젝트 읽는 중: {0} / {1}"
+ "Reading your projects: {0} of {1}": "프로젝트 읽는 중: {0} / {1}",
+ "1 package": "패키지 1개"
 }

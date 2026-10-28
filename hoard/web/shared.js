@@ -2269,6 +2269,11 @@ const PJ_WHY = { requested: "Removed", legacy: "Replaced by a newer package", un
 const PROJECT_STATUS = { yes: "In the project", partly: "Partly in the project", imported: "Imported, not found now" };
 const CREDIT_STYLES = { List: "List", Markdown: "Markdown", ByCreator: "By creator" };
 const pjKind = n => tr(PJ_KINDS[n] || "Unknown");
+// issue #198: Projects in the Library's colours: each kind of project a colour of its own (avatars, worlds, others),
+// shown down its row's side and on its chip, with its Unity beside it
+const pjHue = n => [3, 5, 8].includes(n) ? "avatars" : [2, 4, 7].includes(n) ? "worlds" : "other";
+const pjChips = p => `<span class="pj-chip k-${pjHue(p.type)}">${esc(pjKind(p.type))}</span>` +
+  (p.unity ? ` <span class="pj-chip unity" translate="no">Unity ${esc(p.unity)}</span>` : "");
 const pjQ = path => `?path=${encodeURIComponent(path)}`;
 function openProjects(open) {   // Projects takes the whole window below the bar, until it's closed
   const w = $("#projectsWin"), show = open ?? w.hidden;
@@ -2329,7 +2334,7 @@ function drawProjects() {
 // Projects' views, as tabs along its top; a project, a new one, and Add packages open below them, with a way back
 const PJ_TABS = [["list", "Projects"], ["repos", "Repositories"], ["backups", "Backups"], ["settings", "Unity and folders"], ["logs", "Logs"]];
 const pjTabs = () => `<nav class="pj-tabs" aria-label="${esc(tr("Projects"))}">${PJ_TABS.map(([v, label]) =>
-  `<button class="pj-tab" data-pj="${v === "list" ? "back" : v}"${PJ.view === v ? ' aria-current="page"' : ""}>${esc(tr(label))}</button>`).join("")}</nav>`;
+  `<button class="pj-tab t-${v}" data-pj="${v === "list" ? "back" : v}"${PJ.view === v ? ' aria-current="page"' : ""}><span class="dot" aria-hidden="true"></span>${esc(tr(label))}</button>`).join("")}</nav>`;
 // What Projects' own lane is doing now, above every view: its task, with Stop (what it was changing is put back)
 function pjShowJob() {
   const box = $("#pjJob"), j = PJ.job || {};
@@ -2357,12 +2362,12 @@ function pjList() {
   const tags = p => (p.tags || []).length ? `<span class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
     `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</span>` : "";
   return top + note + pjFolderBar(list) + (shown.length ? "" : `<p class="none">${esc(tr("No projects here."))}</p>`) +
-    `<ul class="pj-list">${[...fav, ...rest].map(p => `<li class="pj-row${p.exists ? "" : " gone"}" data-path="${esc(p.path)}" ` +
+    `<ul class="pj-list">${[...fav, ...rest].map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}" data-path="${esc(p.path)}" ` +
     `data-hay="${esc(norm([p.name, p.path, p.folder || "", ...(p.tags || [])].join(" ")))}">` +
     `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
     `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span>${tags(p)}</span>` +
     `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
-      `${p.exists ? `${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}` +
+      `${p.exists ? `${pjChips(p)}` +
       `${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
     `<span class="pj-acts">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
       `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>`
@@ -2486,7 +2491,7 @@ function pjProject() {
       (pre.length ? pjPutInTiles(pre) : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`),
     report: () => pjReport(p.report) };
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
-    `<p class="pj-facts">${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}</p>` +
+    `<p class="pj-facts">${pjChips(p)}</p>` +
     (p.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it before changing packages, so nothing it has open is replaced under it."))}</p>` : "") +
     `<div class="row">${unity}<button class="ghost sm" data-pj="folder">${esc(tr("Open folder"))}</button>` +
     `<button class="ghost sm" data-pj="backup">${esc(tr("Back up"))}</button>` +
@@ -2587,8 +2592,8 @@ function pjTile(item, known, below) {
   const fromKey = String(known.tag_key || "").split("/")[0];   // (one not in your library now: its store, from its key)
   const store = String((item || known).store || (STRIPE_STORES.includes(fromKey) ? fromKey : "local")).toLowerCase();
   const inner = `<span class="art">${item ? T.art(item) : setPlaceholder(name, creator)}${notch(store, [])}</span>` +
-    `<span class="nm-t" translate="no">${esc(name)}</span><span class="cr" translate="no">${esc(creator ? tr("by {0}", creator) : "")}</span>`;
-  return `<div class="slot ext pj-tile">` + (item ? `<button class="ext-main" data-pj="showitem" data-id="${esc(T.id(item))}">${inner}</button>`
+    `<span class="nm-t" translate="no">${esc(name)}</span><span class="cr" translate="no">${esc(creator)}</span>`;   // (as the Library's: #198)
+  return `<div class="slot ext pj-tile ${esc(store)}">` + (item ? `<button class="ext-main" data-pj="showitem" data-id="${esc(T.id(item))}">${inner}</button>`
     : `<span class="ext-main">${inner}</span>`) + (below ? `<span class="pj-below">${below}</span>` : "") + `</div>`;
 }
 // What went into a project from your library, newest first: a tile for each product, with its files and when beneath
@@ -2597,9 +2602,10 @@ function pjPutInTiles(pre) {
   const items = pjItemsByKey(), by = new Map();
   for (const x of pre) { if (!by.has(x.tag_key)) by.set(x.tag_key, []); by.get(x.tag_key).push(x); }
   return `<div class="grid pj-tiles">${[...by.values()].map(xs => pjTile(items.get(xs[0].tag_key), xs[0],
-    xs.slice(0, 3).map(x => `<span class="pj-file" translate="no"${(x.added || []).length ? ` title="${esc(tr("Added:") + " " + x.added.join(", "))}"` : ""}>${esc(x.label || x.file)}</span>`).join("") +
-    (xs.length > 3 ? `<span class="muted">${esc(tr("{0} more", xs.length - 3))}</span>` : "") +
-    (xs[0].when ? `<span class="muted">${esc(ago(xs[0].when))}</span>` : ""))).join("")}</div>`;
+    `<details class="pj-files"><summary>${esc(tr(xs.length === 1 ? "1 package" : "{0} packages", xs.length))}` +
+      `${xs[0].when ? ` · ${esc(ago(xs[0].when))}` : ""}</summary>` +
+    xs.map(x => `<span class="pj-file" translate="no"${(x.added || []).length ? ` title="${esc(tr("Added:") + " " + x.added.join(", "))}"` : ""}>${esc(x.label || x.file)}</span>`).join("") +
+    `</details>`)).join("")}</div>`;
 }
 function pjReport(p) {
   const used = p.assets.length, style = p.credits.style, items = pjItemsByKey();
