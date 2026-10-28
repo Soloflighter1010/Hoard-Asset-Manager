@@ -72,21 +72,36 @@ GR_LIBRARY = "https://app.gumroad.com/library"
 def extract_page_json(text: str):
     """The page data Gumroad embeds in its HTML (component and props), or None. (Reading the library and
     downloading both use this.)"""
-    m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
-    if m:
-        return json.loads(m.group(1))
+    found = next((inside for attrs, inside in script_tags(text) if re.search(r'\bdata-page="app"', attrs)), None)
+    if found is not None:
+        return json.loads(found)
     m = re.search(r'\bdata-page="(\{[^"]*)"', text)
     if m:
         return json.loads(html.unescape(m.group(1)))
     # Older react-on-rails markup, kept as a fallback
     best = None
-    for m in re.finditer(r'<script[^>]*js-react-on-rails-component[^>]*data-component-name="([^"]+)"[^>]*>(.*?)</script>',
-                         text, re.S):
-        if best is None or len(m.group(2)) > len(best[1]):
-            best = (m.group(1), m.group(2))
+    for attrs, inside in script_tags(text):
+        m = re.search(r'data-component-name="([^"]+)"', attrs) if "js-react-on-rails-component" in attrs else None
+        if m and (best is None or len(inside) > len(best[1])):
+            best = (m.group(1), inside)
     if best:
         return {"component": best[0], "props": json.loads(best[1])}
     return None
+
+
+def script_tags(text: str):
+    """Each <script ...>...</script> in a page, in order: (its opening tag's attributes, what's inside it). Found by
+    looking for each one's ends, reading the page once: a regular expression for them (<script[^>]*...>(.*?)</script>)
+    took time growing with the square of a page's length when it had many <script tags left open, as a saved page
+    you import might (45 seconds for 70 KB)."""
+    start = text.find("<script")
+    while start != -1:
+        tag_end = text.find(">", start)
+        close = text.find("</script>", tag_end) if tag_end != -1 else -1
+        if close == -1:
+            return
+        yield text[start + len("<script"):tag_end], text[tag_end + 1:close]
+        start = text.find("<script", close + len("</script>"))
 
 
 def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None):

@@ -1761,6 +1761,46 @@ class CodeScanningFindings(unittest.TestCase):
                 srv.shutdown()
                 srv.server_close()
 
+    def test_a_pages_script_tags_are_read_in_one_pass(self):
+        """Alerts 52, 53 (October 2026): a saved page full of unclosed <script tags is read quickly. The expressions
+        it replaced (<script[^>]*...>(.*?)</script>) took 45 seconds on a 70 KB page like these."""
+        started = time.monotonic()
+        for page in ("<script js-react-on-rails-component" * 20000, "<script" * 50000,
+                     '<script data-page="app">' * 20000, "<script>" + "</scrip" * 50000):
+            self.assertIsNone(library.extract_page_json(page))
+        self.assertLess(time.monotonic() - started, 1)
+        app = '<script>other()</script><script type="x" data-page="app">{"component": "Library"}</script>'
+        self.assertEqual(library.extract_page_json(app), {"component": "Library"})
+        self.assertIsNone(library.extract_page_json('<script xdata-page="app">{}</script>'), "the attribute, not part of one")
+        rails = ('<script class="js-react-on-rails-component" data-component-name="Small">{"a": 1}</script>'
+                 '<script data-component-name="Big" class="js-react-on-rails-component">{"a": 1, "b": 2}</script>'
+                 '<script data-component-name="NotRails">{"a": 1, "b": 2, "c": 3}</script>')
+        self.assertEqual(library.extract_page_json(rails), {"component": "Big", "props": {"a": 1, "b": 2}}, "its largest")
+        self.assertEqual(list(library.script_tags('<p><script a=1>x</script><script>y</script><script>z')),
+                         [(" a=1", "x"), ("", "y")], "an unclosed last tag is left out")
+
+    def test_a_products_page_is_read_from_its_store_only(self):
+        """Alert 38 (October 2026): Add products by link reads a page at an address put back together from the link's
+        host and path, each checked where the address is made: the store's site or a creator's on it, and a page's
+        path, whatever was pasted."""
+        from hoard import wishlists
+        for store, url in (("gumroad", "https://mochi.gumroad.com/l/snowcap"), ("gumroad", "https://gumroad.com/l/snowcap"),
+                           ("jinxxy", "https://jinxxy.com/Kitsu/Tail"), ("jinxxy", "https://www.jinxxy.com/Kitsu/Tail"),
+                           ("payhip", "https://payhip.com/b/AbC12"), ("itch", "https://kitsu.itch.io/tail-pack")):
+            self.assertEqual(wishlists.page_address(store, url), url, url)
+        for store, url in (("gumroad", "https://evil.example/l/x"), ("gumroad", "https://gumroad.com.evil.example/l/x"),
+                           ("gumroad", "https://a.b.gumroad.com/l/x"),
+                           ("itch", "https://itch.io/x"), ("itch", "https://kitsu.itch.io/"), ("jinxxy", "https://jinxxy.com/a/b/c"),
+                           ("jinxxy", "https://jinxxy.com/a%2F..%2Fb"), ("booth", "https://booth.pm/en/items/1")):
+            self.assertIsNone(wishlists.page_address(store, url), url)
+        self.assertEqual(wishlists.page_address("payhip", "https://payhip.com/b/x?next=https://evil.example#y"),
+                         "https://payhip.com/b/x", "only the host and path")
+        self.assertEqual(wishlists.page_address("gumroad", "https://x:y@mochi.gumroad.com/l/x"), "https://mochi.gumroad.com/l/x")
+        asked = []
+        with self.assertRaises(wishlists.LinkError):
+            wishlists.from_product_page("https://Kitsu.itch.io/tail-pack/", lambda url, hosts: asked.append(url))
+        self.assertEqual(asked, ["https://kitsu.itch.io/tail-pack"], "the address as Hoard put it together")
+
 
 if __name__ == "__main__":
     unittest.main()

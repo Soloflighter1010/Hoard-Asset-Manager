@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import time
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
 from .browser import goto, goto_past_check, has_password_field, settle
 from .common import NotLoggedIn
@@ -112,6 +112,11 @@ def _store_of(url: str) -> str | None:
 # each store's own site, which a product's page may send you on to (besides the page's own host, a creator's)
 LINK_HOSTS = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com", "www.jinxxy.com"),
               "payhip": ("payhip.com", "www.payhip.com"), "itch": ()}
+# where a product's page is read from (Booth's item JSON is read from booth.pm itself): the store's own site, or a
+# creator's one level under it
+PAGE_SITES = {"gumroad": r"(?:[a-z0-9-]{1,63}\.)?gumroad\.com", "jinxxy": r"(?:www\.)?jinxxy\.com",
+              "payhip": r"(?:www\.)?payhip\.com", "itch": r"[a-z0-9-]{1,63}\.itch\.io"}
+_PAGE_PATH = r"(?:/[A-Za-z0-9_.~-]{1,120}){1,2}"
 MAX_PRODUCT_PAGE = 3 * 1024 * 1024
 
 
@@ -147,7 +152,8 @@ def from_product_page(link: str, fetch) -> dict:
         pics = [x.get("original") or x.get("resized") for x in data.get("images") or [] if isinstance(x, dict)]
         return product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
                        url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
-    got = fetch(url, tuple(dict.fromkeys((host,) + LINK_HOSTS[store])))
+    address = page_address(store, url)
+    got = fetch(address, tuple(dict.fromkeys((host,) + LINK_HOSTS[store]))) if address else None
     if not got or "html" not in got[1]:
         raise LinkError("its page couldn't be read")
     page = got[0]
@@ -165,6 +171,17 @@ def from_product_page(link: str, fetch) -> dict:
     if price is None and amount not in (None, "") and str(amount).strip() in ("0", "0.0", "0.00"):
         price = {"text": "Free", "amount": 0.0, "currency": ""}
     return product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+
+
+def page_address(store: str, url: str) -> str | None:
+    """Where a product's page is read from, or None: put back together from its link's host and path, each checked
+    here, where the address is made, to be the store's site or a creator's on it (PAGE_SITES) and a page's path. So
+    the request only ever asks the store, whatever was pasted (product_link has checked the link once already)."""
+    parts = urlsplit(url)
+    host, path = parts.hostname or "", parts.path
+    if store in PAGE_SITES and re.fullmatch(PAGE_SITES[store], host) and re.fullmatch(_PAGE_PATH, path):
+        return f"https://{host}{path}"
+    return None
 
 
 def _meta(page: str, prop: str) -> str:
