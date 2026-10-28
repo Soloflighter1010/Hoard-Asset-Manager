@@ -1101,13 +1101,17 @@ class Handler(BaseHTTPRequestHandler):
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 
     def _add_links(self, sid: str, links):
-        """Products added to a set or wishlist by their store links (at most 30): each one's public page read
-        (wishlists.from_product_page), what was added and what wasn't, and why."""
+        """Products added to a wishlist by their store links (at most 30): each one's public page read
+        (wishlists.from_product_page), what was added and what wasn't, and why. A set is made from what's in your
+        library, so it isn't added to by link (issue #208)."""
         from . import wishlists
         if not isinstance(links, list) or not links:
             return self._json({"error": "Paste a product's link."}, 400)
-        if not any(x["id"] == sid for x in sets.SetStore().load()["sets"]):
+        found = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+        if not found:
             return self._json({"error": "That set isn't there anymore."}, 404)
+        if found.get("kind") != "wishlist":
+            return self._json({"error": "Products are added by link to wishlists. A set is made from what's in your library."}, 400)
         got, said = [], []
         for link in [str(x)[:2000] for x in links[:30]]:
             try:

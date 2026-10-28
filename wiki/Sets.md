@@ -13,7 +13,8 @@ page opens it in the Library). Each set is a big square tile: the picture you ch
 downloaded, yours to download, or still to buy.
 
 Sets are chosen as products are (**Select**, or Ctrl- or Shift-click). Right-click a set, or use the selection bar,
-for **Open**, **Share...**, **Download the N not downloaded**, **Choose a picture...**, **Rename** and **Delete**;
+for **Open**, **Share...**, **Download the N not downloaded**, **New project with this set...** (5.2.0: Projects'
+**New project**, with what's downloaded of the set already in it), **Choose a picture...**, **Rename** and **Delete**;
 with several chosen, **Download** and **Delete** work on them all.
 
 Open a set and it's a folder of its products. **Sets** above its name goes back to every set.
@@ -26,7 +27,7 @@ Open a set and it's a folder of its products. **Sets** above its name goes back 
   also **In your library, not downloaded**, which opens it in the Library. **×** takes one out of the set.
 
 A set also has **Share...**, **Download the N not downloaded** (every product of it that's yours and not downloaded,
-at once, as **Download** does in the Library), **Choose a picture...**, **Rename** and **Delete** (deleting a set
+at once, as **Download** does in the Library), **New project with this set...**, **Choose a picture...**, **Rename** and **Delete** (deleting a set
 leaves its products as they are), and under **Note and photos** (open to begin with) a **Note** (what it's for, or
 how to put it together) and **Photos** (below).
 
@@ -40,7 +41,8 @@ how to put it together) and **Photos** (below).
 - A product's details, in the Library or in Downloads, list its sets: **Add** puts it in another, **×** takes it
   out, and a set's name opens it in the Sets tab.
 - **Make a set** in **Projects** makes one of the products a Unity project uses.
-- **Add products by link...**, in an open set or wishlist (from 5.1): paste products' links on Booth, Gumroad,
+- **Add products by link...**, in an open wishlist (from 5.1; from 5.2.0 on wishlists only, as a set is made from
+  what's in your library): paste products' links on Booth, Gumroad,
   Jinxxy, Payhip or itch.io, one a line. Hoard reads each one's page as anyone sees it (no sign-in is sent), from the
   store's own site, for its name, creator, price and picture, and adds it, owned or not. A link that isn't a
   product's page, or whose page can't be read, is left out, and Hoard says why.

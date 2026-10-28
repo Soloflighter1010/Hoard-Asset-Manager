@@ -542,6 +542,28 @@ class ProjectsPanel(unittest.TestCase):
         page.locator("#projectsWin #pjName").wait_for()
         self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "already in the new project")
 
+    def test_a_new_project_with_a_set(self):
+        """Issue #195: a set's right-click menu, and its own page, offer New project with this set..., which opens New
+        project with what's downloaded of the set in it. Issue #208: a set's page doesn't offer Add products by link
+        (a wishlist's does: test_wishlists)."""
+        page = self.page
+        page.keyboard.press("Escape")
+        page.locator("#projectsWin").wait_for(state="hidden")
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        key = page.evaluate("DATA.items.find(a => a.name === 'Rusk').tag_key")
+        page.evaluate(post, ["/api/sets", {"action": "create", "name": "Rusk outfit", "items": [key]}])
+        page.evaluate("load()")
+        page.click("nav.apptabs a[href='/#store=Sets']")
+        tile = page.locator("#setView .settile", has_text="Rusk outfit")
+        tile.click()
+        page.locator('[data-setx="project"]').wait_for()
+        self.assertEqual(page.locator('[data-setx="addlinks"]').count(), 0, "a set: no Add products by link")
+        page.click('[data-setx="back"]')
+        tile.click(button="right")
+        page.locator(".selmenu [role=menuitem]", has_text="New project with this set...").click()
+        page.locator("#projectsWin #pjName").wait_for()
+        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "the set's product, in it")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3335,7 +3335,8 @@ function setHead(s) {
         `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
       (s.note ? `<p class="setnote" translate="no">${esc(s.note)}</p>` : "") +
       `<div class="row"><button class="primary sm" data-setx="share">Share...</button>` +
-      `<button class="ghost sm" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>` +
+      (isWish(s) ? `<button class="ghost sm" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>` : "") +   // (a set: from your library, #208)
+      (setDownloaded(s).length ? `<button class="ghost sm" data-setx="project">${esc(tr("New project with this set..."))}</button>` : "") +
       (c.owned ? `<button class="ghost sm" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>` : "") +
       `<button class="ghost sm" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>` +
       (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
@@ -3630,6 +3631,13 @@ async function shareSet(s) {
   showShare(s, r.data);
 }
 const notDownloaded = list => [...new Set(list.flatMap(s => s.items.filter(i => i.owned && i.download == null).map(i => i.key)))];
+// what of a set is downloaded, as New project with these takes products (issue #195)
+const setDownloaded = s => (s && s.items || []).filter(i => i.download != null).map(i => ({ tag_key: i.key, name: i.name }));
+function newProjectWithSet(s) {   // Projects' New project, with the set's downloaded products in it
+  const list = setDownloaded(s);
+  if (!list.length) { toast(tr("Nothing in {0} is downloaded yet.", s.name)); return; }
+  return newProjectWith(list);
+}
 async function setPicture(s) {
   const image = await choosePicture();
   if (image && await changeSets({ action: "picture", id: s.id, image })) toast("Its tile shows that picture now.");
@@ -3663,6 +3671,7 @@ const SET_TILE_ACTIONS = () => {
     ...(one ? [{ label: "Open", run: list => showSet(list[0].id) }, { label: "Share...", run: list => shareSet(list[0]) }] : []),
     ...(missing.length ? [{ label: tr(missing.length === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", missing.length),
                             raw: true, run: list => T.download(notDownloaded(list)) }] : []),
+    ...(one && setDownloaded(got[0]).length ? [{ label: "New project with this set...", run: list => newProjectWithSet(list[0]) }] : []),
     ...(one ? [{ label: "Choose a picture...", run: list => setPicture(list[0]) }, { label: "Rename", run: list => renameSet(list[0]) }] : []),
     { label: one ? "Delete" : "Delete these sets", danger: true, run: deleteSets }] }] };
 };
@@ -3705,6 +3714,7 @@ async function setAct(e) {
     return wishChanged();
   }
   if (act === "addlinks") return addByLinks(s);
+  if (act === "project") return newProjectWithSet(s);
   if (act === "share") shareSet(s);
   else if (act === "download") { const keys = notDownloaded([s]); if (keys.length) T.download(keys); }
   else if (act === "picture") setPicture(s);

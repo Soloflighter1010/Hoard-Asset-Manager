@@ -693,6 +693,10 @@ class Tab(unittest.TestCase):
         self.assertEqual((items["Snow Cap"]["price"]["amount"], items["Snow Cap"]["creator"]), (12.5, "Mochi"))
         self.assertEqual(items["Tail Pack & More"]["creator"], "kitsu")
         self.assertTrue(all(i["pic"] for i in items.values()), "each with its picture, from its store's own image host")
+        # a set is made from your library: it isn't added to by link (issue #208)
+        own = self.api("/api/sets", {"action": "create", "name": "Mine", "items": [RUSK]})["made"]
+        refused = self.api("/api/sets", {"action": "add-links", "id": own, "links": ["https://booth.pm/en/items/4242"]})
+        self.assertIn("added by link to wishlists", refused.get("error", ""))
 
     def test_hidden_products_stay_out_while_locked(self):
         secret = tag_key("booth", "Secret Thing")
