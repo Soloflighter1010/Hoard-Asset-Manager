@@ -52,7 +52,14 @@
 [data-style="treasure"] .art { border-radius: 18px; }
 [data-style="treasure"] .slot.stacked .art > img, [data-style="treasure"] .slot.stacked .art > .ph { border-radius: 18px; }
 [data-style="treasure"] .notch { top: 0; height: auto; border-radius: inherit; background: none; box-shadow: inset 0 0 0 3px var(--c); pointer-events: none; }
-[data-style="treasure"] .notch.dup { background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px) bottom / 100% 7px no-repeat; }
+/* something you own on more than one store (issue #193): the frame itself striped in both stores' colours, all the way
+   round, rather than a band of stripes along the bottom with the first store's frame drawn over it. (A ring of its own,
+   so the store's tag inside the frame isn't masked away with the middle.) */
+[data-style="treasure"] .notch.dup { box-shadow: none; }
+[data-style="treasure"] .notch.dup::after { content: ""; position: absolute; inset: 0; padding: 3px; border-radius: inherit;
+  background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
 [data-style="treasure"] .notch[data-s]::before { content: attr(data-s); position: absolute; left: 9px; top: 9px; max-width: calc(100% - 52px);
   padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave); font: 700 10.5px/1.5 var(--body); letter-spacing: .06em;
   text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

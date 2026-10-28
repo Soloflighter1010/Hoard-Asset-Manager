@@ -162,6 +162,35 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class OwnedTwiceInTreasure(unittest.TestCase):
+    def test_the_frame_is_striped(self):
+        """Issue #193: in Treasure, something you own on two stores had a band of both stores' stripes along the bottom,
+        with the first store's frame drawn over half of it. Its frame is striped in both colours, all the way round,
+        and the store's tag inside it still shows."""
+        from playwright.sync_api import sync_playwright
+        srv = Chosen.serve(self, {"setup_done": True, "display": {"style": "treasure"}, "ui": {"toured": True, "stack": False}}, items=False)
+        from hoard import library
+        with srv.lib.lock:
+            srv.lib.data["items"] = [library.item("jinxxy", "1", name="Belly Fluff", creator="Neomi"),
+                                     library.item("gumroad", "2", name="Belly Fluff", creator="Neomi")]
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(srv.entry_url())
+            notch = page.locator("#grid .notch.dup").first
+            notch.wait_for(state="attached")
+            got = notch.evaluate("""n => { const a = getComputedStyle(n, '::after'), own = getComputedStyle(n),
+                                              tag = getComputedStyle(n, '::before');
+              return { ring: a.backgroundImage, mask: a.maskComposite || a.webkitMaskComposite, inset: a.inset, pad: a.paddingTop,
+                       frame: own.boxShadow, tag: tag.content }; }""")
+            self.assertIn("repeating-linear-gradient", got["ring"])
+            self.assertIn(got["mask"].split(",")[0].strip(), ("exclude", "xor"))   # (one per mask layer)
+            self.assertEqual((got["inset"], got["pad"], got["frame"]), ("0px", "3px", "none"), "a 3px ring all round, no other frame")
+            self.assertIn(got["tag"].strip('"'), ("JINXXY", "GUMROAD", "jinxxy", "gumroad", "Jinxxy", "Gumroad"))
+            browser.close()
+
+
 class CardOutlines(unittest.TestCase):
     """Issue #222 (Settings, Accessibility): each product's card can have an outline and a faint background of its own,
     so it stands apart from the page, everywhere cards show, in every style and theme. Kept as display.card_outlines,
