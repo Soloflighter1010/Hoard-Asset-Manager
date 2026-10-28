@@ -5,6 +5,13 @@
 .row-meta, .d-stats { display: none; }
 .local { --c: var(--local); }
 
+/* Settings, Accessibility: make product cards distinct in every theme and page layout. */
+[data-outlined-cards="true"] :is(.slot, .settile) {
+  background: color-mix(in srgb, var(--cave) 94%, var(--bone));
+  box-shadow: inset 0 0 0 1px var(--seam);
+  border-radius: 10px;
+}
+
 /* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */
 .style-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 6px 0 12px; }
 .style-choice { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; cursor: pointer;

@@ -118,6 +118,7 @@ def display_settings(cfg: dict) -> dict:
             "glow": d.get("glow") is not False,
             # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
             "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
+            "outlined_cards": bool(d.get("outlined_cards")),
             "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
             "custom_colours": custom_colours(d.get("custom_colours")),
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
@@ -316,7 +317,7 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing") if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "outlined_cards") if k in given})
         if "font" in given:
             if given["font"] not in FONTS:
                 raise ValueError("Choose a font from the list.")
@@ -2216,6 +2217,8 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     page = page.replace(b"</head>", looks.encode() + style.encode() + b"</head>", 1)
     # the font, spacing (Settings, Accessibility) and style (Appearance) you chose, on the page from its first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
+    if d.get("outlined_cards") is True:
+        marks += ' data-outlined-cards="true"'
     if themes.style_id(d.get("style")) != "standard":
         marks += f' data-style="{themes.style_id(d.get("style"))}"'
     if marks:

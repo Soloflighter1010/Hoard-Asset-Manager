@@ -384,6 +384,7 @@ function applyDisplay(d) {
   const html = document.documentElement;   // easier reading (the page is served with them: this is for a change)
   if (d.font === "dyslexic") html.dataset.font = "dyslexic"; else delete html.dataset.font;
   if (d.spacing) html.dataset.spacing = "wide"; else delete html.dataset.spacing;
+  if (d.outlined_cards) html.dataset.outlinedCards = "true"; else delete html.dataset.outlinedCards;
   document.body.classList.toggle("no-glow", d.glow === false);
   const root = document.documentElement;
   if (d.colours === "standard" || !d.colours) delete root.dataset.colours; else root.dataset.colours = d.colours;
@@ -1147,6 +1148,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setMotion").checked = SETTINGS.display.reduce_motion;
   $("#setFont").value = SETTINGS.display.font || "standard";
   $("#setSpacing").checked = !!SETTINGS.display.spacing;
+  $("#setOutlinedCards").checked = !!SETTINGS.display.outlined_cards;
   $("#setGlowOn").checked = SETTINGS.display.glow;
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
@@ -1457,6 +1459,7 @@ function settingsPart(el) {
     case "setColours": return { display: { colours: el.value } };
     case "setFont": return { display: { font: el.value } };
     case "setSpacing": return { display: { spacing: el.checked } };
+    case "setOutlinedCards": return { display: { outlined_cards: el.checked } };
     case "setTextSize": case "setPause": case "setMotion":
       return { display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
                           reduce_motion: $("#setMotion").checked } };
