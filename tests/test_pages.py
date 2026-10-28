@@ -258,6 +258,9 @@ class AccessKey(unittest.TestCase):
             page.click("#grid .slot")
             self.assertIn("Rusk_v2.zip", page.locator("#detail .update").inner_text())
             page.click("#detail [data-act='update-one']")
+            asked = page.locator("#filesDialog[open]")   # which of its files (issue #225): the update's
+            self.assertIn("It contains 1 compressed file.", asked.inner_text())
+            asked.locator("#filesAll").click()
             page.wait_for_function("() => !document.querySelector('#dlPanel').hidden")
             page.click("#detail [data-act='check-one']")
             for _ in range(50):
@@ -273,6 +276,44 @@ class AccessKey(unittest.TestCase):
                                    ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
         page.close()   # (left open, it carried on beside the tests after it)
+
+    def test_download_more_of_it(self):
+        """Issue #225: a product downloaded with some of its files left out: Download more of it asks again, with
+        just the files that aren't on disk, read from its store first."""
+        from hoard import tags
+        rusk = tags.tag_key("booth", "Rusk")
+        started = []
+        self.addCleanup(self.srv.jobs.listed.clear)
+        self.addCleanup(self.srv.cfg.update, {"file_skip": {}})
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"), \
+                mock.patch.object(server, "save_config"):
+            page, refused = self.open(f"{self.srv.entry_url()}")
+            page.get_by_text("Rusk").first.wait_for()
+            goto(page, f"{self.srv.url}downloads")
+            page.locator("#grid .slot", has_text="Rusk").click()
+            page.click("#detail [data-act='more']")
+            asked = page.locator("#filesDialog[open]")
+            asked.get_by_text("Looking at what it contains...").wait_for()
+            for _ in range(50):
+                if started:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(started, [("list-files", ["booth"], {"keys": [rusk]})])
+            self.srv.jobs.listed[rusk] = {"files": ["Rusk (Quest).zip", "Rusk.psd"], "at": time.monotonic(), "read": True}
+            asked.get_by_text("Not downloaded yet: 1 layered image and 1 compressed file.").wait_for()
+            asked.locator("#filesPick").click()
+            asked.locator("#filesList label", has_text="Rusk.psd").locator("input").uncheck()
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download this one")
+            asked.locator("#filesAll").click()
+            for _ in range(50):
+                if len(started) == 2:
+                    break
+                page.wait_for_timeout(100)
+        self.assertEqual(started[-1][:2], ("download", ["booth"]))
+        self.assertEqual(started[-1][2]["keys"], [rusk])
+        self.assertEqual(started[-1][2]["chosen"], {rusk: {"shown": ["Rusk (Quest).zip", "Rusk.psd"], "chosen": ["Rusk (Quest).zip"]}})
+        self.assertEqual(refused, [])
+        page.close()
 
     def test_downloaded_or_not_yet(self):
         """Issue #17: in the Library, what's on disk is marked on its card and in its label, and Downloaded / Not
@@ -1147,6 +1188,78 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(seen[-1][2].get("keys"), ["gumroad:ghostfollower"], "not a walk through every product")
             page.close()
 
+    def test_which_files_to_save(self):
+        """Issue #225: before a product downloads, Hoard asks which of its files to save: what it contains, then
+        Download everything, or Choose files to tick just those. What you leave out comes unticked the next time it
+        asks; ticked again, all of it comes. Turned off in Settings, it downloads straight away."""
+        from hoard import tags
+        seen = self.started()
+        key = tags.tag_key("gumroad", "Ghost Follower [VRChat]")
+        files = ["Ghost.unitypackage", "Ghost (Quest).unitypackage", "Ghost.spp", "Textures.zip"]
+        self.srv.cfg.update(file_skip={}, file_rules=[])   # (what an earlier test left out of this product)
+        self.addCleanup(self.srv.jobs.listed.clear)
+        self.addCleanup(self.srv.cfg.update, {"file_skip": {}, "ask_files": True})
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            page.locator(".slot", has_text="Someone Else").click()
+            page.click("#detail .actions .primary")
+            asked = page.locator("#filesDialog[open]")
+            self.assertIn("What files do you want to save?", asked.inner_text())
+            self.assertIn("Looking at what it contains...", asked.inner_text())
+            for _ in range(50):   # its store's page is read first (no file downloaded), as a task of its own
+                if seen:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(seen, [("list-files", ["gumroad"], {"keys": [key]})])
+            self.srv.jobs.listed[key] = {"files": files, "at": time.monotonic(), "read": True}
+            asked.get_by_text("It contains 2 Unity packages, 1 Substance Painter project, and 1 compressed file.").wait_for()
+            asked.locator("#filesPick").click()
+            self.assertEqual(asked.locator("#filesList input:checked").count(), 4, "all ticked to begin with")
+            asked.locator("#filesList label", has_text="Ghost (Quest).unitypackage").locator("input").uncheck()
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download these 3")
+            asked.locator("#filesAll").click()
+            page.wait_for_function("() => !document.querySelector('#filesDialog').open")
+            for _ in range(50):
+                if seen[-1][0] == "download":
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(seen[-1][0], "download")
+            self.assertEqual(seen[-1][2]["chosen"], {key: {"shown": files, "chosen": [f for f in files if "Quest" not in f]}})
+            self.assertEqual(self.srv.cfg["file_skip"], {key: ["Ghost (Quest).unitypackage"]}, "remembered for next time")
+            # asked again: what you left out comes unticked; ticked again, it's everything
+            page.click("#detail .actions .primary")
+            asked.locator("#filesList input").first.wait_for()
+            self.assertEqual(asked.locator("#filesList input:not(:checked)").count(), 1)
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download these 3")
+            asked.locator("#filesList label", has_text="Ghost (Quest).unitypackage").locator("input").check()
+            asked.locator("#filesAll").click()
+            for _ in range(50):
+                if len(seen) == 3:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(seen[-1][2]["chosen"], {key: {"shown": [], "chosen": [], "all": True}})
+            self.assertEqual(self.srv.cfg["file_skip"], {}, "nothing of it left out from now on")
+            # Cancel downloads nothing
+            page.click("#detail .actions .primary")
+            asked.locator("[data-files='cancel']").click()
+            page.wait_for_function("() => !document.querySelector('#filesDialog').open")
+            # turned off: straight away, everything new
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
+                page.uncheck("#setAskFiles")
+            self.assertIs(self.srv.cfg["ask_files"], False)
+            page.locator("#settingsPanel .win-x").click()
+            page.click("#detail .actions .primary")
+            for _ in range(50):
+                if len(seen) == 4:
+                    break
+                page.wait_for_timeout(100)
+            self.assertFalse(page.locator("#filesDialog").evaluate("d => d.open"))
+            self.assertEqual(seen[-1][0], "download")
+            self.assertIsNone(seen[-1][2].get("chosen"))
+            page.close()
+
     def test_the_routine_checks_downloads_go_straight_to_each(self):
         """Issue #202: what the routine check found, downloaded with Choose what to download and Download all, was
         downloaded as a sync does: every product on every store looked through. It's the products listed now."""
@@ -1196,7 +1309,9 @@ class CopiesAndActions(unittest.TestCase):
             for n in names:   # (clicked: the last one takes its list away with it)
                 dialog.locator(f"input[data-file='{n}']").click()
             self.assertFalse(dialog.locator("input[data-pick='gumroad:ghostfollower']").is_checked())
-            self.assertEqual(dialog.locator(".pk-files").count(), 0)
+            self.assertEqual(dialog.locator("details.pk-files").count(), 0)
+            self.assertEqual(dialog.locator(".pk-files").inner_text(), "It contains 2 Unity packages and 1 compressed file.",
+                             "what it has, said instead (issue #225)")
             page.click("[data-pick-go='cancel']")
             page.close()
 
@@ -2478,6 +2593,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page = self.open()
             page.locator('.slot', has_text="Rusk").click()
             page.click("#detail [data-act=download]")
+            page.locator("#filesDialog[open] #filesAll").click()   # (Download everything: issue #225)
             page.get_by_text("Queued: it starts when what's running now is done").wait_for()
             gate.set()
             page.close()

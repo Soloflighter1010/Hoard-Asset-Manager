@@ -58,7 +58,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
-           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
+           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip", "/api/product-files",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
            "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
@@ -236,7 +236,7 @@ def public_settings(cfg: dict) -> dict:
     return {
         "root": str(root_dir(cfg)), "default_root": str(default_downloads()), "libraries": libraries.view(cfg),
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
-        "store_tags": bool(cfg.get("store_tags", True)), "file_rules": file_rules(cfg),
+        "store_tags": bool(cfg.get("store_tags", True)), "file_rules": file_rules(cfg), "ask_files": bool(cfg.get("ask_files", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "beta_updates": bool(cfg.get("beta_updates")),
@@ -289,6 +289,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["offline_images"] = bool(body["offline_images"])
     if "store_tags" in body:
         change["store_tags"] = bool(body["store_tags"])
+    if "ask_files" in body:   # ask which of a product's files to download, before downloading it (issue #225)
+        change["ask_files"] = bool(body["ask_files"])
     if "file_rules" in body:   # files to leave out of every download (issue #225), checked as downloads read them
         change["file_rules"] = file_rules({"file_rules": body["file_rules"]})
     if "check_for_updates" in body:
@@ -689,6 +691,34 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _product_files(self, body: dict) -> dict:
+        """Issue #225: what each of these products has on its store, as a quick look at it read it (no file is
+        downloaded), each with the files your rules or an earlier choice leave out ("out"), for Hoard to ask which to
+        download. A product not read in the last ten minutes is read, with read: true, as a task of its own;
+        "reading" says one is under way. names: the files the page knows a product has already ({key: [names]}: an
+        update's, or Booth's from your library), answered with what's left out of them, without reading anything."""
+        srv = self.server
+        keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:20]
+                if isinstance(k, str) and 0 < len(k) <= 400 and ":" in k]
+        rules, kept = file_rules(srv.cfg), remembered_files(srv.cfg)
+        out = lambda k, names: sorted(n for n in names if n in kept.get(k, ()) or ruled_out(rules, k.split(":", 1)[0], n))  # noqa: E731
+        given = body.get("names") if isinstance(body.get("names"), dict) else {}
+        now, files = time.monotonic(), {}
+        for k in keys:
+            got, known = srv.jobs.listed.get(k), given.get(k)
+            if got and now - got["at"] < 600:
+                files[k] = {"files": got["files"], "read": got["read"], "out": out(k, got["files"])}
+            elif isinstance(known, list) and known:
+                names = [n for n in known[:500] if isinstance(n, str) and 0 < len(n) <= 500]
+                files[k] = {"files": names, "read": False, "out": out(k, names)}
+        missing = [k for k in keys if k not in files]
+        busy = any(q.get("task") == "list-files" for q in srv.jobs.state["queue"]) or \
+            bool(srv.jobs.state.get("running") and srv.jobs.state.get("task") == "list-files")
+        if missing and body.get("read") is True and not busy:
+            stores = sorted({k.split(":", 1)[0] for k in missing} & set(DOWNLOADABLE))
+            busy = bool(stores) and bool(srv.jobs.start("list-files", stores, keys=missing))
+        return {"files": files, "reading": bool(missing and busy)}
+
     def _remember_files(self, chosen: dict | None) -> dict | None:
         """The files you left out of a product, as you chose them to download, kept for its downloads from now on
         (issue #225: Sync, Download new and the routine check leave them out too); one you ticked again is
@@ -812,6 +842,7 @@ class Handler(BaseHTTPRequestHandler):
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg),
+                               "ask_files": bool(srv.cfg.get("ask_files", True)),   # (issue #225)
                                "routine": routine_record()["found"]}, compress=True)
         if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
             return self._json(self._download_choices(), compress=True)
@@ -877,7 +908,7 @@ class Handler(BaseHTTPRequestHandler):
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
                      "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg), "ask_files": bool(srv.cfg.get("ask_files", True)),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
@@ -2137,6 +2168,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})
+        if path == "/api/product-files":   # issue #225: what products have, to choose their files from before downloading
+            return self._json(self._product_files(body))
         if path == "/api/download-skip":   # issue #107: always skip these products when downloading, or stop
             keys = body.get("keys") if isinstance(body.get("keys"), list) else []
             keys = {k for k in keys[:MAX_SKIP] if isinstance(k, str) and 0 < len(k) <= 400 and ":" in k}
@@ -2328,13 +2361,18 @@ def guide_source(query: dict) -> bytes:
 def chosen_files(raw) -> dict[str, dict] | None:
     """The files you chose of each product, when choosing what to download: {tag_key: {"shown": the files the list
     showed, "chosen": the ones left ticked}}, for the products you left some files out of. Only a file that was
-    shown and unticked is left out (downloader.left_out). Anything else in it is ignored."""
+    shown and unticked is left out (downloader.left_out). {"all": true}: everything of that product, this time,
+    whatever an earlier choice or a rule leaves out (issue #225: Download everything). Anything else is ignored."""
     if not isinstance(raw, dict):
         return None
     names = lambda v: [n for n in v[:500] if isinstance(n, str) and 0 < len(n) <= 500] if isinstance(v, list) else []  # noqa: E731
     out = {}
     for key, pick in list(raw.items())[:5000]:
-        if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
+        if not (isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict)):
+            continue
+        if pick.get("all") is True:
+            out[key] = {"shown": [], "chosen": [], "all": True}
+        elif names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
 
@@ -2344,6 +2382,9 @@ def remember_choice(kept: dict[str, set], chosen: dict) -> dict[str, list]:
     to download: those of the files shown that weren't ticked, and any left out before that weren't shown."""
     kept = dict(kept)
     for key, pick in chosen.items():
+        if pick.get("all"):   # everything this time: nothing of it left out from now on
+            kept.pop(key, None)
+            continue
         shown = set(pick["shown"])
         left = (kept.get(key, set()) - shown) | (shown - set(pick["chosen"]))
         if left:

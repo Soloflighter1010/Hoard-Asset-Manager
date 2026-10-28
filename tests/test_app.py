@@ -3577,6 +3577,42 @@ class DownloadChoices(unittest.TestCase):
                          {rusk: ["Old.zip"]}, "one not shown this time stays left out")
         self.srv.cfg["file_skip"] = {}
 
+    def test_what_a_product_has_to_choose_from(self):
+        """Issue #225: before a product downloads, Hoard asks which of its files to save. The files the page knows
+        already are answered at once, each with what your rules or an earlier choice leave out; a product it doesn't
+        know is read as a task of its own (See what's in it), and answered from what that found for ten minutes."""
+        from unittest import mock
+        rusk, mochi = tags.tag_key("booth", "Rusk"), tags.tag_key("gumroad", "Mochi")
+        self.srv.cfg["file_rules"], self.srv.cfg["file_skip"] = [{"store": "booth", "words": "quest"}], {mochi: ["Mochi.psd"]}
+        self.addCleanup(self.srv.cfg.update, {"file_rules": [], "file_skip": {}})
+        started = []
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"):
+            status, got = self.call("POST", "/api/product-files", {"keys": [rusk], "names": {rusk: ["Rusk.zip", "Rusk (Quest).zip", 7]}})
+            self.assertEqual(status, 200)
+            self.assertEqual(got, {"files": {rusk: {"files": ["Rusk.zip", "Rusk (Quest).zip"], "read": False,
+                                                    "out": ["Rusk (Quest).zip"]}}, "reading": False})
+            self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi]})[1], {"files": {}, "reading": False},
+                             "not asked to read it")
+            self.assertEqual(started, [], "nothing read")
+            got = self.call("POST", "/api/product-files", {"keys": [mochi, "no store", 5, "payhip:paw pack"], "read": True})[1]
+            self.assertEqual(got, {"files": {}, "reading": True})
+            self.assertEqual(started, [("list-files", ["gumroad"], {"keys": [mochi, "payhip:paw pack"]})], "Payhip isn't read")
+            self.srv.jobs.state["queue"] = [{"id": 2, "task": "list-files", "label": "See what's in it", "queued": 0, "lane": "main"}]
+            self.addCleanup(self.srv.jobs.state.update, {"queue": []})
+            self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["reading"])
+            self.assertEqual(len(started), 1, "one reading at a time")
+            self.srv.jobs.state["queue"] = []
+            # read: its files, with the one you left out of it before
+            self.srv.jobs.listed[mochi] = {"store": "gumroad", "name": "Mochi", "creator": "Kitsu Studio",
+                                           "files": ["Mochi.zip", "Mochi.psd"], "at": time.monotonic(), "read": True}
+            got = self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]
+            self.assertEqual(got, {"files": {mochi: {"files": ["Mochi.zip", "Mochi.psd"], "read": True, "out": ["Mochi.psd"]}},
+                                   "reading": False})
+            self.srv.jobs.listed[mochi]["at"] -= 700
+            self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["files"], {},
+                             "read again after ten minutes")
+            self.assertEqual(len(started), 2)
+
     def test_always_skip(self):
         mochi = tags.tag_key("gumroad", "Mochi")
         self.assertEqual(self.call("POST", "/api/download-skip", {"keys": [mochi]}), (200, {"ok": True, "skipped": 1}))
@@ -3749,6 +3785,11 @@ class ChosenFiles(unittest.TestCase):
         got = server.chosen_files({"gumroad:x": {"shown": ["a.zip", 5, "", "b.zip"], "chosen": ["a.zip", None]},
                                    7: {"shown": ["c"]}, "booth:y": ["a list"], "booth:z": {"shown": []}, "x" * 401: {"shown": ["d"]}})
         self.assertEqual(got, {"gumroad:x": {"shown": ["a.zip", "b.zip"], "chosen": ["a.zip"]}})
+        # Download everything: all of it this time, and nothing of it left out from now on (issue #225)
+        self.assertEqual(server.chosen_files({"booth:x": {"all": True}, "booth:y": {"all": "yes"}}),
+                         {"booth:x": {"shown": [], "chosen": [], "all": True}})
+        self.assertEqual(server.remember_choice({"booth:x": {"x.psd"}, "booth:z": {"z.psd"}}, {"booth:x": {"shown": [], "chosen": [], "all": True}}),
+                         {"booth:z": ["z.psd"]})
 
     def test_the_downloader_leaves_out_what_wasnt_chosen(self):
         from types import SimpleNamespace
@@ -3791,6 +3832,38 @@ class ChosenFiles(unittest.TestCase):
         self.assertIn("Itch.io: Tail Pack / Tail.blend - left out, as you chose before".lower(), [s.lower() for s in report.skipped])
         self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=True, rules=rules), report, "booth", "Fox", "Fox.psd"),
                          "a check for updates sees every file")
+        everything = SimpleNamespace(dry_run=False, rules=rules, remembered=args.remembered,
+                                     files={tags.tag_key("itch", "Tail Pack"): {"shown": set(), "chosen": set(), "all": True}})
+        with common.capture_log(lambda line: None):
+            self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.blend"), "Download everything")
+            self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.psd"), "whatever a rule says")
+            self.assertTrue(downloader.left_out(everything, report, "itch", "Ears", "Ears.psd"), "for that product")
+
+    def test_reading_what_products_have(self):
+        """Issue #225: the task that reads what products have, to choose from: every file not on disk, and no
+        update noted; a product it couldn't find on its store is answered all the same, with nothing read."""
+        from unittest import mock
+        rusk, gone = tags.tag_key("booth", "Rusk"), tags.tag_key("booth", "Gone")
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        seen = []
+
+        def sync(cfg, args):
+            seen.append(args)
+            report = downloader.Report()
+            downloader.would_get(args, report, "booth", {"files": {"Rusk.zip": {}}}, "Rusk", "Kitsu", "Rusk (Quest).zip", False)
+            downloader.would_get(args, report, "booth", {"files": {"Rusk.zip": {}}}, "Rusk", "Kitsu", "Rusk.zip", True)
+            downloader.would_get(args, report, "booth", {}, "Rusk", "Kitsu", "Rusk.zip", False)
+            self.assertEqual(report.available, [], "not an update")
+            return report
+        with mock.patch("hoard.downloader.cmd_sync", sync), mock.patch.object(job, "on_download_done", lambda: None), \
+                mock.patch("hoard.asset_updates.AssetUpdates", side_effect=AssertionError("no check recorded")), \
+                common.capture_log(lambda line: None):
+            job._download(["booth"], None, [rusk, gone], check=True, listing=True)
+        self.assertTrue(seen[0].listing and seen[0].dry_run)
+        self.assertEqual(seen[0].keys, {rusk, gone})
+        self.assertEqual({k: (v["files"], v["read"]) for k, v in job.listed.items()},
+                         {rusk: (["Rusk (Quest).zip", "Rusk.zip"], True), gone: ([], False)})
+        self.assertEqual(job.state["message"], "Read what 2 products have, to choose from.")
 
 
 class TasksAPI(unittest.TestCase):

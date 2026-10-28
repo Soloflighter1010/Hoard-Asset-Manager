@@ -1267,7 +1267,7 @@ async function pickDownloads(title, verb, items, go, choices) {
   choices = choices || await downloadChoices();
   const skip = new Set((choices.skipped || []).map(e => e.key));
   Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb,
-                        offFiles: new Map(), openFiles: new Set() });
+                        offFiles: new Map(), openFiles: new Set(), reading: new Set() });
   for (const e of PICK.items) {   // (issue #225: what your rules, or an earlier choice, leave out comes unticked)
     const out = (e.out || []).filter(n => fileNames(e).includes(n));
     if (out.length) PICK.offFiles.set(e.key, new Set(out));
@@ -1283,15 +1283,114 @@ const fileNames = e => [...new Set(e.names || [])];   // a name two files share 
 function fileChoice(e) {
   const names = fileNames(e), count = {};
   for (const n of e.names || []) count[n] = (count[n] || 0) + 1;
-  if (names.length < 2 || PICK.off.has(e.key)) return "";
+  if (!names.length && !PICK.off.has(e.key))   // (issue #225: its files, looked at first)
+    return `<p class="pk-files">${PICK.reading.has(e.key) ? esc(tr("Looking at what it contains...")) :
+      `<button class="linkish" data-pick-read="${esc(e.key)}">${esc(tr("Choose files..."))}</button>`}</p>`;
+  if (names.length < 2 || PICK.off.has(e.key)) return names.length ? `<p class="pk-files muted">${esc(tr("It contains {0}.", contentsText(e.names)))}</p>` : "";
   const off = PICK.offFiles.get(e.key) || new Set();
   return `<details class="pk-files" data-files-of="${esc(e.key)}"${PICK.openFiles.has(e.key) ? " open" : ""}>` +
-    `<summary>Choose files (${names.length - off.size} of ${names.length})</summary>` +
+    `<summary>${esc(tr("Choose files ({0} of {1})", names.length - off.size, names.length))} <span class="muted">${esc(contentsText(e.names))}</span></summary>` +
     names.map(n => `<label><input type="checkbox" data-file-of="${esc(e.key)}" data-file="${esc(n)}"${off.has(n) ? "" : " checked"}>` +
       ` <span>${esc(n)}${count[n] > 1 ? ` <span class="muted">(${count[n]} files)</span>` : ""}</span></label>`).join("") + `</details>`;
 }
 let DL_FILES = null;   // the files chosen of each product, for the download about to start
 function takeFiles() { const f = DL_FILES; DL_FILES = null; return f; }
+
+/* ---------- issue #225: before a product downloads, Hoard asks which of its files to save. It says what the product
+   contains (2 Unity packages, a Substance Painter project, 3 compressed files...), then Download everything, or
+   Choose files to tick just those. It asks again whenever you download from it later, or it gets an update: the
+   files you left out before, and those a rule leaves out (Settings, Files to leave out), come unticked. Where the
+   store doesn't list a product's files before downloading, Hoard looks at its download page first (no file is
+   downloaded): /api/product-files. */
+const CONTENT_KINDS = [   // [kind, the ends of its files' names, one, many]
+  ["unitypackage", [".unitypackage"], "1 Unity package", "{0} Unity packages"],
+  ["substance", [".spp", ".sbsar", ".sbs"], "1 Substance Painter project", "{0} Substance Painter projects"],
+  ["blender", [".blend", ".blend1"], "1 Blender file", "{0} Blender files"],
+  ["model", [".fbx", ".obj", ".vrm", ".glb", ".gltf", ".dae"], "1 3D model", "{0} 3D models"],
+  ["layered", [".psd", ".psb", ".clip", ".kra", ".sai", ".sai2", ".xcf"], "1 layered image", "{0} layered images"],
+  ["picture", [".png", ".jpg", ".jpeg", ".tga", ".tif", ".tiff", ".exr", ".webp", ".dds", ".bmp"], "1 picture", "{0} pictures"],
+  ["archive", [".zip", ".7z", ".rar", ".tar", ".gz"], "1 compressed file", "{0} compressed files"],
+  ["audio", [".wav", ".mp3", ".ogg", ".flac", ".m4a"], "1 sound file", "{0} sound files"],
+  ["video", [".mp4", ".mov", ".webm", ".mkv", ".avi"], "1 video", "{0} videos"],
+  ["document", [".pdf", ".txt", ".md", ".rtf", ".docx"], "1 document", "{0} documents"],
+  ["other", [], "1 other file", "{0} other files"]];
+const kindOfFile = name => (CONTENT_KINDS.find(([, ends]) => ends.some(e => String(name).toLowerCase().endsWith(e))) || ["other"])[0];
+function contentsText(names) {   // "2 Unity packages, 1 Substance Painter project and 3 compressed files"
+  const n = new Map();
+  for (const f of names) n.set(kindOfFile(f), (n.get(kindOfFile(f)) || 0) + 1);
+  return listed(CONTENT_KINDS.filter(([k]) => n.has(k)).map(([k, , one, many]) => tr(n.get(k) === 1 ? one : many, n.get(k))));
+}
+const FILES = { product: null, names: null, off: new Set(), picking: false, failed: false, go: null, timer: 0, asked: 0 };
+/** Ask which of a product's files to download ({key, store, name, creator, names: its files, when known; more: only
+ *  what isn't downloaded yet}), then go(the choice, for DL_FILES). With asking turned off in Settings: go(null). */
+function askFiles(product, go) {
+  if (typeof DATA === "object" && DATA && DATA.ask_files === false) return go(null);
+  clearTimeout(FILES.timer);
+  const known = [...new Set(product.names || [])];
+  Object.assign(FILES, { product, names: known.length ? known : null, off: new Set(), picking: false, failed: false, go,
+                         asked: FILES.asked + 1 });
+  $("#filesName").textContent = product.name;
+  $("#filesBy").textContent = product.creator ? tr("by {0}", product.creator) : "";
+  drawFiles();
+  $("#filesDialog").showModal();
+  readFiles(FILES.asked, !known.length);
+}
+async function readFiles(asked, read) {   // its files and what's left out of them, read from its store first if need be
+  const key = FILES.product.key;
+  const r = await apiPost("/api/product-files", { keys: [key], read, ...(FILES.names ? { names: { [key]: FILES.names } } : {}) });
+  if (asked !== FILES.asked || !$("#filesDialog").open) return;
+  const got = r.ok && r.data.files && r.data.files[key];
+  if (got) {
+    FILES.names = [...new Set(FILES.names && !got.read ? FILES.names : got.files)];
+    FILES.off = new Set(got.out.filter(n => FILES.names.includes(n)));
+    FILES.picking = FILES.off.size > 0 && FILES.names.length > 1;   // (left out before: the choice, again)
+  } else if (r.ok && r.data.reading) {
+    FILES.timer = setTimeout(() => readFiles(asked, false), 1500);
+    return;
+  } else if (!FILES.names) {
+    FILES.names = []; FILES.failed = true;
+  }
+  drawFiles();
+}
+function drawFiles() {
+  const names = FILES.names, p = FILES.product;
+  $("#filesHas").textContent = names === null ? tr("Looking at what it contains...")
+    : names.length ? tr(p.more ? "Not downloaded yet: {0}." : "It contains {0}.", contentsText(names))
+    : p.more ? tr("Everything it has is downloaded already.")
+    : FILES.failed ? tr("Hoard couldn't see its files before downloading. Download everything gets them all.")
+    : tr("Hoard sees no files to choose from. Download everything gets whatever it has.");
+  $("#filesPick").hidden = FILES.picking || !(names && names.length > 1);
+  const list = $("#filesList");
+  list.hidden = !FILES.picking;
+  if (FILES.picking) list.innerHTML = CONTENT_KINDS.filter(([k]) => names.some(n => kindOfFile(n) === k)).map(([k, , one, many]) => {
+    const these = names.filter(n => kindOfFile(n) === k);
+    return `<p class="files-kind">${esc(tr(these.length === 1 ? one : many, these.length))}</p>` + these.map(n =>
+      `<label class="check"><input type="checkbox" data-file="${esc(n)}"${FILES.off.has(n) ? "" : " checked"}> <span translate="no">${esc(n)}</span></label>`).join("");
+  }).join("");
+  const n = names ? names.filter(x => !FILES.off.has(x)).length : 0;
+  $("#filesAll").textContent = FILES.picking ? tr(n === 1 ? "Download this one" : "Download these {0}", n) : tr("Download everything");
+  $("#filesAll").disabled = (FILES.picking && n === 0) || (!!p.more && !!names && !names.length);
+}
+function wireFiles() {
+  const d = $("#filesDialog");
+  d.addEventListener("change", e => {
+    const f = e.target.dataset.file;
+    if (f == null) return;
+    if (e.target.checked) FILES.off.delete(f); else FILES.off.add(f);
+    drawFiles();
+  });
+  d.addEventListener("click", e => {
+    const b = e.target.closest("[data-files]");
+    if (!b) return;
+    if (b.dataset.files === "pick") { FILES.picking = true; drawFiles(); d.querySelector("#filesList input")?.focus(); return; }
+    d.close();
+    clearTimeout(FILES.timer);
+    if (b.dataset.files !== "go") return;
+    const key = FILES.product.key, names = FILES.names || [];
+    FILES.go(FILES.picking && FILES.off.size ? { [key]: { shown: names, chosen: names.filter(n => !FILES.off.has(n)) } }
+             : { [key]: { all: true } });   // (everything, this time: whatever was left out of it before)
+  });
+}
 function drawPick() {
   const files = n => n ? tr(n === 1 ? ", {0} file" : ", {0} files", n) : "";
   const row = (e, skipped) => `<li>` + (skipped
@@ -1341,8 +1440,30 @@ $("#pickDialog").addEventListener("toggle", e => {   // a product's files stay o
   const k = e.target.dataset && e.target.dataset.filesOf; if (k == null) return;
   if (e.target.open) PICK.openFiles.add(k); else PICK.openFiles.delete(k);
 }, true);
+async function pickRead(key) {   // a product's files, looked at on its store (no file downloaded), to choose from
+  PICK.reading.add(key);
+  drawPick();
+  for (let tries = 0; tries < 200 && $("#pickDialog").open; tries++) {
+    const r = await apiPost("/api/product-files", { keys: [key], read: tries === 0 });
+    const got = r.ok && r.data.files && r.data.files[key], item = PICK.items.find(x => x.key === key);
+    if (got || !r.ok || !r.data.reading) {
+      PICK.reading.delete(key);
+      if (got && item) {
+        item.names = got.files;
+        const out = got.out.filter(n => got.files.includes(n));
+        if (out.length) PICK.offFiles.set(key, new Set(out));
+        PICK.openFiles.add(key);
+      }
+      if (!got) toast(tr("Hoard couldn't see its files before downloading."));
+      drawPick();
+      return;
+    }
+    await new Promise(res => setTimeout(res, 1500));
+  }
+}
 $("#pickDialog").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.pickRead != null) { pickRead(b.dataset.pickRead); return; }
   if (b.dataset.skip != null) pickSkip(b.dataset.skip, true);
   else if (b.dataset.unskip != null) pickSkip(b.dataset.unskip, false);
   else if (b.dataset.pickAll) { PICK.off = b.dataset.pickAll === "on" ? new Set() : new Set(PICK.items.map(x => x.key)); drawPick(); }
@@ -1521,6 +1642,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setPrevious").value = String(SETTINGS.keep_previous ?? 1);
   $("#setOffline").checked = SETTINGS.offline_images;
   $("#setStoreTags").checked = SETTINGS.store_tags !== false;
+  $("#setAskFiles").checked = SETTINGS.ask_files !== false;
   drawFileRules();
   $("#setUpdates").checked = SETTINGS.check_for_updates;
   $("#setBetas").checked = !!SETTINGS.beta_updates;
@@ -1847,6 +1969,7 @@ function settingsPart(el) {
     case "setRoot": { const root = el.value.trim(); return { root: root === SETTINGS.default_root ? "" : root }; }
     case "setOffline": return { offline_images: el.checked };
     case "setStoreTags": return { store_tags: el.checked };
+    case "setAskFiles": DATA.ask_files = el.checked; return { ask_files: el.checked };
     case "setUpdates": return { check_for_updates: el.checked };
     case "setBetas": return { beta_updates: el.checked };
     case "setBackground": return { close_to_taskbar: el.checked };
@@ -1900,6 +2023,7 @@ function savePart(part) {
 // one; each product's own are chosen in Download new's list, and remembered (hoard/downloader.py: left_out)
 const FILE_KINDS = { unitypackage: "Unity packages", archive: "Archives (ZIP, 7z, RAR)",
   layered: "Layered images (Photoshop, Clip Studio, Krita, SAI)", picture: "Pictures and textures", blender: "Blender files",
+  substance: "Substance Painter projects",
   model: "3D models (FBX, OBJ, VRM, glTF)", audio: "Sound", video: "Video", document: "Documents (PDF, text)" };
 const RULE_STORES = { all: "from every store", booth: "from Booth", gumroad: "from Gumroad", jinxxy: "from Jinxxy", itch: "from itch.io" };
 function drawFileRules() {

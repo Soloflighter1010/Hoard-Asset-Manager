@@ -30,7 +30,8 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   skipped** in the same list). **Update all** lists the updates the same way.
 - **Download** in an item's details (in the Library) downloads just that product, and so do **Update** in
   Downloads and **Download** for several selected products in the Library. A product you always skip still
-  downloads when you choose it like this. Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
+  downloads when you choose it like this. For one product, Hoard first asks which of its files to save: see
+  [Which files to save](#which-files-to-save). Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
   page). On Booth it still reads your library list (Booth lists the files there), and on itch.io it asks
   itch.io's API.
 
@@ -38,6 +39,27 @@ Progress shows as Hoard works. At the end, a summary lists what's new, what was 
 anything that couldn't be downloaded, with the reason. A file that fails to download is tried again first (twice,
 after a short wait; **Failed downloads** in [Settings](Settings)), unless the store says it isn't there or isn't
 yours.
+
+### Which files to save
+
+Before one product downloads (**Download** in its details, **Update** in Downloads), Hoard asks **What files do
+you want to save?** (5.2.0). It says what the product contains, such as "2 Unity packages, 1 Substance Painter
+project, and 3 compressed files", then:
+
+- **Download everything** gets all of it.
+- **Choose files** lists its files by kind, to untick what you don't want this time; **Download these** gets the
+  rest.
+
+Where the store doesn't list a product's files before downloading (Gumroad, Jinxxy and itch.io, and Booth when
+your library list doesn't have them), Hoard looks at its download page first, as a short task of its own (**See
+what's in it** in Tasks). Nothing is downloaded, and **Download everything** works while it looks.
+
+Hoard remembers what you leave out of each product, and asks again whenever you download from it later or it gets
+an update: what you left out before, and what your rules leave out (**Files to leave out**, in
+[Settings](Settings)), comes unticked. Tick everything and Hoard forgets the choice. **Download more of it...**, in
+a downloaded product's details in Downloads, lists only the files it has that aren't on disk, to choose from the
+same way. To download straight away instead, turn off **Ask which files to save, before a product downloads** in
+[Settings](Settings): what your rules and earlier choices leave out still stays out.
 
 ### One thing at a time, in turn
 

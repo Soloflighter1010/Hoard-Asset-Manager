@@ -509,6 +509,13 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-files summary { cursor: pointer; color: var(--dust); }
 .pick-list .pk-files label { padding: 4px 0; font-weight: 400; }
 .pick-list .pk-files span { overflow-wrap: anywhere; }
+/* What files do you want to save? (issue #225): what a product contains, then everything or the files you tick */
+.files-dialog { width: min(560px, calc(var(--vw) - 32px)); }
+.files-of { margin: 0 0 4px; overflow-wrap: anywhere; }
+.files-has { margin: 0 0 12px; color: var(--dust); }
+.files-list { max-height: min(46vh, 420px); overflow: auto; margin: 0 0 12px; padding: 4px 10px 8px; border-radius: 10px; background: var(--stone); }
+.files-list .files-kind { margin: 10px 0 4px; font: 700 12px var(--body); color: var(--dust); }
+.files-list label { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; overflow-wrap: anywhere; }
 .pick-skipped { margin-top: 12px; }
 .pick-skipped summary { cursor: pointer; color: var(--dust); font-size: 13px; }
 .pick-go { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
@@ -1444,9 +1451,11 @@ body.less-motion .tour-try::before { animation: none; }
     has been read once. Their tags show as suggestions on them, and you can filter by them; they never change yours.</p>
   <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
+  <label class="check"><input type="checkbox" id="setAskFiles"> Ask which files to save, before a product downloads</label>
   <h3>Files to leave out</h3>
-  <p class="hint">Sync, Download new and the routine check leave these out of every download, from every store or one.
-    To leave out one product's files, untick them under Choose files in Download new's list: Hoard remembers.</p>
+  <p class="hint">Every download leaves these out, from every store or one: Sync, Download new, and a product's own
+    Download. When a product downloads, Hoard asks which of its files to save (above): what you leave out of it, it
+    remembers, and asks again next time.</p>
   <ul id="fileRules" class="file-rules"></ul>
   <div class="rule-add"><select id="ruleWhat" aria-label="What to leave out"></select>
     <input id="ruleWords" maxlength="200" placeholder="quest, android" aria-label="Words in a file's name" hidden>
@@ -1642,6 +1651,15 @@ body.less-motion .tour-try::before { animation: none; }
   </div>
   <p class="muted" id="closeHow">Stopping keeps what's finished, and a half-downloaded file resumes next time where the
     store allows. <strong>Close now</strong> doesn't wait: use it if stopping takes too long.</p>
+</dialog>
+<dialog id="filesDialog" class="support-dialog files-dialog" aria-labelledby="filesTitle">
+  <h2 id="filesTitle">What files do you want to save?</h2>
+  <p class="files-of"><b id="filesName" translate="no"></b> <span id="filesBy" class="muted" translate="no"></span></p>
+  <p id="filesHas" class="files-has" aria-live="polite"></p>
+  <div id="filesList" class="files-list" hidden></div>
+  <div class="pick-go"><button class="ghost" data-files="cancel">Cancel</button>
+    <button class="ghost" data-files="pick" id="filesPick">Choose files</button>
+    <button class="primary" data-files="go" id="filesAll">Download everything</button></div>
 </dialog>
 <dialog id="pickDialog" class="support-dialog pick-dialog" aria-labelledby="pickTitle">
   <h2 id="pickTitle">Download</h2>
@@ -2498,7 +2516,11 @@ $("#detail").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = byKey.get(openKey);
   if (tagDetailAction(b.dataset.act, b, a)) return;
-  if (b.dataset.act === "download") { startDownload([a.store], a.name, a.key); return; }
+  if (b.dataset.act === "download") {   // which of its files, asked first (issue #225)
+    askFiles({ key: a.tag_key, store: a.store, name: a.name, creator: a.creator, names: (a.files || []).map(f => f.name) },
+             files => { DL_FILES = files; startDownload([a.store], a.name, a.key); });
+    return;
+  }
   if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "delete-files") { deleteFiles([a]); return; }
@@ -2610,6 +2632,7 @@ function wireTags() {
   wireBar();
   wireSearch();
   wireTypes();
+  wireFiles();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });

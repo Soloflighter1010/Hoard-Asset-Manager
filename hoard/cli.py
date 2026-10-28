@@ -11,7 +11,7 @@ from . import __version__
 from .browser import PlaywrightMissing, ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
 from .common import log
 from .config import clean_payhip_shop, load_config, payhip_shops, root_dir, save_config
-from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify
+from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify, file_rules, remembered_files
 from .jobs import Jobs
 from . import itch, vault
 from .library import (BOOTH_JS, DOWNLOADABLE, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY,
@@ -284,7 +284,8 @@ def main(argv=None) -> None:
             cmd_refresh(cfg, args.store or list(STORES))
         elif args.cmd == "import":
             sys.exit(cmd_import(cfg, args))
-        elif args.cmd == "sync":
+        elif args.cmd == "sync":   # the files to leave out, as in the app (issue #225: Settings, and each product's)
+            args.rules, args.remembered = file_rules(cfg), remembered_files(cfg)
             cmd_sync(cfg, args)
         elif args.cmd == "tags":
             build_catalog(cfg, root_dir(cfg))

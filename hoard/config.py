@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
     "routine_hours": None,         # issue #113: the routine check, every this many hours (0 = off); None: off, or Sync automatically's
     "download_skip": [],           # products to always skip when downloading, by tag key (issue #107)
     "file_rules": [],              # files to leave out of every download, by kind or words in their names (issue #225)
+    "ask_files": True,             # ask which of a product's files to download, before downloading it (issue #225)
     "file_skip": {},               # the files you left out of each product, by its tag key (issue #225)
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False, "font": "standard", "spacing": False,   # accessibility
                 "card_outlines": False,   # (and each card outlined, on a background of its own: issue #222)

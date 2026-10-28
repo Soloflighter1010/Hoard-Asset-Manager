@@ -106,6 +106,8 @@ class Report:
     available: list = field(default_factory=list)
     got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
     got_files: set = field(default_factory=set)       # (tag_key, file) saved in this run, named as a check names it
+    # what each product has on its store, read without downloading it (issue #225: to choose from): {tag_key: {...}}
+    listed: dict = field(default_factory=dict)
 
     def saved(self, store: str, name: str, file: str, *also: str | None) -> None:
         """A file saved: its product, and the file as Check for updates names it, so only what came is taken off
@@ -179,6 +181,11 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
     changed or added goes on the list of updates the Downloads page shows (issue #26); one downloaded before and
     since deleted from disk, unchanged, isn't an update (it's downloaded again all the same)."""
     log(f"    would {'update' if changed else 'download again' if deleted_here else 'download'}: {file}")
+    if getattr(args, "listing", False):   # what's there to choose from (issue #225), and not an update either way
+        entry = report.listed.setdefault(tag_key(store, name), {"store": store, "name": name, "creator": creator, "files": []})
+        if file not in entry["files"] and len(entry["files"]) < 500:
+            entry["files"].append(file)
+        return
     if rec.get("files") and not deleted_here:
         report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
                                  "file": file, "kind": "changed" if changed else "new"})
@@ -193,6 +200,7 @@ FILE_KINDS = {
     "layered": ("Layered images", (".psd", ".psb", ".clip", ".kra", ".sai", ".sai2", ".xcf")),
     "picture": ("Pictures and textures", (".png", ".jpg", ".jpeg", ".tga", ".tif", ".tiff", ".exr", ".webp", ".dds", ".bmp")),
     "blender": ("Blender files", (".blend", ".blend1")),
+    "substance": ("Substance Painter projects", (".spp", ".sbsar", ".sbs")),
     "model": ("3D models", (".fbx", ".obj", ".vrm", ".glb", ".gltf", ".dae", ".3ds", ".max", ".ma", ".mb")),
     "audio": ("Sound", (".wav", ".mp3", ".ogg", ".flac", ".m4a")),
     "video": ("Video", (".mp4", ".mov", ".webm", ".mkv", ".avi")),
@@ -253,6 +261,8 @@ def left_out(args, report: Report, store: str, name: str, file: str, *also: str)
     chosen = getattr(args, "files", None)
     pick = next((chosen[k] for k in keys if k in chosen), None) if isinstance(chosen, dict) else None
     label = STORES[store]["label"] if store in STORES else store
+    if isinstance(pick, dict) and pick.get("all"):   # Download everything: whatever was left out before, or a rule says
+        return False
     if isinstance(pick, dict) and file in pick.get("shown", ()):
         if file in pick.get("chosen", ()):
             return False

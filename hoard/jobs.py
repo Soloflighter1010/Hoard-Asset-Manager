@@ -205,7 +205,7 @@ TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "che
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists"}
+              "wishlists": "Read wishlists", "list-files": "See what's in it"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -321,6 +321,7 @@ class Jobs:
         self._moved = time.monotonic()      # when the running job last said anything
         self._ids = 0
         self.history: list[dict] = self._load_history()
+        self.listed: dict[str, dict] = {}   # what products have, read to choose from (issue #225): by tag key
 
     def _history_file(self):
         return project_tasks_file() if self.lane == PROJECTS else tasks_file()
@@ -444,6 +445,8 @@ class Jobs:
             target = lambda s: self._download(s, only, keys, items=items, chosen=spec.get("chosen"))  # noqa: E731
         elif task == "check-updates":
             target = lambda s: self._download(s, only, keys, check=True, items=items)  # noqa: E731
+        elif task == "list-files":
+            target = lambda s: self._download(s, only, keys, check=True, items=items, listing=True)  # noqa: E731
         elif task == "sync":
             target = self._sync
         elif task == "install-browser":
@@ -925,14 +928,16 @@ class Jobs:
                                          f"browser if it has stopped answering). Last: {last}")[:500]
 
     def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False,
-                  items: list[str] | None = None, chosen: dict | None = None) -> None:
+                  items: list[str] | None = None, chosen: dict | None = None, listing: bool = False) -> None:
         """Download everything new or changed from these stores (or only the products keys names), passing progress
         to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
-        each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
+        each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26).
+        With listing too, note instead every file each product has that isn't on disk, for you to choose from
+        before downloading it (issue #225: self.listed)."""
         from types import SimpleNamespace
         from .downloader import cmd_sync, direct_targets, file_rules, remembered_files
         from .asset_updates import AssetUpdates
-        task = "check-updates" if check else "download"
+        task = "list-files" if listing else "check-updates" if check else "download"
         stores = [s for s in stores if s in DOWNLOADABLE]
         if not stores:
             self._set(task=task, message="Nothing to download: Hoard lists what you own on Payhip, and you "
@@ -960,12 +965,20 @@ class Jobs:
                                headed=False, keys=set(keys) if keys else None,
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
                                targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
-                               files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"])}
+                               files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"]), "all": bool(v.get("all"))}
                                       for k, v in (chosen or {}).items()} or None,   # the files you chose
-                               rules=file_rules(self.cfg), remembered=remembered_files(self.cfg))   # and leave out (#225)
+                               rules=file_rules(self.cfg), remembered=remembered_files(self.cfg),   # and leave out (#225)
+                               listing=listing)
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
+            if listing:   # what each one has, to choose from: every product asked about gets an answer, if empty
+                now = time.monotonic()
+                for k in keys or []:
+                    self.listed[k] = {**report.listed.get(k, {"files": []}), "at": now, "read": k in report.listed}
+                n = len(keys or [])
+                self._set(message=f"Read what {n} {'product has' if n == 1 else 'products have'}, to choose from.")
+                return
             if check:
                 # a check of chosen products (by key, by library item, or by name) replaces only what an earlier
                 # check found for those, and doesn't count as a check of the whole store
@@ -984,6 +997,8 @@ class Jobs:
                                   + (f". Couldn't check {', '.join(missed)}." if missed else "."))
                 return
             AssetUpdates().after_download(report.got, report.failed, report.got_files)
+            for k in set(keys or []) | report.got:   # what they have that isn't on disk is read again, next time asked
+                self.listed.pop(k, None)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
                       partial=bool(summary["failed"]) or None,
