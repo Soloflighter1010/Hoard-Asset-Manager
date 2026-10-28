@@ -424,6 +424,27 @@ def app_quitting() -> bool:
     return False
 
 
+SM_SHUTTINGDOWN = 0x2000   # Windows' GetSystemMetrics: nonzero while this session is ending
+_QUIT_REASON = int.from_bytes(b"why?", "big")   # macOS: kAEQuitReason, on a quit that's a logout, restart or shutdown
+
+
+def system_ending() -> bool:
+    """Is the computer shutting down, restarting or signing out right now (issue #205)? Then Hoard's window closes
+    and Hoard quits at once: going to the taskbar, or asking about a task, would hold the computer up ("Hoard is
+    preventing shutdown"). Windows says so in its system metrics; a Mac, in the quit event's reason."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            return bool(ctypes.windll.user32.GetSystemMetrics(SM_SHUTTINGDOWN))
+        if sys.platform == "darwin":
+            from Foundation import NSAppleEventManager   # (pyobjc: there with the Mac app's window)
+            event = NSAppleEventManager.sharedAppleEventManager().currentAppleEvent()
+            return event is not None and event.attributeDescriptorForKeyword_(_QUIT_REASON) is not None
+    except Exception:
+        pass   # can't tell: as before
+    return False
+
+
 def _lanes(srv) -> list:
     """The server's jobs: the main lane, and Projects' (see hoard/jobs.py)."""
     return [jobs for jobs in (getattr(srv, "jobs", None), getattr(srv, "project_jobs", None)) if jobs is not None]
@@ -433,7 +454,10 @@ def close_decision(srv, quitting: bool = False) -> str:
     """What closing Hoard's window does: "background" (it's minimized to the taskbar, or the Dock, and Hoard
     carries on: unless you turned that off in Settings), "ask" (something is running or waiting its turn: the page asks whether to stop it first, carry on in
     the background, or close at once), or "quit". Quitting the app (quitting: Command-Q on a Mac) quits, as Quit
-    Hoard does, asking first only while something is running."""
+    Hoard does, asking first only while something is running. The computer shutting down, restarting or signing out
+    always quits, straight away (issue #205)."""
+    if system_ending():
+        return "quit"
     if srv.cfg.get("close_to_taskbar", True) and not quitting:
         return "background"
     if any(jobs.state.get("running") or jobs.state.get("queue") for jobs in _lanes(srv)):   # (a project's task too)
@@ -476,9 +500,10 @@ def quit_cleanly(srv) -> None:
     if srv is None:
         return
     try:
+        ending = system_ending()   # the computer is shutting down: no waiting on anything (issue #205)
         for jobs in _lanes(srv):
-            jobs.cancel()
-        for _ in range(20):   # up to ~5 s for the file being written to finish (or a project's change put back)
+            jobs.force_stop() if ending else jobs.cancel()
+        for _ in range(4 if ending else 20):   # up to ~5 s for the file being written to finish (or a project's change put back)
             if not any(jobs.state.get("running") for jobs in _lanes(srv)):
                 break
             time.sleep(0.25)
