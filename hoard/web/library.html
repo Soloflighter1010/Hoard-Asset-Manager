@@ -2010,6 +2010,7 @@ function showDetail(a, focus = true) {
             ["Added", esc(shortDay(a.added)) || "—"], ["Tags", a.tags.length]]) +
     (a.also_in.length ? `<p class="note">You also own this on ${a.also_in.map(label).join(" and ")}. ` +
       `<button class="linkish" data-act="others">Show all copies</button></p>` : "") +
+    stackNote(a) +
     `<div class="actions">${main}</div>` +
     `<p class="copy">${onDisk(a) ? `<span class="ondisk">On disk${a.update ? ", with an update" : ""}</span>`
       : downloadable(a.store) ? `<span class="muted">Not downloaded yet. Hoard keeps the copy in your downloads folder.</span>`
@@ -2417,6 +2418,7 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") showCopies(a);
+  else if (b.dataset.act === "apart") markItems([a], "apart", b.dataset.on === "true");
 });
 $("#scrim").addEventListener("click", closeDetail);
 document.addEventListener("keydown", e => {
@@ -3012,6 +3014,17 @@ function wireSetup() {
   });
 }
 
+/* ---------- issue #217: why copies are shown together, and "Not a copy" for one that isn't */
+const STACK_WHY = { picture: "the same picture", name: "the same name and creator", look: "the same name, and pictures that look alike",
+                    alike: "names alike, by the same creator" };
+function stackNote(a) {
+  if (a.apart) return `<p class="note">${esc(tr("You said this isn't a copy of anything, so it's shown on its own."))} ` +
+    `<button class="linkish" data-act="apart" data-on="false">${esc(tr("Show it with its copies again"))}</button></p>`;
+  if (!a.stack_key || !(a.stack_why || []).length) return "";
+  return `<p class="note">${esc(tr("Shown with its copies, as they have {0}.", listed(a.stack_why.map(w => tr(STACK_WHY[w])))))} ` +
+    `<button class="linkish" data-act="apart" data-on="true">${esc(tr("Not a copy"))}</button></p>`;
+}
+
 /* ---------- archive, hide and remove; the hidden library and its PIN */
 const VIEWS = { library: "Library", archive: "Archive", removed: "Removed", hidden: "Hidden" };
 const inView = a => state.view === "library" ? !a.mark : state.view === "archive" ? a.mark === "archived" : a.mark === state.view;
@@ -3055,6 +3068,8 @@ const MARK_DONE = {   // [one, many]
   "removed false": ["Restored 1 item.", "Restored {0} items."],
   "hidden true": ["Hidden 1 item. It's in Hidden, behind your PIN.", "Hidden {0} items. They're in Hidden, behind your PIN."],
   "hidden false": ["1 item is no longer hidden.", "{0} items are no longer hidden."],
+  "apart true": ["Shown on its own now: it isn't stacked with other products.", "{0} items are shown on their own now."],
+  "apart false": ["It's stacked with its copies again.", "{0} items are stacked with their copies again."],
 };
 async function markItems(list, kind, on) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
@@ -3062,6 +3077,7 @@ async function markItems(list, kind, on) {
   if (kind === "hidden" && on && !(DATA.privacy || {}).pin_set && !(await pinDialog("set"))) return;
   const r = await apiPost("/api/marks", { kind, keys, on });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  if (kind === "apart") state.copies = null;   // (its stack is changing: back to the library, where the change shows)
   sel.ids.clear(); T.closeDetail(); await load();
   toast(tr(MARK_DONE[`${kind} ${on}`][keys.length === 1 ? 0 : 1], keys.length));
   // issue #81: removing something you downloaded offers to delete its files too, so Downloads doesn't keep it

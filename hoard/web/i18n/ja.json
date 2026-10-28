@@ -1956,5 +1956,17 @@
  "Where Projects backs projects up.": "プロジェクトでプロジェクトをバックアップする場所です。",
  "Not there yet": "まだありません",
  "Hoard's folders couldn't be read just now.": "今はHoardのフォルダーを読み込めませんでした。",
- "That folder didn't open.": "そのフォルダーは開きませんでした。"
+ "That folder didn't open.": "そのフォルダーは開きませんでした。",
+ "the same picture": "同じ画像",
+ "the same name and creator": "同じ名前と作者",
+ "the same name, and pictures that look alike": "同じ名前で、よく似た画像",
+ "names alike, by the same creator": "同じ作者のよく似た名前",
+ "Shown with its copies, as they have {0}.": "ほかのコピーとまとめて表示しています(理由: {0})。",
+ "Not a copy": "コピーではない",
+ "You said this isn't a copy of anything, so it's shown on its own.": "コピーではないと指定したので、単独で表示しています。",
+ "Show it with its copies again": "またコピーとまとめて表示する",
+ "Shown on its own now: it isn't stacked with other products.": "単独で表示するようにしました。ほかの商品とまとめません。",
+ "{0} items are shown on their own now.": "{0}個のアイテムを単独で表示するようにしました。",
+ "It's stacked with its copies again.": "またコピーとまとめて表示します。",
+ "{0} items are stacked with their copies again.": "{0}個のアイテムをまたコピーとまとめて表示します。"
 }

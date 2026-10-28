@@ -636,6 +636,30 @@ class StackingAcrossStores(unittest.TestCase):
             page.wait_for_timeout(300)
         page.close()
 
+    def test_a_copy_that_isnt_one(self):
+        """Issue #217: a copy's details say why it's shown with its copies; Not a copy takes it out of its stack (for
+        good, kept in marks.json), and Show it with its copies again puts it back."""
+        from hoard.marks import MarkStore
+        self.addCleanup(lambda: MarkStore().path.unlink(missing_ok=True))
+        page = self.browser.new_page()
+        goto(page, self.srv.entry_url())
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        page.locator(".slot.stacked", has_text="Fluffy Mane").click()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        page.locator(".slot").first.click()
+        note = page.locator("#detail .note", has_text="Shown with its copies")
+        self.assertIn("the same name and creator", note.inner_text())
+        note.get_by_role("button", name="Not a copy").click()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 5")   # back in the library, apart
+        self.assertEqual(sum("Fluffy Mane" in t and "copies" not in t for t in self.tiles(page)), 2)
+        apart = page.evaluate("() => DATA.items.find(a => a.apart).key")
+        page.locator(f'.slot[data-key="{apart}"]').click()
+        again = page.locator("#detail .note", has_text="isn't a copy of anything")
+        again.get_by_role("button", name="Show it with its copies again").click()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        self.assertEqual(MarkStore().load()["apart"], set())
+        page.close()
+
     def test_the_sort_stays(self):
         """The sort you choose stays when you go to the other page, and next time Hoard starts (kept in config.json,
         one for both pages). One the page doesn't have (Largest, in the Library) shows by name there, and comes back on

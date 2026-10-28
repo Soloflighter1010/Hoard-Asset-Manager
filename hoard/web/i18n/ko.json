@@ -1956,5 +1956,17 @@
  "Where Projects backs projects up.": "프로젝트에서 프로젝트를 백업하는 곳이에요.",
  "Not there yet": "아직 없어요",
  "Hoard's folders couldn't be read just now.": "지금은 Hoard의 폴더를 읽지 못했어요.",
- "That folder didn't open.": "그 폴더가 열리지 않았어요."
+ "That folder didn't open.": "그 폴더가 열리지 않았어요.",
+ "the same picture": "같은 그림",
+ "the same name and creator": "같은 이름과 제작자",
+ "the same name, and pictures that look alike": "같은 이름에 비슷해 보이는 그림",
+ "names alike, by the same creator": "같은 제작자의 비슷한 이름",
+ "Shown with its copies, as they have {0}.": "다른 사본과 함께 보여 줘요(이유: {0}).",
+ "Not a copy": "사본이 아니에요",
+ "You said this isn't a copy of anything, so it's shown on its own.": "사본이 아니라고 하셔서 따로 보여 줘요.",
+ "Show it with its copies again": "다시 사본과 함께 보여 주기",
+ "Shown on its own now: it isn't stacked with other products.": "이제 따로 보여 줘요. 다른 상품과 묶지 않아요.",
+ "{0} items are shown on their own now.": "이제 항목 {0}개를 따로 보여 줘요.",
+ "It's stacked with its copies again.": "다시 사본과 함께 묶어 보여 줘요.",
+ "{0} items are stacked with their copies again.": "항목 {0}개를 다시 사본과 함께 묶어 보여 줘요."
 }

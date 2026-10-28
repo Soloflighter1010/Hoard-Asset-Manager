@@ -23,10 +23,15 @@ The **Library** shows everything you own on the stores you use, whether or not y
     their Gumroad and Jinxxy). Each store saves a picture its own way, so Hoard compares how the pictures look:
     the page works that out once and Hoard keeps it in `picture-looks.json`. Two creators' products with the same
     name and different pictures stay apart;
-  - **a picture several creators use and a name nearly the same** (a word more or less, the same numbers).
+  - **a picture several creators use and a name nearly the same** (a word more or less, the same numbers);
+  - **names alike, by the same creator on two stores** (5.2.0): alike once what listings add around a name is left
+    out ([Asset], versions such as v2 or 1.0.3, "for VRChat", Free, emoji), so "[Asset] Fox Tail v2" on Gumroad
+    and "Fox Tail" on Booth stack. Their other numbers still have to match, and a hoodie "for" one avatar isn't
+    the one for another.
 
   A picture several creators use for different names (a store's default banner) stacks nothing. Choose a stack to
-  see every copy. Downloads stacks the same copies, and lists the others in a copy's details. Untick **Stack
+  see every copy. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
+  it's shown on its own from then on (**Show it with its copies again** undoes it). Downloads stacks the same copies, and lists the others in a copy's details. Untick **Stack
   copies**, beside **Sort** on either page, to show each on its own; Hoard remembers. While you're choosing
   several, and in Disk space, each copy shows.
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
