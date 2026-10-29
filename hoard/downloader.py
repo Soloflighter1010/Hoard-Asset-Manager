@@ -267,10 +267,11 @@ def left_out(args, report: Report, store: str, name: str, file: str, *also: str)
         if file in pick.get("chosen", ()):
             return False
         why = "left out, as you chose"
-    elif any(file in (getattr(args, "remembered", None) or {}).get(k, ()) for k in keys):
+    elif isinstance(remembered := getattr(args, "remembered", None), dict) and any(file in remembered.get(k, ()) for k in keys):
         why = "left out, as you chose before"
     else:
-        rule = ruled_out(getattr(args, "rules", None) or [], store, file)
+        rules = getattr(args, "rules", None)   # (only what a sync gave it: a stand-in's arguments may have anything)
+        rule = ruled_out(rules if isinstance(rules, list) else [], store, file)
         if not rule:
             return False
         why = f"left out by your rule ({rule})"
