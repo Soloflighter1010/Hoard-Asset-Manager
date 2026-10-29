@@ -43,6 +43,7 @@ def show(text: str, title: str = TITLE) -> bool:
 
 
 def _quietly(target, title: str, text: str) -> None:
+    """Show a notification, only printing why when the system can't: the pages say the same thing anyway."""
     try:
         target(title, text)
     except Exception as e:   # only ever a courtesy: the pages say the same
@@ -50,20 +51,24 @@ def _quietly(target, title: str, text: str) -> None:
 
 
 def _run(args: list[str]) -> None:
+    """Run a notification command, silently and for at most 15 seconds."""
     subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                    timeout=15, check=False)
 
 
 def _mac(title: str, text: str) -> None:
+    """A Mac notification, through AppleScript (the title and text are passed as arguments, never as script)."""
     _run(["osascript", "-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)",
           "-e", "end run", title, text])
 
 
 def _gvariant(s: str) -> str:
+    """A string as GVariant text, quoted and escaped, for gdbus."""
     return "'" + s.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
 def _linux(title: str, text: str) -> None:
+    """A Linux desktop notification, through notify-send, or straight to the notification service without it."""
     if shutil.which("notify-send"):
         _run(["notify-send", "--app-name=Hoard", "--icon=io.github.soloflighter1010.Hoard", "--", title, text])
     else:   # (the Flatpak, and desktops without libnotify's tools): the same, straight to the notification service
@@ -79,10 +84,12 @@ def _windows(title: str, text: str) -> None:
     from ctypes import wintypes
 
     class GUID(ctypes.Structure):
+        """Windows' GUID structure, for NOTIFYICONDATAW."""
         _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD),
                     ("Data4", ctypes.c_ubyte * 8)]
 
     class NOTIFYICONDATAW(ctypes.Structure):
+        """What Shell_NotifyIconW takes: the icon in the notification area, and the balloon it shows."""
         _fields_ = [("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uID", wintypes.UINT),
                     ("uFlags", wintypes.UINT), ("uCallbackMessage", wintypes.UINT), ("hIcon", wintypes.HICON),
                     ("szTip", wintypes.WCHAR * 128), ("dwState", wintypes.DWORD), ("dwStateMask", wintypes.DWORD),

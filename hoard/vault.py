@@ -35,10 +35,12 @@ def clean_key(value) -> str | None:
 
 
 def _keys_dir() -> Path:
+    """Where keys are kept as files (Windows' encrypted ones, or the unprotected ones you allowed)."""
     return data_dir() / "keys"
 
 
 def _file(name: str, suffix: str) -> Path:
+    """The file a key is kept in."""
     return _keys_dir() / f"{name}.{suffix}"
 
 
@@ -53,9 +55,11 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
     from ctypes import wintypes
 
     class Blob(ctypes.Structure):
+        """Windows' DATA_BLOB: a length and a pointer to the bytes."""
         _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
 
     def blob(b: bytes):
+        """Bytes as a DATA_BLOB, and the buffer that holds them (kept until the call is done)."""
         buf = ctypes.create_string_buffer(b, len(b))
         return Blob(len(b), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), buf
 
@@ -74,6 +78,7 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
 # ----------------------------------------------------------------------------- the operating systems' stores
 
 def _run(cmd: list[str], stdin: str = "") -> subprocess.CompletedProcess:
+    """Run a program for the keychain or keyring, with what it's given on stdin (never on its command line)."""
     return subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=30)
 
 
@@ -133,6 +138,7 @@ def load_secret(cfg: dict, name: str) -> str | None:
 
 
 def _keep(cfg: dict, name: str, key: str) -> None:
+    """Keep a value under name, wherever this computer keeps keys."""
     where = _where(cfg)
     if where == "windows":
         write_file_safely(_file(name, "dpapi"), _dpapi(key.encode(), True))
@@ -163,6 +169,7 @@ def load_key(cfg: dict, name: str) -> str | None:
 def _read(cfg: dict, name: str) -> str | None:
     """What's kept under name, as it was kept (letters, digits, - and _), or None."""
     def plain(text):
+        """What was kept, as it was kept (letters, digits, - and _), or None."""
         text = str(text or "").strip()
         return text if STORED_FORMAT.fullmatch(text) else None
     try:

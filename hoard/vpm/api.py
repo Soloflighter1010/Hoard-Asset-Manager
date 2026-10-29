@@ -45,12 +45,14 @@ class Service:
         self._collection: repos.Collection | None = None
 
     def settings(self) -> environment.Settings:
+        """The Creator Companion's settings; raises ProjectsError when they can't be read."""
         try:
             return environment.Settings.load()
         except DataFileError as e:
             raise ProjectsError(f"The Creator Companion's settings can't be read ({e}).") from None
 
     def collection(self, reload: bool = False) -> repos.Collection:
+        """Every repository and package folder, read once and kept until forgotten (reload reads them again)."""
         with self._lock:
             if self._collection is None or reload:
                 self._collection = repos.Collection.load(self.settings())
@@ -60,12 +62,15 @@ class Service:
             return self._collection
 
     def forget(self) -> None:
+        """Forget the repositories read, to read them again next time (they changed)."""
         with self._lock:
             self._collection = None
 
     # ---- reading
 
     def overview(self) -> dict:
+        """Everything Projects shows first: the projects, the Unity editors, the templates, the settings, the
+        repositories, presets and backups."""
         settings = self.settings()
         db = environment.database(settings.folder)
         editors = unity.find_editors(db["unityVersions"])
@@ -90,6 +95,7 @@ class Service:
         return any((r.url or "").rstrip("/") == HOARD_REPO or HOARD_PACKAGE in r.packages for r in coll.repos)
 
     def backups_folder(self) -> Path:
+        """Where project backups go."""
         return Path(self.settings().project_backup_path() or backup.default_folder())
 
     def backups(self, summary: bool = False) -> dict:
@@ -103,6 +109,8 @@ class Service:
         return view
 
     def backups_chosen(self, paths) -> list[Path]:
+        """The backups chosen to delete or move, each checked to be in a backups folder; raises ProjectsError
+        otherwise."""
         prefs = listing.backup_prefs()
         try:
             return backup.chosen(paths, [self.backups_folder(), Path(prefs["moved_to"]) if prefs["moved_to"] else None])
@@ -119,6 +127,8 @@ class Service:
         return found
 
     def project(self, path: str) -> dict:
+        """One project, for its page: its packages (each with any newer version), its Unity, and what's installed of
+        your library."""
         path = self.listed(path)
         try:
             p = UnityProject.load(path)
@@ -143,6 +153,7 @@ class Service:
                 "favorite": bool(state.get("favorite"))}
 
     def _package_row(self, coll, p, name, version, have, own, show_pre, folder=None) -> dict:
+        """A package as the project's page lists it: its version, a newer one if there is, where it comes from."""
         newest = None if own else coll.find(name, Selector.latest(p.unity, show_pre or version.is_pre))
         return {"name": name, "label": have.label() if have else name, "version": str(version),
                 "description": have.description if have else "", "own": own, "folder": folder,
@@ -152,6 +163,7 @@ class Service:
                 "changelog": have.changelog_url if have else None}
 
     def packages(self, unity_text, pre: bool) -> list[dict]:
+        """The newest version of every package there is for this Unity, for Add packages."""
         u = UnityVersion.parse(unity_text) if unity_text else None
         coll = self.collection()
         out = []
@@ -196,6 +208,8 @@ class Service:
     # ---- changes, worked out (for the page to show before they're made) and made (in a job)
 
     def changes(self, project: UnityProject, request: dict) -> resolve.Changes:
+        """What a request (add, upgrade, downgrade, remove, repair) would do to the project, worked out by the
+        resolver."""
         coll = self.collection()
         prerelease = request.get("prerelease") is True
         if request.get("repair"):
@@ -226,6 +240,7 @@ class Service:
         return resolve.add(project, coll, wanted, resolve.AUTO, prerelease)
 
     def preview(self, request: dict) -> dict:
+        """What a request would do, for the page to show before it's done."""
         path = self.listed(request.get("path"))
         try:
             project = UnityProject.load(path)
@@ -337,6 +352,7 @@ class Service:
                 log(Warn(f"Couldn't fetch {failed}"))
 
     def _create(self, what: dict, assets_by_key) -> str:
+        """Make a new project from a template, with its packages, then put in your products; returns what was done."""
         settings = self.settings()
         u = UnityVersion.parse(what.get("unity"))
         if u is None:
@@ -380,6 +396,8 @@ class Service:
         return done
 
     def _preload(self, path: str, picks: list, assets_by_key, new: bool) -> str:
+        """Put products from your library (their Unity packages and VPM packages) into a project, with what they need;
+        returns what was done."""
         chosen = []
         for pick in picks[:500]:
             if not isinstance(pick, dict):

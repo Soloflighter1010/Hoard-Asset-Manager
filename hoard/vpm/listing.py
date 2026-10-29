@@ -27,16 +27,20 @@ _lock = threading.RLock()
 
 
 def _key(path: str) -> str:
+    """A project's folder as it's compared and kept (case and separators as the system compares them)."""
     return os.path.normcase(os.path.normpath(path))
 
 
 # ---- Hoard's own notes
 
 def _state_path() -> Path:
+    """Where Hoard's own notes on projects are kept (vpm-projects.json)."""
     return data_dir() / STATE
 
 
 def load_state() -> dict:
+    """Hoard's notes on projects (favourites, folders and tags, what went in from your library, backup choices), or
+    none."""
     try:
         raw = read_json_file(_state_path(), 16 << 20)
     except FileNotFoundError:
@@ -48,6 +52,7 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    """Write Hoard's notes on projects."""
     import json
     write_file_safely(_state_path(), json.dumps(state, indent=1, ensure_ascii=False))
 
@@ -64,6 +69,7 @@ def backup_prefs() -> dict:
 
 
 def set_backup_prefs(**changes) -> dict:
+    """Change how old backups are told apart, or where they were last moved to; returns the choices as they are now."""
     with _lock:
         state = load_state()
         state["backups"] = {**backup_prefs(), **changes}
@@ -175,10 +181,12 @@ def projects(progress=None) -> list[dict]:
 
 
 def _ms(value) -> int:
+    """A time from the Creator Companion's database, in milliseconds (0 when there's none)."""
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
 def _iso_ms(value) -> int:
+    """A time Hoard noted (ISO 8601), in milliseconds (0 when it can't be read)."""
     if not isinstance(value, str):
         return 0
     try:
@@ -211,6 +219,7 @@ def remove(path: str) -> bool:
 
 
 def is_listed(path: str) -> bool:
+    """Is this folder on the project list?"""
     return find(path) is not None
 
 

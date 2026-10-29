@@ -80,6 +80,7 @@ def routine_hours(cfg: dict) -> int:
 
 
 def _routine_file():
+    """Where the routine check notes when it last ran and what it found."""
     return data_dir() / "routine.json"
 
 
@@ -111,6 +112,7 @@ def save_routine(**change) -> None:
 
 
 def _sync_file():
+    """Where the last sync's time is kept (for a schedule carried over from Sync automatically)."""
     return data_dir() / "sync.json"
 
 
@@ -134,6 +136,7 @@ def _when(stamp: str) -> float:
 
 
 def _record_sync() -> None:
+    """Note that a sync ran now."""
     try:
         write_file_safely(_sync_file(), json.dumps({"last": time.time()}))
     except OSError:
@@ -151,15 +154,20 @@ class Schedule:
         self.not_before = time.time() + FIRST_WAIT
 
     def stores(self) -> list[str]:
+        """The stores the routine check reads: those switched on, but Payhip (which needs you there for its bot
+        check)."""
         return [s for s in STORES if self.cfg[s].get("enabled", True) and s not in UNATTENDED]
 
     def _downloaded(self) -> bool:
+        """Has anything been downloaded yet (a store's records in the downloads folder)?"""
         from .config import root_dir
         from .downloader import STORE_DIRS
         root = root_dir(self.cfg)
         return any((root / d / "_manifest.json").is_file() for d in STORE_DIRS.values())
 
     def due(self, now: float | None = None) -> bool:
+        """Is the routine check due: on, set up, nothing running, and long enough since it last ran, with something to
+        check?"""
         now = time.time() if now is None else now
         hours = routine_hours(self.cfg)
         return bool(hours and self.cfg.get("setup_done") and now >= self.not_before and not self.jobs.state["running"]
@@ -180,6 +188,7 @@ class Schedule:
         return started
 
     def run_forever(self, stop: threading.Event) -> None:
+        """Look once a minute whether the routine check is due, until Hoard stops."""
         while not stop.wait(60):
             try:
                 self.tick()
@@ -220,6 +229,7 @@ OUTCOMES = ("done", "partial", "failed", "stopped")
 
 
 def plural(n: int, word: str) -> str:
+    """A count with its word, made plural when it isn't one (3 products)."""
     return f"{n:,} {word}{'' if n == 1 else 's'}"
 
 
@@ -230,6 +240,7 @@ def _names(stores: list[str]) -> str:
 
 
 def tasks_file():
+    """Where the Tasks window's finished tasks are kept between runs."""
     return data_dir() / "tasks.json"
 
 
@@ -303,6 +314,7 @@ class Jobs:
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
         self.project_runner = None   # Projects' work (hoard/vpm/api.py: the server sets it)
         self.on_found = None   # the routine check found more to download than before: Hoard's app tells you (hoard/notify.py)
+        self.on_news = None    # (kind, what): news for notifications through Apprise (issue #230: hoard/alerts.py)
         self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
         self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
         self._forced = False     # Force stop was chosen for the running job
@@ -314,7 +326,6 @@ class Jobs:
                       "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None,
                       "queue": [], "job_id": None, "transfer": None, "partial": None}
         self._queue: list[dict] = []        # jobs waiting their turn, oldest first
-        self.on_news = None    # (kind, what): news for notifications through Apprise (issue #230: hoard/alerts.py)
         self._qlock = threading.Lock()      # the queue, and taking the runner from it
         self._current: dict | None = None
         self._trail: list[str] = []         # the running job's progress, line by line
@@ -325,6 +336,7 @@ class Jobs:
         self.listed: dict[str, dict] = {}   # what products have, read to choose from (issue #225): by tag key
 
     def _history_file(self):
+        """Where this lane's finished tasks are kept (Projects' apart from the rest)."""
         return project_tasks_file() if self.lane == PROJECTS else tasks_file()
 
     def _set(self, **kw):
@@ -406,12 +418,14 @@ class Jobs:
             return len(self._queue) != before
 
     def clear_queue(self) -> int:
+        """Take every waiting task off the queue; returns how many there were."""
         with self._qlock:
             n, self._queue = len(self._queue), []
             self._publish_queue()
             return n
 
     def _publish_queue(self) -> None:
+        """What's waiting, as the pages show it."""
         self.state["queue"] = [{"id": q["id"], "task": q["task"], "label": q["label"], "queued": q["queued"], "lane": self.lane}
                                for q in self._queue]
 
@@ -535,8 +549,18 @@ class Jobs:
             write_file_safely(self._history_file(), json.dumps({"history": self.history}, ensure_ascii=False))
         except OSError as e:
             print(f"Couldn't save the task log: {e}", flush=True)
+        self._news("finished", self.history[-1])
+
+    def _news(self, kind: str, what) -> None:
+        """Pass news on for notifications (issue #230); whatever happens there never stops a task."""
+        if self.on_news:
+            try:
+                self.on_news(kind, what)
+            except Exception as e:  # noqa: BLE001
+                print(f"Couldn't pass on a notification: {type(e).__name__}", flush=True)
 
     def _load_history(self) -> list[dict]:
+        """The finished tasks kept from earlier runs, each checked as it's read."""
         try:
             raw = read_json_file(self._history_file()) if self._history_file().is_file() else {}
         except (DataFileError, OSError):
@@ -549,15 +573,6 @@ class Jobs:
                         "stores": [s for s in (h.get("stores") or []) if s in STORES or s == "all"] if isinstance(h.get("stores"), list) else [],
                         "started": str(h.get("started") or "")[:40], "ended": str(h.get("ended") or "")[:40],
                         "outcome": h.get("outcome") if h.get("outcome") in OUTCOMES else "done",
-        self._news("finished", self.history[-1])
-
-    def _news(self, kind: str, what) -> None:
-        """Pass news on for notifications (issue #230); whatever happens there never stops a task."""
-        if self.on_news:
-            try:
-                self.on_news(kind, what)
-            except Exception as e:  # noqa: BLE001
-                print(f"Couldn't pass on a notification: {type(e).__name__}", flush=True)
                         "message": str(h.get("message") or "")[:600],
                         "report": h.get("report") if isinstance(h.get("report"), dict) else None,
                         "log": [str(x)[:500] for x in h.get("log") or [] if isinstance(x, str)][-MAX_TRAIL:]
@@ -574,6 +589,7 @@ class Jobs:
         return {"current": current, "queue": list(self.state["queue"]), "history": list(reversed(self.history))}
 
     def clear_history(self) -> None:
+        """Forget the finished tasks (Clear in Tasks)."""
         self.history = []
         try:
             self._history_file().unlink(missing_ok=True)
@@ -599,6 +615,7 @@ class Jobs:
         lines: list[str] = []
 
         def progress(line: str) -> None:
+            """A line from the browser's installer: shown, in the task's log, and in Hoard's log."""
             lines.append(line)
             del lines[:-40]
             self._set(message=line, log=lines[-20:])
@@ -630,6 +647,7 @@ class Jobs:
         moved = []   # set once the move has gone through: a Stop after that can't undo it, so it lets it finish
 
         def sink(msg):
+            """A step of the move: shown; Stop takes effect here, until the files have started to move."""
             self._moved = time.monotonic()
             self.state["message"] = str(msg)
             if self.stop.is_set() and not moved and threading.get_ident() == self._job_thread:
@@ -662,6 +680,7 @@ class Jobs:
         lines: list[str] = []
 
         def sink(msg):
+            """A step of Projects' task: shown, kept in its log and in Projects' Logs; Stop takes effect here."""
             self._moved = time.monotonic()
             if isinstance(msg, Progress):
                 self.state["message"] = str(msg)
@@ -800,6 +819,8 @@ class Jobs:
         summary = integrity_summary(result)
         if not result["complete"]:
             summary = "Stopped. " + summary
+        elif result["changed"] or result["missing"]:
+            self._news("checked", {"changed": len(result["changed"]), "missing": len(result["missing"])})
         self._set(message=summary, log=lines[-200:])
         for line in [summary] + lines:
             print(f"Check downloads: {line}", flush=True)
@@ -819,8 +840,6 @@ class Jobs:
                 return
             checked = self._verify(stores, fresh=True)
             if self.stop.is_set():
-        elif result["changed"] or result["missing"]:
-            self._news("checked", {"changed": len(result["changed"]), "missing": len(result["missing"])})
                 return
             downloadable = [s for s in stores if s in DOWNLOADABLE and s not in unread]
             if downloadable:
@@ -897,6 +916,7 @@ class Jobs:
         return True
 
     def _stop_project(self) -> bool:
+        """Stop Projects' task at its next step, which puts back what it was changing; False when nothing's running."""
         if not self.state["running"]:
             return False
         self._set(message="Stopping: what it was changing is put back as it was")
@@ -906,6 +926,7 @@ class Jobs:
     # ---- a job that doesn't stop, or doesn't move
 
     def _still(self, job_id) -> bool:
+        """Is this task (by its id) still the one running?"""
         return bool(self.state.get("running")) and self.state.get("job_id") == job_id
 
     def where(self) -> str:
@@ -962,6 +983,8 @@ class Jobs:
         lines: list[str] = []
 
         def progress(msg):
+            """A message from the download: progress shown as it goes, anything else kept in the task's log; Stop takes
+            effect here."""
             if isinstance(msg, Progress):   # how far a download has got: shown, not kept in the log or Tasks
                 self._moved = time.monotonic()
                 self.state.update(message=str(msg), transfer=msg.transfer)
@@ -1203,6 +1226,8 @@ class Jobs:
                     ctx.close()
         done = SetStore().put_wishlists(got) if got else {"lists": 0, "cheaper": []}
         cheaper = done.get("cheaper") or []
+        if cheaper:
+            self._news("cheaper", len(cheaper))
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])
@@ -1226,8 +1251,6 @@ class Jobs:
             self.lib.set_error(store, unreachable_message(store, "opened for signing in"))
             self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
             return
-        if cheaper:
-            self._news("cheaper", len(cheaper))
         channel, chosen = use_channel(self.cfg), chosen_channel(self.cfg)
         name = BROWSER_NAMES[channel]
         if channel == "chromium" and not own_browser_installed():

@@ -39,6 +39,8 @@ def _url(value) -> str | None:
 
 
 def _text(value, limit: int) -> str:
+    """A text field of a package's manifest, cleaned and cut to limit; blank when it's missing, ValueError when it isn't
+    text."""
     if value is None:
         return ""
     if not isinstance(value, str):
@@ -47,6 +49,7 @@ def _text(value, limit: int) -> str:
 
 
 def _str_map(value, limit: int) -> dict:
+    """A field of names (each to a text or nothing), at most limit of them; ValueError when it isn't one."""
     if value is None:
         return {}
     if not isinstance(value, dict) or len(value) > limit:
@@ -78,6 +81,8 @@ class Package:
         p.name, p.version = raw["name"], version
 
         def field(fn, default):
+            """A field, read by fn; one that can't be read is default when reading loosely (a project's own packages),
+            an error otherwise."""
             try:
                 return fn()
             except (ValueError, VersionError, TypeError, AttributeError):
@@ -109,10 +114,12 @@ class Package:
         return f"Package({self.name}@{self.version})"
 
     def label(self) -> str:
+        """The package's name as people see it (its displayName), or its id."""
         return self.display_name or self.name
 
 
 def _keywords(value) -> list:
+    """A package's keywords (at most 50, each cut short); ValueError when they aren't a list."""
     if value is None:
         return []
     if not isinstance(value, list):
@@ -123,6 +130,8 @@ def _keywords(value) -> list:
 def _soft_url(value):
     # changelogUrl and documentationUrl are only ever shown as links, so a bad one is just left out (vrc-get drops
     # the whole version for one; there's no need to)
+    """A link field only ever shown (changelogUrl, documentationUrl): None for a bad one, rather than the whole version
+    left out."""
     try:
         return _url(value)
     except ValueError:
@@ -130,6 +139,7 @@ def _soft_url(value):
 
 
 def _unity(value):
+    """The Unity a package asks for (2022.3); ValueError for one that isn't a Unity version."""
     if value is None:
         return None
     parsed = partial_unity(value)
@@ -139,6 +149,7 @@ def _unity(value):
 
 
 def _sha(value):
+    """A package zip's SHA-256 (64 hex digits, lower case), None when it has none; ValueError for anything else."""
     if value is None or value == "":
         return None
     if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", value.strip()):
@@ -147,6 +158,7 @@ def _sha(value):
 
 
 def _ranges(value) -> dict:
+    """A package's dependencies, each name with its version range; ValueError for a bad name or range, or too many."""
     if value is None:
         return {}
     if not isinstance(value, dict) or len(value) > MAX_DEPENDENCIES:
@@ -160,6 +172,7 @@ def _ranges(value) -> dict:
 
 
 def _names(value) -> list:
+    """A list of package names (legacyPackages), each once; ValueError for a bad name or too many."""
     if value is None:
         return []
     if not isinstance(value, list) or len(value) > MAX_DEPENDENCIES or not all(valid_name(n) for n in value):
@@ -168,6 +181,8 @@ def _names(value) -> list:
 
 
 def _headers(value) -> dict:
+    """The headers a package asks to be downloaded with: plain names, no line breaks, at most 50; ValueError
+    otherwise."""
     if value is None:
         return {}
     if not isinstance(value, dict) or len(value) > 50:
@@ -182,6 +197,7 @@ def _headers(value) -> dict:
 
 
 def _yanked(value) -> bool:
+    """Is this version withdrawn (yanked: true, or a reason why)?"""
     if not isinstance(value, dict):
         return False
     y = value.get("yanked", False)
@@ -193,6 +209,7 @@ def _yanked(value) -> bool:
 
 
 def _author(value) -> str:
+    """The package's author's name (written as text, or as an object with a name)."""
     if isinstance(value, dict):
         return _text(value.get("name") if isinstance(value.get("name"), str) else None, 200)
     if isinstance(value, str):
@@ -206,6 +223,8 @@ _SDK = ("com.vrchat.avatars", "com.vrchat.worlds", "com.vrchat.base")
 
 
 def unity_compatible(p: Package, unity: UnityVersion) -> bool:
+    """Does this package version work in this Unity? Its own unity field, as vrc-get reads it, with the VRChat SDK held
+    to its own Unity."""
     v = p.version
     if p.name in _SDK and v.major == 3 and v.minor <= 4:
         return unity.major == 2019   # this VRChat SDK is for Unity 2019 only

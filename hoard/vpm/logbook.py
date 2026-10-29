@@ -29,6 +29,7 @@ class Warn(str):
 
 
 class Logbook:
+    """Projects' log: its latest entries for the page (Logs), each also written to this run's projects-<time>.log."""
     def __init__(self, folder: Path | None = None):
         self._folder = folder   # (None: Hoard's logs folder, found when there's first something to write)
         self._lock = threading.Lock()
@@ -39,6 +40,7 @@ class Logbook:
         self.run = datetime.now().astimezone().isoformat(timespec="microseconds")   # (a page sees Hoard started again)
 
     def add(self, level: str, message: str) -> dict:
+        """Add an entry (its level, info unless it's a known one), numbered, and write it to the log file."""
         level = level if level in LEVELS else "info"
         message = str(message).strip()[:MAX_MESSAGE] or "(nothing said)"
         with self._lock:
@@ -56,9 +58,11 @@ class Logbook:
 
     @property
     def file(self) -> Path | None:
+        """This run's log file, once there is one."""
         return self._file
 
     def _write(self, entry: dict) -> None:
+        """Write an entry to the log file; once that fails, the entries are only shown."""
         if self._failed:
             return
         try:
@@ -71,6 +75,7 @@ class Logbook:
             print(f"Couldn't write Projects' log: {e}", flush=True)
 
     def _new_file(self) -> Path:
+        """This run's log file, named for when it started, in Hoard's logs folder."""
         folder = self._folder
         if folder is None:
             from ..paths import logs_dir
@@ -107,22 +112,27 @@ book = Logbook()
 
 
 def info(message: str) -> dict:
+    """Note something in Projects' log."""
     return book.add("info", message)
 
 
 def warning(message: str) -> dict:
+    """Note a warning in Projects' log."""
     return book.add("warning", message)
 
 
 def error(message: str) -> dict:
+    """Note an error in Projects' log."""
     return book.add("error", message)
 
 
 def count(n: int, word: str) -> str:
+    """A count with its word, made plural when it isn't one."""
     return f"{n:,} {word if n == 1 else word + 's'}"
 
 
 def size_text(n: float) -> str:
+    """A size in bytes, KB, MB or GB."""
     if n < 1024:
         return f"{int(n):,} bytes"
     for unit in ("KB", "MB", "GB"):

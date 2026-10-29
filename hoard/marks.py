@@ -69,6 +69,7 @@ def read_phrase(text: str) -> list[str]:
 
 
 def _hash(pin: str, salt: bytes, n: int, r: int, p: int) -> bytes:
+    """The scrypt hash of a PIN or recovery phrase, with its salt and costs."""
     return hashlib.scrypt(pin.encode("utf-8"), salt=salt, n=n, r=r, p=p, dklen=32, maxmem=64 * 1024 * 1024)
 
 
@@ -97,6 +98,7 @@ class MarkStore:
         return self._cached()[kind]
 
     def _cached(self) -> dict:
+        """The choices file as last read, read again only when the file has changed (a new one each save)."""
         try:
             st = self.path.stat()
             stamp = (st.st_mtime_ns, st.st_size, st.st_ino)   # written by replacing it: a new file each time
@@ -113,6 +115,8 @@ class MarkStore:
         return data
 
     def _read_file(self) -> dict:
+        """Read the choices file, starting empty when it's missing or unreadable, and dropping the PIN and phrase when
+        it was edited outside Hoard."""
         empty = {k: set() for k in KINDS} | {"ids": {k: {} for k in KINDS}, "pin": None, "recovery": None,
                                              "failures": 0, "wait_until": 0.0}
         try:
@@ -141,6 +145,7 @@ class MarkStore:
         return out
 
     def _save(self, data: dict) -> None:
+        """Write the choices file, sealed, readable only by its owner."""
         body = {k: sorted(data[k]) for k in KINDS} | {
             "ids": {k: dict(sorted(data["ids"][k].items())) for k in KINDS},
             "format": "hoard-marks", "version": 1, "pin": data["pin"], "recovery": data["recovery"],
@@ -242,6 +247,7 @@ class MarkStore:
 
     @staticmethod
     def _new_phrase(data: dict) -> str:
+        """Pick a new recovery phrase, keep only its hash, and return it to show once."""
         words = [secrets.choice(WORDS) for _ in range(PHRASE_WORDS)]
         phrase = " ".join(words)
         data["recovery"] = _hashed(phrase)
@@ -272,6 +278,8 @@ class MarkStore:
                 self._save(data)
 
     def _check(self, data: dict, pin: str, field: str = "pin") -> None:
+        """Check a PIN (or the recovery phrase), waiting longer after each wrong try. Raises PinError when it's
+        wrong."""
         if not data[field]:
             raise PinError("There's no PIN yet.")
         wait = data["wait_until"] - time.time()
@@ -303,6 +311,7 @@ class MarkStore:
 
 
 def _hashed(secret: str) -> dict:
+    """A new PIN or recovery phrase, as it's kept: a fresh salt, its hash and the costs used, never the secret."""
     salt = secrets.token_bytes(16)
     return {"salt": salt.hex(), "hash": _hash(secret, salt, **_SCRYPT).hex(), **_SCRYPT}
 

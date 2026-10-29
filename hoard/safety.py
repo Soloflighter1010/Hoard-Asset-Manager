@@ -225,6 +225,8 @@ def _canonical(obj) -> bytes:
 
 
 def _key_id(key: bytes) -> str:
+    """A short id for a sealing key (the start of its SHA-256), so a record says which key sealed it without giving it
+    away."""
     return hashlib.sha256(key).hexdigest()[:16]
 
 
@@ -237,6 +239,7 @@ def seal(obj: dict) -> dict:
 
 
 def _path_id(path: Path) -> str:
+    """A short id for a file's real path, to remember which files Hoard sealed itself."""
     return hashlib.sha256(os.path.normcase(os.path.realpath(path)).encode("utf-8", "surrogatepass")).hexdigest()[:32]
 
 
@@ -732,6 +735,7 @@ def _final_path(fd: int) -> str | None:
 
 
 def _same_place(a: str, b: Path) -> bool:
+    """Do two paths name the same place (case and separators as the system compares them)?"""
     return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(str(b)))
 
 
@@ -848,6 +852,8 @@ class _Inert(HTMLParser):
         self.raw: str | None = None   # the raw-text element being written, while inside one
 
     def _attrs(self, attrs) -> str:
+        """A tag's attributes as kept: event handlers and nonsense names left out, and links that could run code made
+        harmless."""
         kept = []
         for name, value in attrs:
             name = (name or "").lower()
@@ -863,6 +869,7 @@ class _Inert(HTMLParser):
         return "".join(kept)
 
     def _dropped(self, tag: str, attrs) -> bool:
+        """Is this tag left out (a frame, an embed, a base, a meta refresh), what's inside it kept?"""
         if tag in _DROP_TAG:
             return True
         if tag == "meta" and any((n or "").lower() == "http-equiv" for n, _ in attrs):
@@ -870,6 +877,8 @@ class _Inert(HTMLParser):
         return False
 
     def handle_starttag(self, tag, attrs):
+        """An opening tag: kept with safe attributes, left out, or (a script, say) left out with everything inside
+        it."""
         if self.skip:
             if tag == self.skip[-1] and tag in _NESTS:
                 self.skip.append(tag)
@@ -884,11 +893,13 @@ class _Inert(HTMLParser):
             self.raw = tag
 
     def handle_startendtag(self, tag, attrs):
+        """A self-closing tag, kept as it was written, with safe attributes, unless it's one left out."""
         if self.skip or tag in _DROP_WITH_CONTENT or self._dropped(tag, attrs):
             return
         self.out.append(f"<{tag}{self._attrs(attrs)} />")   # written as it was, so it's read as it would have been
 
     def handle_endtag(self, tag):
+        """A closing tag: kept, unless its opening tag was left out."""
         if self.skip:
             if tag == self.skip[-1]:
                 self.skip.pop()
@@ -900,6 +911,7 @@ class _Inert(HTMLParser):
         self.out.append(f"</{tag}>")
 
     def handle_data(self, data):
+        """Text: escaped, so none of it can be read as a tag (CSS kept as it is, but for <)."""
         if self.skip:
             return
         if self.raw:   # CSS, written as read except for "<": no tag can start inside it, whichever way it's read
@@ -908,18 +920,22 @@ class _Inert(HTMLParser):
             self.out.append(html.escape(data, quote=False))
 
     def handle_entityref(self, name):
+        """A named character (&amp;), kept when it's a real name, escaped otherwise."""
         if not self.skip:
             self.out.append(f"&{name};" if name.isalnum() else html.escape(f"&{name}", quote=False))
 
     def handle_charref(self, name):
+        """A numbered character (&#39;), kept when it's a real number, escaped otherwise."""
         if not self.skip:
             self.out.append(f"&#{name};" if name.isalnum() else html.escape(f"&#{name}", quote=False))
 
     def handle_decl(self, decl):
+        """The page's doctype, kept."""
         if not self.skip and decl.lower().startswith("doctype") and ">" not in decl:
             self.out.append(f"<!{decl}>")
 
     def unknown_decl(self, data):
+        """CDATA (text inside SVG), kept as escaped text; anything else left out."""
         if not self.skip and data.startswith("CDATA[") and "]]>" not in data:   # text inside SVG
             self.out.append(html.escape(data[6:], quote=False))
 

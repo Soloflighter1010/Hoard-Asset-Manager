@@ -93,6 +93,7 @@ def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=Non
 
 
 def _store_of(url: str) -> str | None:
+    """Which store a page is on (booth, gumroad, jinxxy, payhip, itch), by its address; None for any other site."""
     host = (urlparse(url or "").hostname or "").lower()
     if host == "booth.pm" or host.endswith(".booth.pm"):
         return "booth"
@@ -395,11 +396,14 @@ PAYHIP_JS = r"""() => {
 
 
 def booth_products(cards) -> list[dict]:
+    """Booth's wishlist cards, as products."""
     return [p for p in (product("booth", c.get("name"), id_=c.get("id"), creator=c.get("creator"), url=c.get("url"),
                                 thumbnail=c.get("thumbnail"), price=c.get("price")) for c in cards) if p]
 
 
 def jinxxy_products(cards) -> list[dict]:
+    """Jinxxy's wishlist and likes cards, as products: one Jinxxy lists from another store is that store's, and one from
+    a site that isn't a store keeps that page as its link."""
     out = []
     for c in cards:
         store = _store_of(c.get("url"))   # a product Jinxxy lists from another store is that store's; one on a site
@@ -447,6 +451,7 @@ def gumroad_card_products(cards) -> list[dict]:
 
 
 def payhip_products(cards) -> list[dict]:
+    """A Payhip shop's wishlist cards, as products."""
     return [p for p in (product("payhip", c.get("name"), url=c.get("url"), thumbnail=c.get("thumbnail"),
                                 price=c.get("price")) for c in cards) if p]
 
@@ -454,12 +459,14 @@ def payhip_products(cards) -> list[dict]:
 # ----------------------------------------------------------------------------- reading them, signed in
 
 def _with_page(url: str, n: int) -> str:
+    """The address with its page number set (none for the first page)."""
     u = urlparse(url)
     q = {k: v for k, v in parse_qs(u.query).items() if k != "page"}
     return urlunparse(u._replace(query=urlencode({**q, **({"page": n} if n > 1 else {})}, doseq=True)))
 
 
 def _signed_in(page, host: str) -> None:
+    """Raise NotLoggedIn when the store showed its sign-in page instead of your list."""
     u = urlparse(page.url)
     if u.hostname != host or re.search(r"sign_in|login|/auth/", u.path) or has_password_field(page):
         raise NotLoggedIn()
@@ -471,6 +478,7 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
     delay = float(cfg.get("request_delay", 0.8))
     try:
         def read_all(url: str, label: str) -> list[dict]:
+            """Every product on one of your Booth lists, page by page."""
             found: dict[str, dict] = {}
             goto(page, url)
             settle(page, 900)
@@ -556,6 +564,7 @@ def read_jinxxy(ctx, cfg, progress) -> list[dict]:
     delay = float(cfg.get("request_delay", 0.8))
     try:
         def read_all(url: str, label: str) -> tuple[list[dict], list[dict]]:
+            """Every product on one of your Jinxxy lists, page by page, and the other lists it links to."""
             cards: dict[str, dict] = {}
             lists: dict[str, dict] = {}
             visited = set()
@@ -606,6 +615,7 @@ def read_payhip(ctx, cfg, progress) -> list[dict]:
 
 
 def _payhip_lists(cards, shop: str, url: str) -> list[dict]:
+    """A Payhip shop's wishlists, one list for each name the shop gives them, named with the shop."""
     by: dict[str, list] = {}
     for c in cards:
         by.setdefault(c.get("list") or "Wishlist", []).append(c)
@@ -637,6 +647,7 @@ def page_kind(url: str | None) -> str | None:
 
 
 def _list_name(kind: str, url: str, page) -> str:
+    """The name a saved list page's list goes by: the store's own list name, or the one you gave it."""
     path = urlparse(url).path.rstrip("/")
     if kind == "booth":
         q = parse_qs(urlparse(url).query)

@@ -287,6 +287,8 @@ NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't
 
 
 def download_retries(cfg: dict) -> int:
+    """How many times a failed file download is tried again (Settings, Failed downloads): 0 to 5, 2 unless you chose
+    otherwise."""
     n = cfg.get("download_retries", 2)
     return n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 5 else 2
 
@@ -389,6 +391,7 @@ def browser_download_file(dl) -> Path | None:
 
 
 def _file_size(path: Path) -> int | None:
+    """A file's size, or None when it isn't there."""
     try:
         return path.stat().st_size
     except OSError:
@@ -518,6 +521,7 @@ class Manifest:
             self.save_changes()
 
     def _contents(self) -> str:
+        """The manifest as text, to tell whether it changed since it was read or saved."""
         return json.dumps(self.data, sort_keys=True, ensure_ascii=False)
 
     def record(self, key: str, creator: str, name: str) -> dict:
@@ -578,10 +582,12 @@ class StoreRecords:
         return rel_to_path(self._owner.get(id(rec), self.main).store_dir, rec["folder"])
 
     def checkpoint(self) -> None:
+        """Save each library folder's records, at most once every SAVE_EVERY seconds."""
         for m in (self.main, *self.others):
             m.checkpoint()
 
     def save_changes(self) -> None:
+        """Save whatever changed in each library folder's records."""
         for m in (self.main, *self.others):
             m.save_changes()
 
@@ -636,6 +642,7 @@ def removed_product(store: str, name: str, report: "Report") -> bool:
 
 
 def _removed_keys() -> set:
+    """The products you removed from your library, which no download or sync gets."""
     from .marks import MarkStore   # read again once it changes: removing something takes effect on the next product
     return MarkStore().keys("removed")
 
@@ -731,6 +738,7 @@ def gumroad_page_images(content: dict) -> list[str]:
     found: list[str] = []
 
     def walk(node):
+        """Note each picture from Gumroad's own file host in this part of the page, and in what's under it."""
         if isinstance(node, dict):
             if node.get("type") == "image":
                 src = (node.get("attrs") or {}).get("src")
@@ -1074,6 +1082,8 @@ def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
     page_links: list[str] = []
 
     def read() -> int:
+        """Read the links now on the page: products noted, and numbered pages of the inventory kept for later; returns
+        how many products are known."""
         for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
             u = urlparse(href)
             if not jinxxy_link(u):
@@ -1114,9 +1124,11 @@ def click_download(ctx, page, idx: int, timeout_s: int):
     popups = []
 
     def on_download(d):
+        """Note a download the click started."""
         captured.append(d)
 
     def on_page(pg):
+        """Watch a tab the click opened for its download too."""
         pg.on("download", on_download)
         hooked.append(pg)
         popups.append(pg)
@@ -1554,6 +1566,7 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
     started: list = []
 
     def on_download(download):
+        """Note the download the click started."""
         started.append(download)
 
     page.on("download", on_download)
@@ -1789,6 +1802,8 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRec
         prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
         is_update = old is not None or prev is not None or target.exists()
         def fetch(fid=fid, target=target, fname=fname, u=u):
+            """Download one of the project's files from itch.io, deleting it when it doesn't match itch.io's
+            checksum."""
             got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname,
                                  progress=downloading(fname))
             expected = str(u.get("md5_hash") or "").lower()
@@ -1840,6 +1855,7 @@ def cmd_probe(cfg: dict, args) -> None:
         page.on("response", responses.append)
 
         def dump(stage):
+            """Record the JSON responses seen so far, for this stage of the probe, with any key or pass taken out."""
             for r in responses:
                 try:
                     if "json" not in r.headers.get("content-type", "") and "graphql" not in r.url:
@@ -2317,6 +2333,7 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
 
 
 def integrity_file() -> Path:
+    """Where the last check of your downloads keeps what it found."""
     from .paths import data_dir
     return data_dir() / "integrity.json"
 
@@ -2542,6 +2559,7 @@ def integrity_summary(r: dict) -> str:
 
 
 def _still_there(folder: Path, rel) -> bool:
+    """Is the file (or a link of that name) still in the product's folder?"""
     try:
         return os.path.lexists(rel_to_path(folder, rel))
     except UnsafePath:

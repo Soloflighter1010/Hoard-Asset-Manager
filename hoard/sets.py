@@ -75,10 +75,12 @@ _lock = threading.Lock()
 
 
 def sets_file() -> Path:
+    """Where your sets and wishlists are kept."""
     return data_dir() / "sets.json"
 
 
 def pictures_dir() -> Path:
+    """Where the pictures you choose for your sets are kept."""
     return data_dir() / "set-pictures"
 
 
@@ -104,6 +106,7 @@ def _tidy_pictures(sets: list[dict]) -> None:
 
 
 def clean_name(value) -> str:
+    """A set's name, cleaned and cut short."""
     return clean_text(value, NAME_LENGTH) if isinstance(value, str) else ""
 
 
@@ -325,11 +328,13 @@ def code_mark(code: str) -> str:
 
 
 class SetStore:
+    """Your sets and wishlists (sets.json): read checked, changed under a lock, and written safely."""
     def __init__(self, path: Path | None = None):
         self.path = path or sets_file()
 
     @staticmethod
     def sanitize(raw) -> dict:
+        """sets.json as read, checked: each set and its products kept only as Hoard writes them, at most MAX_SETS."""
         out = {"sets": []}
         seen = set()
         for s in (raw.get("sets") if isinstance(raw, dict) and isinstance(raw.get("sets"), list) else [])[:MAX_SETS]:
@@ -372,6 +377,7 @@ class SetStore:
         return out
 
     def load(self) -> dict:
+        """Your sets, as kept (none when there's no file, or it can't be read)."""
         try:
             raw = read_json_file(self.path) if self.path.is_file() else {}
         except (DataFileError, OSError):
@@ -379,6 +385,7 @@ class SetStore:
         return self.sanitize(raw)
 
     def _save(self, data: dict) -> None:
+        """Write your sets."""
         write_file_safely(self.path, json.dumps({"version": 1, **data}, ensure_ascii=False, indent=1))
 
     def change(self, body: dict, details=None) -> dict:
@@ -624,6 +631,7 @@ def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_li
         return [list(p) for p in _parts_kept[seen]]
 
     def fit(a: int, b: int) -> bool:
+        """Do these rows fit in one short link?"""
         return fits(_pack(sized, [r for r in rows[a:b] if r]))
 
     def most(start: int, low: int, high: int) -> int:   # the last end in low..high that fits, low's known to
@@ -667,6 +675,7 @@ def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_li
 # ----------------------------------------------------------------------------- sharing a set
 
 def _b64(data: bytes) -> str:
+    """Bytes as base64url, without padding (for a share code)."""
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
@@ -714,6 +723,7 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
 
 
 def share_link(code: str) -> str:
+    """The website's set viewer, with a set's code after its #."""
     return f"{VIEWER}#{code}"
 
 

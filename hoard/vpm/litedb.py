@@ -31,11 +31,13 @@ class DatabaseError(ValueError):
 
 
 class _Pages:
+    """The database file as its pages (8 KB each), each checked as it's read."""
     def __init__(self, data: bytes):
         self.data = data
         self.count = len(data) // PAGE
 
     def page(self, page_id: int, kind: int) -> int:
+        """Where a page starts, checked to be the page and the kind it should be."""
         if not 0 <= page_id < self.count:
             raise DatabaseError("a reference to a page that isn't there")
         at = page_id * PAGE
@@ -44,6 +46,7 @@ class _Pages:
         return at
 
     def block(self, page_id: int, slot: int, kind: int) -> bytes:
+        """One block of a page, checked to be inside its page."""
         at = self.page(page_id, kind)
         items, highest = self.data[at + 23], self.data[at + 30]
         if items == 0 or highest == EMPTY_SLOT or slot > highest:
@@ -56,11 +59,13 @@ class _Pages:
 
 
 def _address(buf: bytes, at: int) -> tuple[int, int] | None:
+    """A block's address (page and slot) from the file; None for an empty one."""
     page_id, slot = struct.unpack_from("<IB", buf, at)
     return None if page_id == EMPTY_PAGE and slot == EMPTY_SLOT else (page_id, slot)
 
 
 def _cstring(buf: bytes, at: int) -> tuple[str, int]:
+    """A zero-ended name from the file, and where it ends."""
     end = buf.find(b"\x00", at)
     if end < 0:
         raise DatabaseError("a name with no end")
@@ -153,6 +158,7 @@ def read(path: Path, names: tuple[str, ...]) -> dict[str, list[dict]]:
 
 
 def _documents(pages: _Pages, page_id: int) -> list[dict]:
+    """Every document in a collection, found through its _id index."""
     at = pages.page(page_id, COLLECTION)
     buf = pages.data[at:at + PAGE]
     i, head, tail = 97, None, None
@@ -184,6 +190,7 @@ def _documents(pages: _Pages, page_id: int) -> list[dict]:
 
 
 def _document(pages: _Pages, at: tuple[int, int]) -> dict:
+    """One document, from its blocks (each pointing to the next), read as BSON."""
     parts, seen, current = [], set(), at
     while current is not None:
         if current in seen:

@@ -154,6 +154,8 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
     items, seen = [], set()
 
     def read_props(params: dict) -> dict:
+        """One page of Gumroad's library, as the page's own data; raises NotLoggedIn when Gumroad asks you to sign
+        in."""
         r = ctx.request.get(GR_LIBRARY, params=params, timeout=60000)
         if "/login" in urlparse(r.url).path:
             raise NotLoggedIn()
@@ -165,6 +167,7 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         return data.get("props") or {}
 
     def on_page(archived, page_no, pages):
+        """Say which page of the library is being read."""
         progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
     for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
                               float(cfg.get("request_delay", 0.8)), on_page):
@@ -461,6 +464,8 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
         visited, pending = {page.url}, []
         for _ in range(100):  # numbered pages
             def read() -> int:
+                """Note the products now on the inventory page, and its other pages to visit; returns how many are
+                known."""
                 for c in page.evaluate(JX_CARDS_JS, pattern):
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
@@ -525,6 +530,7 @@ STILL_JS = r"""() => {
 
 
 def jinxxy_key(c: dict) -> str:
+    """A Jinxxy product's key in your library (jinxxy:<its id>)."""
     return "jinxxy:" + c["key"].rsplit("/", 1)[-1]
 
 
@@ -1429,6 +1435,7 @@ _LOOKS_CACHE: dict = {"at": None, "looks": {}}
 
 
 def _looks_file() -> Path:
+    """Where what Hoard worked out about each product picture (how it looks, to stack copies by) is kept."""
     from .paths import data_dir
     return data_dir() / PICTURE_LOOKS_FILE
 
@@ -1466,6 +1473,7 @@ def save_picture_looks(new: dict) -> int:
 
 
 def _is_hex(value, n: int) -> bool:
+    """Is value n hexadecimal digits?"""
     return isinstance(value, str) and len(value) == n and all(c in "0123456789abcdef" for c in value)
 
 
@@ -1478,6 +1486,7 @@ def stack_name(name: str) -> str:
 
 
 def _maker(creator: str) -> str:
+    """A creator's name as copies are matched by (letters and digits only, any case); blank for an unknown creator."""
     key = re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", creator or "").casefold())
     return "" if key in ("", "unknowncreator") else key
 
@@ -1540,12 +1549,14 @@ def stack_by_picture(items: list[dict], looks: dict | None = None, apart=frozens
     why: dict[int, set] = {}   # a stack's root -> why its copies were put together
 
     def find(x: int) -> int:
+        """The group a product is in (the first product of it)."""
         while parent[x] != x:
             parent[x] = parent[parent[x]]
             x = parent[x]
         return x
 
     def union(a: int, b: int, reason: str = "picture") -> None:
+        """Put two products in one group of copies, for this reason (unless you said either isn't a copy)."""
         if kept_apart[a] or kept_apart[b]:
             return
         ra, rb = find(a), find(b)

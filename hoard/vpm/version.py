@@ -45,6 +45,7 @@ def _cmp_pre(a: str, b: str) -> int:
 
 
 def _number(text: str) -> int:
+    """One of a version's numbers: digits only, no leading zero, and not past what vrc-get allows."""
     if not text.isascii() or not text.isdigit() or (len(text) > 1 and text[0] == "0"):
         raise VersionError(f"not a version number: {text!r}")
     value = int(text)
@@ -54,6 +55,7 @@ def _number(text: str) -> int:
 
 
 def _ids(text: str) -> str:
+    """A version's prerelease or build label (beta.1): dot-separated letters, digits and hyphens."""
     if not text or any(not _ID.fullmatch(p) for p in text.split(".")):
         raise VersionError(f"not a version label: {text!r}")
     return text
@@ -69,6 +71,7 @@ class Version:
 
     @classmethod
     def parse(cls, text) -> "Version":
+        """A version from its text (1.2.3, 1.2.3-beta.1, 1.2.3+build); raises VersionError for anything else."""
         if not isinstance(text, str):
             raise VersionError("not a version")
         rest, _, build = text.partition("+")
@@ -80,12 +83,14 @@ class Version:
 
     @classmethod
     def maybe(cls, text) -> "Version | None":
+        """parse, or None for text that isn't a version."""
         try:
             return cls.parse(text)
         except VersionError:
             return None
 
     def _key(self):
+        """What versions sort by before their prerelease labels."""
         return (self.major, self.minor, self.patch)
 
     def __eq__(self, other):
@@ -110,9 +115,11 @@ class Version:
 
     @property
     def is_pre(self) -> bool:
+        """Is this a prerelease (1.2.3-beta)?"""
         return bool(self.pre)
 
     def base(self) -> "Version":
+        """The same version without its prerelease and build labels."""
         return Version(self.major, self.minor, self.patch)
 
 
@@ -124,6 +131,7 @@ _HUGE = (1 << 64) - 1
 
 
 class _Partial:
+    """A version as a range writes it, with parts left out (1.x, ^1.2): each missing part is _NONE, or x or *."""
     __slots__ = ("major", "minor", "patch", "pre", "build")
 
     def __init__(self, major, minor=_NONE, patch=_NONE, pre="", build=""):
@@ -131,17 +139,22 @@ class _Partial:
 
     @staticmethod
     def of(v: Version) -> "_Partial":
+        """A full version, as a partial one (every part there)."""
         return _Partial(v.major, v.minor, v.patch, v.pre, v.build)
 
     def _n(self, part):
+        """A part's number, or None for a missing or starred one."""
         return part if isinstance(part, int) else None
 
     def full(self) -> Version | None:
+        """The version, when every part is there; None when one is missing or starred."""
         if all(isinstance(p, int) for p in (self.major, self.minor, self.patch)):
             return Version(self.major, self.minor, self.patch, self.pre, self.build)
         return None
 
     def full_or_next(self) -> tuple[Version, bool]:
+        """The version with every part there, and True; or, with parts missing, the first version past it (1.x:
+        2.0.0-0), and False."""
         major, minor, patch = self._n(self.major), self._n(self.minor), self._n(self.patch)
         if major is None:
             return Version(_HUGE, _HUGE, _HUGE, "0"), False
@@ -152,10 +165,13 @@ class _Partial:
         return Version(major, minor, patch, self.pre, self.build), True
 
     def zeros(self) -> Version:
+        """The version with missing parts as 0 (1.x: 1.0.0)."""
         return Version(self._n(self.major) or 0, self._n(self.minor) or 0, self._n(self.patch) or 0,
                        self.pre, self.build)
 
     def zeros_with_pre(self) -> Version:
+        """zeros, with the lowest prerelease label (0) when it has none, so it's below every prerelease of that
+        version."""
         v = self.zeros()
         return Version(v.major, v.minor, v.patch, v.pre or "0", v.build)
 
@@ -177,21 +193,26 @@ class _Reader:
         self.text, self.at = text, 0
 
     def first(self, offset: int = 0) -> str | None:
+        """The character offset characters ahead, or None past the end."""
         i = self.at + offset
         return self.text[i] if i < len(self.text) else None
 
     def skip(self, n: int = 1) -> "_Reader":
+        """Move past n characters (and return the reader, to go on with it)."""
         self.at += n
         return self
 
     def skip_ws(self) -> None:
+        """Move past any spaces."""
         while self.first() is not None and self.first() in " \t\r\n\f\v":
             self.at += 1
 
     def empty(self) -> bool:
+        """Is all of the text read?"""
         return self.at >= len(self.text)
 
     def segment(self):
+        """One part of a version in a range: a number (no leading zero), or x, X or *."""
         c = self.first()
         if c in ("x", "X", "*"):
             self.skip()
@@ -212,6 +233,7 @@ class _Reader:
         return value
 
     def ident(self) -> str:
+        """A prerelease or build label, up to the next character that can't be in one."""
         start = self.at
         while True:
             c = self.first()
@@ -225,6 +247,7 @@ class _Reader:
             return self.text[start:self.at]
 
     def partial(self) -> _Partial:
+        """A version as a range writes it (v1.2, 1.x, 1.2.3-beta+build)."""
         self.skip_ws()
         if self.first() == "v":
             self.skip()
@@ -249,6 +272,8 @@ class _Reader:
         return _Partial(major, minor, patch, pre, build)
 
     def comparator(self) -> "tuple[str, tuple]":
+        """One comparison: an operator (~, ^, =, <, <=, >, >=) and its version, a hyphen range (1.0 - 2.0), or a bare
+        version."""
         self.skip_ws()
         c = self.first()
         if c is None:
@@ -272,26 +297,32 @@ class _Reader:
 
 
 def _gt(v: Version, p: _Partial) -> bool:
+    """v > the partial version (>1.2 means 1.3.0 or later)."""
     full, is_full = p.full_or_next()
     return v > full if is_full else v >= full
 
 
 def _ge(v: Version, p: _Partial) -> bool:
+    """v >= the partial version (>=1.2 means 1.2.0 or later)."""
     full = p.full()
     return v >= full if full else v >= p.zeros_with_pre()
 
 
 def _lt(v: Version, p: _Partial) -> bool:
+    """v < the partial version (<1.2 means before 1.2.0)."""
     full = p.full()
     return v < full if full else v < p.zeros_with_pre()
 
 
 def _le(v: Version, p: _Partial) -> bool:
+    """v <= the partial version (<=1.2 means anything 1.2.x)."""
     full, is_full = p.full_or_next()
     return v <= full if is_full else v < full
 
 
 def _matches_internal(op: str, parts: tuple, v: Version) -> bool:
+    """Does v satisfy one comparison (~, ^, =, >, >=, <, <=, a bare or starred version, or a hyphen range), as vrc-get
+    decides it, before the prerelease rules?"""
     p = parts[0]
     if op == "tilde":
         if v < p.zeros() or v.major != (p._n(p.major) or 0):
@@ -330,6 +361,8 @@ DENY, ALLOW, MINIMUM = "deny", "allow", "minimum"
 
 
 def allow_or_minimum(allow: bool) -> str:
+    """The prerelease rule to match with: ALLOW when prereleases are wanted, MINIMUM (only where the range names one)
+    otherwise."""
     return ALLOW if allow else MINIMUM
 
 
@@ -345,6 +378,7 @@ class VersionRange:
 
     @classmethod
     def parse(cls, text) -> "VersionRange":
+        """A range from its text (^1.2 || >=2.0.0 <3); raises VersionError for anything else."""
         if not isinstance(text, str) or len(text) > 500:
             raise VersionError("not a version range")
         sets = []
@@ -359,6 +393,7 @@ class VersionRange:
 
     @classmethod
     def maybe(cls, text) -> "VersionRange | None":
+        """parse, or None for text that isn't a range."""
         try:
             return cls.parse(text)
         except VersionError:
@@ -366,20 +401,27 @@ class VersionRange:
 
     @classmethod
     def same_or_later(cls, v: Version) -> "VersionRange":
+        """The range of v and every version after it (>=v)."""
         return cls([[("ge", (_Partial.of(v),))]])
 
     @classmethod
     def specific(cls, v: Version) -> "VersionRange":
+        """The range of v alone (=v)."""
         return cls([[("exact", (_Partial.of(v),))]])
 
     def contains_pre(self) -> bool:
+        """Does the range name a prerelease anywhere (^1.2.0-beta)?"""
         return any(p.pre for s in self.sets for _, parts in s for p in parts)
 
     def matches(self, v: Version) -> bool:
+        """Does v satisfy the range, a prerelease only where the range names one of its version?"""
         return self.match_pre(v, MINIMUM)
 
     def match_pre(self, v: Version, prerelease: str) -> bool:
+        """Does v satisfy any one of the range's sets, with prerelease (DENY, ALLOW or MINIMUM) as the rule for
+        prereleases?"""
         def one(op, parts):
+            """Does v satisfy this one comparison, under the prerelease rule?"""
             if not _matches_internal(op, parts, v):
                 return False
             if not v.pre:
@@ -392,10 +434,12 @@ class VersionRange:
         return any(all(one(op, parts) for op, parts in s) for s in self.sets)
 
     def intersect(self, other: "VersionRange") -> "VersionRange":
+        """The range of versions both ranges allow."""
         return VersionRange([a + b for a in self.sets for b in other.sets])
 
     def __str__(self):
         def comp(op, parts):
+            """One comparison as it's written."""
             if op == "hyphen":
                 return f"{parts[0]} - {parts[1]}"
             return _SYMBOL[op] + str(parts[0])
@@ -421,18 +465,23 @@ class DependencyRange:
 
     @classmethod
     def parse(cls, text) -> "DependencyRange":
+        """A project's dependency from its text in vpm-manifest.json."""
         return cls(VersionRange.parse(text))
 
     @classmethod
     def version(cls, v: Version) -> "DependencyRange":
+        """A dependency on a version as it's written bare (1.2.3: that version or later)."""
         return cls(VersionRange([[("star", (_Partial.of(v),))]]))
 
     @classmethod
     def from_version_range(cls, r: VersionRange) -> "DependencyRange":
+        """A dependency from a range: a bare full version becomes exactly that version, any other range stays as it
+        is."""
         single = cls(r).single_version()
         return cls(VersionRange.specific(single)) if single else cls(r)
 
     def single_version(self) -> Version | None:
+        """The version, when the dependency is a bare full version (1.2.3); None for a real range."""
         if len(self.range.sets) == 1 and len(self.range.sets[0]) == 1:
             op, parts = self.range.sets[0][0]
             if op == "star":
@@ -440,10 +489,12 @@ class DependencyRange:
         return None
 
     def matches(self, v: Version) -> bool:
+        """Does v satisfy the dependency: a bare version or later, or the range, prereleases allowed?"""
         single = self.single_version()
         return single <= v if single else self.range.match_pre(v, ALLOW)
 
     def as_range(self) -> VersionRange:
+        """The dependency as a range to resolve with: a bare version means it or later."""
         single = self.single_version()
         return VersionRange.same_or_later(single) if single else self.range
 
@@ -472,6 +523,7 @@ class UnityVersion:
 
     @classmethod
     def parse(cls, text) -> "UnityVersion | None":
+        """A Unity version from its text (2022.3.22f1, 2022.3.22f1c1); None for anything else."""
         if not isinstance(text, str) or len(text) > 60:
             return None
         m = re.fullmatch(r"(\d{1,5})\.(\d{1,3})\.(\d{1,3})([abfcpx])(\d{1,3})(?:c(\d{1,3}))?(?:-.*)?", text.strip(),
@@ -493,6 +545,8 @@ class UnityVersion:
         return cls(int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
     def _key(self):
+        """What Unity versions sort by: the numbers, then the release type (alpha, beta, final, patch, experimental),
+        then the increment."""
         return (self.major, self.minor, self.revision, _RELEASE_ORDER[self.type], self.increment)
 
     def __eq__(self, other):
@@ -514,6 +568,7 @@ class UnityVersion:
         return f"UnityVersion({str(self)!r})"
 
     def as_semver(self) -> Version:
+        """The version as semver (2022.3.22), for the ranges packages give for Unity."""
         return Version(self.major, self.minor, self.revision)
 
 

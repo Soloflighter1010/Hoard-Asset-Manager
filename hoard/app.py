@@ -45,6 +45,7 @@ class LaunchLog:
         self.fh = open(path, "a", encoding="utf-8", errors="replace", buffering=1)
 
     def write(self, text: str) -> int:
+        """Write to the log, starting another file once this one reaches LOG_LIMIT."""
         n = self.fh.write(text)
         if self.fh.tell() > LOG_LIMIT:
             self.part += 1
@@ -54,12 +55,15 @@ class LaunchLog:
         return n
 
     def flush(self) -> None:
+        """Write out what's waiting."""
         self.fh.flush()
 
     def close(self) -> None:
+        """Close the log file."""
         self.fh.close()
 
     def isatty(self) -> bool:
+        """Not a terminal (so nothing writes colours or progress bars to the log)."""
         return False
 
 
@@ -100,6 +104,7 @@ class InstanceLock:
         self.path, self.fh = path, None
 
     def acquire(self) -> bool:
+        """Take the lock that lets one copy of Hoard run at a time; False when another copy has it."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fh = open(self.path, "a+b")
         try:
@@ -117,6 +122,7 @@ class InstanceLock:
         return True
 
     def release(self) -> None:
+        """Let go of the lock, for the next copy of Hoard."""
         if self.fh:
             try:
                 if os.name == "nt":
@@ -145,6 +151,8 @@ def local_request(url: str, body: dict | None = None, timeout: float = 20, key: 
 
 
 def running_file() -> Path:
+    """Where a running Hoard notes its address and pass, so a second start can bring its window back instead of starting
+    another."""
     return data_dir() / "running.json"
 
 
@@ -167,10 +175,12 @@ def show_running_copy(wait_s: float = 10.0) -> bool:
 
 
 def token_matches(given, expected: str | None) -> bool:
+    """Does the pass given match this run's (compared in constant time)?"""
     return bool(expected) and isinstance(given, str) and hmac.compare_digest(given, expected)
 
 
 def window_available() -> bool:
+    """Can Hoard open its own window here (pywebview installed)? Otherwise it opens in your browser."""
     try:
         __import__("webview")
         return True
@@ -195,6 +205,7 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
     ready, state = threading.Event(), {}
 
     def on_ready(url, srv):
+        """The server is serving: note its address, and the pass a second start must show."""
         state.update(url=url, srv=srv)
         srv.show_token = token
         ready.set()
@@ -247,6 +258,7 @@ DEFAULT_SIZE, MIN_SIZE = (1440, 920), (900, 600)
 
 
 def place_file() -> Path:
+    """Where the window's size and place are kept between runs."""
     return data_dir() / "window-place.json"
 
 
@@ -270,6 +282,7 @@ def window_place(screens: list[tuple[int, int, int, int]]) -> dict:
     raw = raw if isinstance(raw, dict) else {}
 
     def number(key, low, high):
+        """A whole number from the saved place, when it's between low and high; None otherwise."""
         v = raw.get(key)
         return v if isinstance(v, int) and not isinstance(v, bool) and low <= v <= high else None
 
@@ -298,6 +311,7 @@ class PlaceKeeper:
         self.minimized = False
 
     def watch(self, window) -> None:
+        """Follow the window as it's resized, moved, maximized, minimized and restored, to save its place."""
         events = getattr(window, "events", None)
         if events is None:
             return
@@ -308,23 +322,29 @@ class PlaceKeeper:
         events.restored += self.restored
 
     def resized(self, width, height):
+        """Note the window's new size (not while it's maximized or minimized, and never a size too small to use)."""
         if not (self.place["maximized"] or self.minimized) and width >= MIN_SIZE[0] // 2 and height >= MIN_SIZE[1] // 2:
             self.place.update(width=int(width), height=int(height))
 
     def moved(self, x, y):
+        """Note the window's new place (not while it's maximized or minimized)."""
         if not (self.place["maximized"] or self.minimized) and -10000 < x < 32768 and -10000 < y < 32768:
             self.place.update(x=int(x), y=int(y))   # (a minimized window on Windows is "at" -32000)
 
     def maximized(self):
+        """Note that the window is maximized, to open it so next time."""
         self.place["maximized"], self.minimized = True, False
 
     def minimize(self):
+        """Note that the window is minimized, so its place isn't saved as where Windows parks it."""
         self.minimized = True
 
     def restored(self):
+        """Note that the window is back to its own size and place."""
         self.place["maximized"], self.minimized = False, False
 
     def save(self) -> None:
+        """Keep the window's size and place for next time."""
         from .safety import write_file_safely
         keep = {k: self.place[k] for k in ("width", "height", "x", "y", "maximized") if k in self.place}
         try:
@@ -349,12 +369,14 @@ def open_window(srv) -> None:
     leaving = threading.Event()   # set once Hoard is really quitting: the window may close then
 
     def show():
+        """Bring the window back from the taskbar, in front."""
         window.show()
         window.restore()
         window.on_top = True    # to the front, without staying there
         window.on_top = False
 
     def quit_app():
+        """Quit Hoard from its page: close the window for good."""
         leaving.set()
         window.destroy()
 
@@ -521,6 +543,7 @@ def self_test() -> int:
     problems, checks = [], []
 
     def check(name, ok, detail=""):
+        """Note one thing the self-test checked, and say whether it's there."""
         checks.append(name)
         print(("ok      " if ok else "MISSING ") + name + (f"  ({detail})" if detail and not ok else ""))
         if not ok:

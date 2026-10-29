@@ -30,11 +30,13 @@ _BASE_LIGHT = {"warn": "#A34818", "ph-l": "82%", "ph-s": "30%", **_STORES_LIGHT}
 
 
 def _mode(cave, ledge, stone, seam, bone, dust, gold, ink, gold_text, base, **more) -> dict:
+    """One theme's colours in dark or light: the nine it picks, over the shared ones (warnings, the stores' colours)."""
     return {**base, "cave": cave, "ledge": ledge, "stone": stone, "seam": seam, "bone": bone, "dust": dust,
             "gold": gold, "gold-ink": ink, "gold-text": gold_text, **more}
 
 
 def _theme(name, tag, mood, dark, light, dark_more=None, light_more=None) -> dict:
+    """A theme: its name, tag line and mood, and its colours in dark and in light."""
     return {"name": name, "tag": tag, "mood": mood,
             "dark": _mode(*dark, _BASE_DARK, **(dark_more or {})), "light": _mode(*light, _BASE_LIGHT, **(light_more or {}))}
 
@@ -95,23 +97,28 @@ COLOURBLIND = {"dark": {"booth": "#E69F00", "gumroad": "#CC79A7", "jinxxy": "#56
 
 
 def theme_id(value) -> str:
+    """The theme a setting names, or the default theme for anything that isn't one."""
     return value if isinstance(value, str) and value in THEMES else DEFAULT
 
 
 def mode_id(value) -> str:
+    """Dark, light or system, as a setting says; system for anything else."""
     return value if isinstance(value, str) and value in MODES else "system"
 
 
 def style_id(value) -> str:
+    """The look a setting names (standard and the others in STYLES); standard for anything else."""
     return value if isinstance(value, str) and value in STYLES else "standard"
 
 
 def _block(selector: str, values: dict, scheme: str | None = None) -> str:
+    """One CSS rule setting each value as a custom property, with its colour scheme when it has one."""
     body = "; ".join(f"--{k}: {v}" for k, v in values.items())
     return f"{selector} {{ {body}{'; color-scheme: ' + scheme if scheme else ''}; }}"
 
 
 def _mode_css(t: dict, mode: str) -> list[str]:
+    """The rules for one theme in dark or light: its colours, and the colour-blind colours over them when chosen."""
     return [_block(":root", {k: t[mode][k] for k in KEYS}, mode),
             _block(':root[data-colours="colourblind"]', COLOURBLIND[mode])]
 
