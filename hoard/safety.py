@@ -370,7 +370,8 @@ def note_connection(conn) -> None:
 def cut_connections(lane: str) -> int:
     """Force stop (issue #201): end every connection lane's job has open, so one waiting on a store that went quiet
     (a download part way through, a page being read) ends at once instead of when it times out. Returns how many
-    were cut. (Shut down rather than closed: closing doesn't wake a thread waiting to read from it.)"""
+    were cut. (Shut down rather than closed, elsewhere: closing doesn't wake a thread waiting to read from it. On
+    Windows it's the other way round: shutting down doesn't, and closing the socket's handle does.)"""
     with _open_lock:
         conns = list(_open_connections.pop(lane, ()))
     cut = 0
@@ -383,7 +384,13 @@ def cut_connections(lane: str) -> int:
             sock.shutdown(socket.SHUT_RDWR)
             cut += 1
         except OSError:
-            pass   # already closed
+            continue   # already closed
+        if os.name == "nt":
+            # a response being read holds the socket open (close() waits for it), so its handle is closed itself
+            try:
+                socket.close(sock.detach())
+            except (OSError, ValueError):
+                pass
     return cut
 
 

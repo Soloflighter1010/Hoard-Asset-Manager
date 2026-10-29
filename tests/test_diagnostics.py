@@ -288,7 +288,8 @@ class Sanitizing(unittest.TestCase):
             self.assertEqual(env["windows_security"], {"smart_app_control": "evaluation", "memory_integrity": "on"})
             values.clear()
             self.assertEqual(diagnostics.windows_security(), {"smart_app_control": "unknown", "memory_integrity": "unknown"})
-        self.assertNotIn("windows_security", diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg)))
+        with mock.patch.object(diagnostics.platform, "system", lambda: "Linux"):   # elsewhere, a report doesn't say
+            self.assertNotIn("windows_security", diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg)))
 
 
 class ServerExposure(unittest.TestCase):

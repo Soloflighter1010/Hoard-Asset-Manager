@@ -69,10 +69,13 @@ class Alerts(unittest.TestCase):
         alerts.save_urls(self.cfg, urls)
         self.assertEqual(alerts.urls(self.cfg), urls)
         self.assertNotIn("bottoken", json.dumps(self.cfg), "never in config.json")
-        kept = (self.tmp / "data" / "keys" / "apprise.key")
-        if os.name == "posix":
+        keys = self.tmp / "data" / "keys"
+        if sys.platform == "win32":   # encrypted for this Windows account
+            self.assertNotIn(b"bottoken", (keys / "apprise.dpapi").read_bytes(), "not as typed, either")
+        elif vault._where(self.cfg) == "file":   # (no keyring here: a file only you can read)
+            kept = keys / "apprise.key"
             self.assertEqual(kept.stat().st_mode & 0o777, 0o600)
-        self.assertNotIn("bottoken", kept.read_text(), "not as typed, either")
+            self.assertNotIn("bottoken", kept.read_text(), "not as typed, either")
         alerts.save_urls(self.cfg, [])
         self.assertEqual(alerts.urls(self.cfg), [])
 
