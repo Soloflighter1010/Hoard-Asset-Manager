@@ -300,6 +300,28 @@ async function api(url, opts = {}) {
   }
   return send();
 }
+/* The hidden library locks itself again after a while without anyone using it (issue #248). The page asking Hoard
+   for news every few seconds doesn't count: what you do here (a click, a key, a scroll) tells Hoard, a minute apart at
+   most, and once the time's up the page puts Hidden out of view itself (each page's hiddenLocked()). */
+let lockTimer = 0, lastTouch = 0;
+// Look again when this browser's unlock would run out (it may have been used meanwhile in another of its windows).
+function watchUnlock(p) {
+  clearTimeout(lockTimer);
+  if (p && p.unlocked && p.lock_in > 0) lockTimer = setTimeout(() => touchUnlock(false), p.lock_in * 1000 + 250);
+}
+// Tell Hoard the page is in use (or only ask how long is left), then lock the page's view if it's run out.
+async function touchUnlock(used) {
+  const r = await apiPost("/api/unlock/touch", { used });
+  if (!r.ok) return;   // (Hoard isn't answering: the next look will tell)
+  if (r.data.unlocked) { DATA.privacy = { ...DATA.privacy, lock_in: r.data.lock_in }; watchUnlock(DATA.privacy); }
+  else if ((DATA.privacy || {}).unlocked) { clearTimeout(lockTimer); hiddenLocked(); }
+}
+for (const kind of ["pointerdown", "keydown", "wheel"])
+  document.addEventListener(kind, () => {
+    if (!(DATA.privacy || {}).unlocked || Date.now() - lastTouch < 60000) return;
+    lastTouch = Date.now();
+    touchUnlock(true);
+  }, { capture: true, passive: true });
 // An address with the key in it, for what the browser loads by itself (pictures, downloads).
 const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
 const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
@@ -1156,6 +1178,13 @@ function wireSearch() {
   q.setAttribute("aria-controls", "qMenu"); q.setAttribute("aria-expanded", "false");
   q.addEventListener("focus", showSearchMenu);
   q.addEventListener("input", showSearchMenu);
+  // a search shows its results: Settings and Projects, which fill the window, close as it's typed (issue #249)
+  q.addEventListener("input", () => {
+    if (!q.value.trim()) return;
+    state.q = q.value;   // (taken up now: closing redraws the page, which would put the search back as it was)
+    if (!$("#settingsPanel").hidden) closeSettings();
+    if ($("#projectsWin") && !$("#projectsWin").hidden) openProjects(false);
+  });
   q.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== q) closeSearchMenu(); }, 0));
   q.addEventListener("keydown", e => {
     if (m.hidden) return;
@@ -3987,7 +4016,7 @@ const STORE_SEARCHES = [
   ["nexyy", "Nexyy", q => q ? `https://nexyy.com/browse?q=${q}` : "https://nexyy.com/browse"],
   ["booth", "Booth", q => `https://booth.pm/${["ja", "ko"].includes(document.documentElement.lang) ? document.documentElement.lang : "en"}/` + (q ? `search/${q}` : "items")],
   ["gumroad", "Gumroad", q => q ? `https://gumroad.com/discover?query=${q}` : "https://gumroad.com/discover"],
-  ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search=${q}` : "https://jinxxy.com/market/browse"],
+  ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search_query=${q}` : "https://jinxxy.com/market/browse"],
   ["itch", "itch.io", q => q ? `https://itch.io/search?q=${q}` : "https://itch.io/game-assets"]];
 // A store's search page for some words.
 const storeSearch = (key, words) => STORE_SEARCHES.find(x => x[0] === key)[2](encodeURIComponent(String(words || "").trim().slice(0, 100)));

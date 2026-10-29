@@ -1882,6 +1882,7 @@ async function load() {
     const r = await api("/api/library");
     if (!r.ok) throw new Error(r.status === 401 ? NEEDS_KEY : r.status === 403 ? "Open this page at http://127.0.0.1 on the computer running it." : `Server answered ${r.status}.`);
     DATA = await r.json(); DATA.error = null;
+    watchUnlock(DATA.privacy);   // (Hidden locks itself again when it's left alone)
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
     if ($("#updateNote")) showUpdate();
     applyDisplay(DATA.display);
@@ -1935,20 +1936,28 @@ const filtersActive = () => state.ptype || state.q || state.store || state.creat
 let STACK = true, stackSize = new Map(), stackStores = new Map();   // the first copy's key -> how many copies, and their stores
 // The key a product's copies share, or null.
 const stackKey = a => a.stack_key || null;
+// Each stack's copies here: in this view, from stores you use, whatever the filters, as "Copies of" shows them (it
+// clears the filters); in a set, those in it. One on another store's tab, or by the creator's other name, is still
+// in its stack; one archived, removed or hidden isn't (issue #247).
+function stacksHere(list) {
+  const all = new Map();
+  for (const a of inSets() ? list : DATA.items.filter(a => inView(a) && shown(a.store)))
+    if (stackKey(a)) all.set(stackKey(a), [...(all.get(stackKey(a)) || []), a]);
+  return all;
+}
 // The products with each one's copies shown as one tile (counting them), unless copies aren't stacked.
 function stacked(list) {
   stackSize = new Map(); stackStores = new Map();
   if (!STACK || sel.on || state.copies) return list;
-  const first = new Map(), out = [], all = new Map();
+  const all = stacksHere(list), first = new Set(), out = [];
   for (const a of list) {
-    const k = stackKey(a), f = k && first.get(k);
-    if (f) { stackSize.set(f.key, 2); stackStores.get(f.key).add(a.store); continue; }
-    if (k) stackStores.set(a.key, new Set([a.store]));
-    first.set(k, a); out.push(a);
+    const k = stackKey(a), copies = (k && all.get(k)) || [];
+    if (copies.length > 1) {
+      if (first.has(k)) continue;
+      first.add(k); stackSize.set(a.key, copies.length); stackStores.set(a.key, new Set(copies.map(o => o.store)));
+    }
+    out.push(a);
   }
-  // a stack's ×N is every copy "Copies of" then shows (it clears the filters), not just those the filters let through
-  for (const a of DATA.items) { const k = stackKey(a); if (k && inView(a) && shown(a.store)) all.set(k, (all.get(k) || 0) + 1); }
-  for (const [k, f] of first) if (stackSize.has(f.key)) stackSize.set(f.key, all.get(k));
   return out;
 }
 // "Copies of": every copy, whatever the filters were: a stack's (stack_key), or the same product on any store ("others").
@@ -3288,6 +3297,8 @@ function stackNote(a) {
   if (a.apart) return `<p class="note">${esc(tr("You said this isn't a copy of anything, so it's shown on its own."))} ` +
     `<button class="linkish" data-act="apart" data-on="false">${esc(tr("Show it with its copies again"))}</button></p>`;
   if (!a.stack_key || !(a.stack_why || []).length) return "";
+  // (only when its tile stands for them: a copy archived, say, is on its own here, issue #247)
+  if (!state.copies && ((stacksHere(DATA.items.filter(o => matches(o))).get(a.stack_key) || []).length < 2)) return "";
   return `<p class="note">${esc(tr("Shown with its copies, as they have {0}.", listed(a.stack_why.map(w => tr(STACK_WHY[w])))))} ` +
     `<button class="linkish" data-act="apart" data-on="true">${esc(tr("Not a copy"))}</button></p>`;
 }
@@ -3495,6 +3506,13 @@ async function pinSubmit() {
   if (PIN.mode === "change") toast("PIN changed.");
   if (r.data.recovery) { showPhrase(r.data.recovery); return; }   // the first PIN: show its recovery phrase once
   pinDone(true);
+}
+// Hidden locked itself again, nobody having used it for a while (shared.js, issue #248): out of view, details and all.
+async function hiddenLocked() {
+  const open = openKey && byKey.get(openKey);
+  if (open && open.mark === "hidden") forgetDetail();
+  if (state.view === "hidden") state.view = "library";
+  await load(); toast("Hidden items locked again: they hadn't been used for a while.");
 }
 // The views, and the PIN, lock and phrase buttons.
 function wirePrivacy() {

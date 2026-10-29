@@ -51,7 +51,7 @@ FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenM
               "OpenDyslexic-Regular.woff2", "OpenDyslexic-Bold.woff2")
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
            "/api/download", "/api/sync", "/api/cancel", "/api/force-stop", "/api/settings", "/api/setup/browser", "/api/setup/done",
-           "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
+           "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/unlock/touch", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
            "/api/app/close", "/api/open-logs", "/api/folders/open",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
@@ -714,6 +714,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _unlocked(self) -> bool:
         """Has this browser unlocked the hidden library (and used it within the last UNLOCK_MINUTES)?"""
+        return self._lock_in() > 0
+
+    def _lock_in(self, touch: bool = False) -> int:
+        """Seconds until this browser's hidden library locks itself again (0: it's locked). Only touching it starts
+        the time again, as someone uses the page (issue #248): the page asking for news every few seconds would
+        otherwise keep it unlocked for as long as it's open."""
         srv = self.server
         cookie = self.headers.get("Cookie") or ""
         token = next((c.split("=", 1)[1] for c in (x.strip() for x in cookie.split(";")) if c.startswith("hoard_unlock=")), "")
@@ -721,10 +727,11 @@ class Handler(BaseHTTPRequestHandler):
         with srv.unlocks_lock:
             for t in [t for t, until in srv.unlocks.items() if until < now]:
                 srv.unlocks.pop(t, None)
-            if token and token in srv.unlocks:
+            if not token or token not in srv.unlocks:
+                return 0
+            if touch:
                 srv.unlocks[token] = now + UNLOCK_MINUTES * 60
-                return True
-        return False
+            return max(1, int(srv.unlocks[token] - now))
 
     def _product_files(self, body: dict) -> dict:
         """Issue #225: what each of these products has on its store, as a quick look at it read it (no file is
@@ -913,7 +920,8 @@ class Handler(BaseHTTPRequestHandler):
                 if i["tag_key"] not in marks["hidden"] or unlocked:
                     shown.append(i)
             counted = [i for i in shown if i["mark"] not in ("removed", "hidden")]
-            privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "recovery_set": bool(marks["recovery"]),
+            privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "lock_in": self._lock_in() if unlocked else 0,
+                       "recovery_set": bool(marks["recovery"]),
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
             keys = {i["tag_key"] for i in shown}
             hidden_now = set() if unlocked else set(marks["hidden"])
@@ -953,10 +961,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/integrity":   # issue #231: the files the last check found, each to deal with
             last = last_integrity() or {"problems": [], "changed": [], "missing": [], "data_changed": [], "checked": None}
             hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
-            listed = [{**x, "key": tag_key(x["store"], x["name"])} for x in last["problems"]]
+            removed = MarkStore().keys("removed")   # (removed since the check: not listed, issue #259)
+            listed = [x for x in ({**x, "key": tag_key(x["store"], x["name"])} for x in last["problems"]) if x["key"] not in removed]
             shown = [x for x in listed if x["key"] not in hidden]
             return self._json({"checked": last["checked"], "problems": shown, "hidden_left_out": len(listed) - len(shown),
-                               "more": max(0, len(last["changed"]) + len(last["missing"]) - len(listed)),
+                               "more": max(0, len(last["changed"]) + len(last["missing"]) - len(last["problems"])),
                                "data_changed": last["data_changed"]})
         if path == "/api/loading":   # issue #200: how far reading what a page shows first has got, for its splash
             return self._json(loading.view((parse_qs(u.query).get("part") or [""])[0]))
@@ -1009,7 +1018,8 @@ class Handler(BaseHTTPRequestHandler):
             for a in assets:
                 if a["needs"]:
                     a["needs"] = {**a["needs"], "products": [o for o in a["needs"]["products"] if o["id"] in shown]}
-            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}, "looks_wanted": looks[:500],
+            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked,
+                                                                "lock_in": self._lock_in() if unlocked else 0}, "looks_wanted": looks[:500],
                      "libraries": srv.library_view(),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
                      "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
@@ -2321,6 +2331,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "skipped": len(now)})
         if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
             return self._delete_files(body)
+        if path == "/api/unlock/touch":   # someone's using the page (used): Hidden stays unlocked a while longer
+            lock_in = self._lock_in(touch=body.get("used") is True)
+            return self._json({"ok": True, "unlocked": lock_in > 0, "lock_in": lock_in})
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
                     "/api/pin/recover", "/api/pin/phrase"):
             return self._privacy_action(path, body)

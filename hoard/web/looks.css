@@ -4,6 +4,10 @@
    Everything below is for one of the two, except the parts only they show, which are out of sight in Standard. */
 .row-meta, .d-stats { display: none; }
 .local { --c: var(--local); }
+/* a window's scroll stays in it (issue #264): scrolled to its end, Settings carried on scrolling the page behind it;
+   and while Settings or Projects fills the window, the page behind doesn't scroll at all */
+.win-body, .setjump { overscroll-behavior: contain; }
+html:has(#settingsPanel.win:not([hidden]), #projectsWin:not([hidden])) { overflow: hidden; }
 
 /* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */
 .style-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 6px 0 12px; }

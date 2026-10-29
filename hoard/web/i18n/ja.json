@@ -2173,5 +2173,6 @@
  "Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.": "Hoardは無料で、空いた時間に作られています。役に立っているなら、チップが開発を続ける助けになります。",
  "Tip on Ko-fi": "Ko-fiでチップを送る",
  "Notifications": "通知",
- "Type an address first, one a line.": "まずアドレスを1行に1つずつ入力してください。"
+ "Type an address first, one a line.": "まずアドレスを1行に1つずつ入力してください。",
+ "Hidden items locked again: they hadn't been used for a while.": "しばらく使われていなかったので、非表示のものをもう一度ロックしました。"
 }

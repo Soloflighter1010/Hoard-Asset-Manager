@@ -331,6 +331,13 @@ class EveryBuildHasHoardsFiles(unittest.TestCase):
         packed = {p.relative_to(REPO).as_posix() for pattern in build_release.PACKAGE_PATTERNS for p in REPO.glob(pattern)}
         self.assertEqual(sorted(self.files() - packed), [])
 
+    def test_apprise_finds_its_services(self):
+        """Issue #237: Apprise finds its services by listing the files in its plugins folder, so the apps ship them as
+        files, not only inside the app's archive (where it found none, and sent nothing)."""
+        spec = (REPO / "packaging" / "hoard.spec").read_text("utf-8")
+        self.assertIn('collect_data_files("apprise", include_py_files=True)', spec)
+        self.assertIn('collect_submodules("apprise")', spec)
+
     def test_the_windows_and_mac_apps(self):
         spec = (REPO / "packaging" / "hoard.spec").read_text("utf-8")
         # each (str(REPO / "hoard" / ...), ...) in its datas: a file, or a folder with everything in it

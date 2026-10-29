@@ -2369,7 +2369,8 @@ def _problem(x) -> dict | None:
     return out if out["base"] and out["folder"] and out["path"] else None
 
 
-def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since: str | None = None) -> dict:
+def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since: str | None = None,
+                    leave_out=frozenset()) -> dict:
     """Check the downloads are as Hoard downloaded them (issue #83): every data file's seal, and every recorded file's
     size and SHA-256. A file's fingerprint is taken the first time it's checked and kept in its record; after that it's
     read again only when its size or modified time changed, so a routine check is quick. Nothing is changed but the
@@ -2378,7 +2379,8 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
     data files were changed outside Hoard. stop: a threading.Event that ends the check early (it says so). others: the
     other library folders (hoard/libraries.py), checked the same way when their drive is connected, and named in
     "away" when it isn't. fresh_since: a file downloaded after this time and not fingerprinted yet counts as fine
-    without being read (issue #113: it was checked as it came in); the next check takes its fingerprint."""
+    without being read (issue #113: it was checked as it came in); the next check takes its fingerprint. leave_out:
+    the product keys not to check (the products you removed: issue #259)."""
     import stat as _stat
     from .safety import _is_link
     say = progress or (lambda line: None)
@@ -2418,6 +2420,8 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
                 break
             if not rec.get("files") or rec.get("location"):
                 continue   # (a Local item listed where it is: your own working folder, yours to change)
+            if tag_key(store_ids.get(store, store.lower()), rec.get("name") or "") in leave_out:
+                continue   # (one you removed: not yours to keep track of now)
             result["products"] += 1
             say(f"Checking {store}: {rec.get('name')}")
             try:

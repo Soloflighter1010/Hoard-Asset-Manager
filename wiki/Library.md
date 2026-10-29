@@ -36,7 +36,8 @@ The **Library** shows everything you own on the stores you use, whether or not y
     the one for another.
 
   A picture several creators use for different names (a store's default banner) stacks nothing. Choose a stack to
-  see every copy. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
+  see every copy. A stack counts its copies in the view you're in whatever you've filtered by, so on one store's
+  tab it still stands for its copy on another; a copy you've archived, removed or hidden isn't in it. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
   it's shown on its own from then on (**Show it with its copies again** undoes it). Downloads stacks the same copies, and lists the others in a copy's details. Turn off **Stack
   copies** (a button beside **Sort** on either page, pressed while it's on) to show each on its own; Hoard remembers. While you're choosing
   several, and in Disk space, each copy shows.
@@ -106,8 +107,9 @@ Hidden items stay out of view everywhere (Library, Downloads, counts and tags) u
 
 - **Setting your PIN:** the first time you hide something, Hoard asks for a PIN, then shows **6 recovery
   words, once**. Write them down: they're how you reset a forgotten PIN without losing anything.
-- **Unlocking** applies to the window or browser you unlock it in, and lasts 15 minutes after you last use it.
-  **Lock now** locks it straight away, and restarting Hoard locks everything.
+- **Unlocking** applies to the window or browser you unlock it in, and lasts 15 minutes after you last use it: a
+  click, a key or a scroll in Hoard's page (a page left open on its own doesn't count). Then Hidden locks itself and
+  the page says so. **Lock now** locks it straight away, and restarting Hoard locks everything.
 - **Wrong PINs:** after five wrong tries, each further try waits longer (30 seconds, doubling, up to an hour),
   even if Hoard restarts.
 - **Forgot your PIN?** Enter your recovery words and choose a new PIN. Hidden items stay hidden, and every

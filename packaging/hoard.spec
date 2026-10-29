@@ -28,7 +28,9 @@ datas = [
 datas += collect_data_files("playwright")                                 # Playwright's driver (Node and its package)
 hidden = collect_submodules("hoard")
 hidden += collect_submodules("apprise")                                    # its services, loaded by name (issue #230)
-datas += collect_data_files("apprise")
+# ...once it's found them: it lists the files in its plugins, attachment and config folders, so they're shipped as
+# they are too (without them, it knows no service and sends nothing: issue #237)
+datas += collect_data_files("apprise", include_py_files=True)
 # each library's own details, with its license files, so Acknowledgements (Settings) can show its license
 for credit in (i for g in json.loads((REPO / "hoard" / "credits.json").read_text("utf-8"))["groups"] for i in g["items"]):
     if credit.get("package") and credit["in"] != "build":

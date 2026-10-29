@@ -384,21 +384,28 @@ class AccessKey(unittest.TestCase):
         root = str(self.srv.cfg["root"])
         where.parent.mkdir(parents=True, exist_ok=True)
         where.write_text(json.dumps({"checked": "2026-10-28T10:00:00+00:00", "products": 1, "files": 1, "fine": 0,
-                                     "changed": ["Rusk (Booth): rusk.zip"], "missing": [], "data_changed": [], "complete": True,
+                                     "changed": ["Rusk (Booth): rusk.zip"], "missing": ["Rusk (Booth): rusk.psd"], "data_changed": [], "complete": True,
                                      "problems": [{"kind": "changed", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
-                                                   "path": "rusk.zip", "name": "Rusk"}]}))
+                                                   "path": "rusk.zip", "name": "Rusk"},
+                                                  {"kind": "missing", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
+                                                   "path": "rusk.psd", "name": "Rusk"}]}))
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         goto(page, f"{self.srv.url}downloads")
         page.locator("#integrity [data-check-open]").click()
         dialog = page.locator("#checkDialog")
         dialog.wait_for()
-        row = dialog.locator(".check-list li")
-        self.assertIn("rusk.zip", row.inner_text())
+        gone = dialog.locator(".check-list li", has_text="rusk.psd")
+        self.assertEqual(gone.locator("button").all_inner_texts(), ["Download again", "Forget it"],
+                         "missing: nothing there to show in its folder (issue #259)")
+        row = dialog.locator(".check-list li", has_text="rusk.zip")
         self.assertIn("Changed since Hoard downloaded it", row.inner_text())
         self.assertEqual(row.locator("button").all_inner_texts(), ["Download again", "Keep it as it is", "Show in folder"])
         self.assertIn("Rusk", dialog.locator(".check-list h3").inner_text())
         row.get_by_role("button", name="Keep it as it is").click()
+        dialog.locator(".check-list li", has_text="rusk.zip").wait_for(state="detached")
+        gone.get_by_role("button", name="Forget it").click()
+        page.locator("dialog.ask .primary").click()
         dialog.get_by_text("Nothing left to deal with.").wait_for()
         self.assertEqual(downloader.last_integrity()["changed"], [])
         dialog.locator("[data-check-close]").click()
@@ -522,6 +529,54 @@ class AccessKey(unittest.TestCase):
             self.assertEqual(page.evaluate("state.view"), "hidden")
             page.click('#viewBar [data-privacy="lock"]')
             page.wait_for_function("() => state.view === 'downloads' && !DATA.privacy.unlocked")
+        finally:   # as it was: nothing hidden, no PIN
+            page.evaluate(post, ["/api/unlock", {"pin": "4821"}])
+            page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": False}])
+            page.evaluate(post, ["/api/hidden/forget", {"confirm": True}])
+            page.close()
+
+    def test_hidden_locks_itself_again_when_left_alone(self):
+        """Issue #248: using the page keeps Hidden unlocked (a key or a click tells Hoard, a minute apart at most);
+        left alone, it locks itself again and the page shows it locked, its details closed, in both pages."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        post = "([u, b]) => apiPost(u, b).then(r => r.ok)"
+        key = page.evaluate("DATA.items[0].tag_key")
+        touches = []
+        page.on("request", lambda r: touches.append(r.post_data_json) if r.url.endswith("/api/unlock/touch") else None)
+        # (a second and a half left: the page's look at the time finds it still open, then locked)
+        run_out = lambda: [self.srv.unlocks.__setitem__(t, time.time() + 1.5) for t in list(self.srv.unlocks)]
+        try:
+            self.assertTrue(page.evaluate(post, ["/api/pin", {"pin": "4821"}]))
+            self.assertTrue(page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": True}]))
+            self.assertTrue(page.evaluate(post, ["/api/unlock", {"pin": "4821"}]))
+            page.evaluate("load().then(() => showView('hidden'))")
+            page.wait_for_function("() => state.view === 'hidden' && DATA.privacy.unlocked && byKey.size === 1")
+            page.evaluate("showDetail(DATA.items[0])")
+            page.keyboard.press("Shift")
+            page.mouse.wheel(0, 10)
+            page.wait_for_function("() => lastTouch > 0")
+            page.wait_for_timeout(300)
+            self.assertEqual(touches, [{"used": True}], "using the page tells Hoard, once a minute at most")
+            run_out()
+            page.evaluate("load()")
+            page.wait_for_function("() => state.view === 'library' && !DATA.privacy.unlocked", timeout=10000)
+            self.assertIsNone(page.evaluate("openKey"), "the hidden item's details close")
+            self.assertEqual(page.evaluate("$('#detail').innerHTML"), "")
+            self.assertEqual(page.evaluate("DATA.items.length"), 0)
+            self.assertIn("locked again", page.locator("#toast").text_content())
+            self.assertEqual(touches[-1], {"used": False}, "the page only asked how long was left")
+            # Downloads, the same
+            self.assertTrue(page.evaluate(post, ["/api/unlock", {"pin": "4821"}]))
+            page.click("nav.apptabs a[href='/downloads']")
+            page.wait_for_url("**/downloads**")
+            page.wait_for_function("() => (DATA.privacy || {}).unlocked")   # (Rusk, hidden, is only in Hidden)
+            page.evaluate("showView('hidden')")
+            page.wait_for_function("() => state.view === 'hidden' && DATA.assets.some(a => a.mark === 'hidden')")
+            run_out()
+            page.evaluate("load()")
+            page.wait_for_function("() => state.view === 'downloads' && !DATA.privacy.unlocked", timeout=10000)
+            self.assertEqual(page.evaluate("DATA.assets.filter(a => a.mark === 'hidden').length"), 0)
         finally:   # as it was: nothing hidden, no PIN
             page.evaluate(post, ["/api/unlock", {"pin": "4821"}])
             page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": False}])
@@ -790,6 +845,35 @@ class StackingAcrossStores(unittest.TestCase):
             self.assertEqual(page.get_attribute("#stackCopies", "aria-pressed"), "true")
             page.evaluate("uiFlush()")
             page.wait_for_timeout(300)
+        page.close()
+
+    def test_a_stack_whatever_the_filters(self):
+        """Issue #247: a stack is every copy in the view, whatever the filters, so on one store's tab its tile still
+        stands for its copy on another; a copy archived isn't in it, and then its details don't say it's shown with it."""
+        from hoard.marks import MarkStore
+        self.addCleanup(lambda: MarkStore().path.unlink(missing_ok=True))
+        page = self.browser.new_page()
+        goto(page, self.srv.entry_url())
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        page.evaluate("state.store = 'jinxxy'; render()")
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 3")
+        mane = page.locator(".slot", has_text="Fluffy Mane")
+        self.assertIn("×2", mane.inner_text())
+        self.assertIn("2 copies", mane.get_attribute("aria-label"))
+        mane.click()   # every copy, from both stores
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        page.evaluate("state.copies = null; state.store = ''; render()")
+        gumroad = page.evaluate("DATA.items.find(a => a.store === 'gumroad' && a.name.startsWith('Fluffy')).tag_key")
+        page.evaluate("([k]) => apiPost('/api/marks', { keys: [k], kind: 'archived', on: true }).then(load)", [gumroad])
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4 && !document.querySelector('.slot.stacked[data-key*=\"m2\"]')")
+        alone = page.locator(".slot", has_text="Fluffy Mane")
+        self.assertEqual(alone.count(), 1, "its archived copy is in Archived")
+        self.assertNotIn("×2", alone.inner_text())
+        alone.click()
+        page.locator("#detail.open").wait_for()
+        self.assertEqual(page.locator("#detail .note", has_text="Shown with its copies").count(), 0,
+                         "its details don't say it's shown with a copy that isn't here")
+        page.evaluate("([k]) => apiPost('/api/marks', { keys: [k], kind: 'archived', on: false })", [gumroad])
         page.close()
 
     def test_a_copy_that_isnt_one(self):
@@ -2225,6 +2309,43 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.locator("#settingsPanel:not([hidden])").wait_for()
         page.wait_for_function("() => document.activeElement && document.activeElement.id === 'setLanguage'")
         self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_a_search_shows_its_results(self):
+        """Issue #249: typing a search while Settings or Projects fills the window left them over the results."""
+        page = self.open()
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        page.locator("#q").fill("Mochi")
+        page.locator("#settingsPanel").wait_for(state="hidden")
+        page.locator("#q").fill("")
+        page.click("#projectsTab")
+        page.locator("#projectsWin:not([hidden])").wait_for()
+        page.locator("#q").fill("creator:Kitsu")
+        page.locator("#projectsWin").wait_for(state="hidden")
+        page.wait_for_function("() => state.q === 'creator:Kitsu'")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_settings_scroll_only_settings(self):
+        """Issue #264: scrolled to its end, Settings carried on scrolling the Library behind it."""
+        page = self.open()
+        page.set_viewport_size({"width": 1400, "height": 420})
+        page.evaluate("() => { document.body.style.minHeight = '3000px'; }")   # (a library long enough to scroll)
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        body = page.locator("#settingsPanel .win-body")
+        self.assertEqual(body.evaluate("b => getComputedStyle(b).overscrollBehaviorY"), "contain")
+        box = body.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        for _ in range(40):   # past the end of Settings
+            page.mouse.wheel(0, 600)
+        page.wait_for_timeout(300)
+        self.assertGreater(body.evaluate("b => b.scrollTop"), 0, "Settings scrolled")
+        self.assertEqual(page.evaluate("() => scrollY"), 0, "the page behind didn't")
+        page.locator("#settingsPanel .win-x").click()
+        page.mouse.wheel(0, 600)
+        page.wait_for_function("() => scrollY > 0")   # (closed: the page scrolls again)
         page.close()
 
     def test_back_and_forward(self):

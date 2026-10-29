@@ -200,10 +200,12 @@ version: remove it again, and Hoard remembers it by the store's own number for i
 
 ### Notifications through Apprise don't arrive
 
-Choose **Send a test** in **Settings**. If it says a service didn't take it, check that address against the
-service's page in [Apprise's wiki](https://github.com/caronc/apprise/wiki), and that the service can be reached
-from this computer. If Settings says Apprise isn't installed (running Hoard from its source), run Setup again.
-Hoard's log notes each notification that wasn't sent, without its address.
+Choose **Send a test** in **Settings**. If it says a service didn't take it, it says what the service answered
+(401 is a wrong token, 404 an address that isn't there): check that address against the service's page in
+[Apprise's wiki](https://github.com/caronc/apprise/wiki), and that the service can be reached from this computer.
+If Settings says Apprise isn't installed (running Hoard from its source), run Setup again. In 5.2.0 beta 1 the apps
+sent nothing at all, as Apprise couldn't find its services in them; 5.2.0 beta 2 fixes that. Hoard's log notes each
+notification: what it was for, which services took it, and why one didn't, without its address (from 5.2.0 beta 2).
 
 ## The hidden library
 

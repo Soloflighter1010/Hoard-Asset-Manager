@@ -1858,6 +1858,7 @@ async function load(rescan = false) {
       ? `The library server refused this address. Open http://127.0.0.1:${location.port || 8765}/ on the PC running it, or start it with --host 0.0.0.0.`
       : `The library server answered ${r.status} ${r.statusText}.`);
     DATA = await r.json();
+    watchUnlock(DATA.privacy);   // (Hidden locks itself again when it's left alone)
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
     applyDisplay(DATA.display);
     applyUi(DATA.ui);
@@ -2238,6 +2239,13 @@ async function showView(v) {
   else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = sortFrom("", SORTS);   // the one you chose
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
+// Hidden locked itself again, nobody having used it for a while (shared.js, issue #248): out of view, details and all.
+async function hiddenLocked() {
+  const open = openId != null && byId.get(openId);
+  if (open && open.mark === "hidden") closeDetail();
+  if (state.view === "hidden") { state.view = "downloads"; sel.ids.clear(); }
+  await load(); toast("Hidden items locked again: they hadn't been used for a while.");
+}
 $("#viewBar").addEventListener("click", async e => {
   if (!e.target.closest('[data-privacy="lock"]')) return;
   const open = openId != null && byId.get(openId);
@@ -2427,7 +2435,8 @@ function drawCheck() {
         `<button class="ghost sm" data-check="again" data-i="${i}">${esc(tr("Download again"))}</button>` +
         (x.kind === "changed" ? `<button class="ghost sm" data-check="keep" data-i="${i}">${esc(tr("Keep it as it is"))}</button>`
           : `<button class="ghost sm" data-check="forget" data-i="${i}">${esc(tr("Forget it"))}</button>`) +
-        `<button class="ghost sm" data-check="show" data-i="${i}">${esc(tr("Show in folder"))}</button></span></li>`).join("") + `</ul>`).join("") +
+        (x.kind === "changed" ? `<button class="ghost sm" data-check="show" data-i="${i}">${esc(tr("Show in folder"))}</button>` : "") +
+        `</span></li>`).join("") + `</ul>`).join("") +   // (a missing file: nothing there to show, issue #259)
     (CHECK.more ? `<p class="muted">${esc(tr("{0} more are named in the check's log, in Tasks.", CHECK.more))}</p>` : "");
   $("#checkKeepAll").hidden = !CHECK.list.some(x => x.kind === "changed");
   $("#checkAgainAll").hidden = CHECK.list.length < 2;
