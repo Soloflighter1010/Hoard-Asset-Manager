@@ -2208,6 +2208,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page.wait_for_function("() => !document.querySelector('#detail').classList.contains('open')")
             page.go_forward()
             page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            for name in ("constructor", "__defineGetter__", "__proto__"):   # an address naming no window opens nothing
+                page.evaluate("n => { location.hash = 'win=' + n; }", name)
+                page.wait_for_timeout(200)
+            self.assertTrue(page.locator("#settingsPanel").is_hidden())
             self.assertEqual(self.errors, [])
         finally:
             page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])

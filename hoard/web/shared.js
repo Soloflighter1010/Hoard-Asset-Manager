@@ -1175,8 +1175,10 @@ function wireSearch() {
    change the address in place: they aren't places. */
 const PLACE_PARTS = ["store", "set", "view", "space", "open", "win", "project"];
 const WIN_PLACES = { settingsPanel: "settings", tasksWin: "tasks", projectsWin: "projects", stores: "stores", tagPanel: "tags" };
-const WIN_OPEN = { settings: () => openSettings(true), tasks: () => openTasks(true), projects: () => openProjects(true),
-                   stores: () => { if (typeof openStores === "function") openStores(true); }, tags: () => openTagPanel(true) };
+// what opens each window an address names (a Map: an address naming anything else, "constructor" say, opens nothing)
+const WIN_OPEN = new Map([["settings", () => openSettings(true)], ["tasks", () => openTasks(true)],
+                          ["projects", () => openProjects(true)], ["tags", () => openTagPanel(true)],
+                          ["stores", () => { if (typeof openStores === "function") openStores(true); }]]);
 const NAV = { at: null, quiet: false, back: null };
 // The address's place (the window, the product, the set...), without the search and filters.
 const placeOf = p => PLACE_PARTS.map(k => p.get(k) || "").join("|");
@@ -1207,7 +1209,8 @@ function goToAddress() {   // Back or Forward: show the place the address names
     T.goTo();
     const open = placeWindow();
     if (open && WIN_PLACES[open.id] !== want) WINDOWS[open.id]();
-    if (want && (!open || WIN_PLACES[open.id] !== want) && WIN_OPEN[want]) WIN_OPEN[want]();
+    const opener = WIN_OPEN.get(want);
+    if (opener && (!open || WIN_PLACES[open.id] !== want)) opener();
     const project = p.get("project");
     if (want === "projects" && project && !(PJ.view === "project" && PJ.project && PJ.project.path === project)) openProject(project);
     else if (want === "projects" && !project && PJ.view === "project") { PJ.view = "list"; drawProjects(); }
