@@ -22,6 +22,7 @@ _lock = threading.Lock()
 
 
 def updates_file() -> Path:
+    """The file the asset update checks are kept in."""
     return data_dir() / "asset-updates.json"
 
 
@@ -33,6 +34,7 @@ class AssetUpdates:
 
     @staticmethod
     def empty() -> dict:
+        """Nothing checked yet."""
         return {"checked": {}, "items": {}}
 
     def load(self) -> dict:
@@ -45,6 +47,7 @@ class AssetUpdates:
 
     @staticmethod
     def sanitize(raw) -> dict:
+        """The update checks as read from the file, with anything malformed dropped."""
         out = AssetUpdates.empty()
         if not isinstance(raw, dict):
             return out
@@ -62,6 +65,7 @@ class AssetUpdates:
         return out
 
     def save(self, data: dict) -> None:
+        """Write the update checks, cleaned."""
         write_file_safely(self.path, json.dumps(self.sanitize(data), indent=1, ensure_ascii=False))
 
     def record_check(self, stores: list[str], keys: set | None, available: list[dict]) -> int:

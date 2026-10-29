@@ -12,6 +12,8 @@ using UnityEngine;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>Products' pictures, read in the background and kept (within a count and a memory budget), GIFs
+    /// animated.</summary>
     public sealed class ThumbnailCache
     {
         const int Capacity = 256;                     // pictures kept at once
@@ -21,6 +23,7 @@ namespace SoloFlighter.Hoard.Editor
         const int GifSide = 160;                      // a GIF's frames are kept at most this big: the size it's shown at
         const int Readers = 2;                        // files read and GIFs decoded at once, however fast the list scrolls
 
+        /// <summary>A picture as textures: one frame, or a GIF's frames and their timing.</summary>
         sealed class Picture
         {
             public Texture2D[] Frames;                 // one for a still picture
@@ -28,6 +31,7 @@ namespace SoloFlighter.Hoard.Editor
             public long Bytes;
         }
 
+        /// <summary>A picture as read from disk, before it's made into textures.</summary>
         sealed class Read { public string Path; public int Generation; public byte[] Still; public GifImage Gif; }
 
         readonly Dictionary<string, Picture> ready = new Dictionary<string, Picture>();   // null: couldn't be shown
@@ -134,6 +138,7 @@ namespace SoloFlighter.Hoard.Editor
             return any;
         }
 
+        /// <summary>Make a picture's textures (on the main thread, as Unity needs).</summary>
         static Picture Make(Read item)
         {
             if (item.Gif != null)
@@ -165,6 +170,7 @@ namespace SoloFlighter.Hoard.Editor
             return new Picture { Frames = new[] { t }, Bytes = (long)t.width * t.height * 4 };
         }
 
+        /// <summary>Free a picture's textures.</summary>
         static void Destroy(Picture p)
         {
             foreach (var t in p.Frames) if (t != null) UnityEngine.Object.DestroyImmediate(t);
@@ -177,6 +183,7 @@ namespace SoloFlighter.Hoard.Editor
             place[path] = recent.AddFirst(path);
         }
 
+        /// <summary>Forget every picture (one being read is dropped when it arrives).</summary>
         public void Clear()
         {
             generation++;

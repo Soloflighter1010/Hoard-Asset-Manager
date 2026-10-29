@@ -19,10 +19,12 @@ def set_lane(name: str) -> None:
 
 
 def _this_lane() -> str:
+    """The lane this thread's work is in."""
     return getattr(_lane, "name", "main")   # (any thread not set: the main lane's, as all were before)
 
 
 def _sinks_here() -> list:
+    """The progress sinks of the job running in this thread's lane."""
     lane = _this_lane()
     with _sink_lock:
         return [sink for on, sink in _sinks if on == lane]

@@ -37,6 +37,7 @@ def places(cfg: dict, vpm_settings=None) -> list[dict]:
 
 
 def _place(pid: str, path: Path, label: str | None = None) -> dict:
+    """A place a library folder can be, for the page: its id, path, a label, and whether it's there."""
     try:
         there = path.is_dir()
     except OSError:
@@ -45,4 +46,5 @@ def _place(pid: str, path: Path, label: str | None = None) -> dict:
 
 
 def find(found: list[dict], pid) -> dict | None:
+    """The place with that id, or None."""
     return next((p for p in found if p["id"] == pid), None) if isinstance(pid, str) else None

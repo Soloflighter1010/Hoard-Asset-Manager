@@ -1828,21 +1828,28 @@ body.less-motion .tour-try::before { animation: none; }
 //@include shared.js
 const STORE_ORDER = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
 const shown = s => (DATA.enabled || {})[s] !== false;   // stores you don't use (Settings, or setup) are hidden
+// The stores shown, in the page's order.
 const usedStores = () => STORE_ORDER.filter(shown);
 // The stores you can import saved pages for, and the ones Hoard downloads from (Payhip is only read). The server
 // says which; these are the same, for before it has.
 const importable = s => (DATA.importable || ["booth", "jinxxy", "payhip", "itch"]).includes(s);
+// Whether Hoard downloads from a store.
 const downloadable = s => (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).includes(s);
 let importStore = null, importing = null;
 const state = { view: "library", q: "", store: "", set: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false, ptype: "" };
 // Downloaded, or not yet (issue #17): "yes", "no", or "" for both
 const DISK = { yes: "Downloaded", no: "Not downloaded yet" };
+// Whether a product is downloaded.
 const onDisk = a => a.on_disk != null;
 let DATA = { items: [], stores: {}, labels: {}, job: {} }, byKey = new Map(), openKey = null, lastFocus = null, polling = null;
 
+// A store's name.
 const label = s => DATA.labels[s] || s;
+// A tile's letters and colour, for a product with no picture.
 const placeholder = a => `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b></span>`;
+// A product's picture (or its letters).
 const thumb = a => a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="" loading="lazy" decoding="async">` : placeholder(a);
+// How long ago a time was, in words ("5 min ago").
 function ago(iso) {
   if (!iso) return tr("never");
   const s = (Date.now() - Date.parse(iso)) / 1000;
@@ -1856,6 +1863,7 @@ function toast(msg) {
   clearTimeout(toastTimer);   // long enough to read: a longer message stays longer
   toastTimer = setTimeout(() => t.classList.remove("show"), Math.min(10000, Math.max(2600, String(msg).length * 60)));
 }
+// Send a change to Hoard, as JSON, and return its answer. Throws with Hoard's reason when it says no.
 async function post(url, body) {
   const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
@@ -1912,6 +1920,7 @@ const SORTS = {
   // the newest first; items listed before Hoard kept the time they appeared go last (issue #18)
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || coll.compare(a.name, b.name),
 };
+// Whether any search or filter is narrowing the library down.
 const filtersActive = () => state.ptype || state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
@@ -1919,7 +1928,9 @@ const filtersActive = () => state.ptype || state.q || state.store || state.creat
 // picture, name and creator: hoard/library.py) show as one tile. Choosing it shows them all, as "Copies of". Not
 // while selecting, so each can be chosen.
 let STACK = true, stackSize = new Map(), stackStores = new Map();   // the first copy's key -> how many copies, and their stores
+// The key a product's copies share, or null.
 const stackKey = a => a.stack_key || null;
+// The products with each one's copies shown as one tile (counting them), unless copies aren't stacked.
 function stacked(list) {
   stackSize = new Map(); stackStores = new Map();
   if (!STACK || sel.on || state.copies) return list;
@@ -1940,6 +1951,7 @@ function showCopies(a, field = "match_key") {
   state.copies = { field, key: a[field], name: a.name, store: "" };
   state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.fresh = false; state.tags.clear(); render();
 }
+// Draw the library as it is now: the tiles, filters, counts and status, and the address.
 function render() {
   if (!inSets()) state.set = "";
   wishScope();
@@ -1951,6 +1963,7 @@ function render() {
 // only as the library loaded, a load while you were in another view (a routine check finishing, say) left them
 // counting that view (all 0 in Hidden) once you came back.
 let storeSegShown = "";
+// The store tabs, each with how many products the view has from it.
 function renderStoreSeg() {
   const counts = {};
   const here = DATA.items.filter(inView);
@@ -1962,6 +1975,7 @@ function renderStoreSeg() {
     `<button role="radio" class="sets" data-store="Sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and Wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
   if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
+// The Stores panel: each store, whether you're signed in, its count, and its buttons.
 function renderStores() {
   const job = DATA.job || {};
   $("#storeRows").innerHTML = usedStores().map(s => {
@@ -1999,6 +2013,7 @@ function renderStores() {
   $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
   $("#menuDot").hidden = $("#warnDot").hidden;   // (Stores is in the Menu)
 }
+// A product's tile: its picture, name, creator, store and marks (copies, downloaded, new).
 const slotHTML = a => {
     const n = stackSize.get(a.key) || 0;
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
@@ -2017,6 +2032,7 @@ function rowMeta(a) {
   return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store}"></span>${label(a.store)}</span>` +
     `<span class="rm-state ${how}">${esc(tr(state))}</span><span class="rm-when">${esc(shortDay(a.added))}</span></span>`;
 }
+// Draw the tiles (or why there are none).
 function renderGrid(list) {
   (cards = cards || lazyCards($("#grid"))).show(list, slotHTML);
   const empty = $("#empty");
@@ -2036,6 +2052,7 @@ function renderGrid(list) {
   }
   empty.hidden = list.length > 0 || (inSets() && !DATA.error && DATA.items.length > 0);   // (Sets says what it has)
 }
+// The filters for the products shown: tags, downloaded or not, and creators.
 function renderFacets(list) {
   renderTagFacets(list);
 
@@ -2057,6 +2074,7 @@ function renderFacets(list) {
       (both ? ` ${both} are owned on more than one store.` : "")
     : "";
 }
+// The status line: what's searched and filtered (each to clear), and how many things are shown.
 function renderStatus(list) {
   const pills = [];
   if (state.copies) pills.push(["copies", "", "Copies of", state.copies.name]);
@@ -2068,6 +2086,7 @@ function renderStatus(list) {
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   if (state.ptype) pills.push(["ptype", "", "Product type", tr(PRODUCT_TYPES[state.ptype] || state.ptype)]);
   const total = DATA.items.filter(a => inView(a) && shown(a.store)).length;   // this view: Library, Archive, ...
+  // "1 thing" or "n things".
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   for (const [a, here] of [[$('.apptabs a[href="/"]'), !inSets()], [$('.apptabs a[href="/#store=Sets"]'), inSets()]])
     if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
@@ -2081,6 +2100,7 @@ function renderStatus(list) {
       `<b>${l}</b> ${esc(text)}<span aria-hidden="true">×</span></button>`).join("") +
     (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
 }
+// Put the search box, tabs and sort as the state says, and the glow in the store's colour.
 function syncControls() {
   if ($("#q").value !== state.q) $("#q").value = state.q;
   for (const b of $("#storeSeg").children) b.setAttribute("aria-checked", String(b.dataset.store === state.store));
@@ -2097,6 +2117,7 @@ function showJob(job) {
   el.textContent = job && job.message || "";
   taskCount(job && job.running ? 1 + (job.queue || []).length : 0);
 }
+// Follow a job while it runs, reading the library again when its counts change.
 function startPolling() {
   if (polling) return;
   let lastCounts = JSON.stringify(DATA.stores);
@@ -2118,6 +2139,7 @@ function startPolling() {
     } catch (e) { clearInterval(polling); polling = null; showJob(null); }
   }, 1000);
 }
+// Start a sign-in, refresh or sign-out for some stores (all: every product, not only what's new).
 async function runJob(url, stores, all = false) {
   if (!navigator.onLine && !url.endsWith("logout")) {
     toast(url.endsWith("/login") ? "You're offline. Signing in needs a connection." : "You're offline. Refreshing needs a connection.");
@@ -2131,6 +2153,7 @@ async function runJob(url, stores, all = false) {
     if (url.endsWith("/login")) toast(`Sign in to ${label(stores[0])} in the window that opened, then close it.`);
   } catch (e) { toast(e.message); }
 }
+// Open the Stores panel or close it (open: which; else the other way).
 function openStores(open) {
   const p = $("#stores"); const show = open ?? p.hidden;
   p.hidden = !show; $("#storesBtn").setAttribute("aria-expanded", String(show));
@@ -2158,6 +2181,7 @@ async function addPayhipShops(add) {
   } catch (e) { return null; }
   return apiPost("/api/settings", { payhip_shops: [...current, ...add] });
 }
+// Add a Payhip shop to read, once you say so.
 async function addShop(shop) {
   const host = shop.replace(/^https:\/\//, "");
   if (!await ask(tr("Add {0} to your Payhip shops? Hoard will then open its products' links, and read your purchases there when you refresh Payhip. Only add a shop you bought from.", host), tr("Add it"))) return;
@@ -2166,6 +2190,7 @@ async function addShop(shop) {
     : r.ok ? tr("Added. Refresh Payhip to open its products from here.") : (r.data.error || tr("It wasn't added.")));
   if (r && r.ok) await load();
 }
+// Open a product's details: its picture, store, creator, tags, type, sets, files and buttons.
 function showDetail(a, focus = true) {
   openKey = a.key;
   markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
@@ -2209,6 +2234,7 @@ function showDetail(a, focus = true) {
   if (focus) $("#detail .x").focus();
   saveHash();
 }
+// Close the details, focusing the tile they were for.
 function closeDetail() {
   if (!openKey) return;
   $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
@@ -2237,6 +2263,7 @@ function saveHash() {
   if (openKey) p.set("open", openKey);   // (a product's details: a place, for Back and Forward)
   setAddress(p);
 }
+// Read the search, filters and place from the address.
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
@@ -2265,6 +2292,7 @@ $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
+// Download what's new from some stores (choosing what, in the downloads dialog).
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
 $("#downloadAll").addEventListener("click", () => downloadNew(usedStores().filter(downloadable)));
 // issue #106: download what's selected, from every store it's on, as one job
@@ -2290,11 +2318,13 @@ $("#storeRows").addEventListener("click", e => {
 });
 /* ---------- itch.io's API key: checked with itch.io and kept by Hoard (POST /api/itch-key), never shown again */
 let itchDone = null;
+// Ask for an itch.io API key (done runs once it's saved).
 function openItchKey(done) {
   itchDone = done || null;
   $("#itchKey").value = ""; $("#itchNote").textContent = ""; $("#itchSave").disabled = false;
   $("#itchDialog").showModal(); $("#itchKey").focus();
 }
+// Check the itch.io key with itch.io, then keep it.
 async function saveItchKey() {
   const key = $("#itchKey").value.trim();
   if (!key) { $("#itchNote").textContent = "Paste the key from itch.io first."; return; }
@@ -2317,6 +2347,7 @@ $("#itchDialog").addEventListener("close", () => { $("#itchKey").value = ""; });
    each page by hand. It sends nothing anywhere: the file goes to your downloads. (No backticks or "${" in it: it's
    kept in a String.raw template.) */
 const PAYHIP_SAVER = String.raw`(async () => {
+  // Show a message on the shop's page.
   const say = m => { note.textContent = m; };
   const note = document.createElement("div");
   note.style.cssText = "position:fixed;z-index:2147483647;left:50%;top:16px;transform:translateX(-50%);max-width:90vw;" +
@@ -2328,7 +2359,9 @@ const PAYHIP_SAVER = String.raw`(async () => {
   }
   document.body.appendChild(note);
   const start = location.href.split(/[?#]/)[0].split("/b-account")[0] + "/b-account";
+  // An element's text, its spaces collapsed.
   const text = e => ((e && e.textContent) || "").replace(/\s+/g, " ").trim();
+  // Whether a link is to one of your products in the shop's library.
   const isProduct = h => /\/b-account\/(digital|products?|downloads?)\/[^/?#]+\/?$/i.test(h);
   const parts = [], seen = new Set(), products = new Set();
   let url = start, first = null;
@@ -2393,9 +2426,11 @@ $("#payhipSaverCopy").addEventListener("click", async () => {
 const PAGE_FILE = /\.(mhtml|mht|html|htm)$/i;
 const IMPORT_BATCH = { pages: 10, bytes: 24 * 1024 * 1024 };   // per request, well inside what Hoard accepts
 const MOST_PAGES = 2000;
+// A count, with the word for one or many.
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const shopName = s => String(s).replace(/^https:\/\//, "");
 
+// Import saved store pages (as many as MOST_PAGES), saying what was found in them.
 async function importPages(files, store) {
   const all = files.filter(f => PAGE_FILE.test(f.name)), pages = all.slice(0, MOST_PAGES);
   if (!pages.length) {
@@ -2435,6 +2470,7 @@ async function importPages(files, store) {
     finishImport(done, files.length - all.length, stopped);
   }
 }
+// Send the pages to Hoard a few at a time, adding up what was found, until they're all sent or it's stopped.
 async function sendPages(files, store, trust, done) {
   let i = 0;
   while (i < files.length && !importing.stop) {
@@ -2474,6 +2510,7 @@ async function sendPages(files, store, trust, done) {
     done.added.push(...(r.data.added_shops || []));
   }
 }
+// Show the import panel's progress.
 function showImport(done, message, finished = false, title = "Importing pages") {
   $("#impPanel").hidden = false;
   $("#impTitle").textContent = title;
@@ -2484,6 +2521,7 @@ function showImport(done, message, finished = false, title = "Importing pages") 
   $("#impProblems").innerHTML = done.problems.map(p => `<li>${esc(p)}</li>`).join("");
   $("#impLog").textContent = done.log.join("\n");
 }
+// Say what an import found: the products from each store, and anything that couldn't be read.
 function finishImport(done, notPages, stopped) {
   if (notPages) done.problems.push(notPages === 1 ? tr("{0} file isn't a saved page (.mhtml or .html), so it was left alone.", notPages)
                                                   : tr("{0} files aren't saved pages (.mhtml or .html), so they were left alone.", notPages));
@@ -2513,9 +2551,11 @@ $("#importDir").addEventListener("change", e => {
   e.target.value = "";
   importPages(files, null);
 });
+// The files dropped on the window, with everything in the folders dropped (at most most of them).
 async function filesIn(entries, most = 5000) {
   // Files and folders dropped on the window, with everything inside the folders
   const out = [];
+  // Add a dropped file, or everything in a dropped folder.
   const walk = async entry => {
     if (out.length >= most) return;
     if (entry.isFile) { out.push(await new Promise((ok, fail) => entry.file(ok, fail))); return; }
@@ -2548,13 +2588,16 @@ document.addEventListener("drop", e => {
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
 });
+// Set the tiles' size.
 function setZoom(v) { document.documentElement.style.setProperty("--slot-size", v + "px"); zoom.value = v; }
 zoom.addEventListener("input", () => { setZoom(zoom.value); try { localStorage.setItem("hoard-tile-size", zoom.value); } catch (e) {} });
 zoom.addEventListener("change", () => uiSave({ tile_size: Number(zoom.value) }));   // kept with the other layout choices
 try { const z = localStorage.getItem("hoard-tile-size"); if (z) setZoom(z); } catch (e) {}
+// Show copies as one tile, or each on its own.
 function applyStack(on) { STACK = on !== false; $("#stackCopies").setAttribute("aria-pressed", String(STACK)); }
 $("#stackCopies").addEventListener("click", () => { applyStack(!STACK); uiSave({ stack: STACK }); render(); });
 
+// Add a value to a set, or take it out when it's there.
 const toggle = (set, v) => set.has(v) ? set.delete(v) : set.add(v);
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), c = e.target.closest("[data-creator]"), d = e.target.closest("[data-disk]");
@@ -2629,6 +2672,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h"
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-h", e.target.offsetHeight + "px")).observe($(".shelf"));
 {   // tabs out of sight (a very narrow window) fade at the edge they're beyond, so it shows there are more
   const seg = $(".shelf .seg");
+  // Fade the tabs' edges where there are more tabs beyond them.
   const edges = () => {
     seg.classList.toggle("more-left", seg.scrollLeft > 2);
     seg.classList.toggle("more-right", seg.scrollLeft + seg.clientWidth < seg.scrollWidth - 2);
@@ -2672,6 +2716,7 @@ const T = {
       { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
   }),
 };
+// Do what a button in the tag manager says: keep a suggestion, hide it, rename a tag or delete one.
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2698,6 +2743,7 @@ async function tagPanelAction(b) {
     if (word !== null) return changeTags({ action: "match", name: t, match: word });
   }
 }
+// The tag manager's buttons and fields.
 function wireTags() {
   $("#tagsBtn").addEventListener("click", () => openTagPanel());
   $("#manageTags").addEventListener("click", () => openTagPanel(true));
@@ -2779,6 +2825,7 @@ async function startDownload(stores, only, item, keys) {   // item: the library 
   showDownload({ running: true, message: "Starting", log: [] });
   pollDownload();
 }
+// Follow the download running, showing its progress, until it's done.
 async function pollDownload() {
   clearTimeout(dlTimer);
   let job;
@@ -2793,6 +2840,7 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+// Show a download's progress: what it's doing, each file's transfer, and what it found when it's done.
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
@@ -2914,13 +2962,16 @@ function setupPicked(st, s) {
   if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
   return !!((DATA.stores || {})[s] || {}).count;
 }
+// The setup assistant's steps (Payhip's and closing only when they apply).
 const setupSteps = () => ["language", "access", "look", "welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
+// What the setup assistant needs to know (the stores, the browser, the folders...).
 async function setupStatus() {
   SETUP.st = await (await api("/api/setup", { cache: "no-store" })).json();
   return SETUP.st;
 }
+// Open the setup assistant at its first step.
 async function openSetup() {
   try { await setupStatus(); } catch (e) { toast("Hoard isn't running. Open it again."); return; }
   closeSettings(); openStores(false); openTagPanel(false);
@@ -2934,6 +2985,7 @@ async function openSetup() {
   $("#setup").hidden = false;
   renderSetup();
 }
+// Close the setup assistant, following any sign-in it started.
 function closeSetup() {
   $("#setup").hidden = true; clearTimeout(SETUP.timer);
   // A sign-in or browser install the assistant started keeps going once it's closed: the library page follows it
@@ -2960,6 +3012,7 @@ const LANGUAGE_NAMES = { en: "English", ja: "日本語", ko: "한국어" };
 const SETUP_VIEWS = {
   language: () => {
     const now = (DATA.display || {}).language || "system", here = LANGUAGE_NAMES[document.documentElement.lang] || "English";
+    // A language to choose, in its own words.
     const choice = (v, label, own) => `<label><input type="radio" name="setupLang" value="${v}"${now === v ? " checked" : ""}>` +
       `<span>${own ? `<strong translate="no" lang="${v}">${label}</strong>` : `<strong>${label}</strong>`}</span></label>`;
     return `<h2 id="setupTitle">Choose your language</h2>
@@ -3053,6 +3106,7 @@ const SETUP_VIEWS = {
     <p class="muted">Run this again any time from Settings.</p>`,
 };
 
+// Follow a sign-in or install the assistant started, drawing its step again as it goes, until onDone.
 function pollSetup(onDone, show) {
   clearTimeout(SETUP.timer);
   SETUP.watching = true;
@@ -3075,6 +3129,7 @@ const SETUP_WIRES = {
     });
   },
   access: () => {
+    // The display choices made in the assistant.
     const read = () => ({ text_size: Number($("#setupTextSize").value), font: $("#setupFont").value, mode: $("#setupMode").value,
                           colours: $("#setupColours").value, spacing: $("#setupSpacing").checked,
                           card_outlines: $("#setupCardOutlines").checked,
@@ -3132,6 +3187,7 @@ const SETUP_WIRES = {
     });
   },
 };
+// Draw the setup assistant's step.
 function renderSetup() {
   const list = setupSteps(), name = list[Math.min(SETUP.step, list.length - 1)];
   $("#setupSteps").innerHTML = list.map((_, i) => `<span class="${i <= SETUP.step ? "done" : ""}"></span>`).join("");
@@ -3187,6 +3243,7 @@ function setupNotDone(name) {
     return { ask: "You haven't signed in to any store yet, so Hoard can't read your library until you do. Go on anyway?" };
   return null;
 }
+// The setup assistant's buttons: Next, Back and Skip.
 function wireSetup() {
   $("#setupNext").addEventListener("click", async () => {
     if (SETUP.busy) return;
@@ -3221,6 +3278,7 @@ function wireSetup() {
 /* ---------- issue #217: why copies are shown together, and "Not a copy" for one that isn't */
 const STACK_WHY = { picture: "the same picture", name: "the same name and creator", look: "the same name, and pictures that look alike",
                     alike: "names alike, by the same creator" };
+// Why a product is shown with its copies (or isn't), with a button to change it.
 function stackNote(a) {
   if (a.apart) return `<p class="note">${esc(tr("You said this isn't a copy of anything, so it's shown on its own."))} ` +
     `<button class="linkish" data-act="apart" data-on="false">${esc(tr("Show it with its copies again"))}</button></p>`;
@@ -3231,11 +3289,15 @@ function stackNote(a) {
 
 /* ---------- archive, hide and remove; the hidden library and its PIN */
 const VIEWS = { library: "Library", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+// Whether a product belongs in the view shown (Library, Archive, Hidden or Removed).
 const inView = a => state.view === "library" ? !a.mark : state.view === "archive" ? a.mark === "archived" : a.mark === state.view;
+// The view a product is in.
 const viewOf = a => !a.mark ? "library" : a.mark === "archived" ? "archive" : a.mark;
+// The views to choose from, with their counts (Hidden only once there's a PIN, Removed only when it has some).
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.items) if (shown(a.store)) (count[viewOf(a)] ||= new Set()).add(a.key);   // as the grid counts
+  // How many products a view has.
   const n = v => (count[v] || new Set()).size;
   $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "library" || v === "archive" || state.view === v
       || (v === "removed" && n(v)) || (v === "hidden" && p.pin_set)).map(v =>
@@ -3250,7 +3312,9 @@ function renderViews() {
         <button class="ghost sm" data-privacy="phrase">${(DATA.privacy || {}).recovery_set ? "New recovery phrase" : "Create a recovery phrase"}</button>` : "";
   if (selecting()) markSelected();   // (the selection's actions follow the view)
 }
+// A product's buttons to archive, hide or remove it, or undo that.
 function markButtons(a) {
+  // One of those buttons.
   const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
   if (a.mark === "removed") return b("removed", false, "Restore") + `<button class="ghost sm" data-act="purge">Delete for good</button>` +
     (onDisk(a) ? `<button class="ghost sm" data-act="delete-files">Delete downloaded files</button>` : "");
@@ -3260,6 +3324,7 @@ function markButtons(a) {
     b("hidden", true, "Hide") + b("removed", true, "Remove") + del;
 }
 function markActions(v) {   // Archive, Hide and Remove, or their undoing, for the view you're in
+  // One of those actions, for the selection.
   const m = (kind, on, label) => ({ label, run: list => markItems(list, kind, on) });
   if (v === "removed") return [m("removed", false, "Restore")];
   if (v === "hidden") return [m("hidden", false, "Unhide"), m("removed", true, "Remove")];
@@ -3275,6 +3340,7 @@ const MARK_DONE = {   // [one, many]
   "apart true": ["Shown on its own now: it isn't stacked with other products.", "{0} items are shown on their own now."],
   "apart false": ["It's stacked with its copies again.", "{0} items are stacked with their copies again."],
 };
+// Archive, hide or remove products, or undo that (a PIN is set first, the first time anything is hidden).
 async function markItems(list, kind, on) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
   if (!keys.length) { toast("Select some items first."); return; }
@@ -3290,6 +3356,7 @@ async function markItems(list, kind, on) {
     if (downloaded.length) await deleteFiles(downloaded, true);
   }
 }
+// Delete products' downloaded files, once you say so.
 async function deleteFiles(list, justRemoved = false) {
   const keys = [...new Set(list.filter(a => a && onDisk(a)).map(a => a.tag_key))];
   if (!keys.length) { toast("None of those are downloaded."); return; }
@@ -3309,6 +3376,7 @@ async function deleteFiles(list, justRemoved = false) {
          r.data.kept.length && tr(r.data.kept.length === 1 ? "A folder still has other files, so it was kept." : "{0} folders still have other files, so they were kept.",
                                   r.data.kept.length)].filter(Boolean).join(" "));
 }
+// Delete products from Hoard for good, once you say so.
 async function purgeItems(list) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
   if (!keys.length) return;
@@ -3319,6 +3387,7 @@ async function purgeItems(list) {
   sel.ids.clear(); T.closeDetail(); await load();
   toast(tr(r.data.deleted === 1 ? "Deleted {0} item from Hoard's library." : "Deleted {0} items from Hoard's library.", r.data.deleted));
 }
+// Show a view (Hidden only once it's unlocked with the PIN).
 async function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
     if (!(await pinDialog("unlock"))) return;
@@ -3336,6 +3405,7 @@ const PIN_TEXT = {
   recover: ["Reset your PIN", "Enter your 6 recovery words, then choose a new PIN. Your hidden items stay hidden."],
   phrase: ["Your recovery phrase", "Write these 6 words down, in order, and keep them somewhere safe away from this computer. They're the only way to reset your PIN, and Hoard won't show them again."],
 };
+// Set the PIN dialog out for what it's doing: setting, changing or checking the PIN, or the recovery phrase.
 function pinLayout(mode) {
   PIN.mode = mode;
   $("#pinTitle").textContent = PIN_TEXT[mode][0];
@@ -3352,6 +3422,7 @@ function pinLayout(mode) {
   $("#pinOk").textContent = mode === "phrase" ? "I've written them down" : "OK";
   $("#pinNote").textContent = "";
 }
+// Show the recovery phrase, asking for two of its words back.
 function showPhrase(phrase) {
   const words = phrase.split(" ");
   PIN.words = words;
@@ -3363,6 +3434,7 @@ function showPhrase(phrase) {
   pinLayout("phrase");
   $("#checkWordA").focus();
 }
+// Make a new recovery phrase, and show it.
 async function newPhrase() {
   const r = await apiPost("/api/pin/phrase");
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
@@ -3370,6 +3442,7 @@ async function newPhrase() {
   $("#pinDialog").showModal();
   showPhrase(r.data.recovery);
 }
+// Open the PIN dialog, resolving with whether it was done.
 function pinDialog(mode) {
   return new Promise(resolve => {
     PIN.resolve = resolve;
@@ -3379,14 +3452,17 @@ function pinDialog(mode) {
     (mode === "change" ? $("#pinCurrent") : $("#pinInput")).focus();
   });
 }
+// Close the PIN dialog, saying whether it was done.
 function pinDone(ok) {
   if ($("#pinDialog").open) $("#pinDialog").close();
   const r = PIN.resolve; PIN.resolve = null;
   if (r) r(ok);
 }
+// Send what was typed in the PIN dialog.
 async function pinSubmit() {
   const pin = $("#pinInput").value, note = $("#pinNote");
   if (PIN.mode === "phrase") {   // both check words must match (the first four letters are enough)
+    // Whether a word typed is the phrase's (its first four letters are enough).
     const same = (typed, word) => { const t = typed.trim().toLowerCase(); return t === word || (t.length >= 4 && word.startsWith(t)); };
     if (!same($("#checkWordA").value, PIN.words[PIN.checks[0]]) || !same($("#checkWordB").value, PIN.words[PIN.checks[1]])) {
       note.textContent = "Those don't match the words above. Check them, and try again."; return;
@@ -3415,6 +3491,7 @@ async function pinSubmit() {
   if (r.data.recovery) { showPhrase(r.data.recovery); return; }   // the first PIN: show its recovery phrase once
   pinDone(true);
 }
+// The views, and the PIN, lock and phrase buttons.
 function wirePrivacy() {
   $("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
   $("#viewBar").addEventListener("click", async e => {

@@ -9,10 +9,13 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>A package as Hoard for Unity names it: a .unitypackage file, or one inside a .zip
+    /// ("the.zip|its/path").</summary>
     public static class PackageFile
     {
         const string Mark = ".zip|";
 
+        /// <summary>The name of a package inside a .zip.</summary>
         public static string InZip(string zipPath, string member) { return zipPath + "|" + member; }
 
         /// <summary>The file on disk (the .zip, for a package in one), and the package's path in the zip (null for a
@@ -26,6 +29,7 @@ namespace SoloFlighter.Hoard
             return true;
         }
 
+        /// <summary>Whether a package is inside a .zip.</summary>
         public static bool IsZipped(string package) { string f, m; return Split(package, out f, out m); }
 
         /// <summary>The file on disk: the package, or the .zip it's in.</summary>
@@ -45,8 +49,10 @@ namespace SoloFlighter.Hoard
             return Split(package, out f, out m) ? Path.GetFileName(f) + " › " + m : Path.GetFileName(f);
         }
 
+        /// <summary>Whether a package's file (or its .zip) is there.</summary>
         public static bool Exists(string package) { return File.Exists(OnDisk(package)); }
 
+        /// <summary>When a package's file (or its .zip) was last changed.</summary>
         public static DateTime LastWriteUtc(string package) { return File.GetLastWriteTimeUtc(OnDisk(package)); }
 
         /// <summary>The package as it is now: a changed file (the .zip, for one in a zip) is read again.</summary>
@@ -124,6 +130,7 @@ namespace SoloFlighter.Hoard
             return s.Length == 0 || !HoardCatalog.IsUnityPackage(s) ? "package.unitypackage" : s;
         }
 
+        /// <summary>Delete the copies taken out of zips more than a day ago, but keep's.</summary>
         static void Tidy(string folder, string keep)
         {
             try
@@ -141,7 +148,9 @@ namespace SoloFlighter.Hoard
         {
             readonly Stream inner, owner;
             public Owning(Stream inner, Stream owner) { this.inner = inner; this.owner = owner; }
+            /// <summary>Read from the package.</summary>
             public override int Read(byte[] buffer, int offset, int count) { return inner.Read(buffer, offset, count); }
+            /// <summary>Close the package and the file it's in.</summary>
             protected override void Dispose(bool disposing)
             {
                 if (disposing) { inner.Dispose(); owner.Dispose(); }
@@ -152,9 +161,13 @@ namespace SoloFlighter.Hoard
             public override bool CanWrite { get { return false; } }
             public override long Length { get { throw new NotSupportedException(); } }
             public override long Position { get { throw new NotSupportedException(); } set { throw new NotSupportedException(); } }
+            /// <summary>Nothing to flush: it only reads.</summary>
             public override void Flush() { }
+            /// <summary>Not supported: it's read once, in order.</summary>
             public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+            /// <summary>Not supported: it only reads.</summary>
             public override void SetLength(long value) { throw new NotSupportedException(); }
+            /// <summary>Not supported: it only reads.</summary>
             public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
         }
     }

@@ -40,6 +40,7 @@ def info(tag: str) -> dict | None:
 
 
 def main(argv: list[str]) -> int:
+    """Print what a release tag means (or write it for GitHub's environment, with --github-env)."""
     env = argv[:1] == ["--github-env"]
     args = argv[1:] if env else argv
     if len(args) != 1:

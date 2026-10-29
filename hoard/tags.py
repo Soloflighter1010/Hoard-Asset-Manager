@@ -107,6 +107,8 @@ def name_text(name: str) -> str:
 
 
 def _text_has_word(text: str, word: str) -> bool:
+    """Whether a product's name contains a tag's word: a whole word (or its plural) in English, anywhere in other
+    scripts."""
     if word.isascii():
         return re.search(rf"(?<![a-z0-9]){re.escape(word)}(?:s|es)?(?![a-z0-9])", text) is not None
     return word in text  # Japanese and other scripts don't separate words with spaces
@@ -146,6 +148,7 @@ class TagMatcher:
                 self.direct.append((tag, word))
 
     def tags(self, name: str) -> set:
+        """The tags whose words a product's name contains."""
         text = name_text(name)
         found = set()
         for run in set(_RUN.findall(text)):
@@ -299,11 +302,13 @@ class TagStore:
         name = clean_tag(body.get("name"))
 
         def need(value, what="a tag name"):
+            """The value, or ValueError asking for it when it's empty."""
             if not value:
                 raise ValueError(f"Give {what}.")
             return value
 
         def drop(mapping, key, tag):
+            """Take a tag off one entry in a mapping, removing the entry once it has none."""
             left = [t for t in mapping.get(key, []) if t != tag]
             if left:
                 mapping[key] = left

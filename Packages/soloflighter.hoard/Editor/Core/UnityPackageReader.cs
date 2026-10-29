@@ -14,6 +14,8 @@ using System.Text.RegularExpressions;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>Reads what's in a .unitypackage (a gzipped tar): each asset's path and GUID, without unpacking
+    /// it.</summary>
     public static class UnityPackageReader
     {
         const int MaxEntries = 500000;
@@ -82,8 +84,10 @@ namespace SoloFlighter.Hoard
             return result;
         }
 
+        /// <summary>The padding after a tar entry of that size, to the next 512 bytes.</summary>
         static long Pad(long size) { return (512 - size % 512) % 512; }
 
+        /// <summary>A tar entry's name (with its ustar prefix).</summary>
         static string TarName(byte[] h)
         {
             string name = Field(h, 0, 100), prefix = Field(h, 345, 155);
@@ -91,6 +95,7 @@ namespace SoloFlighter.Hoard
             return ustar && prefix.Length > 0 ? prefix + "/" + name : name;
         }
 
+        /// <summary>A text field of a tar header, up to its first zero.</summary>
         static string Field(byte[] h, int at, int len)
         {
             int end = at;
@@ -98,6 +103,7 @@ namespace SoloFlighter.Hoard
             return Encoding.UTF8.GetString(h, at, end - at);
         }
 
+        /// <summary>A number field of a tar header (octal, or base-256 for a big one).</summary>
         static long Octal(byte[] h, int at, int len)
         {
             string s = Field(h, at, len).Trim(' ', '\0');
@@ -105,8 +111,10 @@ namespace SoloFlighter.Hoard
             try { return Convert.ToInt64(s, 8); } catch (Exception) { return -1; }
         }
 
+        /// <summary>Whether a block is all zeros (the end of a tar).</summary>
         static bool AllZero(byte[] b) { foreach (byte x in b) if (x != 0) return false; return true; }
 
+        /// <summary>Read exactly n bytes. False when the stream ends first.</summary>
         static bool ReadFull(Stream s, byte[] buf, int n)
         {
             int got = 0;
@@ -129,6 +137,7 @@ namespace SoloFlighter.Hoard
             return buf;
         }
 
+        /// <summary>Skip n bytes of the stream.</summary>
         static void Skip(Stream s, long n)
         {
             var buf = new byte[81920];

@@ -46,6 +46,7 @@ def meta_guid(path: Path) -> str:
 
 
 def meta_text(path: Path) -> str:
+    """A Unity .meta file's text for a file or folder in the package, with its fixed GUID."""
     kind = "folder" if path.is_dir() else ("package.json" if path.name == "package.json" else path.suffix)
     body = META[kind]
     if not body.startswith("folderAsset") and "userData" not in body:
@@ -121,6 +122,8 @@ def build_unitypackage(version: str, date: tuple) -> Path:
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.GNU_FORMAT) as tar:
         def add(name: str, data: bytes) -> None:
+            """Add a file to the package's archive, with fixed times and owners so the same input makes the same
+            archive."""
             info = tarfile.TarInfo(name)
             info.size, info.mtime, info.mode, info.uid, info.gid = len(data), mtime, 0o644, 0, 0
             tar.addfile(info, io.BytesIO(data))
@@ -137,6 +140,7 @@ def build_unitypackage(version: str, date: tuple) -> Path:
 
 
 def main() -> None:
+    """Build Hoard for Unity's package and its VPM listing (or only write the .meta files, with --write-metas)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", help="the git tag being released (unity-vX.Y.Z); must match package.json")
     ap.add_argument("--write-metas", action="store_true")

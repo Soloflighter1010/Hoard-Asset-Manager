@@ -74,6 +74,7 @@ def library_status(root: Path) -> dict:
                 count = -1
         stores[store] = {"manifest": str(m), "found": m.exists(), "assets": count}
     def subdirs(d: Path) -> list[Path]:
+        """A folder's subfolders (at most 200), or none when it can't be read."""
         try:
             return [p for p in d.iterdir() if p.is_dir()][:200]
         except OSError:

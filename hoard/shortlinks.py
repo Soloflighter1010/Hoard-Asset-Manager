@@ -56,10 +56,13 @@ def fits(code: str) -> bool:
 
 
 def code(sid: str, key: str) -> str:
+    """The code for a share link: its id and key, which the person it's given to pastes."""
     return f"{PREFIX}{sid}.{key}"
 
 
 def _request(method: str, path: str, *, token: str | None = None, data: str | None = None) -> dict:
+    """One request to the share server, through egress, as its JSON. Raises ShortLinkError when it can't be reached or
+    says no."""
     headers = {"Accept": "application/json", **({"Authorization": f"Bearer {token}"} if token else {})}
     try:
         r = egress.send(method, SERVER + path, f"Hoard/{__version__}", headers=headers, timeout=30,
@@ -84,6 +87,7 @@ def _request(method: str, path: str, *, token: str | None = None, data: str | No
 
 
 def _expires(body: dict) -> int:
+    """When a share link ends, as the server said. Raises ShortLinkError for an answer that makes no sense."""
     e = body.get("expires")
     if not isinstance(e, int) or isinstance(e, bool) or not 0 < e < 2 ** 40:
         raise ShortLinkError(OFFLINE)

@@ -29,6 +29,7 @@ def bookmark() -> str:
 
 
 def main(argv: list[str]) -> int:
+    """Fill the Save for Hoard page's bookmark link from the bookmarklet's source."""
     page = PAGE.read_text("utf-8")
     if len(LINK.findall(page)) != 1:
         print(f"{PAGE.name}: no bookmark link (<a class=\"bookmarklet\" id=\"saver\" href=...>) to fill")

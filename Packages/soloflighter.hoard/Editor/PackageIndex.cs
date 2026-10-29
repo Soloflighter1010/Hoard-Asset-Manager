@@ -12,8 +12,11 @@ using UnityEditor;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>How much of a product's package a project has.</summary>
     public enum InProject { Unknown, No, Partly, Yes }
 
+    /// <summary>The GUIDs in every package Hoard has, read in the background and kept, to tell what's in a
+    /// project.</summary>
     public sealed class PackageIndex
     {
         // -2: files only (the first kept folders' GUIDs too, which a product shares with others in the same folder);
@@ -90,6 +93,7 @@ namespace SoloFlighter.Hoard.Editor
             } while (!stop.IsCancellationRequested && !waiting.IsEmpty);
         }
 
+        /// <summary>A package's stamp, or its path when it can't be had.</summary>
         static string SafeStamp(string path) { try { return Stamp(path); } catch (Exception) { return path; } }
 
         /// <summary>Which product each package is (main thread): products are told apart by the files that are
@@ -161,6 +165,7 @@ namespace SoloFlighter.Hoard.Editor
             return c;
         }
 
+        /// <summary>How much of a package the project has.</summary>
         public InProject Status(string path)
         {
             int have, total;
@@ -178,6 +183,7 @@ namespace SoloFlighter.Hoard.Editor
             return tracked.Contains(guid);
         }
 
+        /// <summary>The GUIDs in a package (none until it's been read).</summary>
         public string[] Guids(string path)
         {
             string[] list;
@@ -198,6 +204,7 @@ namespace SoloFlighter.Hoard.Editor
             return Origins.Of(fileGuids, read);
         }
 
+        /// <summary>Stop reading packages, keeping what's been read.</summary>
         public void Stop() { stop.Cancel(); if (cacheDirty) SaveCache(); }
 
         void LoadCache()

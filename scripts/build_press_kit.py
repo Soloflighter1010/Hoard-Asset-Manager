@@ -30,6 +30,7 @@ class Words(HTMLParser):
         self.inside, self.depth, self.line = None, 0, ""
 
     def handle_starttag(self, tag, attrs):
+        """Note when a word section starts, and a new line at each block in it."""
         if tag == "section" and dict(attrs).get("id") in SECTIONS:
             self.inside, self.depth = dict(attrs)["id"], 0
         if not self.inside:
@@ -42,6 +43,7 @@ class Words(HTMLParser):
             self.line += ": "
 
     def handle_endtag(self, tag):
+        """End the line at the end of a block, underlining headings."""
         if not self.inside:
             return
         if tag in ("h2", "h3", "p", "dd", "li"):
@@ -54,10 +56,12 @@ class Words(HTMLParser):
                 self.inside = None
 
     def handle_data(self, data):
+        """Add text inside a word section to the line."""
         if self.inside:
             self.line += data
 
     def end(self, underline: str = "") -> None:
+        """Finish the line being read (with an underline under a heading)."""
         text = " ".join(self.line.split())
         if text:
             self.lines.append(text)
@@ -67,6 +71,7 @@ class Words(HTMLParser):
 
 
 def about_text(page: str) -> str:
+    """The press kit's about.txt, from press.html's word sections."""
     words = Words()
     words.feed(page)
     return "Hoard press kit\nhttps://hoard.furryup.link/press.html\n\n" + "\n".join(words.lines).strip() + "\n"

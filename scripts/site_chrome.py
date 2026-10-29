@@ -100,6 +100,7 @@ def apply(page: str, name: str) -> str:
 
 
 def main(argv: list[str]) -> int:
+    """Check every page's bar and footer are the site's, or write them with --write. 1 when any isn't."""
     wrong = []
     for p in sorted((REPO / "site").glob("*.html")):
         text = p.read_text("utf-8")

@@ -46,6 +46,7 @@ def cmd_refresh(cfg, stores):
     last = [""]
 
     def show(**kw):
+        """Update the job's state, printing each new message once."""
         jobs.state.update(kw)
         if jobs.state["message"] != last[0]:
             last[0] = jobs.state["message"]

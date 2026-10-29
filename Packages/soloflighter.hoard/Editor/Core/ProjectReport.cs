@@ -9,12 +9,15 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>A product found in a project: whether it's all there, partly, or only in the import log.</summary>
     public sealed class ProjectAsset
     {
         public string Store, Name, Creator, Folder, Url;
         public string Status;   // "yes": a package of it is all in the project; "partly"; "imported": only the import log says so
     }
 
+    /// <summary>The report Hoard for Unity writes into a project for Hoard to read: what's in it, and its
+    /// credits.</summary>
     public static class ProjectReport
     {
         public const int MaxAssets = 5000;
@@ -52,6 +55,7 @@ namespace SoloFlighter.Hoard
             return plain;
         }
 
+        /// <summary>The report as JSON: the project, what it has of each product, and its credits.</summary>
         static JsonValue Tree(string projectPath, string name, string unityVersion, string updated,
                               List<ProjectAsset> assets, CreditsFile credits)
         {
@@ -107,17 +111,24 @@ namespace SoloFlighter.Hoard
             return true;
         }
 
+        /// <summary>Whether two arrays of the same length have the same bytes.</summary>
         static bool Same(byte[] a, byte[] b)
         {
             for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
             return true;
         }
 
+        /// <summary>A new JSON object.</summary>
         static JsonValue Obj() { return JsonBuild.Obj(); }
+        /// <summary>A JSON array of these.</summary>
         static JsonValue Arr(List<JsonValue> items) { return JsonBuild.Arr(items); }
+        /// <summary>A JSON string.</summary>
         static JsonValue Str(string s) { return JsonBuild.Str(s); }
+        /// <summary>A JSON number.</summary>
         static JsonValue Num(int n) { return JsonBuild.Num(n); }
+        /// <summary>JSON's null.</summary>
         static JsonValue Null() { return JsonBuild.Null(); }
+        /// <summary>Add a member to a JSON object.</summary>
         static void Put(JsonValue o, string k, JsonValue v) { JsonBuild.Put(o, k, v); }
     }
 }

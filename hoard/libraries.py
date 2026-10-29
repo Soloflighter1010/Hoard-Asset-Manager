@@ -157,10 +157,12 @@ def free_space(folder: Path) -> int | None:
 # ----------------------------------------------------------------------------- what each folder held, last seen
 
 def _seen_file() -> Path:
+    """The file listing the library folders Hoard has been given, so a missing one can be noticed."""
     return data_dir() / "library_folders.json"
 
 
 def _load_seen() -> dict:
+    """The library folders Hoard has been given, as last saved; none when unreadable."""
     try:
         raw = read_json_file(_seen_file()) if _seen_file().is_file() else {}
     except (DataFileError, OSError):

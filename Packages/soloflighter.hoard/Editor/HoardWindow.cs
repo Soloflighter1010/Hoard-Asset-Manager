@@ -9,11 +9,14 @@ using UnityEngine;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>Hoard's window in Unity: your downloaded products, to import, with what's in the project and what each
+    /// needs.</summary>
     public sealed class HoardWindow : EditorWindow
     {
         const string RootPref = "SoloFlighter.Hoard.DownloadsFolder";
         static readonly string[] StoreNames = Prepend("All stores", HoardCatalog.Stores);   // the catalog's own list
 
+        /// <summary>A list with one more at its start.</summary>
         static string[] Prepend(string first, string[] rest)
         {
             var all = new string[rest.Length + 1];
@@ -69,6 +72,7 @@ namespace SoloFlighter.Hoard.Editor
         [MenuItem("Hoard/Open Hoard", false, 0)]
         public static void Open() { OpenWindow(); }
 
+        /// <summary>Open Hoard's window, or bring it to the front.</summary>
         static HoardWindow OpenWindow()
         {
             var w = GetWindow<HoardWindow>("Hoard");
@@ -77,6 +81,7 @@ namespace SoloFlighter.Hoard.Editor
             return w;
         }
 
+        /// <summary>Open Create Credits List (the Hoard menu's).</summary>
         [MenuItem("Hoard/Create Credits List", false, 1)]
         static void OpenCredits() { CreditsWindow.Open(OpenWindow()); }
 
@@ -296,6 +301,7 @@ namespace SoloFlighter.Hoard.Editor
             return missing;
         }
 
+        /// <summary>What a product needs, as a list in words.</summary>
         static string Listed(List<HoardNeed> needs)
         {
             var names = needs.ConvertAll(n => n.Label);
@@ -339,6 +345,8 @@ namespace SoloFlighter.Hoard.Editor
             return ProjectStatus(a) >= InProject.Partly && pending.TryGetValue(Updates.Key(a.Store, a.Name), out n) ? n : 0;
         }
 
+        /// <summary>The updates Hoard found for each product, from its asset-updates.json (none when it can't be
+        /// read).</summary>
         static Dictionary<string, int> ReadPending()
         {
             try
@@ -369,6 +377,7 @@ namespace SoloFlighter.Hoard.Editor
 
         // ---- "Which Product Is This From?" (Assets menu, and the Project window's right-click menu)
 
+        /// <summary>Which Product Is This From?: the products the selected files came from.</summary>
         [MenuItem("Hoard/Which Product Is This From?", false, 20)]
         [MenuItem("Assets/Hoard/Which Product Is This From?", false, 1500)]
         static void WhichProduct()
@@ -380,6 +389,7 @@ namespace SoloFlighter.Hoard.Editor
             w.FindOrigins();
         }
 
+        /// <summary>Whether there's a selection to ask about.</summary>
         [MenuItem("Hoard/Which Product Is This From?", true)]
         [MenuItem("Assets/Hoard/Which Product Is This From?", true)]
         static bool CanWhichProduct() { return Selection.assetGUIDs != null && Selection.assetGUIDs.Length > 0; }

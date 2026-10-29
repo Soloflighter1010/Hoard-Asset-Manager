@@ -5,11 +5,13 @@
 // getWithMetadata ({type: "text" | "arrayBuffer" | "stream"}), delete. A key past its expiration is gone.
 export function fakeKV(now = () => Date.now()) {
   const kept = new Map();
+  // What's kept under a key, unless it has expired (then it's dropped).
   const live = key => {
     const x = kept.get(key);
     if (x && x.expiration && x.expiration * 1000 <= now()) { kept.delete(key); return undefined; }
     return x;
   };
+  // Bytes as the type asked for: an ArrayBuffer, a stream or text.
   const as = (bytes, type) => type === "arrayBuffer" ? bytes.slice().buffer
     : type === "stream" ? new Blob([bytes]).stream() : new TextDecoder().decode(bytes);
   return {

@@ -24,11 +24,13 @@ DESCRIPTION = "Everything Hoard uses or ships, from the browser it drives to the
 
 
 def where(value: str) -> str:
+    """Where a credit is used, in words (its "in": all, windows, mac, linux, build)."""
     parts = value.split()
     return "Every copy of Hoard" if "all" in parts else ", ".join(WHERE[p] for p in parts)
 
 
 def render() -> str:
+    """The Acknowledgements page, from credits.json."""
     credits = json.loads((REPO / "hoard" / "credits.json").read_text("utf-8"))
     groups = []
     for g in credits["groups"]:
@@ -95,6 +97,7 @@ def render() -> str:
 
 
 def main(argv: list[str]) -> int:
+    """Check the page is up to date, or write it with --write. 1 when it's out of date."""
     page = render()
     if "--write" in argv:
         PAGE.write_text(page, "utf-8")

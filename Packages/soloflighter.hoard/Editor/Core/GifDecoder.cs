@@ -8,6 +8,7 @@ using System.Collections.Generic;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>A GIF's frames, as RGBA pixels, with how long each shows.</summary>
     public sealed class GifImage
     {
         public int Width, Height;                                   // after shrinking to fit
@@ -32,12 +33,14 @@ namespace SoloFlighter.Hoard
         }
     }
 
+    /// <summary>Reads animated GIFs (a product's pictures) into frames Unity can show, shrunk to fit.</summary>
     public static class GifDecoder
     {
         public const int MaxCanvas = 4096;                  // a side of the picture, as the file gives it
         public const int MaxFrames = 200;
         public const long MaxFrameBytes = 16L * 1024 * 1024; // all the frames kept, after shrinking
 
+        /// <summary>Whether the bytes are a GIF.</summary>
         public static bool IsGif(byte[] data)
         {
             return data != null && data.Length >= 6 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F' && data[3] == '8' &&
@@ -52,14 +55,18 @@ namespace SoloFlighter.Hoard
             catch (Exception) { return null; }
         }
 
+        /// <summary>Reads a GIF's bytes in order, failing when the file ends early.</summary>
         sealed class Reader
         {
             readonly byte[] d;
             public int Pos;
             public Reader(byte[] data) { d = data; }
             public bool More { get { return Pos < d.Length; } }
+            /// <summary>The next byte.</summary>
             public int Byte() { if (Pos >= d.Length) throw new FormatException("the file ends early"); return d[Pos++]; }
+            /// <summary>The next two bytes, as a little-endian number.</summary>
             public int Short() { int lo = Byte(); return lo | (Byte() << 8); }
+            /// <summary>The next n bytes.</summary>
             public byte[] Bytes(int n)
             {
                 if (n < 0 || Pos + n > d.Length) throw new FormatException("the file ends early");
@@ -83,6 +90,7 @@ namespace SoloFlighter.Hoard
                 }
                 return all.ToArray();
             }
+            /// <summary>Skip a run of data blocks, to the empty one that ends it.</summary>
             public void SkipBlocks()
             {
                 while (Pos < d.Length)
@@ -94,6 +102,8 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Read every frame of a GIF, each drawn onto the one before as the file says. Throws on a broken
+        /// file.</summary>
         static GifImage DecodeOrThrow(byte[] data, int maxSide)
         {
             if (!IsGif(data)) return null;
@@ -230,6 +240,8 @@ namespace SoloFlighter.Hoard
             return output;
         }
 
+        /// <summary>Draw a frame's pixels onto the picture (its rows in GIF's interlaced order when it is), leaving
+        /// transparent ones.</summary>
         static void Draw(byte[] canvas, int w, int h, byte[] indexes, int fx, int fy, int fw, int fh, bool interlaced,
                          byte[] colours, int transparent)
         {
@@ -261,6 +273,7 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Clear part of the picture to transparent (a frame's disposal).</summary>
         static void Clear(byte[] canvas, int w, int h, int fx, int fy, int fw, int fh)
         {
             for (int y = Math.Max(0, fy); y < Math.Min(h, fy + fh); y++)

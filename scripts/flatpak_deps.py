@@ -82,12 +82,14 @@ def pick(name: str, files: list[dict]) -> list[dict]:
 
 
 def choose(name: str, version: str, hashes: set[str]) -> list[dict]:
+    """The Flatpak sources for one locked package: the files PyPI has with the locked hashes that suit the Flatpak."""
     with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/{version}/json", timeout=30) as r:
         files = [f for f in json.load(r)["urls"] if f["digests"]["sha256"] in hashes]
     return [{"type": "file", "url": f["url"], "sha256": f["digests"]["sha256"]} for f in pick(name, files)]
 
 
 def main() -> None:
+    """Write the Flatpak's Python dependencies module from requirements-flatpak.txt."""
     deps = locked(LOCK.read_text("utf-8"))
     sources = [s for name, (version, hashes) in sorted(deps.items()) for s in choose(name, version, hashes)]
     module = {

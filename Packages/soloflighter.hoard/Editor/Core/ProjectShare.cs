@@ -7,6 +7,7 @@ using System.Collections.Generic;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>How much of each product a project has, by the GUIDs of its packages' files.</summary>
     public static class ProjectShare
     {
         /// <summary>Of a package's GUIDs, how many this project has under Assets/ (have) out of how many could be
@@ -116,8 +117,11 @@ namespace SoloFlighter.Hoard
             return changed;
         }
 
+        /// <summary>Whether a GUID is in more than one product's packages (so it can't say which is in the
+        /// project).</summary>
         public bool IsShared(string guid) { string was; return owner.TryGetValue(guid, out was) && was == null; }
 
+        /// <summary>Forget every GUID's product.</summary>
         public void Clear() { owner.Clear(); }
 
         /// <summary>The files a package is told by: those that are its product's own, or all of them if none are.</summary>

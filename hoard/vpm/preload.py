@@ -106,6 +106,7 @@ def _zip_contents(path: str, rel: str, _size: int, _mtime: int) -> tuple:
 
 
 def _read_zip_contents(path: Path, rel: str, size: int | None = None) -> list[dict]:
+    """What a .zip holds that Projects can add: a VPM package (by its package.json) or .unitypackage files."""
     out = []
     try:
         with zipfile.ZipFile(path) as zf:
@@ -136,6 +137,7 @@ def _read_zip_contents(path: Path, rel: str, size: int | None = None) -> list[di
 
 
 def _extract(zf: zipfile.ZipFile, prefix: str, dest: Path) -> None:
+    """Unpack the package under prefix in a .zip to dest, refusing one larger than any real package."""
     infos = [i for i in zf.infolist() if i.filename.replace("\\", "/").startswith(prefix)]
     if len(infos) > MAX_MEMBERS or sum(i.file_size for i in infos) > MAX_UNPACKED:
         raise ResolveError("That package is larger than any real one.")
@@ -277,5 +279,6 @@ def suggested_packages(needs: list[str]) -> list[dict]:
 
 
 def newer(a: str, b: str) -> bool:
+    """Whether version a is newer than b (False when either isn't a version)."""
     va, vb = Version.maybe(a), Version.maybe(b)
     return bool(va and vb and va > vb)

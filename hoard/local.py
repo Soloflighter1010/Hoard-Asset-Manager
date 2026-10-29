@@ -37,10 +37,12 @@ SKIP = {".ds_store", "thumbs.db", "desktop.ini", "_manifest.json", "asset.json"}
 
 
 def local_dir(root: Path) -> Path:
+    """The Local folder in a library folder, where files added to Local are moved to."""
     return root / LOCAL
 
 
 def pictures_dir() -> Path:
+    """Where Hoard keeps the pictures chosen for Local products."""
     return data_dir() / "local-pictures"
 
 
@@ -330,6 +332,7 @@ def _forget_picture(sdir: Path, rec: dict) -> None:
 
 
 def _listing(folder: Path, files: list[str]) -> dict:
+    """The record's file list: each file's path and size, skipping any that's gone or unsafe."""
     out = {}
     for n, rel in enumerate(files, 1):
         try:
@@ -340,6 +343,7 @@ def _listing(folder: Path, files: list[str]) -> dict:
 
 
 def find(manifest: Manifest, key: str) -> dict:
+    """A Local product's record. Raises ValueError when it isn't there any more."""
     rec = manifest.assets.get(key) if isinstance(key, str) else None
     if rec is None:
         raise ValueError("That isn't in Local any more.")

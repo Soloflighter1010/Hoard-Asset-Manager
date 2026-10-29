@@ -42,17 +42,20 @@ def blocks(lines: list[str]) -> str:
     item: list[str] | None = None  # the text of the list item being read
 
     def flush_para():
+        """End the paragraph being read."""
         if para:
             out.append(f"<p>{inline(' '.join(para))}</p>")
             para.clear()
 
     def flush_item():
+        """End the list item being read."""
         nonlocal item
         if item is not None:
             out.append(inline(" ".join(item)))
             item = None
 
     def close_lists(to: int = -1):
+        """End the lists nested deeper than to (all of them by default)."""
         flush_item()
         while stack and stack[-1] > to:
             stack.pop()

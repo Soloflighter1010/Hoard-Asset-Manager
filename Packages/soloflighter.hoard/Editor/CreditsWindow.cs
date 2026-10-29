@@ -10,6 +10,7 @@ using UnityEngine;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>Create Credits List: the project's credits, found by Hoard for Unity, to edit and copy.</summary>
     public sealed class CreditsWindow : EditorWindow
     {
         public static readonly string SettingsFile = Path.Combine("ProjectSettings", "Hoard", "credits.json");
@@ -26,6 +27,7 @@ namespace SoloFlighter.Hoard.Editor
         string listTitle;          // the title as you're typing it (a space at the end stays while you type)
         double saveAt = -1;        // typing saves once you pause, not on every key
 
+        /// <summary>Open the window, for the project Hoard's window shows.</summary>
         public static void Open(HoardWindow from)
         {
             var w = GetWindow<CreditsWindow>(true, "Create Credits List");
@@ -113,6 +115,7 @@ namespace SoloFlighter.Hoard.Editor
             GUILayout.EndHorizontal();
         }
 
+        /// <summary>A note in a box.</summary>
         static void Note(string text)
         {
             GUILayout.BeginVertical(Look.Box("note", Look.Ledge, Look.Seam));

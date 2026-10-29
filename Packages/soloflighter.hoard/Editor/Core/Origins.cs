@@ -13,6 +13,7 @@ namespace SoloFlighter.Hoard
         public int Count;
     }
 
+    /// <summary>Which products a project's files came from, by the packages Hoard has read.</summary>
     public static class Origins
     {
         /// <summary>The products whose packages carry any of these files, most files first. packages: for each
@@ -51,6 +52,7 @@ namespace SoloFlighter.Hoard
         public bool AllHere;
     }
 
+    /// <summary>Which of a product's packages are updates of each other, by when they were downloaded.</summary>
     public static class Updates
     {
         /// <summary>Packages downloaded this long apart are the same download, not an update: a product's packages

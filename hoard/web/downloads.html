@@ -1818,19 +1818,24 @@ const grid = $("#grid"), detail = $("#detail");
 const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "", ptype: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
+// A store's name, from its folder's.
 const storeName = folder => folder === "Itch" ? "itch.io" : folder;
 const isLocal = a => a.store === "Local";   // your own (issue #80)   // a store as people write it, from its folder's name
+// The address of a downloaded file (v: its version, so a changed picture isn't cached).
 const fileUrl = (p, v) => keyed("/files/" + p.split("/").map(encodeURIComponent).join("/") + (v ? `?v=${+v}` : ""));
+// A size in B, KB, MB, GB or TB.
 function fmtSize(n) {
   if (n == null) return "";
   const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + " " + u[i];
 }
+// A tile's letters, colour and file type, for a download with no picture.
 function placeholder(a) {
   return `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b>` +
          `<small>${a.types[0] ? "." + esc(a.types[0]) : ""}</small></span>`;
 }
+// A download's picture (or its letters).
 const art = a => a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="" loading="lazy" decoding="async">` : placeholder(a);
 
 /* ---------- highlights and accessibility */
@@ -1895,11 +1900,13 @@ const SORTS = {
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
   size: (a, b) => b.size - a.size,
 };
+// How many of a list have each value of a list-valued field (types, tags...).
 const countBy = (list, key) => {
   const m = new Map();
   for (const a of list) for (const v of a[key]) m.set(v, (m.get(v) || 0) + 1);
   return m;
 };
+// Whether any search or filter is narrowing the downloads down.
 const filtersActive = () => state.ptype || state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size || state.set;
 
 /* ---------- rendering */
@@ -1914,15 +1921,19 @@ function render() {
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
 const VIEWS = { downloads: "Downloads", updates: "Updates", archive: "Archive", removed: "Removed", hidden: "Hidden", space: "Disk space" };
+// The view a download is in (Downloads, Archive, Hidden or Removed).
 const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
 // Updates: what the last check found, from the Downloads and the Archive (issue #26)
 const hasUpdate = a => !!(a.update && a.update.length);
+// Whether a download belongs in the view shown (Updates and Disk space are views of their own).
 const inView = a => state.view === "updates" ? hasUpdate(a) && a.mark !== "removed"
   : state.view === "space" ? inSpace(a) : viewOf(a) === state.view;
+// The views to choose from, with their counts (Disk space's: the size downloads take).
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.assets) count[viewOf(a)] = (count[viewOf(a)] || 0) + 1;
   count.updates = DATA.assets.filter(a => hasUpdate(a) && a.mark !== "removed").length;
+  // How many downloads a view has.
   const n = v => count[v] || 0;
   const onDisk = DATA.assets.filter(takesSpace).reduce((t, a) => t + a.size, 0);   // Disk space: its count is the size
   $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === "updates" || v === state.view || n(v)
@@ -1941,14 +1952,18 @@ function renderViews() {
 /* ---------- updates (issue #26): a check reads your stores without downloading anything, and lists what each
    download is missing that its store has now: files the creator added or changed. Update downloads just those. */
 const STORE_IDS = { booth: "booth", gumroad: "gumroad", jinxxy: "jinxxy", itch: "itch", payhip: "payhip" };
+// A download's store, as Hoard's settings name it.
 const storeId = a => STORE_IDS[a.store.toLowerCase()] || a.store.toLowerCase();
+// Whether Hoard can download a product again (not Payhip's or your own).
 const canDownload = a => storeId(a) !== "payhip" && !isLocal(a);
+// When updates were last checked, in words.
 function whenChecked() {
   const times = Object.values(DATA.updates_checked || {}).filter(Boolean).sort();
   if (!times.length) return "";
   const d = new Date(times[times.length - 1]);   // the latest check
   return isNaN(d) ? "" : d.toLocaleString(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+// The Updates view's bar: how many have newer files, when they were checked, and its buttons.
 function updatesBar(n) {
   const when = whenChecked();
   const say = [n ? tr(n === 1 ? "1 download has newer files on the store: files the creator added or changed since you downloaded them."
@@ -1963,6 +1978,7 @@ afterSetMade = () => load();   // (shared.js: a set made from a project shows in
 function previousSection(a) {
   const list = a.previous || [];
   if (!list.length) return "";
+  // A previous version's time, as this computer writes one.
   const when = s => { const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d)(\d\d)/.exec(s);
     return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).toLocaleString(document.documentElement.lang || undefined,
       { dateStyle: "medium", timeStyle: "short" }) : s; };
@@ -1972,6 +1988,7 @@ function previousSection(a) {
       `<button class="ghost sm" data-act="restore" data-stamp="${esc(v.stamp)}" data-file="${esc(v.file)}">Restore</button></li>`).join("")}</ul>` +
     `<p class="sub">Restore puts it back, and keeps the one it replaces here, so you can change your mind.</p>`;
 }
+// Put a previous version of a file back, once you say so (the current one is kept as a previous version).
 async function restorePrevious(a, b) {
   if (!await ask(tr("Put back {0} from {1}? The current one is kept here as a previous version.", b.dataset.file, b.closest("li").querySelector(".muted").textContent),
                  "Restore")) return;
@@ -1999,6 +2016,7 @@ function needsSection(a) {
   if (!rows.length && !unknown) return head + `<p class="sub">${esc(tr("Nothing from elsewhere: everything it uses is in it."))}</p>`;
   return head + (rows.length ? `<ul class="needs">${rows.join("")}</ul>` : "") + unknown;
 }
+// A download's details: its update (what's newer, to download), or a button to check for one.
 function updateSection(a) {
   if (!canDownload(a)) return "";
   if (!hasUpdate(a)) return `<div class="update"><button class="ghost sm" data-act="check-one">Check for updates</button>` +
@@ -2009,11 +2027,13 @@ function updateSection(a) {
       `<li>${esc(f.file)} <span class="muted-inline">(${f.kind === "changed" ? "changed" : "new"})</span></li>`).join("")}</ul>` +
     `<button class="primary sm" data-act="update-one">Update</button> <button class="ghost sm" data-act="check-one">Check again</button></div>`;
 }
+// Download the updates of some downloads.
 function updateItems(list) {
   const chosen = list.filter(a => canDownload(a));
   if (!chosen.length) { takeFiles(); return; }
   startDownload([...new Set(chosen.map(storeId))], null, chosen.map(a => a.tag_key));
 }
+// Check the stores for updates (of some downloads, or all of them).
 async function checkUpdates(list) {
   if (!navigator.onLine) { toast("You're offline. Checking for updates needs a connection."); return; }
   const body = list ? { stores: [...new Set(list.map(storeId))], keys: list.map(a => a.tag_key) } : {};
@@ -2037,7 +2057,9 @@ $("#viewBar").addEventListener("click", e => {
    folder, archived or deleted, a few at a time with Select. */
 let SPACE = null;   // /api/space: {groups, unchecked, projects}, read when Disk space is opened
 const takesSpace = a => !a.linked;   // (a folder of your own, listed where it is, isn't Hoard's to free)
+// The files of a download that are kept elsewhere too, or null.
 const copiesOf = a => (SPACE && SPACE.of.get(a.id)) || null;
+// Whether a download is in Disk space's list, as its chips choose (all, copies, unused...).
 function inSpace(a) {
   if (!takesSpace(a)) return false;
   if (state.space === "copies") return !!copiesOf(a);
@@ -2049,6 +2071,7 @@ function inSpace(a) {
    one store's copy and remove the others. A copy removed leaves your library (Library, Removed, where Restore
    brings it back), so syncing doesn't download it again, and its downloaded files are deleted. */
 const dupeKeep = new Map();   // stack_key -> the id of the copy to keep; none chosen: all of them stay
+// The products downloaded from more than one store, each as a group of its copies.
 function dupeGroups() {
   const by = new Map();
   for (const a of DATA.assets) if (a.stack_key && takesSpace(a) && !isLocal(a) && !a.mark) by.set(a.stack_key, [...(by.get(a.stack_key) || []), a]);
@@ -2056,6 +2079,7 @@ function dupeGroups() {
     .map(g => g.sort((x, y) => coll.compare(storeName(x.store), storeName(y.store)) || y.size - x.size))
     .sort((x, y) => coll.compare(x[0].name, y[0].name));
 }
+// Every download that's in such a group.
 const dupeIds = () => new Set(dupeGroups().flat().map(a => a.id));
 /* A copy is removed (marked Removed, its files deleted) by its product key, the key tags use: a store and a name
    without versions or (labels), so "Hair Pack 1" and "Hair Pack 2" from one store share one. So a copy goes only
@@ -2072,6 +2096,7 @@ function dupeRemovals(groups = dupeGroups()) {
     return g.filter(a => a.tag_key !== keep.tag_key && here.get(a.tag_key) === count.get(a.tag_key));
   });
 }
+// The products downloaded from more than one store: which copy of each to keep.
 function dupesPanel() {
   const groups = dupeGroups();
   if (!groups.length) return `<p class="muted">${esc(tr("Nothing here is downloaded from more than one store."))}</p>`;
@@ -2085,6 +2110,7 @@ function dupesPanel() {
     `<button class="linkish" data-dupe="none">${esc(tr("Keep them all"))}</button></div>` +
     `<ul class="dupelist">${groups.map(g => {
       const k = g[0].stack_key, keep = dupeKeep.get(k), name = `dk-${g[0].id}`;
+      // Which copy to keep, as a radio button.
       const opt = (v, label, on) => `<label><input type="radio" name="${name}" data-stack="${esc(k)}" value="${v}"${on ? " checked" : ""}> ${label}</label>`;
       const twice = st => g.filter(a => a.store === st).length > 1;   // two from one store: which is which, by name
       return `<li><span class="nm"><b translate="no">${esc(g[0].name)}</b> <span class="muted" translate="no">${esc(tr("by {0}", g[0].creator))}</span></span><span class="opts">` +
@@ -2094,10 +2120,12 @@ function dupesPanel() {
     }).join("")}</ul>` +
     `<button class="primary sm danger" data-dupe="go"${going.length ? "" : " disabled"}>${dupeGoText(going, bytes)}</button></div>`;
 }
+// The button's words: how many copies go, and the room it frees.
 function dupeGoText(going, bytes) {
   return esc(going.length ? tr(going.length === 1 ? "Remove 1 copy ({1})" : "Remove {0} copies ({1})", going.length.toLocaleString(), sizeText(bytes))
                           : tr("Choose the copies to keep"));
 }
+// Remove the copies not kept (their files deleted), once you say so.
 async function removeDupes() {
   const going = dupeRemovals();
   if (!going.length) return;
@@ -2118,6 +2146,7 @@ async function removeDupes() {
   if (state.view === "space") loadSpace();
   toast(tr(going.length === 1 ? "Removed 1 copy and deleted {1}." : "Removed {0} copies and deleted {1}.", going.length.toLocaleString(), sizeText(r.data.bytes)));
 }
+// Read Disk space's findings: the same files kept twice, and how much room that takes.
 async function loadSpace() {
   let j;
   try { const r = await api("/api/space", { cache: "no-store" }); if (!r.ok) throw new Error(); j = await r.json(); }
@@ -2143,9 +2172,11 @@ function mapSpace(j) {   // (again after each reload of the downloads, whose ids
   }
   SPACE = { ...j, of, saving, files };
 }
+// Disk space's bar: how much room downloads take, and its chips.
 function spaceBar() {
   const here = DATA.assets.filter(takesSpace), total = here.reduce((t, a) => t + a.size, 0);
   const unused = here.filter(a => !isLocal(a) && !(a.used_in || []).length);
+  // One of Disk space's chips, with its count.
   const chip = (v, label, n) => `<button class="chip" data-space="${v}" aria-pressed="${state.space === v}">${label}` +
     (n != null ? `<span class="n">${esc(String(n))}</span>` : "") + `</button>`;
   const copies = !SPACE ? `<span class="muted">Looking for copies…</span>`
@@ -2163,6 +2194,7 @@ function spaceBar() {
     `${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
     notes.map(t => `<p class="muted">${t}</p>`).join("") + (state.space === "dupes" ? dupesPanel() : "");
 }
+// A download's details: the files of it that are kept elsewhere too.
 function spaceSection(a) {
   const e = copiesOf(a);
   if (!e) return "";
@@ -2190,6 +2222,7 @@ $("#viewBar").addEventListener("click", e => {
   const b = e.target.closest("[data-space]"); if (!b) return;
   state.space = state.space === b.dataset.space ? "" : b.dataset.space; sel.ids.clear(); render();
 });
+// Show a view (Hidden only once it's unlocked with the PIN).
 async function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {   // the same PIN as the Library's Hidden
     if (!(await unlockDialog())) return;
@@ -2208,6 +2241,7 @@ $("#viewBar").addEventListener("click", async e => {
 });
 /* unlocking hidden items: setting, changing or resetting the PIN is the Library's */
 let pinResolve = null;
+// Ask for the PIN, resolving with whether it unlocked Hidden.
 function unlockDialog() {
   return new Promise(resolve => {
     pinResolve = resolve;
@@ -2216,11 +2250,13 @@ function unlockDialog() {
     $("#pinInput").focus();
   });
 }
+// Close the PIN dialog, saying whether it unlocked.
 function pinDone(ok) {
   if ($("#pinDialog").open) $("#pinDialog").close();
   const r = pinResolve; pinResolve = null;
   if (r) r(ok);
 }
+// Send the PIN typed.
 async function pinSubmit() {
   const r = await apiPost("/api/unlock", { pin: $("#pinInput").value });
   if (!r.ok) { $("#pinNote").textContent = r.data.error || "That didn't work."; $("#pinInput").select(); return; }
@@ -2238,6 +2274,7 @@ $("#views").addEventListener("click", e => { const b = e.target.closest("[data-v
 /* copies of one product (bought twice, in versions, or on two stores: hoard/library.py's stack_key) as one tile, as in
    the Library: its details list the others. Every copy shows while selecting, and in Disk space (each takes space). */
 let stackSize = new Map();   // the first copy's id -> how many copies its tile stands for
+// The downloads with each one's copies shown as one tile (counting them), unless copies aren't stacked.
 function stacked(list) {
   stackSize = new Map();
   if (UI.stack === false || sel.on || state.view === "space") return list;
@@ -2252,11 +2289,13 @@ function stacked(list) {
 }
 // the other copies of a product: on another store by the same creator (also_in), or in its stack
 let stackMembers = new Map();   // stack_key -> its copies (made with byId, in load)
+// A download's copies: on other stores, and versions of it.
 function otherCopies(a) {
   const ids = new Set(a.also_in.map(o => o.id));
   for (const o of (a.stack_key && stackMembers.get(a.stack_key)) || []) if (o.id !== a.id) ids.add(o.id);
   return [...ids].map(id => byId.get(id)).filter(Boolean);
 }
+// A download's tile: its picture, name, creator, store, size and marks.
 const slotHTML = a => {
     const n = stackSize.get(a.id) || 0, others = otherCopies(a);
     const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
@@ -2279,6 +2318,7 @@ function rowMeta(a) {
   return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)}</span>` +
     `<span class="rm-state ${how}">${esc(state)}</span><span class="rm-when">${esc(shortDay(a.added || (a.modified && new Date(a.modified * 1000).toISOString())))}</span></span>`;
 }
+// Draw the tiles (or why there are none).
 function renderGrid(list) {
   (cards = cards || lazyCards(grid)).show(list, slotHTML);
 
@@ -2314,6 +2354,7 @@ function renderGrid(list) {
   empty.hidden = list.length > 0 || (inSets() && !DATA.error && DATA.assets.length > 0);   // (Sets says what it has)
 }
 
+// The filters for the downloads shown: tags, file types, library folders and creators.
 function renderFacets(list) {
   renderTagFacets(list);
 
@@ -2359,6 +2400,7 @@ function renderIntegrity() {
 // it is (it's fine from then on), a missing file forgotten (and left out of its product's downloads), either
 // downloaded again (a changed one kept in _Previous versions first), or shown in its folder
 const CHECK = { list: [], hidden: 0, more: 0 };
+// Open what the last integrity check found, each file to deal with.
 async function openCheck() {
   const r = await api("/api/integrity", { cache: "no-store" });
   if (!r.ok) { toast(tr("That can't be done.")); return; }
@@ -2369,6 +2411,7 @@ async function openCheck() {
   drawCheck();
   if (!$("#checkDialog").open) $("#checkDialog").showModal();
 }
+// Draw what the check found, by product, each with Keep, Forget and Download again.
 function drawCheck() {
   const by = new Map();
   CHECK.list.forEach((x, i) => { const k = `${x.store}:${x.name}`; if (!by.has(k)) by.set(k, []); by.get(k).push([x, i]); });
@@ -2384,6 +2427,7 @@ function drawCheck() {
   $("#checkKeepAll").hidden = !CHECK.list.some(x => x.kind === "changed");
   $("#checkAgainAll").hidden = CHECK.list.length < 2;
 }
+// Deal with files the check found (forgetting them once you say so).
 async function resolveCheck(action, list) {
   if (action === "forget" && !await ask(tr(list.length === 1 ? "Forget {0}? Hoard stops expecting it, and leaves it out of that product's downloads from now on."
       : "Forget these {0} files? Hoard stops expecting them, and leaves them out of their products' downloads from now on.",
@@ -2404,6 +2448,7 @@ document.addEventListener("click", e => {
   if (one) resolveCheck(one.dataset.check, [CHECK.list[+one.dataset.i]]);
   else if (all) resolveCheck(all.dataset.checkAll, all.dataset.checkAll === "keep" ? CHECK.list.filter(x => x.kind === "changed") : CHECK.list);
 });
+// Start an integrity check of the downloads.
 async function checkDownloads() {
   const r = await apiPost("/api/verify");
   if (!r.ok) { toast(r.data.error || "The check didn't start."); return; }
@@ -2412,6 +2457,7 @@ async function checkDownloads() {
 }
 document.addEventListener("click", e => { if (e.target.closest("#checkNow, [data-checknow]")) checkDownloads(); });
 
+// The status line: what's searched and filtered (each to clear), and how many things are shown.
 function renderStatus(list) {
   const total = DATA.assets.filter(inView).length;   // this view: Downloads, Archive, ...
   const pills = [];
@@ -2422,6 +2468,7 @@ function renderStatus(list) {
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
   if (state.ptype) pills.push(["ptype", "", "Product type", tr(PRODUCT_TYPES[state.ptype] || state.ptype)]);
+  // "1 thing" or "n things".
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
   const local = state.store === "Local";
@@ -2441,6 +2488,7 @@ function renderStatus(list) {
     (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
 }
 
+// Put the search box, store tabs, library folders and sort as the state says.
 function syncControls() {
   const q = $("#q"); if (q.value !== state.q) q.value = state.q;
   renderDrives();
@@ -2507,6 +2555,7 @@ function showDetail(a, focus = true) {
   if (focus) detail.querySelector(".x").focus();
   saveHash();
 }
+// Close the details, focusing the tile they were for.
 function closeDetail() {
   if (openId == null) return;
   detail.classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
@@ -2516,6 +2565,7 @@ function closeDetail() {
   if (back) back.focus();
   saveHash();
 }
+// Show a downloaded file or folder in the system's file manager.
 async function reveal(path) {
   try {
     const r = await api("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
@@ -2523,6 +2573,7 @@ async function reveal(path) {
     toast(r.ok ? tr("Opened in {0}", tr(j.opened_in)) : j.error);
   } catch (e) { toast("Couldn't reach the library server."); }
 }
+// Copy the open download's folder's path.
 async function copyPath() {
   const text = byId.get(openId).abs_folder;
   try { await navigator.clipboard.writeText(text); }
@@ -2537,11 +2588,13 @@ async function copyPath() {
 /* ---------- Look inside: what a .unitypackage or .zip holds, read without extracting it (hoard/packages.py) */
 const canLookInside = name => /\.(unitypackage|zip)$/i.test(name);
 let INSIDE = null;   // what's shown: {id, kind, items | files + packages, nodes: folders drawn when opened}
+// Open Look inside, or close it (open: which; else the other way).
 function openInside(open) {
   const w = $("#insideWin"), show = open ?? w.hidden;
   w.hidden = !show;
   if (!show) INSIDE = null;
 }
+// Look inside a package or .zip: read what's in it, and show it.
 async function lookInside(path) {
   const body = $("#insideBody"), name = path.split("/").pop();
   INSIDE = null;
@@ -2575,6 +2628,7 @@ function insideTree(items) {
   })(root);
   return root;
 }
+// A file's preview in Look inside (its type, when it has no picture).
 function previewImg(it, n) {
   const ext = (it.name || it.path).split(".").pop();
   return it.preview ? `<img class="pv" loading="lazy" alt="" src="${keyed(`/inside/${INSIDE.id}/${n}-${it.guid}.png`)}">`
@@ -2589,6 +2643,7 @@ function insideFolder(node, n) {   // one folder's contents: its folders (closed
   }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
     `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
 }
+// What's in a package, as a tree of folders, with how many files and their size.
 function insidePackage(items, n, open) {
   const tree = insideTree(items);
   if (!tree.count) return `<p class="sum">${esc(tr("No files in it."))}</p>`;
@@ -2597,6 +2652,7 @@ function insidePackage(items, n, open) {
 }
 function insideFound(q) {   // searching: every file whose path has these words, wherever it is
   const words = q.toLowerCase().split(/\s+/).filter(Boolean), found = [];
+  // Note the files in a package that have every word searched for.
   const look = (items, n, where) => {
     for (const it of items) if (it.size != null && words.every(w => it.path.toLowerCase().includes(w))) found.push({ ...it, n, where });
   };
@@ -2611,6 +2667,7 @@ function insideFound(q) {   // searching: every file whose path has these words,
       `<span class="nm" translate="no">${esc(f.path)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
     (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
 }
+// Draw Look inside: the package (or each in the .zip), or the files matching what's searched for.
 function drawInside(q = "") {
   const I = INSIDE, body = $("#insideBody");
   I.nodes = [];
@@ -2638,6 +2695,7 @@ function pickedUnder(key) {   // in a folder that's chosen (so chosen with it)
   const [kind, n, ...rest] = key.split(":"), path = rest.join(":");
   return kind !== "z" && [...INSIDE.pick.keys()].some(k => k !== key && k.startsWith(`d:${n}:`) && path.startsWith(k.slice(`d:${n}:`.length) + "/"));
 }
+// A file's or folder's tick, to take it out (one in a folder ticked is ticked with it).
 function pickBox(key, count, name) {
   const under = pickedUnder(key), on = under || INSIDE.pick.has(key);
   return `<input type="checkbox" class="pick" data-pick="${esc(key)}" data-count="${count}"${on ? " checked" : ""}${under ? " disabled" : ""}` +
@@ -2651,6 +2709,7 @@ function insideBar() {   // (while files are being taken out, its buttons stay o
     `<button class="ghost sm" data-x="extract" data-what="all"${busy}>${esc(tr("Extract everything"))}</button>` +
     (packaged ? `<label class="check"><input type="checkbox" id="insideMetas"${INSIDE.metas ? " checked" : ""}> ${esc(tr("With Unity's .meta files"))}</label>` : "") + `</div>`;
 }
+// Note a tick: a folder's brings everything in it, no longer chosen on its own.
 function pickChanged(box) {
   const key = box.dataset.pick;
   if (box.checked) INSIDE.pick.set(key, Number(box.dataset.count)); else INSIDE.pick.delete(key);   // (an empty folder: 0)
@@ -2667,9 +2726,11 @@ function pickChanged(box) {
   const bar = $("#insideBody .inside-bar");
   if (bar) bar.outerHTML = insideBar();
 }
+// Take what's ticked out of the package (or all of it) into a folder, then open it.
 async function extractInside(what) {
   const I = INSIDE, picks = what === "all" ? ["all"] : [...I.pick.keys()];
   if (!picks.length || I.busy) return;
+  // Draw Look inside's bar again.
   const redraw = () => { const bar = INSIDE === I && $("#insideBody .inside-bar"); if (bar) bar.outerHTML = insideBar(); };
   I.busy = true;
   redraw();
@@ -2685,10 +2746,12 @@ async function extractInside(what) {
     (r.data.skipped.length ? " " + tr(r.data.skipped.length === 1 ? "1 file was left out: {0}." : "{0} files were left out.",
       r.data.skipped.length === 1 ? `${r.data.skipped[0].name} (${tr(r.data.skipped[0].why)})` : r.data.skipped.length) : ""));
 }
+// Fill a folder of the package's tree, the first time it's opened.
 function fillPackage(d) {
   const slot = d.querySelector("[data-pkg-node]");
   if (slot && !slot.childElementCount) { const { node, n } = INSIDE.nodes[+slot.dataset.pkgNode]; slot.innerHTML = insideFolder(node, n); }
 }
+// Look inside's window, its search, ticks and buttons.
 function wireInside() {
   makeWindow($("#insideWin"));
   WINDOWS.insideWin = () => openInside(false);
@@ -2740,6 +2803,7 @@ function saveHash() {
   if (openId != null) p.set("open", openId);   // (a product's details: a place, for Back and Forward)
   setAddress(p);
 }
+// Read the search, filters and place from the address.
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
@@ -2801,6 +2865,7 @@ async function bulkArchive() {
   toast(tr(chosen.length === 1 ? "Archived {0}. Its files stay where they are: find it in Archive." : "Archived {0} products. Their files stay where they are: find them in Archive.",
            chosen.length === 1 ? chosen[0].name : chosen.length));
 }
+// Delete the selected downloads' files, once you say so.
 async function bulkDelete() {
   const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked);
   if (!chosen.length) { toast("Your own packages leave Local from their own panel: Take out of Local."); return; }
@@ -2820,6 +2885,7 @@ async function bulkDelete() {
 /* ---------- a tab for each library folder (hoard/libraries.py): shown once there's more than the downloads folder */
 const libName = n => { const l = (DATA.libraries || []).find(l => String(l.n) === String(n)); return l ? libText(l) : tr("Another folder"); };
 let drivesShown = "";
+// The library folders, each with how many downloads it has, to show only one.
 function renderDrives() {
   const libs = DATA.libraries || [];
   if (state.lib !== "" && !libs.some(l => String(l.n) === state.lib)) state.lib = "";   // a folder taken out
@@ -2835,6 +2901,7 @@ function renderDrives() {
 $("#sort").addEventListener("change", e => { state.sort = e.target.value; if (state.view !== "space") uiSave({ sort: state.sort }); render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
+// Download what's new from some stores (choosing what, in the downloads dialog).
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, keys) : startDownload(stores));
 $("#downloadNew").addEventListener("click", () => downloadNew(Object.keys(STORE_NAMES)));
 $("#rescan").addEventListener("click", async () => {
@@ -2844,12 +2911,14 @@ $("#rescan").addEventListener("click", async () => {
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
 });
+// Set the tiles' size.
 function setZoom(v) { document.documentElement.style.setProperty("--slot-size", v + "px"); zoom.value = v; }
 zoom.addEventListener("input", () => { setZoom(zoom.value); try { localStorage.setItem("hoard-dl-tile-size", zoom.value); } catch (e) {} });
 zoom.addEventListener("change", () => uiSave({ dl_tile_size: Number(zoom.value) }));   // kept with the other layout choices
 const TILE_KEY = "dl_tile_size";   // this page's own tile size (see applyUi)
 try { const z = localStorage.getItem("hoard-dl-tile-size"); if (z) setZoom(z); } catch (e) {}
 
+// Add a value to a set, or take it out when it's there.
 function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); }
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), ty = e.target.closest("[data-type]"), c = e.target.closest("[data-creator]");
@@ -2888,6 +2957,7 @@ function localSection(a) {
     (a.own_picture ? `<button class="ghost" data-act="local-unpicture">${esc(tr(a.linked ? "Use one of its own pictures" : "Take the picture off"))}</button>` : "") +
     `<button class="ghost" data-act="local-remove">Remove from Local</button></div>`;
 }
+// Do what a button on one of your own packages says: its picture, details, or taking it out of Local.
 async function localAction(act, a) {
   if (!a) return;
   if (act === "local-picture" || act === "local-unpicture") {   // (kept in Hoard's own folder for it: see local.py)
@@ -2914,6 +2984,7 @@ async function localAction(act, a) {
   toast(act === "local-rescan" ? tr(r.data.files === 1 ? "Rescanned: 1 file." : "Rescanned: {0} files.", r.data.files)
         : tr("Took {0} out of Local.", a.name));
 }
+// Open Add to Local, or close it (open: which; else the other way).
 function openLocal(open) {
   const panel = $("#localPanel");
   const show = open ?? panel.hidden;
@@ -2929,6 +3000,7 @@ function openLocal(open) {
 }
 // issue #109: each folder some levels down as its own package: what that would add, before adding it
 let previewFor = "";
+// Show what adding a folder to Local would add: one product, or one for each folder in it.
 async function previewLocal() {
   const depth = Number($("#localDepth").value), path = $("#localPath").value.trim(), list = $("#localPreview");
   $("#localNameRow").hidden = depth > 0;
@@ -2949,6 +3021,7 @@ async function previewLocal() {
       `${p.creator ? ` <span class="muted" translate="no">${esc(tr("by {0}", p.creator))}</span>` : ""}${p.added ? ` <span>${esc(tr("(already in Local: left as it is)"))}</span>` : ""}</li>`).join("") +
     (n > 200 ? `<li class="muted">${esc(tr("and {0} more", n - 200))}</li>` : "");
 }
+// Add a folder (or each of its folders) to Local.
 async function addLocal() {
   const depth = Number($("#localDepth").value);
   const body = { path: $("#localPath").value, name: depth ? "" : $("#localName").value, creator: $("#localCreator").value,
@@ -2974,6 +3047,7 @@ async function addLocal() {
     return;
   }
 }
+// Add to Local's window, its fields and buttons.
 function wireLocal() {
   makeWindow($("#localPanel"));
   WINDOWS.localPanel = () => openLocal(false);
@@ -3012,6 +3086,7 @@ async function editableCopy(a, button) {
 }
 // Library folders (Settings): a product kept in one of them can be moved to another
 const libLabel = l => `${libText(l)} (${l.path})`;
+// A download's details: the library folder it's in, and moving it to another.
 function librarySection(a) {
   const libs = DATA.libraries || [];
   if (isLocal(a) || a.linked || libs.length < 2) return "";
@@ -3022,6 +3097,7 @@ function librarySection(a) {
       `</select><button class="ghost sm" data-act="move">Move here</button></div>`
       : `<p class="sub">Your other library folders' drives aren't connected.</p>`);
 }
+// Move a download to another library folder, once you say so (copied, checked, then deleted here).
 async function moveProduct(a, button) {
   const to = +$("#moveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
   if (!a || !lib) return;
@@ -3102,6 +3178,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h"
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-h", e.target.offsetHeight + "px")).observe($(".shelf"));
 {   // tabs out of sight (a very narrow window) fade at the edge they're beyond, so it shows there are more
   const seg = $(".shelf .seg");
+  // Fade the tabs' edges where there are more tabs beyond them.
   const edges = () => {
     seg.classList.toggle("more-left", seg.scrollLeft > 2);
     seg.classList.toggle("more-right", seg.scrollLeft + seg.clientWidth < seg.scrollWidth - 2);
@@ -3152,6 +3229,7 @@ const T = {
     return { main: [], groups };
   },
 };
+// Do what a button in the tag manager says: keep a suggestion, hide it, rename a tag or delete one.
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -3175,6 +3253,7 @@ async function tagPanelAction(b) {
     if (word !== null) return changeTags({ action: "match", name: t, match: word });
   }
 }
+// The tag manager's buttons and fields.
 function wireTags() {
   $("#tagsBtn").addEventListener("click", () => openTagPanel());
   $("#manageTags").addEventListener("click", () => openTagPanel(true));
@@ -3234,6 +3313,7 @@ function ago(iso) {   // the Library page has this in its own part; the Download
   const [n, u] = s < 3600 ? [s / 60, "minute"] : s < 86400 ? [s / 3600, "hour"] : [s / 86400, "day"];
   const r = Math.round(n); return tr(`{0} ${u}${r === 1 ? "" : "s"} ago`, r);
 }
+// Whether a new version of Hoard is out, in words.
 function describeUpdate(u) {
   if (u.error) return u.error;
   if (u.busy) return u.message || tr("Getting the update");
@@ -3242,6 +3322,7 @@ function describeUpdate(u) {
   if (u.checked) return tr("Hoard {0} is the newest version.", verText(u.current)) + " " + tr("Last checked {0}.", ago(new Date(u.checked * 1000).toISOString()));
   return tr("You have Hoard {0}.", verText(u.current));
 }
+// Start a download (of some stores, only some kinds, or some products), with the files chosen.
 async function startDownload(stores, only, keys) {
   const files = takeFiles();   // the files chosen of each product, if some were left out (taken first: never kept for later)
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
@@ -3252,6 +3333,7 @@ async function startDownload(stores, only, keys) {
   showDownload({ running: true, message: "Starting", log: [] });
   pollDownload();
 }
+// Follow the download running, showing its progress, until it's done.
 async function pollDownload() {
   clearTimeout(dlTimer);
   let job;
@@ -3266,6 +3348,7 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+// Show a download's progress: what it's doing, each file's transfer, and what it found when it's done.
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");

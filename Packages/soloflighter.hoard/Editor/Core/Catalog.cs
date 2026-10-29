@@ -8,6 +8,8 @@ using System.Text.RegularExpressions;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>One product in Hoard's catalog: its store, name, creator, folder and files, and what it
+    /// needs.</summary>
     public sealed class HoardAsset
     {
         public string Store, Name, Creator, Folder, Url, Variants, Added;
@@ -40,6 +42,8 @@ namespace SoloFlighter.Hoard
         public string Label { get { return Versions.Count > 0 ? Name + " " + string.Join(", ", Versions.ToArray()) : Name; } }
     }
 
+    /// <summary>Hoard's catalog.json, read and checked: the products Hoard has downloaded, and where each one's files
+    /// are.</summary>
     public sealed class HoardCatalog
     {
         public const int NewestVersion = 4;
@@ -70,6 +74,7 @@ namespace SoloFlighter.Hoard
         public string Problem;          // why the catalog couldn't be read at all, or null
         public int LeftOut;             // entries that broke a promise, and were left out
 
+        /// <summary>Read catalog.json, checking its seal with one key (or none).</summary>
         public static HoardCatalog Load(string root, byte[] key)
         {
             return Load(root, key == null ? new List<byte[]>() : new List<byte[]> { key });
@@ -292,6 +297,7 @@ namespace SoloFlighter.Hoard
             return ok ? "https://" + host + path : null;
         }
 
+        /// <summary>Whether a host is a store's site.</summary>
         static bool On(string host, string site) { return host == site || host == "www." + site; }
 
         /// <summary>A creator's shop: one level below the store's site, and not one of the site's own.</summary>
@@ -324,6 +330,7 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Whether a file is a .unitypackage.</summary>
         public static bool IsUnityPackage(string file) { return file.EndsWith(".unitypackage", StringComparison.OrdinalIgnoreCase); }
 
         /// <summary>The full path of one of an asset's files, only if it's a plain file inside the downloads folder,
@@ -354,6 +361,7 @@ namespace SoloFlighter.Hoard
         public static readonly string[] PictureTypes = { ".png", ".jpg", ".jpeg", ".gif" };
         static readonly Regex PreviewHint = new Regex("preview|thumb|cover|icon|promo|banner", RegexOptions.IgnoreCase);
 
+        /// <summary>Whether a file is a picture Hoard for Unity can show.</summary>
         public static bool IsPicture(string file)
         {
             foreach (string ext in PictureTypes) if (file.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) return true;
@@ -385,6 +393,8 @@ namespace SoloFlighter.Hoard
             return null;
         }
 
+        /// <summary>The full path of a product's folder, only when it's a real folder inside the downloads folder. Null
+        /// otherwise.</summary>
         public string FolderPath(HoardAsset a) { return Under(a, null, true); }
 
         // Folders already checked (a real folder, not a link or junction): many products share a store and creator

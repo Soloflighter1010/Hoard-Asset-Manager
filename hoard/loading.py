@@ -26,12 +26,14 @@ def counter(part: str, what: str, total: int, every: int = 25):
     step(part, what, 0, total)
 
     def tick(done: int) -> None:
+        """Note done of total, every so many and the last."""
         if done == total or done % every == 0:
             step(part, what, done, total)
     return tick
 
 
 def finished(part: str) -> None:
+    """That part has finished loading: the splash stops showing it."""
     with _lock:
         _now.pop(part, None)
 

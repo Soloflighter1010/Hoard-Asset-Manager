@@ -143,6 +143,7 @@ def send(cfg: dict, event: str, body: str, title: str = TITLE) -> bool:
 
 
 def _work() -> None:
+    """The background worker: send each notification waiting, logging any that couldn't be sent."""
     while True:
         addresses, body, title = _out.get()
         problem = deliver(addresses, body, title)

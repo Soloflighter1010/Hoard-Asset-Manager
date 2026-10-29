@@ -51,6 +51,7 @@ class VirusTotal:
 
     def request(self, method: str, url: str, data: bytes | None = None, content_type: str | None = None,
                 missing_ok: bool = False) -> dict | None:
+        """One API request, spaced out to stay within the public API's rate. None for a 404 when missing_ok."""
         if self.last is not None:
             wait = SPACING - (self.clock() - self.last)
             if wait > 0:
@@ -91,6 +92,7 @@ class VirusTotal:
         return self.request("POST", url, body, f"multipart/form-data; boundary={boundary}")["data"]["id"]
 
     def digest(self, path: Path) -> str:
+        """A file's SHA-256, which VirusTotal knows files by."""
         h = hashlib.sha256()
         with path.open("rb") as f:
             for block in iter(lambda: f.read(1 << 20), b""):
@@ -130,10 +132,12 @@ class VirusTotal:
 
 
 def say(text: str) -> None:
+    """Print a line straight away (the workflow's log shows it as it happens)."""
     print(text, flush=True)
 
 
 def files_to_scan(folder: Path) -> list[Path]:
+    """The release's files VirusTotal is asked about."""
     return sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in SCANNED)
 
 
@@ -166,6 +170,7 @@ def flags_shown(notes: str) -> dict[str, int]:
 
 
 def flags(stats: dict) -> int:
+    """How many engines flagged a file (malicious or suspicious)."""
     return int(stats.get("malicious", 0)) + int(stats.get("suspicious", 0))
 
 
@@ -176,6 +181,7 @@ def with_results(notes: str, results: str) -> str:
 
 
 def main(folder: Path = Path("dist"), vt: VirusTotal | None = None, env=os.environ) -> int:
+    """Scan every release file with VirusTotal, waiting for the results. 1 when any is flagged."""
     key = env.get("VT_API_KEY", "")
     if not key and vt is None:
         raise RuntimeError("VT_API_KEY isn't set: add it as a repository secret (Settings > Secrets and variables > Actions)")

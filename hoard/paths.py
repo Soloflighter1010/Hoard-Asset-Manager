@@ -42,6 +42,7 @@ current_log: Path | None = None   # this launch's log, when Hoard runs without a
 
 
 def logs_dir() -> Path:
+    """Where Hoard keeps its logs."""
     return data_dir() / "logs"
 
 

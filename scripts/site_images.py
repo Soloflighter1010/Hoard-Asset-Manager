@@ -22,10 +22,12 @@ def screenshots() -> list[Path]:
 
 
 def copy_of(shot: Path, width: int) -> Path:
+    """A screenshot's smaller copy for the website, at that width."""
     return shot.with_name(f"{shot.stem}-{width}.webp")
 
 
 def main(argv: list[str]) -> int:
+    """Make the website's smaller copies of the screenshots (or only check they're there, with --check)."""
     stale = [copy_of(s, w) for s in screenshots() for w in WIDTHS if "--all" in argv or not copy_of(s, w).is_file()]
     if "--check" in argv:
         if stale:

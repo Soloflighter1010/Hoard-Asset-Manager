@@ -39,6 +39,7 @@ def standalone(svg: str, outline: str, word: str | None) -> str:
 
 
 def main() -> int:
+    """Make the press kit's pictures and logos, and its zip."""
     from playwright.sync_api import sync_playwright
     OUT.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:

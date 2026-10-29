@@ -432,6 +432,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         super().process_request(request, client_address)
 
     def process_request_thread(self, request, client_address):
+        """Serve the connection, then give its slot back."""
         try:
             super().process_request_thread(request, client_address)
         finally:
@@ -493,6 +494,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         return self.project_jobs if name == PROJECTS else self.jobs
 
     def lanes(self) -> tuple[Jobs, Jobs]:
+        """Both lanes' jobs: the main one's and Projects'."""
         return self.jobs, self.project_jobs
 
     def working(self) -> bool:
@@ -685,8 +687,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
-    timeout = 30   # seconds a connection may sit idle or trickle a request before it's closed
     """Answers the pages' requests."""
+    timeout = 30   # seconds a connection may sit idle or trickle a request before it's closed
     server: AppServer
 
     def log_message(self, *args):
@@ -812,6 +814,7 @@ class Handler(BaseHTTPRequestHandler):
         return chosen
 
     def _download_choices(self) -> dict:
+        """The download choices the page may see (hidden products only once unlocked)."""
         return self.server.download_choices(self._unlocked())
 
     def _hidden_names(self) -> list[str]:
@@ -933,6 +936,7 @@ class Handler(BaseHTTPRequestHandler):
             tasks, hidden = srv.tasks(), self._hidden_names()
             if hidden:
                 def mask(job):
+                    """A job as the page may see it: hidden products' names masked while Hoard is locked."""
                     return {**job, **public_job({k: job.get(k) for k in ("message", "log", "report", "label", "transfer") if k in job}, hidden)}
                 tasks = {"current": mask(tasks["current"]) if tasks["current"] else None,
                          "project": mask(tasks["project"]) if tasks["project"] else None,
@@ -1190,6 +1194,7 @@ class Handler(BaseHTTPRequestHandler):
             return next((u for u in (sets.product_link(store, x) for x in links) if u), None)
 
         def details(key: str) -> dict | None:
+            """A product's details for the page, from the library or the downloads, with only its public link."""
             i = lib.get(key)
             if i:
                 return {"store": i["store"], "id": i.get("id"), "name": i["name"], "creator": i.get("creator"),
@@ -1529,6 +1534,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---- Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, with your library in them
 
     def _hidden_key(self, key) -> bool:
+        """Whether a product is hidden and Hoard is locked, so the request is answered as if it weren't there."""
         return isinstance(key, str) and key in MarkStore().keys("hidden") and not self._unlocked()
 
     def _hidden_file(self, target: Path) -> bool:
@@ -1574,6 +1580,7 @@ class Handler(BaseHTTPRequestHandler):
             self._vpm_doing = None
 
     def _vpm_get(self, path: str, query: dict):
+        """Answer a Projects (VPM) GET request."""
         srv = self.server
         one = lambda k: (query.get(k) or [""])[0][:2000]  # noqa: E731
         try:
@@ -1618,12 +1625,14 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, b"Not found", "text/plain")
 
     def _vpm_job(self, what: dict):
+        """Queue a Projects task, saying whether it waits its turn."""
         started = self.server.project_jobs.start("project", [], project=what)
         if not started:
             return self._json({"error": "That's already waiting its turn."}, 409)
         return self._json({"ok": True, "queued": started == "queued"})
 
     def _vpm_post(self, path: str, body: dict):
+        """Answer a Projects (VPM) POST request."""
         from .vpm import imports as vpm_imports, listing, presets as vpm_presets, templates as vpm_templates, unity as vpm_unity
         from .vpm.project import is_project
         srv = self.server
@@ -2075,6 +2084,7 @@ class Handler(BaseHTTPRequestHandler):
                                             "so nothing was restored."}, 500)
 
             def add_folder(value: str) -> None:
+                """Add a library folder from the backup, checked as one added in Settings is."""
                 folder = str(libraries.check_new_folder(srv.cfg, value))
                 srv.cfg["library_folders"] = [str(f) for f in libraries.other_folders(srv.cfg)] + [folder]
             dropped = []
@@ -2443,6 +2453,7 @@ def guide_source(query: dict) -> bytes:
     address, chosen in its own bar (and card outlines). Nothing of yours is in it: every product, project and file in it
     is made up."""
     def one(k):
+        """One value from the address (at most 40 characters)."""
         return (query.get(k) or [""])[0][:40]
     page = one("page") if one("page") in GUIDE_PAGES else "library"
     style, theme, mode = themes.style_id(one("style")), themes.theme_id(one("theme")), themes.mode_id(one("mode"))
@@ -2459,6 +2470,7 @@ def guide_source(query: dict) -> bytes:
              (f' style="zoom: {size / 100}; --zoom: {size / 100}"' if size != 100 else ""))
 
     def choice(name, label, options, chosen):
+        """One of the guide bar's dropdowns."""
         opts = "".join(f'<option value="{v}"{" selected" if v == chosen else ""}>{text}</option>' for v, text in options)
         return f'<label>{label} <select name="{name}">{opts}</select></label>'
     bar = (choice("page", "Page", [("library", "Library"), ("downloads", "Downloads")], page) +

@@ -4,6 +4,7 @@ using System;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>Shortening text to fit a width, with an ellipsis at its end or in its middle.</summary>
     public static class TextFit
     {
         public const string Ellipsis = "…";
@@ -23,6 +24,7 @@ namespace SoloFlighter.Hoard
             return Cut(text, lo, middle);
         }
 
+        /// <summary>The text cut to keep characters, at its end or in its middle (keeping more of its end).</summary>
         static string Cut(string text, int keep, bool middle)
         {
             if (!middle) return text.Substring(0, keep).TrimEnd() + Ellipsis;
