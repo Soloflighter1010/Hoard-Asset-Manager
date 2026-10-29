@@ -2629,10 +2629,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
-    def test_the_search_is_in_the_middle(self):
-        """Issue #203: the search box is in the middle of the bar, Library, Downloads and Local to its left and Sets
-        and Wishlists, Tasks, Projects and the tools to its right, at every width, text size and style; when there
-        isn't room, it goes under them, still in the middle, and nothing hides or overlaps."""
+    def test_the_bar_reads_logo_search_then_the_buttons(self):
+        """Issues #203, #236: the bar reads the logo with the search beside it, then on the other side the pages
+        (Library, Downloads, Local, Sets and Wishlists, Tasks, Projects), Menu and Sync, at every width, text size and
+        style; when there isn't room, the search goes under them, and nothing hides or overlaps."""
         page = self.open()
         check = """() => {
           const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
@@ -2644,8 +2644,16 @@ class WindowsTabsAndTasks(unittest.TestCase):
             for (const [b, rb] of parts.slice(i + 1))
               if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
           }
-          return { off: Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2), wide: search.width, over,
-                   fit: document.querySelector('.bar').dataset.fit || 'one' };
+          const r = sel => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
+          const pages = r('.bar .apptabs > *'), tools = r('.bar .tools > *'), one = !document.querySelector('.bar').dataset.fit;
+          const brand = document.querySelector('.bar .brand').getBoundingClientRect();
+          const end = document.querySelector('.bar > .bar-end');
+          const sides = { left: [...document.querySelector('.bar > .bar-side').querySelectorAll('a, button')].map(e => e.className),
+                          right: [...end.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
+                          tools: [...end.querySelectorAll('.tools button, .tools a')].filter(e => e.getClientRects().length && !e.closest('.barmenu')).map(e => e.id) };
+          const order = one ? brand.right <= search.left + 1 && pages.concat(tools).every(p => p.left >= search.right - 1)
+                            : pages.concat(tools).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
+          return { order, wide: search.width, over, sides, fit: document.querySelector('.bar').dataset.fit || 'one' };
         }"""
         seen = set()
         for path in ("", "downloads"):
@@ -2662,7 +2670,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
                         page.wait_for_timeout(120)
                         got = page.evaluate(check)
                         seen.add(got["fit"])
-                        self.assertLess(got["off"], 2, got)
+                        self.assertTrue(got["order"], got)
+                        self.assertEqual(got["sides"]["left"], ["brand"], "the logo, the search beside it")
+                        self.assertEqual(got["sides"]["right"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
+                        self.assertEqual([b for b in got["sides"]["tools"] if b != "filtersToggle"], ["menuBtn", "syncBtn"] if not path else ["menuBtn", "downloadNew"])
                         self.assertGreater(got["wide"], 150, got)
                         self.assertEqual(got["over"], [], got)
         self.assertEqual(seen, {"one", "rows", "stack"}, "each way the bar fits was tried")

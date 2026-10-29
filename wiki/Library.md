@@ -3,7 +3,7 @@ The **Library** shows everything you own on the stores you use, whether or not y
 
 ## Finding things
 
-- **Search** (in the middle of the bar at the top) matches names, creators, stores, variants and tags. A prefix
+- **Search** (beside the logo, at the top) matches names, creators, stores, variants and tags. A prefix
   searches one kind of thing (5.2.0): `creator:` (or `by:`), `tag:` (or `#`), `store:` (or `on:`) and `type:` (or
   `kind:`: a tag's kind, such as avatar, or in Downloads a kind of file) narrow the products; `set:` (or `in:`)
   narrows them to a set's and offers to go to it; `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)

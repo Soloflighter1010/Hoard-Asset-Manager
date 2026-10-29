@@ -993,8 +993,7 @@ function fitBar() {
   };
   const [left, right] = [...bar.querySelectorAll(":scope > .bar-side")].map(wide);
   const room = bar.getBoundingClientRect().width - px(bar, "paddingLeft", "paddingRight"), gap = px(bar, "columnGap");
-  const fit = 2 * Math.max(left, right) + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
-  bar.style.setProperty("--bar-side", Math.ceil(Math.max(left, right) / scale + 1) + "px");   // each side at least as wide as the wider
+  const fit = left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
   if ((bar.dataset.fit || "") !== fit) { if (fit) bar.dataset.fit = fit; else delete bar.dataset.fit; }
 }
 // The top bar's menu button and its keys, and fitting the bar to the window.
@@ -2688,8 +2687,7 @@ function pjList() {
   const bk = d.backups || {}, room = bk.room || {};
   const note = (room.low && bk.old_count ? `<p class="pj-warn pj-low">${esc(tr(bk.old_count === 1
       ? "The drive your project backups are on has {0} left, and {1} old backup takes {2}." : "The drive your project backups are on has {0} left, and {1} old backups take {2}.",
-      sizeText(room.free), bk.old_count, sizeText(bk.old_size)))} <button class="linkish" data-pj="backups">${esc(tr("Delete or move them"))}</button></p>` : "") +
-    `<p class="hint">${esc(tr("The same list as ALCOM's and the VRChat Creator Companion's: a project added in any of them shows in all three."))}</p>`;
+      sizeText(room.free), bk.old_count, sizeText(bk.old_size)))} <button class="linkish" data-pj="backups">${esc(tr("Delete or move them"))}</button></p>` : "");
   const others = pjUnlisted();
   if (!list.length) return top + note + `<p class="none">${esc(tr("No projects yet. Make one with New project, or add one you have."))}</p>` + others;
   const shown = pjOrganised(list), fav = shown.filter(p => p.favorite), rest = shown.filter(p => !p.favorite);
@@ -3057,8 +3055,7 @@ async function pjSuggest() {
 // ---- repositories, and Unity and folders
 function pjRepos() {
   const rs = PJ.data.repos || [];
-  return pjTabs() + `<p class="hint">${esc(tr("Where packages come from. The same list ALCOM and the Creator Companion use."))}</p>` +
-    `<h4>${esc(tr("Add a repository"))}</h4><div class="pj-field"><label for="pjRepoUrl">${esc(tr("Its address"))}</label>` +
+  return pjTabs() + `<h4>${esc(tr("Add a repository"))}</h4><div class="pj-field"><label for="pjRepoUrl">${esc(tr("Its address"))}</label>` +
     `<input id="pjRepoUrl" placeholder="https://" translate="no"><button class="primary sm" data-pj="addrepo">${esc(tr("Add"))}</button></div>` +
     `<details class="pj-more"><summary>${esc(tr("For a private repository"))}</summary><p class="hint">${esc(tr("Headers it asks for, one a line (Name: value). They're sent to its own address only."))}</p>` +
     `<textarea id="pjRepoHeaders" rows="3" translate="no"></textarea></details>` +
@@ -3192,8 +3189,8 @@ function pjBackups() {
       : `<p class="muted">${esc(tr("No old backups."))}</p>`) +
     (list.length ? `<ul class="pj-list">${list.map(pjBackupRow).join("")}</ul>` : `<p class="none">${esc(tr("No project backups here yet. Back up a project from Manage."))}</p>`) +
     (moved.length ? `<h4>${esc(tr("Moved to"))} <span translate="no">${esc(k.moved_to)}</span></h4><ul class="pj-list">${moved.map(pjBackupRow).join("")}</ul>` : "") +
-    (list.length || moved.length ? `<div class="row"><button class="ghost sm" data-pj="bkdel">${esc(tr("Delete the chosen ones"))}</button>` +
-      `<button class="ghost sm" data-pj="bkmove">${esc(tr("Move the chosen ones..."))}</button></div>` : "");
+    (list.length || moved.length ? `<div class="row"><button class="ghost sm" data-pj="bkdel">${esc(tr("Delete Selected"))}</button>` +
+      `<button class="ghost sm" data-pj="bkmove">${esc(tr("Move Selected"))}</button></div>` : "");
 }
 // Delete the backups chosen, once you say so.
 async function pjBackupsDelete(paths) {
@@ -4125,7 +4122,7 @@ function setHead(s) {
       `<div class="row"><button class="ghost sm" data-setx="note">Save the note</button></div>` +
       (s.photos.length ? `<ul class="setphotos">${s.photos.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
         `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a><button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button></li>`).join("")}</ul>` : "") +
-      `<p class="hint">${esc(tr("Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture."))}</p>` +
+      `<p class="hint">${esc(tr("Photos to show off the set: links from Imgur, Gyazo, X, Bluesky, Reddit, Postimages, ImgBB, Discord, or a store's own pictures."))}</p>` +
       `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div></details>`;
 }
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in

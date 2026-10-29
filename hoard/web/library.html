@@ -73,19 +73,21 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
-/* top bar: the search in the middle, Library, Downloads and Local to its left, and Sets and Wishlists, Tasks,
-   Projects and the page's tools to its right (issue #203). The two sides are as wide as each other, so the search
-   is in the middle of the window. When they don't fit beside it, fitBar (shared.js) puts the search on a row of its
-   own under them, and when they don't fit side by side either, each side on a row of its own: nothing hides. */
+/* top bar: the logo with the search beside it, and on the other side the pages (Library, Downloads, Local, Sets and
+   Wishlists, Tasks, Projects), then Menu and Sync (issue #236). When they don't fit beside the search, fitBar
+   (shared.js) puts the search on a row of its own under them, and when they don't fit side by side either, each side
+   on a row of its own: nothing hides. */
 .bar {
   position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
-  display: grid; grid-template-columns: minmax(var(--bar-side, 0px), 1fr) minmax(220px, 560px) minmax(var(--bar-side, 0px), 1fr); align-items: center;
+  display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; align-items: center;
   gap: 10px 18px; padding: 12px 24px; background: var(--cave);
 }
 .bar-side { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .bar-end { justify-content: flex-end; }
+.bar > .search { justify-self: start; width: min(100%, 560px); }   /* (beside the logo) */
+.bar-side .apptabs + .apptabs { margin-left: -8px; }   /* (the pages in one row: the gap between their tabs) */
 .bar[data-fit="rows"] { grid-template-columns: auto auto; justify-content: space-between; }
-.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: center; width: min(100%, 720px); }
+.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: start; width: min(100%, 720px); }
 .bar[data-fit="stack"] { grid-template-columns: minmax(0, 1fr); }
 .bar[data-fit="stack"] .search { order: 1; }
 .bar[data-fit="stack"] :is(.bar-side, .apptabs, .tools) { flex-wrap: wrap; }
@@ -1342,7 +1344,6 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Your hoard"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
 </div>
   <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
@@ -1350,6 +1351,7 @@ body.less-motion .tour-try::before { animation: none; }
     <kbd aria-hidden="true">/</kbd>
   </div>
 <div class="bar-side bar-end">
+  <nav class="apptabs" aria-label="Your hoard"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
   <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <div class="tools">
     <div class="barmenu-wrap">
@@ -1389,8 +1391,8 @@ body.less-motion .tour-try::before { animation: none; }
 
 <section id="tagPanel" class="stores tagpanel" hidden aria-labelledby="tagPanelTitle">
   <h2 id="tagPanelTitle">Tags</h2>
-  <p>Your tags are yours to name and use. Suggested tags are words that turn up in several item names:
-    keep one and it becomes your tag on every item whose name has that word.</p>
+  <p>Suggested tags are words that turn up in several item names: keep one and it becomes your tag on every item
+    whose name has that word.</p>
   <div class="newtag"><input id="newTag" maxlength="40" placeholder="New tag" aria-label="New tag">
     <button class="ghost sm" id="newTagBtn">Create</button></div>
   <h3>Your tags</h3>
@@ -1511,7 +1513,6 @@ body.less-motion .tour-try::before { animation: none; }
     Hoard reading it: its files stay where they are.</p>
   <p class="hint" id="libMsg" role="status"></p>
   <h3 id="part-places">Hoard's folders</h3>
-  <p class="hint">Every folder Hoard uses, and what each is for. Open one to see what's in it.</p>
   <div id="setPlaces" class="libs places"></div>
   <h3 id="part-stores">Stores</h3>
   <div id="setStores"></div>
@@ -1614,7 +1615,7 @@ body.less-motion .tour-try::before { animation: none; }
     <label><input type="radio" name="setMode" id="setModeDark" value="dark"> Dark</label>
   </div>
   <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
-  <p class="hint">Style: how Hoard lays everything out.</p>
+  <p class="hint">Style</p>
   <div id="styleChoices" class="style-choices" role="radiogroup" aria-label="Style"></div>
   <h3>Accessibility</h3>
   <label class="check">Text size
@@ -1668,7 +1669,7 @@ body.less-motion .tour-try::before { animation: none; }
   <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
-  <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button>: every change, version by version.</p>
+  <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button></p>
   <h3 id="part-backup">Backup</h3>
   <div class="field"><button class="ghost sm" id="backupMake">Make a backup</button>
     <button class="ghost sm" id="backupRestore">Restore a backup...</button>
@@ -1681,13 +1682,12 @@ body.less-motion .tour-try::before { animation: none; }
   <button class="ghost sm" id="openLogs">Open logs folder</button>
   <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
-  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
+  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button></p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
   <h3 id="part-tip">Support Hoard</h3>
   <p class="hint">Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.</p>
   <div class="field"><a class="ghost sm" id="tipKofi" href="https://ko-fi.com/knowbodyonline" target="_blank" rel="noopener noreferrer">Tip on Ko-fi</a></div>
   <h3 id="part-thanks">Acknowledgements</h3>
-  <p class="hint">Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.</p>
   <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>
   </div>
 </section>

@@ -153,7 +153,7 @@ These are kept in the Creator Companion's settings, so ALCOM and the Creator Com
 and how much room the drive it's on has left. A backup is **old** when it's past the newest few of its project (3
 unless you choose 1, 2, 5 or 10) and older than a month (or a week, 2 weeks, 3 or 6 months, or a year). **Delete the old
 ones**, or **Move the old ones...** to a folder on another drive with more room; or tick the ones you want, then **Delete
-the chosen ones** or **Move the chosen ones...**.
+Selected** or **Move Selected**.
 
 - When the drive your backups are on runs low on room (less than 10 GB, or a tenth of the drive, free) and there are
   old backups, the top of Projects says so, with **Delete or move them**.
