@@ -550,6 +550,12 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-files label { padding: 4px 0; font-weight: 400; }
 .pick-list .pk-files span { overflow-wrap: anywhere; }
 /* What files do you want to save? (issue #225): what a product contains, then everything or the files you tick */
+/* issue #230: notifications through Apprise */
+#setApprise { width: 100%; box-sizing: border-box; font: 12.5px/1.5 ui-monospace, monospace; }
+.apprise-acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 8px; }
+.apprise-acts > button { width: auto; margin: 0; }
+.apprise-events { display: flex; flex-direction: column; }
+.apprise-events[aria-disabled="true"] { opacity: .6; }
 .files-dialog { width: min(560px, calc(var(--vw) - 32px)); }
 /* issue #231: what the check found, each file with what can be done about it */
 .check-dialog { width: min(720px, calc(var(--vw) - 32px)); }
@@ -1562,6 +1568,25 @@ body.less-motion .tour-try::before { animation: none; }
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
+  <h3 id="part-apprise">Notifications through Apprise</h3>
+  <p class="hint">Send the news you choose to Discord, Telegram, ntfy, email and many more, through
+    <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener noreferrer">Apprise</a>: an address
+    for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in
+    config.json. What's sent says how many, never a product's name.</p>
+  <p id="appriseKept" class="hint" aria-live="polite"></p>
+  <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
+    placeholder="discord://..."></textarea>
+  <div class="apprise-acts"><button class="ghost sm" id="appriseSave">Keep these addresses</button>
+    <button class="ghost sm" id="appriseTest">Send a test</button>
+    <button class="linkish" id="appriseForget">Forget them</button></div>
+  <div id="appriseEvents" class="apprise-events" role="group" aria-label="What to send">
+    <label class="check"><input type="checkbox" data-apprise-event="new"> New products the routine check finds</label>
+    <label class="check"><input type="checkbox" data-apprise-event="updates"> Updates the routine check finds</label>
+    <label class="check"><input type="checkbox" data-apprise-event="prices"> Products on my wishlists that got cheaper</label>
+    <label class="check"><input type="checkbox" data-apprise-event="tasks"> Tasks that finish or fail</label>
+    <label class="check"><input type="checkbox" data-apprise-event="routine"> The routine check, when it's done</label>
+    <label class="check"><input type="checkbox" data-apprise-event="other"> Other news: a new version of Hoard, files the check of my downloads found changed or missing</label>
+  </div>
   <h3 id="part-look">Appearance</h3>
   <label class="check">Language
     <select id="setLanguage" aria-label="Language">

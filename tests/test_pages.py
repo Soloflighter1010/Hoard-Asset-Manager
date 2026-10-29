@@ -315,6 +315,41 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_notifications_through_apprise(self):
+        """Issue #230: Settings keeps Apprise's addresses (and then only says how many), and what's sent is ticked."""
+        from hoard import alerts, vault
+        self.srv.cfg["allow_unprotected_signins"] = True
+        self.addCleanup(self.srv.cfg.pop, "allow_unprotected_signins", None)
+        self.addCleanup(vault.forget_key, self.srv.cfg, alerts.SECRET)
+        self.addCleanup(self.srv.cfg.update, {"apprise_events": []})
+        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None), \
+                mock.patch.object(server, "save_config"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            self.assertEqual(page.locator("#appriseKept").inner_text(), "No addresses yet: nothing is sent.")
+            self.assertTrue(page.locator("#appriseTest").is_disabled())
+            page.fill("#setApprise", "json://example.com/hook\nntfys://ntfy.example/hoard")
+            page.click("#appriseSave")
+            page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()
+            self.assertEqual(page.input_value("#setApprise"), "", "never shown again")
+            self.assertEqual(alerts.urls(self.srv.cfg), ["json://example.com/hook", "ntfys://ntfy.example/hoard"])
+            with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
+                page.check("[data-apprise-event='tasks']")
+            self.assertEqual(self.srv.cfg["apprise_events"], ["tasks"])
+            page.reload()
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()   # (Settings, filled in)
+            self.assertTrue(page.is_checked("[data-apprise-event='tasks']"), "kept")
+            page.on("dialog", lambda d: d.accept())
+            page.click("#appriseForget")
+            page.locator("dialog.ask .primary").click()
+            page.locator("#appriseKept", has_text="No addresses yet").wait_for()
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_what_the_check_found(self):
         """Issue #231: what the check of the downloads found, each file with what can be done about it, from the
         Downloads page's summary (it said "Which files is in Tasks")."""

@@ -261,6 +261,8 @@ class Updates:
         self.state = {"current": __version__, "checked": checked, "latest": latest, "busy": False, "message": "",
                       "error": ""}
         self.pending: Path | None = None   # checked and waiting to run once Hoard has stopped
+        self.on_available = None   # (version): a newer Hoard was found (issue #230)
+        self._told = ""
 
     def view(self, can_install: bool) -> dict:
         latest = self.state["latest"]
@@ -279,11 +281,19 @@ class Updates:
             pass
 
     def check(self) -> dict:
-        """Ask GitHub now. Raises when it can't be reached or answers strangely; the last answer is kept."""
+        """Ask GitHub now. Raises when it can't be reached or answers strangely; the last answer is kept. A newer
+        version is news, once a run (issue #230: on_available, for notifications through Apprise)."""
         release = fetch_latest(bool(self.cfg.get("beta_updates")))
         with self._lock:
             self.state.update(checked=time.time(), latest=describe(release) if release else None, error="")
             self._save()
+        latest = self.view(False)
+        if latest["available"] and latest["latest"]["version"] != self._told and self.on_available:
+            self._told = latest["latest"]["version"]
+            try:
+                self.on_available(self._told)
+            except Exception:  # noqa: BLE001 - news never stops a check
+                pass
         return self.state
 
     def due(self) -> bool:

@@ -2,9 +2,14 @@
   "name": "python3-deps",
   "buildsystem": "simple",
   "build-commands": [
-    "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} --no-build-isolation bottle certifi charset-normalizer colorama greenlet idna playwright proxy-tools pyee pywebview requests tqdm typing-extensions urllib3"
+    "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} --no-build-isolation apprise bottle certifi charset-normalizer click colorama greenlet idna markdown oauthlib playwright proxy-tools pyee pywebview pyyaml requests requests-oauthlib tqdm typing-extensions tzdata urllib3"
   ],
   "sources": [
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/1f/8a/61c171d579df71583a76ac86d38814bce0aa615099d09a72888f36ff0c92/apprise-2.1.0-py3-none-any.whl",
+      "sha256": "f743f4bc81dc5a68bddab53d420071b45541630dfea8c907a5e8b2b38555c681"
+    },
     {
       "type": "file",
       "url": "https://files.pythonhosted.org/packages/83/f6/b55ec74cfe68c6584163faa311503c20b0da4c09883a41e8e00d6726c954/bottle-0.13.4-py2.py3-none-any.whl",
@@ -19,6 +24,11 @@
       "type": "file",
       "url": "https://files.pythonhosted.org/packages/9f/2f/fe3f187327aac18e2d54e9d2b08e15d27bf9b642d9e51c219f130fc34d1a/charset_normalizer-3.5.1-cp37-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
       "sha256": "a6dac12ff6b846103483683f60c5f8fee205121adc58ffd87e90a90a3af69e99"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl",
+      "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360"
     },
     {
       "type": "file",
@@ -47,6 +57,16 @@
     },
     {
       "type": "file",
+      "url": "https://files.pythonhosted.org/packages/fe/66/bcab3b677b71ad286b4e607e3427499537c76e13ad2e22584ba7a7d9882c/markdown-3.11.2-py3-none-any.whl",
+      "sha256": "f80390747a2a0ff2ba54da074ce4f862f72a6685f608cd2637b646a6d83993f5"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/d9/f4/78229a1066068ca14fc60fb26cf7381cabe4382261392b90e5f9552722d4/oauthlib-4.0.0-py3-none-any.whl",
+      "sha256": "624c28c13a0a59cabf9747dfa52af63be3e512a7f2714df16e91b5b3a145e6cd"
+    },
+    {
+      "type": "file",
       "url": "https://files.pythonhosted.org/packages/27/9c/103a5037789062bdab27c7dca53f3ca6b075b572ab2cd96eec825b3aec4e/playwright-1.63.0-py3-none-manylinux1_x86_64.whl",
       "sha256": "ad21bc07516b187965a7521c5cf0df0bd657b17482eaad74335272d35a2b07de"
     },
@@ -67,8 +87,28 @@
     },
     {
       "type": "file",
+      "url": "https://files.pythonhosted.org/packages/8b/9d/b3589d3877982d4f2329302ef98a8026e7f4443c765c46cfecc8858c6b4b/pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/74/27/e5b8f34d02d9995b80abcef563ea1f8b56d20134d8f4e5e81733b1feceb2/pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "0f29edc409a6392443abf94b9cf89ce99889a1dd5376d94316ae5145dfedd5d6"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/88/f9/16491d7ed2a919954993e48aa941b200f38040928474c9e85ea9e64222c3/pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5"
+    },
+    {
+      "type": "file",
       "url": "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl",
       "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/3b/5d/63d4ae3b9daea098d5d6f5da83984853c1bbacd5dc826764b249fe119d24/requests_oauthlib-2.0.0-py2.py3-none-any.whl",
+      "sha256": "7dd8a5c40426b779b0868c404bdef9768deccf22749cde15852df527e6269b36"
     },
     {
       "type": "file",
@@ -79,6 +119,11 @@
       "type": "file",
       "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
       "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+    },
+    {
+      "type": "file",
+      "url": "https://files.pythonhosted.org/packages/0a/66/9a06c2227fedfd4919f0eaaa8b94377d9730882a7e4f95823c9a331ab5e1/tzdata-2026.6-py2.py3-none-any.whl",
+      "sha256": "0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec"
     },
     {
       "type": "file",

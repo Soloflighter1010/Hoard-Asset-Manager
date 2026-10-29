@@ -314,6 +314,7 @@ class Jobs:
                       "log": [], "report": None, "sync": False, "scheduled": False, "diagnostic": None,
                       "queue": [], "job_id": None, "transfer": None, "partial": None}
         self._queue: list[dict] = []        # jobs waiting their turn, oldest first
+        self.on_news = None    # (kind, what): news for notifications through Apprise (issue #230: hoard/alerts.py)
         self._qlock = threading.Lock()      # the queue, and taking the runner from it
         self._current: dict | None = None
         self._trail: list[str] = []         # the running job's progress, line by line
@@ -548,6 +549,15 @@ class Jobs:
                         "stores": [s for s in (h.get("stores") or []) if s in STORES or s == "all"] if isinstance(h.get("stores"), list) else [],
                         "started": str(h.get("started") or "")[:40], "ended": str(h.get("ended") or "")[:40],
                         "outcome": h.get("outcome") if h.get("outcome") in OUTCOMES else "done",
+        self._news("finished", self.history[-1])
+
+    def _news(self, kind: str, what) -> None:
+        """Pass news on for notifications (issue #230); whatever happens there never stops a task."""
+        if self.on_news:
+            try:
+                self.on_news(kind, what)
+            except Exception as e:  # noqa: BLE001
+                print(f"Couldn't pass on a notification: {type(e).__name__}", flush=True)
                         "message": str(h.get("message") or "")[:600],
                         "report": h.get("report") if isinstance(h.get("report"), dict) else None,
                         "log": [str(x)[:500] for x in h.get("log") or [] if isinstance(x, str)][-MAX_TRAIL:]
@@ -809,6 +819,8 @@ class Jobs:
                 return
             checked = self._verify(stores, fresh=True)
             if self.stop.is_set():
+        elif result["changed"] or result["missing"]:
+            self._news("checked", {"changed": len(result["changed"]), "missing": len(result["missing"])})
                 return
             downloadable = [s for s in stores if s in DOWNLOADABLE and s not in unread]
             if downloadable:
@@ -818,8 +830,10 @@ class Jobs:
             found = {"at": now_iso(), **counts} if counts["new"] or counts["updates"] else None
             before = routine_record()["found"] or {"new": 0, "updates": 0}
             save_routine(found=found)
-            if found and self.on_found and (counts["new"] > before["new"] or counts["updates"] > before["updates"]):
-                self.on_found(counts)   # (what you were told already and haven't looked at, only once)
+            if found and (counts["new"] > before["new"] or counts["updates"] > before["updates"]):
+                if self.on_found:
+                    self.on_found(counts)   # (what you were told already and haven't looked at, only once)
+                self._news("found", counts)
             said = (f"Found {plural(counts['new'], 'new product')} and {plural(counts['updates'], 'update')}: "
                     "choose what to download." if found else "Nothing new to download.")
             self._set(message=f"{checked} {said}" + (f" Couldn't read {_names(unread)}: see Stores." if unread else ""),
@@ -1212,6 +1226,8 @@ class Jobs:
             self.lib.set_error(store, unreachable_message(store, "opened for signing in"))
             self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
             return
+        if cheaper:
+            self._news("cheaper", len(cheaper))
         channel, chosen = use_channel(self.cfg), chosen_channel(self.cfg)
         name = BROWSER_NAMES[channel]
         if channel == "chromium" and not own_browser_installed():

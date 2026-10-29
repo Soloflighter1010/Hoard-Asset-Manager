@@ -1683,6 +1683,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setBackground").checked = !!SETTINGS.close_to_taskbar;
   $("#backgroundRow").hidden = !DATA.can_background;
   $("#setNotify").checked = SETTINGS.notify_found !== false;
+  fillApprise();
   $("#notifyRow").hidden = !DATA.can_notify;
   showUpdate();
   $("#setBrowser").value = SETTINGS.browser_channel;
@@ -1988,7 +1989,40 @@ function wireSidebar() {
   setFold(!!UI.side_folded, false);
 }
 
+// Notifications through Apprise (issue #230): its addresses go to /api/apprise (kept as API keys are, and never shown
+// again: Settings only learns how many), and what's sent is a setting like any other
+function fillApprise() {
+  const a = SETTINGS.apprise || {}, chosen = new Set(a.events || []);
+  for (const b of document.querySelectorAll("[data-apprise-event]")) b.checked = chosen.has(b.dataset.appriseEvent);
+  $("#appriseKept").textContent = !a.available ? tr("Apprise isn't installed. Run Setup again to install it.")
+    : a.kept ? tr(a.kept === 1 ? "1 address is kept. Type new ones to replace it." : "{0} addresses are kept. Type new ones to replace them.", a.kept)
+    : tr("No addresses yet: nothing is sent.");
+  $("#appriseTest").disabled = $("#appriseForget").hidden = !a.kept;
+  $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
+}
+async function appriseAct(id) {
+  if (id === "appriseTest") {
+    winNote("settingsPanel", tr("Sending a test..."));
+    const r = await apiPost("/api/apprise/test", {});
+    winNote("settingsPanel", "");
+    toast(r.ok && r.data.ok ? tr("Sent. Check that it came.") : (r.data.error || tr("That can't be done.")));
+    return;
+  }
+  const forget = id === "appriseForget";
+  if (forget && !await ask(tr("Forget the Apprise addresses? Nothing is sent until you add one again."), tr("Forget"))) return;
+  const r = await apiPost("/api/apprise", forget ? { forget: true } : { urls: $("#setApprise").value });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  $("#setApprise").value = "";
+  SETTINGS.apprise = { ...(SETTINGS.apprise || {}), kept: r.data.kept };
+  fillApprise();
+  toast(forget ? tr("Forgotten.") : tr(r.data.kept === 1 ? "Kept 1 address." : "Kept {0} addresses.", r.data.kept));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("#appriseSave, #appriseTest, #appriseForget");
+  if (b) appriseAct(b.id);
+});
 function settingsPart(el) {
+  if (el.dataset.appriseEvent) return { apprise_events: [...document.querySelectorAll("[data-apprise-event]:checked")].map(b => b.dataset.appriseEvent) };
   if (el.dataset.colour) {   // all of them, so what's saved is what you see
     const mine = {};
     for (const i of document.querySelectorAll("#customColours input[data-colour]")) mine[i.dataset.colour] = i.value;

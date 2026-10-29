@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, alerts, backup, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -59,7 +59,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip", "/api/product-files",
-           "/api/integrity/resolve",
+           "/api/integrity/resolve", "/api/apprise", "/api/apprise/test",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
            "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
@@ -243,6 +243,8 @@ def public_settings(cfg: dict) -> dict:
         "beta_updates": bool(cfg.get("beta_updates")),
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "notify_found": cfg.get("notify_found", True) is not False,
+        # notifications through Apprise (issue #230): how many addresses are kept (never the addresses), and what's sent
+        "apprise": {"available": alerts.available(), "kept": alerts.kept(cfg), "events": sorted(alerts.chosen(cfg))},
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -302,6 +304,9 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["close_to_taskbar"] = bool(body["close_to_taskbar"])
     if "notify_found" in body:
         change["notify_found"] = bool(body["notify_found"])
+    if "apprise_events" in body:   # issue #230: what's sent through Apprise (the addresses go to /api/apprise)
+        events = body["apprise_events"] if isinstance(body["apprise_events"], list) else []
+        change["apprise_events"] = [e for e in alerts.EVENTS if e in events]
     if "routine_hours" in body:   # issue #113
         if body["routine_hours"] not in ROUTINE_CHOICES or isinstance(body["routine_hours"], bool):
             raise ValueError("Choose how often to run the routine check from the list.")
@@ -466,6 +471,10 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._index, self._index_lock = None, threading.Lock()
         self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
+        # news, sent through Apprise as you chose (issue #230): counts, never a product's name
+        self.jobs.on_news = self.project_jobs.on_news = self._news
+        self.updates.on_available = lambda version: alerts.send(
+            self.cfg, "other", f"Hoard {version} is available. Open Hoard to update.")
         self.schedule = Schedule(cfg, self.jobs)
         previous.set_keep(keep_previous(cfg))
         # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
@@ -612,6 +621,28 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         except Exception:  # noqa: BLE001 - counts are a nicety; the folders still show
             pass
         return [{**f, "products": counts.get(f["n"], 0)} for f in libraries.view(self.cfg)]
+
+    def _news(self, kind: str, what) -> None:
+        """Issue #230: news from the tasks, sent through Apprise as you chose (hoard/alerts.py): how many, never names."""
+        if kind == "found":
+            for event in ("new", "updates"):
+                text = alerts.found_text(what, event)
+                if text:
+                    alerts.send(self.cfg, event, text)
+        elif kind == "cheaper":
+            alerts.send(self.cfg, "prices", f"{alerts.plural(what, 'product')} on your wishlists "
+                                            f"{'is' if what == 1 else 'are'} cheaper than before.")
+        elif kind == "checked":
+            parts = [alerts.plural(what[k], f"file {k}", f"files {k}") for k in ("changed", "missing") if what.get(k)]
+            alerts.send(self.cfg, "other", f"The check of your downloads found {' and '.join(parts)}. "
+                                           "Open Hoard to see what it found.")
+        elif kind == "finished" and what.get("task") == "routine":
+            counts = (what.get("report") or {}).get("routine") or {}
+            found = [alerts.plural(counts[k], one) for k, one in (("new", "new product"), ("updates", "update")) if counts.get(k)]
+            alerts.send(self.cfg, "routine", "The routine check failed." if what.get("outcome") == "failed" else
+                        f"The routine check found {' and '.join(found)}." if found else "The routine check found nothing new.")
+        elif kind == "finished" and what.get("task") not in ("list-files",):
+            alerts.send(self.cfg, "tasks", alerts.task_text(what))
 
     def index(self, rescan: bool = False, stale_ok: bool = False) -> dict:
         """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan.
@@ -2234,6 +2265,23 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})
+        if path == "/api/apprise":   # issue #230: Apprise's addresses, kept as API keys are; none, or forget, forgets them
+            try:
+                addresses = [] if body.get("forget") is True else alerts.clean_urls(body.get("urls"))
+                alerts.save_urls(srv.cfg, addresses)
+            except (ValueError, SigninsUnprotected) as e:
+                return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": f"They couldn't be kept: {e}"}, 500)
+            return self._json({"ok": True, "kept": len(addresses)})
+        if path == "/api/apprise/test":   # a test notification, to every address kept, now
+            if not alerts.available():
+                return self._json({"error": "Apprise isn't installed. Run Setup again to install it."}, 400)
+            addresses = alerts.urls(srv.cfg)
+            if not addresses:
+                return self._json({"error": "Add an Apprise address first."}, 400)
+            problem = alerts.deliver(addresses, "This is a test from Hoard: notifications through Apprise work.")
+            return self._json({"ok": problem is None, "error": problem})
         if path == "/api/integrity/resolve":   # issue #231: deal with what the last check found
             return self._resolve_integrity(body)
         if path == "/api/product-files":   # issue #225: what products have, to choose their files from before downloading

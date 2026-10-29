@@ -5,3 +5,5 @@ requests>=2.32.4,<3   # 2.32.4 fixes CVE-2024-35195 and CVE-2024-47081
 playwright>=1.45,<2   # each Playwright version also fixes which Chromium build gets installed
 tqdm>=4.66,<5
 colorama              # tqdm needs it on Windows; listed so the Windows install is hash-checked too
+apprise>=1.9,<3       # notifications through Apprise (issue #230): only used once you give Hoard an address
+tzdata                # apprise needs it on Windows; listed so the Windows install is hash-checked too

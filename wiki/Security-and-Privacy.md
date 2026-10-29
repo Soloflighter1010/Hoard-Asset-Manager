@@ -56,6 +56,11 @@ is in [PRIVACY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/
   product to a set or wishlist by its link (as anyone sees it, without your sign-in), a photo site when you add a set's [photo](Sets#photos) by its page there, and
   Hoard's share server when you make or open a [short link](Sets#short-links) for a set, which it can't read: the
   set is locked on your computer first.
+- **Notifications through Apprise go only where you say** (5.2.0, off until you add an address in Settings). Hoard
+  sends the news you tick to the services you give it addresses for, directly (your own ntfy on your network too).
+  The addresses hold those services' tokens, so they're kept as API keys are: Windows encrypts them with your
+  account, macOS keeps them in your Keychain, Linux in your keyring. What's sent says how many (3 new products, a
+  task done), never a product's name.
 - **Updates are checked before they run.** Hoard only runs an installer whose SHA-256 matches both the
   release's `SHA256SUMS-windows.txt` and the checksum GitHub lists for the file.
 - **It works offline** for everything except refreshing, signing in and downloading.

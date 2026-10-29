@@ -24,6 +24,8 @@ datas = [
 ]
 datas += collect_data_files("playwright")                                 # Playwright's driver (Node and its package)
 hidden = collect_submodules("hoard")
+hidden += collect_submodules("apprise")                                    # its services, loaded by name (issue #230)
+datas += collect_data_files("apprise")
 if WINDOWS or MAC:
     datas += collect_data_files("webview")   # pywebview's parts (WebView2, or the Mac's WebKit; its build rules do the rest)
 

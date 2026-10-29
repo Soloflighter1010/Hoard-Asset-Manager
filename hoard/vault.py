@@ -11,6 +11,7 @@ A key never goes on a command line (other accounts can read those on some system
 """
 from __future__ import annotations
 
+import base64
 import os
 import re
 import shutil
@@ -24,6 +25,7 @@ from .safety import write_file_safely
 
 SERVICE = "Hoard"
 KEY_FORMAT = re.compile(r"[A-Za-z0-9_-]{16,200}")
+STORED_FORMAT = re.compile(r"[A-Za-z0-9_-]{1,8000}")   # what's kept: a key, or a secret as base64url (save_secret)
 
 
 def clean_key(value) -> str | None:
@@ -109,6 +111,28 @@ def save_key(cfg: dict, name: str, key: str) -> None:
     """Keep an API key (see the module's notes on where)."""
     if clean_key(key) != key:   # only letters, digits, - and _: nothing that could end the Keychain command's quotes
         raise ValueError("that isn't an API key")
+    _keep(cfg, name, key)
+
+
+def save_secret(cfg: dict, name: str, text: str) -> None:
+    """Keep a secret that isn't an API key, as one is kept: Apprise's addresses, which have their services' tokens in
+    them (issue #230). It's kept as base64url, so nothing in it can end the Keychain command's quotes."""
+    data = base64.urlsafe_b64encode(text.encode("utf-8")).decode("ascii").rstrip("=")
+    if not STORED_FORMAT.fullmatch(data):
+        raise ValueError("that's too long to keep")
+    _keep(cfg, name, data)
+
+
+def load_secret(cfg: dict, name: str) -> str | None:
+    """A secret kept with save_secret, or None when there isn't one (or it can't be read)."""
+    data = _read(cfg, name)
+    try:
+        return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8") if data else None
+    except ValueError:
+        return None
+
+
+def _keep(cfg: dict, name: str, key: str) -> None:
     where = _where(cfg)
     if where == "windows":
         write_file_safely(_file(name, "dpapi"), _dpapi(key.encode(), True))
@@ -132,6 +156,15 @@ def save_key(cfg: dict, name: str, key: str) -> None:
 
 def load_key(cfg: dict, name: str) -> str | None:
     """The API key kept under name, or None when there isn't one (or it can't be read)."""
+    kept = _read(cfg, name)
+    return clean_key(kept) if kept else None
+
+
+def _read(cfg: dict, name: str) -> str | None:
+    """What's kept under name, as it was kept (letters, digits, - and _), or None."""
+    def plain(text):
+        text = str(text or "").strip()
+        return text if STORED_FORMAT.fullmatch(text) else None
     try:
         where = _where(cfg)
     except SigninsUnprotected:
@@ -139,15 +172,15 @@ def load_key(cfg: dict, name: str) -> str | None:
     try:
         if where == "windows":
             path = _file(name, "dpapi")
-            return _dpapi(path.read_bytes(), False).decode() if path.is_file() else None
+            return plain(_dpapi(path.read_bytes(), False).decode()) if path.is_file() else None
         if where == "keychain":
             r = _run(["security", "find-generic-password", "-s", SERVICE, "-a", name, "-w"])
-            return clean_key(r.stdout) if r.returncode == 0 else None
+            return plain(r.stdout) if r.returncode == 0 else None
         if where == "keyring":
             r = _run(["secret-tool", "lookup", "application", "hoard", "key", name])
-            return clean_key(r.stdout) if r.returncode == 0 else None
+            return plain(r.stdout) if r.returncode == 0 else None
         path = _file(name, "key")
-        return clean_key(path.read_text("utf-8")) if path.is_file() else None
+        return plain(path.read_text("utf-8")) if path.is_file() else None
     except (OSError, UnicodeDecodeError, subprocess.SubprocessError):
         return None
 

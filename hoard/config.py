@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
     "check_for_updates": True,     # ask GitHub, each time Hoard starts (and once a day while it's open), for a newer version
     "beta_updates": False,         # count betas (GitHub pre-releases) as updates too: for testers
     "notify_found": True,       # a notification from your system when the routine check finds something to download
+    "apprise_events": [],       # what's sent through Apprise (issue #230); its addresses are kept as API keys are
     "close_to_taskbar": True,   # closing Hoard's window minimizes it to the taskbar (the Dock), and Hoard carries on
     "auto_sync_hours": 0,          # while Hoard is open, sync by itself this often (0 = only when you choose Sync)
     "new_days": 7,                 # how long something that just appeared in your library is marked New (0 = never)
