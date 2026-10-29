@@ -373,6 +373,8 @@ class SetStore:
             short = clean_short(s.get("short"))
             if short:
                 one["short"] = short
+            if s.get("from_link") is True:   # added from someone's link (issue #258): shown apart from your own
+                one["from_link"] = True
             out["sets"].append(one)
         return out
 
@@ -426,7 +428,7 @@ class SetStore:
                 one = {"id": made, "name": name,
                        "items": list(dict.fromkeys(given["items"] if given else items))[:MAX_ITEMS]}
                 if given:
-                    one.update({k: given[k] for k in ("note", "photos", "products") if given.get(k)})
+                    one.update({k: given[k] for k in ("note", "photos", "products") if given.get(k)}, from_link=True)
                 else:
                     one.update(note=clean_note(body.get("note")), photos=body.get("photos") or [])
                     if body.get("kind") == "wishlist":   # one of your own, product by product (issue #158)

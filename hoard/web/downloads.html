@@ -71,19 +71,21 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 [hidden] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
-/* top bar: the search in the middle, Library, Downloads and Local to its left, and Sets and Wishlists, Tasks,
-   Projects and the page's tools to its right (issue #203). The two sides are as wide as each other, so the search
-   is in the middle of the window. When they don't fit beside it, fitBar (shared.js) puts the search on a row of its
-   own under them, and when they don't fit side by side either, each side on a row of its own: nothing hides. */
+/* top bar: the logo with the search beside it, and on the other side the pages (Library, Downloads, Local, Sets and
+   Wishlists, Tasks, Projects), then Menu and Sync (issue #236). When they don't fit beside the search, fitBar
+   (shared.js) puts the search on a row of its own under them, and when they don't fit side by side either, each side
+   on a row of its own: nothing hides. */
 .bar {
   position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
-  display: grid; grid-template-columns: minmax(var(--bar-side, 0px), 1fr) minmax(220px, 560px) minmax(var(--bar-side, 0px), 1fr); align-items: center;
+  display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; align-items: center;
   gap: 10px 18px; padding: 12px 24px; background: var(--cave);
 }
 .bar-side { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .bar-end { justify-content: flex-end; }
+.bar > .search { justify-self: start; width: min(100%, 560px); }   /* (beside the logo) */
+.bar-side .apptabs + .apptabs { margin-left: -8px; }   /* (the pages in one row: the gap between their tabs) */
 .bar[data-fit="rows"] { grid-template-columns: auto auto; justify-content: space-between; }
-.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: center; width: min(100%, 720px); }
+.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: start; width: min(100%, 720px); }
 .bar[data-fit="stack"] { grid-template-columns: minmax(0, 1fr); }
 .bar[data-fit="stack"] .search { order: 1; }
 .bar[data-fit="stack"] :is(.bar-side, .apptabs, .tools) { flex-wrap: wrap; }
@@ -225,7 +227,7 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 /* your tags in the filters, by what they're about (issue #157): each kind's name on a line of its own */
 .chips .tgroup { flex-basis: 100%; margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--dust); }
 .chips .tgroup:first-child { margin-top: 0; }
-.tagrows select.ttype { width: auto; height: 32px; padding: 0 8px; font-size: 13px; }
+.tagrows select.ttype { width: auto; height: 32px; padding: 0 30px 0 10px; font-size: 13px; }   /* (the arrow: looks.css) */
 /* Mix and match (issue #156) */
 dialog.ask.mixdlg { width: min(560px, calc(var(--vw) - 32px)); }
 dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
@@ -674,8 +676,8 @@ dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0
    full-width gold buttons would push what's beside it out of the panel */
 .settings .field .primary { width: auto; margin-top: 0; }
 .movefield { display: flex; gap: 6px; margin: 0 0 10px; }
-.movefield select { flex: 1; min-width: 0; height: 32px; padding: 0 8px; border-radius: 8px; border: 0;
-  background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.movefield select { flex: 1; min-width: 0; height: 32px; padding: 0 30px 0 8px; border-radius: 8px; border: 0;
+  background-color: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
 .movefield select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .settings .field input, .settings select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
@@ -944,10 +946,11 @@ body.no-glow .projects.win { background: var(--cave); }
 .projects .row > button { width: auto; flex: none; margin: 0; }
 .projects .meta, .projects .muted { font-size: 12px; color: var(--dust); overflow-wrap: anywhere; }
 .projects input:not([type=checkbox]):not([type=radio]), .projects select:not([data-proj-style]), .projects textarea:not([readonly]) {
-  height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0; background: var(--cave); color: var(--bone);
+  height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0; background-color: var(--cave); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; min-width: 0; box-sizing: border-box; }
 .projects textarea:not([readonly]) { height: auto; width: 100%; padding: 8px 12px; resize: vertical; font: 12.5px/1.5 ui-monospace, monospace; }
 .projects input:focus, .projects select:focus, .projects textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.projects select:not([data-proj-style]) { padding-right: 30px; }   /* (room for its arrow: looks.css) */
 .pj-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .projects .primary, .projects .ghost { width: auto; margin-top: 0; }   /* (not a panel's one full-width button) */
 .pj-top input[type=search] { flex: 1 1 200px; }
@@ -1156,7 +1159,7 @@ dialog.ask.share .shortlink { margin-top: 4px; }   /* (its short link: the only 
 dialog.ask.share .shortlink p:first-child { font-weight: 400; }   /* (not a question's first line) */
 dialog.ask .ghost.danger { color: var(--warn); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-.proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
+.proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background-color: var(--ledge); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); }
 /* the Tasks window: running, waiting and finished jobs */
 .tasks h3 { display: flex; align-items: center; gap: 8px; font: 700 13px var(--body); color: var(--dust); margin: 16px 0 8px;
@@ -1284,7 +1287,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
 /* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
 .tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
-  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
+  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .5s ease-in-out, top .5s ease-in-out,
+  width .5s ease-in-out, height .5s ease-in-out; }   /* (slow enough to follow, issue #265: the card waits for it, shared.js) */
 .tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
 .tour-card { position: fixed; z-index: 90; width: min(380px, calc(var(--vw) - 32px)); padding: 18px 20px 16px; border-radius: 16px;
   background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
@@ -1301,9 +1305,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @keyframes tourPulse { 50% { opacity: .3; } }
 .tour-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
 .tour-go > span { display: flex; gap: 8px; margin-left: auto; }
-body.less-motion .tour-ring { transition: none; }
+.tour-card { transition: opacity .3s ease-out; }
+.tour-card.tour-wait { opacity: 0; transition: none; }   /* (gone at once, back once the ring's there) */
+body.less-motion .tour-ring, body.less-motion .tour-card { transition: none; }
 body.less-motion .tour-try::before { animation: none; }
-@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-try::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card { transition: none; } .tour-try::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -1329,7 +1335,6 @@ body.less-motion .tour-try::before { animation: none; }
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Your hoard"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
 </div>
   <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
@@ -1337,6 +1342,7 @@ body.less-motion .tour-try::before { animation: none; }
     <kbd aria-hidden="true">/</kbd>
   </div>
 <div class="bar-side bar-end">
+  <nav class="apptabs" aria-label="Your hoard"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
   <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <div class="tools">
     <div class="barmenu-wrap">
@@ -1378,6 +1384,7 @@ body.less-motion .tour-try::before { animation: none; }
         <option value="creator">Creator</option>
         <option value="store">Store</option>
         <option value="added">Recently added</option>
+        <option value="season">Seasonal</option>
         <option value="size">Largest</option>
       </select>
     </label>
@@ -1389,8 +1396,8 @@ body.less-motion .tour-try::before { animation: none; }
 <div id="offline" class="offline" role="status" hidden>You're offline. Browsing your downloads still works; store links need a connection.</div>
 <section id="tagPanel" class="stores tagpanel" hidden aria-labelledby="tagPanelTitle">
   <h2 id="tagPanelTitle">Tags</h2>
-  <p>Your tags are yours to name and use. Suggested tags are words that turn up in several item names:
-    keep one and it becomes your tag on every item whose name has that word.</p>
+  <p>Suggested tags are words that turn up in several item names: keep one and it becomes your tag on every item
+    whose name has that word.</p>
   <div class="newtag"><input id="newTag" maxlength="40" placeholder="New tag" aria-label="New tag">
     <button class="ghost sm" id="newTagBtn">Create</button></div>
   <h3>Your tags</h3>
@@ -1509,7 +1516,6 @@ body.less-motion .tour-try::before { animation: none; }
     Hoard reading it: its files stay where they are.</p>
   <p class="hint" id="libMsg" role="status"></p>
   <h3 id="part-places">Hoard's folders</h3>
-  <p class="hint">Every folder Hoard uses, and what each is for. Open one to see what's in it.</p>
   <div id="setPlaces" class="libs places"></div>
   <h3 id="part-stores">Stores</h3>
   <div id="setStores"></div>
@@ -1586,6 +1592,12 @@ body.less-motion .tour-try::before { animation: none; }
   <p id="appriseKept" class="hint" aria-live="polite"></p>
   <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
     placeholder="discord://..."></textarea>
+  <details id="appriseBuild" class="apprise-build"><summary>Build an address</summary>
+    <label class="check">Service <select id="appriseService" aria-label="Service"></select></label>
+    <div id="appriseFields" class="apprise-fields"></div>
+    <div class="row"><button class="ghost sm" id="appriseAdd">Put it in the box</button></div>
+    <p class="hint" id="appriseBuilt" aria-live="polite"></p>
+  </details>
   <div class="apprise-acts"><button class="ghost sm" id="appriseSave">Keep these addresses</button>
     <button class="ghost sm" id="appriseTest">Send a test</button>
     <button class="linkish" id="appriseForget">Forget them</button></div>
@@ -1612,7 +1624,7 @@ body.less-motion .tour-try::before { animation: none; }
     <label><input type="radio" name="setMode" id="setModeDark" value="dark"> Dark</label>
   </div>
   <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
-  <p class="hint">Style: how Hoard lays everything out.</p>
+  <p class="hint">Style</p>
   <div id="styleChoices" class="style-choices" role="radiogroup" aria-label="Style"></div>
   <h3>Accessibility</h3>
   <label class="check">Text size
@@ -1630,6 +1642,7 @@ body.less-motion .tour-try::before { animation: none; }
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
+  <label class="check"><input type="checkbox" id="setSeasonal"> Seasonal Secrets: while Hoard is in the background, Spooky Hoard gathers dust and cobwebs, and Winter Hoard snow and ice</label>
   <label class="check">Store colours
     <select id="setColours" aria-label="Store colours">
       <option value="standard">Standard</option>
@@ -1665,7 +1678,7 @@ body.less-motion .tour-try::before { animation: none; }
   <div class="field"><button class="ghost sm" id="updCheck">Check now</button>
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
-  <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button>: every change, version by version.</p>
+  <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button></p>
   <h3 id="part-backup">Backup</h3>
   <div class="field"><button class="ghost sm" id="backupMake">Make a backup</button>
     <button class="ghost sm" id="backupRestore">Restore a backup...</button>
@@ -1678,13 +1691,12 @@ body.less-motion .tour-try::before { animation: none; }
   <button class="ghost sm" id="openLogs">Open logs folder</button>
   <p class="hint">Hoard keeps a log of each time it runs, for 30 days.</p>
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
-  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
+  <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button></p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
   <h3 id="part-tip">Support Hoard</h3>
   <p class="hint">Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.</p>
   <div class="field"><a class="ghost sm" id="tipKofi" href="https://ko-fi.com/knowbodyonline" target="_blank" rel="noopener noreferrer">Tip on Ko-fi</a></div>
   <h3 id="part-thanks">Acknowledgements</h3>
-  <p class="hint">Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.</p>
   <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>
   </div>
 </section>
@@ -1858,6 +1870,7 @@ async function load(rescan = false) {
       ? `The library server refused this address. Open http://127.0.0.1:${location.port || 8765}/ on the PC running it, or start it with --host 0.0.0.0.`
       : `The library server answered ${r.status} ${r.statusText}.`);
     DATA = await r.json();
+    watchUnlock(DATA.privacy);   // (Hidden locks itself again when it's left alone)
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
     applyDisplay(DATA.display);
     applyUi(DATA.ui);
@@ -1905,6 +1918,7 @@ const SORTS = {
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
   size: (a, b) => b.size - a.size,
 };
+SORTS.season = seasonSort(SORTS.added);   // the season's first (issue #261: shared.js)
 // How many of a list have each value of a list-valued field (types, tags...).
 const countBy = (list, key) => {
   const m = new Map();
@@ -2238,6 +2252,13 @@ async function showView(v) {
   else if (v !== "space" && state.view === "space" && state.sort === "size") state.sort = sortFrom("", SORTS);   // the one you chose
   state.view = v; sel.ids.clear(); closeDetail(); render();
 }
+// Hidden locked itself again, nobody having used it for a while (shared.js, issue #248): out of view, details and all.
+async function hiddenLocked() {
+  const open = openId != null && byId.get(openId);
+  if (open && open.mark === "hidden") closeDetail();
+  if (state.view === "hidden") { state.view = "downloads"; sel.ids.clear(); }
+  await load(); toast("Hidden items locked again: they hadn't been used for a while.");
+}
 $("#viewBar").addEventListener("click", async e => {
   if (!e.target.closest('[data-privacy="lock"]')) return;
   const open = openId != null && byId.get(openId);
@@ -2427,7 +2448,8 @@ function drawCheck() {
         `<button class="ghost sm" data-check="again" data-i="${i}">${esc(tr("Download again"))}</button>` +
         (x.kind === "changed" ? `<button class="ghost sm" data-check="keep" data-i="${i}">${esc(tr("Keep it as it is"))}</button>`
           : `<button class="ghost sm" data-check="forget" data-i="${i}">${esc(tr("Forget it"))}</button>`) +
-        `<button class="ghost sm" data-check="show" data-i="${i}">${esc(tr("Show in folder"))}</button></span></li>`).join("") + `</ul>`).join("") +
+        (x.kind === "changed" ? `<button class="ghost sm" data-check="show" data-i="${i}">${esc(tr("Show in folder"))}</button>` : "") +
+        `</span></li>`).join("") + `</ul>`).join("") +   // (a missing file: nothing there to show, issue #259)
     (CHECK.more ? `<p class="muted">${esc(tr("{0} more are named in the check's log, in Tasks.", CHECK.more))}</p>` : "");
   $("#checkKeepAll").hidden = !CHECK.list.some(x => x.kind === "changed");
   $("#checkAgainAll").hidden = CHECK.list.length < 2;
@@ -3387,6 +3409,7 @@ function showDownload(job) {
 function applyUi(ui) {   // once, when the page first has its data
   if (uiApplied || !ui) return;
   uiApplied = true;
+  seasonLabel();   // (which season the Seasonal sort puts first: shared.js)
   UI = { windows: {}, sections: {}, ...ui };
   for (const [name, open] of Object.entries(UI.sections || {})) if (SECTIONS[name]) SECTIONS[name](open, false);
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);
@@ -3483,7 +3506,7 @@ wireTags();
 wireApp();
 wireTour();
 readHash();
-load().finally(() => hideSplash()).then(() => { tourResume(); pickResume(); });   // the tour, carried on from the Library,
+load().finally(() => hideSplash()).then(() => { tourResume(); pickResume(); showSpots(); });   // the tour, carried on from the Library,
 // or choosing products for a project there (Projects' Put in products from your library)
 </script>
 </body>

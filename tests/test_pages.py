@@ -78,6 +78,22 @@ def picture(seed: int, noise: int = 0, size: int = 48, height: int | None = None
             + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
+# Issue #239: what Build an address makes of each service's fields (tests/test_alerts.py checks Apprise takes each one)
+APPRISE_BUILT = [
+    ("discord", {"hook": "https://discord.com/api/webhooks/123456789012345678/AbC-dEf_123"}, "discord://123456789012345678/AbC-dEf_123"),
+    ("telegram", {"token": "123456:ABC-def_ghi", "chat": "-1001234567890"}, "tgram://123456:ABC-def_ghi/-1001234567890"),
+    ("ntfy", {"topic": "my-hoard"}, "ntfy://my-hoard"),
+    ("ntfy", {"topic": "my-hoard", "server": "https://ntfy.example.com:8443"}, "ntfys://ntfy.example.com:8443/my-hoard"),
+    ("email", {"from": "you@gmail.com", "password": "app pass", "to": "me@example.org"}, "mailtos://you:app%20pass@gmail.com?to=me%40example.org"),
+    ("pushover", {"user": "fakeuserkey", "token": "fakeapptoken"}, "pover://fakeuserkey@fakeapptoken"),
+    ("slack", {"hook": "https://hooks.slack.com/services/TFAKE/BFAKE/notarealtoken"}, "slack://TFAKE/BFAKE/notarealtoken"),
+    ("matrix", {"server": "matrix.org", "user": "bot", "password": "pw", "room": "#hoard:matrix.org"},
+     "matrixs://bot:pw@matrix.org/%23hoard%3Amatrix.org"),
+    ("gotify", {"server": "https://gotify.example.com", "token": "AbCdEf123"}, "gotifys://gotify.example.com/AbCdEf123"),
+    ("webhook", {"url": "https://example.com/hook?token=abc/d"}, "jsons://example.com/hook?-token=abc%2Fd"),
+]
+
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class AccessKey(unittest.TestCase):
     """S-01: Hoard opens its page with a one-time link, which the page trades for the access key; from then on
@@ -315,6 +331,33 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_building_an_apprise_address(self):
+        """Issue #239: Build an address makes a service's Apprise address from its fields and puts it in the box with
+        the others (nothing is sent, or kept, until Keep these addresses)."""
+        from unittest import mock
+        from hoard import alerts
+        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            page.locator("#appriseBuild summary").click()
+            sent = []
+            page.on("request", lambda r: sent.append(r.url) if r.method == "POST" else None)
+            for service, fields, want in APPRISE_BUILT:
+                page.select_option("#appriseService", service)
+                for k, v in fields.items():
+                    page.fill(f'[data-apprise-field="{k}"]', v)
+                page.click("#appriseAdd")
+                self.assertIn(want, page.input_value("#setApprise").split("\n"), service)
+            self.assertEqual(page.input_value("#setApprise").split("\n"), [w for _, _, w in APPRISE_BUILT], "one a line")
+            page.select_option("#appriseService", "discord")
+            page.fill('[data-apprise-field="hook"]', "https://example.com/not-discord")
+            page.click("#appriseAdd")
+            self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
+            self.assertFalse([u for u in sent if "/api/apprise" in u], "nothing kept or sent")
+            page.close()
+
     def test_notifications_through_apprise(self):
         """Issue #230: Settings keeps Apprise's addresses (and then only says how many), and what's sent is ticked."""
         from hoard import alerts, vault
@@ -384,21 +427,28 @@ class AccessKey(unittest.TestCase):
         root = str(self.srv.cfg["root"])
         where.parent.mkdir(parents=True, exist_ok=True)
         where.write_text(json.dumps({"checked": "2026-10-28T10:00:00+00:00", "products": 1, "files": 1, "fine": 0,
-                                     "changed": ["Rusk (Booth): rusk.zip"], "missing": [], "data_changed": [], "complete": True,
+                                     "changed": ["Rusk (Booth): rusk.zip"], "missing": ["Rusk (Booth): rusk.psd"], "data_changed": [], "complete": True,
                                      "problems": [{"kind": "changed", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
-                                                   "path": "rusk.zip", "name": "Rusk"}]}))
+                                                   "path": "rusk.zip", "name": "Rusk"},
+                                                  {"kind": "missing", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
+                                                   "path": "rusk.psd", "name": "Rusk"}]}))
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         goto(page, f"{self.srv.url}downloads")
         page.locator("#integrity [data-check-open]").click()
         dialog = page.locator("#checkDialog")
         dialog.wait_for()
-        row = dialog.locator(".check-list li")
-        self.assertIn("rusk.zip", row.inner_text())
+        gone = dialog.locator(".check-list li", has_text="rusk.psd")
+        self.assertEqual(gone.locator("button").all_inner_texts(), ["Download again", "Forget it"],
+                         "missing: nothing there to show in its folder (issue #259)")
+        row = dialog.locator(".check-list li", has_text="rusk.zip")
         self.assertIn("Changed since Hoard downloaded it", row.inner_text())
         self.assertEqual(row.locator("button").all_inner_texts(), ["Download again", "Keep it as it is", "Show in folder"])
         self.assertIn("Rusk", dialog.locator(".check-list h3").inner_text())
         row.get_by_role("button", name="Keep it as it is").click()
+        dialog.locator(".check-list li", has_text="rusk.zip").wait_for(state="detached")
+        gone.get_by_role("button", name="Forget it").click()
+        page.locator("dialog.ask .primary").click()
         dialog.get_by_text("Nothing left to deal with.").wait_for()
         self.assertEqual(downloader.last_integrity()["changed"], [])
         dialog.locator("[data-check-close]").click()
@@ -527,6 +577,125 @@ class AccessKey(unittest.TestCase):
             page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": False}])
             page.evaluate(post, ["/api/hidden/forget", {"confirm": True}])
             page.close()
+
+    def test_hidden_locks_itself_again_when_left_alone(self):
+        """Issue #248: using the page keeps Hidden unlocked (a key or a click tells Hoard, a minute apart at most);
+        left alone, it locks itself again and the page shows it locked, its details closed, in both pages."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        post = "([u, b]) => apiPost(u, b).then(r => r.ok)"
+        key = page.evaluate("DATA.items[0].tag_key")
+        touches = []
+        page.on("request", lambda r: touches.append(r.post_data_json) if r.url.endswith("/api/unlock/touch") else None)
+        # (a second and a half left: the page's look at the time finds it still open, then locked)
+        run_out = lambda: [self.srv.unlocks.__setitem__(t, time.time() + 1.5) for t in list(self.srv.unlocks)]
+        try:
+            self.assertTrue(page.evaluate(post, ["/api/pin", {"pin": "4821"}]))
+            self.assertTrue(page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": True}]))
+            self.assertTrue(page.evaluate(post, ["/api/unlock", {"pin": "4821"}]))
+            page.evaluate("load().then(() => showView('hidden'))")
+            page.wait_for_function("() => state.view === 'hidden' && DATA.privacy.unlocked && byKey.size === 1")
+            page.evaluate("showDetail(DATA.items[0])")
+            page.keyboard.press("Shift")
+            page.mouse.wheel(0, 10)
+            page.wait_for_function("() => lastTouch > 0")
+            page.wait_for_timeout(300)
+            self.assertEqual(touches, [{"used": True}], "using the page tells Hoard, once a minute at most")
+            run_out()
+            page.evaluate("load()")
+            page.wait_for_function("() => state.view === 'library' && !DATA.privacy.unlocked", timeout=10000)
+            self.assertIsNone(page.evaluate("openKey"), "the hidden item's details close")
+            self.assertEqual(page.evaluate("$('#detail').innerHTML"), "")
+            self.assertEqual(page.evaluate("DATA.items.length"), 0)
+            self.assertIn("locked again", page.locator("#toast").text_content())
+            self.assertEqual(touches[-1], {"used": False}, "the page only asked how long was left")
+            # Downloads, the same
+            self.assertTrue(page.evaluate(post, ["/api/unlock", {"pin": "4821"}]))
+            page.click("nav.apptabs a[href='/downloads']")
+            page.wait_for_url("**/downloads**")
+            page.wait_for_function("() => (DATA.privacy || {}).unlocked")   # (Rusk, hidden, is only in Hidden)
+            page.evaluate("showView('hidden')")
+            page.wait_for_function("() => state.view === 'hidden' && DATA.assets.some(a => a.mark === 'hidden')")
+            run_out()
+            page.evaluate("load()")
+            page.wait_for_function("() => state.view === 'downloads' && !DATA.privacy.unlocked", timeout=10000)
+            self.assertEqual(page.evaluate("DATA.assets.filter(a => a.mark === 'hidden').length"), 0)
+        finally:   # as it was: nothing hidden, no PIN
+            page.evaluate(post, ["/api/unlock", {"pin": "4821"}])
+            page.evaluate(post, ["/api/marks", {"keys": [key], "kind": "hidden", "on": False}])
+            page.evaluate(post, ["/api/hidden/forget", {"confirm": True}])
+            page.close()
+
+    def test_a_gift_is_wrapped_until_its_opened(self):
+        """Issue #263: a gift is wrapped in its store's colours until you first open it; then the paper comes off, and
+        it's remembered (Hoard's config, by its key: never its name)."""
+        from unittest import mock
+        item = self.srv.lib.data["items"][0]
+        item["gift"] = True
+        self.addCleanup(item.update, gift=False)
+        self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("unwrapped", None))
+        with mock.patch.object(server, "save_config"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            tile = page.locator(".slot", has_text="Rusk")
+            self.assertIn("wrapped", tile.get_attribute("class"))
+            self.assertIn("a gift, not opened yet", tile.get_attribute("aria-label"))
+            paper = tile.locator(".art").evaluate("e => getComputedStyle(e, '::before').backgroundImage")
+            self.assertIn("repeating-linear-gradient", paper)
+            tile.click()
+            page.locator("#detail.open").wait_for()
+            self.assertNotIn(" wrapped", tile.get_attribute("class"))
+            page.evaluate("uiFlush()")
+            page.wait_for_function("() => !uiPending")
+            page.wait_for_timeout(300)
+            self.assertEqual(self.srv.cfg["ui"]["unwrapped"], ["booth:111"])
+            page.reload()
+            page.get_by_text("Rusk").first.wait_for()
+            self.assertNotIn("wrapped", page.locator(".slot", has_text="Rusk").get_attribute("class"), "remembered")
+            page.close()
+        self.assertEqual(server.ui_settings({"ui": {"unwrapped": ["booth:111", "Rusk the fox", 3, "gumroad:ab-c"]}})["unwrapped"],
+                         ["booth:111", "gumroad:ab-c"], "keys only")
+
+    def test_every_dropdown_in_the_themes_colours(self):
+        """Issues #241, #243: every dropdown, on both pages, in each place the app makes one (the tag manager's kind,
+        Projects', Settings', a set's, the dialogs'), is drawn in the theme's colours with Sort's arrow and room for
+        it, never the system's grey; and its open list is in the theme's colours too."""
+        places = ['<ul class="tagrows"><li><span class="tbtns"><select class="ttype"><option>Clothing</option></select></span></li></ul>',
+                  '<div class="projects"><div class="pj-field"><select><option>2022</option></select></div></div>',
+                  '<div class="projects"><div class="proj"><div class="row"><select data-proj-style><option>A</option></select></div></div></div>',
+                  '<div class="settings"><div class="field"><select><option>English</option></select></div></div>',
+                  '<div class="tagadd"><select><option>Add it to a set</option></select></div>',
+                  '<div class="typepick"><select><option>Avatar</option></select></div>',
+                  '<div class="wish-price"><select><option>USD</option></select></div>',
+                  '<dialog class="ask" open><select><option>One</option></select></dialog>',
+                  '<div class="movefield"><select><option>D:</option></select></div>',
+                  '<div class="bulkmove"><select><option>D:</option></select></div>',
+                  '<div class="dupes"><select><option>Booth</option></select></div>',
+                  '<select><option>Anywhere else</option></select>']
+        check = """places => places.map(html => {
+          const box = document.createElement('div'); box.innerHTML = html; document.body.append(box);
+          const s = box.querySelector('select'), c = getComputedStyle(s), o = getComputedStyle(s.options[0]);
+          const token = n => { const p = document.createElement('i'); p.style.color = `var(--${n})`; document.body.append(p);
+                               const v = getComputedStyle(p).color; p.remove(); return v; };
+          const ground = ['cave', 'ledge', 'stone'].map(token);
+          const said = [c.appearance, c.backgroundImage.includes('gradient'), parseFloat(c.paddingRight) >= 24,
+                        ground.includes(c.backgroundColor), c.color === token('bone'), o.backgroundColor === token('stone'),
+                        o.color === token('bone')];
+          box.remove();
+          return said;
+        })"""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        for where in ("library", "downloads"):
+            if where == "downloads":
+                page.click("nav.apptabs a[href='/downloads']")
+                page.wait_for_url("**/downloads**")
+                page.locator("#sort").wait_for(state="attached")
+            for scheme in ("dark", "light"):
+                page.emulate_media(color_scheme=scheme)
+                for html, said in zip(places, page.evaluate(check, places)):
+                    self.assertEqual(said, ["none", True, True, True, True, True, True], f"{where}, {scheme}: {html}")
+        page.close()
 
     def test_add_a_folder_leaves_room_beside_it(self):
         """In Hoard's window (a folder picker), Add a folder... sits beside the path box and Add, all in the panel:
@@ -790,6 +959,57 @@ class StackingAcrossStores(unittest.TestCase):
             self.assertEqual(page.get_attribute("#stackCopies", "aria-pressed"), "true")
             page.evaluate("uiFlush()")
             page.wait_for_timeout(300)
+        page.close()
+
+    def test_a_stack_whatever_the_filters(self):
+        """Issue #247: a stack is every copy in the view, whatever the filters, so on one store's tab its tile still
+        stands for its copy on another; a copy archived isn't in it, and then its details don't say it's shown with it."""
+        from hoard.marks import MarkStore
+        self.addCleanup(lambda: MarkStore().path.unlink(missing_ok=True))
+        page = self.browser.new_page()
+        goto(page, self.srv.entry_url())
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        page.evaluate("state.store = 'jinxxy'; render()")
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 3")
+        mane = page.locator(".slot", has_text="Fluffy Mane")
+        self.assertIn("×2", mane.inner_text())
+        self.assertIn("2 copies", mane.get_attribute("aria-label"))
+        mane.click()   # every copy, from both stores
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        page.evaluate("state.copies = null; state.store = ''; render()")
+        gumroad = page.evaluate("DATA.items.find(a => a.store === 'gumroad' && a.name.startsWith('Fluffy')).tag_key")
+        page.evaluate("([k]) => apiPost('/api/marks', { keys: [k], kind: 'archived', on: true }).then(load)", [gumroad])
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4 && !document.querySelector('.slot.stacked[data-key*=\"m2\"]')")
+        alone = page.locator(".slot", has_text="Fluffy Mane")
+        self.assertEqual(alone.count(), 1, "its archived copy is in Archived")
+        self.assertNotIn("×2", alone.inner_text())
+        alone.click()
+        page.locator("#detail.open").wait_for()
+        self.assertEqual(page.locator("#detail .note", has_text="Shown with its copies").count(), 0,
+                         "its details don't say it's shown with a copy that isn't here")
+        page.evaluate("([k]) => apiPost('/api/marks', { keys: [k], kind: 'archived', on: false })", [gumroad])
+        page.close()
+
+    def test_a_tile_names_its_stores_when_pointed_at(self):
+        """Issue #251: a stack's count is small in every style (the Treasure style's page count no longer makes it
+        big), and pointing at a tile, or focusing it, names every store its product is owned on."""
+        page = self.browser.new_page()
+        goto(page, self.srv.entry_url())
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        mane = page.locator(".slot.stacked", has_text="Fluffy Mane")
+        tag = lambda: mane.locator(".notch").evaluate("e => getComputedStyle(e, '::before').content")  # noqa: E731
+        for style in ("", "treasure"):
+            page.evaluate("s => s ? document.documentElement.dataset.style = s : delete document.documentElement.dataset.style", style)
+            self.assertLessEqual(float(mane.locator(".badge.count").evaluate("e => parseFloat(getComputedStyle(e).fontSize)")), 13,
+                                 style or "standard")
+            page.mouse.move(0, 0)
+            self.assertIn(tag(), ("none", '"Gumroad"'), "not until it's pointed at (Treasure: its own store's tag)")
+            mane.hover()
+            self.assertEqual(tag(), '"Gumroad · Jinxxy"', style or "standard")
+        page.mouse.move(0, 0)
+        mane.focus()
+        page.keyboard.press("Shift")   # (focused from the keyboard)
+        self.assertEqual(tag(), '"Gumroad · Jinxxy"', "focused")
         page.close()
 
     def test_a_copy_that_isnt_one(self):
@@ -2227,6 +2447,144 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_whats_new_is_pointed_out_once(self):
+        """Issue #244: after an update, Product type has a note beside it, once: Got it puts it away for good. A new
+        install never has one (the tour shows everything, and answering its offer counts every note as seen)."""
+        from unittest import mock
+        ui = self.srv.cfg.setdefault("ui", {})
+        self.addCleanup(lambda: [ui.pop(k, None) for k in ("toured", "spots_seen")])
+        with mock.patch.object(server, "save_config"):
+            ui.update(toured=True)   # (someone who's used Hoard before, updated)
+            ui.pop("spots_seen", None)
+            page = self.open()
+            note = page.locator('.new-spot[data-spot="product-type"]')
+            note.wait_for()
+            self.assertEqual(note.evaluate("n => n.previousElementSibling.dataset.sec"), "product-type", "beside it")
+            self.assertIn("Product type", note.inner_text())
+            note.get_by_role("button", name="Got it").click()
+            self.assertEqual(note.count(), 0)
+            page.evaluate("uiFlush()")
+            page.wait_for_function("() => !uiPending")
+            page.wait_for_timeout(300)
+            self.assertEqual(ui.get("spots_seen"), ["product-type"])
+            page.reload()
+            page.locator(".slot", has_text="Mochi").wait_for()
+            page.wait_for_timeout(300)
+            self.assertEqual(page.locator(".new-spot").count(), 0, "once")
+            page.close()
+            ui.pop("toured", None)   # a new install: the tour's offer, no notes
+            ui.pop("spots_seen", None)
+            page = self.open()
+            page.wait_for_timeout(500)
+            self.assertEqual(page.locator(".new-spot").count(), 0, "a new install: the tour")
+            self.assertEqual(page.evaluate("spotsAllSeen()"), {"spots_seen": ["product-type"]})
+            page.close()
+        self.assertEqual(server.ui_settings({"ui": {"spots_seen": ["product-type", "<b>", 4]}})["spots_seen"], ["product-type"])
+
+    def test_the_seasonal_sort(self):
+        """Issue #261: Seasonal puts the season's products first (by their names and tags: Halloween's in the autumn,
+        Christmas's and winter's from November until early January), then the rest as Recently added; its name says
+        which. It's remembered as the other sorts are."""
+        page = self.browser.new_page(viewport={"width": 1400, "height": 860})
+        page.clock.set_fixed_time("2026-10-20T12:00:00")
+        goto(page, self.srv.entry_url())
+        page.locator(".slot", has_text="Mochi").wait_for()
+        self.assertEqual(page.evaluate("[new Date(2026, 9, 31), new Date(2026, 10, 1), new Date(2027, 0, 6), new Date(2027, 0, 7)].map(seasonNow)"),
+                         ["halloween", "christmas", "christmas", "halloween"])
+        self.assertEqual(page.locator('#sort option[value="season"]').inner_text(), "Seasonal: Halloween first")
+        order = page.evaluate("""() => {
+          const a = [{ name: 'Plain Hat', added: '2026-10-09' }, { name: 'Pumpkin Hat', added: '2026-01-02' },
+                     { name: 'Winter Coat', added: '2026-10-08' }, { name: 'Cape', added: '2026-03-01', hay: 'cape kitsu ハロウィン' }];
+          return a.sort(SORTS.season).map(x => x.name); }""")
+        self.assertEqual(order, ["Cape", "Pumpkin Hat", "Plain Hat", "Winter Coat"], "Halloween's first (a tag too), then the newest")
+        from unittest import mock
+        self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("sort", None))
+        with mock.patch.object(server, "save_config"):
+            page.select_option("#sort", "season")
+            page.wait_for_function("() => state.sort === 'season'")
+            page.evaluate("uiFlush()")
+            page.wait_for_timeout(300)
+        self.assertEqual(self.srv.cfg["ui"]["sort"], "season", "remembered")
+        page.close()
+
+    def test_seasonal_secrets(self):
+        """Issue #260: while Hoard's window is in the background, Spooky Hoard gathers dust and cobwebs round the edges
+        (Winter Hoard snow and ice); moving the mouse about clears it a little at a time, switching tabs at once. Never
+        in the way (nothing in it can be pointed at or read out), and off with Reduce motion or Seasonal Secrets off."""
+        page = self.open()
+        secrets = page.locator("#secrets")
+        away = """kind => { applyDisplay({ ...DATA.display, theme: kind, seasonal: true });
+            window.dispatchEvent(new Event('blur')); SECRETS.since = Date.now() - SECRET_WAIT - SECRET_GROW * .8; secretsGrow();
+            window.dispatchEvent(new Event('focus')); return SECRETS.level; }"""
+        self.assertAlmostEqual(page.evaluate(away, "spooky"), .8, delta=.02)
+        self.assertTrue(secrets.is_visible())
+        self.assertEqual((secrets.get_attribute("data-kind"), secrets.get_attribute("aria-hidden")), ("spooky", "true"))
+        self.assertEqual(secrets.locator(".sec-web").count(), 4)
+        self.assertEqual(secrets.evaluate("e => getComputedStyle(e).pointerEvents"), "none")
+        page.mouse.move(700, 400)
+        for x in range(10):   # (back and forth across the window)
+            page.mouse.move(200 if x % 2 else 1200, 400, steps=8)
+        level = page.evaluate("SECRETS.level")
+        self.assertLess(level, .8, "moving the mouse clears it")
+        for x in range(30):
+            page.mouse.move(200 if x % 2 else 1200, 300 + x, steps=4)
+        page.wait_for_function("() => SECRETS.level === 0")
+        secrets.wait_for(state="hidden")
+        page.evaluate(away, "winter")
+        self.assertEqual(secrets.get_attribute("data-kind"), "winter")
+        self.assertEqual(secrets.locator(".sec-snow").count(), 1)
+        page.locator("#storeSeg button[aria-checked=\"false\"]").first.click()   # a tab: cleared at once
+        page.wait_for_function("() => SECRETS.level === 0")
+        secrets.wait_for(state="hidden")
+        page.evaluate("DATA.display.reduce_motion = true")   # (Settings' Reduce motion)
+        page.evaluate(away, "winter")
+        self.assertFalse(secrets.is_visible(), "Reduce motion: none")
+        page.evaluate("DATA.display.reduce_motion = false; SECRETS.level = 0")
+        self.assertEqual(page.evaluate("""() => { applyDisplay({ ...DATA.display, theme: 'winter', seasonal: false });
+            window.dispatchEvent(new Event('blur')); return SECRETS.kind; }"""), "", "turned off")
+        page.evaluate("applyDisplay({ ...DATA.display, theme: 'hoard' })")
+        self.assertEqual(page.evaluate("SECRETS.kind"), "", "only the seasonal themes")
+        self.assertEqual(self.errors, [])
+        self.assertTrue(server.display_settings({"display": {}})["seasonal"], "on unless you turn it off")
+        self.assertFalse(server.display_settings({"display": {"seasonal": False}})["seasonal"])
+
+    def test_a_search_shows_its_results(self):
+        """Issue #249: typing a search while Settings or Projects fills the window left them over the results."""
+        page = self.open()
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        page.locator("#q").fill("Mochi")
+        page.locator("#settingsPanel").wait_for(state="hidden")
+        page.locator("#q").fill("")
+        page.click("#projectsTab")
+        page.locator("#projectsWin:not([hidden])").wait_for()
+        page.locator("#q").fill("creator:Kitsu")
+        page.locator("#projectsWin").wait_for(state="hidden")
+        page.wait_for_function("() => state.q === 'creator:Kitsu'")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_settings_scroll_only_settings(self):
+        """Issue #264: scrolled to its end, Settings carried on scrolling the Library behind it."""
+        page = self.open()
+        page.set_viewport_size({"width": 1400, "height": 420})
+        page.evaluate("() => { document.body.style.minHeight = '3000px'; }")   # (a library long enough to scroll)
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        body = page.locator("#settingsPanel .win-body")
+        self.assertEqual(body.evaluate("b => getComputedStyle(b).overscrollBehaviorY"), "contain")
+        box = body.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        for _ in range(40):   # past the end of Settings
+            page.mouse.wheel(0, 600)
+        page.wait_for_timeout(300)
+        self.assertGreater(body.evaluate("b => b.scrollTop"), 0, "Settings scrolled")
+        self.assertEqual(page.evaluate("() => scrollY"), 0, "the page behind didn't")
+        page.locator("#settingsPanel .win-x").click()
+        page.mouse.wheel(0, 600)
+        page.wait_for_function("() => scrollY > 0")   # (closed: the page scrolls again)
+        page.close()
+
     def test_back_and_forward(self):
         """Issue #211: each place is a step in the page's history (a set, a product's details, Settings...), so Back
         and Forward (the mouse's buttons, Alt+Left and Alt+Right) go through them, and Back closes a panel first."""
@@ -2274,7 +2632,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
 
     def test_the_right_click_menu_names_a_few_sets(self):
         """Issue #228: the right-click menu named every set, taller than the window with 16 of them. Now it names the
-        five you added to last (the newest, before you have), and Add to another set... finds the rest by name."""
+        five you added to last (the newest, before you have), and Add to another set... shows every set's tile to choose
+        from, with a box to find one, then asks before adding (issue #242); sets added from a link are apart (#258)."""
         page = self.open()
         post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
         made = [page.evaluate(post, ["/api/sets", {"action": "create", "name": f"Set {n:02}", "items": []}])["made"] for n in range(16)]
@@ -2287,8 +2646,18 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(adds(), ["Add to Set 15", "Add to Set 14", "Add to Set 13", "Add to Set 12", "Add to Set 11",
                                       "Add to another set..."], "the newest five, then the rest by name")
             page.locator(".selmenu [role=menuitem]", has_text="Add to another set...").click()
-            page.locator("dialog.ask #askName").fill("set 03")
-            page.keyboard.press("Enter")
+            picker = page.locator("dialog.setpick-dlg")
+            picker.wait_for()
+            self.assertEqual(picker.locator(".settile").count(), 16, "every set")
+            self.assertEqual(picker.locator("h4").all_inner_texts(), ["Your sets"])
+            picker.locator(".setpick-find").fill("set 03")
+            self.assertEqual(picker.locator(".settile:not([hidden]) .nm-t").all_inner_texts(), ["Set 03"])
+            picker.locator(".settile", has_text="Set 03").click()
+            page.locator("#askDialog[open]").wait_for()
+            self.assertIn("Add it to Set 03?", page.locator("#askText").inner_text())
+            page.wait_for_timeout(200)
+            self.assertEqual(page.evaluate("id => DATA.sets.find(s => s.id === id).items.length", made[3]), 0, "not before it's confirmed")
+            page.click("#askDialog button.primary")
             page.wait_for_function("id => (DATA.sets.find(s => s.id === id) || {}).items.length === 1", arg=made[3])
             page.locator(".slot", has_text="Anko").click(button="right")
             page.locator(".selmenu").wait_for()
@@ -2374,10 +2743,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
-    def test_the_search_is_in_the_middle(self):
-        """Issue #203: the search box is in the middle of the bar, Library, Downloads and Local to its left and Sets
-        and Wishlists, Tasks, Projects and the tools to its right, at every width, text size and style; when there
-        isn't room, it goes under them, still in the middle, and nothing hides or overlaps."""
+    def test_the_bar_reads_logo_search_then_the_buttons(self):
+        """Issues #203, #236: the bar reads the logo with the search beside it, then on the other side the pages
+        (Library, Downloads, Local, Sets and Wishlists, Tasks, Projects), Menu and Sync, at every width, text size and
+        style; when there isn't room, the search goes under them, and nothing hides or overlaps."""
         page = self.open()
         check = """() => {
           const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
@@ -2389,8 +2758,16 @@ class WindowsTabsAndTasks(unittest.TestCase):
             for (const [b, rb] of parts.slice(i + 1))
               if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
           }
-          return { off: Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2), wide: search.width, over,
-                   fit: document.querySelector('.bar').dataset.fit || 'one' };
+          const r = sel => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
+          const pages = r('.bar .apptabs > *'), tools = r('.bar .tools > *'), one = !document.querySelector('.bar').dataset.fit;
+          const brand = document.querySelector('.bar .brand').getBoundingClientRect();
+          const end = document.querySelector('.bar > .bar-end');
+          const sides = { left: [...document.querySelector('.bar > .bar-side').querySelectorAll('a, button')].map(e => e.className),
+                          right: [...end.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
+                          tools: [...end.querySelectorAll('.tools button, .tools a')].filter(e => e.getClientRects().length && !e.closest('.barmenu')).map(e => e.id) };
+          const order = one ? brand.right <= search.left + 1 && pages.concat(tools).every(p => p.left >= search.right - 1)
+                            : pages.concat(tools).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
+          return { order, wide: search.width, over, sides, fit: document.querySelector('.bar').dataset.fit || 'one' };
         }"""
         seen = set()
         for path in ("", "downloads"):
@@ -2407,7 +2784,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
                         page.wait_for_timeout(120)
                         got = page.evaluate(check)
                         seen.add(got["fit"])
-                        self.assertLess(got["off"], 2, got)
+                        self.assertTrue(got["order"], got)
+                        self.assertEqual(got["sides"]["left"], ["brand"], "the logo, the search beside it")
+                        self.assertEqual(got["sides"]["right"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
+                        self.assertEqual([b for b in got["sides"]["tools"] if b != "filtersToggle"], ["menuBtn", "syncBtn"] if not path else ["menuBtn", "downloadNew"])
                         self.assertGreater(got["wide"], 150, got)
                         self.assertEqual(got["over"], [], got)
         self.assertEqual(seen, {"one", "rows", "stack"}, "each way the bar fits was tried")

@@ -23,6 +23,15 @@ except ImportError:
     BROWSER = False
 
 
+def pj_details(page, name):
+    """A listed project's details (issue #246: its buttons are there, beside the list), opened from its row."""
+    panel = page.locator("#projectsBody .pj-detail", has=page.locator("b", has_text=name))
+    if not panel.count():
+        page.locator(".pj-row", has_text=name).locator(".pj-open").click()
+        panel.wait_for()
+    return panel
+
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class ProjectsPanel(unittest.TestCase):
     def setUp(self):
@@ -85,16 +94,85 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => document.querySelector('.pj-row b').textContent === 'Old World'")
         self.assertTrue(page.locator(".pj-row", has_text="Old World").locator("[data-pj=star]").get_attribute("aria-pressed") == "true")
         # taken off the list: off the Creator Companion's too, its other settings kept
-        page.locator(".pj-row", has_text="Old World").locator("[data-pj=forget]").click()
+        pj_details(page, "Old World").locator("[data-pj=forget]").click()
         page.locator("dialog.ask .primary").click()
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 
+    def test_a_projects_details(self):
+        """Issue #246: a row says what's needed at a glance; choosing it opens its details beside the list, where its
+        buttons are (Open in Unity, Manage, Show in folder, Folder and tags, a favourite), and Close puts them away."""
+        page = self.page
+        row = page.locator(".pj-row", has_text="Rusk Avatar")
+        self.assertEqual(row.locator("[data-pj=unity], [data-pj=manage], [data-pj=organize]").count(), 0, "not on the row")
+        panel = pj_details(page, "Rusk Avatar")
+        self.assertEqual(panel.locator(".row button").all_inner_texts(),
+                         ["Open in Unity", "Manage", "Show in folder", "Folder and tags...", "Make it a favourite"])
+        self.assertIn("Unity 2022.3.22f1", panel.inner_text())
+        self.assertEqual(row.locator(".pj-open").get_attribute("aria-pressed"), "true")
+        panel.locator("[data-pj=undetail]").click()
+        self.assertEqual(page.locator(".pj-detail").count(), 0)
+        self.assertTrue(page.evaluate("document.activeElement.classList.contains('pj-open')"), "back to its row")
+        gone = pj_details(page, "Old World")
+        self.assertEqual(gone.locator(".row button").all_inner_texts(), ["Take off the list", "Folder and tags...", "Make it a favourite"])
+
+    def test_projects_as_tiles_with_folder_tiles(self):
+        """Issue #250: projects as tiles (remembered), and a folder of them as one folder tile that opens to them."""
+        page = self.page
+        pj_details(page, "Rusk Avatar").locator("[data-pj=organize]").click()
+        dlg = page.locator("dialog.ask[open]")
+        dlg.locator("#pjOrgFolder").fill("Avatars WIP")
+        dlg.locator(".primary").click()
+        page.locator("#projectsBody .pj-folders").wait_for()
+        page.click("[data-pj=layout][data-v=tiles]")
+        page.locator(".pj-tiles").wait_for()
+        self.assertEqual(page.evaluate("UI.pj_layout"), "tiles")
+        folder = page.locator(".pj-folder-tile")
+        self.assertEqual(folder.locator(".nm-t").inner_text(), "Avatars WIP")
+        self.assertIn("1 project", folder.inner_text())
+        self.assertEqual(page.locator(".pj-tile:not(.pj-folder-tile) .nm-t").all_inner_texts(), ["Old World"], "its project inside it")
+        page.click("[data-pj=undetail]")   # (its details were open from before: choosing it again would put them away)
+        folder.click()
+        page.wait_for_function("() => [...document.querySelectorAll('.pj-tile .nm-t')].map(e => e.textContent).join() === 'Rusk Avatar'")
+        page.locator(".pj-tile", has_text="Rusk Avatar").click()
+        page.locator(".pj-detail", has_text="Rusk Avatar").wait_for()
+        page.fill("#pjFind", "zzz")
+        self.assertEqual(page.locator(".pj-tile:visible").count(), 0, "Find a project looks at tiles too")
+        page.fill("#pjFind", "")
+        self.assertEqual(server.ui_settings({"ui": {"pj_layout": "tiles"}})["pj_layout"], "tiles")
+        self.assertNotIn("pj_layout", server.ui_settings({"ui": {"pj_layout": "grid"}}))
+
+    def test_whats_new_in_a_project(self):
+        """Issue #253: a project's row says how many of its packages have newer versions, and, apart from that, how many
+        products from your library in it have updates; its details lead to each."""
+        page = self.page
+        row = page.locator(".pj-row", has_text="Rusk Avatar")
+        page.wait_for_function("() => PJ.updates !== null")
+        packages = page.evaluate("PJ.updates[PJ.data.projects.find(p => p.name === 'Rusk Avatar').path].packages")
+        self.assertGreater(packages, 0)
+        self.assertEqual(row.locator(".pj-up.pkg").inner_text(), f"{packages} package update" + ("s" if packages > 1 else ""))
+        self.assertEqual(row.locator(".pj-up.prod").count(), 0)
+        report = page.evaluate("""() => { const p = PJ.data.projects.find(p => p.name === 'Rusk Avatar');
+          let r = PJ.reports.find(r => r.path && pjSame(r.path, p.path));   // (what Hoard for Unity reported of it)
+          if (!r) { r = { id: 'r1', name: p.name, path: p.path }; PJ.reports.push(r); }
+          r.assets = [{ update: true }, { update: true }, { update: false }];
+          drawProjects(); return r.id; }""")
+        self.assertEqual(row.locator(".pj-up.prod").inner_text(), "2 products updated")
+        pkg, prod = [row.locator(c).evaluate("e => [getComputedStyle(e).backgroundColor, getComputedStyle(e).boxShadow]")
+                     for c in (".pj-up.pkg", ".pj-up.prod")]
+        self.assertNotEqual(pkg, prod, "each its own way")
+        panel = pj_details(page, "Rusk Avatar")
+        panel.locator(".pj-up-go", has_text="2 products in it have updates").click()
+        page.wait_for_function("id => PJ.view === 'report' && PJ.report && PJ.report.id === id", arg=report)
+        page.evaluate("PJ.view = 'list'; drawProjects()")
+        pj_details(page, "Rusk Avatar").locator(".pj-up-go", has_text="newer version").click()
+        page.wait_for_function("() => PJ.view === 'project'")
+
     def test_folders_and_tags(self):
         """Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have
-        only a favourite): one folder shown at a time, a project's tags on its row, and each tag shows those with it."""
+        only a favourite): one folder shown at a time, a project's tags in its details, and each tag shows those with it."""
         page = self.page
-        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=organize]").click()
+        pj_details(page, "Rusk Avatar").locator("[data-pj=organize]").click()
         dlg = page.locator("dialog.ask[open]")
         dlg.locator("#pjOrgFolder").fill("Avatars WIP")
         dlg.locator("#pjOrgTags").fill("Quest, poiyomi,, quest")
@@ -103,32 +181,32 @@ class ProjectsPanel(unittest.TestCase):
         bar.wait_for()
         self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])
         rusk = page.locator(".pj-row", has_text="Rusk Avatar")
-        self.assertEqual(rusk.locator(".pj-tags .chip").all_inner_texts(), ["quest", "poiyomi"], "as tags are kept")
+        self.assertEqual(page.locator(".pj-detail .pj-tags .chip").all_inner_texts(), ["quest", "poiyomi"], "as tags are kept")
         self.assertIn("Avatars WIP", rusk.locator(".pj-what").inner_text())
         bar.locator(".chip", has_text="Avatars WIP").click()
-        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 1")
+        page.wait_for_function("() => document.querySelectorAll('.pj-items .pj-list .pj-row').length === 1")
         self.assertEqual(page.locator(".pj-list").first.locator(".pj-row b").all_inner_texts(), ["Rusk Avatar"])
         self.assertNotIn("Avatars WIP", rusk.locator(".pj-what").inner_text(), "not said again in its own folder")
         bar.locator(".chip", has_text="Not in a folder").click()
-        page.wait_for_function("() => document.querySelector('.pj-list:first-of-type .pj-row b').textContent === 'Old World'")
+        page.wait_for_function("() => document.querySelector('.pj-items .pj-list .pj-row b').textContent === 'Old World'")
         bar.locator(".chip", has_text="All projects").click()
         # a tag: the projects that have it
-        rusk.locator(".pj-tags .chip", has_text="poiyomi").click()
-        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 1")
+        page.locator(".pj-detail .pj-tags .chip", has_text="poiyomi").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-items .pj-list .pj-row').length === 1")
         self.assertEqual(bar.locator(".chip[aria-pressed=true]").all_inner_texts(), ["All projects2", "poiyomi ×"])
         page.fill("#pjFind", "wip")   # Find a project looks at its folder and tags too
         self.assertEqual(page.locator(".pj-list").first.locator(".pj-row:visible").count(), 1)
         page.fill("#pjFind", "")
         bar.locator(".chip", has_text="poiyomi ×").click()
-        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 2")
+        page.wait_for_function("() => document.querySelectorAll('.pj-items .pj-list .pj-row').length === 2")
         # emptied: out of the folder, and with no folder left, no folders to choose from
-        rusk.locator("[data-pj=organize]").click()
+        pj_details(page, "Rusk Avatar").locator("[data-pj=organize]").click()
         self.assertEqual(dlg.locator("#pjOrgFolder").input_value(), "Avatars WIP")
         dlg.locator("#pjOrgFolder").fill("")
         dlg.locator("#pjOrgTags").fill("")
         dlg.locator(".primary").click()
         page.wait_for_function("() => !document.querySelector('#projectsBody .pj-folders')")
-        self.assertEqual(rusk.locator(".pj-tags").count(), 0)
+        self.assertEqual(page.locator(".pj-detail .pj-tags").count(), 0)
 
     def test_choosing_a_products_packages_in_steps(self):
         """Issue #199: a product with several packages: first which of them (each with its size, a variant marked,
@@ -193,7 +271,8 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.evaluate("window.__splash"), 1)
         box = page.locator("#projectsWin .win-bar").bounding_box()
         self.assertGreater(box["height"], 0, "Projects' own bar, with its Close, stays above it")
-        page.locator("[data-pj=manage]").first.click()   # nothing in the way once it's gone
+        page.locator(".pj-open").first.click()   # nothing in the way once it's gone
+        page.locator(".pj-detail .row [data-pj=manage]").click()
         page.locator("[data-pj=back]").first.wait_for()
 
         # the other page, in the same window: not straight away, and only once reading takes a while
@@ -267,7 +346,7 @@ class ProjectsPanel(unittest.TestCase):
         # Delete from this computer: the button waits for its name
         ran = []
         self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
-        page.locator(".pj-row", has_text="Picked Project").locator("[data-pj=manage]").click()
+        pj_details(page, "Picked Project").locator(".row [data-pj=manage]").click()
         page.click("[data-pj=delete]")
         sure = page.locator("dialog.pj-dlg", has_text="Delete Picked Project from this computer?")
         self.assertTrue(sure.locator("#pjDelBackup").is_checked(), "backed up first, unless you untick it")
@@ -292,7 +371,7 @@ class ProjectsPanel(unittest.TestCase):
             return "Done."
         self.addCleanup(going.set)
         self.srv.project_jobs.project_runner = slow
-        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
         page.click("[data-pj=backup]")
         page.locator("dialog.pj-dlg button[value=yes]").click()
         strip = page.locator("#pjJob")
@@ -305,7 +384,7 @@ class ProjectsPanel(unittest.TestCase):
 
     def test_a_project(self):
         page = self.page
-        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
         page.locator(".pj-pk").wait_for()
         text = page.locator("#projectsBody").inner_text()
         self.assertIn("Some packages aren't installed the way the project says.", text)
@@ -418,7 +497,7 @@ class ProjectsPanel(unittest.TestCase):
         page = self.page
         ran = []
         self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
-        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
         page.click("[data-pj=sub][data-sub=library]")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")
@@ -502,7 +581,7 @@ class ProjectsPanel(unittest.TestCase):
         page.route("**/api/vpm/repos/add", lambda route: added.append(json.loads(route.request.post_data)["url"]) or route.fulfill(json={"ok": True}))
         page.route("**/api/vpm/preview", lambda route: route.fulfill(status=400, json={"error": "(not in the sample)"}))
         self.srv.project_jobs.project_runner = lambda what: "Done."
-        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
         page.click("[data-pj=sub][data-sub=library]")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")

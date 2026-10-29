@@ -340,6 +340,15 @@ class RoutineChecks(unittest.TestCase):
         self.assertIn("1 changed since Hoard downloaded it, 1 missing", downloader.integrity_summary(again))
         self.assertEqual(downloader.last_integrity()["changed"], ["Rusk (Booth): body.png"])
 
+    def test_a_removed_product_isnt_checked(self):
+        """Issue #259: a product you removed isn't checked, nor listed in what the check found."""
+        downloader.check_integrity(self.root)
+        (self.folder / "body.png").write_bytes(b"mine")
+        rusk = tags.tag_key("booth", "Rusk")
+        got = downloader.check_integrity(self.root, leave_out=frozenset({rusk}))
+        self.assertEqual((got["products"], got["changed"], got["missing"], got["problems"]), (0, [], [], []))
+        self.assertTrue(downloader.check_integrity(self.root)["problems"], "checked again once it's back")
+
     def test_dealing_with_what_it_found(self):
         """Issue #231: each file a check finds changed or missing can be dealt with from its results: a change kept as
         it is, a missing file forgotten, or either downloaded again (a changed one kept aside first)."""
@@ -1297,6 +1306,55 @@ class ArchiveHideRemove(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
+    def test_hidden_locks_itself_again_when_left_alone(self):
+        """Issue #248: the page asking for news doesn't keep Hidden unlocked; only someone using the page does, and
+        left alone it locks itself again, the page told how long it has."""
+        from hoard import marks, tags
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        with srv.lib.lock:
+            srv.lib.data["items"] = [library.item("booth", "1", name="Secret Suit"), library.item("booth", "2", name="Plain Hat")]
+            srv.lib.save()
+        st = marks.MarkStore()
+        st.set_pin("4821")
+        st.change("hidden", {tags.tag_key("booth", "Secret Suit")}, True)
+        try:
+            def call(method, path, body=None, cookie=None):
+                c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+                headers = {**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: srv.key}
+                if cookie:
+                    headers["Cookie"] = cookie
+                c.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
+                r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+                return r.status, data, r.getheader("Set-Cookie")
+            cookie = call("POST", "/api/unlock", {"pin": "4821"})[2].split(";")[0]
+            token = cookie.split("=", 1)[1]
+            privacy = call("GET", "/api/library", cookie=cookie)[1]["privacy"]
+            self.assertTrue(privacy["unlocked"])
+            self.assertGreater(privacy["lock_in"], server.UNLOCK_MINUTES * 60 - 30)
+            srv.unlocks[token] = time.time() + 20   # (fourteen minutes and more later)
+            for path in ("/api/library", "/api/assets", "/api/status", "/api/tasks"):
+                call("GET", path, cookie=cookie)
+            self.assertLessEqual(call("GET", "/api/library", cookie=cookie)[1]["privacy"]["lock_in"], 20,
+                                 "the page asking for news doesn't keep it unlocked")
+            self.assertLessEqual(call("GET", "/api/assets", cookie=cookie)[1]["privacy"]["lock_in"], 20)
+            self.assertLessEqual(call("POST", "/api/unlock/touch", {}, cookie=cookie)[1]["lock_in"], 20,
+                                 "only asking how long is left")
+            touched = call("POST", "/api/unlock/touch", {"used": True}, cookie=cookie)[1]
+            self.assertTrue(touched["unlocked"])
+            self.assertGreater(touched["lock_in"], server.UNLOCK_MINUTES * 60 - 30, "someone's using it: a while longer")
+            srv.unlocks[token] = time.time() - 1   # left alone
+            _, now, _ = call("GET", "/api/library", cookie=cookie)
+            self.assertEqual([i["name"] for i in now["items"]], ["Plain Hat"])
+            self.assertEqual((now["privacy"]["unlocked"], now["privacy"]["lock_in"]), (False, 0))
+            self.assertEqual(call("POST", "/api/unlock/touch", {"used": True}, cookie=cookie)[1],
+                             {"ok": True, "unlocked": False, "lock_in": 0}, "using the page doesn't unlock it again")
+            self.assertEqual(call("POST", "/api/unlock/touch", {"used": True})[1]["unlocked"], False)
+        finally:
+            marks.MarkStore().path.unlink(missing_ok=True)
+            srv.shutdown()
+            srv.server_close()
+
     def test_downloads_carry_the_librarys_marks(self):
         """Issue #29: the Downloads page gets each download's mark from the Library (archived by you or by the
         store, removed, hidden), and a hidden one's download only while this browser is unlocked."""
@@ -1331,7 +1389,7 @@ class ArchiveHideRemove(unittest.TestCase):
                 self.assertEqual({a["name"]: a["mark"] for a in locked["assets"]},
                                  {"Old Hat": "archived", "Store Archived": "archived", "Moved Back": None,
                                   "Gone Pack": "removed", "Plain Hat": None})
-                self.assertEqual(locked["privacy"], {"pin_set": True, "unlocked": False})
+                self.assertEqual(locked["privacy"], {"pin_set": True, "unlocked": False, "lock_in": 0})
                 cookie = call("POST", "/api/unlock", {"pin": "4821"})[1].split(";")[0]
                 unlocked = call("GET", "/api/assets", cookie=cookie)[0]
                 self.assertEqual({a["name"]: a["mark"] for a in unlocked["assets"]}["Secret Suit"], "hidden")

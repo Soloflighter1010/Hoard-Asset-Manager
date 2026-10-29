@@ -3,7 +3,7 @@ The **Library** shows everything you own on the stores you use, whether or not y
 
 ## Finding things
 
-- **Search** (in the middle of the bar at the top) matches names, creators, stores, variants and tags. A prefix
+- **Search** (beside the logo, at the top) matches names, creators, stores, variants and tags. A prefix
   searches one kind of thing (5.2.0): `creator:` (or `by:`), `tag:` (or `#`), `store:` (or `on:`) and `type:` (or
   `kind:`: a tag's kind, such as avatar, or in Downloads a kind of file) narrow the products; `set:` (or `in:`)
   narrows them to a set's and offers to go to it; `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)
@@ -17,7 +17,9 @@ The **Library** shows everything you own on the stores you use, whether or not y
   **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
-- **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs. Hoard remembers
+- **Sort** by name, creator, store, **Recently added** (the newest first) or **Seasonal** (5.2.0 beta 2: the season's
+  products first, by their names and tags, then the rest as Recently added: Christmas's and winter's from November
+  until early January, Halloween's the rest of the year; the sort's name says which), beside the store tabs. Hoard remembers
   the sort you choose, on this page and in Downloads, and next time it starts (5.0).
 - **Stack copies:** copies of the same product show as one tile with a count on it (×3): bought more than once,
   in several versions, or on two stores (from 3.1). Hoard knows copies by:
@@ -36,7 +38,8 @@ The **Library** shows everything you own on the stores you use, whether or not y
     the one for another.
 
   A picture several creators use for different names (a store's default banner) stacks nothing. Choose a stack to
-  see every copy. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
+  see every copy. A stack counts its copies in the view you're in whatever you've filtered by, so on one store's
+  tab it still stands for its copy on another; a copy you've archived, removed or hidden isn't in it. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
   it's shown on its own from then on (**Show it with its copies again** undoes it). Downloads stacks the same copies, and lists the others in a copy's details. Turn off **Stack
   copies** (a button beside **Sort** on either page, pressed while it's on) to show each on its own; Hoard remembers. While you're choosing
   several, and in Disk space, each copy shows.
@@ -55,7 +58,11 @@ Click an item to open its details. The item stays outlined in gold in the grid w
 you can see where it is.
 
 Something you own on more than one store has a striped spine along the bottom of its tile, in both stores'
-colours (the tile's label says so too, for screen readers).
+colours (the tile's label says so too, for screen readers). Point at a tile, or move to it with the keyboard, and
+its picture names every store you own it on (5.2.0 beta 2).
+
+A gift someone sent you on Booth shows wrapped in Booth's colours, with a ribbon and a bow, until you first open its
+details (5.2.0 beta 2). Hoard remembers the gifts you've opened.
 
 In the details:
 
@@ -106,8 +113,9 @@ Hidden items stay out of view everywhere (Library, Downloads, counts and tags) u
 
 - **Setting your PIN:** the first time you hide something, Hoard asks for a PIN, then shows **6 recovery
   words, once**. Write them down: they're how you reset a forgotten PIN without losing anything.
-- **Unlocking** applies to the window or browser you unlock it in, and lasts 15 minutes after you last use it.
-  **Lock now** locks it straight away, and restarting Hoard locks everything.
+- **Unlocking** applies to the window or browser you unlock it in, and lasts 15 minutes after you last use it: a
+  click, a key or a scroll in Hoard's page (a page left open on its own doesn't count). Then Hidden locks itself and
+  the page says so. **Lock now** locks it straight away, and restarting Hoard locks everything.
 - **Wrong PINs:** after five wrong tries, each further try waits longer (30 seconds, doubling, up to an hour),
   even if Hoard restarts.
 - **Forgot your PIN?** Enter your recovery words and choose a new PIN. Hidden items stay hidden, and every

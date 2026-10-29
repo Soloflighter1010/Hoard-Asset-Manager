@@ -274,9 +274,9 @@ or missing, **See what it found** (5.2.0) lists them by product, each with what 
   from then on.
 - **Forget it** (a missing file): Hoard stops expecting it, and leaves it out of that product's downloads from then
   on, so a sync doesn't bring it back. Tick it again when Hoard asks which files to save to get it back.
-- **Show in folder** opens its folder.
+- **Show in folder** (a changed file) opens its folder.
 
-**Keep every change** and **Download them all again** do the same for all of them. The check is a task like a
+Products you've removed aren't checked: their files are yours to keep or delete. **Keep every change** and **Download them all again** do the same for all of them. The check is a task like a
 sync, so Tasks lists it too, with its log. A file that changed may be your own edit; see the next section for
 editing safely.
 

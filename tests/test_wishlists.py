@@ -479,7 +479,7 @@ class InHoard(unittest.TestCase):
             finds = page.locator("[data-findon]").evaluate_all("l => l.map(a => [a.textContent, a.href, a.target])")
             self.assertEqual([f[0] for f in finds], ["Nexyy", "Booth", "Gumroad", "Jinxxy", "itch.io"])
             self.assertEqual(finds[0][1:], ["https://nexyy.com/browse?q=fox%20tail", "_blank"])
-            self.assertEqual(finds[3][1], "https://jinxxy.com/market/browse?search=fox%20tail")
+            self.assertEqual(finds[3][1], "https://jinxxy.com/market/browse?search_query=fox%20tail", "#245: search_query, which Jinxxy reads")
             # added by its link: the one Nexyy gave (its ?ref=nexyy left off)
             page.click('[data-setx="addlinks"]')
             page.fill("#addLinks", "https://booth.pm/en/items/4242?ref=nexyy")

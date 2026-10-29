@@ -463,6 +463,32 @@ class Server(unittest.TestCase):
         self.assertFalse(project.exists())
         self.assertEqual([p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"] if "Real Name" in p["path"]], [])
 
+    def test_projects_with_newer_packages(self):
+        """Issue #253: the list says how many of each project's packages have a newer version, as its own page does
+        (a stable one, unless it has a prerelease already or they're offered)."""
+        status, made = self.call("POST", "/api/vpm/create", {
+            "name": "Fox", "location": str(self.tmp / "Projects"), "template": "com.anatawa12.vrc-get.vrchat.avatars",
+            "unity": "2022.3.22f1", "packages": {}, "picks": []})
+        self.assertEqual(status, 200, made)
+        self.assertEqual(self.wait()["outcome"], "done")
+        project = str(self.tmp / "Projects" / "Fox")
+        status, got = self.call("GET", "/api/vpm/updates")
+        self.assertEqual((status, got["projects"][project]["packages"]), (200, 0))
+        cache = self.vcc / "Repos" / "vrc-official.json"
+        repo = json.loads(cache.read_text())
+        for name in ("com.vrchat.base", "com.vrchat.avatars"):
+            versions = repo["repo"]["packages"][name]["versions"]
+            versions["3.11.0-beta.1"] = {**versions["3.10.5"], "version": "3.11.0-beta.1"}
+        cache.write_text(json.dumps(repo))
+        self.srv.vpm.forget()
+        self.assertEqual(self.call("GET", "/api/vpm/updates")[1]["projects"][project]["packages"], 0, "a prerelease isn't one")
+        versions = repo["repo"]["packages"]["com.vrchat.base"]["versions"]
+        versions["3.10.6"] = {**versions["3.10.5"], "version": "3.10.6"}
+        cache.write_text(json.dumps(repo))
+        self.srv.vpm.forget()
+        got = self.call("GET", "/api/vpm/updates")[1]["projects"][project]
+        self.assertEqual(got, {"packages": 1, "names": ["com.vrchat.base"]})
+
     def test_versions_to_choose_from(self):
         """Manage project's and Add packages' version choice (#160): newest first, only those that work in the
         project's Unity, never a yanked one, and prereleases when they're offered or one is installed."""

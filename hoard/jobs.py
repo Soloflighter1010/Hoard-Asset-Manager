@@ -820,7 +820,9 @@ class Jobs:
         from .libraries import other_folders
         before = last_integrity() or {}
         since = before.get("checked") if fresh else None
+        from .marks import MarkStore
         result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly,
+                                 leave_out=frozenset(MarkStore().keys("removed")),
                                  others=other_folders(self.cfg), fresh_since=since)
         lines = ([f"Changed: {p}" for p in result["changed"][:100]] + [f"Missing: {p}" for p in result["missing"][:100]]
                  + [f"Changed outside Hoard: {p}" for p in result["data_changed"]]

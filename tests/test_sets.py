@@ -284,6 +284,9 @@ class Sharing(unittest.TestCase):
         self.assertEqual(mine[again]["name"], "Rusk, winter (2)", "a set of yours keeps its name")
         self.assertEqual(mine[made]["products"][RUSK]["creator"], "Kitsu")
         self.assertEqual(mine[made]["photos"], ["https://i.imgur.com/abc.png"])
+        self.assertTrue(mine[made]["from_link"], "added from a link: shown apart from your own (issue #258)")
+        own = store.change({"action": "create", "name": "Mine", "items": []})["made"]
+        self.assertNotIn("from_link", {s["id"]: s for s in store.load()["sets"]}[own])
 
     def test_note_and_photos(self):
         store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
@@ -857,12 +860,26 @@ class Tab(unittest.TestCase):
             # a note and a photo, kept with the set and shared with it
             self.assertIsNotNone(page.locator("#setView details.setextra").get_attribute("open"), "open to begin with")
             page.fill("#setView [data-setnote]", "Cozy fox look")
-            page.click('#setView [data-setx="note"]')
-            page.get_by_text("Saved the note.").wait_for()
+            page.click('#setView [data-setx="save"]')
+            page.get_by_text("Saved the note and photos.").wait_for()
+            # saved: shown as it's shared, and changed only after Edit (issue #256)
+            self.assertEqual(page.locator("#setView [data-setnote]").count(), 0)
+            self.assertEqual(page.locator("#setView .setnote-full").inner_text(), "Cozy fox look")
+            page.click('#setView [data-setx="edit"]')
+            page.fill("#setView [data-setnote]", "Changed my mind")
+            page.click('#setView [data-setx="cancel"]')
+            self.assertEqual(page.locator("#setView .setnote-full").inner_text(), "Cozy fox look", "Cancel keeps it")
+            page.click('#setView [data-setx="edit"]')
             page.click('#setView [data-setx="photo"]')
             page.fill("dialog[open] #askName", "https://evil.example/a.png")
             page.keyboard.press("Enter")
+            page.locator("#setView .setphotos li").wait_for()
+            self.assertEqual(page.evaluate("SETS.sets.find(s => s.name === 'Fox outfit').photos"), [], "not sent until Save")
+            page.click('#setView [data-setx="save"]')
             page.get_by_text("isn't a link to a picture on a photo site").wait_for()
+            self.assertEqual(page.locator("#setView [data-setnote]").count(), 1, "still open, to fix it")
+            page.click('#setView [data-setx="unphoto"]')
+            page.click('#setView [data-setx="cancel"]')
             # in Downloads, the same set: what's downloaded as its tiles, the rest after them
             page.click("nav.apptabs a[href='/downloads']")
             page.click('#stores [data-store="Sets"]')
@@ -871,7 +888,12 @@ class Tab(unittest.TestCase):
             hoodie = page.locator("#setMore .slot", has_text="Hoodie for Rusk")
             self.assertIn("In your library, not downloaded", page.locator("#setMore").inner_text())
             hoodie.locator("a").click()   # to it in the Library
-            page.locator("#detail.open", has_text="Hoodie for Rusk").wait_for()
+            page.wait_for_url("**/#store=Sets&set=*&open=booth%3A2")
+            try:
+                page.locator("#detail.open", has_text="Hoodie for Rusk").wait_for()
+            except Exception:   # (seen once, on Windows only: what the Library had, to say why)
+                had = page.evaluate("() => typeof DATA === 'undefined' ? null : [DATA.error, openKey, DATA.items.length]")
+                self.fail(f"the Library had {had}; the pages' errors: {errors}")
             # sets are chosen and right-clicked as products are: Select, Ctrl, and what can be done to them
             page.click('#storeSeg [data-store="Sets"]')
             page.locator("#setView .settile", has_text="Rusk, winter").click(button="right")

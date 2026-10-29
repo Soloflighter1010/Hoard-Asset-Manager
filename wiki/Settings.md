@@ -60,7 +60,9 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   your system when it finds new products or updates while Hoard is open in the background.
 - **Notifications through Apprise** (5.2.0): send the news you choose to Discord, Telegram, ntfy, email and
   [many more](https://github.com/caronc/apprise/wiki), through Apprise. Type an address for each service, one a
-  line, then **Keep these addresses**, and **Send a test** to check it comes. Each address holds its service's
+  line, or **Build an address** (5.2.0 beta 2): choose the service (Discord, Telegram, ntfy, email, Pushover, Slack,
+  Matrix, Gotify or a webhook), fill in what it gives you, and **Put it in the box**. Then **Keep these addresses**,
+  and **Send a test** to check it comes. Each address holds its service's
   token, so Hoard keeps them as it keeps API keys (see [Security and Privacy](Security-and-Privacy)), never in
   config.json; Settings only says how many are kept, and **Forget them** deletes them. Then tick what to send: new
   products and updates the routine check finds, products on your wishlists that got cheaper, tasks that finish or
@@ -105,7 +107,12 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
     computer's own settings ask for less motion.
   - **Coloured glow behind the page:** the stores' colours rising from the bottom of the window. Turn it off for a
-    plain background.
+    plain background. What's written where it shows (the sidebar, the footer, tiles' names) sits on the page's own
+    colour, so it reads as clearly over the glow as without it, in every theme (5.2.0 beta 2).
+  - **Seasonal Secrets** (5.2.0 beta 2): with Spooky Hoard or Winter Hoard, while Hoard is in the background its
+    page slowly gathers dust and cobwebs (Spooky) or snow and ice (Winter) round its edges. Move the mouse about to
+    clear it away, or switch tabs to clear it at once. It keeps to the edges and never gets in the way of a click.
+    It's off with **Reduce motion**, and you can turn it off here.
   - **Store colours:** **Standard**; **Easier to tell apart (colour blindness)**, a set of colours chosen to stay
     distinct with the common kinds of colour blindness, clear on light and dark backgrounds; or **My own**, a colour
     for each store (and Local) that you pick. Choose **Standard** again to go back.
@@ -179,8 +186,9 @@ and keep it valid JSON.
 | `display.spacing` | `false` | More space between letters, words and lines (**Accessibility** in Settings) |
 | `display.card_outlines` | `false` | Product cards with an outline and a faint background (**Accessibility** in Settings) |
 | `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
+| `display.seasonal` | `true` | Seasonal Secrets, in Spooky Hoard and Winter Hoard (**Accessibility** in Settings) |
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
-| `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |
+| `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast`, `spooky` or `winter` (**Appearance** in Settings) |
 | `display.mode` | `"system"` | `"system"` (match your computer), `"light"` or `"dark"` (**Appearance** in Settings) |
 | `display.style` | `"standard"` | The style: `"standard"`, `"treasure"` or `"workbench"` (**Appearance** in Settings) |
 | `display.language` | `"system"` | `"system"` (match your computer), `"en"`, `"ja"` or `"ko"` (**Appearance** in Settings) |

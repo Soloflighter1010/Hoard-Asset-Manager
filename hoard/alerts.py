@@ -13,14 +13,16 @@ What can be sent (EVENTS), each only when you tick it in Settings:
   config.json, and never sent back to the page: it only learns how many there are.
 - What's sent says how many, never a product's name (a hidden one stays hidden there too), as the system's own
   notifications do (hoard/notify.py).
-- Sending happens in the background, one notification at a time, and never holds up what Hoard is doing. A service
-  that doesn't take it is noted in Hoard's log, without its address.
+- Sending happens in the background, one notification at a time, and never holds up what Hoard is doing. Hoard's
+  log notes each one sent (what it was for, and whether each service took it) and why one wasn't, in what the service
+  said, with every address and anything from one taken out (issue #238). Apprise's own log goes nowhere else.
 - Apprise reaches each service directly, wherever you said it is (your own ntfy on your network, say): these requests
   don't go through egress.py's rules, which are for stores.
 """
 from __future__ import annotations
 
 import importlib.util
+import logging
 import queue
 import re
 import threading
@@ -96,24 +98,87 @@ def chosen(cfg: dict) -> set[str]:
     return {e for e in raw if e in EVENTS} if isinstance(raw, list) else set()
 
 
-def deliver(addresses: list[str], body: str, title: str = TITLE) -> str | None:
-    """Send now. None when every service took it, or what went wrong (never an address: they hold tokens)."""
+class _Heard(logging.Handler):
+    """What Apprise's services say went wrong (its warnings and errors), kept for the thread sending, so a failure
+    can say why. Apprise's log goes only here: it can hold an address."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.here = threading.local()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Keep what's said while this thread is sending (and nothing at other times)."""
+        lines = getattr(self.here, "lines", None)
+        if lines is not None and len(lines) < 10:
+            try:
+                lines.append(record.getMessage())
+            except Exception:  # noqa: BLE001 - a message that can't be put together is one less reason, nothing more
+                pass
+
+
+_heard = _Heard()
+_apprise_log = logging.getLogger("apprise")
+_apprise_log.addHandler(_heard)
+_apprise_log.propagate = False   # (not on to the launch log as it is: what it says can hold an address)
+
+
+def scrub(text: str, addresses: list[str]) -> str:
+    """What a service said, with every address and anything from one (a token, a host, a name) taken out."""
+    text = URL.sub("…", str(text))
+    for address in addresses:
+        for part in re.split(r"[/:@?&=#,;+]+", address.split("://", 1)[-1]):
+            if len(part) >= 4:
+                text = text.replace(part, "…")
+    return re.sub(r"\s+", " ", text).strip()[:300]
+
+
+def deliver(addresses: list[str], body: str, title: str = TITLE, event: str = "test") -> str | None:
+    """Send now, to each service in turn, noting in Hoard's log what it was for (event) and how each service took it
+    (issue #238). None when every service took it, or what went wrong, in what each service said (never an address:
+    they hold tokens)."""
     try:
         import apprise
     except ImportError:
+        log(f"A notification through Apprise ({event}) wasn't sent: Apprise isn't installed.")
         return "Apprise isn't installed."
-    sender = apprise.Apprise()
-    added = sum(bool(sender.add(u)) for u in addresses)
-    if not added:
+    try:   # (a service Apprise can't find, as when its services weren't packed with Hoard's app: issue #237)
+        sender = apprise.Apprise()
+        added = sum(bool(sender.add(u)) for u in addresses)
+        services = list(sender)
+    except Exception as e:  # noqa: BLE001 - Apprise's own problem, said in Hoard's words
+        log(f"A notification through Apprise ({event}) wasn't sent: Apprise couldn't start ({type(e).__name__}).")
+        return f"Apprise couldn't start ({type(e).__name__}). Run Setup again, or reinstall Hoard."
+    unknown = len(addresses) - added
+    if not services:
+        log(f"A notification through Apprise ({event}) wasn't sent: none of the addresses is one Apprise knows.")
         return "None of the addresses is one Apprise knows."
-    try:
-        ok = sender.notify(body=body, title=title)
-    except Exception as e:  # noqa: BLE001 - a plugin's own error; what it says can't hold an address we gave it
-        return f"Apprise couldn't send it ({type(e).__name__})."
-    if not ok:
-        return "A service didn't take it: check its address, and that it can be reached from this computer."
-    if added < len(addresses):
-        return f"{len(addresses) - added} of the addresses isn't one Apprise knows; the rest were sent it."
+    took, problems = [], []
+    for service in services:
+        name = str(getattr(service, "service_name", "") or type(service).__name__)
+        _heard.here.lines = []
+        try:
+            ok = bool(service.notify(body=body, title=title))
+        except Exception as e:  # noqa: BLE001 - a service's own error: its kind, never its words (they may hold an address)
+            ok = False
+            _heard.here.lines.append(type(e).__name__)
+        finally:
+            said, _heard.here.lines = _heard.here.lines, None
+        if ok:
+            took.append(name)
+        else:
+            why = scrub(said[-1], addresses) if said else "it didn't answer as it should"
+            problems.append(f"{name} didn't take it: {why}")
+    if took:
+        log(f"A notification through Apprise ({event}) was sent: {', '.join(took)} took it.")
+    for p in problems:
+        log(f"A notification through Apprise ({event}) wasn't sent: {p}")
+    if unknown:
+        log(f"A notification through Apprise ({event}): {unknown} of the addresses isn't one Apprise knows.")
+    if problems:
+        return " ".join(p if p.endswith(".") else p + "." for p in problems) + \
+            " Check its address, and that it can be reached from this computer."
+    if unknown:
+        return f"{unknown} of the addresses isn't one Apprise knows; the rest were sent it."
     return None
 
 
@@ -135,23 +200,25 @@ def send(cfg: dict, event: str, body: str, title: str = TITLE) -> bool:
             _worker = threading.Thread(target=_work, name="apprise", daemon=True)
             _worker.start()
     try:
-        _out.put_nowait((cfg, body, title))
+        _out.put_nowait((cfg, event, body, title))
     except queue.Full:
         return False
     return True
 
 
 def _work() -> None:
-    """The background worker: send each notification waiting, to the addresses kept, logging any that couldn't be
-    sent."""
+    """The background worker: send each notification waiting, to the addresses kept (deliver notes each in Hoard's
+    log). Nothing stops it: a notification that can't be sent is noted, and the next one is sent."""
     global _kept
     while True:
-        cfg, body, title = _out.get()
-        addresses = urls(cfg)
-        _kept = len(addresses)
-        problem = deliver(addresses, body, title) if addresses else None
-        if problem:
-            log(f"A notification through Apprise wasn't sent: {problem}")
+        cfg, event, body, title = _out.get()
+        try:
+            addresses = urls(cfg)
+            _kept = len(addresses)
+            if addresses:
+                deliver(addresses, body, title, event)
+        except Exception as e:  # noqa: BLE001 - the worker carries on with the next
+            log(f"A notification through Apprise ({event}) wasn't sent ({type(e).__name__}).")
 
 
 # What's sent, in words: counts only, never a product's name.

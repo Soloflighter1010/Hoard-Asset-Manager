@@ -199,6 +199,26 @@ class Tour(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_slow_enough_to_follow(self):
+        """Issue #265: between steps the ring moves to what's next (slowly enough to follow) and the card shows a moment
+        later, once it's there; with Reduce motion, at once."""
+        self.serve()
+        page = self.open()
+        page.evaluate("tourStart(TOUR.steps.findIndex(s => s.id === 'stores'))")
+        self.title(page, "")
+        self.assertFalse(page.evaluate("document.querySelector('.tour-card').classList.contains('tour-wait')"), "the first: at once")
+        self.assertGreaterEqual(page.evaluate("parseFloat(getComputedStyle(document.querySelector('.tour-ring')).transitionDuration)"), .5)
+        self.nxt(page)
+        self.assertTrue(page.evaluate("document.querySelector('.tour-card').classList.contains('tour-wait')"), "the card waits")
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('.tour-card')).opacity"), "0")
+        page.wait_for_function("() => !document.querySelector('.tour-card.tour-wait')", timeout=3000)
+        page.evaluate("document.body.classList.add('less-motion')")   # (Settings' Reduce motion)
+        self.nxt(page)
+        self.assertFalse(page.evaluate("document.querySelector('.tour-card').classList.contains('tour-wait')"), "Reduce motion: at once")
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('.tour-ring')).transitionDuration"), "0s")
+        self.assertEqual(self.errors, [])
+        page.close()
+
     def test_on_screen_at_the_largest_text_size(self):
         """Text size zooms the whole page: the card and its ring were placed by the window's pixels, so at 130% and up
         they landed past the target, the card off the window's edge."""
@@ -209,7 +229,8 @@ class Tour(unittest.TestCase):
         page.evaluate("applyDisplay({ ...DATA.display, text_size: 150 })")
         for step in ("stores", "search", "sync", "views"):
             page.evaluate("id => TOUR.i < 0 ? tourStart(TOUR.steps.findIndex(s => s.id === id)) : tourShow(TOUR.steps.findIndex(s => s.id === id), 1)", step)
-            page.wait_for_timeout(400)   # (the ring moves there)
+            page.wait_for_function("() => !document.querySelector('.tour-card.tour-wait')")   # (the ring moves there,
+            page.wait_for_timeout(800)                                                         # then the card: #265)
             self.assertTrue(page.evaluate(inside, ".tour-card"), f"{step}: the card on screen")
             ring, target = page.evaluate("""id => [document.querySelector('.tour-ring').getBoundingClientRect(),
                 tourTarget(TOUR.steps.find(s => s.id === id))[0].getBoundingClientRect()].map(r => [r.left, r.top])""", step)

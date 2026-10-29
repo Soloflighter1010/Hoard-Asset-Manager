@@ -51,7 +51,7 @@ FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenM
               "OpenDyslexic-Regular.woff2", "OpenDyslexic-Bold.woff2")
 ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tags", "/api/open",
            "/api/download", "/api/sync", "/api/cancel", "/api/force-stop", "/api/settings", "/api/setup/browser", "/api/setup/done",
-           "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/lock",
+           "/api/setup/migrate", "/api/signin-link", "/api/marks", "/api/pin", "/api/unlock", "/api/unlock/touch", "/api/lock",
            "/api/purge", "/api/hidden/forget", "/api/pin/recover", "/api/pin/phrase", "/api/show", "/api/quit",
            "/api/app/close", "/api/open-logs", "/api/folders/open",
            "/api/enter", "/api/itch-key", "/api/update/check", "/api/update/install",
@@ -72,6 +72,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
+MAX_UNWRAPPED = 5000   # gifts remembered as opened (issue #263): the last ones opened, past that
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
@@ -118,6 +119,7 @@ def display_settings(cfg: dict) -> dict:
     return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
             "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion")),
             "glow": d.get("glow") is not False,
+            "seasonal": d.get("seasonal") is not False,   # Seasonal Secrets (issue #260): on unless you turn it off
             # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
             "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
             "card_outlines": bool(d.get("card_outlines")),   # each card outlined, on a background of its own (#222)
@@ -164,13 +166,14 @@ def mask_names(text: str, names: list[str]) -> str:
 
 
 UI_WINDOWS = ("tagPanel", "stores", "settingsPanel", "tasksWin")
-UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and Downloads' Sort (size: Downloads only)
+UI_SORTS = ("name", "creator", "store", "added", "season", "size")   # the Library's and Downloads' Sort (size: Downloads only)
 
 
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
     is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
-    the sort, one for both pages, and the sets you added to last."""
+    the sort, one for both pages, the sets you added to last, the gifts you've opened, and the notes on what's new
+    you've seen."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -188,8 +191,14 @@ def ui_settings(cfg: dict) -> dict:
             out[k] = ui[k]
     if ui.get("sort") in UI_SORTS:
         out["sort"] = ui["sort"]
+    if ui.get("pj_layout") in ("list", "tiles"):   # Projects as a list or as tiles (issue #250)
+        out["pj_layout"] = ui["pj_layout"]
     if isinstance(ui.get("recent_sets"), list):   # the sets you added to last, first in the right-click menu (issue #228)
         out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
+    if isinstance(ui.get("spots_seen"), list):   # the "new here" notes you've seen (issue #244), by their names
+        out["spots_seen"] = [k for k in ui["spots_seen"] if isinstance(k, str) and re.fullmatch(r"[a-z0-9-]{1,40}", k)][:100]
+    if isinstance(ui.get("unwrapped"), list):   # the gifts you've opened (issue #263): their keys, never their names
+        out["unwrapped"] = [k for k in ui["unwrapped"] if isinstance(k, str) and re.fullmatch(r"[a-z]{2,12}:[\w.:-]{1,120}", k)][-MAX_UNWRAPPED:]
     return out
 
 
@@ -333,8 +342,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines")
-                        if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines",
+                                                    "seasonal") if k in given})
         if "font" in given:
             if given["font"] not in FONTS:
                 raise ValueError("Choose a font from the list.")
@@ -714,6 +723,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _unlocked(self) -> bool:
         """Has this browser unlocked the hidden library (and used it within the last UNLOCK_MINUTES)?"""
+        return self._lock_in() > 0
+
+    def _lock_in(self, touch: bool = False) -> int:
+        """Seconds until this browser's hidden library locks itself again (0: it's locked). Only touching it starts
+        the time again, as someone uses the page (issue #248): the page asking for news every few seconds would
+        otherwise keep it unlocked for as long as it's open."""
         srv = self.server
         cookie = self.headers.get("Cookie") or ""
         token = next((c.split("=", 1)[1] for c in (x.strip() for x in cookie.split(";")) if c.startswith("hoard_unlock=")), "")
@@ -721,10 +736,11 @@ class Handler(BaseHTTPRequestHandler):
         with srv.unlocks_lock:
             for t in [t for t, until in srv.unlocks.items() if until < now]:
                 srv.unlocks.pop(t, None)
-            if token and token in srv.unlocks:
+            if not token or token not in srv.unlocks:
+                return 0
+            if touch:
                 srv.unlocks[token] = now + UNLOCK_MINUTES * 60
-                return True
-        return False
+            return max(1, int(srv.unlocks[token] - now))
 
     def _product_files(self, body: dict) -> dict:
         """Issue #225: what each of these products has on its store, as a quick look at it read it (no file is
@@ -913,7 +929,8 @@ class Handler(BaseHTTPRequestHandler):
                 if i["tag_key"] not in marks["hidden"] or unlocked:
                     shown.append(i)
             counted = [i for i in shown if i["mark"] not in ("removed", "hidden")]
-            privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "recovery_set": bool(marks["recovery"]),
+            privacy = {"pin_set": bool(marks["pin"]), "unlocked": unlocked, "lock_in": self._lock_in() if unlocked else 0,
+                       "recovery_set": bool(marks["recovery"]),
                        "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
             keys = {i["tag_key"] for i in shown}
             hidden_now = set() if unlocked else set(marks["hidden"])
@@ -953,10 +970,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/integrity":   # issue #231: the files the last check found, each to deal with
             last = last_integrity() or {"problems": [], "changed": [], "missing": [], "data_changed": [], "checked": None}
             hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
-            listed = [{**x, "key": tag_key(x["store"], x["name"])} for x in last["problems"]]
+            removed = MarkStore().keys("removed")   # (removed since the check: not listed, issue #259)
+            listed = [x for x in ({**x, "key": tag_key(x["store"], x["name"])} for x in last["problems"]) if x["key"] not in removed]
             shown = [x for x in listed if x["key"] not in hidden]
             return self._json({"checked": last["checked"], "problems": shown, "hidden_left_out": len(listed) - len(shown),
-                               "more": max(0, len(last["changed"]) + len(last["missing"]) - len(listed)),
+                               "more": max(0, len(last["changed"]) + len(last["missing"]) - len(last["problems"])),
                                "data_changed": last["data_changed"]})
         if path == "/api/loading":   # issue #200: how far reading what a page shows first has got, for its splash
             return self._json(loading.view((parse_qs(u.query).get("part") or [""])[0]))
@@ -1009,7 +1027,8 @@ class Handler(BaseHTTPRequestHandler):
             for a in assets:
                 if a["needs"]:
                     a["needs"] = {**a["needs"], "products": [o for o in a["needs"]["products"] if o["id"] in shown]}
-            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked}, "looks_wanted": looks[:500],
+            index = {**index, "assets": assets, "privacy": {"pin_set": bool(marks["pin"]), "unlocked": unlocked,
+                                                                "lock_in": self._lock_in() if unlocked else 0}, "looks_wanted": looks[:500],
                      "libraries": srv.library_view(),
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
                      "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
@@ -1256,7 +1275,7 @@ class Handler(BaseHTTPRequestHandler):
                     row["words"] = sorted(words)
             out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                         "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
-                        "short": (s.get("short") or {}).get("expires"), "items": rows,
+                        "short": (s.get("short") or {}).get("expires"), "items": rows, "from_link": s.get("from_link") is True,
                         **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 
@@ -1609,6 +1628,8 @@ class Handler(BaseHTTPRequestHandler):
                 hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
                 found["preloaded"] = [x for x in found["preloaded"] if x.get("tag_key") not in hidden]
                 return self._json({**found, "report": report}, compress=True)
+            if path == "/api/vpm/updates":   # issue #253: each project's packages with newer versions, for the list
+                return self._json({"projects": srv.vpm.updates()}, compress=True)
             if path == "/api/vpm/packages":
                 return self._json({"packages": srv.vpm.packages(one("unity"), one("pre") == "1")}, compress=True)
             if path == "/api/vpm/versions":
@@ -2321,6 +2342,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "skipped": len(now)})
         if path == "/api/delete-files":   # a removed product's downloaded files, after you've confirmed (issue #81)
             return self._delete_files(body)
+        if path == "/api/unlock/touch":   # someone's using the page (used): Hidden stays unlocked a while longer
+            lock_in = self._lock_in(touch=body.get("used") is True)
+            return self._json({"ok": True, "unlocked": lock_in > 0, "lock_in": lock_in})
         if path in ("/api/marks", "/api/pin", "/api/unlock", "/api/lock", "/api/purge", "/api/hidden/forget",
                     "/api/pin/recover", "/api/pin/phrase"):
             return self._privacy_action(path, body)

@@ -4,6 +4,141 @@
    Everything below is for one of the two, except the parts only they show, which are out of sight in Standard. */
 .row-meta, .d-stats { display: none; }
 .local { --c: var(--local); }
+/* a window's scroll stays in it (issue #264): scrolled to its end, Settings carried on scrolling the page behind it;
+   and while Settings or Projects fills the window, the page behind doesn't scroll at all */
+.win-body, .setjump { overscroll-behavior: contain; }
+html:has(#settingsPanel.win:not([hidden]), #projectsWin:not([hidden])) { overflow: hidden; }
+/* Every dropdown in the theme's colours (issues #241, #243): its box and Sort's arrow, never the system's grey; and its
+   open list, where the browser draws it from the page (Windows' and Linux's do; a Mac's is the system's own menu). A
+   dropdown's own rules (its size, its corners, its ground) come first: these fill in what they don't say. */
+select { appearance: none; -webkit-appearance: none; border: 0; border-radius: 8px; padding-right: 30px; cursor: pointer;
+  background-color: var(--ledge); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam);
+  background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+select:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+select:disabled { opacity: .55; cursor: default; }
+select option, select optgroup { background-color: var(--stone); color: var(--bone); }
+/* Standard's tiles: their stores, named on the picture while a tile is pointed at or focused (issue #251), as the
+   Treasure style's tag is */
+html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before { content: attr(data-all); position: absolute;
+  left: 8px; bottom: 11px; max-width: calc(100% - 16px); padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave);
+  font: 700 10.5px/1.5 var(--body); letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Add to another set (issue #242, shared.js): every set's tile to choose from */
+.setpick { max-height: min(60vh, 560px); overflow: auto; padding: 4px 2px; }
+.setpick h4 { margin: 10px 0 8px; font-size: 13px; color: var(--dust); }
+.setpick h4:first-child { margin-top: 0; }
+.setpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px 12px; }
+.setpick-grid .settile { cursor: pointer; }
+.setpick-grid .settile .art { border-radius: 10px; }
+.setpick-grid .settile:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 2px; }
+.setpick-find { width: 100%; box-sizing: border-box; }
+.setpick [hidden] { display: none; }
+/* Projects' list (issues #246, #250, #253): a row or a tile says what's needed at a glance (its kind, Unity, folder,
+   and what's new: packages outlined, products filled), and choosing one opens its details beside the list */
+.pj-layout { display: inline-flex; gap: 4px; margin-left: auto; }
+.pj-layout [aria-checked="true"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--gold); }
+.pj-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.pj-split.with-detail { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); }
+@media (max-width: 900px) { .pj-split.with-detail { grid-template-columns: minmax(0, 1fr); } .pj-split .pj-detail { order: -1; position: static; } }
+.pj-row:has(> .pj-open) { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "star open"; }
+.pj-open { grid-area: open; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main ups" "what ups";
+  gap: 2px 12px; align-items: center; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left;
+  font: inherit; cursor: pointer; }
+.pj-open .pj-ups { grid-area: ups; }
+.pj-open:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 6px; }
+.pj-row.on { box-shadow: inset 4px 0 0 var(--c, var(--seam)), inset 0 0 0 2px var(--gold); }
+.pj-ups { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.pj-up { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.pj-up.pkg { color: var(--gold-text); box-shadow: inset 0 0 0 1.5px var(--gold); }
+.pj-up.prod { background: var(--gold); color: var(--gold-ink); }
+.pj-detail { position: sticky; top: 8px; padding: 16px; border-radius: 14px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); min-width: 0; }
+.pj-detail .win-x { float: right; margin: -6px -6px 0 0; }
+.pj-detail .pj-h { margin: 0 32px 2px 0; overflow-wrap: anywhere; }
+.pj-detail .meta { overflow-wrap: anywhere; }
+.pj-detail p { margin: 6px 0; }
+.pj-detail p svg { width: 14px; height: 14px; vertical-align: -2px; }
+.pj-detail .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 14px; }
+.pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
+  text-align: left; font: inherit; cursor: pointer; }
+.pj-tile.k-avatars, .pj-mini i.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds, .pj-mini i.k-worlds { --c: var(--pj-worlds); }
+.pj-tile.k-other, .pj-mini i.k-other { --c: var(--pj-other); }
+.pj-tile-art { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;
+  background: color-mix(in srgb, var(--c, var(--seam)) 22%, var(--ledge)); box-shadow: inset 0 -5px 0 var(--c, var(--seam)); }
+.pj-tile-art b { font: 400 34px var(--display); color: var(--bone); }
+.pj-tile:hover .pj-tile-art { transform: translateY(-2px); }
+.pj-tile.on .pj-tile-art, .pj-tile:focus-visible .pj-tile-art { outline: 3px solid var(--gold); outline-offset: 2px; }
+.pj-tile:focus-visible { outline: none; }
+.pj-tile.gone { opacity: .7; }
+.pj-tile .nm-t { font-weight: 700; overflow-wrap: anywhere; }
+.pj-tile .cr { font-size: 12px; color: var(--dust); }
+.pj-tile .pj-ups { justify-content: flex-start; }
+.pj-fav { position: absolute; top: 8px; left: 10px; font-style: normal; color: var(--gold-text); }
+.pj-folder-tile .pj-tile-art { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-folder-tile .pj-tile-art > svg { width: 70%; height: 70%; color: var(--dust); }
+.pj-mini { position: absolute; inset: 40% 27% 27%; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.pj-mini i { display: grid; place-items: center; border-radius: 4px; font: 700 10px var(--body); font-style: normal;
+  background: color-mix(in srgb, var(--c) 45%, var(--stone)); color: var(--bone); }
+body.less-motion .pj-tile-art { transition: none; }
+/* building an Apprise address (issue #239): a service, and its fields one under another */
+.apprise-build { margin: 8px 0; }
+.apprise-build summary { cursor: pointer; font-weight: 700; color: var(--dust); }
+.apprise-fields { display: grid; gap: 6px; margin: 8px 0; }
+.apprise-fields .field-row { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.apprise-fields input { min-width: 0; height: var(--btn-h-sm); padding: 0 10px; border-radius: 8px; border: 0; background: var(--stone);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.apprise-fields input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+@media (max-width: 560px) { .apprise-fields .field-row { grid-template-columns: minmax(0, 1fr); } }
+/* a set's note, as it's shared (issue #256: changed after Edit) */
+.setnote-full { margin: 10px 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+/* a note on what's new (issue #244, shared.js): beside what it's about, once */
+.new-spot { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 4px 0 12px; padding: 10px 12px;
+  border-radius: 10px; background: var(--ledge); box-shadow: inset 0 0 0 1.5px var(--gold); font-size: 13px; line-height: 1.45; }
+.new-spot p { margin: 0; }
+/* Seasonal Secrets (issue #260, shared.js): what Spooky and Winter Hoard gather round the page's edges while you're
+   away, as much as --level says (0 to 1). Over the page, under its panels, windows, menus and dialogs; never pointed at */
+.secrets { position: fixed; inset: 0; z-index: 18; pointer-events: none; overflow: hidden; --level: 0;
+  opacity: min(1, calc(var(--level) * 1.6)); transition: opacity .35s ease-out; }
+.secrets[hidden] { display: none; }
+.secrets i { position: absolute; display: block; }
+.sec-web { width: calc(50px + 120px * var(--level)); aspect-ratio: 1; color: color-mix(in srgb, var(--bone) 55%, transparent); }
+.sec-web svg { display: block; width: 100%; height: 100%; }
+.sec-web.tl { left: 0; top: 0; }
+.sec-web.tr { right: 0; top: 0; transform: scaleX(-1); }
+.sec-web.bl { left: 0; bottom: 0; transform: scaleY(-1); }
+.sec-web.br { right: 0; bottom: 0; transform: scale(-1); }
+.sec-dust, .sec-flakes, .sec-frost { inset: 0; }
+.sec-dust { background-image: radial-gradient(circle, rgb(176 164 142 / .6) 0 1px, transparent 1.6px),
+    radial-gradient(circle, rgb(150 138 120 / .45) 0 1.5px, transparent 2.1px);
+  background-size: 23px 19px, 41px 37px; background-position: 0 0, 11px 7px;
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 52%, #000 100%); mask-image: radial-gradient(ellipse at center, transparent 52%, #000 100%); }
+.sec-flakes { background-image: radial-gradient(circle, rgb(255 255 255 / .85) 0 1.4px, transparent 2px),
+    radial-gradient(circle, rgb(235 245 255 / .6) 0 2px, transparent 2.8px);
+  background-size: 29px 31px, 53px 47px; background-position: 0 0, 17px 9px;
+  -webkit-mask-image: linear-gradient(transparent 55%, #000); mask-image: linear-gradient(transparent 55%, #000); }
+.sec-frost { --r: calc(50px + 170px * var(--level));
+  background: radial-gradient(circle at 0 0, rgb(226 242 255 / .6), transparent var(--r)), radial-gradient(circle at 100% 0, rgb(226 242 255 / .6), transparent var(--r)),
+    radial-gradient(circle at 0 100%, rgb(226 242 255 / .6), transparent var(--r)), radial-gradient(circle at 100% 100%, rgb(226 242 255 / .6), transparent var(--r)),
+    repeating-linear-gradient(60deg, rgb(255 255 255 / .38) 0 1px, transparent 1px 11px),
+    repeating-linear-gradient(-60deg, rgb(255 255 255 / .38) 0 1px, transparent 1px 11px),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / .22) 0 1px, transparent 1px 9.5px);   /* (ice crystals) */
+  -webkit-mask-image: radial-gradient(circle at 0 0, #000, transparent var(--r)), radial-gradient(circle at 100% 0, #000, transparent var(--r)),
+    radial-gradient(circle at 0 100%, #000, transparent var(--r)), radial-gradient(circle at 100% 100%, #000, transparent var(--r));
+  mask-image: radial-gradient(circle at 0 0, #000, transparent var(--r)), radial-gradient(circle at 100% 0, #000, transparent var(--r)),
+    radial-gradient(circle at 0 100%, #000, transparent var(--r)), radial-gradient(circle at 100% 100%, #000, transparent var(--r)); }
+.sec-snow { left: 0; right: 0; bottom: 0; height: calc(6px + 46px * var(--level)); color: #F3F9FF;
+  filter: drop-shadow(0 -2px 3px rgb(110 150 190 / .4)); }
+.sec-snow svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+/* Text over the glow (issues #240, #257). The glow rises behind the page in the stores' colours, so what's written where
+   it shows (the sidebar, the footer, a tile's name and creator, a Workbench row) sits on the page's own colour with the
+   glow faint through it, never on the glow itself: tests/test_themes.py checks it reads at 4.5:1 over the brightest
+   glow, in every theme. (Where there's no glow, it's the page's colour on itself: nothing shows.) */
+.side, .foot, [data-style="workbench"] .grid .slot:not(:hover):not([aria-current="true"]) {
+  background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
+html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm, .cr) {
+  width: fit-content; max-width: calc(100% + 8px); margin-inline: -4px; padding-inline: 4px; border-radius: 6px;
+  background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
+.foot { padding: 18px 18px 20px; border-top: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--seam); }
 
 /* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */
 .style-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 6px 0 12px; }
@@ -70,7 +205,9 @@
 [data-style="treasure"] .slot:not(.stacked):is(:hover, [aria-current="true"]) .art { box-shadow: 0 6px 24px -6px var(--c, var(--gold)); }
 [data-style="treasure"] .slot[aria-current="true"] .art { outline-offset: 4px; }
 [data-style="treasure"] :is(.nm-t, .slot .nm) { font-size: 15px; }
-[data-style="treasure"] .count { font-size: clamp(26px, 3vw, 36px); }
+[data-style="treasure"] h2.count { font-size: clamp(26px, 3vw, 36px); }   /* (the page's count: a tile's ×2 stays small, #251) */
+/* every store a tile's product is owned on, named on its picture while it's pointed at or focused (issue #251) */
+[data-style="treasure"] .slot:is(:hover, :focus-visible) .notch[data-all]::before { content: attr(data-all); max-width: calc(100% - 18px); }
 [data-style="treasure"] .setgrid { gap: 30px 22px; }
 [data-style="treasure"] .settile .art { border: 3px solid var(--gold); }   /* (a set is yours: gold) */
 /* a product's details: its picture big, in its store's frame, a row of what it is, and the main button wide */
@@ -111,9 +248,9 @@
 :root[data-style="workbench"][data-font="dyslexic"] { --body: "OpenDyslexic", "Segoe UI", "Yu Gothic UI", "Malgun Gothic", system-ui, sans-serif; }
 [data-style="workbench"] body { font-size: 14px; line-height: 1.45; }
 /* headings: the body's font, bold, smaller */
-[data-style="workbench"] :is(.count, .d-name, .stores h2, .win-bar h2, .setup h2, .support-dialog h2, dialog.pin h2, .tour-card h2,
+[data-style="workbench"] :is(h2.count, .d-name, .stores h2, .win-bar h2, .setup h2, .support-dialog h2, dialog.pin h2, .tour-card h2,
   .sethead h2, .empty h2, .projects h3.pj-h, .dlpanel h2, .drop) { font-weight: 700; letter-spacing: 0; }
-[data-style="workbench"] .count { font-size: 20px; }
+[data-style="workbench"] h2.count { font-size: 20px; }
 [data-style="workbench"] .d-name { font-size: 20px; margin-top: 14px; }
 [data-style="workbench"] .win-bar h2, [data-style="workbench"] .stores h2 { font-size: 16px; }
 [data-style="workbench"] .setup h2, [data-style="workbench"] .support-dialog h2, [data-style="workbench"] .sethead h2 { font-size: 20px; }

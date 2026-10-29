@@ -2,7 +2,10 @@
 config.json), what's sent saying how many and never a product's name, and nothing sent unless chosen."""
 from __future__ import annotations
 
+import http.server
+import importlib.util
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -18,6 +21,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from hoard import alerts, config, jobs, library, vault  # noqa: E402
 
 
+class FakeService:
+    """One service an address is for, as Apprise has it: what it's sent, and what it answers (a refusal, as Apprise's
+    services do, said in Apprise's log with the address in it)."""
+
+    def __init__(self, url):
+        self.url, self.service_name = url, url.split("://")[0].title()
+
+    def notify(self, body, title):
+        FakeApprise.sent.append(([self.url], title, body))
+        if not FakeApprise.accept:
+            logging.getLogger("apprise").warning(f"Failed to send {self.service_name} notification to {self.url}: "
+                                                 "Unauthorized - error=401.")
+        return FakeApprise.accept
+
+
 class FakeApprise:
     """A stand-in for the apprise package: what was added and sent, and what it answers."""
     sent: list = []
@@ -29,12 +47,11 @@ class FakeApprise:
     def add(self, url):
         ok = "://" in url and not url.startswith("nope://")
         if ok:
-            self.added.append(url)
+            self.added.append(FakeService(url))
         return ok
 
-    def notify(self, body, title):
-        FakeApprise.sent.append((list(self.added), title, body))
-        return FakeApprise.accept
+    def __iter__(self):
+        return iter(self.added)
 
 
 class Alerts(unittest.TestCase):
@@ -102,14 +119,48 @@ class Alerts(unittest.TestCase):
         alerts.save_urls(self.cfg, [])
 
     def test_what_a_service_answers(self):
-        self.assertIsNone(alerts.deliver(["json://example.com/hook"], "hi"))
-        FakeApprise.accept = False
-        self.assertIn("didn't take it", alerts.deliver(["json://example.com/hook"], "hi"))
-        FakeApprise.accept = True
-        self.assertEqual(alerts.deliver(["nope://x"], "hi"), "None of the addresses is one Apprise knows.")
-        said = alerts.deliver(["nope://secret-token", "json://example.com/hook"], "hi")
-        self.assertIn("1 of the addresses", said)
-        self.assertNotIn("secret-token", said, "an address is never said: it holds a token")
+        """What each service answered is said, and noted in Hoard's log (issue #238), with its address taken out."""
+        logged = []
+        with mock.patch.object(alerts, "log", logged.append):
+            self.assertIsNone(alerts.deliver(["json://example.com/hook"], "hi"))
+            self.assertEqual(logged, ["A notification through Apprise (test) was sent: Json took it."])
+            FakeApprise.accept = False
+            said = alerts.deliver(["json://hooks.example.com/hook?token=SECRET1234"], "hi", event="new")
+            self.assertIn("Json didn't take it: Failed to send Json notification to … Unauthorized - error=401.", said)
+            self.assertIn("A notification through Apprise (new) wasn't sent: Json didn't take it", logged[-1])
+            FakeApprise.accept = True
+            self.assertEqual(alerts.deliver(["nope://x"], "hi"), "None of the addresses is one Apprise knows.")
+            said = alerts.deliver(["nope://secret-token", "json://example.com/hook"], "hi")
+            self.assertIn("1 of the addresses", said)
+        for line in [said, *logged]:
+            for secret in ("secret-token", "SECRET1234", "hooks.example.com"):
+                self.assertNotIn(secret, line, "an address is never said: it holds a token")
+
+    def test_a_service_that_breaks_doesnt_stop_the_rest(self):
+        """A service that raises, or Apprise itself failing to start (as when the app didn't ship its services: issue
+        #237), is said in Hoard's words; the background worker carries on with the next notification."""
+        logged = []
+
+        def broken(self, body, title):
+            raise ConnectionError("https://example.com/hook?token=SECRET1234 refused")
+        with mock.patch.object(alerts, "log", logged.append):
+            with mock.patch.object(FakeService, "notify", broken):
+                said = alerts.deliver(["json://example.com/hook?token=SECRET1234"], "hi")
+            self.assertIn("Json didn't take it: ConnectionError.", said)
+            with mock.patch.object(FakeApprise, "add", side_effect=FileNotFoundError("apprise/plugins")):
+                self.assertIn("Apprise couldn't start (FileNotFoundError)", alerts.deliver(["json://example.com/hook"], "hi"))
+                alerts.save_urls(self.cfg, ["json://example.com/hook"])
+                self.assertTrue(alerts.send(self.cfg, "tasks", "A task finished."))
+                for _ in range(100):
+                    if any("(tasks)" in line for line in logged):
+                        break
+                    time.sleep(0.02)
+            self.assertTrue(alerts.send(self.cfg, "new", "Found some."))
+            self.wait_sent(1)
+        self.assertEqual(FakeApprise.sent[-1][2], "Found some.", "the worker carried on")
+        self.assertNotIn("SECRET1234", " ".join(logged + [said]))
+        alerts.save_urls(self.cfg, [])
+
 
     def test_a_finished_task_says_how_it_went_in_counts(self):
         record = {"task": "download", "outcome": "partial", "label": "Download Secret Product",
@@ -238,6 +289,46 @@ class AlertsInHoard(unittest.TestCase):
         self.srv._news("finished", {"task": "download", "outcome": "failed", "report": {}})
         time.sleep(0.1)
         self.assertEqual(FakeApprise.sent, [], "tasks aren't ticked: nothing sent")
+
+
+@unittest.skipUnless(importlib.util.find_spec("apprise"), "Apprise isn't installed here")
+class RealApprise(unittest.TestCase):
+    """Issue #237: Send a test, through Apprise itself, reaches a service (one on this computer, answering as a webhook
+    would), and a service that refuses it says why, its address never in what's said."""
+
+    def test_a_test_reaches_the_service(self):
+        heard = []
+
+        class Hook(http.server.BaseHTTPRequestHandler):
+            """A webhook: takes what's sent to /ok, refuses the rest."""
+            def do_POST(self):
+                heard.append((self.path, json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))))
+                self.send_response(200 if self.path.startswith("/ok") else 401)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+        hook = http.server.HTTPServer(("127.0.0.1", 0), Hook)
+        threading.Thread(target=hook.serve_forever, daemon=True).start()
+        self.addCleanup(hook.server_close)
+        self.addCleanup(hook.shutdown)
+        port = hook.server_port
+        with mock.patch.object(alerts, "log"):
+            self.assertIsNone(alerts.deliver([f"json://127.0.0.1:{port}/ok"], "This is a test from Hoard."))
+            said = alerts.deliver([f"json://127.0.0.1:{port}/SECRET1234"], "hi")
+        self.assertEqual(heard[0][0], "/ok")
+        self.assertEqual((heard[0][1]["title"], heard[0][1]["message"]), ("Hoard", "This is a test from Hoard."))
+        self.assertIn("didn't take it", said)
+        self.assertIn("401", said, "what the service answered")
+        self.assertNotIn("SECRET1234", said)
+
+    def test_built_addresses_are_ones_apprise_takes(self):
+        """Issue #239: every address Build an address makes (tests/test_pages.py's APPRISE_BUILT) is one Apprise takes."""
+        import apprise
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_pages import APPRISE_BUILT
+        for service, _, address in APPRISE_BUILT:
+            self.assertTrue(apprise.Apprise().add(address), f"{service}: {address}")
 
 
 if __name__ == "__main__":

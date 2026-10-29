@@ -300,6 +300,28 @@ async function api(url, opts = {}) {
   }
   return send();
 }
+/* The hidden library locks itself again after a while without anyone using it (issue #248). The page asking Hoard
+   for news every few seconds doesn't count: what you do here (a click, a key, a scroll) tells Hoard, a minute apart at
+   most, and once the time's up the page puts Hidden out of view itself (each page's hiddenLocked()). */
+let lockTimer = 0, lastTouch = 0;
+// Look again when this browser's unlock would run out (it may have been used meanwhile in another of its windows).
+function watchUnlock(p) {
+  clearTimeout(lockTimer);
+  if (p && p.unlocked && p.lock_in > 0) lockTimer = setTimeout(() => touchUnlock(false), p.lock_in * 1000 + 250);
+}
+// Tell Hoard the page is in use (or only ask how long is left), then lock the page's view if it's run out.
+async function touchUnlock(used) {
+  const r = await apiPost("/api/unlock/touch", { used });
+  if (!r.ok) return;   // (Hoard isn't answering: the next look will tell)
+  if (r.data.unlocked) { DATA.privacy = { ...DATA.privacy, lock_in: r.data.lock_in }; watchUnlock(DATA.privacy); }
+  else if ((DATA.privacy || {}).unlocked) { clearTimeout(lockTimer); hiddenLocked(); }
+}
+for (const kind of ["pointerdown", "keydown", "wheel"])
+  document.addEventListener(kind, () => {
+    if (!(DATA.privacy || {}).unlocked || Date.now() - lastTouch < 60000) return;
+    lastTouch = Date.now();
+    touchUnlock(true);
+  }, { capture: true, passive: true });
 // An address with the key in it, for what the browser loads by itself (pictures, downloads).
 const keyed = url => `${url}${url.includes("?") ? "&" : "?"}k=${encodeURIComponent(ACCESS.key)}`;
 const NEEDS_KEY = "Hoard didn't recognise this page. Open Hoard again (or the address it printed, which includes its key).";
@@ -320,16 +342,48 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 // Text folded for searching: the same width, lower case.
 const norm = s => String(s || "").normalize("NFKC").toLowerCase();
 const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+/* The Seasonal sort (issue #261): the season's products first, by words in their names and tags, then the rest as
+   Recently added. From November until early January, Christmas's and winter's; the rest of the year, Halloween's. */
+const SEASON_WORDS = {
+  halloween: ["halloween", "ハロウィン", "ハロウィーン", "할로윈", "핼러윈", "pumpkin", "かぼちゃ", "カボチャ", "호박", "witch", "魔女",
+    "마녀", "vampire", "吸血鬼", "뱀파이어", "ghost", "おばけ", "お化け", "유령", "spooky", "skeleton", "骸骨", "zombie", "ゾンビ",
+    "좀비", "jack-o", "trick or treat"],
+  christmas: ["christmas", "xmas", "x'mas", "クリスマス", "크리스마스", "santa", "サンタ", "산타", "reindeer", "トナカイ", "순록",
+    "snowman", "雪だるま", "눈사람", "gingerbread", "mistletoe", "noel", "winter", "冬", "겨울", "snow", "雪", "knit", "ニット", "니트"],
+};
+// The season now: Christmas from November 1 until January 6, else Halloween (the one coming).
+const seasonNow = (d = new Date()) => d.getMonth() >= 10 || (d.getMonth() === 0 && d.getDate() <= 6) ? "christmas" : "halloween";
+const seasonSeen = new WeakMap();   // product -> [season, whether it's the season's], worked out once
+// Whether a product is the season's (by its name and tags: the words it's searched by).
+function inSeason(a) {
+  const now = seasonNow(), got = seasonSeen.get(a);
+  if (got && got[0] === now) return got[1];
+  const hay = a.hay || norm(a.name), yes = SEASON_WORDS[now].some(w => hay.includes(norm(w)));
+  seasonSeen.set(a, [now, yes]);
+  return yes;
+}
+// A page's Seasonal sort, from its Recently added.
+const seasonSort = added => (a, b) => (inSeason(b) - inSeason(a)) || added(a, b);
+// The Seasonal sort's name says which season it puts first.
+function seasonLabel() {
+  const o = document.querySelector('#sort option[value="season"]');
+  const winter = seasonNow() === "christmas";
+  if (o) o.textContent = winter ? tr("Seasonal: Christmas and winter first") : tr("Seasonal: Halloween first");
+}
 // A hue from a name, the same each time, for a tile with no picture.
 const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 // Up to two initials of a name, for a tile with no picture.
 const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
 const STRIPE_STORES = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
-// A tile's store spine; for something you own on more than one store, striped with the other store's colour.
+// A tile's store spine; for something you own on more than one store, striped with the other store's colour. Its
+// stores are named on the picture (web/looks.css): the Treasure style's tag, and every one of them while the tile is
+// pointed at or focused (issue #251).
 function notch(store, others) {
   const other = (others || []).find(o => STRIPE_STORES.includes(o) && o !== store);
-  const named = COLOUR_NAMES[store] ? ` data-s="${esc(tr(COLOUR_NAMES[store]))}"` : "";   // (the Treasure style's tag)
-  return other ? `<i class="notch ${store} dup"${named} style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"${named}></i>`;
+  const named = COLOUR_NAMES[store] ? ` data-s="${esc(tr(COLOUR_NAMES[store]))}"` : "";
+  const every = [...new Set([store, ...(others || [])])].filter(s => COLOUR_NAMES[s]).map(s => tr(COLOUR_NAMES[s])).join(" · ");
+  const all = every ? ` data-all="${esc(every)}"` : "";
+  return other ? `<i class="notch ${store} dup"${named}${all} style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"${named}${all}></i>`;
 }
 // The Treasure style's row of facts in a product's details (web/looks.css): [label, value as HTML]
 const dStats = facts => `<div class="d-stats">${facts.map(([k, v]) => `<span><small>${esc(tr(k))}</small><b>${v}</b></span>`).join("")}</div>`;
@@ -453,6 +507,8 @@ function applyDisplay(d) {
   if (d.spacing) html.dataset.spacing = "wide"; else delete html.dataset.spacing;
   if (d.card_outlines) html.dataset.cards = "outlined"; else delete html.dataset.cards;   // (issue #222: looks.css)
   document.body.classList.toggle("no-glow", d.glow === false);
+  SECRETS.kind = d.seasonal !== false && SECRET_THEMES.includes(d.theme) ? d.theme : "";   // (issue #260)
+  secretsDraw();
   const root = document.documentElement;
   if (d.colours === "standard" || !d.colours) delete root.dataset.colours; else root.dataset.colours = d.colours;
   for (const c of COLOURED) {   // your own colours (issue #112), only while you've chosen them
@@ -479,6 +535,71 @@ function freeze(img) {
   img.replaceWith(c);
 }
 document.addEventListener("load", e => { if (e.target.tagName === "IMG") freeze(e.target); }, true);
+
+/* ---------- Seasonal Secrets (issue #260): while Hoard's window isn't the one you're using, Spooky Hoard slowly
+   gathers dust and cobwebs round the page's edges, and Winter Hoard snow and ice. Moving the mouse about clears it
+   away, a little at a time, and switching tabs clears it at once. It keeps to the edges, nothing in it can be pointed
+   at or read out, and it's off with Reduce motion, or in Settings, Accessibility. */
+const SECRET_THEMES = ["spooky", "winter"];
+const SECRET_WAIT = 20000, SECRET_GROW = 240000, SECRET_SWEEP = 2400;   // ms away before it starts, and to gather it all;
+                                                                        // px of the mouse's movement to clear it all
+const SECRETS = { kind: "", level: 0, from: 0, since: 0, timer: null, frame: 0 };
+// A cobweb in a corner: threads out from it, and rings across them sagging a little between each.
+function cobweb() {
+  const angles = [0, 15, 30, 45, 60, 75, 90].map(a => a * Math.PI / 180), at = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
+  let d = angles.map(a => `M0 0L${at(100, a).join(" ")}`).join("");
+  for (const r of [22, 40, 58, 76, 93]) {
+    d += `M${at(r, angles[0]).join(" ")}`;
+    for (let i = 1; i < angles.length; i++) {
+      const [x, y] = at(r, angles[i]), [cx, cy] = at(r * .86, (angles[i - 1] + angles[i]) / 2);
+      d += `Q${cx.toFixed(1)} ${cy.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+  }
+  return `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width=".7"><path d="${d}"/></svg>`;
+}
+const SECRET_ART = {
+  spooky: () => `<i class="sec-dust"></i>${["tl", "tr", "bl", "br"].map(c => `<i class="sec-web ${c}">${cobweb()}</i>`).join("")}`,
+  winter: () => `<i class="sec-frost"></i><i class="sec-flakes"></i><i class="sec-snow"><svg viewBox="0 0 1200 60" preserveAspectRatio="none">` +
+    `<path d="M0 60V26C80 8 150 30 240 22S390 4 480 18 640 34 730 20 880 2 980 16 1120 30 1200 14V60Z"/></svg></i>`,
+};
+// Show what's gathered (or nothing), as it is now.
+function secretsDraw() {
+  let el = document.getElementById("secrets");
+  const on = SECRETS.kind && SECRETS.level > 0 && motionOk();
+  if (!on) { if (el) el.hidden = true; return; }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "secrets"; el.className = "secrets"; el.setAttribute("aria-hidden", "true");
+    document.body.append(el);
+  }
+  if (el.dataset.kind !== SECRETS.kind) { el.dataset.kind = SECRETS.kind; el.innerHTML = SECRET_ART[SECRETS.kind](); }
+  el.hidden = false;
+  el.style.setProperty("--level", SECRETS.level.toFixed(3));
+}
+// While the window's in the background: gather, from SECRET_WAIT after it went there, over SECRET_GROW.
+function secretsGrow() {
+  SECRETS.level = Math.min(1, SECRETS.from + Math.max(0, Date.now() - SECRETS.since - SECRET_WAIT) / SECRET_GROW);
+  secretsDraw();
+}
+// Clear it away: all at once (a tab switched), or as far as the mouse has moved.
+function secretsSweep(px = Infinity) {
+  if (!SECRETS.level) return;
+  SECRETS.level = Math.max(0, SECRETS.level - px / SECRET_SWEEP);
+  if (!SECRETS.frame) SECRETS.frame = requestAnimationFrame(() => { SECRETS.frame = 0; secretsDraw(); });
+}
+window.addEventListener("blur", () => {
+  if (!SECRETS.kind) return;
+  SECRETS.since = Date.now(); SECRETS.from = SECRETS.level;
+  clearInterval(SECRETS.timer);
+  SECRETS.timer = setInterval(secretsGrow, 2000);
+});
+window.addEventListener("focus", () => { if (SECRETS.timer) { secretsGrow(); clearInterval(SECRETS.timer); SECRETS.timer = null; } });
+document.addEventListener("pointermove", e => {
+  if (SECRETS.level && !SECRETS.timer) secretsSweep(Math.hypot(e.movementX || 0, e.movementY || 0));
+}, { passive: true });
+document.addEventListener("click", e => {   // a tab: a store's, a view's, the pages', Projects' and the rest
+  if (e.target.closest('[role="tab"], .seg button, nav.apptabs a, #views [data-view], .wintabs button')) secretsSweep();
+}, true);
 
 let toastTimer;
 /* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
@@ -900,8 +1021,7 @@ function fitBar() {
   };
   const [left, right] = [...bar.querySelectorAll(":scope > .bar-side")].map(wide);
   const room = bar.getBoundingClientRect().width - px(bar, "paddingLeft", "paddingRight"), gap = px(bar, "columnGap");
-  const fit = 2 * Math.max(left, right) + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
-  bar.style.setProperty("--bar-side", Math.ceil(Math.max(left, right) / scale + 1) + "px");   // each side at least as wide as the wider
+  const fit = left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
   if ((bar.dataset.fit || "") !== fit) { if (fit) bar.dataset.fit = fit; else delete bar.dataset.fit; }
 }
 // The top bar's menu button and its keys, and fitting the bar to the window.
@@ -1156,6 +1276,13 @@ function wireSearch() {
   q.setAttribute("aria-controls", "qMenu"); q.setAttribute("aria-expanded", "false");
   q.addEventListener("focus", showSearchMenu);
   q.addEventListener("input", showSearchMenu);
+  // a search shows its results: Settings and Projects, which fill the window, close as it's typed (issue #249)
+  q.addEventListener("input", () => {
+    if (!q.value.trim()) return;
+    state.q = q.value;   // (taken up now: closing redraws the page, which would put the search back as it was)
+    if (!$("#settingsPanel").hidden) closeSettings();
+    if ($("#projectsWin") && !$("#projectsWin").hidden) openProjects(false);
+  });
   q.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== q) closeSearchMenu(); }, 0));
   q.addEventListener("keydown", e => {
     if (m.hidden) return;
@@ -1823,6 +1950,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setSpacing").checked = !!SETTINGS.display.spacing;
   $("#setCardOutlines").checked = !!SETTINGS.display.card_outlines;
   $("#setGlowOn").checked = SETTINGS.display.glow;
+  $("#setSeasonal").checked = SETTINGS.display.seasonal !== false;
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
   fillThemes();
@@ -2143,6 +2271,82 @@ function fillApprise() {
   $("#appriseTest").disabled = $("#appriseForget").hidden = !a.kept;
   $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
 }
+/* Building an Apprise address (issue #239): a service and its fields, made into the address Apprise takes (as its
+   wiki has each one: https://github.com/caronc/apprise/wiki), and put in the box with the others. Nothing it builds
+   goes anywhere until you keep the addresses, as one typed there. */
+const APPRISE_SERVICES = [   // {id, name, fields: [[field, label, example, "password"?]], build(the fields) -> address or null}
+  { id: "discord", name: "Discord", fields: [["hook", "Webhook URL", "https://discord.com/api/webhooks/..."]],
+    build: f => { const m = f.hook.match(/^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([\w-]+)/);
+                  return m && `discord://${m[1]}/${m[2]}`; } },
+  { id: "telegram", name: "Telegram", fields: [["token", "Bot token", "123456:ABC-def..."], ["chat", "Chat ID", "123456789"]],
+    build: f => /^\d+:[\w-]+$/.test(f.token) && /^(-?\d+|@\w+)$/.test(f.chat) ? `tgram://${f.token}/${f.chat}` : null },
+  { id: "ntfy", name: "ntfy", fields: [["topic", "Topic", "my-hoard"], ["server", "Your own server (empty for ntfy.sh)", "https://ntfy.example.com"]],
+    build: f => {
+      if (!/^[\w-]{1,64}$/.test(f.topic)) return null;
+      if (!f.server) return `ntfy://${f.topic}`;
+      const u = urlOf(f.server);
+      return u && `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}`;
+    } },
+  { id: "email", name: "Email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
+      ["to", "Send to (empty for yourself)", "me@example.com"], ["smtp", "Mail server (empty to let Apprise find it)", "smtp.example.com"]],
+    build: f => {
+      const m = f.from.match(/^([^@\s]+)@([^@\s]+\.[^@\s]+)$/);
+      if (!m || !f.password || (f.to && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.to)) || (f.smtp && !/^[\w.-]+$/.test(f.smtp))) return null;
+      const q = [f.to && "to=" + encodeURIComponent(f.to), f.smtp && "smtp=" + encodeURIComponent(f.smtp)].filter(Boolean);
+      return `mailtos://${encodeURIComponent(m[1])}:${encodeURIComponent(f.password)}@${m[2]}` + (q.length ? "?" + q.join("&") : "");
+    } },
+  { id: "pushover", name: "Pushover", fields: [["user", "User key", ""], ["token", "Application token", ""]],
+    build: f => /^\w+$/.test(f.user) && /^\w+$/.test(f.token) ? `pover://${f.user}@${f.token}` : null },
+  { id: "slack", name: "Slack", fields: [["hook", "Webhook URL", "https://hooks.slack.com/services/..."]],
+    build: f => { const m = f.hook.match(/^https:\/\/hooks\.slack\.com\/services\/(\w+)\/(\w+)\/(\w+)/); return m && `slack://${m[1]}/${m[2]}/${m[3]}`; } },
+  { id: "matrix", name: "Matrix", fields: [["server", "Homeserver", "matrix.org"], ["user", "User", "hoard-bot"],
+      ["password", "Password", "", "password"], ["room", "Room", "#hoard:matrix.org"]],
+    build: f => {
+      const host = (urlOf(/^https?:/.test(f.server) ? f.server : "https://" + f.server) || {}).host;
+      return host && f.user && f.password && /^[#!]\S+:\S+$/.test(f.room)
+        ? `matrixs://${encodeURIComponent(f.user)}:${encodeURIComponent(f.password)}@${host}/${encodeURIComponent(f.room)}` : null;
+    } },
+  { id: "gotify", name: "Gotify", fields: [["server", "Server", "https://gotify.example.com"], ["token", "Application token", ""]],
+    build: f => { const u = urlOf(f.server); return u && /^[\w.-]+$/.test(f.token) ? `${u.protocol === "https:" ? "gotifys" : "gotify"}://${u.host}${u.pathname.replace(/\/$/, "")}/${f.token}` : null; } },
+  { id: "webhook", name: "A webhook (JSON)", fields: [["url", "Its address", "https://example.com/hook"]],
+    build: f => {   // (its own ?parameters go to it as they are: Apprise's -name=value)
+      const u = urlOf(f.url);
+      if (!u) return null;
+      const q = [...u.searchParams].map(([k, v]) => `-${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+      return `${u.protocol === "https:" ? "jsons" : "json"}://${u.host}${u.pathname}` + (q ? "?" + q : "");
+    } },
+];
+// An http(s) address as typed, or null.
+function urlOf(text) {
+  try { const u = new URL(String(text).trim()); return /^https?:$/.test(u.protocol) && u.hostname ? u : null; } catch (e) { return null; }
+}
+// The builder's fields, for the service chosen.
+function fillAppriseBuilder() {
+  const pick = $("#appriseService");
+  if (!pick) return;
+  if (!pick.options.length) pick.innerHTML = APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
+  const sv = APPRISE_SERVICES.find(x => x.id === pick.value) || APPRISE_SERVICES[0];
+  $("#appriseFields").innerHTML = sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
+    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("");
+  $("#appriseBuilt").textContent = "";
+}
+// The address the builder's fields make, or null (and a word on what's missing).
+function buildApprise() {
+  const sv = APPRISE_SERVICES.find(x => x.id === $("#appriseService").value);
+  const f = Object.fromEntries([...document.querySelectorAll("[data-apprise-field]")].map(i => [i.dataset.appriseField, i.value.trim()]));
+  return sv ? sv.build(f) || null : null;
+}
+document.addEventListener("change", e => { if (e.target.id === "appriseService") fillAppriseBuilder(); });
+document.addEventListener("toggle", e => { if (e.target.id === "appriseBuild" && e.target.open) fillAppriseBuilder(); }, true);
+document.addEventListener("click", e => {
+  if (!e.target.closest("#appriseAdd")) return;
+  const made = buildApprise(), box = $("#setApprise");
+  if (!made) { $("#appriseBuilt").textContent = tr("Fill in its fields as the service gives them: that isn't an address yet."); return; }
+  const lines = box.value.split("\n").map(x => x.trim()).filter(Boolean);
+  if (!lines.includes(made)) box.value = [...lines, made].join("\n");
+  for (const i of document.querySelectorAll("[data-apprise-field]")) i.value = "";
+  $("#appriseBuilt").textContent = tr("It's in the box. Keep these addresses to use it.");
+});
 // Acknowledgements (issue #227): everything Hoard uses or ships, with its license (/api/credits), read the first time
 // it's opened; a license's text where Hoard has it, in a dialog
 async function showAcks() {
@@ -2218,6 +2422,7 @@ function settingsPart(el) {
     case "setRetries": return { download_retries: Number(el.value) };
     case "setPrevious": return { keep_previous: Number(el.value) };
     case "setGlowOn": return { display: { glow: el.checked } };
+    case "setSeasonal": return { display: { seasonal: el.checked } };
     case "setColours": return { display: { colours: el.value } };
     case "setFont": return { display: { font: el.value } };
     case "setSpacing": return { display: { spacing: el.checked } };
@@ -2484,7 +2689,9 @@ const PJ = { view: "list", data: null, project: null, find: "", form: null, asse
   pkgs: null, pkFind: "", vers: {},   // the packages there are to add (for one Unity), and each one's versions
   repoShut: new Set(),   // Add packages' repositories you folded away
   job: {},               // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
-  folder: null, tag: "" };   // issue #190: the list's folder shown (null: all of them, "": those in none) and tag
+  folder: null, tag: "",   // issue #190: the list's folder shown (null: all of them, "": those in none) and tag
+  selected: null,          // issue #246: the project whose details are open beside the list (its path)
+  updates: null };         // issue #253: each project's packages with newer versions, by path (/api/vpm/updates)
 const PJ_KINDS = { 0: "Unknown", 1: "Legacy SDK2", 2: "Legacy Worlds", 3: "Legacy Avatars", 4: "UPM Worlds", 5: "UPM Avatars",
   6: "UPM Starter", 7: "Worlds", 8: "Avatars", 9: "VPM Starter" };
 const PJ_WHY = { requested: "Removed", legacy: "Replaced by a newer package", unused: "Nothing uses it any more" };
@@ -2529,6 +2736,7 @@ async function loadProjects(view) {
     if (PJ.view === "new" && !PJ.form) PJ.view = "list";
     if (PJ.view === "backups") await pjLoadBackups();
     drawProjects();
+    pjLoadUpdates();   // (issue #253: read after the list, which shows at once)
   } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Projects couldn't be read just now."))} ${esc(e.message || "")}</p>`; }
   finally { if (pjSplashing) pjSplashing(); }
 }
@@ -2579,33 +2787,100 @@ function pjShowJob() {
 const pjBack = () => `<button class="linkish pj-back" data-pj="back">${esc(tr("‹ All projects"))}</button>`;
 // Projects' list: favourites first, each with its kind, Unity, folder and tags, found by what's typed.
 function pjList() {
-  const d = PJ.data, list = d.projects || [];
+  const d = PJ.data, list = d.projects || [], tiles = UI.pj_layout === "tiles";
   const top = pjTabs() + `<div class="pj-top"><input type="search" id="pjFind" placeholder="${esc(tr("Find a project"))}" aria-label="${esc(tr("Find a project"))}">` +
     `<button class="primary sm" data-pj="new">${esc(tr("New project"))}</button>` +
-    `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button></div>`;
+    `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button>` +
+    `<span class="pj-layout" role="radiogroup" aria-label="${esc(tr("Show projects as"))}">` +
+    [["list", "List"], ["tiles", "Tiles"]].map(([v, label]) => `<button class="ghost sm" role="radio" data-pj="layout" data-v="${v}" ` +
+      `aria-checked="${(v === "tiles") === tiles}">${esc(tr(label))}</button>`).join("") + `</span></div>`;
   const bk = d.backups || {}, room = bk.room || {};
   const note = (room.low && bk.old_count ? `<p class="pj-warn pj-low">${esc(tr(bk.old_count === 1
       ? "The drive your project backups are on has {0} left, and {1} old backup takes {2}." : "The drive your project backups are on has {0} left, and {1} old backups take {2}.",
-      sizeText(room.free), bk.old_count, sizeText(bk.old_size)))} <button class="linkish" data-pj="backups">${esc(tr("Delete or move them"))}</button></p>` : "") +
-    `<p class="hint">${esc(tr("The same list as ALCOM's and the VRChat Creator Companion's: a project added in any of them shows in all three."))}</p>`;
+      sizeText(room.free), bk.old_count, sizeText(bk.old_size)))} <button class="linkish" data-pj="backups">${esc(tr("Delete or move them"))}</button></p>` : "");
   const others = pjUnlisted();
   if (!list.length) return top + note + `<p class="none">${esc(tr("No projects yet. Make one with New project, or add one you have."))}</p>` + others;
   const shown = pjOrganised(list), fav = shown.filter(p => p.favorite), rest = shown.filter(p => !p.favorite);
-  // A project's tags, each a button to show only those.
-  const tags = p => (p.tags || []).length ? `<span class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
-    `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</span>` : "";
+  const ordered = [...fav, ...rest];
+  if (PJ.selected && !list.some(p => p.path === PJ.selected)) PJ.selected = null;   // (taken off the list since)
+  // What Find a project looks at: its name, path, folder and tags.
+  const hay = p => esc(norm([p.name, p.path, p.folder || "", ...(p.tags || [])].join(" ")));
+  let body;
+  if (tiles) {   // issue #250: each project a tile, and (all of them shown) each folder one tile of its own
+    const grouped = PJ.folder == null && !PJ.tag;
+    const folders = grouped ? pjFolders(list) : [];
+    const loose = grouped ? ordered.filter(p => !p.folder) : ordered;
+    body = `<div class="pj-tiles">` + folders.map(([f, n]) => {
+      const inside = list.filter(p => p.folder === f), ups = inside.reduce((t, p) => t + pjUpdateCount(p), 0);
+      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" ` +
+        `data-hay="${esc(norm([f, ...inside.map(p => p.name)].join(" ")))}" aria-label="${esc(tr("Folder {0}, {1} projects", f, n))}">` +
+        `<span class="pj-tile-art folder">${FOLDER_ICON}<span class="pj-mini">${inside.slice(0, 4).map(p =>
+          `<i class="k-${pjHue(p.type)}">${esc(initials(p.name))}</i>`).join("")}</span></span>` +
+        `<span class="nm-t" translate="no">${esc(f)}</span><span class="cr">${esc(tr(n === 1 ? "1 project" : "{0} projects", n))}` +
+        `${ups ? ` · ${esc(tr("updates inside"))}` : ""}</span></button>`;
+    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
+        `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}">` +
+        `<span class="pj-tile-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></span>` +
+        `<span class="nm-t" translate="no">${esc(p.name)}</span><span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
+        pjUpdateMarks(p) + `</button>`).join("") + `</div>`;
+  } else {   // issue #246: a row says what you need at a glance; choosing it opens its details
+    body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
+      `data-path="${esc(p.path)}" data-hay="${hay(p)}">` +
+      `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
+      `<button class="pj-open" data-pj="details" aria-pressed="${PJ.selected === p.path}">` +
+      `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span></span>` +
+      `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
+        `${p.exists ? `${pjChips(p)}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
+      pjUpdateMarks(p) + `</button></li>`).join("")}</ul>`;
+  }
+  const chosen = PJ.selected && list.find(p => p.path === PJ.selected);
   return top + note + pjFolderBar(list) + (shown.length ? "" : `<p class="none">${esc(tr("No projects here."))}</p>`) +
-    `<ul class="pj-list">${[...fav, ...rest].map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}" data-path="${esc(p.path)}" ` +
-    `data-hay="${esc(norm([p.name, p.path, p.folder || "", ...(p.tags || [])].join(" ")))}">` +
-    `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
-    `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span>${tags(p)}</span>` +
-    `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
-      `${p.exists ? `${pjChips(p)}` +
-      `${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
-    `<span class="pj-acts">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
-      `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>`
+    `<div class="pj-split${chosen ? " with-detail" : ""}"><div class="pj-items">${body}</div>${chosen ? pjDetail(chosen) : ""}</div>` + others;
+}
+/* Issue #253: what's new for a project, two ways apart: its VPM packages with newer versions (Projects reads them for
+   the list: /api/vpm/updates), and products from your library in it with updates (Hoard for Unity's report of it) */
+// The report Hoard for Unity made of a listed project, if there is one.
+const pjReportOf = p => PJ.reports.find(r => r.path && pjSame(r.path, p.path)) || null;
+// How many of the project's packages have newer versions, and how many of its products have updates.
+const pjUpdates = p => ({ packages: ((PJ.updates || {})[p.path] || {}).packages || 0,
+                          products: ((pjReportOf(p) || {}).assets || []).filter(a => a.update).length });
+// Both, added up (a folder tile says there are some inside).
+const pjUpdateCount = p => { const u = pjUpdates(p); return u.packages + u.products; };
+// A project's update marks: packages, and products, each its own way.
+function pjUpdateMarks(p) {
+  const u = pjUpdates(p);
+  return (u.packages || u.products ? `<span class="pj-ups">` : "") +
+    (u.packages ? `<span class="pj-up pkg" title="${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}">` +
+      `${esc(tr(u.packages === 1 ? "1 package update" : "{0} package updates", u.packages))}</span>` : "") +
+    (u.products ? `<span class="pj-up prod" title="${esc(tr(u.products === 1 ? "1 product in it has an update" : "{0} products in it have updates", u.products))}">` +
+      `${esc(tr(u.products === 1 ? "1 product updated" : "{0} products updated", u.products))}</span>` : "") +
+    (u.packages || u.products ? `</span>` : "");
+}
+// A project's details (issue #246), beside the list: what it is, where, its folder and tags, what's new, and what to do.
+function pjDetail(p) {
+  const u = pjUpdates(p), rep = pjReportOf(p);
+  return `<aside class="pj-detail" data-path="${esc(p.path)}"${rep ? ` data-report="${esc(rep.id)}"` : ""} aria-label="${esc(p.name)}">` +
+    `<button class="win-x" data-pj="undetail" aria-label="${esc(tr("Close"))}">×</button>` +
+    `<h3 class="pj-h"><b translate="no">${esc(p.name)}</b></h3><p class="meta" translate="no">${esc(p.path)}</p>` +
+    `<p>${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}</p>` +
+    `<p class="muted">${p.folder ? `${FOLDER_ICON} <span translate="no">${esc(p.folder)}</span>` : esc(tr("Not in a folder"))}</p>` +
+    ((p.tags || []).length ? `<p class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
+      `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</p>` : "") +
+    (u.packages ? `<p><button class="linkish pj-up-go" data-pj="manage">${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}</button></p>` : "") +
+    (u.products ? `<p><button class="linkish pj-up-go" data-pj="report">${esc(tr(u.products === 1 ? "1 product in it has an update" : "{0} products in it have updates", u.products))}</button></p>` : "") +
+    `<div class="row">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
+      `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>` +
+      `<button class="ghost sm" data-pj="folder">${esc(tr("Show in folder"))}</button>`
       : `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>`}` +
-      `<button class="ghost sm" data-pj="organize">${esc(tr("Folder and tags..."))}</button></span></li>`).join("")}</ul>` + others;
+    `<button class="ghost sm" data-pj="organize">${esc(tr("Folder and tags..."))}</button>` +
+    `<button class="ghost sm" data-pj="star" aria-pressed="${p.favorite}">${esc(tr(p.favorite ? "Favourite" : "Make it a favourite"))}</button></div></aside>`;
+}
+// Read each project's packages with newer versions, once the list is shown (then draw it again with them).
+async function pjLoadUpdates() {
+  const r = await api("/api/vpm/updates", { cache: "no-store" }).catch(() => null);
+  if (!r || !r.ok) return;
+  PJ.updates = (await r.json()).projects || {};
+  if (PJ.view === "list" && !$("#projectsWin").hidden) drawProjects();
 }
 // Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have only a
 // favourite): one folder shown at a time, or all of them, and a tag on a project shows those that have it
@@ -2688,7 +2963,7 @@ const pjShownReport = () => PJ.view === "report" ? PJ.report : (PJ.project || {}
 // Show only the projects whose details have every word typed.
 function pjFilter() {
   const words = norm(PJ.find).split(/\s+/).filter(Boolean);
-  for (const li of document.querySelectorAll(".pj-row")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
+  for (const li of document.querySelectorAll(".pj-row[data-hay], .pj-tile[data-hay]")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
 }
 // Read one project and show it.
 async function openProject(path) {
@@ -2955,8 +3230,7 @@ async function pjSuggest() {
 // ---- repositories, and Unity and folders
 function pjRepos() {
   const rs = PJ.data.repos || [];
-  return pjTabs() + `<p class="hint">${esc(tr("Where packages come from. The same list ALCOM and the Creator Companion use."))}</p>` +
-    `<h4>${esc(tr("Add a repository"))}</h4><div class="pj-field"><label for="pjRepoUrl">${esc(tr("Its address"))}</label>` +
+  return pjTabs() + `<h4>${esc(tr("Add a repository"))}</h4><div class="pj-field"><label for="pjRepoUrl">${esc(tr("Its address"))}</label>` +
     `<input id="pjRepoUrl" placeholder="https://" translate="no"><button class="primary sm" data-pj="addrepo">${esc(tr("Add"))}</button></div>` +
     `<details class="pj-more"><summary>${esc(tr("For a private repository"))}</summary><p class="hint">${esc(tr("Headers it asks for, one a line (Name: value). They're sent to its own address only."))}</p>` +
     `<textarea id="pjRepoHeaders" rows="3" translate="no"></textarea></details>` +
@@ -3090,8 +3364,8 @@ function pjBackups() {
       : `<p class="muted">${esc(tr("No old backups."))}</p>`) +
     (list.length ? `<ul class="pj-list">${list.map(pjBackupRow).join("")}</ul>` : `<p class="none">${esc(tr("No project backups here yet. Back up a project from Manage."))}</p>`) +
     (moved.length ? `<h4>${esc(tr("Moved to"))} <span translate="no">${esc(k.moved_to)}</span></h4><ul class="pj-list">${moved.map(pjBackupRow).join("")}</ul>` : "") +
-    (list.length || moved.length ? `<div class="row"><button class="ghost sm" data-pj="bkdel">${esc(tr("Delete the chosen ones"))}</button>` +
-      `<button class="ghost sm" data-pj="bkmove">${esc(tr("Move the chosen ones..."))}</button></div>` : "");
+    (list.length || moved.length ? `<div class="row"><button class="ghost sm" data-pj="bkdel">${esc(tr("Delete Selected"))}</button>` +
+      `<button class="ghost sm" data-pj="bkmove">${esc(tr("Move Selected"))}</button></div>` : "");
 }
 // Delete the backups chosen, once you say so.
 async function pjBackupsDelete(paths) {
@@ -3504,6 +3778,19 @@ async function pjAct(b) {
     return drawProjects();
   }
   if (act === "tagpick") { PJ.tag = PJ.tag === b.dataset.tag ? "" : b.dataset.tag; return drawProjects(); }
+  if (act === "details") {   // a project's details, beside the list (issue #246); chosen again, put away
+    PJ.selected = PJ.selected === path ? null : path; drawProjects();
+    const panel = $("#projectsBody .pj-detail");
+    if (panel) panel.querySelector(".win-x").focus();
+    return;
+  }
+  if (act === "undetail") {
+    const was = PJ.selected; PJ.selected = null; drawProjects();
+    const back = [...document.querySelectorAll("#projectsBody [data-pj=details]")].find(x => x.closest("[data-path]").dataset.path === was);
+    if (back) back.focus();
+    return;
+  }
+  if (act === "layout") { uiSave({ pj_layout: b.dataset.v }); return drawProjects(); }   // list or tiles (issue #250)
   if (act === "organize") {
     const p = (PJ.data.projects || []).find(x => x.path === path) || PJ.project;
     if (p) await pjOrganize(p);
@@ -3796,17 +4083,40 @@ function setsInMenu() {
   const recent = (UI.recent_sets || []).map(id => byId.get(id)).filter(Boolean);
   return [...new Set([...recent, ...[...all].reverse()])].slice(0, SETS_IN_MENU);
 }
-async function addToAnotherSet(list) {   // any set, by its name: the box offers them as you type
-  const all = DATA.sets || [];
-  let names = $("#setNames");
-  if (!names) { names = document.createElement("datalist"); names.id = "setNames"; document.body.appendChild(names); }
-  names.innerHTML = all.map(s => `<option value="${esc(s.name)}">`).join("");
-  const name = await askName("Add to which set?", "", { list: "setNames", max: 80 });
-  if (!name) return;
-  const exact = all.filter(s => norm(s.name) === norm(name)), near = all.filter(s => norm(s.name).includes(norm(name)));
-  const found = exact.length ? exact : near;
-  if (found.length === 1) return addToSet(list, found[0].id);
-  toast(found.length ? tr("More than one set has {0} in its name: type more of it.", name) : tr("There's no set called {0}.", name));
+// Add to another set (issue #242): every set to choose from, as Sets and Wishlists shows them (your own, the ones you
+// added from a link, your wishlists), a box to find one by its name; then a yes before anything's added.
+async function addToAnotherSet(list) {
+  const items = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!items.length) return;
+  let sets = SETS && SETS.for === DATA && !SETS.error ? SETS.sets : null;
+  if (!sets) {
+    const r = await api("/api/sets", { cache: "no-store" }).catch(() => null);
+    sets = r && r.ok ? (await r.json()).sets : (DATA.sets || []).map(s => ({ ...s, items: [] }));
+  }
+  // A set's tile to choose (its picture, name and counts), and a group of them under a heading.
+  const tile = s => `<button class="slot settile" value="${esc(s.id)}" data-name="${esc(norm(s.name))}"><span class="art">${setArt(s)}</span>` +
+    `<span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(setCounts(s).text)}</span></button>`;
+  // (a group with none in it isn't shown)
+  const group = (title, some) => some.length ? `<h4>${esc(tr(title))}</h4><div class="setpick-grid">${some.map(tile).join("")}</div>` : "";
+  const shown = pjDialog(`<p><b>${esc(tr("Add to which set?"))}</b></p>` +
+    `<p><input type="search" class="setpick-find" placeholder="${esc(tr("Find a set"))}" aria-label="${esc(tr("Find a set"))}"></p>` +
+    `<div class="setpick">${group("Your sets", sets.filter(s => !isWish(s) && !s.from_link))}` +
+    group("Sets you added from a link", sets.filter(s => !isWish(s) && s.from_link)) + group("Wishlists", sets.filter(isWish)) + `</div>` +
+    `<div class="ask-row"><button class="ghost" value="no">${esc(tr("Cancel"))}</button></div>`, "wide setpick-dlg");
+  const dlg = [...document.querySelectorAll(".setpick-dlg")].pop();
+  const find = dlg.querySelector(".setpick-find");
+  find.addEventListener("input", () => {   // (by its name, as you type: a group with none left is put away)
+    const words = norm(find.value).split(/\s+/).filter(Boolean);
+    for (const b of dlg.querySelectorAll(".settile")) b.hidden = !words.every(w => b.dataset.name.includes(w));
+    for (const g of dlg.querySelectorAll(".setpick-grid")) g.previousElementSibling.hidden = g.hidden = !g.querySelector(".settile:not([hidden])");
+  });
+  find.addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });   // (not the form's first button)
+  find.focus();
+  const { value } = await shown;
+  const s = sets.find(x => x.id === value);
+  if (!s) return;
+  if (!await ask(tr(items.length === 1 ? "Add it to {0}?" : "Add {1} products to {0}?", s.name, items.length), tr("Add"))) return;
+  return addToSet(list, s.id);
 }
 /* Mix and match (issue #156): an outfit picked at random from what you own, to try something new with what you have.
    An avatar from your tags whose kind is Avatar, and one product from each tag whose kind is Clothing (tops, shoes,
@@ -3968,11 +4278,15 @@ function setsRoot() {
     `<button class="ghost sm" data-setx="mix">${esc(tr("Mix and match..."))}</button></div>` +
     (SETS.hidden_left_out ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "");
   if (SETS.error) return top + `<p class="none">${esc(tr("Your sets couldn't be read just now."))}</p>`;
-  const plain = SETS.sets.filter(s => !isWish(s)), wishes = SETS.sets.filter(isWish);
-  const sets = plain.length ? `<div class="grid setgrid">${plain.map(setTile).join("")}</div>`
+  // your own sets, then the ones you added from someone's link (issue #258), then your wishlists
+  const plain = SETS.sets.filter(s => !isWish(s) && !s.from_link), added = SETS.sets.filter(s => !isWish(s) && s.from_link);
+  const wishes = SETS.sets.filter(isWish);
+  const sets = (plain.length ? `<div class="grid setgrid">${plain.map(setTile).join("")}</div>`
     : `<p class="none">No sets yet. A set groups products you use together, such as an avatar,
     its outfits and the shaders they need, downloaded or not. Make one here, or choose products in the Library or Downloads and
-    use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`;
+    use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`) +
+    (added.length ? `<h3 class="setmore-h added-h">${esc(tr("Sets you added from a link"))} <span class="n">${added.length.toLocaleString()}</span></h3>` +
+      `<div class="grid setgrid">${added.map(setTile).join("")}</div>` : "");
   return top + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
     `<div class="row sets-top"><button class="primary sm" data-setx="readwish">${esc(tr("Read my wishlists..."))}</button>` +
     `<button class="ghost sm" data-setx="importwish">${esc(tr("Import saved wishlist pages..."))}</button>` +
@@ -3987,7 +4301,7 @@ const STORE_SEARCHES = [
   ["nexyy", "Nexyy", q => q ? `https://nexyy.com/browse?q=${q}` : "https://nexyy.com/browse"],
   ["booth", "Booth", q => `https://booth.pm/${["ja", "ko"].includes(document.documentElement.lang) ? document.documentElement.lang : "en"}/` + (q ? `search/${q}` : "items")],
   ["gumroad", "Gumroad", q => q ? `https://gumroad.com/discover?query=${q}` : "https://gumroad.com/discover"],
-  ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search=${q}` : "https://jinxxy.com/market/browse"],
+  ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search_query=${q}` : "https://jinxxy.com/market/browse"],
   ["itch", "itch.io", q => q ? `https://itch.io/search?q=${q}` : "https://itch.io/game-assets"]];
 // A store's search page for some words.
 const storeSearch = (key, words) => STORE_SEARCHES.find(x => x[0] === key)[2](encodeURIComponent(String(words || "").trim().slice(0, 100)));
@@ -4017,15 +4331,36 @@ function setHead(s) {
       (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
       `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div>` +
       (isWish(s) ? wishFindHTML() : "") + `</div></div>` +
-    `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>` +
-      `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
-      `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(s.note || "")}</textarea>` +
-      `<div class="row"><button class="ghost sm" data-setx="note">Save the note</button></div>` +
-      (s.photos.length ? `<ul class="setphotos">${s.photos.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
-        `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a><button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button></li>`).join("")}</ul>` : "") +
-      `<p class="hint">${esc(tr("Photos of the set (an avatar wearing it, say) show on its shared page. Put each picture on a photo site such as Imgur or Gyazo, then add its link, or the link to its page there. Hoard saves the link, not the picture."))}</p>` +
-      `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div></details>`;
+    `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>${setExtraHTML(s)}</details>`;
 }
+/* A set's note and photos (issue #256): once saved, shown as they're shared, and changed only after Edit, which opens
+   the note's box and the photos' × with Save and Cancel; nothing's sent until Save. With none saved yet, it's open
+   to begin with. */
+let SETEDIT = null;   // {id, note, photos}: the set being edited, as it's being changed
+// A set's note and photos: as they're shared, with Edit; or being changed, with Save and Cancel.
+function setExtraHTML(s) {
+  const editing = SETEDIT && SETEDIT.id === s.id, saved = !!(s.note || s.photos.length);
+  const photos = editing ? SETEDIT.photos : s.photos;
+  // The photos' links (each with its × while they're being changed).
+  const links = (list, out) => list.length ? `<ul class="setphotos">${list.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
+    `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a>` +
+    (out ? `<button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button>` : "") + `</li>`).join("")}</ul>` : "";
+  if (saved && !editing) {
+    return (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
+      (photos.length ? links(photos, false) : `<p class="none">${esc(tr("No photos."))}</p>`) +
+      `<div class="row"><button class="ghost sm" data-setx="edit">${esc(tr("Edit"))}</button></div>`;
+  }
+  return `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
+      `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(editing ? SETEDIT.note : s.note || "")}</textarea>` +
+    links(photos, true) +
+    `<p class="hint">${esc(tr("Photos to show off the set: links from Imgur, Gyazo, X, Bluesky, Reddit, Postimages, ImgBB, Discord, or a store's own pictures."))}</p>` +
+    `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div>` +
+    `<div class="row"><button class="primary sm" data-setx="save">${esc(tr("Save"))}</button>` +
+    (saved ? `<button class="ghost sm" data-setx="cancel">${esc(tr("Cancel"))}</button>` : "") + `</div>`;
+}
+// Start changing a set's note and photos (none saved yet: as they are).
+const setEditStart = s => { if (!SETEDIT || SETEDIT.id !== s.id) SETEDIT = { id: s.id, note: s.note || "", photos: [...s.photos] }; };
+document.addEventListener("input", e => { if (e.target.matches("#setView [data-setnote]") && SETEDIT) SETEDIT.note = e.target.value; });
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
 // Downloads); in Downloads, ones not downloaded. Each says where it is, or where to buy it.
 function setMoreHTML(s) {
@@ -4427,15 +4762,30 @@ async function setAct(e) {
     const it = s.items.find(i => i.key === b.dataset.key), name = it ? it.name : "";
     if (!await ask(isWish(s) ? tr("Take {0} off this wishlist?", name) : tr("Take {0} out of {1}?", name, s.name), tr("Take it off"), true)) return;
     changeSets({ action: "remove", id: s.id, items: [b.dataset.key] });
-  } else if (act === "note") {
-    const done = await changeSets({ action: "note", id: s.id, note: $("#setView [data-setnote]").value });
-    if (done) toast("Saved the note.");
+  } else if (act === "edit") {
+    setEditStart(s); setExtraOpen = true; drawSets();
+    const box = $("#setView [data-setnote]");
+    if (box) box.focus();
+  } else if (act === "cancel") {
+    SETEDIT = null; drawSets();
+  } else if (act === "save") {   // the note, then the photos, as they're changed (a photo link that's no good stays to fix)
+    setEditStart(s);
+    SETEDIT.note = $("#setView [data-setnote]").value;
+    const want = SETEDIT;
+    if (want.note !== (s.note || "") && !await changeSets({ action: "note", id: s.id, note: want.note })) return;
+    if (want.photos.join("\n") !== s.photos.join("\n") && !await changeSets({ action: "photos", id: s.id, photos: want.photos })) {
+      SETEDIT = want; drawSets(); return;
+    }
+    SETEDIT = null; drawSets(); toast("Saved the note and photos.");
   } else if (act === "photo") {
-    if (s.photos.length >= 8) { toast("A set has up to 8 photos."); return; }
+    setEditStart(s);
+    SETEDIT.note = ($("#setView [data-setnote]") || {}).value ?? SETEDIT.note;
+    if (SETEDIT.photos.length >= 8) { toast("A set has up to 8 photos."); return; }
     const url = await askName("Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)", "", { max: 600 });
-    if (url) changeSets({ action: "photos", id: s.id, photos: [...s.photos, url] });
+    if (url) { SETEDIT.photos.push(url.trim()); drawSets(); }
   } else if (act === "unphoto") {
-    changeSets({ action: "photos", id: s.id, photos: s.photos.filter((u, n) => n !== +b.dataset.n) });
+    setEditStart(s);
+    SETEDIT.photos = SETEDIT.photos.filter((u, n) => n !== +b.dataset.n); drawSets();
   }
 }
 // Read my wishlists: from each store chosen, in its own signed-in window, as a task (hoard/wishlists.py)
@@ -4750,7 +5100,10 @@ if (new Date().getMonth() === 3 && new Date().getDate() === 1) document.document
    the page it's about, the rest dimmed but still yours to use; a step that asks you to try something (open one of your
    own items, choose two) goes on by itself once you have. It carries on from the Library to Downloads (in
    sessionStorage), and a step about something you don't have yet (nothing downloaded, no updates) is passed by. */
-const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null, ready: 0, tags: 0, offered: false };
+const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null, ready: 0, tags: 0, offered: false, drawn: -1, follow: null };
+// Moving between the tour's steps is slow enough to follow by eye (issue #265): the page scrolls smoothly to what's
+// next, the ring moves to it, and the card shows a moment later, beside it. With Reduce motion (motionOk), all at once.
+const TOUR_FOLLOW = 650;   // ms: the ring's move (.tour-ring's transition), and a moment to take it in
 const ON_DOWNLOADS = /downloads/.test(location.pathname);
 const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 // A name, as the tour shows it.
@@ -4783,6 +5136,7 @@ const tourCount = () => (ON_DOWNLOADS ? DATA.assets : DATA.items || []).length;
 function tourClearSearch() {
   const q = $("#q");
   if (q && q.value) { q.value = ""; q.dispatchEvent(new Event("input", { bubbles: true })); }
+  closeSearchMenu();   // (its list, under the search beside the logo, would cover the first tiles: issue #236)
 }
 // Open the tour's product's details, when they're not.
 function tourEnsureDetail() {
@@ -4946,7 +5300,7 @@ function tourStart(at = 0) {
   tourBuild();
   if ($("#tourNote")) $("#tourNote").hidden = true;
   for (const w of document.querySelectorAll(".win:not([hidden])")) if (WINDOWS[w.id]) WINDOWS[w.id]();   // (Settings, where it was started)
-  uiSave({ toured: true });   // offered no more, however it ends
+  uiSave({ toured: true, ...spotsAllSeen() });   // offered no more, however it ends (and it shows what's new)
   TOUR.pick = tourPick();
   TOUR.i = -1;
   tourShow(at, 1);
@@ -4958,7 +5312,8 @@ function tourEnd(finished) {
   clearInterval(TOUR.timer);
   const step = TOUR.steps[TOUR.i];
   if (step && step.leave) try { step.leave(); } catch (e) { /* gone already */ }
-  TOUR.i = -1;
+  TOUR.i = TOUR.drawn = -1;
+  clearTimeout(TOUR.follow);
   if (TOUR.card) { TOUR.card.remove(); TOUR.ring.remove(); TOUR.card = TOUR.ring = null; }
   tourSave(null);
   if (finished) toast("Take the tour again any time, from Settings.");
@@ -4985,7 +5340,7 @@ function tourShow(n, dir) {
   tourSave(s.id);
   try { if (s.enter) s.enter(); } catch (e) { /* the page changed under it */ }
   const el = tourTarget(s)[0];
-  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
+  if (el) el.scrollIntoView({ block: "center", inline: "nearest", behavior: motionOk() ? "smooth" : "auto" });
   tourDraw();
 }
 // Go to the tour's next or last step, or end it.
@@ -5012,6 +5367,12 @@ function tourDraw() {
   back.textContent = tr("Back");
   back.hidden = TOUR.i === 0 || TOUR.steps[TOUR.i - 1].page !== s.page;
   c.querySelector('[data-tour="next"]').textContent = s.next ? s.next() : s.done ? tr("Skip") : tr("Next");
+  if (TOUR.drawn !== -1 && TOUR.drawn !== TOUR.i && motionOk()) {   // another step: the card follows the ring there
+    c.classList.add("tour-wait");
+    clearTimeout(TOUR.follow);
+    TOUR.follow = setTimeout(() => c.classList.remove("tour-wait"), TOUR_FOLLOW);
+  }
+  TOUR.drawn = TOUR.i;
   tourPlace();
   // the card has the focus, so its words are read out and Next is a Tab away, unless you're typing (the search)
   if (!document.activeElement || !document.activeElement.matches("input, textarea, select")) c.focus({ preventScroll: true });
@@ -5057,6 +5418,35 @@ function tourTick() {
   try { done = !!(s.done && Date.now() > TOUR.ready && s.done()); } catch (e) { done = false; }
   if (done) { TOUR.ready = Infinity; setTimeout(() => { if (TOUR.steps[TOUR.i] === s) tourMove("next"); }, 700); }
 }
+/* ---------- New here (issue #244): the first time Hoard opens after an update that brings something easy to miss, a
+   short note beside it says so, once; Got it puts it away for good. Never on a new install: the tour shows it all, and
+   answering the tour's offer counts every note as seen. */
+const NEW_SPOTS = [
+  { id: "product-type", at: '[data-sec="product-type"]',
+    text: "New: Product type. Show only avatars, clothing, hair and the rest, as Hoard works out what each thing is. Change one in its details." },
+];
+// What the tour's offer, once answered, saves: every note seen.
+const spotsAllSeen = () => ({ spots_seen: [...new Set([...(UI.spots_seen || []), ...NEW_SPOTS.map(s => s.id)])] });
+// Put each note not seen yet beside what it's about (once the page has it to show).
+function showSpots() {
+  if (!UI.toured) return;   // (a new install: the tour)
+  const seen = new Set(UI.spots_seen || []);
+  for (const s of NEW_SPOTS) {
+    const at = document.querySelector(s.at);
+    if (seen.has(s.id) || !at || document.querySelector(`.new-spot[data-spot="${s.id}"]`)) continue;
+    const note = document.createElement("div");
+    note.className = "new-spot"; note.dataset.spot = s.id; note.setAttribute("role", "note");
+    note.innerHTML = `<p>${esc(tr(s.text))}</p><button class="ghost sm" data-spot-ok>${esc(tr("Got it"))}</button>`;
+    at.after(note);
+  }
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-spot-ok]");
+  if (!b) return;
+  const note = b.closest(".new-spot");
+  note.remove();
+  uiSave({ spots_seen: [...new Set([...(UI.spots_seen || []), note.dataset.spot])] });
+});
 // on each page: carry on where the tour was (from the Library to Downloads), and the Library offers it, once
 function tourResume() {
   let id = null;
@@ -5090,7 +5480,7 @@ function wireTour() {
     const b = e.target.closest("[data-tour-note]");
     if (!b) return;
     note.hidden = true;
-    if (b.dataset.tourNote === "go") tourStart(0); else { uiSave({ toured: true }); toast("Take the tour any time, from Settings."); }
+    if (b.dataset.tourNote === "go") tourStart(0); else { uiSave({ toured: true, ...spotsAllSeen() }); toast("Take the tour any time, from Settings."); }
   });
   addEventListener("resize", () => { if (TOUR.i >= 0) tourPlace(); });
   document.addEventListener("scroll", () => { if (TOUR.i >= 0) tourPlace(); }, { capture: true, passive: true });
