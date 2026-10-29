@@ -818,7 +818,8 @@ class Jobs:
         from .downloader import check_integrity, integrity_summary, last_integrity
         self._set(task="verify" if not self.state.get("routine") else "routine", message="Checking your downloads")
         from .libraries import other_folders
-        since = (last_integrity() or {}).get("checked") if fresh else None
+        before = last_integrity() or {}
+        since = before.get("checked") if fresh else None
         result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly,
                                  others=other_folders(self.cfg), fresh_since=since)
         lines = ([f"Changed: {p}" for p in result["changed"][:100]] + [f"Missing: {p}" for p in result["missing"][:100]]
@@ -827,8 +828,10 @@ class Jobs:
         summary = integrity_summary(result)
         if not result["complete"]:
             summary = "Stopped. " + summary
-        elif result["changed"] or result["missing"]:
-            self._news("checked", {"changed": len(result["changed"]), "missing": len(result["missing"])})
+        elif result["changed"] or result["missing"]:   # news of what the last check hadn't found already, once
+            new = {k: len(set(result[k]) - set(before.get(k) or ())) for k in ("changed", "missing")}
+            if any(new.values()):
+                self._news("checked", new)
         self._set(message=summary, log=lines[-200:])
         for line in [summary] + lines:
             print(f"Check downloads: {line}", flush=True)

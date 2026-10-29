@@ -1398,6 +1398,7 @@ async function pickDownloads(title, verb, items, go, choices) {
   for (const e of PICK.items) {   // (issue #225: what your rules, or an earlier choice, leave out comes unticked)
     const out = (e.out || []).filter(n => fileNames(e).includes(n));
     if (out.length) PICK.offFiles.set(e.key, new Set(out));
+    if (out.length && out.length >= fileNames(e).length) PICK.off.add(e.key);   // all of it: the product, unticked
   }
   if (!PICK.items.length && !PICK.skipped.length) { go(null); return; }   // nothing to choose from: as before
   $("#pickTitle").textContent = title;
@@ -1572,6 +1573,9 @@ $("#pickDialog").addEventListener("change", e => {
   }
   const k = e.target.dataset.pick; if (k == null) return;
   if (e.target.checked) PICK.off.delete(k); else PICK.off.add(k);
+  const item = PICK.items.find(x => x.key === k), off = PICK.offFiles.get(k);
+  // ticked when every file of it was left out (one file, say, that a rule leaves out): all of them go, this time
+  if (e.target.checked && item && off && off.size >= fileNames(item).length) PICK.offFiles.set(k, new Set());
   drawPick();
 });
 $("#pickDialog").addEventListener("toggle", e => {   // a product's files stay open as the list is drawn again
@@ -2172,6 +2176,8 @@ async function appriseAct(id) {
     return;
   }
   const forget = id === "appriseForget";
+  // (the box is empty once they're kept, as they're never shown: Keep with nothing typed isn't a way to forget them)
+  if (!forget && !$("#setApprise").value.trim()) { toast(tr("Type an address first, one a line.")); $("#setApprise").focus(); return; }
   if (forget && !await ask(tr("Forget the Apprise addresses? Nothing is sent until you add one again."), tr("Forget"))) return;
   const r = await apiPost("/api/apprise", forget ? { forget: true } : { urls: $("#setApprise").value });
   if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
@@ -2278,17 +2284,19 @@ function drawFileRules() {
 }
 // Add a rule for which files to download, or remove one.
 function wireFileRules() {
+  // the rules as they are now, shown at once, then saved: a second change before the first is saved builds on it
+  const setRules = rules => { SETTINGS.file_rules = rules; drawFileRules(); savePart({ file_rules: rules }); };
   $("#ruleWhat").addEventListener("change", () => { $("#ruleWords").hidden = $("#ruleWhat").value !== "words"; if (!$("#ruleWords").hidden) $("#ruleWords").focus(); });
   $("#ruleAdd").addEventListener("click", () => {
     const what = $("#ruleWhat").value, store = $("#ruleStore").value, words = $("#ruleWords").value.trim();
     if (what === "words" && !words) { toast(tr("Type the words to leave out, such as quest or android.")); $("#ruleWords").focus(); return; }
     const rule = what === "words" ? { store, words } : { store, kind: what.slice(5) };
     $("#ruleWords").value = "";
-    savePart({ file_rules: [...(SETTINGS.file_rules || []), rule] });
+    setRules([...(SETTINGS.file_rules || []), rule]);
   });
   $("#fileRules").addEventListener("click", e => {
     const b = e.target.closest("[data-rule-out]");
-    if (b) savePart({ file_rules: (SETTINGS.file_rules || []).filter((_, i) => i !== +b.dataset.ruleOut) });
+    if (b) setRules((SETTINGS.file_rules || []).filter((_, i) => i !== +b.dataset.ruleOut));
   });
 }
 // Save each setting as it changes.

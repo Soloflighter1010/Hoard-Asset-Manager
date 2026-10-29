@@ -1507,12 +1507,26 @@ _FILLER = re.compile(r"\b(?:for vrchat|vrchat|vrc|assets?|unitypackage|unity pac
 _VERSION = re.compile(r"\bv\d+(?:\.\d+)*[a-z]?\b|\b\d+(?:\.\d+)+\b")   # v2, 1.0.3 (a plain number is the name's: Pack 2)
 
 
+# what a [label] says that isn't the product (besides _FILLER and versions): what it runs on, and where it's sold
+_LABEL_WORDS = re.compile(r"\b(?:pc|quest|android|ios|mobile|sale|3d|model|booth|gumroad|jinxxy|payhip|itch(?:\.io)?|unity)\b")
+_LABEL_JA = re.compile(r"無料|想定|向け|対応|モデル|オリジナル|新作|セール")   # (free, made for, works with, model...)
+
+
+def _label(m: re.Match) -> str:
+    """A 【label】 or [label] in a name: gone when it only says what listings say ([Asset], 【VRChat】, [PC/Quest]),
+    kept when it names anything else (the avatar it's for: 【Rusk】)."""
+    inside = m.group(0)[1:-1]
+    rest = _LABEL_WORDS.sub(" ", _FILLER.sub(" ", _VERSION.sub(" ", _LABEL_JA.sub(" ", inside))))
+    return f" {inside} " if re.sub(r"[\W_]+", "", rest) else " "
+
+
 def fuzzy_name(name: str) -> str:
     """A product's name with what listings add around it left out, to tell two stores' listings of it apart from
-    other products (issue #217): no case, punctuation, emoji, 【store】 [labels], versions (v2, 1.0.3), or words like
-    VRChat, Asset or Free. Its other numbers stay, so "Hair Pack 1" isn't "Hair Pack 2"; and "for <base>" stays, as a
-    hoodie for one avatar isn't the hoodie for another."""
-    s = re.sub(r"【[^】]*】|\[[^\]]*\]", " ", unicodedata.normalize("NFKC", name or "").casefold())
+    other products (issue #217): no case, punctuation, emoji, labels that only say what listings say ([Asset],
+    【VRChat】), versions (v2, 1.0.3), or words like VRChat, Asset or Free. Its other numbers stay, so "Hair Pack 1"
+    isn't "Hair Pack 2"; and the avatar it's for stays ("for <base>", or 【Rusk】), as a hoodie for one avatar isn't
+    the hoodie for another."""
+    s = re.sub(r"【[^】]*】|\[[^\]]*\]", _label, unicodedata.normalize("NFKC", name or "").casefold())
     s = _FILLER.sub(" ", _VERSION.sub(" ", s))
     return re.sub(r"[\W_]+", "", s)
 

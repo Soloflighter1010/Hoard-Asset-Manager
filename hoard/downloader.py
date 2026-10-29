@@ -176,13 +176,16 @@ def direct_targets(library_items: list[dict], stores: list[str], only: str | Non
 
 
 def would_get(args, report: Report, store: str, rec: dict, name: str, creator: str, file: str, changed: bool,
-              deleted_here: bool = False) -> None:
+              deleted_here: bool = False, also: str | None = None) -> None:
     """A dry run: note a file the store has that isn't on disk. For a product already downloaded, a file the store
     changed or added goes on the list of updates the Downloads page shows (issue #26); one downloaded before and
-    since deleted from disk, unchanged, isn't an update (it's downloaded again all the same)."""
+    since deleted from disk, unchanged, isn't an update (it's downloaded again all the same). also: the product's name
+    in your library, when its page names it differently (a chosen Jinxxy item's)."""
     log(f"    would {'update' if changed else 'download again' if deleted_here else 'download'}: {file}")
     if getattr(args, "listing", False):   # what's there to choose from (issue #225), and not an update either way
         entry = report.listed.setdefault(tag_key(store, name), {"store": store, "name": name, "creator": creator, "files": []})
+        if also:   # (the same list, under the name it was asked for by)
+            report.listed.setdefault(tag_key(store, also), entry)
         if file not in entry["files"] and len(entry["files"]) < 500:
             entry["files"].append(file)
         return
@@ -1246,7 +1249,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if left_out(args, report, store.lower(), name, label or k, listed_name or ""):
             continue
         if args.dry_run:
-            would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
+            would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None, listed_name)
             continue
         def named(raw: str, k=k):
             """The file's name in the product's folder, the file it replaces (if any), and whether it's an update."""

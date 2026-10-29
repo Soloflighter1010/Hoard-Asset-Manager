@@ -123,30 +123,33 @@ _lock = threading.Lock()
 
 
 def send(cfg: dict, event: str, body: str, title: str = TITLE) -> bool:
-    """Send this news in the background, if it's an event you chose and there are addresses kept. True when it's on
-    its way. Never raises: notifications never get in the way of what Hoard is doing."""
+    """Send this news in the background, if it's an event you chose and there may be addresses kept. True when it's
+    on its way. Never raises: notifications never get in the way of what Hoard is doing. The addresses are read by
+    the worker, not here: reading the Keychain or the keyring starts a program, and a task that sends news (as it
+    finishes) would wait for it."""
     global _worker
-    if event not in chosen(cfg) or not available():
-        return False
-    addresses = urls(cfg)
-    if not addresses:
+    if event not in chosen(cfg) or not available() or _kept == 0:   # (none kept, as far as Hoard knows)
         return False
     with _lock:
         if _worker is None or not _worker.is_alive():
             _worker = threading.Thread(target=_work, name="apprise", daemon=True)
             _worker.start()
     try:
-        _out.put_nowait((addresses, body, title))
+        _out.put_nowait((cfg, body, title))
     except queue.Full:
         return False
     return True
 
 
 def _work() -> None:
-    """The background worker: send each notification waiting, logging any that couldn't be sent."""
+    """The background worker: send each notification waiting, to the addresses kept, logging any that couldn't be
+    sent."""
+    global _kept
     while True:
-        addresses, body, title = _out.get()
-        problem = deliver(addresses, body, title)
+        cfg, body, title = _out.get()
+        addresses = urls(cfg)
+        _kept = len(addresses)
+        problem = deliver(addresses, body, title) if addresses else None
         if problem:
             log(f"A notification through Apprise wasn't sent: {problem}")
 

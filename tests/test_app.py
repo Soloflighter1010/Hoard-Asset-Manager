@@ -3075,7 +3075,9 @@ class CopiesStack(unittest.TestCase):
                 ("jinxxy", "🐺 Wolf Ears (Free!)", "Kitsu"), ("booth", "Wolf Ears", "Kitsu"),
                 ("booth", "Paw Gloves", "Kitsu"), ("booth", "Paw Gloves v2", "Kitsu"),
                 ("gumroad", "Fluffy Mane", "Sesilaso"), ("jinxxy", "Fluffy Mane", "Sesilaso"),
-                ("gumroad", "Cat Tail", "Kitsu"), ("booth", "Cat Tail", "Someone Else")]
+                ("gumroad", "Cat Tail", "Kitsu"), ("booth", "Cat Tail", "Someone Else"),
+                ("booth", "【Rusk】 Hoodie Asset", "Kitsu"), ("jinxxy", "[Karin] Hoodie", "Kitsu"),
+                ("booth", "【VRChat】Fox Ears [PC/Quest]", "Kitsu"), ("jinxxy", "Fox Ears", "Kitsu")]
         items = [library.item(store, str(n), name=name, creator=creator) for n, (store, name, creator) in enumerate(rows)]
         with mock.patch.object(library, "picture_looks", lambda: {}):
             out = library.enrich(items, {})
@@ -3086,7 +3088,9 @@ class CopiesStack(unittest.TestCase):
             self.assertEqual(keys[2:6], ["", "", "", ""], "Hair Pack 1 isn't 2; a hoodie for Rusk isn't one for Mochi")
             self.assertEqual(keys[8:10], ["", ""], "one store's two listings: not compared by their names")
             self.assertEqual(out[10]["stack_why"], ["name"])
-            self.assertEqual(keys[12:], ["", ""], "two creators' names alike: not by name alone")
+            self.assertEqual(keys[12:14], ["", ""], "two creators' names alike: not by name alone")
+            self.assertEqual(keys[14:16], ["", ""], "a label naming the avatar it's for stays: 【Rusk】 isn't [Karin]")
+            self.assertTrue(keys[16] and keys[16] == keys[17], "labels that only say what listings say are left out")
             out = library.enrich(items, {}, apart={tags.tag_key("booth", "Fox Tail")})
         self.assertEqual([e["stack_key"] for e in out[:2]], ["", ""], "Not a copy: never stacked")
         self.assertEqual(out[0]["stack_why"], [])
@@ -3942,6 +3946,9 @@ class ChosenFiles(unittest.TestCase):
         self.assertEqual(server.remember_choice({"booth:x": {"x.psd", "x (Quest).zip"}, "booth:z": {"z.psd"}},
                                                 {"booth:x": {"shown": ["x.psd", "x v2.zip"], "chosen": ["x.psd", "x v2.zip"]}}),
                          {"booth:x": ["x (Quest).zip"], "booth:z": ["z.psd"]})
+        # one a rule leaves out isn't remembered as your choice: the rule keeps it out (and gives it back if it goes)
+        self.assertEqual(server.remember_choice({}, {"booth:x": {"shown": ["x.psd", "x.zip", "x (Quest).zip"], "chosen": ["x.zip"]}},
+                                                [{"store": "all", "kind": "layered"}]), {"booth:x": ["x (Quest).zip"]})
 
     def test_the_downloader_leaves_out_what_wasnt_chosen(self):
         from types import SimpleNamespace
@@ -3992,6 +3999,20 @@ class ChosenFiles(unittest.TestCase):
             self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail v2.psd"), "Download everything")
             self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.blend"), "not listed: left out before")
             self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.psd"), "not listed: the rule")
+
+    def test_a_listing_is_found_by_the_name_it_was_asked_for(self):
+        """Choose files on a Jinxxy item whose page names it differently from your library: what it lists is filed
+        under both names, so the page asking by its library name finds it."""
+        from types import SimpleNamespace
+        report = downloader.Report()
+        args = SimpleNamespace(listing=True)
+        with common.capture_log(lambda line: None):
+            downloader.would_get(args, report, "jinxxy", {}, "Foo Hoodie [PC/Quest] v2", "Kitsu", "Main package", False,
+                                 also="Foo Hoodie")
+            downloader.would_get(args, report, "jinxxy", {}, "Foo Hoodie [PC/Quest] v2", "Kitsu", "Textures", False,
+                                 also="Foo Hoodie")
+        self.assertEqual(report.listed[tags.tag_key("jinxxy", "Foo Hoodie")]["files"], ["Main package", "Textures"])
+        self.assertIs(report.listed[tags.tag_key("jinxxy", "Foo Hoodie")], report.listed[tags.tag_key("jinxxy", "Foo Hoodie [PC/Quest] v2")])
 
     def test_reading_what_products_have(self):
         """Issue #225: the task that reads what products have, to choose from: every file not on disk, and no

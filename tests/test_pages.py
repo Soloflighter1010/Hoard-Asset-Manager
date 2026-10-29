@@ -343,6 +343,12 @@ class AccessKey(unittest.TestCase):
             menu(page, "#settingsBtn")
             page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()   # (Settings, filled in)
             self.assertTrue(page.is_checked("[data-apprise-event='tasks']"), "kept")
+            page.click("#appriseSave")   # nothing typed: not a way to forget them
+            page.locator(".toast", has_text="Type an address first").wait_for()
+            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
+            self.assertEqual(page.evaluate("api('/api/apprise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
+                                           "body: JSON.stringify({ urls: '' }) }).then(r => r.status)"), 400)
+            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
             page.on("dialog", lambda d: d.accept())
             page.click("#appriseForget")
             page.locator("dialog.ask .primary").click()
@@ -1437,6 +1443,28 @@ class CopiesAndActions(unittest.TestCase):
                              "all ticked, said so: no longer left out")
             page.close()
 
+    def test_a_product_whose_only_file_is_left_out(self):
+        """A product with one file, which a rule leaves out: it comes unticked (there's nothing of it to download), and
+        ticked, its file goes, whatever the rule says; it isn't remembered as left out either way."""
+        from unittest import mock
+        seen = self.started()
+        choices = {"new": [{"key": "gumroad:fox model", "store": "gumroad", "name": "Fox Model", "creator": "Kitsu",
+                            "files": 1, "names": ["model.psd"], "out": ["model.psd"]}], "skipped": [], "updates": []}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            menu(page, "#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            box = dialog.locator("input[data-pick='gumroad:fox model']")
+            self.assertFalse(box.is_checked(), "all of it left out: the product unticked")
+            box.check()
+            before = len(seen)
+            page.click("#pickGo")
+            self.after(page, seen, before)
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:fox model": {"shown": ["model.psd"], "chosen": ["model.psd"]}})
+            page.close()
+
     def test_rules_for_files_to_leave_out(self):
         """Issue #225: Settings' Files to leave out: a kind of file, or words in a file's name, from every store or one."""
         from unittest import mock
@@ -1458,6 +1486,19 @@ class CopiesAndActions(unittest.TestCase):
             rules.locator("li", has_text="Layered images").locator("[data-rule-out]").click()
             page.wait_for_function("() => document.querySelectorAll('#fileRules li').length === 1 && !document.querySelector('#fileRules').textContent.includes('Layered')")
             self.assertEqual(self.srv.cfg["file_rules"], [{"store": "booth", "words": "quest android"}])
+            # two changes before the first is saved: the second builds on the first, not on what was last saved
+            slow = self.srv.save_settings
+            with mock.patch.object(self.srv, "save_settings", lambda: time.sleep(0.4) or slow()):
+                page.select_option("#ruleWhat", "kind:archive")
+                page.click("#ruleAdd")
+                page.select_option("#ruleWhat", "kind:blender")
+                page.click("#ruleAdd")
+                page.wait_for_function("() => document.querySelectorAll('#fileRules li').length === 3")
+                for _ in range(40):
+                    if len(self.srv.cfg["file_rules"]) == 3:
+                        break
+                    page.wait_for_timeout(100)
+            self.assertEqual([r.get("kind") for r in self.srv.cfg["file_rules"]], [None, "archive", "blender"])
             self.srv.cfg["file_rules"] = []
             page.close()
 

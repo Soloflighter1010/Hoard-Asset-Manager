@@ -812,7 +812,7 @@ class Handler(BaseHTTPRequestHandler):
         if chosen:
             srv = self.server
             with srv.cfg_lock:
-                srv.cfg["file_skip"] = remember_choice(remembered_files(srv.cfg), chosen)
+                srv.cfg["file_skip"] = remember_choice(remembered_files(srv.cfg), chosen, file_rules(srv.cfg))
                 srv.save_settings()
         return chosen
 
@@ -2286,6 +2286,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/apprise":   # issue #230: Apprise's addresses, kept as API keys are; none, or forget, forgets them
             try:
                 addresses = [] if body.get("forget") is True else alerts.clean_urls(body.get("urls"))
+                if not addresses and body.get("forget") is not True:   # (forgetting them is asked for, and asked first)
+                    raise ValueError("Type an address first, one a line.")
                 alerts.save_urls(srv.cfg, addresses)
             except (ValueError, SigninsUnprotected) as e:
                 return self._json({"error": str(e)}, 400)
@@ -2511,13 +2513,14 @@ def chosen_files(raw) -> dict[str, dict] | None:
     return out or None
 
 
-def remember_choice(kept: dict[str, set], chosen: dict) -> dict[str, list]:
+def remember_choice(kept: dict[str, set], chosen: dict, rules=()) -> dict[str, list]:
     """The files left out of each product from now on (config.json's "file_skip", issue #225), after choosing what
-    to download: those of the files shown that weren't ticked, and any left out before that weren't shown."""
+    to download: those of the files shown that weren't ticked, and any left out before that weren't shown. One that
+    one of your rules leaves out isn't remembered: the rule keeps it out (and it comes back if you take the rule away)."""
     kept = dict(kept)
     for key, pick in chosen.items():
-        shown = set(pick["shown"])
-        left = (kept.get(key, set()) - shown) | (shown - set(pick["chosen"]))
+        shown, store = set(pick["shown"]), key.split(":", 1)[0]
+        left = (kept.get(key, set()) - shown) | {n for n in shown - set(pick["chosen"]) if not ruled_out(rules, store, n)}
         if left:
             kept[key] = left
         else:

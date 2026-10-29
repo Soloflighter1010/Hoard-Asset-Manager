@@ -90,6 +90,17 @@ class Alerts(unittest.TestCase):
         alerts.save_urls(self.cfg, [])
         self.assertFalse(alerts.send(self.cfg, "new", "x"), "no addresses: nothing sent")
 
+    def test_the_addresses_are_read_in_the_background(self):
+        """Reading them starts a program (the Keychain's, the keyring's), so a task sending news as it finishes would
+        wait on it: the worker reads them, never the task."""
+        alerts.save_urls(self.cfg, ["json://example.com/hook"])
+        read_by, real = [], alerts.urls
+        with mock.patch.object(alerts, "urls", lambda cfg: read_by.append(threading.current_thread().name) or real(cfg)):
+            self.assertTrue(alerts.send(self.cfg, "tasks", "A task finished."))
+            self.wait_sent(1)
+        self.assertEqual(read_by, ["apprise"])
+        alerts.save_urls(self.cfg, [])
+
     def test_what_a_service_answers(self):
         self.assertIsNone(alerts.deliver(["json://example.com/hook"], "hi"))
         FakeApprise.accept = False
@@ -124,6 +135,27 @@ class Alerts(unittest.TestCase):
         self.assertEqual(news, [("finished", "refresh", "done")])
         job.on_news = lambda kind, what: 1 / 0   # a notification that fails never stops a task
         job._news("finished", {})
+
+
+    def test_the_checks_news_is_sent_once(self):
+        """The routine check runs every few hours: what it found missing is news once, not every time it's found
+        missing again; what's new since then is news again."""
+        job = jobs.Jobs(self.cfg, library.Library(self.tmp / "library.json"))
+        news = []
+        job.on_news = lambda kind, what: news.append((kind, what))
+        found = [{"changed": ["a.zip"], "missing": ["b.zip", "c.zip"]}, {"changed": ["a.zip"], "missing": ["b.zip", "c.zip"]},
+                 {"changed": ["a.zip"], "missing": ["b.zip", "c.zip", "d.zip"]}]
+        last = [None]
+
+        def check(*a, **k):
+            last[0] = {"complete": True, "data_changed": [], "checked": "now", **found.pop(0)}
+            return last[0]
+        with mock.patch("hoard.downloader.check_integrity", check), \
+                mock.patch("hoard.downloader.last_integrity", lambda: last[0]), \
+                mock.patch("hoard.downloader.integrity_summary", lambda r: "summary"):
+            for _ in range(3):
+                job._verify(["booth"])
+        self.assertEqual(news, [("checked", {"changed": 1, "missing": 2}), ("checked", {"changed": 0, "missing": 1})])
 
 
 class AlertsInHoard(unittest.TestCase):
