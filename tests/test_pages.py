@@ -2404,6 +2404,40 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_whats_new_is_pointed_out_once(self):
+        """Issue #244: after an update, Product type has a note beside it, once: Got it puts it away for good. A new
+        install never has one (the tour shows everything, and answering its offer counts every note as seen)."""
+        from unittest import mock
+        ui = self.srv.cfg.setdefault("ui", {})
+        self.addCleanup(lambda: [ui.pop(k, None) for k in ("toured", "spots_seen")])
+        with mock.patch.object(server, "save_config"):
+            ui.update(toured=True)   # (someone who's used Hoard before, updated)
+            ui.pop("spots_seen", None)
+            page = self.open()
+            note = page.locator('.new-spot[data-spot="product-type"]')
+            note.wait_for()
+            self.assertEqual(note.evaluate("n => n.previousElementSibling.dataset.sec"), "product-type", "beside it")
+            self.assertIn("Product type", note.inner_text())
+            note.get_by_role("button", name="Got it").click()
+            self.assertEqual(note.count(), 0)
+            page.evaluate("uiFlush()")
+            page.wait_for_function("() => !uiPending")
+            page.wait_for_timeout(300)
+            self.assertEqual(ui.get("spots_seen"), ["product-type"])
+            page.reload()
+            page.locator(".slot", has_text="Mochi").wait_for()
+            page.wait_for_timeout(300)
+            self.assertEqual(page.locator(".new-spot").count(), 0, "once")
+            page.close()
+            ui.pop("toured", None)   # a new install: the tour's offer, no notes
+            ui.pop("spots_seen", None)
+            page = self.open()
+            page.wait_for_timeout(500)
+            self.assertEqual(page.locator(".new-spot").count(), 0, "a new install: the tour")
+            self.assertEqual(page.evaluate("spotsAllSeen()"), {"spots_seen": ["product-type"]})
+            page.close()
+        self.assertEqual(server.ui_settings({"ui": {"spots_seen": ["product-type", "<b>", 4]}})["spots_seen"], ["product-type"])
+
     def test_seasonal_secrets(self):
         """Issue #260: while Hoard's window is in the background, Spooky Hoard gathers dust and cobwebs round the edges
         (Winter Hoard snow and ice); moving the mouse about clears it a little at a time, switching tabs at once. Never

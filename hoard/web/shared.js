@@ -5048,7 +5048,7 @@ function tourStart(at = 0) {
   tourBuild();
   if ($("#tourNote")) $("#tourNote").hidden = true;
   for (const w of document.querySelectorAll(".win:not([hidden])")) if (WINDOWS[w.id]) WINDOWS[w.id]();   // (Settings, where it was started)
-  uiSave({ toured: true });   // offered no more, however it ends
+  uiSave({ toured: true, ...spotsAllSeen() });   // offered no more, however it ends (and it shows what's new)
   TOUR.pick = tourPick();
   TOUR.i = -1;
   tourShow(at, 1);
@@ -5166,6 +5166,35 @@ function tourTick() {
   try { done = !!(s.done && Date.now() > TOUR.ready && s.done()); } catch (e) { done = false; }
   if (done) { TOUR.ready = Infinity; setTimeout(() => { if (TOUR.steps[TOUR.i] === s) tourMove("next"); }, 700); }
 }
+/* ---------- New here (issue #244): the first time Hoard opens after an update that brings something easy to miss, a
+   short note beside it says so, once; Got it puts it away for good. Never on a new install: the tour shows it all, and
+   answering the tour's offer counts every note as seen. */
+const NEW_SPOTS = [
+  { id: "product-type", at: '[data-sec="product-type"]',
+    text: "New: Product type. Show only avatars, clothing, hair and the rest, as Hoard works out what each thing is. Change one in its details." },
+];
+// What the tour's offer, once answered, saves: every note seen.
+const spotsAllSeen = () => ({ spots_seen: [...new Set([...(UI.spots_seen || []), ...NEW_SPOTS.map(s => s.id)])] });
+// Put each note not seen yet beside what it's about (once the page has it to show).
+function showSpots() {
+  if (!UI.toured) return;   // (a new install: the tour)
+  const seen = new Set(UI.spots_seen || []);
+  for (const s of NEW_SPOTS) {
+    const at = document.querySelector(s.at);
+    if (seen.has(s.id) || !at || document.querySelector(`.new-spot[data-spot="${s.id}"]`)) continue;
+    const note = document.createElement("div");
+    note.className = "new-spot"; note.dataset.spot = s.id; note.setAttribute("role", "note");
+    note.innerHTML = `<p>${esc(tr(s.text))}</p><button class="ghost sm" data-spot-ok>${esc(tr("Got it"))}</button>`;
+    at.after(note);
+  }
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-spot-ok]");
+  if (!b) return;
+  const note = b.closest(".new-spot");
+  note.remove();
+  uiSave({ spots_seen: [...new Set([...(UI.spots_seen || []), note.dataset.spot])] });
+});
 // on each page: carry on where the tour was (from the Library to Downloads), and the Library offers it, once
 function tourResume() {
   let id = null;
@@ -5199,7 +5228,7 @@ function wireTour() {
     const b = e.target.closest("[data-tour-note]");
     if (!b) return;
     note.hidden = true;
-    if (b.dataset.tourNote === "go") tourStart(0); else { uiSave({ toured: true }); toast("Take the tour any time, from Settings."); }
+    if (b.dataset.tourNote === "go") tourStart(0); else { uiSave({ toured: true, ...spotsAllSeen() }); toast("Take the tour any time, from Settings."); }
   });
   addEventListener("resize", () => { if (TOUR.i >= 0) tourPlace(); });
   document.addEventListener("scroll", () => { if (TOUR.i >= 0) tourPlace(); }, { capture: true, passive: true });

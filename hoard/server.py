@@ -172,7 +172,8 @@ UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and D
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
     is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
-    the sort, one for both pages, the sets you added to last, and the gifts you've opened."""
+    the sort, one for both pages, the sets you added to last, the gifts you've opened, and the notes on what's new
+    you've seen."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -192,6 +193,8 @@ def ui_settings(cfg: dict) -> dict:
         out["sort"] = ui["sort"]
     if isinstance(ui.get("recent_sets"), list):   # the sets you added to last, first in the right-click menu (issue #228)
         out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
+    if isinstance(ui.get("spots_seen"), list):   # the "new here" notes you've seen (issue #244), by their names
+        out["spots_seen"] = [k for k in ui["spots_seen"] if isinstance(k, str) and re.fullmatch(r"[a-z0-9-]{1,40}", k)][:100]
     if isinstance(ui.get("unwrapped"), list):   # the gifts you've opened (issue #263): their keys, never their names
         out["unwrapped"] = [k for k in ui["unwrapped"] if isinstance(k, str) and re.fullmatch(r"[a-z]{2,12}:[\w.:-]{1,120}", k)][-MAX_UNWRAPPED:]
     return out

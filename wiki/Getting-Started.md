@@ -55,6 +55,10 @@ look (5.2.0 beta 2); with **Reduce motion**, both move at once.
 It's offered once. Take it again any time from **Settings**, then **Take the tour**, and leave it with **End the
 tour**.
 
+After an update, something new that's easy to miss has a short note beside it the first time you open Hoard (5.2.0
+beta 2: **Product type**, in the filters). **Got it** puts it away for good. A new install has none: the tour shows
+everything.
+
 ## Signing in without your saved passwords
 
 Hoard's window is its own browser, so it doesn't have the passwords your usual browser saved. Copy yours from

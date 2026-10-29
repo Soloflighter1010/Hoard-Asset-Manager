@@ -1921,6 +1921,7 @@ async function load() {
   // copies on two stores whose pictures may be one picture saved twice: how they look decides (then read again)
   const wanted = DATA.items.filter(a => a.look_for && a.thumbnail).map(a => ({ look_for: a.look_for, src: keyed("/thumb/" + encodeURIComponent(a.key)) }));
   tourOffer();   // (once there's something in the library)
+  showSpots();   // (what's new, after an update: issue #244)
   if (wanted.length && await lookAtPictures(wanted)) load();
 }
 

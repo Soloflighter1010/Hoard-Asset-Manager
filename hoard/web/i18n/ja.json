@@ -2170,5 +2170,7 @@
  "Move Selected": "選択したものを移動",
  "Photos to show off the set: links from Imgur, Gyazo, X, Bluesky, Reddit, Postimages, ImgBB, Discord, or a store's own pictures.": "セットを見せる写真です。Imgur、Gyazo、X、Bluesky、Reddit、Postimages、ImgBB、Discord、またはストアの画像のリンクを追加します。",
  "Suggested tags are words that turn up in several item names: keep one and it becomes your tag on every item whose name has that word.": "おすすめのタグは、いくつもの商品名に出てくる言葉です。残すと、その言葉が名前に入っているすべての商品につくあなたのタグになります。",
- "What's new in Hoard": "Hoardの新機能"
+ "What's new in Hoard": "Hoardの新機能",
+ "New: Product type. Show only avatars, clothing, hair and the rest, as Hoard works out what each thing is. Change one in its details.": "新機能: 商品の種類。Hoardがそれぞれ何かを見分けて、アバター、衣装、髪などだけを表示できます。変えたいものは詳細で変更できます。",
+ "Got it": "わかりました"
 }
