@@ -18,6 +18,9 @@ is in [PRIVACY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/
   needs a key that's new each time Hoard starts, even from your own computer, so other programs and other
   people's accounts on a shared computer can't use it. Hoard opens its window with a one-time link that the page
   trades for the key, so the key never shows up where another program could read it.
+- **Windows' own protections stay on.** Hoard installs no driver, so it works with Memory integrity (Core isolation)
+  on; its programs are code-signed for Smart App Control; and it doesn't need a TPM: sign-ins and keys are protected
+  by your Windows account either way. See [Troubleshooting](Troubleshooting#smart-app-control-memory-integrity-and-tpm-windows-11).
 - **Sharing with your other devices is off** until you switch it on, and then needs a secure connection and the
   key. See [Using Hoard on other devices](Using-Hoard-on-Other-Devices).
 - **Websites can't use Hoard against you.** Other sites can't read Hoard's pages, press its buttons, or show it

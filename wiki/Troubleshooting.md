@@ -31,6 +31,19 @@ info** and the publisher shows as Hoard's maintainer. A new publisher earns Micr
 people install its releases, so the warning fades with time. Choose **Run anyway**. To check the
 file first, see [Installing Hoard](Installing-Hoard#checking-a-download).
 
+### Smart App Control, Memory integrity and TPM (Windows 11)
+
+- **Memory integrity** (Core isolation, in Windows Security) can stay on. It stops drivers that aren't safe, and
+  Hoard installs no driver: its programs, its browser and its window (Microsoft Edge WebView2) are ordinary apps.
+- **Smart App Control** can stay on too. Hoard's programs and its installer are code-signed, and the Python
+  runtime, Playwright's browser and Edge WebView2 carry their makers' signatures; a few of the smaller libraries
+  Hoard bundles carry none. If Smart App Control ever stops part of Hoard, Windows names the file it stopped:
+  please [report it](#reporting-a-problem) with that name (a support report says whether Smart App Control and
+  Memory integrity are on). Turning Smart App Control off can't be undone without reinstalling Windows, so report
+  it rather than turning it off.
+- **A TPM isn't needed.** Your store sign-ins and API keys are protected by your Windows account (DPAPI), which
+  works the same with or without a TPM, and whether or not BitLocker or Windows Hello use one.
+
 ## Signing in
 
 ### Signing in with Google, Discord or X doesn't work

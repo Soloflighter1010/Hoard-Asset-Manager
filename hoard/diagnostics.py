@@ -610,7 +610,28 @@ def _environment(cfg: dict, sanitizer: _ReportSanitizer) -> dict:
         "desktop_app": frozen,
         "store_signin_protection": sanitizer.text(signins_note or "unknown"),
         "downloads_folder_exists": _downloads_exists(cfg),
+        **({"windows_security": windows_security()} if platform.system() == "Windows" else {}),
     }
+
+
+def windows_security() -> dict:
+    """Issue #229: whether Smart App Control and Memory integrity (Core isolation) are on, as Windows' registry says,
+    for a report about something Windows stopped. ("unknown" when it doesn't say: an older Windows, say.)"""
+    try:
+        import winreg
+    except ImportError:
+        return {}
+
+    def read(path: str, name: str):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as key:
+                return winreg.QueryValueEx(key, name)[0]
+        except OSError:
+            return None
+    sac = read(r"SYSTEM\CurrentControlSet\Control\CI\Policy", "VerifiedAndReputablePolicyState")
+    hvci = read(r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled")
+    return {"smart_app_control": {0: "off", 1: "on", 2: "evaluation"}.get(sac, "unknown"),
+            "memory_integrity": {0: "off", 1: "on"}.get(hvci, "unknown")}
 
 
 def _downloads_exists(cfg: dict) -> bool:
