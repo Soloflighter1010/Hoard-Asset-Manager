@@ -68,7 +68,8 @@ when you leave the field. The title bar says **Saved**.
     one you choose.
   - **A theme**, each in a light and a dark version: **Hoard** (the cave and its gold), **Dragonfire**, **Frost
     Cave**, **Geode**, **Mossy Ruins**, **Synthwave**, **Sakura**, **Midnight & Paper** (true black, for OLED
-    screens, and white), **High contrast** and **Spooky Hoard**. In a theme whose accent is close to a store's
+    screens, and white), **High contrast**, and two for the seasons: **Spooky Hoard** and **Winter Hoard** (5.2.0:
+    snow and night skies, with holly red). In a theme whose accent is close to a store's
     colour, that store's colour shifts a little, so the two aren't mistaken for each other. **Store colours** (below)
     still apply in every theme.
   - **Style** (5.0): how Hoard lays everything out, apart from its colours. **Standard** is Hoard as it has always

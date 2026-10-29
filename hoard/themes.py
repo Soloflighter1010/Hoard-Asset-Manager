@@ -82,6 +82,10 @@ THEMES = {
                      ("#140F1C", "#1F1729", "#2A2037", "#43345A", "#F5EEDF", "#B5A8C4", "#FF8A1F", "#2B1300", "#FF9A3C"),
                      ("#F4EFE6", "#FFFDF8", "#E9E1D2", "#D6CAB4", "#241A2E", "#6B5E75", "#B5520A", "#FFFFFF", "#9A4508"),
                      {"booth": "#FF4F7A"}, {"booth": "#C41E50"}),
+    "winter": _theme("Winter Hoard", "Seasonal", "Snow and night skies, with holly red.",   # (issue #191)
+                     ("#0F161D", "#17212B", "#202C38", "#33465A", "#F2F7FA", "#A9B8C6", "#FF6F7E", "#2E0008", "#FF8794"),
+                     ("#EEF3F6", "#FFFFFF", "#E0E8EE", "#C8D4DE", "#13202B", "#566573", "#B3243A", "#FFFFFF", "#9E1D31"),
+                     {"booth": "#FFA552", "gumroad": "#D9A0FF"}, {"booth": "#A85300", "gumroad": "#8A3FC4"}),
 }
 
 # Store colours easier to tell apart with colour blindness (Okabe and Ito's palette), as Settings offers them: the

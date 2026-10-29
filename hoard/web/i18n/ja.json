@@ -2134,5 +2134,7 @@
  "Forget {0}? Hoard stops expecting it, and leaves it out of that product's downloads from now on.": "{0}を忘れますか? Hoardはこのファイルを探さなくなり、これからはその商品のダウンロードから除外します。",
  "Forget these {0} files? Hoard stops expecting them, and leaves them out of their products' downloads from now on.": "この{0}個のファイルを忘れますか? Hoardはこれらを探さなくなり、これからはそれぞれの商品のダウンロードから除外します。",
  "Downloading them again: it starts when what's running now is done.": "もう一度ダウンロードします。実行中のものが終わってから始まります。",
- "Downloading them again. Follow it in Tasks.": "もう一度ダウンロードしています。タスクで進み具合を見られます。"
+ "Downloading them again. Follow it in Tasks.": "もう一度ダウンロードしています。タスクで進み具合を見られます。",
+ "Winter Hoard": "冬のHoard",
+ "Snow and night skies, with holly red.": "雪と夜空に、ヒイラギの赤。"
 }

@@ -43,7 +43,7 @@ class EveryTheme(unittest.TestCase):
 
     def test_complete(self):
         self.assertIn(themes.DEFAULT, themes.THEMES)
-        self.assertEqual(len(themes.THEMES), 10)
+        self.assertEqual(len(themes.THEMES), 11)
         for name, t in themes.THEMES.items():
             for mode in ("dark", "light"):
                 self.assertEqual(set(t[mode]), set(themes.KEYS), f"{name} {mode}")
