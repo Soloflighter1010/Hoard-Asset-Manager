@@ -347,11 +347,15 @@ const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0))
 // Up to two initials of a name, for a tile with no picture.
 const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
 const STRIPE_STORES = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
-// A tile's store spine; for something you own on more than one store, striped with the other store's colour.
+// A tile's store spine; for something you own on more than one store, striped with the other store's colour. Its
+// stores are named on the picture (web/looks.css): the Treasure style's tag, and every one of them while the tile is
+// pointed at or focused (issue #251).
 function notch(store, others) {
   const other = (others || []).find(o => STRIPE_STORES.includes(o) && o !== store);
-  const named = COLOUR_NAMES[store] ? ` data-s="${esc(tr(COLOUR_NAMES[store]))}"` : "";   // (the Treasure style's tag)
-  return other ? `<i class="notch ${store} dup"${named} style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"${named}></i>`;
+  const named = COLOUR_NAMES[store] ? ` data-s="${esc(tr(COLOUR_NAMES[store]))}"` : "";
+  const every = [...new Set([store, ...(others || [])])].filter(s => COLOUR_NAMES[s]).map(s => tr(COLOUR_NAMES[s])).join(" · ");
+  const all = every ? ` data-all="${esc(every)}"` : "";
+  return other ? `<i class="notch ${store} dup"${named}${all} style="--c2: var(--${other})"></i>` : `<i class="notch ${store}"${named}${all}></i>`;
 }
 // The Treasure style's row of facts in a product's details (web/looks.css): [label, value as HTML]
 const dStats = facts => `<div class="d-stats">${facts.map(([k, v]) => `<span><small>${esc(tr(k))}</small><b>${v}</b></span>`).join("")}</div>`;
@@ -475,6 +479,8 @@ function applyDisplay(d) {
   if (d.spacing) html.dataset.spacing = "wide"; else delete html.dataset.spacing;
   if (d.card_outlines) html.dataset.cards = "outlined"; else delete html.dataset.cards;   // (issue #222: looks.css)
   document.body.classList.toggle("no-glow", d.glow === false);
+  SECRETS.kind = d.seasonal !== false && SECRET_THEMES.includes(d.theme) ? d.theme : "";   // (issue #260)
+  secretsDraw();
   const root = document.documentElement;
   if (d.colours === "standard" || !d.colours) delete root.dataset.colours; else root.dataset.colours = d.colours;
   for (const c of COLOURED) {   // your own colours (issue #112), only while you've chosen them
@@ -501,6 +507,71 @@ function freeze(img) {
   img.replaceWith(c);
 }
 document.addEventListener("load", e => { if (e.target.tagName === "IMG") freeze(e.target); }, true);
+
+/* ---------- Seasonal Secrets (issue #260): while Hoard's window isn't the one you're using, Spooky Hoard slowly
+   gathers dust and cobwebs round the page's edges, and Winter Hoard snow and ice. Moving the mouse about clears it
+   away, a little at a time, and switching tabs clears it at once. It keeps to the edges, nothing in it can be pointed
+   at or read out, and it's off with Reduce motion, or in Settings, Accessibility. */
+const SECRET_THEMES = ["spooky", "winter"];
+const SECRET_WAIT = 20000, SECRET_GROW = 240000, SECRET_SWEEP = 2400;   // ms away before it starts, and to gather it all;
+                                                                        // px of the mouse's movement to clear it all
+const SECRETS = { kind: "", level: 0, from: 0, since: 0, timer: null, frame: 0 };
+// A cobweb in a corner: threads out from it, and rings across them sagging a little between each.
+function cobweb() {
+  const angles = [0, 15, 30, 45, 60, 75, 90].map(a => a * Math.PI / 180), at = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
+  let d = angles.map(a => `M0 0L${at(100, a).join(" ")}`).join("");
+  for (const r of [22, 40, 58, 76, 93]) {
+    d += `M${at(r, angles[0]).join(" ")}`;
+    for (let i = 1; i < angles.length; i++) {
+      const [x, y] = at(r, angles[i]), [cx, cy] = at(r * .86, (angles[i - 1] + angles[i]) / 2);
+      d += `Q${cx.toFixed(1)} ${cy.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+  }
+  return `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width=".7"><path d="${d}"/></svg>`;
+}
+const SECRET_ART = {
+  spooky: () => `<i class="sec-dust"></i>${["tl", "tr", "bl", "br"].map(c => `<i class="sec-web ${c}">${cobweb()}</i>`).join("")}`,
+  winter: () => `<i class="sec-frost"></i><i class="sec-flakes"></i><i class="sec-snow"><svg viewBox="0 0 1200 60" preserveAspectRatio="none">` +
+    `<path d="M0 60V26C80 8 150 30 240 22S390 4 480 18 640 34 730 20 880 2 980 16 1120 30 1200 14V60Z"/></svg></i>`,
+};
+// Show what's gathered (or nothing), as it is now.
+function secretsDraw() {
+  let el = document.getElementById("secrets");
+  const on = SECRETS.kind && SECRETS.level > 0 && motionOk();
+  if (!on) { if (el) el.hidden = true; return; }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "secrets"; el.className = "secrets"; el.setAttribute("aria-hidden", "true");
+    document.body.append(el);
+  }
+  if (el.dataset.kind !== SECRETS.kind) { el.dataset.kind = SECRETS.kind; el.innerHTML = SECRET_ART[SECRETS.kind](); }
+  el.hidden = false;
+  el.style.setProperty("--level", SECRETS.level.toFixed(3));
+}
+// While the window's in the background: gather, from SECRET_WAIT after it went there, over SECRET_GROW.
+function secretsGrow() {
+  SECRETS.level = Math.min(1, SECRETS.from + Math.max(0, Date.now() - SECRETS.since - SECRET_WAIT) / SECRET_GROW);
+  secretsDraw();
+}
+// Clear it away: all at once (a tab switched), or as far as the mouse has moved.
+function secretsSweep(px = Infinity) {
+  if (!SECRETS.level) return;
+  SECRETS.level = Math.max(0, SECRETS.level - px / SECRET_SWEEP);
+  if (!SECRETS.frame) SECRETS.frame = requestAnimationFrame(() => { SECRETS.frame = 0; secretsDraw(); });
+}
+window.addEventListener("blur", () => {
+  if (!SECRETS.kind) return;
+  SECRETS.since = Date.now(); SECRETS.from = SECRETS.level;
+  clearInterval(SECRETS.timer);
+  SECRETS.timer = setInterval(secretsGrow, 2000);
+});
+window.addEventListener("focus", () => { if (SECRETS.timer) { secretsGrow(); clearInterval(SECRETS.timer); SECRETS.timer = null; } });
+document.addEventListener("pointermove", e => {
+  if (SECRETS.level && !SECRETS.timer) secretsSweep(Math.hypot(e.movementX || 0, e.movementY || 0));
+}, { passive: true });
+document.addEventListener("click", e => {   // a tab: a store's, a view's, the pages', Projects' and the rest
+  if (e.target.closest('[role="tab"], .seg button, nav.apptabs a, #views [data-view], .wintabs button')) secretsSweep();
+}, true);
 
 let toastTimer;
 /* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
@@ -1852,6 +1923,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setSpacing").checked = !!SETTINGS.display.spacing;
   $("#setCardOutlines").checked = !!SETTINGS.display.card_outlines;
   $("#setGlowOn").checked = SETTINGS.display.glow;
+  $("#setSeasonal").checked = SETTINGS.display.seasonal !== false;
   $("#setColours").value = SETTINGS.display.colours;
   fillColours();
   fillThemes();
@@ -2247,6 +2319,7 @@ function settingsPart(el) {
     case "setRetries": return { download_retries: Number(el.value) };
     case "setPrevious": return { keep_previous: Number(el.value) };
     case "setGlowOn": return { display: { glow: el.checked } };
+    case "setSeasonal": return { display: { seasonal: el.checked } };
     case "setColours": return { display: { colours: el.value } };
     case "setFont": return { display: { font: el.value } };
     case "setSpacing": return { display: { spacing: el.checked } };
@@ -4779,7 +4852,10 @@ if (new Date().getMonth() === 3 && new Date().getDate() === 1) document.document
    the page it's about, the rest dimmed but still yours to use; a step that asks you to try something (open one of your
    own items, choose two) goes on by itself once you have. It carries on from the Library to Downloads (in
    sessionStorage), and a step about something you don't have yet (nothing downloaded, no updates) is passed by. */
-const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null, ready: 0, tags: 0, offered: false };
+const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null, ready: 0, tags: 0, offered: false, drawn: -1, follow: null };
+// Moving between the tour's steps is slow enough to follow by eye (issue #265): the page scrolls smoothly to what's
+// next, the ring moves to it, and the card shows a moment later, beside it. With Reduce motion (motionOk), all at once.
+const TOUR_FOLLOW = 650;   // ms: the ring's move (.tour-ring's transition), and a moment to take it in
 const ON_DOWNLOADS = /downloads/.test(location.pathname);
 const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 // A name, as the tour shows it.
@@ -4987,7 +5063,8 @@ function tourEnd(finished) {
   clearInterval(TOUR.timer);
   const step = TOUR.steps[TOUR.i];
   if (step && step.leave) try { step.leave(); } catch (e) { /* gone already */ }
-  TOUR.i = -1;
+  TOUR.i = TOUR.drawn = -1;
+  clearTimeout(TOUR.follow);
   if (TOUR.card) { TOUR.card.remove(); TOUR.ring.remove(); TOUR.card = TOUR.ring = null; }
   tourSave(null);
   if (finished) toast("Take the tour again any time, from Settings.");
@@ -5014,7 +5091,7 @@ function tourShow(n, dir) {
   tourSave(s.id);
   try { if (s.enter) s.enter(); } catch (e) { /* the page changed under it */ }
   const el = tourTarget(s)[0];
-  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
+  if (el) el.scrollIntoView({ block: "center", inline: "nearest", behavior: motionOk() ? "smooth" : "auto" });
   tourDraw();
 }
 // Go to the tour's next or last step, or end it.
@@ -5041,6 +5118,12 @@ function tourDraw() {
   back.textContent = tr("Back");
   back.hidden = TOUR.i === 0 || TOUR.steps[TOUR.i - 1].page !== s.page;
   c.querySelector('[data-tour="next"]').textContent = s.next ? s.next() : s.done ? tr("Skip") : tr("Next");
+  if (TOUR.drawn !== -1 && TOUR.drawn !== TOUR.i && motionOk()) {   // another step: the card follows the ring there
+    c.classList.add("tour-wait");
+    clearTimeout(TOUR.follow);
+    TOUR.follow = setTimeout(() => c.classList.remove("tour-wait"), TOUR_FOLLOW);
+  }
+  TOUR.drawn = TOUR.i;
   tourPlace();
   // the card has the focus, so its words are read out and Next is a Tab away, unless you're typing (the search)
   if (!document.activeElement || !document.activeElement.matches("input, textarea, select")) c.focus({ preventScroll: true });

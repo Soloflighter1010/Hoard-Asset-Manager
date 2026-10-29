@@ -44,6 +44,7 @@ DEFAULT_CONFIG = {
     "display": {"text_size": 100, "pause_animations": False, "reduce_motion": False, "font": "standard", "spacing": False,   # accessibility
                 "card_outlines": False,   # (and each card outlined, on a background of its own: issue #222)
                 "glow": True, "colours": "standard", "custom_colours": {},   # issue #112: the glow, store colours
+                "seasonal": True,   # Seasonal Secrets (issue #260): what Spooky and Winter Hoard gather while you're away
                 "theme": "hoard", "mode": "system",   # Settings, Appearance: hoard/themes.py, and Light or Dark
                 "style": "standard",   # and the style (issue #159): standard, treasure or workbench (web/looks.css)
                 "language": "system"},   # and the pages' language (hoard/i18n.py): system follows the window's

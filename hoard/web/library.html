@@ -237,7 +237,7 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 /* your tags in the filters, by what they're about (issue #157): each kind's name on a line of its own */
 .chips .tgroup { flex-basis: 100%; margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--dust); }
 .chips .tgroup:first-child { margin-top: 0; }
-.tagrows select.ttype { width: auto; height: 32px; padding: 0 8px; font-size: 13px; }
+.tagrows select.ttype { width: auto; height: 32px; padding: 0 30px 0 10px; font-size: 13px; }   /* (the arrow: looks.css) */
 /* Mix and match (issue #156) */
 dialog.ask.mixdlg { width: min(560px, calc(var(--vw) - 32px)); }
 dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
@@ -813,6 +813,21 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 .slot.stacked .art { overflow: visible; min-height: 0; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
 .slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
 .badge.count { background: var(--bone); color: var(--cave); }
+/* a gift (issue #263), wrapped in its store's colours, with a ribbon and a bow, until you first open it; then the
+   paper lifts away */
+.slot.wrapped .art::before, .slot.unwrapping .art::before { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; pointer-events: none;
+  --bow: color-mix(in srgb, var(--bone) 86%, var(--c));
+  background: radial-gradient(circle at 50% 50%, var(--bow) 0 11px, transparent 12px),
+    radial-gradient(ellipse 24px 15px at calc(50% - 21px) calc(50% - 13px), transparent 0 38%, var(--bow) 44% 94%, transparent 100%),
+    radial-gradient(ellipse 24px 15px at calc(50% + 21px) calc(50% - 13px), transparent 0 38%, var(--bow) 44% 94%, transparent 100%),
+    linear-gradient(90deg, transparent calc(50% - 7px), var(--bow) calc(50% - 7px) calc(50% + 7px), transparent calc(50% + 7px)),
+    linear-gradient(transparent calc(50% - 7px), var(--bow) calc(50% - 7px) calc(50% + 7px), transparent calc(50% + 7px)),
+    repeating-linear-gradient(135deg, var(--c) 0 14px, color-mix(in srgb, var(--c) 80%, var(--bone)) 14px 28px); }
+.slot:is(.wrapped, .unwrapping) .art > :is(.badges, .notch, .tick, .ondisk-mark) { z-index: 2; }   /* (over the paper) */
+.slot.unwrapping .art::before { animation: unwrap .7s ease-in forwards; }
+@keyframes unwrap { to { opacity: 0; transform: translateY(-60%) rotate(-6deg); } }
+body.less-motion .slot.unwrapping .art::before { animation-duration: .01s; }
+@media (prefers-reduced-motion: reduce) { .slot.unwrapping .art::before { animation-duration: .01s; } }
 /* Stack copies (issue #215): a button that stays pressed while it's on */
 .stack-toggle { gap: 6px; height: var(--btn-h-sm); color: var(--dust); cursor: pointer; }
 .stack-toggle svg { width: 16px; height: 16px; flex: none; }
@@ -939,10 +954,11 @@ body.no-glow .projects.win { background: var(--cave); }
 .projects .row > button { width: auto; flex: none; margin: 0; }
 .projects .meta, .projects .muted { font-size: 12px; color: var(--dust); overflow-wrap: anywhere; }
 .projects input:not([type=checkbox]):not([type=radio]), .projects select:not([data-proj-style]), .projects textarea:not([readonly]) {
-  height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0; background: var(--cave); color: var(--bone);
+  height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0; background-color: var(--cave); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); font: inherit; font-size: 13.5px; min-width: 0; box-sizing: border-box; }
 .projects textarea:not([readonly]) { height: auto; width: 100%; padding: 8px 12px; resize: vertical; font: 12.5px/1.5 ui-monospace, monospace; }
 .projects input:focus, .projects select:focus, .projects textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.projects select:not([data-proj-style]) { padding-right: 30px; }   /* (room for its arrow: looks.css) */
 .pj-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .projects .primary, .projects .ghost { width: auto; margin-top: 0; }   /* (not a panel's one full-width button) */
 .pj-top input[type=search] { flex: 1 1 200px; }
@@ -1151,7 +1167,7 @@ dialog.ask.share .shortlink { margin-top: 4px; }   /* (its short link: the only 
 dialog.ask.share .shortlink p:first-child { font-weight: 400; }   /* (not a question's first line) */
 dialog.ask .ghost.danger { color: var(--warn); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-.proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--ledge); color: var(--bone);
+.proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background-color: var(--ledge); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); }
 /* the Tasks window: running, waiting and finished jobs */
 .tasks h3 { display: flex; align-items: center; gap: 8px; font: 700 13px var(--body); color: var(--dust); margin: 16px 0 8px;
@@ -1278,7 +1294,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
 /* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
 .tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
-  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .2s, top .2s, width .2s, height .2s; }
+  box-shadow: 0 0 0 3px var(--gold), 0 0 0 100vmax rgb(10 8 6 / .55); transition: left .5s ease-in-out, top .5s ease-in-out,
+  width .5s ease-in-out, height .5s ease-in-out; }   /* (slow enough to follow, issue #265: the card waits for it, shared.js) */
 .tour-ring.none { left: 50%; top: 50%; width: 0; height: 0; box-shadow: 0 0 0 100vmax rgb(10 8 6 / .55); }
 .tour-card { position: fixed; z-index: 90; width: min(380px, calc(var(--vw) - 32px)); padding: 18px 20px 16px; border-radius: 16px;
   background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--gold), 0 24px 60px rgb(0 0 0 / .5); }
@@ -1295,9 +1312,11 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 @keyframes tourPulse { 50% { opacity: .3; } }
 .tour-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
 .tour-go > span { display: flex; gap: 8px; margin-left: auto; }
-body.less-motion .tour-ring { transition: none; }
+.tour-card { transition: opacity .3s ease-out; }
+.tour-card.tour-wait { opacity: 0; transition: none; }   /* (gone at once, back once the ring's there) */
+body.less-motion .tour-ring, body.less-motion .tour-card { transition: none; }
 body.less-motion .tour-try::before { animation: none; }
-@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } .tour-try::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card { transition: none; } .tour-try::before { animation: none; } }
 </style>
 </head>
 <body>
@@ -1613,6 +1632,7 @@ body.less-motion .tour-try::before { animation: none; }
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
+  <label class="check"><input type="checkbox" id="setSeasonal"> Seasonal Secrets: while Hoard is in the background, Spooky Hoard gathers dust and cobwebs, and Winter Hoard snow and ice</label>
   <label class="check">Store colours
     <select id="setColours" aria-label="Store colours">
       <option value="standard">Standard</option>
@@ -2027,12 +2047,25 @@ function renderStores() {
   $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
   $("#menuDot").hidden = $("#warnDot").hidden;   // (Stores is in the Menu)
 }
+// Gifts (issue #263) are wrapped until you first open one; the ones you've opened are remembered (Hoard's config: ui).
+let giftsOpened = null;
+// Is this a gift not opened yet?
+const isWrapped = a => a.gift && !(giftsOpened ||= new Set(UI.unwrapped || [])).has(a.key);
+// Open a gift: remembered, and its tile's paper lifts away.
+function unwrap(a) {
+  if (!isWrapped(a)) return;
+  giftsOpened.add(a.key);
+  uiSave({ unwrapped: [...giftsOpened] });
+  const tile = document.querySelector(`.slot[data-key="${CSS.escape(a.key)}"]`);
+  if (tile) { tile.classList.replace("wrapped", "unwrapping"); setTimeout(() => tile.classList.remove("unwrapping"), 800); }
+}
 // A product's tile: its picture, name, creator, store and marks (copies, downloaded, new).
 const slotHTML = a => {
-    const n = stackSize.get(a.key) || 0;
+    const n = stackSize.get(a.key) || 0, wrapped = isWrapped(a);
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
-                  a.also_in.length && tr("also on {0}", listed(a.also_in.map(label))), onDisk(a) && tr("downloaded"), a.new && tr("new")];
-    return `<button class="slot ${a.store}${n > 1 ? " stacked" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
+                  a.also_in.length && tr("also on {0}", listed(a.also_in.map(label))), onDisk(a) && tr("downloaded"), a.new && tr("new"),
+                  wrapped && tr("a gift, not opened yet")];
+    return `<button class="slot ${a.store}${n > 1 ? " stacked" : ""}${wrapped ? " wrapped" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
@@ -2207,6 +2240,7 @@ async function addShop(shop) {
 // Open a product's details: its picture, store, creator, tags, type, sets, files and buttons.
 function showDetail(a, focus = true) {
   openKey = a.key;
+  unwrap(a);   // (a gift, opened for the first time)
   markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
   const by = storeUrl(a.store, a.creator_url) ? `<a href="${esc(storeUrl(a.store, a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
   const extra = [a.variants && esc(a.variants), a.gift && tr("gift"), a.archived && tr("archived on Gumroad")].filter(Boolean).join(", ");

@@ -48,7 +48,9 @@ Once Hoard has read your library, the Library offers a short tour (4.1.0): **Tak
 shows what Hoard can do with your own things, one part of the page at a time, with a card beside it. Some steps ask
 you to try something (search for a word from one of your items, open it, choose two, look inside its package, give it
 a tag), and the tour goes on by itself once you have; **Skip** goes on without. It carries on from the Library to
-Downloads, and passes by what you don't have yet: with nothing downloaded, it says what Downloads will hold.
+Downloads, and passes by what you don't have yet: with nothing downloaded, it says what Downloads will hold. From
+one step to the next, the ring moves to what's next and the card follows a moment later, so you can see where to
+look (5.2.0 beta 2); with **Reduce motion**, both move at once.
 
 It's offered once. Take it again any time from **Settings**, then **Take the tour**, and leave it with **End the
 tour**.

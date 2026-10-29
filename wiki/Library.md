@@ -56,7 +56,11 @@ Click an item to open its details. The item stays outlined in gold in the grid w
 you can see where it is.
 
 Something you own on more than one store has a striped spine along the bottom of its tile, in both stores'
-colours (the tile's label says so too, for screen readers).
+colours (the tile's label says so too, for screen readers). Point at a tile, or move to it with the keyboard, and
+its picture names every store you own it on (5.2.0 beta 2).
+
+A gift someone sent you on Booth shows wrapped in Booth's colours, with a ribbon and a bow, until you first open its
+details (5.2.0 beta 2). Hoard remembers the gifts you've opened.
 
 In the details:
 

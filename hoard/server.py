@@ -72,6 +72,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
 # Actions that prove themselves another way than the access key: the one-time link a page is opened with,
 # and a second copy of Hoard with the token in the running copy's private file.
 KEYLESS_ACTIONS = ("/api/enter", "/api/show")
+MAX_UNWRAPPED = 5000   # gifts remembered as opened (issue #263): the last ones opened, past that
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
 BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
@@ -118,6 +119,7 @@ def display_settings(cfg: dict) -> dict:
     return {"text_size": d.get("text_size") if d.get("text_size") in TEXT_SIZES else 100,
             "pause_animations": bool(d.get("pause_animations")), "reduce_motion": bool(d.get("reduce_motion")),
             "glow": d.get("glow") is not False,
+            "seasonal": d.get("seasonal") is not False,   # Seasonal Secrets (issue #260): on unless you turn it off
             # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
             "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
             "card_outlines": bool(d.get("card_outlines")),   # each card outlined, on a background of its own (#222)
@@ -170,7 +172,7 @@ UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and D
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
     is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
-    the sort, one for both pages, and the sets you added to last."""
+    the sort, one for both pages, the sets you added to last, and the gifts you've opened."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -190,6 +192,8 @@ def ui_settings(cfg: dict) -> dict:
         out["sort"] = ui["sort"]
     if isinstance(ui.get("recent_sets"), list):   # the sets you added to last, first in the right-click menu (issue #228)
         out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
+    if isinstance(ui.get("unwrapped"), list):   # the gifts you've opened (issue #263): their keys, never their names
+        out["unwrapped"] = [k for k in ui["unwrapped"] if isinstance(k, str) and re.fullmatch(r"[a-z]{2,12}:[\w.:-]{1,120}", k)][-MAX_UNWRAPPED:]
     return out
 
 
@@ -333,8 +337,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines")
-                        if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines",
+                                                    "seasonal") if k in given})
         if "font" in given:
             if given["font"] not in FONTS:
                 raise ValueError("Choose a font from the list.")

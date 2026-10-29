@@ -583,6 +583,77 @@ class AccessKey(unittest.TestCase):
             page.evaluate(post, ["/api/hidden/forget", {"confirm": True}])
             page.close()
 
+    def test_a_gift_is_wrapped_until_its_opened(self):
+        """Issue #263: a gift is wrapped in its store's colours until you first open it; then the paper comes off, and
+        it's remembered (Hoard's config, by its key: never its name)."""
+        from unittest import mock
+        item = self.srv.lib.data["items"][0]
+        item["gift"] = True
+        self.addCleanup(item.update, gift=False)
+        self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("unwrapped", None))
+        with mock.patch.object(server, "save_config"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            tile = page.locator(".slot", has_text="Rusk")
+            self.assertIn("wrapped", tile.get_attribute("class"))
+            self.assertIn("a gift, not opened yet", tile.get_attribute("aria-label"))
+            paper = tile.locator(".art").evaluate("e => getComputedStyle(e, '::before').backgroundImage")
+            self.assertIn("repeating-linear-gradient", paper)
+            tile.click()
+            page.locator("#detail.open").wait_for()
+            self.assertNotIn(" wrapped", tile.get_attribute("class"))
+            page.evaluate("uiFlush()")
+            page.wait_for_function("() => !uiPending")
+            page.wait_for_timeout(300)
+            self.assertEqual(self.srv.cfg["ui"]["unwrapped"], ["booth:111"])
+            page.reload()
+            page.get_by_text("Rusk").first.wait_for()
+            self.assertNotIn("wrapped", page.locator(".slot", has_text="Rusk").get_attribute("class"), "remembered")
+            page.close()
+        self.assertEqual(server.ui_settings({"ui": {"unwrapped": ["booth:111", "Rusk the fox", 3, "gumroad:ab-c"]}})["unwrapped"],
+                         ["booth:111", "gumroad:ab-c"], "keys only")
+
+    def test_every_dropdown_in_the_themes_colours(self):
+        """Issues #241, #243: every dropdown, on both pages, in each place the app makes one (the tag manager's kind,
+        Projects', Settings', a set's, the dialogs'), is drawn in the theme's colours with Sort's arrow and room for
+        it, never the system's grey; and its open list is in the theme's colours too."""
+        places = ['<ul class="tagrows"><li><span class="tbtns"><select class="ttype"><option>Clothing</option></select></span></li></ul>',
+                  '<div class="projects"><div class="pj-field"><select><option>2022</option></select></div></div>',
+                  '<div class="projects"><div class="proj"><div class="row"><select data-proj-style><option>A</option></select></div></div></div>',
+                  '<div class="settings"><div class="field"><select><option>English</option></select></div></div>',
+                  '<div class="tagadd"><select><option>Add it to a set</option></select></div>',
+                  '<div class="typepick"><select><option>Avatar</option></select></div>',
+                  '<div class="wish-price"><select><option>USD</option></select></div>',
+                  '<dialog class="ask" open><select><option>One</option></select></dialog>',
+                  '<div class="movefield"><select><option>D:</option></select></div>',
+                  '<div class="bulkmove"><select><option>D:</option></select></div>',
+                  '<div class="dupes"><select><option>Booth</option></select></div>',
+                  '<select><option>Anywhere else</option></select>']
+        check = """places => places.map(html => {
+          const box = document.createElement('div'); box.innerHTML = html; document.body.append(box);
+          const s = box.querySelector('select'), c = getComputedStyle(s), o = getComputedStyle(s.options[0]);
+          const token = n => { const p = document.createElement('i'); p.style.color = `var(--${n})`; document.body.append(p);
+                               const v = getComputedStyle(p).color; p.remove(); return v; };
+          const ground = ['cave', 'ledge', 'stone'].map(token);
+          const said = [c.appearance, c.backgroundImage.includes('gradient'), parseFloat(c.paddingRight) >= 24,
+                        ground.includes(c.backgroundColor), c.color === token('bone'), o.backgroundColor === token('stone'),
+                        o.color === token('bone')];
+          box.remove();
+          return said;
+        })"""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        for where in ("library", "downloads"):
+            if where == "downloads":
+                page.click("nav.apptabs a[href='/downloads']")
+                page.wait_for_url("**/downloads**")
+                page.locator("#sort").wait_for(state="attached")
+            for scheme in ("dark", "light"):
+                page.emulate_media(color_scheme=scheme)
+                for html, said in zip(places, page.evaluate(check, places)):
+                    self.assertEqual(said, ["none", True, True, True, True, True, True], f"{where}, {scheme}: {html}")
+        page.close()
+
     def test_add_a_folder_leaves_room_beside_it(self):
         """In Hoard's window (a folder picker), Add a folder... sits beside the path box and Add, all in the panel:
         a gold button in a row of fields isn't the full width of the panel."""
@@ -874,6 +945,28 @@ class StackingAcrossStores(unittest.TestCase):
         self.assertEqual(page.locator("#detail .note", has_text="Shown with its copies").count(), 0,
                          "its details don't say it's shown with a copy that isn't here")
         page.evaluate("([k]) => apiPost('/api/marks', { keys: [k], kind: 'archived', on: false })", [gumroad])
+        page.close()
+
+    def test_a_tile_names_its_stores_when_pointed_at(self):
+        """Issue #251: a stack's count is small in every style (the Treasure style's page count no longer makes it
+        big), and pointing at a tile, or focusing it, names every store its product is owned on."""
+        page = self.browser.new_page()
+        goto(page, self.srv.entry_url())
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        mane = page.locator(".slot.stacked", has_text="Fluffy Mane")
+        tag = lambda: mane.locator(".notch").evaluate("e => getComputedStyle(e, '::before').content")  # noqa: E731
+        for style in ("", "treasure"):
+            page.evaluate("s => s ? document.documentElement.dataset.style = s : delete document.documentElement.dataset.style", style)
+            self.assertLessEqual(float(mane.locator(".badge.count").evaluate("e => parseFloat(getComputedStyle(e).fontSize)")), 13,
+                                 style or "standard")
+            page.mouse.move(0, 0)
+            self.assertIn(tag(), ("none", '"Gumroad"'), "not until it's pointed at (Treasure: its own store's tag)")
+            mane.hover()
+            self.assertEqual(tag(), '"Gumroad · Jinxxy"', style or "standard")
+        page.mouse.move(0, 0)
+        mane.focus()
+        page.keyboard.press("Shift")   # (focused from the keyboard)
+        self.assertEqual(tag(), '"Gumroad · Jinxxy"', "focused")
         page.close()
 
     def test_a_copy_that_isnt_one(self):
@@ -2310,6 +2403,47 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.wait_for_function("() => document.activeElement && document.activeElement.id === 'setLanguage'")
         self.assertEqual(self.errors, [])
         page.close()
+
+    def test_seasonal_secrets(self):
+        """Issue #260: while Hoard's window is in the background, Spooky Hoard gathers dust and cobwebs round the edges
+        (Winter Hoard snow and ice); moving the mouse about clears it a little at a time, switching tabs at once. Never
+        in the way (nothing in it can be pointed at or read out), and off with Reduce motion or Seasonal Secrets off."""
+        page = self.open()
+        secrets = page.locator("#secrets")
+        away = """kind => { applyDisplay({ ...DATA.display, theme: kind, seasonal: true });
+            window.dispatchEvent(new Event('blur')); SECRETS.since = Date.now() - SECRET_WAIT - SECRET_GROW * .8; secretsGrow();
+            window.dispatchEvent(new Event('focus')); return SECRETS.level; }"""
+        self.assertAlmostEqual(page.evaluate(away, "spooky"), .8, delta=.02)
+        self.assertTrue(secrets.is_visible())
+        self.assertEqual((secrets.get_attribute("data-kind"), secrets.get_attribute("aria-hidden")), ("spooky", "true"))
+        self.assertEqual(secrets.locator(".sec-web").count(), 4)
+        self.assertEqual(secrets.evaluate("e => getComputedStyle(e).pointerEvents"), "none")
+        page.mouse.move(700, 400)
+        for x in range(10):   # (back and forth across the window)
+            page.mouse.move(200 if x % 2 else 1200, 400, steps=8)
+        level = page.evaluate("SECRETS.level")
+        self.assertLess(level, .8, "moving the mouse clears it")
+        for x in range(30):
+            page.mouse.move(200 if x % 2 else 1200, 300 + x, steps=4)
+        page.wait_for_function("() => SECRETS.level === 0")
+        secrets.wait_for(state="hidden")
+        page.evaluate(away, "winter")
+        self.assertEqual(secrets.get_attribute("data-kind"), "winter")
+        self.assertEqual(secrets.locator(".sec-snow").count(), 1)
+        page.locator("#storeSeg button[aria-checked=\"false\"]").first.click()   # a tab: cleared at once
+        page.wait_for_function("() => SECRETS.level === 0")
+        secrets.wait_for(state="hidden")
+        page.evaluate("DATA.display.reduce_motion = true")   # (Settings' Reduce motion)
+        page.evaluate(away, "winter")
+        self.assertFalse(secrets.is_visible(), "Reduce motion: none")
+        page.evaluate("DATA.display.reduce_motion = false; SECRETS.level = 0")
+        self.assertEqual(page.evaluate("""() => { applyDisplay({ ...DATA.display, theme: 'winter', seasonal: false });
+            window.dispatchEvent(new Event('blur')); return SECRETS.kind; }"""), "", "turned off")
+        page.evaluate("applyDisplay({ ...DATA.display, theme: 'hoard' })")
+        self.assertEqual(page.evaluate("SECRETS.kind"), "", "only the seasonal themes")
+        self.assertEqual(self.errors, [])
+        self.assertTrue(server.display_settings({"display": {}})["seasonal"], "on unless you turn it off")
+        self.assertFalse(server.display_settings({"display": {"seasonal": False}})["seasonal"])
 
     def test_a_search_shows_its_results(self):
         """Issue #249: typing a search while Settings or Projects fills the window left them over the results."""

@@ -51,7 +51,8 @@ class EveryTheme(unittest.TestCase):
                     self.assertRegex(v, r"^(#[0-9A-F]{6}|\d+%)$", f"{name} {mode} {k}")
 
     def test_readable(self):
-        """Text 4.5:1 on every background it's set on; the accent as text 4.5:1; text on the accent 4.5:1."""
+        """Text 4.5:1 on every background it's set on; the accent as text 4.5:1; text on the accent 4.5:1; the accent
+        3:1 on the page and its panels, as a control's edge."""
         for name, t in themes.THEMES.items():
             for mode in ("dark", "light"):
                 c = t[mode]
@@ -61,6 +62,34 @@ class EveryTheme(unittest.TestCase):
                     for ground in grounds:
                         self.assertGreaterEqual(contrast(c[fg], c[ground]), 4.5, f"{at}: {fg} on {ground}")
                 self.assertGreaterEqual(contrast(c["gold-ink"], c["gold"]), 4.5, f"{at}: text on the accent")
+                for ground in ("cave", "ledge"):   # (issue #240: a control's edge, as the focus ring and gold buttons are)
+                    self.assertGreaterEqual(contrast(c["gold"], c[ground]), 3, f"{at}: the accent on {ground}")
+
+    def test_readable_over_the_glow(self):
+        """Issues #240, #257: the glow rises behind the page in the stores' colours (shared.js's setGlow), brightest at
+        the bottom of the window, where the sidebar's foot, the footer and tiles' names are. What's written there sits
+        on the page's colour over the glow (web/looks.css), and reads at 4.5:1 over the brightest glow: one store's,
+        or two stores' where Everything's colours meet; in every theme, with its own store colours and Settings'
+        colour-blind ones."""
+        root = Path(__file__).resolve().parent.parent / "hoard" / "web"
+        dark, light = map(int, re.search(r"const strength = light \? (\d+) : (\d+);", (root / "shared.js").read_text("utf-8")).groups()[::-1])
+        looks = (root / "looks.css").read_text("utf-8")
+        backdrop = int(re.search(r"\.side, \.foot, [^{]+\{\s*background-color: color-mix\(in srgb, var\(--cave\) (\d+)%", looks).group(1)) / 100
+        self.assertIn(f"var(--cave) {round(backdrop * 100)}%", looks.split(".slot :is(.nm-t, .nm, .cr)")[1].split("}")[0],
+                      "tiles' names on the same")
+
+        def mix(base, top, a):
+            return "#" + "".join(f"{round(b * (1 - a) + t * a):02X}" for b, t in zip(_rgb(base), _rgb(top)))
+        # at the bottom of the window: 79% of the glow's strength under one store's spot, 59% of each where two meet
+        for name, t in themes.THEMES.items():
+            for mode, strength in (("dark", dark / 100), ("light", light / 100)):
+                for colours in (t[mode], {**t[mode], **themes.COLOURBLIND[mode]}):
+                    c, stores = colours, [s for s in themes.STORES if s != "local"]
+                    glows = [mix(c["cave"], c[s], strength * .79) for s in stores]
+                    glows += [mix(mix(c["cave"], c[a], strength * .59), c[b], strength * .59) for a in stores for b in stores if a != b]
+                    for ground in (mix(g, c["cave"], backdrop) for g in glows):
+                        for fg in ("bone", "dust", "gold-text", "warn"):
+                            self.assertGreaterEqual(contrast(c[fg], ground), 4.5, f"{name} ({mode}): {fg} over the glow")
 
     def test_stores_stay_stores(self):
         """Each store's colour shows on the page (3:1, as a line or a dot) and isn't taken for the accent."""
