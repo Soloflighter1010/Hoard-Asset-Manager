@@ -13,14 +13,25 @@ ALCOM or the Creator Companion installed: it chooses the same package versions, 
 ## The list
 
 Each project shows its kind (avatars or worlds), its Unity version, and when you last opened it. **★** makes it a
-favourite, at the top of the list. **Open in Unity** opens it; **Manage** shows its packages and more. A project whose
-folder has gone (moved, or on a drive that isn't connected) says so, with **Take off the list**.
+favourite, at the top of the list. From 5.2.0 beta 2, a project also shows what's new for it, two ways apart: how many
+of its packages have newer versions (outlined), and how many products from your library in it have updates (filled,
+from what [Hoard for Unity](Hoard-for-Unity) reported of it).
+
+Choose a project to open its details beside the list (5.2.0 beta 2): where it is, its folder and tags, what's new
+(each leads to it: its packages in **Manage**, its products in what Hoard for Unity reported), and its buttons:
+**Open in Unity**, **Manage** (its packages and more), **Show in folder**, **Folder and tags...** and the favourite.
+Choose it again, or **×**, to put them away. A project whose folder has gone (moved, or on a drive that isn't
+connected) says so, with **Take off the list** in its details.
+
+**List** and **Tiles** (beside **Add a project...**, 5.2.0 beta 2) choose how the list shows, as ALCOM's and the
+Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, and
+(with all projects shown) each folder is one folder tile, with its projects inside: choose it to see them.
 
 **Folder and tags...** (5.2.0) puts a project in a folder of your own and gives it tags: words to find it by, such
 as `quest` or `poiyomi`, with commas between them. They're Hoard's own (the Creator Companion and ALCOM have only a
 favourite). Once a project is in a folder, the folders show above the list: choose one to see just its projects,
-**Not in a folder** for the rest, or **All projects**. Choose a tag on a project to see those that have it, and choose
-it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
+**Not in a folder** for the rest, or **All projects**. Choose a tag in a project's details to see those that have it,
+and choose it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
 
 **Add a project...** lists one you already have: in Hoard's own window it opens your computer's folder picker, in your
 projects folder (in a web browser, you type the folder's full path). **Take off the list** leaves its folder as it is;

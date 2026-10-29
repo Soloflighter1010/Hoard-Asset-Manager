@@ -1592,6 +1592,12 @@ body.less-motion .tour-try::before { animation: none; }
   <p id="appriseKept" class="hint" aria-live="polite"></p>
   <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
     placeholder="discord://..."></textarea>
+  <details id="appriseBuild" class="apprise-build"><summary>Build an address</summary>
+    <label class="check">Service <select id="appriseService" aria-label="Service"></select></label>
+    <div id="appriseFields" class="apprise-fields"></div>
+    <div class="row"><button class="ghost sm" id="appriseAdd">Put it in the box</button></div>
+    <p class="hint" id="appriseBuilt" aria-live="polite"></p>
+  </details>
   <div class="apprise-acts"><button class="ghost sm" id="appriseSave">Keep these addresses</button>
     <button class="ghost sm" id="appriseTest">Send a test</button>
     <button class="linkish" id="appriseForget">Forget them</button></div>

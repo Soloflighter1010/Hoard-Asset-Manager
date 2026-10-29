@@ -89,6 +89,28 @@ class Service:
             "hoard_for_unity": {"package": HOARD_PACKAGE, "repo": HOARD_REPO, "repo_added": self._has_hoard(coll)},
         }
 
+    def updates(self) -> dict:
+        """For Projects' list (issue #253): each project's packages with a newer version (as its own page lists them:
+        stable ones only, unless it has a prerelease already or you asked for them), by its path. A project that
+        can't be read just now isn't there."""
+        settings = self.settings()
+        coll = self.collection()
+        out = {}
+        for listed in listing.projects():
+            if not listed.get("exists"):
+                continue
+            try:
+                p = UnityProject.load(listed["path"])
+            except (ProjectError, OSError, ValueError):
+                continue
+            newer = []
+            for name, (version, _deps) in sorted(p.locked.items()):
+                found = coll.find(name, Selector.latest(p.unity, settings.show_prerelease() or version.is_pre))
+                if found and found.version > version:
+                    newer.append(name)
+            out[listed["path"]] = {"packages": len(newer), "names": newer[:20]}
+        return out
+
     @staticmethod
     def _has_hoard(coll) -> bool:
         """Is Hoard for Unity's repository added (by its address, or a repository that has the package)?"""

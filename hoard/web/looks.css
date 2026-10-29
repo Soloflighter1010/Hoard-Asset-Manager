@@ -33,6 +33,62 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 .setpick-grid .settile:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 2px; }
 .setpick-find { width: 100%; box-sizing: border-box; }
 .setpick [hidden] { display: none; }
+/* Projects' list (issues #246, #250, #253): a row or a tile says what's needed at a glance (its kind, Unity, folder,
+   and what's new: packages outlined, products filled), and choosing one opens its details beside the list */
+.pj-layout { display: inline-flex; gap: 4px; margin-left: auto; }
+.pj-layout [aria-checked="true"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--gold); }
+.pj-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.pj-split.with-detail { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); }
+@media (max-width: 900px) { .pj-split.with-detail { grid-template-columns: minmax(0, 1fr); } .pj-split .pj-detail { order: -1; position: static; } }
+.pj-row:has(> .pj-open) { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "star open"; }
+.pj-open { grid-area: open; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main ups" "what ups";
+  gap: 2px 12px; align-items: center; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left;
+  font: inherit; cursor: pointer; }
+.pj-open .pj-ups { grid-area: ups; }
+.pj-open:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 6px; }
+.pj-row.on { box-shadow: inset 4px 0 0 var(--c, var(--seam)), inset 0 0 0 2px var(--gold); }
+.pj-ups { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.pj-up { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.pj-up.pkg { color: var(--gold-text); box-shadow: inset 0 0 0 1.5px var(--gold); }
+.pj-up.prod { background: var(--gold); color: var(--gold-ink); }
+.pj-detail { position: sticky; top: 8px; padding: 16px; border-radius: 14px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); min-width: 0; }
+.pj-detail .win-x { float: right; margin: -6px -6px 0 0; }
+.pj-detail .pj-h { margin: 0 32px 2px 0; overflow-wrap: anywhere; }
+.pj-detail .meta { overflow-wrap: anywhere; }
+.pj-detail p { margin: 6px 0; }
+.pj-detail p svg { width: 14px; height: 14px; vertical-align: -2px; }
+.pj-detail .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 14px; }
+.pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
+  text-align: left; font: inherit; cursor: pointer; }
+.pj-tile.k-avatars, .pj-mini i.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds, .pj-mini i.k-worlds { --c: var(--pj-worlds); }
+.pj-tile.k-other, .pj-mini i.k-other { --c: var(--pj-other); }
+.pj-tile-art { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;
+  background: color-mix(in srgb, var(--c, var(--seam)) 22%, var(--ledge)); box-shadow: inset 0 -5px 0 var(--c, var(--seam)); }
+.pj-tile-art b { font: 400 34px var(--display); color: var(--bone); }
+.pj-tile:hover .pj-tile-art { transform: translateY(-2px); }
+.pj-tile.on .pj-tile-art, .pj-tile:focus-visible .pj-tile-art { outline: 3px solid var(--gold); outline-offset: 2px; }
+.pj-tile:focus-visible { outline: none; }
+.pj-tile.gone { opacity: .7; }
+.pj-tile .nm-t { font-weight: 700; overflow-wrap: anywhere; }
+.pj-tile .cr { font-size: 12px; color: var(--dust); }
+.pj-tile .pj-ups { justify-content: flex-start; }
+.pj-fav { position: absolute; top: 8px; left: 10px; font-style: normal; color: var(--gold-text); }
+.pj-folder-tile .pj-tile-art { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-folder-tile .pj-tile-art > svg { width: 70%; height: 70%; color: var(--dust); }
+.pj-mini { position: absolute; inset: 40% 27% 27%; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.pj-mini i { display: grid; place-items: center; border-radius: 4px; font: 700 10px var(--body); font-style: normal;
+  background: color-mix(in srgb, var(--c) 45%, var(--stone)); color: var(--bone); }
+body.less-motion .pj-tile-art { transition: none; }
+/* building an Apprise address (issue #239): a service, and its fields one under another */
+.apprise-build { margin: 8px 0; }
+.apprise-build summary { cursor: pointer; font-weight: 700; color: var(--dust); }
+.apprise-fields { display: grid; gap: 6px; margin: 8px 0; }
+.apprise-fields .field-row { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.apprise-fields input { min-width: 0; height: var(--btn-h-sm); padding: 0 10px; border-radius: 8px; border: 0; background: var(--stone);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.apprise-fields input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+@media (max-width: 560px) { .apprise-fields .field-row { grid-template-columns: minmax(0, 1fr); } }
 /* a set's note, as it's shared (issue #256: changed after Edit) */
 .setnote-full { margin: 10px 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 /* a note on what's new (issue #244, shared.js): beside what it's about, once */

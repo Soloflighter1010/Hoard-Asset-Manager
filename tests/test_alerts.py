@@ -322,6 +322,14 @@ class RealApprise(unittest.TestCase):
         self.assertIn("401", said, "what the service answered")
         self.assertNotIn("SECRET1234", said)
 
+    def test_built_addresses_are_ones_apprise_takes(self):
+        """Issue #239: every address Build an address makes (tests/test_pages.py's APPRISE_BUILT) is one Apprise takes."""
+        import apprise
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_pages import APPRISE_BUILT
+        for service, _, address in APPRISE_BUILT:
+            self.assertTrue(apprise.Apprise().add(address), f"{service}: {address}")
+
 
 if __name__ == "__main__":
     unittest.main()

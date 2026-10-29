@@ -191,6 +191,8 @@ def ui_settings(cfg: dict) -> dict:
             out[k] = ui[k]
     if ui.get("sort") in UI_SORTS:
         out["sort"] = ui["sort"]
+    if ui.get("pj_layout") in ("list", "tiles"):   # Projects as a list or as tiles (issue #250)
+        out["pj_layout"] = ui["pj_layout"]
     if isinstance(ui.get("recent_sets"), list):   # the sets you added to last, first in the right-click menu (issue #228)
         out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
     if isinstance(ui.get("spots_seen"), list):   # the "new here" notes you've seen (issue #244), by their names
@@ -1626,6 +1628,8 @@ class Handler(BaseHTTPRequestHandler):
                 hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
                 found["preloaded"] = [x for x in found["preloaded"] if x.get("tag_key") not in hidden]
                 return self._json({**found, "report": report}, compress=True)
+            if path == "/api/vpm/updates":   # issue #253: each project's packages with newer versions, for the list
+                return self._json({"projects": srv.vpm.updates()}, compress=True)
             if path == "/api/vpm/packages":
                 return self._json({"packages": srv.vpm.packages(one("unity"), one("pre") == "1")}, compress=True)
             if path == "/api/vpm/versions":

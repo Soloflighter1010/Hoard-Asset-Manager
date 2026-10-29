@@ -78,6 +78,22 @@ def picture(seed: int, noise: int = 0, size: int = 48, height: int | None = None
             + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
+# Issue #239: what Build an address makes of each service's fields (tests/test_alerts.py checks Apprise takes each one)
+APPRISE_BUILT = [
+    ("discord", {"hook": "https://discord.com/api/webhooks/123456789012345678/AbC-dEf_123"}, "discord://123456789012345678/AbC-dEf_123"),
+    ("telegram", {"token": "123456:ABC-def_ghi", "chat": "-1001234567890"}, "tgram://123456:ABC-def_ghi/-1001234567890"),
+    ("ntfy", {"topic": "my-hoard"}, "ntfy://my-hoard"),
+    ("ntfy", {"topic": "my-hoard", "server": "https://ntfy.example.com:8443"}, "ntfys://ntfy.example.com:8443/my-hoard"),
+    ("email", {"from": "you@gmail.com", "password": "app pass", "to": "me@example.org"}, "mailtos://you:app%20pass@gmail.com?to=me%40example.org"),
+    ("pushover", {"user": "fakeuserkey", "token": "fakeapptoken"}, "pover://fakeuserkey@fakeapptoken"),
+    ("slack", {"hook": "https://hooks.slack.com/services/TFAKE/BFAKE/notarealtoken"}, "slack://TFAKE/BFAKE/notarealtoken"),
+    ("matrix", {"server": "matrix.org", "user": "bot", "password": "pw", "room": "#hoard:matrix.org"},
+     "matrixs://bot:pw@matrix.org/%23hoard%3Amatrix.org"),
+    ("gotify", {"server": "https://gotify.example.com", "token": "AbCdEf123"}, "gotifys://gotify.example.com/AbCdEf123"),
+    ("webhook", {"url": "https://example.com/hook?token=abc/d"}, "jsons://example.com/hook?-token=abc%2Fd"),
+]
+
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class AccessKey(unittest.TestCase):
     """S-01: Hoard opens its page with a one-time link, which the page trades for the access key; from then on
@@ -314,6 +330,33 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(started[-1][2]["chosen"], {rusk: {"shown": ["Rusk (Quest).zip", "Rusk.psd"], "chosen": ["Rusk (Quest).zip"]}})
         self.assertEqual(refused, [])
         page.close()
+
+    def test_building_an_apprise_address(self):
+        """Issue #239: Build an address makes a service's Apprise address from its fields and puts it in the box with
+        the others (nothing is sent, or kept, until Keep these addresses)."""
+        from unittest import mock
+        from hoard import alerts
+        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            page.locator("#appriseBuild summary").click()
+            sent = []
+            page.on("request", lambda r: sent.append(r.url) if r.method == "POST" else None)
+            for service, fields, want in APPRISE_BUILT:
+                page.select_option("#appriseService", service)
+                for k, v in fields.items():
+                    page.fill(f'[data-apprise-field="{k}"]', v)
+                page.click("#appriseAdd")
+                self.assertIn(want, page.input_value("#setApprise").split("\n"), service)
+            self.assertEqual(page.input_value("#setApprise").split("\n"), [w for _, _, w in APPRISE_BUILT], "one a line")
+            page.select_option("#appriseService", "discord")
+            page.fill('[data-apprise-field="hook"]', "https://example.com/not-discord")
+            page.click("#appriseAdd")
+            self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
+            self.assertFalse([u for u in sent if "/api/apprise" in u], "nothing kept or sent")
+            page.close()
 
     def test_notifications_through_apprise(self):
         """Issue #230: Settings keeps Apprise's addresses (and then only says how many), and what's sent is ticked."""

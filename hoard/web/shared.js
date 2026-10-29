@@ -2271,6 +2271,82 @@ function fillApprise() {
   $("#appriseTest").disabled = $("#appriseForget").hidden = !a.kept;
   $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
 }
+/* Building an Apprise address (issue #239): a service and its fields, made into the address Apprise takes (as its
+   wiki has each one: https://github.com/caronc/apprise/wiki), and put in the box with the others. Nothing it builds
+   goes anywhere until you keep the addresses, as one typed there. */
+const APPRISE_SERVICES = [   // {id, name, fields: [[field, label, example, "password"?]], build(the fields) -> address or null}
+  { id: "discord", name: "Discord", fields: [["hook", "Webhook URL", "https://discord.com/api/webhooks/..."]],
+    build: f => { const m = f.hook.match(/^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([\w-]+)/);
+                  return m && `discord://${m[1]}/${m[2]}`; } },
+  { id: "telegram", name: "Telegram", fields: [["token", "Bot token", "123456:ABC-def..."], ["chat", "Chat ID", "123456789"]],
+    build: f => /^\d+:[\w-]+$/.test(f.token) && /^(-?\d+|@\w+)$/.test(f.chat) ? `tgram://${f.token}/${f.chat}` : null },
+  { id: "ntfy", name: "ntfy", fields: [["topic", "Topic", "my-hoard"], ["server", "Your own server (empty for ntfy.sh)", "https://ntfy.example.com"]],
+    build: f => {
+      if (!/^[\w-]{1,64}$/.test(f.topic)) return null;
+      if (!f.server) return `ntfy://${f.topic}`;
+      const u = urlOf(f.server);
+      return u && `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}`;
+    } },
+  { id: "email", name: "Email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
+      ["to", "Send to (empty for yourself)", "me@example.com"], ["smtp", "Mail server (empty to let Apprise find it)", "smtp.example.com"]],
+    build: f => {
+      const m = f.from.match(/^([^@\s]+)@([^@\s]+\.[^@\s]+)$/);
+      if (!m || !f.password || (f.to && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.to)) || (f.smtp && !/^[\w.-]+$/.test(f.smtp))) return null;
+      const q = [f.to && "to=" + encodeURIComponent(f.to), f.smtp && "smtp=" + encodeURIComponent(f.smtp)].filter(Boolean);
+      return `mailtos://${encodeURIComponent(m[1])}:${encodeURIComponent(f.password)}@${m[2]}` + (q.length ? "?" + q.join("&") : "");
+    } },
+  { id: "pushover", name: "Pushover", fields: [["user", "User key", ""], ["token", "Application token", ""]],
+    build: f => /^\w+$/.test(f.user) && /^\w+$/.test(f.token) ? `pover://${f.user}@${f.token}` : null },
+  { id: "slack", name: "Slack", fields: [["hook", "Webhook URL", "https://hooks.slack.com/services/..."]],
+    build: f => { const m = f.hook.match(/^https:\/\/hooks\.slack\.com\/services\/(\w+)\/(\w+)\/(\w+)/); return m && `slack://${m[1]}/${m[2]}/${m[3]}`; } },
+  { id: "matrix", name: "Matrix", fields: [["server", "Homeserver", "matrix.org"], ["user", "User", "hoard-bot"],
+      ["password", "Password", "", "password"], ["room", "Room", "#hoard:matrix.org"]],
+    build: f => {
+      const host = (urlOf(/^https?:/.test(f.server) ? f.server : "https://" + f.server) || {}).host;
+      return host && f.user && f.password && /^[#!]\S+:\S+$/.test(f.room)
+        ? `matrixs://${encodeURIComponent(f.user)}:${encodeURIComponent(f.password)}@${host}/${encodeURIComponent(f.room)}` : null;
+    } },
+  { id: "gotify", name: "Gotify", fields: [["server", "Server", "https://gotify.example.com"], ["token", "Application token", ""]],
+    build: f => { const u = urlOf(f.server); return u && /^[\w.-]+$/.test(f.token) ? `${u.protocol === "https:" ? "gotifys" : "gotify"}://${u.host}${u.pathname.replace(/\/$/, "")}/${f.token}` : null; } },
+  { id: "webhook", name: "A webhook (JSON)", fields: [["url", "Its address", "https://example.com/hook"]],
+    build: f => {   // (its own ?parameters go to it as they are: Apprise's -name=value)
+      const u = urlOf(f.url);
+      if (!u) return null;
+      const q = [...u.searchParams].map(([k, v]) => `-${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+      return `${u.protocol === "https:" ? "jsons" : "json"}://${u.host}${u.pathname}` + (q ? "?" + q : "");
+    } },
+];
+// An http(s) address as typed, or null.
+function urlOf(text) {
+  try { const u = new URL(String(text).trim()); return /^https?:$/.test(u.protocol) && u.hostname ? u : null; } catch (e) { return null; }
+}
+// The builder's fields, for the service chosen.
+function fillAppriseBuilder() {
+  const pick = $("#appriseService");
+  if (!pick) return;
+  if (!pick.options.length) pick.innerHTML = APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
+  const sv = APPRISE_SERVICES.find(x => x.id === pick.value) || APPRISE_SERVICES[0];
+  $("#appriseFields").innerHTML = sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
+    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("");
+  $("#appriseBuilt").textContent = "";
+}
+// The address the builder's fields make, or null (and a word on what's missing).
+function buildApprise() {
+  const sv = APPRISE_SERVICES.find(x => x.id === $("#appriseService").value);
+  const f = Object.fromEntries([...document.querySelectorAll("[data-apprise-field]")].map(i => [i.dataset.appriseField, i.value.trim()]));
+  return sv ? sv.build(f) || null : null;
+}
+document.addEventListener("change", e => { if (e.target.id === "appriseService") fillAppriseBuilder(); });
+document.addEventListener("toggle", e => { if (e.target.id === "appriseBuild" && e.target.open) fillAppriseBuilder(); }, true);
+document.addEventListener("click", e => {
+  if (!e.target.closest("#appriseAdd")) return;
+  const made = buildApprise(), box = $("#setApprise");
+  if (!made) { $("#appriseBuilt").textContent = tr("Fill in its fields as the service gives them: that isn't an address yet."); return; }
+  const lines = box.value.split("\n").map(x => x.trim()).filter(Boolean);
+  if (!lines.includes(made)) box.value = [...lines, made].join("\n");
+  for (const i of document.querySelectorAll("[data-apprise-field]")) i.value = "";
+  $("#appriseBuilt").textContent = tr("It's in the box. Keep these addresses to use it.");
+});
 // Acknowledgements (issue #227): everything Hoard uses or ships, with its license (/api/credits), read the first time
 // it's opened; a license's text where Hoard has it, in a dialog
 async function showAcks() {
@@ -2613,7 +2689,9 @@ const PJ = { view: "list", data: null, project: null, find: "", form: null, asse
   pkgs: null, pkFind: "", vers: {},   // the packages there are to add (for one Unity), and each one's versions
   repoShut: new Set(),   // Add packages' repositories you folded away
   job: {},               // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
-  folder: null, tag: "" };   // issue #190: the list's folder shown (null: all of them, "": those in none) and tag
+  folder: null, tag: "",   // issue #190: the list's folder shown (null: all of them, "": those in none) and tag
+  selected: null,          // issue #246: the project whose details are open beside the list (its path)
+  updates: null };         // issue #253: each project's packages with newer versions, by path (/api/vpm/updates)
 const PJ_KINDS = { 0: "Unknown", 1: "Legacy SDK2", 2: "Legacy Worlds", 3: "Legacy Avatars", 4: "UPM Worlds", 5: "UPM Avatars",
   6: "UPM Starter", 7: "Worlds", 8: "Avatars", 9: "VPM Starter" };
 const PJ_WHY = { requested: "Removed", legacy: "Replaced by a newer package", unused: "Nothing uses it any more" };
@@ -2658,6 +2736,7 @@ async function loadProjects(view) {
     if (PJ.view === "new" && !PJ.form) PJ.view = "list";
     if (PJ.view === "backups") await pjLoadBackups();
     drawProjects();
+    pjLoadUpdates();   // (issue #253: read after the list, which shows at once)
   } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Projects couldn't be read just now."))} ${esc(e.message || "")}</p>`; }
   finally { if (pjSplashing) pjSplashing(); }
 }
@@ -2708,10 +2787,13 @@ function pjShowJob() {
 const pjBack = () => `<button class="linkish pj-back" data-pj="back">${esc(tr("‹ All projects"))}</button>`;
 // Projects' list: favourites first, each with its kind, Unity, folder and tags, found by what's typed.
 function pjList() {
-  const d = PJ.data, list = d.projects || [];
+  const d = PJ.data, list = d.projects || [], tiles = UI.pj_layout === "tiles";
   const top = pjTabs() + `<div class="pj-top"><input type="search" id="pjFind" placeholder="${esc(tr("Find a project"))}" aria-label="${esc(tr("Find a project"))}">` +
     `<button class="primary sm" data-pj="new">${esc(tr("New project"))}</button>` +
-    `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button></div>`;
+    `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button>` +
+    `<span class="pj-layout" role="radiogroup" aria-label="${esc(tr("Show projects as"))}">` +
+    [["list", "List"], ["tiles", "Tiles"]].map(([v, label]) => `<button class="ghost sm" role="radio" data-pj="layout" data-v="${v}" ` +
+      `aria-checked="${(v === "tiles") === tiles}">${esc(tr(label))}</button>`).join("") + `</span></div>`;
   const bk = d.backups || {}, room = bk.room || {};
   const note = (room.low && bk.old_count ? `<p class="pj-warn pj-low">${esc(tr(bk.old_count === 1
       ? "The drive your project backups are on has {0} left, and {1} old backup takes {2}." : "The drive your project backups are on has {0} left, and {1} old backups take {2}.",
@@ -2719,21 +2801,86 @@ function pjList() {
   const others = pjUnlisted();
   if (!list.length) return top + note + `<p class="none">${esc(tr("No projects yet. Make one with New project, or add one you have."))}</p>` + others;
   const shown = pjOrganised(list), fav = shown.filter(p => p.favorite), rest = shown.filter(p => !p.favorite);
-  // A project's tags, each a button to show only those.
-  const tags = p => (p.tags || []).length ? `<span class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
-    `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</span>` : "";
+  const ordered = [...fav, ...rest];
+  if (PJ.selected && !list.some(p => p.path === PJ.selected)) PJ.selected = null;   // (taken off the list since)
+  // What Find a project looks at: its name, path, folder and tags.
+  const hay = p => esc(norm([p.name, p.path, p.folder || "", ...(p.tags || [])].join(" ")));
+  let body;
+  if (tiles) {   // issue #250: each project a tile, and (all of them shown) each folder one tile of its own
+    const grouped = PJ.folder == null && !PJ.tag;
+    const folders = grouped ? pjFolders(list) : [];
+    const loose = grouped ? ordered.filter(p => !p.folder) : ordered;
+    body = `<div class="pj-tiles">` + folders.map(([f, n]) => {
+      const inside = list.filter(p => p.folder === f), ups = inside.reduce((t, p) => t + pjUpdateCount(p), 0);
+      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" ` +
+        `data-hay="${esc(norm([f, ...inside.map(p => p.name)].join(" ")))}" aria-label="${esc(tr("Folder {0}, {1} projects", f, n))}">` +
+        `<span class="pj-tile-art folder">${FOLDER_ICON}<span class="pj-mini">${inside.slice(0, 4).map(p =>
+          `<i class="k-${pjHue(p.type)}">${esc(initials(p.name))}</i>`).join("")}</span></span>` +
+        `<span class="nm-t" translate="no">${esc(f)}</span><span class="cr">${esc(tr(n === 1 ? "1 project" : "{0} projects", n))}` +
+        `${ups ? ` · ${esc(tr("updates inside"))}` : ""}</span></button>`;
+    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
+        `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}">` +
+        `<span class="pj-tile-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></span>` +
+        `<span class="nm-t" translate="no">${esc(p.name)}</span><span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
+        pjUpdateMarks(p) + `</button>`).join("") + `</div>`;
+  } else {   // issue #246: a row says what you need at a glance; choosing it opens its details
+    body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
+      `data-path="${esc(p.path)}" data-hay="${hay(p)}">` +
+      `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
+      `<button class="pj-open" data-pj="details" aria-pressed="${PJ.selected === p.path}">` +
+      `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span></span>` +
+      `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
+        `${p.exists ? `${pjChips(p)}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
+      pjUpdateMarks(p) + `</button></li>`).join("")}</ul>`;
+  }
+  const chosen = PJ.selected && list.find(p => p.path === PJ.selected);
   return top + note + pjFolderBar(list) + (shown.length ? "" : `<p class="none">${esc(tr("No projects here."))}</p>`) +
-    `<ul class="pj-list">${[...fav, ...rest].map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}" data-path="${esc(p.path)}" ` +
-    `data-hay="${esc(norm([p.name, p.path, p.folder || "", ...(p.tags || [])].join(" ")))}">` +
-    `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
-    `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span>${tags(p)}</span>` +
-    `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
-      `${p.exists ? `${pjChips(p)}` +
-      `${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
-    `<span class="pj-acts">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
-      `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>`
+    `<div class="pj-split${chosen ? " with-detail" : ""}"><div class="pj-items">${body}</div>${chosen ? pjDetail(chosen) : ""}</div>` + others;
+}
+/* Issue #253: what's new for a project, two ways apart: its VPM packages with newer versions (Projects reads them for
+   the list: /api/vpm/updates), and products from your library in it with updates (Hoard for Unity's report of it) */
+// The report Hoard for Unity made of a listed project, if there is one.
+const pjReportOf = p => PJ.reports.find(r => r.path && pjSame(r.path, p.path)) || null;
+// How many of the project's packages have newer versions, and how many of its products have updates.
+const pjUpdates = p => ({ packages: ((PJ.updates || {})[p.path] || {}).packages || 0,
+                          products: ((pjReportOf(p) || {}).assets || []).filter(a => a.update).length });
+// Both, added up (a folder tile says there are some inside).
+const pjUpdateCount = p => { const u = pjUpdates(p); return u.packages + u.products; };
+// A project's update marks: packages, and products, each its own way.
+function pjUpdateMarks(p) {
+  const u = pjUpdates(p);
+  return (u.packages || u.products ? `<span class="pj-ups">` : "") +
+    (u.packages ? `<span class="pj-up pkg" title="${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}">` +
+      `${esc(tr(u.packages === 1 ? "1 package update" : "{0} package updates", u.packages))}</span>` : "") +
+    (u.products ? `<span class="pj-up prod" title="${esc(tr(u.products === 1 ? "1 product in it has an update" : "{0} products in it have updates", u.products))}">` +
+      `${esc(tr(u.products === 1 ? "1 product updated" : "{0} products updated", u.products))}</span>` : "") +
+    (u.packages || u.products ? `</span>` : "");
+}
+// A project's details (issue #246), beside the list: what it is, where, its folder and tags, what's new, and what to do.
+function pjDetail(p) {
+  const u = pjUpdates(p), rep = pjReportOf(p);
+  return `<aside class="pj-detail" data-path="${esc(p.path)}"${rep ? ` data-report="${esc(rep.id)}"` : ""} aria-label="${esc(p.name)}">` +
+    `<button class="win-x" data-pj="undetail" aria-label="${esc(tr("Close"))}">×</button>` +
+    `<h3 class="pj-h"><b translate="no">${esc(p.name)}</b></h3><p class="meta" translate="no">${esc(p.path)}</p>` +
+    `<p>${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}</p>` +
+    `<p class="muted">${p.folder ? `${FOLDER_ICON} <span translate="no">${esc(p.folder)}</span>` : esc(tr("Not in a folder"))}</p>` +
+    ((p.tags || []).length ? `<p class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
+      `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</p>` : "") +
+    (u.packages ? `<p><button class="linkish pj-up-go" data-pj="manage">${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}</button></p>` : "") +
+    (u.products ? `<p><button class="linkish pj-up-go" data-pj="report">${esc(tr(u.products === 1 ? "1 product in it has an update" : "{0} products in it have updates", u.products))}</button></p>` : "") +
+    `<div class="row">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
+      `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>` +
+      `<button class="ghost sm" data-pj="folder">${esc(tr("Show in folder"))}</button>`
       : `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>`}` +
-      `<button class="ghost sm" data-pj="organize">${esc(tr("Folder and tags..."))}</button></span></li>`).join("")}</ul>` + others;
+    `<button class="ghost sm" data-pj="organize">${esc(tr("Folder and tags..."))}</button>` +
+    `<button class="ghost sm" data-pj="star" aria-pressed="${p.favorite}">${esc(tr(p.favorite ? "Favourite" : "Make it a favourite"))}</button></div></aside>`;
+}
+// Read each project's packages with newer versions, once the list is shown (then draw it again with them).
+async function pjLoadUpdates() {
+  const r = await api("/api/vpm/updates", { cache: "no-store" }).catch(() => null);
+  if (!r || !r.ok) return;
+  PJ.updates = (await r.json()).projects || {};
+  if (PJ.view === "list" && !$("#projectsWin").hidden) drawProjects();
 }
 // Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have only a
 // favourite): one folder shown at a time, or all of them, and a tag on a project shows those that have it
@@ -2816,7 +2963,7 @@ const pjShownReport = () => PJ.view === "report" ? PJ.report : (PJ.project || {}
 // Show only the projects whose details have every word typed.
 function pjFilter() {
   const words = norm(PJ.find).split(/\s+/).filter(Boolean);
-  for (const li of document.querySelectorAll(".pj-row")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
+  for (const li of document.querySelectorAll(".pj-row[data-hay], .pj-tile[data-hay]")) li.hidden = !words.every(w => li.dataset.hay.includes(w));
 }
 // Read one project and show it.
 async function openProject(path) {
@@ -3631,6 +3778,19 @@ async function pjAct(b) {
     return drawProjects();
   }
   if (act === "tagpick") { PJ.tag = PJ.tag === b.dataset.tag ? "" : b.dataset.tag; return drawProjects(); }
+  if (act === "details") {   // a project's details, beside the list (issue #246); chosen again, put away
+    PJ.selected = PJ.selected === path ? null : path; drawProjects();
+    const panel = $("#projectsBody .pj-detail");
+    if (panel) panel.querySelector(".win-x").focus();
+    return;
+  }
+  if (act === "undetail") {
+    const was = PJ.selected; PJ.selected = null; drawProjects();
+    const back = [...document.querySelectorAll("#projectsBody [data-pj=details]")].find(x => x.closest("[data-path]").dataset.path === was);
+    if (back) back.focus();
+    return;
+  }
+  if (act === "layout") { uiSave({ pj_layout: b.dataset.v }); return drawProjects(); }   // list or tiles (issue #250)
   if (act === "organize") {
     const p = (PJ.data.projects || []).find(x => x.path === path) || PJ.project;
     if (p) await pjOrganize(p);

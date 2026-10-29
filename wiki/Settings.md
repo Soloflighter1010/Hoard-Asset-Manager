@@ -60,7 +60,9 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   your system when it finds new products or updates while Hoard is open in the background.
 - **Notifications through Apprise** (5.2.0): send the news you choose to Discord, Telegram, ntfy, email and
   [many more](https://github.com/caronc/apprise/wiki), through Apprise. Type an address for each service, one a
-  line, then **Keep these addresses**, and **Send a test** to check it comes. Each address holds its service's
+  line, or **Build an address** (5.2.0 beta 2): choose the service (Discord, Telegram, ntfy, email, Pushover, Slack,
+  Matrix, Gotify or a webhook), fill in what it gives you, and **Put it in the box**. Then **Keep these addresses**,
+  and **Send a test** to check it comes. Each address holds its service's
   token, so Hoard keeps them as it keeps API keys (see [Security and Privacy](Security-and-Privacy)), never in
   config.json; Settings only says how many are kept, and **Forget them** deletes them. Then tick what to send: new
   products and updates the routine check finds, products on your wishlists that got cheaper, tasks that finish or
