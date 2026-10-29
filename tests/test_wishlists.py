@@ -631,6 +631,29 @@ class InHoard(unittest.TestCase):
         self.assertIn("Not signed in to Booth", done["message"])
         self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"])
 
+    def test_stopped_part_way_keeps_the_lists_read(self):
+        """Stop or Force stop while a store's lists were being read (their pictures, say, which wait between pages)
+        ended the task as stopped, but the lists already read from the stores before it were thrown away."""
+        lists = [{"store": "gumroad", "list": "Winter", "url": "u", "products": [product("Snow Cap", "12.50 USD", "gumroad")]}]
+        from hoard import common, jobs
+
+        class Ctx:
+            def close(self):
+                pass
+        with mock.patch.object(jobs, "reachable", lambda s: True), mock.patch.object(jobs, "launch", lambda *a: Ctx()), \
+                mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                mock.patch.dict(wishlists.READERS, {"gumroad": lambda ctx, cfg, progress: lists,
+                                                    "booth": mock.Mock(side_effect=common.Cancelled())}):
+            self.api("/api/wishlists/read", {"stores": ["gumroad", "booth"]})
+            for _ in range(200):
+                if not self.srv.jobs.state["running"] and self.srv.jobs.history:
+                    break
+                time.sleep(0.05)
+        done = self.srv.jobs.history[0]
+        self.assertEqual(done["task"], "wishlists")
+        self.assertTrue(done["message"].startswith("Stopped"), done["message"])
+        self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"], "Gumroad's, kept")
+
 
 if __name__ == "__main__":
     unittest.main()

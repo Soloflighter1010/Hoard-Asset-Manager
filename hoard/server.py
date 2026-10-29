@@ -747,12 +747,13 @@ class Handler(BaseHTTPRequestHandler):
                 names = [n for n in known[:500] if isinstance(n, str) and 0 < len(n) <= 500]
                 files[k] = {"files": names, "read": False, "out": out(k, names)}
         missing = [k for k in keys if k not in files]
-        busy = any(q.get("task") == "list-files" for q in srv.jobs.state["queue"]) or \
-            bool(srv.jobs.state.get("running") and srv.jobs.state.get("task") == "list-files")
-        if missing and body.get("read") is True and not busy:
-            stores = sorted({k.split(":", 1)[0] for k in missing} & set(DOWNLOADABLE))
-            busy = bool(stores) and bool(srv.jobs.start("list-files", stores, keys=missing))
-        return {"files": files, "reading": bool(missing and busy)}
+        reading = srv.jobs.keys_of("list-files")   # (being read, or waiting its turn: asked for once, not again)
+        unread = [k for k in missing if k not in reading]
+        if unread and body.get("read") is True:   # a read of its own, waiting its turn behind another's if need be
+            stores = sorted({k.split(":", 1)[0] for k in unread} & set(DOWNLOADABLE))
+            if stores and srv.jobs.start("list-files", stores, keys=unread):
+                reading = reading | set(unread)
+        return {"files": files, "reading": any(k in reading for k in missing)}
 
     def _resolve_integrity(self, body: dict):
         """Issue #231: files the last check found changed or missing, dealt with: "keep" (a change, as it is now),
@@ -779,6 +780,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "in": reveal(target if target.is_file() else folder if folder.is_dir() else folder.parent)})
             except (UnsafePath, OSError):
                 return self._json({"error": "That folder couldn't be opened."}, 400)
+        if srv.jobs.state.get("running"):   # (a sync or check holds its own copy of a store's records, and saves it)
+            return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
         done, failed, again = 0, [], {}
         for x in problems:
             try:
@@ -2493,9 +2496,9 @@ def guide_source(query: dict) -> bytes:
 
 def chosen_files(raw) -> dict[str, dict] | None:
     """The files you chose of each product, when choosing what to download: {tag_key: {"shown": the files the list
-    showed, "chosen": the ones left ticked}}, for the products you left some files out of. Only a file that was
-    shown and unticked is left out (downloader.left_out). {"all": true}: everything of that product, this time,
-    whatever an earlier choice or a rule leaves out (issue #225: Download everything). Anything else is ignored."""
+    showed, "chosen": the ones left ticked}}. Only a file that was shown and unticked is left out, and one shown and
+    ticked is downloaded whatever an earlier choice or a rule says (downloader.left_out); a file that wasn't shown is
+    left to them. Anything else is ignored."""
     if not isinstance(raw, dict):
         return None
     names = lambda v: [n for n in v[:500] if isinstance(n, str) and 0 < len(n) <= 500] if isinstance(v, list) else []  # noqa: E731
@@ -2503,9 +2506,7 @@ def chosen_files(raw) -> dict[str, dict] | None:
     for key, pick in list(raw.items())[:5000]:
         if not (isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict)):
             continue
-        if pick.get("all") is True:
-            out[key] = {"shown": [], "chosen": [], "all": True}
-        elif names(pick.get("shown")):
+        if names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
 
@@ -2515,9 +2516,6 @@ def remember_choice(kept: dict[str, set], chosen: dict) -> dict[str, list]:
     to download: those of the files shown that weren't ticked, and any left out before that weren't shown."""
     kept = dict(kept)
     for key, pick in chosen.items():
-        if pick.get("all"):   # everything this time: nothing of it left out from now on
-            kept.pop(key, None)
-            continue
         shown = set(pick["shown"])
         left = (kept.get(key, set()) - shown) | (shown - set(pick["chosen"]))
         if left:

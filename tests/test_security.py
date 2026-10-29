@@ -207,7 +207,10 @@ class PublicOnlyFetching(unittest.TestCase):
         here = [(socket.AF_INET, ("127.0.0.1", listener.getsockname()[1]))]
         got = []
         with mock.patch.object(safety, "_public_addresses", lambda host, port: here):
-            reader = threading.Thread(target=lambda: got.append(safety.fetch_public("http://quiet.example/a.png", {}, 1 << 20, timeout=30)))
+            def read():   # as a job's own thread does (jobs.py sets its lane)
+                common.set_lane("main")
+                got.append(safety.fetch_public("http://quiet.example/a.png", {}, 1 << 20, timeout=30))
+            reader = threading.Thread(target=read)
             reader.start()
             for _ in range(200):
                 if held and safety._open_connections.get("main"):
@@ -219,6 +222,24 @@ class PublicOnlyFetching(unittest.TestCase):
         self.assertFalse(reader.is_alive(), "still waiting on the quiet store")
         self.assertLess(time.monotonic() - started, 3)
         self.assertEqual(got, [None])
+
+    def test_only_a_jobs_connections_are_cut(self):
+        """A connection opened by anything but a job (a page's request, the update's download, a picture fetched in
+        the background) isn't noted, so Force stop on the main lane can't cut it."""
+        class Conn:
+            sock = None
+        theirs, a_jobs = Conn(), Conn()
+
+        def job():
+            common.set_lane("main")
+            safety.note_connection(a_jobs)
+        for t in (threading.Thread(target=safety.note_connection, args=(theirs,)), threading.Thread(target=job)):
+            t.start()
+            t.join()
+        noted = safety._open_connections.get("main", ())
+        self.assertNotIn(theirs, noted)
+        self.assertIn(a_jobs, noted)
+        safety.cut_connections("main")
 
     def test_kept_to_its_sites_when_given_them(self):
         """A photo site's page is read from that site only: not a link elsewhere, and not after a redirect elsewhere."""

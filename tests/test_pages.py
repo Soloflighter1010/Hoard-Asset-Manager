@@ -1331,7 +1331,7 @@ class CopiesAndActions(unittest.TestCase):
                 if len(seen) == 3:
                     break
                 page.wait_for_timeout(100)
-            self.assertEqual(seen[-1][2]["chosen"], {key: {"shown": [], "chosen": [], "all": True}})
+            self.assertEqual(seen[-1][2]["chosen"], {key: {"shown": files, "chosen": files}})
             self.assertEqual(self.srv.cfg["file_skip"], {}, "nothing of it left out from now on")
             # Cancel downloads nothing
             page.click("#detail .actions .primary")

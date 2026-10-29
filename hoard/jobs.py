@@ -579,6 +579,14 @@ class Jobs:
                         if isinstance(h.get("log"), list) else [], "lane": self.lane})
         return out
 
+    def keys_of(self, task: str) -> set[str]:
+        """The products the running job and the waiting ones of a task are for, by key: what's being read already."""
+        with self._qlock:
+            specs = [q for q in self._queue if q.get("task") == task]
+            if self.state.get("running") and self._spec and self._spec.get("task") == task:
+                specs.append(self._spec)
+        return {k for s in specs for k in (s.get("keys") or ())}
+
     def tasks(self) -> dict:
         """The Tasks tab: what's running (with its progress so far), what's waiting, and what finished, newest
         first."""
@@ -1002,7 +1010,7 @@ class Jobs:
                                headed=False, keys=set(keys) if keys else None,
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
                                targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
-                               files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"]), "all": bool(v.get("all"))}
+                               files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"])}
                                       for k, v in (chosen or {}).items()} or None,   # the files you chose
                                rules=file_rules(self.cfg), remembered=remembered_files(self.cfg),   # and leave out (#225)
                                listing=listing)
@@ -1192,6 +1200,7 @@ class Jobs:
         online = [s for s in stores if reachable(s)]
         failed = {s: unreachable_message(s, "read") for s in stores if s not in online}
         got: list[dict] = []
+        stopped = None   # Stop or Force stop while a store's lists were read: those read so far are kept all the same
         with (_playwright()() if online else contextlib.nullcontext()) as p:
             for store in online:
                 if self._forced or self.stop.is_set():
@@ -1213,6 +1222,9 @@ class Jobs:
                         pictures_from_pages(one.get("products") or [], read_store_page, said,
                                             float(self.cfg.get("request_delay", 0.8)))
                     got += lists
+                except Cancelled as e:
+                    stopped = e
+                    break
                 except NotLoggedIn:
                     failed[store] = f"Not signed in to {label}. Choose Sign in on its row in Stores, then read your wishlists again."
                 except Blocked as e:
@@ -1225,6 +1237,8 @@ class Jobs:
                 finally:
                     ctx.close()
         done = SetStore().put_wishlists(got) if got else {"lists": 0, "cheaper": []}
+        if stopped is not None:   # (kept: now it ends as stopped)
+            raise stopped
         cheaper = done.get("cheaper") or []
         if cheaper:
             self._news("cheaper", len(cheaper))

@@ -1518,9 +1518,11 @@ function wireFiles() {
     d.close();
     clearTimeout(FILES.timer);
     if (b.dataset.files !== "go") return;
+    // what it listed, and which of them to save: all of them unless you chose. Only those are your choice: a file it
+    // didn't list (one an update didn't touch) stays as your earlier choices and your rules have it
     const key = FILES.product.key, names = FILES.names || [];
-    FILES.go(FILES.picking && FILES.off.size ? { [key]: { shown: names, chosen: names.filter(n => !FILES.off.has(n)) } }
-             : { [key]: { all: true } });   // (everything, this time: whatever was left out of it before)
+    const chosen = FILES.picking ? names.filter(n => !FILES.off.has(n)) : names;
+    FILES.go(names.length ? { [key]: { shown: names, chosen } } : {});
   });
 }
 // Draw the downloads dialog: each product to tick, its files, and those skipped.

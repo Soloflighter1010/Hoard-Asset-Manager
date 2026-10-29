@@ -261,8 +261,6 @@ def left_out(args, report: Report, store: str, name: str, file: str, *also: str)
     chosen = getattr(args, "files", None)
     pick = next((chosen[k] for k in keys if k in chosen), None) if isinstance(chosen, dict) else None
     label = STORES[store]["label"] if store in STORES else store
-    if isinstance(pick, dict) and pick.get("all"):   # Download everything: whatever was left out before, or a rule says
-        return False
     if isinstance(pick, dict) and file in pick.get("shown", ()):
         if file in pick.get("chosen", ()):
             return False
@@ -2515,7 +2513,20 @@ def resolve_problem(root: Path, others, problem: dict, action: str) -> dict:
         target.unlink(missing_ok=True)   # (an empty file: nothing to keep)
     manifest.save()
     _drop_problem(problem)
-    return {"key": tag_key(store, rec.get("name") or ""), "store": store, "name": rec.get("name") or "", "file": rel}
+    return {"key": tag_key(store, rec.get("name") or ""), "store": store, "name": rec.get("name") or "",
+            "file": chosen_name(store, fkey, f)}
+
+
+def chosen_name(store: str, fkey: str, f: dict) -> str:
+    """The name a downloaded file is left out by (left_out's file), from its record: what its store called it when it
+    was downloaded (a Jinxxy button's label, itch.io's name for it, Booth's), else its path."""
+    if f.get("label"):
+        return f["label"]
+    if store == "gumroad" and fkey.startswith("page-image:"):
+        return f["path"].rsplit(".", 1)[0]   # (a page's pictures are left out by their name before their type is known)
+    if "label" in f and store in ("jinxxy", "payhip"):
+        return fkey   # (a button with no words is left out by its key)
+    return f["path"]
 
 
 def _drop_problem(problem: dict) -> None:

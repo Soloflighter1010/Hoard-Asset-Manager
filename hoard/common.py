@@ -23,6 +23,12 @@ def _this_lane() -> str:
     return getattr(_lane, "name", "main")   # (any thread not set: the main lane's, as all were before)
 
 
+def job_lane() -> str | None:
+    """The lane whose job this thread runs, or None for any other thread (a page's request, the update's download, a
+    picture fetched in the background): what Force stop cuts is only ever a job's."""
+    return getattr(_lane, "name", None)
+
+
 def _sinks_here() -> list:
     """The progress sinks of the job running in this thread's lane."""
     lane = _this_lane()

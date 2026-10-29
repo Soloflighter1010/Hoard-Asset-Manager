@@ -361,10 +361,14 @@ _open_lock = threading.Lock()
 
 def note_connection(conn) -> None:
     """Remember a connection Hoard opened (to a store, or for a picture) as its lane's, so Force stop can cut it:
-    a socket, or a connection that keeps its socket as .sock (urllib3's, while its answer is read)."""
-    from .common import _this_lane
+    a socket, or a connection that keeps its socket as .sock (urllib3's, while its answer is read). Only a job's: one
+    opened by anything else (a page's request, the update's download) is never cut by Force stop."""
+    from .common import job_lane
+    lane = job_lane()
+    if lane is None:
+        return
     with _open_lock:
-        _open_connections.setdefault(_this_lane(), weakref.WeakSet()).add(conn)
+        _open_connections.setdefault(lane, weakref.WeakSet()).add(conn)
 
 
 def cut_connections(lane: str) -> int:

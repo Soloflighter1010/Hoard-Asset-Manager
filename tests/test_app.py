@@ -409,6 +409,11 @@ class RoutineChecks(unittest.TestCase):
         self.assertEqual((changed["kind"], changed["path"], changed["key"]), ("changed", "body.png", tags.tag_key("booth", "Rusk")))
         self.assertEqual(call("GET", "/api/library")[0], 200)
         self.assertEqual(call("GET", "/api/assets")[1]["integrity"]["listed"], 2)
+        srv.jobs.state["running"] = True   # a sync or check under way: its copy of the records would be saved over these
+        for action in ("keep", "forget", "again"):
+            self.assertEqual(call("POST", "/api/integrity/resolve", {"action": action, "problems": [missing, changed]})[0], 409)
+        srv.jobs.state["running"] = False
+        self.assertEqual((srv.cfg["file_skip"], started, len(call("GET", "/api/integrity")[1]["problems"])), ({}, [], 2))
         self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "keep", "problems": [missing]})[1]["ok"], False,
                          "nothing there to keep")
         self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "forget", "problems": [missing]})[1],
@@ -428,6 +433,18 @@ class RoutineChecks(unittest.TestCase):
             self.assertEqual((got["problems"], got["hidden_left_out"]), ([], 1))
             hidden = downloader.last_integrity()["problems"][0]
             self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "keep", "problems": [hidden]})[0], 403)
+
+    def test_a_forgotten_file_is_left_out_by_the_name_its_store_gives_it(self):
+        """Issue #231: Forget (and Download again) name a file as its store's download leaves it out (left_out's file),
+        not by where it was saved: a Jinxxy button's label, itch.io's name for it, a Gumroad page picture's name."""
+        name = downloader.chosen_name
+        self.assertEqual(name("jinxxy", "k1", {"path": "Product_v1.2.unitypackage", "label": "Main package"}), "Main package")
+        self.assertEqual(name("jinxxy", "file #2", {"path": "Product.zip", "label": ""}), "file #2")
+        self.assertEqual(name("itch", "1234", {"path": "tail.zip", "label": "Tail (PC)", "shown": True}), "Tail (PC)")
+        self.assertEqual(name("booth", "5678", {"path": "Rusk.zip", "label": "Rusk_v1.zip"}), "Rusk_v1.zip")
+        self.assertEqual(name("booth", "5678", {"path": "Rusk.zip", "label": ""}), "Rusk.zip")
+        self.assertEqual(name("gumroad", "page-image:abc", {"path": "Page images/01 abc.png"}), "Page images/01 abc")
+        self.assertEqual(name("gumroad", "f1", {"path": "Rusk/Rusk.unitypackage"}), "Rusk/Rusk.unitypackage")
 
     def test_an_unchanged_file_isnt_read_again(self):
         downloader.check_integrity(self.root)
@@ -3728,11 +3745,14 @@ class DownloadChoices(unittest.TestCase):
             got = self.call("POST", "/api/product-files", {"keys": [mochi, "no store", 5, "payhip:paw pack"], "read": True})[1]
             self.assertEqual(got, {"files": {}, "reading": True})
             self.assertEqual(started, [("list-files", ["gumroad"], {"keys": [mochi, "payhip:paw pack"]})], "Payhip isn't read")
-            self.srv.jobs.state["queue"] = [{"id": 2, "task": "list-files", "label": "See what's in it", "queued": 0, "lane": "main"}]
-            self.addCleanup(self.srv.jobs.state.update, {"queue": []})
-            self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["reading"])
-            self.assertEqual(len(started), 1, "one reading at a time")
-            self.srv.jobs.state["queue"] = []
+            with mock.patch.object(self.srv.jobs, "keys_of", lambda task: {mochi} if task == "list-files" else set()):
+                self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["reading"])
+                self.assertEqual(len(started), 1, "being read already: not asked for again")
+                # another product meanwhile: a read of its own, waiting its turn (it wasn't asked for at all)
+                self.assertTrue(self.call("POST", "/api/product-files", {"keys": [rusk], "read": True})[1]["reading"])
+                self.assertEqual(started[1], ("list-files", ["booth"], {"keys": [rusk]}))
+                self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi]})[1]["reading"], "its next look")
+            del started[1]
             # read: its files, with the one you left out of it before
             self.srv.jobs.listed[mochi] = {"store": "gumroad", "name": "Mochi", "creator": "Kitsu Studio",
                                            "files": ["Mochi.zip", "Mochi.psd"], "at": time.monotonic(), "read": True}
@@ -3916,11 +3936,12 @@ class ChosenFiles(unittest.TestCase):
         got = server.chosen_files({"gumroad:x": {"shown": ["a.zip", 5, "", "b.zip"], "chosen": ["a.zip", None]},
                                    7: {"shown": ["c"]}, "booth:y": ["a list"], "booth:z": {"shown": []}, "x" * 401: {"shown": ["d"]}})
         self.assertEqual(got, {"gumroad:x": {"shown": ["a.zip", "b.zip"], "chosen": ["a.zip"]}})
-        # Download everything: all of it this time, and nothing of it left out from now on (issue #225)
-        self.assertEqual(server.chosen_files({"booth:x": {"all": True}, "booth:y": {"all": "yes"}}),
-                         {"booth:x": {"shown": [], "chosen": [], "all": True}})
-        self.assertEqual(server.remember_choice({"booth:x": {"x.psd"}, "booth:z": {"z.psd"}}, {"booth:x": {"shown": [], "chosen": [], "all": True}}),
-                         {"booth:z": ["z.psd"]})
+        self.assertIsNone(server.chosen_files({"booth:x": {"all": True}}), "only files named: never all of a product")
+        # Download everything: what was listed, all ticked. Those are no longer left out; a file an update didn't
+        # list (left out before) still is (issue #225)
+        self.assertEqual(server.remember_choice({"booth:x": {"x.psd", "x (Quest).zip"}, "booth:z": {"z.psd"}},
+                                                {"booth:x": {"shown": ["x.psd", "x v2.zip"], "chosen": ["x.psd", "x v2.zip"]}}),
+                         {"booth:x": ["x (Quest).zip"], "booth:z": ["z.psd"]})
 
     def test_the_downloader_leaves_out_what_wasnt_chosen(self):
         from types import SimpleNamespace
@@ -3963,12 +3984,14 @@ class ChosenFiles(unittest.TestCase):
         self.assertIn("Itch.io: Tail Pack / Tail.blend - left out, as you chose before".lower(), [s.lower() for s in report.skipped])
         self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=True, rules=rules), report, "booth", "Fox", "Fox.psd"),
                          "a check for updates sees every file")
+        # Download everything for an update: what it listed, all ticked, comes whatever a rule says; what it didn't
+        # list (left out before, or by a rule) stays out
         everything = SimpleNamespace(dry_run=False, rules=rules, remembered=args.remembered,
-                                     files={tags.tag_key("itch", "Tail Pack"): {"shown": set(), "chosen": set(), "all": True}})
+                                     files={tags.tag_key("itch", "Tail Pack"): {"shown": {"Tail v2.psd"}, "chosen": {"Tail v2.psd"}}})
         with common.capture_log(lambda line: None):
-            self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.blend"), "Download everything")
-            self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.psd"), "whatever a rule says")
-            self.assertTrue(downloader.left_out(everything, report, "itch", "Ears", "Ears.psd"), "for that product")
+            self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail v2.psd"), "Download everything")
+            self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.blend"), "not listed: left out before")
+            self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.psd"), "not listed: the rule")
 
     def test_reading_what_products_have(self):
         """Issue #225: the task that reads what products have, to choose from: every file not on disk, and no
