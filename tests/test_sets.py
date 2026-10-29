@@ -888,7 +888,12 @@ class Tab(unittest.TestCase):
             hoodie = page.locator("#setMore .slot", has_text="Hoodie for Rusk")
             self.assertIn("In your library, not downloaded", page.locator("#setMore").inner_text())
             hoodie.locator("a").click()   # to it in the Library
-            page.locator("#detail.open", has_text="Hoodie for Rusk").wait_for()
+            page.wait_for_url("**/#store=Sets&set=*&open=booth%3A2")
+            try:
+                page.locator("#detail.open", has_text="Hoodie for Rusk").wait_for()
+            except Exception:   # (seen once, on Windows only: what the Library had, to say why)
+                had = page.evaluate("() => typeof DATA === 'undefined' ? null : [DATA.error, openKey, DATA.items.length]")
+                self.fail(f"the Library had {had}; the pages' errors: {errors}")
             # sets are chosen and right-clicked as products are: Select, Ctrl, and what can be done to them
             page.click('#storeSeg [data-store="Sets"]')
             page.locator("#setView .settile", has_text="Rusk, winter").click(button="right")
