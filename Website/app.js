@@ -32,7 +32,9 @@ const PACKAGES = {
 /*{{~ end ~}}*/
 };
 
+// Match the page to the system's light or dark mode.
 const setTheme = () => {
+  // Whether the system is in dark mode.
   const isDarkTheme = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   if (isDarkTheme()) {
     baseLayerLuminance.setValueFor(document.documentElement, StandardLuminance.DarkMode);
@@ -105,6 +107,7 @@ const setTheme = () => {
   });
 
   const rowMoreMenu = document.getElementById('rowMoreMenu');
+  // Hide a package's menu when the click is outside it.
   const hideRowMoreMenu = e => {
     if (rowMoreMenu.contains(e.target)) return;
     document.removeEventListener('click', hideRowMoreMenu);
@@ -120,6 +123,7 @@ const setTheme = () => {
         rowMoreMenu.hidden = false;
 
         const downloadLink = rowMoreMenu.querySelector('#rowMoreMenuDownload');
+        // Download the package chosen.
         const downloadListener = () => {
           window.open(e?.target?.dataset?.packageUrl, '_blank');
         }

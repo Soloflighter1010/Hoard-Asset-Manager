@@ -8,6 +8,8 @@ using UnityEngine;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>How Hoard's window looks: the app's colours, fonts, boxes and buttons, in Unity's light or dark
+    /// skin.</summary>
     public static class Look
     {
         // ---- colours: hoard/web/library.html's
@@ -39,11 +41,13 @@ namespace SoloFlighter.Hoard.Editor
             return store != null && StoreColours.TryGetValue(store, out c) ? Hex(c[Dark ? 0 : 1]) : Gold;
         }
 
+        /// <summary>A colour from 0xRRGGBB.</summary>
         public static Color Hex(int rgb)
         {
             return new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f, 1);
         }
 
+        /// <summary>A colour, see-through by a.</summary>
         public static Color Alpha(Color c, float a) { c.a = a; return c; }
 
         /// <summary>A picture's stand-in, as the app's: a soft colour of its own for each product.</summary>
@@ -55,6 +59,7 @@ namespace SoloFlighter.Hoard.Editor
             return Hsl(hue, 0.28f, Dark ? 0.30f : 0.82f);
         }
 
+        /// <summary>A colour from hue, saturation and lightness.</summary>
         static Color Hsl(float h, float s, float l)
         {
             float q = l < 0.5f ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
@@ -111,6 +116,7 @@ namespace SoloFlighter.Hoard.Editor
             GUI.EndClip();
         }
 
+        /// <summary>Up to two initials of a name, for a product with no picture.</summary>
         static string Initials(string name)
         {
             var letters = new List<char>();
@@ -169,6 +175,7 @@ namespace SoloFlighter.Hoard.Editor
             return s;
         }
 
+        /// <summary>Free the boxes' textures (when the skin changes, or the window closes).</summary>
         static void ReleaseBoxes()
         {
             foreach (var t in boxTextures) if (t != null) UnityEngine.Object.DestroyImmediate(t);
@@ -186,6 +193,7 @@ namespace SoloFlighter.Hoard.Editor
             GUI.matrix = m;
         }
 
+        /// <summary>A kind of button.</summary>
         public enum Kind { Ghost, Primary, Pill, PillOn }
 
         /// <summary>A button as the app draws them: Ghost (ledge, with a seam), Primary (gold), or a filter Pill (gold
@@ -209,6 +217,7 @@ namespace SoloFlighter.Hoard.Editor
             return GUI.Button(r, new GUIContent("", text.tooltip), GUIStyle.none);
         }
 
+        /// <summary>A button with words.</summary>
         public static bool Button(Rect r, string text, Kind kind = Kind.Ghost) { return Button(r, new GUIContent(text), kind); }
 
         /// <summary>The width a button needs for its words.</summary>
@@ -225,6 +234,7 @@ namespace SoloFlighter.Hoard.Editor
 
         // ---- text styles, made once for each skin
 
+        /// <summary>The text styles the window uses.</summary>
         public enum Styles { Body, Dust, Small, Name, Title, Heading, HeadingDust, Badge, ButtonText, Initials, Tab, TabCount, Section, Wrapped, Centered }
 
         static readonly Dictionary<string, GUIStyle> styles = new Dictionary<string, GUIStyle>();
@@ -260,6 +270,7 @@ namespace SoloFlighter.Hoard.Editor
             return s;
         }
 
+        /// <summary>A text style, made once for each skin.</summary>
         public static GUIStyle Style(Styles kind) { return Style(kind.ToString(), kind); }
 
         static GUIStyle searchField;
@@ -303,6 +314,7 @@ namespace SoloFlighter.Hoard.Editor
             return w;
         }
 
+        /// <summary>A texture from a PNG, as base64.</summary>
         static Texture2D FromPng(string base64)
         {
             var t = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Bilinear };

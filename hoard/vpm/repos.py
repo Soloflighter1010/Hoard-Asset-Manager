@@ -54,12 +54,15 @@ class Repo:
 
     @property
     def loaded(self) -> bool:
+        """Has its listing been read?"""
         return self.raw is not None
 
     def label(self) -> str:
+        """The repository's name, as you, its listing or VRChat call it, or its address."""
         return (self.setting_name or self.name or BUILTIN_NAMES.get(self.url) or self.url or self.path.stem)
 
     def load(self) -> None:
+        """Read the repository's kept listing (Repos/), noting why when it can't be."""
         try:
             cache = environment.read_json(self.path, MAX_LISTING)
         except (DataFileError, OSError) as e:
@@ -76,6 +79,7 @@ class Repo:
         self._take(listing)
 
     def _take(self, listing) -> None:
+        """Take a listing as this repository's: its id, name and packages, each package checked as it's read."""
         if not isinstance(listing, dict):
             self.error = "its listing isn't one"
             return
@@ -101,6 +105,7 @@ class Repo:
                 self.packages[name] = found
 
     def save(self) -> None:
+        """Keep the listing in Repos/, as ALCOM and the Creator Companion keep it, with its headers and ETag."""
         cache = {"repo": self.raw}
         if self.headers:
             cache["headers"] = self.headers
@@ -135,6 +140,7 @@ class Repo:
 
 
 def _parse_listing(data: bytes):
+    """A repository's listing from its bytes (a byte-order mark allowed); None when it isn't JSON with packages."""
     if data.startswith(b"\xef\xbb\xbf"):
         data = data[3:]
     try:
@@ -155,21 +161,26 @@ class Selector:
 
     @classmethod
     def specific(cls, version: Version) -> "Selector":
+        """Choose exactly this version."""
         return cls("specific", version=version)
 
     @classmethod
     def latest(cls, unity: UnityVersion | None, include_pre: bool) -> "Selector":
+        """Choose the newest version that works in this Unity (a prerelease only with include_pre)."""
         return cls("latest", unity=unity, include_pre=include_pre)
 
     @classmethod
     def range(cls, unity: UnityVersion | None, r: VersionRange, prerelease: str) -> "Selector":
+        """Choose the newest version in range r that works in this Unity, under the prerelease rule."""
         return cls("range", unity=unity, ranges=(r,), prerelease=prerelease)
 
     @classmethod
     def all_of(cls, unity: UnityVersion | None, ranges, prerelease: str) -> "Selector":
+        """Choose the newest version in every one of these ranges that works in this Unity."""
         return cls("range", unity=unity, ranges=tuple(ranges), prerelease=prerelease)
 
     def satisfies(self, p: Package) -> bool:
+        """Is this package version one the selector chooses (not withdrawn, right for the Unity, in range)?"""
         if self.kind == "specific":
             return p.version == self.version
         if p.yanked or (self.unity is not None and not unity_compatible(p, self.unity)):
@@ -188,10 +199,12 @@ class Info:
 
     @property
     def name(self) -> str:
+        """The package's name."""
         return self.package.name
 
     @property
     def version(self) -> Version:
+        """The package's version."""
         return self.package.version
 
     def __repr__(self):
@@ -205,6 +218,8 @@ def same_address(a, b) -> bool:
 
 
 def _address(url: str) -> str:
+    """A repository's address, written one way (lower-case host, no default port, no trailing slash), to tell whether
+    two addresses are the same repository."""
     try:
         u = urlsplit(url.strip())
         port = u.port
@@ -223,6 +238,7 @@ class Collection:
 
     @classmethod
     def load(cls, settings: Settings) -> "Collection":
+        """Every repository's kept listing, and the packages in your package folders."""
         repos = [r for r in _sources(settings)]
         for r in repos:
             r.load()
@@ -259,6 +275,7 @@ class Collection:
         return failed
 
     def loaded(self) -> list[Repo]:
+        """The repositories whose listings could be read."""
         return [r for r in self.repos if r.loaded]
 
     def has_repo(self, url: str | None, repo_id: str | None = None) -> Repo | None:
@@ -275,6 +292,7 @@ class Collection:
         return next((r for r in self.loaded() if name in r.packages), None)
 
     def versions(self, name: str) -> list[Info]:
+        """Every version of a package there is, from every repository and package folder."""
         out = [Info(p, repo=r) for r in self.loaded() for p in r.packages.get(name, {}).values()]
         out += [Info(p, folder=f) for f, p in self.local if p.name == name]
         return out
@@ -300,6 +318,7 @@ class Collection:
         return best
 
     def names(self) -> set[str]:
+        """Every package name there is, in any repository or package folder."""
         return {n for r in self.loaded() for n in r.packages} | {p.name for _, p in self.local}
 
     def newest(self, unity: UnityVersion | None, include_pre: bool) -> list[Info]:
@@ -315,6 +334,8 @@ class Collection:
 
 
 def _sources(settings: Settings) -> list[Repo]:
+    """Every repository the Creator Companion and ALCOM use: VRChat's official and curated ones (unless ALCOM's settings
+    leave them out), then yours, each with its kept listing's file."""
     folder = settings.folder
     own = environment.vrc_get_settings(folder)
     out = []
@@ -337,6 +358,8 @@ _HEADER_NAME = re.compile(r"[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}")
 
 
 def check_headers(headers) -> dict:
+    """The headers a repository asks Hoard to send (a key, say), checked: at most 20, plain names, no line breaks;
+    raises RepoError otherwise."""
     if not headers:
         return {}
     if not isinstance(headers, dict) or len(headers) > 20:

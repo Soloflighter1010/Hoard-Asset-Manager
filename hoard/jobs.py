@@ -14,14 +14,14 @@ from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, 
 from .safety import store_link
 from .tags import tag_key
 from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
-from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane
+from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane, stoppable
 from . import diagnostics
 from .config import payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, payhip_unread_note, sign_in_urls, unreachable_message
 from .net import is_network_error, plain_error, reachable
 from .paths import data_dir
 from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
-from .safety import DataFileError, read_json_file, write_file_safely
+from .safety import DataFileError, cut_connections, read_json_file, write_file_safely
 from .common import now_iso
 
 
@@ -80,6 +80,7 @@ def routine_hours(cfg: dict) -> int:
 
 
 def _routine_file():
+    """Where the routine check notes when it last ran and what it found."""
     return data_dir() / "routine.json"
 
 
@@ -111,6 +112,7 @@ def save_routine(**change) -> None:
 
 
 def _sync_file():
+    """Where the last sync's time is kept (for a schedule carried over from Sync automatically)."""
     return data_dir() / "sync.json"
 
 
@@ -134,6 +136,7 @@ def _when(stamp: str) -> float:
 
 
 def _record_sync() -> None:
+    """Note that a sync ran now."""
     try:
         write_file_safely(_sync_file(), json.dumps({"last": time.time()}))
     except OSError:
@@ -151,15 +154,20 @@ class Schedule:
         self.not_before = time.time() + FIRST_WAIT
 
     def stores(self) -> list[str]:
+        """The stores the routine check reads: those switched on, but Payhip (which needs you there for its bot
+        check)."""
         return [s for s in STORES if self.cfg[s].get("enabled", True) and s not in UNATTENDED]
 
     def _downloaded(self) -> bool:
+        """Has anything been downloaded yet (a store's records in the downloads folder)?"""
         from .config import root_dir
         from .downloader import STORE_DIRS
         root = root_dir(self.cfg)
         return any((root / d / "_manifest.json").is_file() for d in STORE_DIRS.values())
 
     def due(self, now: float | None = None) -> bool:
+        """Is the routine check due: on, set up, nothing running, and long enough since it last ran, with something to
+        check?"""
         now = time.time() if now is None else now
         hours = routine_hours(self.cfg)
         return bool(hours and self.cfg.get("setup_done") and now >= self.not_before and not self.jobs.state["running"]
@@ -180,6 +188,7 @@ class Schedule:
         return started
 
     def run_forever(self, stop: threading.Event) -> None:
+        """Look once a minute whether the routine check is due, until Hoard stops."""
         while not stop.wait(60):
             try:
                 self.tick()
@@ -205,7 +214,7 @@ TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "che
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists"}
+              "wishlists": "Read wishlists", "list-files": "See what's in it"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -220,6 +229,7 @@ OUTCOMES = ("done", "partial", "failed", "stopped")
 
 
 def plural(n: int, word: str) -> str:
+    """A count with its word, made plural when it isn't one (3 products)."""
     return f"{n:,} {word}{'' if n == 1 else 's'}"
 
 
@@ -230,6 +240,7 @@ def _names(stores: list[str]) -> str:
 
 
 def tasks_file():
+    """Where the Tasks window's finished tasks are kept between runs."""
     return data_dir() / "tasks.json"
 
 
@@ -303,6 +314,7 @@ class Jobs:
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
         self.project_runner = None   # Projects' work (hoard/vpm/api.py: the server sets it)
         self.on_found = None   # the routine check found more to download than before: Hoard's app tells you (hoard/notify.py)
+        self.on_news = None    # (kind, what): news for notifications through Apprise (issue #230: hoard/alerts.py)
         self._spec: dict | None = None   # what the running job was started with, to start an automatic one again
         self._made_way = False   # the running automatic job was stopped for one of yours (issue #110)
         self._forced = False     # Force stop was chosen for the running job
@@ -321,8 +333,10 @@ class Jobs:
         self._moved = time.monotonic()      # when the running job last said anything
         self._ids = 0
         self.history: list[dict] = self._load_history()
+        self.listed: dict[str, dict] = {}   # what products have, read to choose from (issue #225): by tag key
 
     def _history_file(self):
+        """Where this lane's finished tasks are kept (Projects' apart from the rest)."""
         return project_tasks_file() if self.lane == PROJECTS else tasks_file()
 
     def _set(self, **kw):
@@ -404,12 +418,14 @@ class Jobs:
             return len(self._queue) != before
 
     def clear_queue(self) -> int:
+        """Take every waiting task off the queue; returns how many there were."""
         with self._qlock:
             n, self._queue = len(self._queue), []
             self._publish_queue()
             return n
 
     def _publish_queue(self) -> None:
+        """What's waiting, as the pages show it."""
         self.state["queue"] = [{"id": q["id"], "task": q["task"], "label": q["label"], "queued": q["queued"], "lane": self.lane}
                                for q in self._queue]
 
@@ -444,6 +460,8 @@ class Jobs:
             target = lambda s: self._download(s, only, keys, items=items, chosen=spec.get("chosen"))  # noqa: E731
         elif task == "check-updates":
             target = lambda s: self._download(s, only, keys, check=True, items=items)  # noqa: E731
+        elif task == "list-files":
+            target = lambda s: self._download(s, only, keys, check=True, items=items, listing=True)  # noqa: E731
         elif task == "sync":
             target = self._sync
         elif task == "install-browser":
@@ -482,7 +500,11 @@ class Jobs:
         set_lane(self.lane)   # (what this job says goes to its own lane's progress, not the other's)
         try:
             self._set(running=True)
-            fn(stores)
+            with stoppable(self.stop):   # (a wait in this job ends at once on Stop and Force stop: common.pause)
+                fn(stores)
+        except Cancelled:   # stopped where the job itself doesn't catch it (a wait, say): it says so as it ends
+            if not str(self.state.get("message") or "").startswith(("Stopped", "Force stopp")):
+                self._set(message="Stopped.")
         except (ProfileBusy, SigninsUnprotected) as e:
             diagnostic = diagnostics.record_exception(e, area="job", task=self.state.get("task"),
                                                        store=self.state.get("store"), include_traceback=False)
@@ -527,8 +549,18 @@ class Jobs:
             write_file_safely(self._history_file(), json.dumps({"history": self.history}, ensure_ascii=False))
         except OSError as e:
             print(f"Couldn't save the task log: {e}", flush=True)
+        self._news("finished", self.history[-1])
+
+    def _news(self, kind: str, what) -> None:
+        """Pass news on for notifications (issue #230); whatever happens there never stops a task."""
+        if self.on_news:
+            try:
+                self.on_news(kind, what)
+            except Exception as e:  # noqa: BLE001
+                print(f"Couldn't pass on a notification: {type(e).__name__}", flush=True)
 
     def _load_history(self) -> list[dict]:
+        """The finished tasks kept from earlier runs, each checked as it's read."""
         try:
             raw = read_json_file(self._history_file()) if self._history_file().is_file() else {}
         except (DataFileError, OSError):
@@ -547,6 +579,14 @@ class Jobs:
                         if isinstance(h.get("log"), list) else [], "lane": self.lane})
         return out
 
+    def keys_of(self, task: str) -> set[str]:
+        """The products the running job and the waiting ones of a task are for, by key: what's being read already."""
+        with self._qlock:
+            specs = [q for q in self._queue if q.get("task") == task]
+            if self.state.get("running") and self._spec and self._spec.get("task") == task:
+                specs.append(self._spec)
+        return {k for s in specs for k in (s.get("keys") or ())}
+
     def tasks(self) -> dict:
         """The Tasks tab: what's running (with its progress so far), what's waiting, and what finished, newest
         first."""
@@ -557,6 +597,7 @@ class Jobs:
         return {"current": current, "queue": list(self.state["queue"]), "history": list(reversed(self.history))}
 
     def clear_history(self) -> None:
+        """Forget the finished tasks (Clear in Tasks)."""
         self.history = []
         try:
             self._history_file().unlink(missing_ok=True)
@@ -582,6 +623,7 @@ class Jobs:
         lines: list[str] = []
 
         def progress(line: str) -> None:
+            """A line from the browser's installer: shown, in the task's log, and in Hoard's log."""
             lines.append(line)
             del lines[:-40]
             self._set(message=line, log=lines[-20:])
@@ -613,6 +655,7 @@ class Jobs:
         moved = []   # set once the move has gone through: a Stop after that can't undo it, so it lets it finish
 
         def sink(msg):
+            """A step of the move: shown; Stop takes effect here, until the files have started to move."""
             self._moved = time.monotonic()
             self.state["message"] = str(msg)
             if self.stop.is_set() and not moved and threading.get_ident() == self._job_thread:
@@ -645,6 +688,7 @@ class Jobs:
         lines: list[str] = []
 
         def sink(msg):
+            """A step of Projects' task: shown, kept in its log and in Projects' Logs; Stop takes effect here."""
             self._moved = time.monotonic()
             if isinstance(msg, Progress):
                 self.state["message"] = str(msg)
@@ -667,6 +711,11 @@ class Jobs:
             logbook.warning(f"{label}: stopped. What was being changed was put back as it was.")
             return
         except (ProjectsError, ResolveError, ProjectError, FetchError, ValueError, OSError) as e:
+            if self.stop.is_set():   # a download cut by Force stop: stopped, not failed (put back all the same)
+                self.stop.clear()
+                self._set(message="Stopped. What was being changed was put back as it was.")
+                logbook.warning(f"{label}: stopped. What was being changed was put back as it was.")
+                return
             why = str(e) if not isinstance(e, OSError) else f"That couldn't be done ({e.strerror or e})."
             self._set(message=why, error=why)
             logbook.error(f"{label}: {why}")
@@ -769,7 +818,8 @@ class Jobs:
         from .downloader import check_integrity, integrity_summary, last_integrity
         self._set(task="verify" if not self.state.get("routine") else "routine", message="Checking your downloads")
         from .libraries import other_folders
-        since = (last_integrity() or {}).get("checked") if fresh else None
+        before = last_integrity() or {}
+        since = before.get("checked") if fresh else None
         result = check_integrity(root_dir(self.cfg), stop=self.stop, progress=self._quietly,
                                  others=other_folders(self.cfg), fresh_since=since)
         lines = ([f"Changed: {p}" for p in result["changed"][:100]] + [f"Missing: {p}" for p in result["missing"][:100]]
@@ -778,6 +828,10 @@ class Jobs:
         summary = integrity_summary(result)
         if not result["complete"]:
             summary = "Stopped. " + summary
+        elif result["changed"] or result["missing"]:   # news of what the last check hadn't found already, once
+            new = {k: len(set(result[k]) - set(before.get(k) or ())) for k in ("changed", "missing")}
+            if any(new.values()):
+                self._news("checked", new)
         self._set(message=summary, log=lines[-200:])
         for line in [summary] + lines:
             print(f"Check downloads: {line}", flush=True)
@@ -806,8 +860,10 @@ class Jobs:
             found = {"at": now_iso(), **counts} if counts["new"] or counts["updates"] else None
             before = routine_record()["found"] or {"new": 0, "updates": 0}
             save_routine(found=found)
-            if found and self.on_found and (counts["new"] > before["new"] or counts["updates"] > before["updates"]):
-                self.on_found(counts)   # (what you were told already and haven't looked at, only once)
+            if found and (counts["new"] > before["new"] or counts["updates"] > before["updates"]):
+                if self.on_found:
+                    self.on_found(counts)   # (what you were told already and haven't looked at, only once)
+                self._news("found", counts)
             said = (f"Found {plural(counts['new'], 'new product')} and {plural(counts['updates'], 'update')}: "
                     "choose what to download." if found else "Nothing new to download.")
             self._set(message=f"{checked} {said}" + (f" Couldn't read {_names(unread)}: see Stores." if unread else ""),
@@ -853,7 +909,10 @@ class Jobs:
         away; anything else ends at its next step (a thread can't be ended from outside). What finished is kept, and
         a file part way through resumes next time where it can. False when nothing is running."""
         if self.lane == PROJECTS:   # (the store browsers and a sign-in window are the main lane's: left alone)
-            return self._stop_project()
+            stopped = self._stop_project()
+            if stopped:
+                cut_connections(self.lane)   # a package download waiting on a quiet server ends now, and is put back
+            return stopped
         if not self.state["running"]:
             return False
         self._forced = True
@@ -864,9 +923,11 @@ class Jobs:
             window.end()
         stop_install()
         end_browsers()
+        cut_connections(self.lane)   # a download or a page read that's waiting on a quiet store ends now too
         return True
 
     def _stop_project(self) -> bool:
+        """Stop Projects' task at its next step, which puts back what it was changing; False when nothing's running."""
         if not self.state["running"]:
             return False
         self._set(message="Stopping: what it was changing is put back as it was")
@@ -876,6 +937,7 @@ class Jobs:
     # ---- a job that doesn't stop, or doesn't move
 
     def _still(self, job_id) -> bool:
+        """Is this task (by its id) still the one running?"""
         return bool(self.state.get("running")) and self.state.get("job_id") == job_id
 
     def where(self) -> str:
@@ -912,14 +974,16 @@ class Jobs:
                                          f"browser if it has stopped answering). Last: {last}")[:500]
 
     def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False,
-                  items: list[str] | None = None, chosen: dict | None = None) -> None:
+                  items: list[str] | None = None, chosen: dict | None = None, listing: bool = False) -> None:
         """Download everything new or changed from these stores (or only the products keys names), passing progress
         to the page as it goes. (Payhip is only read, so it's left out.) With check, download nothing: note what
-        each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26)."""
+        each product already downloaded has on its store that isn't on disk, for the Downloads page (issue #26).
+        With listing too, note instead every file each product has that isn't on disk, for you to choose from
+        before downloading it (issue #225: self.listed)."""
         from types import SimpleNamespace
-        from .downloader import cmd_sync, direct_targets
+        from .downloader import cmd_sync, direct_targets, file_rules, remembered_files
         from .asset_updates import AssetUpdates
-        task = "check-updates" if check else "download"
+        task = "list-files" if listing else "check-updates" if check else "download"
         stores = [s for s in stores if s in DOWNLOADABLE]
         if not stores:
             self._set(task=task, message="Nothing to download: Hoard lists what you own on Payhip, and you "
@@ -930,6 +994,8 @@ class Jobs:
         lines: list[str] = []
 
         def progress(msg):
+            """A message from the download: progress shown as it goes, anything else kept in the task's log; Stop takes
+            effect here."""
             if isinstance(msg, Progress):   # how far a download has got: shown, not kept in the log or Tasks
                 self._moved = time.monotonic()
                 self.state.update(message=str(msg), transfer=msg.transfer)
@@ -948,10 +1014,19 @@ class Jobs:
                                skip=None if keys or items else download_skip(self.cfg),   # issue #107: chosen wins
                                targets=direct_targets(self.lib.snapshot()[0], stores, only, keys, items),
                                files={k: {"shown": set(v["shown"]), "chosen": set(v["chosen"])}
-                                      for k, v in (chosen or {}).items()} or None)   # the files you chose
+                                      for k, v in (chosen or {}).items()} or None,   # the files you chose
+                               rules=file_rules(self.cfg), remembered=remembered_files(self.cfg),   # and leave out (#225)
+                               listing=listing)
         try:
             with capture_log(progress):
                 report = cmd_sync(self.cfg, args)
+            if listing:   # what each one has, to choose from: every product asked about gets an answer, if empty
+                now = time.monotonic()
+                for k in keys or []:
+                    self.listed[k] = {**report.listed.get(k, {"files": []}), "at": now, "read": k in report.listed}
+                n = len(keys or [])
+                self._set(message=f"Read what {n} {'product has' if n == 1 else 'products have'}, to choose from.")
+                return
             if check:
                 # a check of chosen products (by key, by library item, or by name) replaces only what an earlier
                 # check found for those, and doesn't count as a check of the whole store
@@ -970,6 +1045,8 @@ class Jobs:
                                   + (f". Couldn't check {', '.join(missed)}." if missed else "."))
                 return
             AssetUpdates().after_download(report.got, report.failed, report.got_files)
+            for k in set(keys or []) | report.got:   # what they have that isn't on disk is read again, next time asked
+                self.listed.pop(k, None)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
             self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
                       partial=bool(summary["failed"]) or None,
@@ -1045,7 +1122,9 @@ class Jobs:
                         # before (not read again), and hands back what it found besides: none of it is a setting
                         with self.lib.lock:
                             run_cfg = {**self.cfg, "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
-                                                                    if i["store"] == store and i.get("page")}}
+                                                                    if i["store"] == store and i.get("page")},
+                                       "_known_pictures": {i["key"]: i["thumbnail"] for i in self.lib.data["items"]
+                                                           if i["store"] == store and i.get("thumbnail")}}
                         items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
                         shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
@@ -1076,7 +1155,7 @@ class Jobs:
                             else f"{label} blocked the automated browser ({e}). Try again later.")
                     except Exception as e:
                         if not self._forced:   # (its browser was closed by Force stop: not the store's fault)
-                            self.lib.set_error(store, unreachable_message(store) if is_network_error(e)
+                            self.lib.set_error(store, unreachable_message(store, error=e) if is_network_error(e)
                                                else f"Couldn't read the library: {plain_error(e)}")
                 finally:
                     if ctx:
@@ -1086,6 +1165,16 @@ class Jobs:
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
             cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
+        if refreshed and self.cfg.get("store_tags", True) and not self._forced:   # the tags creators gave them (#206)
+            from .library import store_tags_from_pages
+            from .wishlists import read_store_page
+            for store in refreshed:
+                try:
+                    store_tags_from_pages(self.lib, store, read_store_page,
+                                          lambda m, l=STORES[store]["label"]: self._set(message=f"{l}: {m}"),
+                                          float(self.cfg.get("request_delay", 0.8)))
+                except Exception as e:   # (never fails the refresh)
+                    print(f"Couldn't read {store}'s product tags: {e}", flush=True)
         if refreshed:   # the public pages a refresh finds (Jinxxy's) reach catalog.json, for Hoard for Unity's credits
             from .config import root_dir
             from .downloader import build_catalog
@@ -1108,12 +1197,13 @@ class Jobs:
         """Read your wishlists from each store (issue #158), in its own signed-in browser as a refresh reads your
         library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists)."""
         from .sets import SetStore
-        from .wishlists import READERS
+        from .wishlists import READERS, pictures_from_pages, read_store_page
         stores = [s for s in stores if s in READERS]
         self._set(task="wishlists", message="Checking your connection")
         online = [s for s in stores if reachable(s)]
         failed = {s: unreachable_message(s, "read") for s in stores if s not in online}
         got: list[dict] = []
+        stopped = None   # Stop or Force stop while a store's lists were read: those read so far are kept all the same
         with (_playwright()() if online else contextlib.nullcontext()) as p:
             for store in online:
                 if self._forced or self.stop.is_set():
@@ -1129,7 +1219,15 @@ class Jobs:
                     failed[store] = str(e)
                     continue
                 try:
-                    got += READERS[store](ctx, self.cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                    said = lambda m, l=label: self._set(message=f"{l}: {m}")   # noqa: E731
+                    lists = READERS[store](ctx, self.cfg, said)
+                    for one in lists:   # a product with no picture on the list (a video first): its page's (issue #212)
+                        pictures_from_pages(one.get("products") or [], read_store_page, said,
+                                            float(self.cfg.get("request_delay", 0.8)))
+                    got += lists
+                except Cancelled as e:
+                    stopped = e
+                    break
                 except NotLoggedIn:
                     failed[store] = f"Not signed in to {label}. Choose Sign in on its row in Stores, then read your wishlists again."
                 except Blocked as e:
@@ -1137,12 +1235,16 @@ class Jobs:
                                      f"browser instead, and choose Import saved pages in Wishlists.")
                 except Exception as e:
                     if not self._forced:
-                        failed[store] = unreachable_message(store, "read") if is_network_error(e) \
+                        failed[store] = unreachable_message(store, "read", e) if is_network_error(e) \
                             else f"Couldn't read {label}'s wishlists: {plain_error(e)}"
                 finally:
                     ctx.close()
         done = SetStore().put_wishlists(got) if got else {"lists": 0, "cheaper": []}
+        if stopped is not None:   # (kept: now it ends as stopped)
+            raise stopped
         cheaper = done.get("cheaper") or []
+        if cheaper:
+            self._news("cheaper", len(cheaper))
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])

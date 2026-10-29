@@ -24,6 +24,7 @@ os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, library, server, themes  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 try:
     from playwright.sync_api import sync_playwright
@@ -184,7 +185,7 @@ class AccessKey(unittest.TestCase):
                 if url:
                     goto(page, url)
                     page.get_by_text("Rusk").first.wait_for()
-                page.click("#settingsBtn")
+                menu(page, "#settingsBtn")
                 page.locator("#settingsPanel:not([hidden])").wait_for()
                 page.select_option("#setBrowser", "chrome")
                 self.assertEqual(page.locator("#browserInUse").inner_text(),
@@ -257,6 +258,9 @@ class AccessKey(unittest.TestCase):
             page.click("#grid .slot")
             self.assertIn("Rusk_v2.zip", page.locator("#detail .update").inner_text())
             page.click("#detail [data-act='update-one']")
+            asked = page.locator("#filesDialog[open]")   # which of its files (issue #225): the update's
+            self.assertIn("It contains 1 compressed file.", asked.inner_text())
+            asked.locator("#filesAll").click()
             page.wait_for_function("() => !document.querySelector('#dlPanel').hidden")
             page.click("#detail [data-act='check-one']")
             for _ in range(50):
@@ -272,6 +276,134 @@ class AccessKey(unittest.TestCase):
                                    ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
         page.close()   # (left open, it carried on beside the tests after it)
+
+    def test_download_more_of_it(self):
+        """Issue #225: a product downloaded with some of its files left out: Download more of it asks again, with
+        just the files that aren't on disk, read from its store first."""
+        from hoard import tags
+        rusk = tags.tag_key("booth", "Rusk")
+        started = []
+        self.addCleanup(self.srv.jobs.listed.clear)
+        self.addCleanup(self.srv.cfg.update, {"file_skip": {}})
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"), \
+                mock.patch.object(server, "save_config"):
+            page, refused = self.open(f"{self.srv.entry_url()}")
+            page.get_by_text("Rusk").first.wait_for()
+            goto(page, f"{self.srv.url}downloads")
+            page.locator("#grid .slot", has_text="Rusk").click()
+            page.click("#detail [data-act='more']")
+            asked = page.locator("#filesDialog[open]")
+            asked.get_by_text("Looking at what it contains...").wait_for()
+            for _ in range(50):
+                if started:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(started, [("list-files", ["booth"], {"keys": [rusk]})])
+            self.srv.jobs.listed[rusk] = {"files": ["Rusk (Quest).zip", "Rusk.psd"], "at": time.monotonic(), "read": True}
+            asked.get_by_text("Not downloaded yet: 1 layered image and 1 compressed file.").wait_for()
+            asked.locator("#filesPick").click()
+            asked.locator("#filesList label", has_text="Rusk.psd").locator("input").uncheck()
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download this one")
+            asked.locator("#filesAll").click()
+            for _ in range(50):
+                if len(started) == 2:
+                    break
+                page.wait_for_timeout(100)
+        self.assertEqual(started[-1][:2], ("download", ["booth"]))
+        self.assertEqual(started[-1][2]["keys"], [rusk])
+        self.assertEqual(started[-1][2]["chosen"], {rusk: {"shown": ["Rusk (Quest).zip", "Rusk.psd"], "chosen": ["Rusk (Quest).zip"]}})
+        self.assertEqual(refused, [])
+        page.close()
+
+    def test_notifications_through_apprise(self):
+        """Issue #230: Settings keeps Apprise's addresses (and then only says how many), and what's sent is ticked."""
+        from hoard import alerts, vault
+        self.srv.cfg["allow_unprotected_signins"] = True
+        self.addCleanup(self.srv.cfg.pop, "allow_unprotected_signins", None)
+        self.addCleanup(vault.forget_key, self.srv.cfg, alerts.SECRET)
+        self.addCleanup(self.srv.cfg.update, {"apprise_events": []})
+        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None), \
+                mock.patch.object(server, "save_config"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            self.assertEqual(page.locator("#appriseKept").inner_text(), "No addresses yet: nothing is sent.")
+            self.assertTrue(page.locator("#appriseTest").is_disabled())
+            page.fill("#setApprise", "json://example.com/hook\nntfys://ntfy.example/hoard")
+            page.click("#appriseSave")
+            page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()
+            self.assertEqual(page.input_value("#setApprise"), "", "never shown again")
+            self.assertEqual(alerts.urls(self.srv.cfg), ["json://example.com/hook", "ntfys://ntfy.example/hoard"])
+            with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
+                page.check("[data-apprise-event='tasks']")
+            self.assertEqual(self.srv.cfg["apprise_events"], ["tasks"])
+            page.reload()
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()   # (Settings, filled in)
+            self.assertTrue(page.is_checked("[data-apprise-event='tasks']"), "kept")
+            page.click("#appriseSave")   # nothing typed: not a way to forget them
+            page.locator(".toast", has_text="Type an address first").wait_for()
+            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
+            self.assertEqual(page.evaluate("api('/api/apprise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
+                                           "body: JSON.stringify({ urls: '' }) }).then(r => r.status)"), 400)
+            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
+            page.on("dialog", lambda d: d.accept())
+            page.click("#appriseForget")
+            page.locator("dialog.ask .primary").click()
+            page.locator("#appriseKept", has_text="No addresses yet").wait_for()
+        self.assertEqual(refused, [])
+        page.close()
+
+    def test_acknowledgements(self):
+        """Issue #227: Settings lists everything Hoard uses or ships, with its license, and shows a license's text."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        page.click("#acks summary")
+        page.locator("#acksList li", has_text="Apprise").wait_for()
+        self.assertIn("BSD-2-Clause", page.locator("#acksList li", has_text="Apprise").inner_text())
+        self.assertGreater(page.locator("#acksList li").count(), 40)
+        self.assertEqual(page.locator("#acksList h4").first.inner_text(), "What Hoard runs on")
+        page.locator("#acksList li", has_text="Zen Maru Gothic").get_by_role("button", name="License").click()
+        dialog = page.locator("dialog.ask[open]")
+        dialog.locator(".ack-text").wait_for()
+        self.assertIn("SIL OPEN FONT LICENSE", dialog.locator(".ack-text").inner_text().upper())
+        dialog.get_by_role("button", name="Close").click()
+        self.assertEqual(refused, [])
+        page.close()
+
+    def test_what_the_check_found(self):
+        """Issue #231: what the check of the downloads found, each file with what can be done about it, from the
+        Downloads page's summary (it said "Which files is in Tasks")."""
+        from hoard import downloader
+        where = downloader.integrity_file()
+        self.addCleanup(where.unlink, missing_ok=True)
+        root = str(self.srv.cfg["root"])
+        where.parent.mkdir(parents=True, exist_ok=True)
+        where.write_text(json.dumps({"checked": "2026-10-28T10:00:00+00:00", "products": 1, "files": 1, "fine": 0,
+                                     "changed": ["Rusk (Booth): rusk.zip"], "missing": [], "data_changed": [], "complete": True,
+                                     "problems": [{"kind": "changed", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
+                                                   "path": "rusk.zip", "name": "Rusk"}]}))
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        goto(page, f"{self.srv.url}downloads")
+        page.locator("#integrity [data-check-open]").click()
+        dialog = page.locator("#checkDialog")
+        dialog.wait_for()
+        row = dialog.locator(".check-list li")
+        self.assertIn("rusk.zip", row.inner_text())
+        self.assertIn("Changed since Hoard downloaded it", row.inner_text())
+        self.assertEqual(row.locator("button").all_inner_texts(), ["Download again", "Keep it as it is", "Show in folder"])
+        self.assertIn("Rusk", dialog.locator(".check-list h3").inner_text())
+        row.get_by_role("button", name="Keep it as it is").click()
+        dialog.get_by_text("Nothing left to deal with.").wait_for()
+        self.assertEqual(downloader.last_integrity()["changed"], [])
+        dialog.locator("[data-check-close]").click()
+        self.assertEqual(refused, [])
+        page.close()
 
     def test_downloaded_or_not_yet(self):
         """Issue #17: in the Library, what's on disk is marked on its card and in its label, and Downloaded / Not
@@ -313,7 +445,7 @@ class AccessKey(unittest.TestCase):
             page.get_by_text("Rusk").first.wait_for()
             goto(page, f"{self.srv.url}downloads")
             page.get_by_text("Rusk").first.wait_for()
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#setUpdates").wait_for()
             page.get_by_text("You have Hoard").wait_for()   # its status, as on the Library page
             expect(page.locator("#setUpdates")).not_to_be_checked()
@@ -407,7 +539,7 @@ class AccessKey(unittest.TestCase):
                 page.wait_for_url("**/downloads**")
                 page.get_by_text("Rusk").first.wait_for()
             page.evaluate("DATA.can_pick = true; syncBrowse()")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#libAdd").wait_for()
             box = lambda sel: page.locator(sel).bounding_box()
             panel, pick, field, add = box("#settingsPanel"), box("#libPick"), box("#libPath"), box("#libAdd")
@@ -416,16 +548,38 @@ class AccessKey(unittest.TestCase):
             self.assertLessEqual(add["x"] + add["width"], panel["x"] + panel["width"], path or "library")
             page.close()
 
-    def test_both_pages_end_their_header_with_sync(self):
-        """The gold Sync is the last button in the header on both pages, as the one thing to press."""
+    def test_each_page_ends_its_header_with_its_one_thing_to_press(self):
+        """The gold button is the last in the header, as the one thing to press: Sync in the Library, and Download new
+        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, and Settings are in the Menu (#219)."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
-        last = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).pop().id"
-        self.assertEqual(page.evaluate(last), "syncBtn")
+        shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
+        self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
+        page.click("#menuBtn")
+        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Stores", "Settings"])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
-        self.assertEqual(page.evaluate(last), "syncBtn")
+        self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
+        self.assertEqual(page.locator("#syncBtn").count(), 0)
+        page.click("#menuBtn")
+        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
+        page.close()
+
+    def test_search_prefixes_in_downloads(self):
+        """Issue #220 in Downloads: type: is a kind of file there too, and store: and by: filter as in the Library."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_url("**/downloads**")
+        page.get_by_text("Rusk").first.wait_for()
+        q = page.locator("#q")
+        q.fill("type:")
+        page.locator("#qMenu .qopt", has_text=".zip").wait_for()
+        for text, count in (("type:zip", 1), ("type:unitypackage", 0), ("store:booth by:kitsu", 1), ("store:gumroad", 0)):
+            with self.subTest(text):
+                q.fill(text)
+                page.wait_for_function(f"() => document.querySelectorAll('#grid .slot').length === {count}")
         page.close()
 
     def test_a_link_to_a_download_opens_its_details(self):
@@ -630,10 +784,36 @@ class StackingAcrossStores(unittest.TestCase):
         with mock.patch.object(server, "save_config"):   # (the choice is kept with the Library's: not in your config)
             page.click("#stackCopies")   # every copy, as before
             page.wait_for_function("() => document.querySelectorAll('.slot').length === 6")
+            self.assertEqual(page.get_attribute("#stackCopies", "aria-pressed"), "false", "a button, not pressed while off (#215)")
             page.click("#stackCopies")
             page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+            self.assertEqual(page.get_attribute("#stackCopies", "aria-pressed"), "true")
             page.evaluate("uiFlush()")
             page.wait_for_timeout(300)
+        page.close()
+
+    def test_a_copy_that_isnt_one(self):
+        """Issue #217: a copy's details say why it's shown with its copies; Not a copy takes it out of its stack (for
+        good, kept in marks.json), and Show it with its copies again puts it back."""
+        from hoard.marks import MarkStore
+        self.addCleanup(lambda: MarkStore().path.unlink(missing_ok=True))
+        page = self.browser.new_page()
+        goto(page, self.srv.entry_url())
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        page.locator(".slot.stacked", has_text="Fluffy Mane").click()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 2")
+        page.locator(".slot").first.click()
+        note = page.locator("#detail .note", has_text="Shown with its copies")
+        self.assertIn("the same name and creator", note.inner_text())
+        note.get_by_role("button", name="Not a copy").click()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 5")   # back in the library, apart
+        self.assertEqual(sum("Fluffy Mane" in t and "copies" not in t for t in self.tiles(page)), 2)
+        apart = page.evaluate("() => DATA.items.find(a => a.apart).key")
+        page.locator(f'.slot[data-key="{apart}"]').click()
+        again = page.locator("#detail .note", has_text="isn't a copy of anything")
+        again.get_by_role("button", name="Show it with its copies again").click()
+        page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
+        self.assertEqual(MarkStore().load()["apart"], set())
         page.close()
 
     def test_the_sort_stays(self):
@@ -851,7 +1031,7 @@ class ImportingFromTheLibrary(unittest.TestCase):
         asked = []
         page.on("dialog", lambda d: (asked.append(d.message), d.accept()))   # (there should be none: Hoard asks itself)
         goto(page, srv.entry_url())
-        page.locator("#storesBtn").click()
+        menu(page, "#storesBtn")
         page.locator("#importPages").wait_for()
         page.set_input_files("#importFile", [
             {"name": "Dashboard - Test Shop.mhtml", "mimeType": "multipart/related",
@@ -1038,7 +1218,7 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
             page.click("#selectBtn")
             with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
-                page.locator("#stackCopies").uncheck()   # turned off, and kept (saved here, not a later test's config)
+                page.click("#stackCopies")   # turned off, and kept (saved here, not a later test's config)
             page.wait_for_function("() => document.querySelectorAll('.slot.stacked').length === 0")
             self.assertEqual(page.locator(".slot", has_text="Ghost Follower").count(), 4)
             page.close()
@@ -1061,6 +1241,15 @@ class CopiesAndActions(unittest.TestCase):
         page.close()
 
 
+    def after(self, page, seen, before, dialog="#pickDialog"):
+        """The job the page started once its dialog closed (asked for just after it closes, so waited for)."""
+        page.wait_for_function(f"() => !document.querySelector('{dialog}').open")
+        for _ in range(100):
+            if len(seen) > before:
+                return seen[-1]
+            page.wait_for_timeout(50)
+        self.fail("nothing was started")
+
     def started(self):
         """Jobs started from the page, kept instead of run."""
         from unittest import mock
@@ -1078,7 +1267,7 @@ class CopiesAndActions(unittest.TestCase):
         with mock.patch.object(server, "save_config"):
             self.srv.cfg["download_skip"] = []
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog = page.locator("#pickDialog")
             dialog.wait_for()
@@ -1091,11 +1280,102 @@ class CopiesAndActions(unittest.TestCase):
             dialog.get_by_role("button", name="Stop skipping").click()
             page.wait_for_function("() => document.querySelectorAll('#pickList input').length === 1")
             self.assertEqual(self.srv.cfg["download_skip"], [])
-            page.click("#pickGo")   # everything ticked: the download runs as it always has
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            before = len(seen)
+            page.click("#pickGo")   # everything ticked: still the products listed, each gone to straight away (#202)
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][0], "download")
-            self.assertIn("gumroad", seen[-1][1], "every store you use, as always")
-            self.assertIsNone(seen[-1][2].get("keys"))
+            self.assertEqual(seen[-1][1], ["gumroad"], "the stores of what's chosen")
+            self.assertEqual(seen[-1][2].get("keys"), ["gumroad:ghostfollower"], "not a walk through every product")
+            page.close()
+
+    def test_which_files_to_save(self):
+        """Issue #225: before a product downloads, Hoard asks which of its files to save: what it contains, then
+        Download everything, or Choose files to tick just those. What you leave out comes unticked the next time it
+        asks; ticked again, all of it comes. Turned off in Settings, it downloads straight away."""
+        from hoard import tags
+        seen = self.started()
+        key = tags.tag_key("gumroad", "Ghost Follower [VRChat]")
+        files = ["Ghost.unitypackage", "Ghost (Quest).unitypackage", "Ghost.spp", "Textures.zip"]
+        self.srv.cfg.update(file_skip={}, file_rules=[])   # (what an earlier test left out of this product)
+        self.addCleanup(self.srv.jobs.listed.clear)
+        self.addCleanup(self.srv.cfg.update, {"file_skip": {}, "ask_files": True})
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            page.locator(".slot", has_text="Someone Else").click()
+            page.click("#detail .actions .primary")
+            asked = page.locator("#filesDialog[open]")
+            self.assertIn("What files do you want to save?", asked.inner_text())
+            self.assertIn("Looking at what it contains...", asked.inner_text())
+            for _ in range(50):   # its store's page is read first (no file downloaded), as a task of its own
+                if seen:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(seen, [("list-files", ["gumroad"], {"keys": [key]})])
+            self.srv.jobs.listed[key] = {"files": files, "at": time.monotonic(), "read": True}
+            asked.get_by_text("It contains 2 Unity packages, 1 Substance Painter project, and 1 compressed file.").wait_for()
+            asked.locator("#filesPick").click()
+            self.assertEqual(asked.locator("#filesList input:checked").count(), 4, "all ticked to begin with")
+            asked.locator("#filesList label", has_text="Ghost (Quest).unitypackage").locator("input").uncheck()
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download these 3")
+            asked.locator("#filesAll").click()
+            page.wait_for_function("() => !document.querySelector('#filesDialog').open")
+            for _ in range(50):
+                if seen[-1][0] == "download":
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(seen[-1][0], "download")
+            self.assertEqual(seen[-1][2]["chosen"], {key: {"shown": files, "chosen": [f for f in files if "Quest" not in f]}})
+            self.assertEqual(self.srv.cfg["file_skip"], {key: ["Ghost (Quest).unitypackage"]}, "remembered for next time")
+            # asked again: what you left out comes unticked; ticked again, it's everything
+            page.click("#detail .actions .primary")
+            asked.locator("#filesList input").first.wait_for()
+            self.assertEqual(asked.locator("#filesList input:not(:checked)").count(), 1)
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download these 3")
+            asked.locator("#filesList label", has_text="Ghost (Quest).unitypackage").locator("input").check()
+            asked.locator("#filesAll").click()
+            for _ in range(50):
+                if len(seen) == 3:
+                    break
+                page.wait_for_timeout(100)
+            self.assertEqual(seen[-1][2]["chosen"], {key: {"shown": files, "chosen": files}})
+            self.assertEqual(self.srv.cfg["file_skip"], {}, "nothing of it left out from now on")
+            # Cancel downloads nothing
+            page.click("#detail .actions .primary")
+            asked.locator("[data-files='cancel']").click()
+            page.wait_for_function("() => !document.querySelector('#filesDialog').open")
+            # turned off: straight away, everything new
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
+                page.uncheck("#setAskFiles")
+            self.assertIs(self.srv.cfg["ask_files"], False)
+            page.locator("#settingsPanel .win-x").click()
+            page.click("#detail .actions .primary")
+            for _ in range(50):
+                if len(seen) == 4:
+                    break
+                page.wait_for_timeout(100)
+            self.assertFalse(page.locator("#filesDialog").evaluate("d => d.open"))
+            self.assertEqual(seen[-1][0], "download")
+            self.assertIsNone(seen[-1][2].get("chosen"))
+            page.close()
+
+    def test_the_routine_checks_downloads_go_straight_to_each(self):
+        """Issue #202: what the routine check found, downloaded with Choose what to download and Download all, was
+        downloaded as a sync does: every product on every store looked through. It's the products listed now."""
+        from unittest import mock
+        seen = self.started()
+        found = {"at": "2026-10-28T08:00:00+00:00", "new": 1, "updates": 0}
+        with mock.patch.object(server, "save_config"), mock.patch.object(server, "routine_record", lambda: {"last": 0, "found": found}):
+            self.srv.cfg["download_skip"] = []
+            page = self.open()
+            page.locator("#routineNote:not([hidden])").wait_for()
+            page.click("#routineChoose")
+            page.locator("#pickDialog").wait_for()
+            before = len(seen)
+            page.click("#pickGo")
+            self.after(page, seen, before)
+            self.assertEqual((seen[-1][0], seen[-1][2].get("keys")), ("download", ["gumroad:ghostfollower"]))
             page.close()
 
     def test_choose_each_file(self):
@@ -1108,7 +1388,7 @@ class CopiesAndActions(unittest.TestCase):
                    "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3, "names": names}]}
         with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog = page.locator("#pickDialog")
             dialog.wait_for()
@@ -1117,21 +1397,109 @@ class CopiesAndActions(unittest.TestCase):
             dialog.locator(f"input[data-file='{names[1]}']").uncheck()
             self.assertIn("2 of 3", dialog.locator(".pk-files summary").inner_text())
             self.assertTrue(dialog.locator(f"input[data-file='{names[0]}']").is_visible(), "the list stays open")
+            before = len(seen)
             page.click("#pickGo")
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][0], "download")
             self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": [names[0], names[2]]}})
             # every file unticked: the product itself is unticked
             if not page.locator("#downloadAll").is_visible():   # (Stores stays open after a download starts)
-                page.click("#storesBtn")
+                menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog.wait_for()
             dialog.locator(".pk-files summary").click()
             for n in names:   # (clicked: the last one takes its list away with it)
                 dialog.locator(f"input[data-file='{n}']").click()
             self.assertFalse(dialog.locator("input[data-pick='gumroad:ghostfollower']").is_checked())
-            self.assertEqual(dialog.locator(".pk-files").count(), 0)
+            self.assertEqual(dialog.locator("details.pk-files").count(), 0)
+            self.assertEqual(dialog.locator(".pk-files").inner_text(), "It contains 2 Unity packages and 1 compressed file.",
+                             "what it has, said instead (issue #225)")
             page.click("[data-pick-go='cancel']")
+            page.close()
+
+    def test_files_left_out_come_unticked(self):
+        """Issue #225: the files your rules, or an earlier choice, leave out come unticked in Download new's list; ticked
+        again, they go with the download, so Hoard forgets having left them out."""
+        from unittest import mock
+        seen = self.started()
+        names = ["Avatar.unitypackage", "Avatar.psd", "Read me.txt"]
+        choices = {"new": [], "skipped": [], "updates": [{"key": "gumroad:ghostfollower", "store": "gumroad",
+                   "name": "Ghost Follower [VRChat]", "creator": "Pointless Creations", "files": 3, "names": names,
+                   "out": ["Avatar.psd"]}]}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            menu(page, "#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            self.assertIn("Choose files (2 of 3)", dialog.locator(".pk-files summary").inner_text())
+            dialog.locator(".pk-files summary").click()
+            self.assertFalse(dialog.locator("input[data-file='Avatar.psd']").is_checked())
+            dialog.locator("input[data-file='Avatar.psd']").check()
+            before = len(seen)
+            page.click("#pickGo")
+            self.after(page, seen, before)
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": names}},
+                             "all ticked, said so: no longer left out")
+            page.close()
+
+    def test_a_product_whose_only_file_is_left_out(self):
+        """A product with one file, which a rule leaves out: it comes unticked (there's nothing of it to download), and
+        ticked, its file goes, whatever the rule says; it isn't remembered as left out either way."""
+        from unittest import mock
+        seen = self.started()
+        choices = {"new": [{"key": "gumroad:fox model", "store": "gumroad", "name": "Fox Model", "creator": "Kitsu",
+                            "files": 1, "names": ["model.psd"], "out": ["model.psd"]}], "skipped": [], "updates": []}
+        with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
+            page = self.open()
+            menu(page, "#storesBtn")
+            page.click("#downloadAll")
+            dialog = page.locator("#pickDialog")
+            dialog.wait_for()
+            box = dialog.locator("input[data-pick='gumroad:fox model']")
+            self.assertFalse(box.is_checked(), "all of it left out: the product unticked")
+            box.check()
+            before = len(seen)
+            page.click("#pickGo")
+            self.after(page, seen, before)
+            self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:fox model": {"shown": ["model.psd"], "chosen": ["model.psd"]}})
+            page.close()
+
+    def test_rules_for_files_to_leave_out(self):
+        """Issue #225: Settings' Files to leave out: a kind of file, or words in a file's name, from every store or one."""
+        from unittest import mock
+        with mock.patch.object(server, "save_config"):
+            page = self.open()
+            menu(page, "#settingsBtn")
+            rules = page.locator("#fileRules")
+            rules.locator("li.none").wait_for()
+            page.select_option("#ruleWhat", "kind:layered")
+            page.click("#ruleAdd")
+            rules.locator("li", has_text="Layered images").wait_for()
+            self.assertIn("from every store", rules.inner_text())
+            page.select_option("#ruleWhat", "words")
+            page.fill("#ruleWords", "Quest, android")
+            page.select_option("#ruleStore", "booth")
+            page.click("#ruleAdd")
+            rules.locator("li", has_text="quest android").wait_for()
+            self.assertEqual(self.srv.cfg["file_rules"], [{"store": "all", "kind": "layered"}, {"store": "booth", "words": "quest android"}])
+            rules.locator("li", has_text="Layered images").locator("[data-rule-out]").click()
+            page.wait_for_function("() => document.querySelectorAll('#fileRules li').length === 1 && !document.querySelector('#fileRules').textContent.includes('Layered')")
+            self.assertEqual(self.srv.cfg["file_rules"], [{"store": "booth", "words": "quest android"}])
+            # two changes before the first is saved: the second builds on the first, not on what was last saved
+            slow = self.srv.save_settings
+            with mock.patch.object(self.srv, "save_settings", lambda: time.sleep(0.4) or slow()):
+                page.select_option("#ruleWhat", "kind:archive")
+                page.click("#ruleAdd")
+                page.select_option("#ruleWhat", "kind:blender")
+                page.click("#ruleAdd")
+                page.wait_for_function("() => document.querySelectorAll('#fileRules li').length === 3")
+                for _ in range(40):
+                    if len(self.srv.cfg["file_rules"]) == 3:
+                        break
+                    page.wait_for_timeout(100)
+            self.assertEqual([r.get("kind") for r in self.srv.cfg["file_rules"]], [None, "archive", "blender"])
+            self.srv.cfg["file_rules"] = []
             page.close()
 
     def test_files_with_one_name_are_one_choice(self):
@@ -1143,7 +1511,7 @@ class CopiesAndActions(unittest.TestCase):
                    "names": ["Avatar.zip", "Avatar.zip", "Read me.txt"]}]}
         with mock.patch.object(self.srv, "download_choices", lambda unlocked: choices):
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.click("#downloadAll")
             dialog = page.locator("#pickDialog")
             dialog.wait_for()
@@ -1151,8 +1519,9 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(dialog.locator("input[data-file]").count(), 2)
             self.assertIn("(2 files)", dialog.locator(".pk-files").inner_text())
             dialog.locator("input[data-file='Avatar.zip']").uncheck()
+            before = len(seen)
             page.click("#pickGo")
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": ["Avatar.zip", "Read me.txt"],
                                                                                     "chosen": ["Read me.txt"]}})
             page.close()
@@ -1182,7 +1551,8 @@ class CopiesAndActions(unittest.TestCase):
         """Issue #106: the selected products, downloaded as one job."""
         seen = self.started()
         page = self.open()
-        page.locator("#stackCopies").uncheck() if page.locator("#stackCopies").is_checked() else None
+        if page.get_attribute("#stackCopies", "aria-pressed") == "true":
+            page.click("#stackCopies")
         page.click("#selectBtn")
         page.locator(".slot", has_text="Someone Else").click()
         page.locator(".slot", has_text="Mochi").click()   # Payhip's: listed, not downloaded
@@ -1278,6 +1648,33 @@ class HighlightsAndAccessibility(unittest.TestCase):
         page.locator("#splash").wait_for(state="detached", timeout=10000)
         page.close()
 
+    def test_the_splash_talks_and_counts(self):
+        """Issue #200: while the page reads, a few friendly words that change, and how far Hoard has got (the
+        products read of all of them, then what's downloaded), from the server's own count."""
+        from hoard import loading
+        page = self.browser.new_page()
+        held = []
+        page.route("**/api/library*", lambda route: held.append(route))   # (reading takes a while)
+        loading.step("library", "products", 40, 100)
+        self.addCleanup(loading.finished, "library")
+        goto(page, self.srv.entry_url())
+        count = page.locator("#splash .splash-count .n")
+        count.wait_for()
+        self.assertEqual(count.inner_text(), "Reading your library: 40 of 100")
+        self.assertEqual(page.locator("#splash .splash-bar").get_attribute("aria-valuenow"), "40")
+        self.assertRegex(page.locator("#splash .splash-quote").inner_text(), r"\w.*\.\.\.$")
+        loading.step("library", "downloads", 3, 4)
+        page.wait_for_function("() => document.querySelector('#splash .splash-count .n').textContent"
+                               " === \"Looking at what's downloaded: 3 of 4\"")
+        for _ in range(100):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        held[0].continue_()
+        page.locator("#splash").wait_for(state="detached", timeout=10000)
+        page.get_by_text("Mochi").first.wait_for()
+        page.close()
+
     def test_the_open_item_is_marked(self):
         page = self.open()
         mochi = page.locator(".slot", has_text="Mochi")
@@ -1333,7 +1730,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         self.assertEqual(page.locator(".slot img").count(), 0, "every picture is a still")
         # turned off from Settings: the pictures move again, straight away
         from playwright.sync_api import expect
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         # uncheck() reads the box straight away, so wait for Settings to have filled it in first
         expect(page.locator("#setPause")).to_be_checked()
         page.locator("#setPause").uncheck()
@@ -1374,7 +1771,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         with mock.patch.object(server, "save_config"):
             page = self.open()
             standard = page.evaluate(colour)
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator("#setGlowOn")).to_be_checked()
             page.locator("#setGlowOn").uncheck()
             page.wait_for_function("() => document.body.classList.contains('no-glow')")
@@ -1401,7 +1798,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         cave = "() => getComputedStyle(document.documentElement).getPropertyValue('--cave').trim().toUpperCase()"
         with mock.patch.object(server, "save_config"):
             page = self.open()
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             expect(page.locator('input[name="setTheme"][value="hoard"]')).to_be_checked()
             self.assertEqual(page.locator('input[name="setTheme"]').count(), len(themes.THEMES))
             expect(page.locator("#setModeSystem")).to_be_checked()
@@ -1442,7 +1839,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         with mock.patch.object(server, "save_config"):
             page = self.open()
             page.set_viewport_size({"width": 1000, "height": 640})
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.wait_for_function("() => document.querySelector('#setTextSize').value === '100'")
             page.select_option("#setTextSize", "150")   # saved and applied as it's chosen
             page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
@@ -1451,7 +1848,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
                     goto(page, f"{self.srv.url}downloads")
                     page.wait_for_function("() => document.documentElement.style.zoom === '1.5'")
                 if page.locator("#settingsPanel").is_hidden():
-                    page.click("#settingsBtn")
+                    menu(page, "#settingsBtn")
                 page.locator("#setTextSize").wait_for()
                 self.assertEqual(page.evaluate(fits), [], where)
             page.select_option("#setTextSize", "100")   # and the text size can be put back from there
@@ -1676,7 +2073,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
         shade = page.locator("#winShade")
         for button, win in (("#settingsBtn", "#settingsPanel"), ("#storesBtn", "#stores"), ("#tagsBtn", "#tagPanel"),
                             ("#tasksTab", "#tasksWin")):
-            page.click(button)   # the title bar stays above the dimmed page, so its buttons swap the panel
+            # the title bar stays above the dimmed page, so its buttons (and its Menu's) swap the panel
+            page.click(button) if button == "#tasksTab" else menu(page, button)
             page.locator(win + ".win:not([hidden])").wait_for()
             self.assertEqual(page.locator(".win:not([hidden])").count(), 1, f"{win}: only it is open")
             self.assertTrue(shade.is_visible(), win)
@@ -1686,12 +2084,12 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.keyboard.press("Escape")
         self.assertEqual(page.locator(".win:not([hidden])").count(), 0)
         self.assertTrue(shade.is_hidden())
-        page.click("#tagsBtn")
+        menu(page, "#tagsBtn")
         page.locator("#tagPanel.win:not([hidden])").wait_for()
         page.mouse.click(30, 700)   # around it
         self.assertTrue(page.locator("#tagPanel").is_hidden())
         self.assertTrue(shade.is_hidden())
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.locator("#settingsPanel .win-x").click()
         self.assertTrue(page.locator("#settingsPanel").is_hidden())
         self.assertEqual(self.errors, [])
@@ -1724,7 +2122,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         from unittest import mock
         with mock.patch.object(server, "signed_in", lambda cfg, s: s == "booth"):
             page = self.open()
-            page.click("#storesBtn")
+            menu(page, "#storesBtn")
             page.locator("#storeRows [data-logout='booth']").wait_for()
             self.assertEqual(page.locator("#storeRows [data-login='booth']").count(), 0, "signed in: no Sign in")
             self.assertEqual(page.locator("#storeRows [data-logout='gumroad']").count(), 0, "signed out: no Sign out")
@@ -1739,7 +2137,11 @@ class WindowsTabsAndTasks(unittest.TestCase):
         inside = "id => document.getElementById(id).contains(document.activeElement)"
         for button, win in (("#settingsBtn", "settingsPanel"), ("#storesBtn", "stores")):
             with self.subTest(win):
-                page.focus(button)
+                page.focus("#menuBtn")
+                page.keyboard.press("Enter")   # the Menu opens, with the keyboard in it
+                page.wait_for_function("() => document.querySelector('#barMenu').contains(document.activeElement)")
+                while page.evaluate("document.activeElement.id") != button[1:]:
+                    page.keyboard.press("ArrowDown")
                 page.keyboard.press("Enter")
                 page.wait_for_function(inside, arg=win)
                 for _ in range(60):   # more than the panel has: round and round, never out
@@ -1749,7 +2151,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
                 self.assertTrue(page.evaluate(inside, win))
                 self.assertEqual(page.get_attribute(f"#{win}", "aria-modal"), "true")
                 page.keyboard.press("Escape")
-                page.wait_for_function(f"() => document.activeElement === document.querySelector('{button}')")
+                page.wait_for_function("() => document.activeElement === document.querySelector('#menuBtn')")   # (its item is out of sight)
         self.assertEqual(self.errors, [])
         page.close()
 
@@ -1769,6 +2171,247 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.set_viewport_size({"width": 330, "height": 800})   # a phone: they scroll, and a fade shows there are more
         page.evaluate("document.documentElement.style.zoom = '1.5'")
         page.wait_for_function("() => document.querySelector('.shelf .seg').classList.contains('more-right')")
+        page.close()
+
+    def test_search_prefixes(self):
+        """Issues #220 and #221: the empty search box shows the prefixes, each with an example, and choosing one puts
+        it in the box; then what it could be is offered. creator:, by:, store:, # and set: filter the products; a
+        set or a setting is a place to go."""
+        page = self.open()
+        self.assertEqual(page.evaluate("parseSearch('by:\"Kitsu Studio\" #Hoodie https://booth.pm/x set: hello')"),
+                         {"words": ["https://booth.pm/x", "hello"], "creator": ["kitsu studio"], "tag": ["hoodie"], "store": [],
+                          "type": [], "set": [], "project": [], "settings": []}, "an address's https: isn't a prefix")
+        q, guide = page.locator("#q"), page.locator("#qMenu")
+        q.focus()
+        guide.wait_for()
+        self.assertEqual(guide.locator(".qopt code").first.inner_text(), "creator:")
+        self.assertEqual(guide.locator(".qopt").count(), 7, "every prefix")
+        self.assertEqual(q.get_attribute("aria-expanded"), "true")
+        page.keyboard.press("ArrowDown")
+        page.keyboard.press("Enter")   # creator:, and then the creators
+        self.assertEqual(q.input_value(), "creator:")
+        guide.locator(".qopt", has_text="Kitsu Studio").wait_for()
+        page.keyboard.type("kit")
+        self.assertEqual(guide.locator(".qopt").all_inner_texts()[0].split("\n")[0], "Kitsu Studio")
+        guide.locator(".qopt", has_text="Kitsu Studio").click()
+        self.assertEqual(q.input_value(), 'creator:"Kitsu Studio" ')
+        self.assertTrue(guide.is_hidden(), "a space after it: nothing more to offer")
+        page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")
+        self.assertEqual(page.locator("#grid .slot", has_text="Mochi").count(), 0)
+        for text, count in (("by:mochi", 1), ("store:gumroad", 1), ("store:booth anko", 1), ("#nothing-tagged", 0), ("https://", 0)):
+            with self.subTest(text):
+                q.fill(text)
+                page.wait_for_function(f"() => document.querySelectorAll('#grid .slot').length === {count}")
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        key = page.evaluate("DATA.items.find(a => a.name === 'Rusk').tag_key")
+        made = page.evaluate(post, ["/api/sets", {"action": "create", "name": "Winter", "items": [key]}])["made"]
+        try:
+            page.evaluate("load()")
+            page.wait_for_function("() => (DATA.sets || []).length === 1")
+            q.fill("set:win")
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            guide.locator(".qopt", has_text="Go to this set").wait_for()
+            page.keyboard.press("ArrowDown")
+            page.keyboard.press("Enter")
+            page.wait_for_function("id => state.store === 'Sets' && state.set === id", arg=made)
+            self.assertEqual(q.input_value(), "", "gone there: the box is empty again")
+        finally:
+            page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])
+        q.focus()
+        q.fill("settings:langu")
+        guide.locator(".qopt", has_text="Language").first.wait_for()
+        page.keyboard.press("ArrowDown")
+        page.keyboard.press("Enter")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        page.wait_for_function("() => document.activeElement && document.activeElement.id === 'setLanguage'")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_back_and_forward(self):
+        """Issue #211: each place is a step in the page's history (a set, a product's details, Settings...), so Back
+        and Forward (the mouse's buttons, Alt+Left and Alt+Right) go through them, and Back closes a panel first."""
+        page = self.open()
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        key = page.evaluate("DATA.items.find(a => a.name === 'Rusk').tag_key")
+        made = page.evaluate(post, ["/api/sets", {"action": "create", "name": "Spring", "items": [key]}])["made"]
+        try:
+            page.evaluate("load()")
+            page.wait_for_function("() => (DATA.sets || []).length === 1")
+            page.click("nav.apptabs a[href='/#store=Sets']")
+            page.locator("#setView .settile", has_text="Spring").click()
+            page.wait_for_function("id => state.set === id", arg=made)
+            page.go_back()   # the list of sets
+            page.wait_for_function("() => state.store === 'Sets' && state.set === ''")
+            page.go_forward()   # the set again
+            page.wait_for_function("id => state.set === id", arg=made)
+            page.go_back()
+            page.go_back()   # the tab before Sets
+            page.wait_for_function("() => state.store === ''")
+            page.locator(".slot", has_text="Mochi").click()   # a product's details, then Settings over them
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            page.go_back()   # Settings closes, the details stay
+            page.locator("#settingsPanel").wait_for(state="hidden")
+            self.assertTrue(page.evaluate("document.querySelector('#detail').classList.contains('open')"))
+            page.mouse.move(400, 400)
+            page.evaluate("dispatchEvent(new MouseEvent('mouseup', { button: 3, bubbles: true }))")   # the mouse's back button
+            page.wait_for_function("() => !document.querySelector('#detail').classList.contains('open')")
+            page.keyboard.press("Alt+ArrowRight")   # forward: the details again
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            page.locator("#detail .x").click()   # closed by its ×: a step back, not a new one
+            page.wait_for_function("() => !document.querySelector('#detail').classList.contains('open')")
+            page.go_forward()
+            page.wait_for_function("() => document.querySelector('#detail').classList.contains('open')")
+            for name in ("constructor", "__defineGetter__", "__proto__"):   # an address naming no window opens nothing
+                page.evaluate("n => { location.hash = 'win=' + n; }", name)
+                page.wait_for_timeout(200)
+            self.assertTrue(page.locator("#settingsPanel").is_hidden())
+            self.assertEqual(self.errors, [])
+        finally:
+            page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])
+        page.close()
+
+    def test_the_right_click_menu_names_a_few_sets(self):
+        """Issue #228: the right-click menu named every set, taller than the window with 16 of them. Now it names the
+        five you added to last (the newest, before you have), and Add to another set... finds the rest by name."""
+        page = self.open()
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        made = [page.evaluate(post, ["/api/sets", {"action": "create", "name": f"Set {n:02}", "items": []}])["made"] for n in range(16)]
+        try:
+            page.evaluate("load()")
+            page.wait_for_function("() => (DATA.sets || []).length === 16")
+            page.locator(".slot", has_text="Anko").click(button="right")
+            adds = lambda: [t for t in page.locator(".selmenu [role=menuitem]").all_inner_texts() if t.startswith("Add to")]
+            page.locator(".selmenu").wait_for()
+            self.assertEqual(adds(), ["Add to Set 15", "Add to Set 14", "Add to Set 13", "Add to Set 12", "Add to Set 11",
+                                      "Add to another set..."], "the newest five, then the rest by name")
+            page.locator(".selmenu [role=menuitem]", has_text="Add to another set...").click()
+            page.locator("dialog.ask #askName").fill("set 03")
+            page.keyboard.press("Enter")
+            page.wait_for_function("id => (DATA.sets.find(s => s.id === id) || {}).items.length === 1", arg=made[3])
+            page.locator(".slot", has_text="Anko").click(button="right")
+            page.locator(".selmenu").wait_for()
+            self.assertEqual(adds()[:2], ["Add to Set 03", "Add to Set 15"], "the one you added to last, first")
+            page.keyboard.press("Escape")
+            self.assertEqual(self.errors, [])
+        finally:
+            for sid in made:
+                page.evaluate(post, ["/api/sets", {"action": "delete", "id": sid}])
+            self.srv.cfg.get("ui", {}).pop("recent_sets", None)
+        page.close()
+
+    def test_the_creators_tags_on_a_product(self):
+        """Issue #206: the tags Rusk's creator gave it on Booth show in its details, apart from the suggestions from its
+        name, to add as yours; and you can filter and search by them."""
+        with self.srv.lib.lock:
+            rusk = next(i for i in self.srv.lib.data["items"] if i["name"] == "Rusk")
+            rusk["store_tags"] = ["fox", "vrchat"]
+        try:
+            page = self.open()
+            page.locator(".slot", has_text="Rusk").click()
+            theirs = page.locator("#detail p.sub", has_text="Its creator's tags on Booth")
+            theirs.wait_for()
+            self.assertEqual(page.locator("#detail p.sub:has-text(\"Its creator's tags\") + .chips .chip").all_inner_texts(), ["fox", "vrchat"])
+            page.click("#detail .x")
+            page.click('#tags [data-tag="vrchat"]')   # beside the grid, with the suggested tags
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            page.click('#tags [data-tag="vrchat"]')
+            page.fill("#q", "tag:fox")
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            self.assertEqual(self.errors, [])
+            page.close()
+        finally:
+            with self.srv.lib.lock:
+                rusk.pop("store_tags", None)
+
+    def test_a_products_type(self):
+        """Issue #223: what a product is, set in its details without a tag (Hoard guesses until you do), and a filter
+        beside the grid; the search's type: finds it too."""
+        page = self.open()
+        page.locator(".slot", has_text="Rusk").click()
+        pick = page.locator("#detail select[data-ptypeset]")
+        self.assertEqual(pick.locator("option").first.inner_text(), "Not known yet", "nothing in its name says")
+        with page.expect_response(lambda r: r.url.endswith("/api/tags") and r.request.method == "POST"):
+            pick.select_option("avatar")
+        page.wait_for_function("() => (DATA.items.find(a => a.name === 'Rusk') || {}).type === 'avatar'")
+        try:
+            self.assertEqual(page.evaluate("DATA.items.find(a => a.name === 'Rusk').tags"), [], "no tag added")
+            chip = page.locator('#ptypes [data-ptype="avatar"]')
+            self.assertIn("1", chip.inner_text())
+            chip.click()
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            self.assertIn("Product type", page.locator("#status").inner_text())
+            chip.click()
+            page.fill("#q", "type:avatar")
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            page.fill("#q", "")
+            self.assertEqual(self.errors, [])
+        finally:   # (Hoard's guess again, for the other tests)
+            page.evaluate("api('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
+                          "body: JSON.stringify({ action: 'set-type', keys: [DATA.items.find(a => a.name === 'Rusk').tag_key], type: '' }) })")
+        page.close()
+
+    def test_sync_asks_first(self):
+        """Issue #214: Sync says what it does, and on which stores, and starts only after Start."""
+        page = self.open()
+        asked = []
+        page.route("**/api/sync", lambda route: (asked.append(route.request.post_data),
+                                                  route.fulfill(status=400, json={"error": "Not in this test."})))
+        page.click("#syncBtn")
+        dialog = page.locator("#askDialog[open]")
+        dialog.wait_for()
+        self.assertRegex(dialog.inner_text(),   # (the list in the language's own way: Intl.ListFormat)
+                         r"Sync reads what you own on Booth, Gumroad, Jinxxy, Payhip,? and itch\.io, then downloads anything new\.")
+        dialog.locator('button[value="no"]').click()
+        page.wait_for_timeout(200)
+        self.assertEqual(asked, [], "Cancel: no sync")
+        page.click("#syncBtn")
+        dialog.wait_for()
+        dialog.locator('button[value="yes"]', has_text="Start").click()
+        page.locator(".toast", has_text="Not in this test.").wait_for()
+        self.assertEqual(len(asked), 1, "Start: it starts")
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_the_search_is_in_the_middle(self):
+        """Issue #203: the search box is in the middle of the bar, Library, Downloads and Local to its left and Sets
+        and Wishlists, Tasks, Projects and the tools to its right, at every width, text size and style; when there
+        isn't room, it goes under them, still in the middle, and nothing hides or overlaps."""
+        page = self.open()
+        check = """() => {
+          const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
+          const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .tools > *')]
+            .filter(el => el.getClientRects().length).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
+          const over = [];
+          for (const [i, [a, ra]] of parts.entries()) {
+            if (ra.left < bar.left - 1 || ra.right > bar.right + 1) over.push(a + ' is out of the bar');
+            for (const [b, rb] of parts.slice(i + 1))
+              if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
+          }
+          return { off: Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2), wide: search.width, over,
+                   fit: document.querySelector('.bar').dataset.fit || 'one' };
+        }"""
+        seen = set()
+        for path in ("", "downloads"):
+            if path:
+                goto(page, self.srv.url + path)
+                page.locator("#menuBtn").wait_for()   # (nothing downloaded here)
+                page.wait_for_load_state("networkidle")
+            for style in ("", "treasure", "workbench"):
+                for width, zoom in ((1800, 1), (1350, 1), (1000, 1), (700, 1), (420, 1), (1800, 1.5), (1000, 1.5)):
+                    with self.subTest(path=path or "library", style=style or "standard", width=width, zoom=zoom):
+                        page.set_viewport_size({"width": width, "height": 800})
+                        page.evaluate(f"""() => {{ document.documentElement.style.zoom = '{zoom}';
+                          if ('{style}') document.documentElement.dataset.style = '{style}'; else delete document.documentElement.dataset.style; }}""")
+                        page.wait_for_timeout(120)
+                        got = page.evaluate(check)
+                        seen.add(got["fit"])
+                        self.assertLess(got["off"], 2, got)
+                        self.assertGreater(got["wide"], 150, got)
+                        self.assertEqual(got["over"], [], got)
+        self.assertEqual(seen, {"one", "rows", "stack"}, "each way the bar fits was tried")
+        self.assertEqual(self.errors, [])
         page.close()
 
     def test_the_top_bar_shrinks_back(self):
@@ -1834,7 +2477,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         out of Hoard's window into another browser), or copied from here, as Hoard makes it."""
         from urllib.parse import unquote
         page = self.open()
-        page.click("#storesBtn")
+        menu(page, "#storesBtn")
         link = page.locator("#payhipSaver")
         link.wait_for()
         self.assertEqual(link.get_attribute("href"), "https://hoard.furryup.link/save-for-hoard.html")
@@ -1856,7 +2499,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         with mock.patch.object(server, "reveal", lambda p: opened.append(p) or "your file manager"):
             page = self.open()
             page.set_viewport_size({"width": 1280, "height": 800})
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#settingsPanel").wait_for()
             box = page.locator("#settingsPanel").bounding_box()
             bar = page.evaluate("() => document.querySelector('header').getBoundingClientRect().bottom")
@@ -1895,7 +2538,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))
         with mock.patch.object(server, "save_config"):
             page = self.open()
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.wait_for_function("() => document.querySelector('#setNewDays').value === '7'")
             self.assertEqual(page.locator("#setSave").count(), 0, "there's nothing to save")
             page.select_option("#setNewDays", "14")
@@ -2095,7 +2738,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(hidden, [1], "the window went to the taskbar; Hoard carries on")
             self.assertEqual(closed, [])
             # Quit Hoard in Settings asks the same, while it's working
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.locator("#backgroundRow").wait_for(state="visible")   # the setting, in Hoard's own window
             self.assertTrue(page.is_checked("#setBackground"), "on unless you turn it off")
             page.uncheck("#setBackground")
@@ -2120,6 +2763,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page = self.open()
             page.locator('.slot', has_text="Rusk").click()
             page.click("#detail [data-act=download]")
+            page.locator("#filesDialog[open] #filesAll").click()   # (Download everything: issue #225)
             page.get_by_text("Queued: it starts when what's running now is done").wait_for()
             gate.set()
             page.close()

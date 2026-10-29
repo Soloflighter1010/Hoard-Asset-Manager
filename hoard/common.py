@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
 from datetime import datetime, timezone
 
 _sinks: list = []   # (lane, sink): each job's, while it runs
 _sink_lock = threading.Lock()
 _lane = threading.local()
+_stops: dict = {}   # lane -> (the running job's Stop, the job's thread), while one runs (stoppable)
 
 
 def set_lane(name: str) -> None:
@@ -17,10 +19,18 @@ def set_lane(name: str) -> None:
 
 
 def _this_lane() -> str:
+    """The lane this thread's work is in."""
     return getattr(_lane, "name", "main")   # (any thread not set: the main lane's, as all were before)
 
 
+def job_lane() -> str | None:
+    """The lane whose job this thread runs, or None for any other thread (a page's request, the update's download, a
+    picture fetched in the background): what Force stop cuts is only ever a job's."""
+    return getattr(_lane, "name", None)
+
+
 def _sinks_here() -> list:
+    """The progress sinks of the job running in this thread's lane."""
     lane = _this_lane()
     with _sink_lock:
         return [sink for on, sink in _sinks if on == lane]
@@ -32,6 +42,32 @@ class NotLoggedIn(Exception):
 
 class Cancelled(BaseException):
     """You stopped a download. A BaseException, so it passes through the per-file error handling."""
+
+
+@contextlib.contextmanager
+def stoppable(stop: threading.Event):
+    """While inside: this thread runs its lane's job, which stop ends (Stop and Force stop set it), so pause() in
+    this thread ends the job at once rather than after the wait."""
+    lane = _this_lane()
+    _stops[lane] = (stop, threading.get_ident())
+    try:
+        yield
+    finally:
+        if _stops.get(lane, (None, None))[1] == threading.get_ident():
+            del _stops[lane]
+
+
+def pause(seconds: float) -> None:
+    """Wait seconds, as time.sleep does: between a store's pages, before trying a download again. In a running job's
+    own thread, Stop or Force stop chosen meanwhile ends the job straight away (raising Cancelled, as a progress
+    message would; the Stop is used up), instead of only after the wait (issue #201)."""
+    got = _stops.get(_this_lane())
+    if got is None or got[1] != threading.get_ident():
+        time.sleep(seconds)
+        return
+    if got[0].wait(max(0.0, seconds)):
+        got[0].clear()
+        raise Cancelled()
 
 
 def now_iso() -> str:

@@ -17,7 +17,9 @@
   const SHARE_SERVER = "https://hoard-share.furryup.link";
   const SHORT = /^S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})$/;
 
+  // The first element a selector matches.
   const $ = s => document.querySelector(s);
+  // A new element, with its attributes and what's in it.
   function el(tag, attrs, ...kids) {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) e.setAttribute(k, v === true ? "" : v);
@@ -41,6 +43,7 @@
   const JINXXY_NOT_A_CREATOR = new Set(["my", "market", "api", "auth", "cart", "checkout", "about", "login", "signup", "settings",
     "search", "help", "support", "feedback", "terms-of-service", "privacy-policy", "refund-policy", "_next", "static", "admin"]);
   const BOOTH_ITEM = /^\/(?:[a-z]{2}(?:-[a-z]+)?\/)?items\/\d{1,12}$/;
+  // A product's link, only when it's to the store's own site (a product or shop page there), else "".
   function storePage(store, value) {
     if (typeof value !== "string" || value.length > 600) return "";
     let u;
@@ -48,7 +51,9 @@
     const host = u.hostname.replace(/\.$/, "").toLowerCase(), path = u.pathname.replace(/\/+$/, "");
     if (u.protocol !== "https:" || u.username || u.password || (u.port && u.port !== "443") || !/^[\x00-\x7f]*$/.test(host)) return "";
     const dot = host.indexOf("."), name = host.slice(0, dot), rest = host.slice(dot + 1);
+    // Whether the address is a shop's own address on a store's site.
     const shop = site => rest === site && /^[a-z0-9-]{1,63}$/.test(name) && !NOT_A_SHOP.has(name);
+    // Whether the address is on a store's site.
     const on = site => host === site || host === "www." + site;
     const segs = path ? path.split("/").slice(1) : [];
     const ok = store === "booth" ? (on("booth.pm") && BOOTH_ITEM.test(path)) || (shop("booth.pm") && (!path || BOOTH_ITEM.test(path)))
@@ -60,9 +65,12 @@
     if (ok && store === "booth" && on("booth.pm") && path.startsWith("/items/")) return `https://${host}/en${path}`;   // (as Hoard does)
     return ok ? `https://${host}${path}` : "";
   }
+  // A value as plain text of at most n characters, or "".
   const text = (v, n) => typeof v === "string" ? v.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, n) : "";
+  // A set's note: at most 20 lines, as plain text.
   const note = v => typeof v === "string" ? v.split(/\r?\n/).slice(0, 20).map(l => text(l, 1000)).join("\n").trim().slice(0, 1000) : "";
 
+  // A set from its code: decompressed and checked. Throws when it isn't one.
   async function unpack(code) {
     code = code.replace(/\s+/g, "");
     if (!code.startsWith(PREFIX) || code.length > MAX_CODE) throw new Error("not a code");
@@ -98,7 +106,9 @@
 
   // A short link's set, unlocked as Hoard's page locks it (hoard/web/shared.js: lockSet)
   const LOCKED_AS = new TextEncoder().encode("Hoard set S1");
+  // URL-safe base64 as bytes.
   const unb64u = t => Uint8Array.from(atob(t.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0));
+  // A shared set's code, decrypted with the key from its short link.
   async function unlockSet(data, key) {
     const bytes = unb64u(data), k = await crypto.subtle.importKey("raw", unb64u(key), "AES-GCM", false, ["decrypt"]);
     return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12), additionalData: LOCKED_AS }, k, bytes.subarray(12)));
@@ -121,13 +131,17 @@
   // A product with no picture, or one that won't load, gets the tile Hoard's own pages draw: its initials on a
   // colour worked out from its creator's name (hoard/web/shared.js: hue, initials)
   const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
+  // Up to two initials of a name, for a product with no picture.
   const initials = s => (s.match(/[\p{L}\p{N}]+/gu) || ["?"]).slice(0, 2).map(w => [...w][0]).join("").toUpperCase();
+  // A product's letters and colour, for when it has no picture.
   const lettered = i => el("span", { class: "ph", style: `--h:${hue(i.creator || i.name)}`, "aria-hidden": "true" }, el("b", {}, initials(i.name)));
+  // A picture, replaced by what instead() makes (or nothing) when it doesn't load.
   function picture(src, alt, cls, instead) {
     const img = el("img", { src, alt, loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", class: cls });
     img.addEventListener("error", () => img.replaceWith(instead ? instead() : el("span", { class: cls + " none", "aria-hidden": "true" })), { once: true });
     return img;
   }
+  // Show the set: its name, note, products and where to get each.
   function show(set, expires) {
     document.title = set.name + " · a set shared from Hoard";
     $("#setName").textContent = set.name;
@@ -166,10 +180,12 @@
       catch (e) { $("#setCode").select(); $("#setCopied").textContent = "Copy it from the box."; }
     });
   }
+  // Say why the set can't be shown.
   function problem(why) {
     $("#setProblem").hidden = false;
     $("#setProblemWhy").textContent = why;
   }
+  // Read the set from the address (or its short link), and show it.
   async function start() {
     let code = decodeURIComponent(location.hash.slice(1)).replace(/\s+/g, ""), expires = 0;
     if (!code) { problem("This page shows a set someone shared from Hoard. Open the link they sent you: the set is in it."); return; }

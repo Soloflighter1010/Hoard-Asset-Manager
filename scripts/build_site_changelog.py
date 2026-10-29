@@ -41,6 +41,7 @@ def when(stamp: str | None) -> tuple[str, str] | None:
 
 
 def page(markdown: str, dates: dict[str, str]) -> str:
+    """The website's What's new page: a card for each release (betas left out), newest first."""
     cards = []
     # A beta's notes (## 3.1.0-beta.1) are for testers, on its GitHub release: What's new shows releases only
     for n, (version, lines) in enumerate([r for r in releases(markdown) if not is_beta(r[0])]):
@@ -110,6 +111,7 @@ TEMPLATE = """<!doctype html>
 
 
 def main(argv: list[str]) -> int:
+    """Write the page to OUT.html, with each release's date from --dates."""
     if not argv or argv[0].startswith("-"):
         print("usage: build_site_changelog.py OUT.html [--dates DATES.json]", file=sys.stderr)
         return 2

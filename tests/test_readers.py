@@ -150,6 +150,28 @@ class ProductPages(unittest.TestCase):
         items = [library.jinxxy_item({**c, "creator": "Kitsu", "thumbnail": None}) for c in found.values()]
         self.assertEqual(items[3]["page"], "https://jinxxy.com/kitsu/item-4")
 
+    def test_a_product_shown_by_its_video_gets_a_picture(self):
+        """Issue #212: an inventory card showing a video (no picture) gets the picture its public page gives; one a refresh
+        found before is kept without reading the page again; a card that simply has no picture isn't read for one."""
+        found = {f"/my/inventory/{n}": {"key": f"/my/inventory/{n}", "url": f"https://jinxxy.com/my/inventory/{n}", "name": f"Item {n}",
+                                        "creator_url": "https://jinxxy.com/kitsu", "page": f"https://jinxxy.com/kitsu/Item{n}"}
+                 for n in range(1, 4)}
+        found["/my/inventory/1"]["video"] = found["/my/inventory/2"]["video"] = True
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url)
+            return ('<meta property="og:title" content="Item 1"><meta property="og:image" '
+                    'content="https://jinxxy-c.jinxxy-cdn.com/a/1/still.webp">', "text/html")
+        cfg = {"request_delay": 0, "_known_pictures": {"jinxxy:2": "https://jinxxy-c.jinxxy-cdn.com/a/2/before.png"}}
+        from hoard import wishlists
+        with mock.patch.object(wishlists, "read_store_page", fetch), mock.patch.object(library, "goto", lambda page, url: self.fail(url)):
+            library.jinxxy_product_pages(object(), found, cfg, lambda m: None)
+        self.assertEqual(asked, ["https://jinxxy.com/kitsu/Item1"])
+        self.assertEqual([c.get("thumbnail") for c in found.values()],
+                         ["https://jinxxy-c.jinxxy-cdn.com/a/1/still.webp", "https://jinxxy-c.jinxxy-cdn.com/a/2/before.png", None])
+        self.assertNotIn("_known_pictures", cfg)
+
     def test_a_page_found_once_is_kept(self):
         lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
         lib.replace_store("jinxxy", [library.item("jinxxy", "1", name="Paw", page="https://jinxxy.com/kitsu/paw")])

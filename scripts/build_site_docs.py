@@ -60,6 +60,7 @@ SEPARATOR = re.compile(r"^ *\|? *:?-{3,}:? *(\| *:?-{3,}:? *)*\|? *$")
 
 
 class BrokenLink(ValueError):
+    """A wiki link to a page or heading that isn't there."""
     pass
 
 
@@ -70,6 +71,7 @@ def slug(heading: str) -> str:
 
 
 def page_file(name: str) -> str:
+    """A wiki page's file on the website."""
     return "index.html" if name == "Home" else f"{name}.html"
 
 
@@ -140,23 +142,28 @@ def cells(row: str) -> list[str]:
 
 
 def indent_of(line: str) -> int:
+    """How many spaces a line starts with."""
     return len(line) - len(line.lstrip(" "))
 
 
 def starts_block(line: str) -> bool:
+    """Whether a line starts a block of its own (a list, code, a heading or a table), ending a paragraph."""
     return bool(LIST.match(line) or FENCE.match(line) or HEADING.match(line) or line.lstrip().startswith("|"))
 
 
 class Renderer:
+    """Turns a wiki page's Markdown into the website's HTML, collecting its headings for its contents."""
     def __init__(self, link, anchor_label: str = UI["en"]["anchor"]):
         self.link = link
         self.anchor_label = anchor_label
         self.headings: list[tuple[int, str, str]] = []   # (level, id, text), for the page's own contents
 
     def inline(self, text: str) -> str:
+        """A line's inline Markdown (links, code, emphasis) as HTML."""
         return inline(text, self.link)
 
     def blocks(self, lines: list[str]) -> str:
+        """Lines of Markdown as HTML blocks: paragraphs, lists, code, headings, tables and notes."""
         out, i, n = [], 0, len(lines)
         while i < n:
             line = lines[i]
@@ -383,6 +390,7 @@ def build(out: Path, folder: Path = WIKI) -> list[str]:
 
 
 def _build(lang: str, pages: Pages, out: Path, have: dict[str, set[str]]) -> list[str]:
+    """Write one language's pages, returning the files written."""
     ui, up = UI[lang], "../" if lang == "en" else "../../"
     out.mkdir(parents=True, exist_ok=True)
     index, written = [], []
@@ -425,6 +433,7 @@ def _build(lang: str, pages: Pages, out: Path, have: dict[str, set[str]]) -> lis
 
 
 def main(argv: list[str]) -> int:
+    """Build the website's docs from the wiki into the folder given."""
     if len(argv) != 1 or argv[0].startswith("-"):
         print(__doc__.strip().split("\n\n")[1])
         return 2

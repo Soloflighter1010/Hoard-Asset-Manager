@@ -13,7 +13,7 @@ from unittest import mock
 
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
-from hoard import sets, wishlists
+from hoard import library, sets, wishlists
 from hoard.tags import tag_key
 
 try:
@@ -162,11 +162,66 @@ class SavedPages(unittest.TestCase):
         self.assertEqual(likes["list"], "Likes", "a page saved as HTML only: its own address from its canonical link")
         self.assertEqual([(p["store"], p["name"], p["url"]) for p in likes["products"]],
                          [("jinxxy", "Fox Ears", "https://jinxxy.com/kitsu/FoxEars"),
+                          ("jinxxy", "Paw Grab", "https://jinxxy.com/kitsu/PawGrab"),
+                          ("jinxxy", "Tail Wag", "https://jinxxy.com/kitsu/TailWag"),
                           ("gumroad", "Snowflakes", "https://snowy.gumroad.com/l/flakes")])
         self.assertEqual(likes["products"][0]["creator"], "kitsu")
         self.assertIn("foxears.png", likes["products"][0]["thumbnail"], "its picture, not its creator's")
+        # issue #212: a product shown by its video: the video's still, or (none given) no picture rather than the video
+        self.assertTrue(likes["products"][1]["thumbnail"].endswith("/pawgrab-still.png"))
+        self.assertNotIn("thumbnail", likes["products"][2])
         (pay,) = got["payhip.html"]["lists"]
         self.assertEqual((pay["list"], pay["products"][0]["name"], pay["products"][0]["price"]["amount"]), ("citrus.example: Summer", "Citrus Hat", 5.0))
+
+    def test_a_product_shown_by_a_video_gets_its_pages_picture(self):
+        """Issue #212: a product whose first picture is a video (Jinxxy's IK Grab) had no picture, so its tile showed its
+        initials and its wishlist's cover a gap. Its public page gives one (Open Graph), which Hoard takes instead."""
+        page = ('<meta property="og:title" content="Tail Wag"><meta property="og:image" '
+                'content="https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto/aaa/3/tailwag.webp">'
+                '<video src="https://jinxxy-c.jinxxy-cdn.com/aaa/3/tailwag.mp4"></video>')
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url)
+            return (page, "text/html") if url.endswith("/TailWag") else None
+        items = [{"store": "jinxxy", "name": "Tail Wag", "url": "https://jinxxy.com/kitsu/TailWag"},
+                 {"store": "jinxxy", "name": "Video Only", "url": "https://jinxxy.com/kitsu/Gone", "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/a/b.mp4"},
+                 {"store": "jinxxy", "name": "Has One", "url": "https://jinxxy.com/kitsu/Has", "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/a/has.png"},
+                 {"store": "jinxxy", "name": "Elsewhere", "elsewhere": "https://ko-fi.com/s/x"}]
+        self.assertEqual(wishlists.pictures_from_pages(items, fetch), 1)
+        self.assertEqual(items[0]["thumbnail"], "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto/aaa/3/tailwag.webp")
+        self.assertTrue(sets.product_picture("jinxxy", items[0]["thumbnail"]), "from Jinxxy's own picture host, so it shows")
+        self.assertEqual(items[1]["thumbnail"], "https://jinxxy-c.jinxxy-cdn.com/a/b.mp4", "a page that can't be read: left as it was")
+        self.assertEqual(asked, ["https://jinxxy.com/kitsu/TailWag", "https://jinxxy.com/kitsu/Gone"], "only those without a picture")
+        self.assertEqual(wishlists.pictures_from_pages([dict(items[0], thumbnail=None)] * 3, fetch, limit=2), 2)
+        self.assertIsNone(wishlists.product("jinxxy", "Clip", thumbnail="https://jinxxy-c.jinxxy-cdn.com/a/clip.MP4?x=1").get("thumbnail"))
+        self.assertIsNone(library.item("jinxxy", "9", name="Clip", thumbnail="https://jinxxy-c.jinxxy-cdn.com/a/clip.webm")["thumbnail"])
+
+    def test_the_tags_creators_give_their_products(self):
+        """Issue #206: the tags a product's creator gave it on its store's page: Booth's item JSON (and its category),
+        Jinxxy's page data and itch.io's Tags row, kept as Hoard keeps tags. Gumroad's and Payhip's pages show none."""
+        booth = {"name": "Fox Tail", "price": "¥ 600", "shop": {"name": "Kitsu"}, "images": [],
+                 "tags": [{"name": "VRChat"}, {"name": "しっぽ"}, {"name": "VRChat"}, {"name": "#Fox, Tail"}],
+                 "category": {"name": "3D Accessories", "parent": {"name": "3D Models"}}}
+        jinxxy = ('<meta property="og:title" content="Fox Ears"><script>self.__next_f.push([1,"{\\"product\\":'
+                  '{\\"name\\":\\"Fox Ears\\",\\"tags\\":[\\"furry\\",\\"face_tracking\\",\\"Quest\\"]}}"])</script>')
+        itch = ('<meta property="og:title" content="Tail Pack"><table><tr><td>Category</td><td><a href="/x">Assets</a></td></tr>'
+                '<tr><td>Tags</td><td><a href="https://itch.io/game-assets/tag-3d">3D</a>, <a href="/t">Low-poly</a>, '
+                '<a href="/t">Tails &amp; Ears</a></td></tr></table>')
+        pages = {"https://booth.pm/en/items/77.json": (json.dumps(booth), "application/json"),
+                 "https://jinxxy.com/kitsu/FoxEars": (jinxxy, "text/html"),
+                 "https://kitsu.itch.io/tail-pack": (itch, "text/html"),
+                 "https://kitsu.gumroad.com/l/hat": ('<meta property="og:title" content="Hat">', "text/html")}
+        fetch = lambda url, hosts: pages.get(url)   # noqa: E731
+        got = {link: wishlists.from_product_page(link, fetch)["store_tags"] for link in
+               ("https://booth.pm/en/items/77", "https://jinxxy.com/kitsu/FoxEars", "https://kitsu.itch.io/tail-pack",
+                "https://kitsu.gumroad.com/l/hat")}
+        self.assertEqual(got, {"https://booth.pm/en/items/77": ["vrchat", "しっぽ", "fox tail", "3d accessories", "3d models"],
+                               "https://jinxxy.com/kitsu/FoxEars": ["furry", "face_tracking", "quest"],
+                               "https://kitsu.itch.io/tail-pack": ["3d", "low-poly", "tails & ears"],
+                               "https://kitsu.gumroad.com/l/hat": []})
+        self.assertEqual(len(wishlists.store_tags_in("booth", {"tags": [{"name": f"t{n}"} for n in range(80)]})), 30, "30 at most")
+        self.assertEqual(wishlists.store_tags_in("jinxxy", '"tags":[not json]'), [])
 
     def test_what_isnt_a_wishlist(self):
         (r,) = wishlists.from_saved_pages([("library.html", "<!-- saved from url=(0035)https://accounts.booth.pm/library -->"
@@ -273,6 +328,9 @@ class InHoard(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})
         env.start()
         self.addCleanup(env.stop)
+        offline = mock.patch.object(wishlists, "read_store_page", lambda url, hosts: None)   # (no store's page is read)
+        offline.start()
+        self.addCleanup(offline.stop)
         (tmp / "dl").mkdir()
         self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(tmp / "dl"), "setup_done": True,
                                                       "ui": {"toured": True}}, lan=False)
@@ -356,7 +414,7 @@ class InHoard(unittest.TestCase):
             page.goto(self.srv.entry_url())
             page.wait_for_function("() => localStorage.getItem('hoard-key')")
             page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
-            self.assertIn("Sets and wishlists", page.locator('#storeSeg [data-store="Sets"]').inner_text())
+            self.assertIn("Sets and Wishlists", page.locator('#storeSeg [data-store="Sets"]').inner_text())
             page.locator(".settile", has_text="Booth: Loved items").wait_for()
             self.assertEqual(page.locator("#count").inner_text(), "0 sets", "a wishlist is counted under Wishlists")
             page.locator(".settile", has_text="Booth: Loved items").click()
@@ -416,11 +474,30 @@ class InHoard(unittest.TestCase):
             self.assertEqual(page.locator('#status [data-clear="tag"]').count(), 0, "its tag isn't a filter anymore")
             page.locator(".settile", has_text="Booth: Loved items").click()
             buy.wait_for()
-            # added by its link
+            # more to add, found in the browser (issue #187): Nexyy and the stores' own searches, with your words
+            page.fill("[data-wishfind]", "fox tail")
+            finds = page.locator("[data-findon]").evaluate_all("l => l.map(a => [a.textContent, a.href, a.target])")
+            self.assertEqual([f[0] for f in finds], ["Nexyy", "Booth", "Gumroad", "Jinxxy", "itch.io"])
+            self.assertEqual(finds[0][1:], ["https://nexyy.com/browse?q=fox%20tail", "_blank"])
+            self.assertEqual(finds[3][1], "https://jinxxy.com/market/browse?search=fox%20tail")
+            # added by its link: the one Nexyy gave (its ?ref=nexyy left off)
             page.click('[data-setx="addlinks"]')
-            page.fill("#addLinks", "https://booth.pm/en/items/4242")
+            page.fill("#addLinks", "https://booth.pm/en/items/4242?ref=nexyy")
             page.locator("dialog.ask button[value=yes]").click()
             buy.locator(".slot.ext", has_text="Fox Tail").wait_for()
+            self.assertEqual(buy.locator(".slot.ext", has_text="Fox Tail").locator(".ext-price .price").inner_text(), "¥ 600",
+                             "its price, as a badge")
+            # taken off again: a button that says so, and asked first (issue #213)
+            tail = buy.locator(".slot.ext", has_text="Fox Tail")
+            self.assertEqual(tail.locator(".ext-out").get_attribute("aria-label"), "Take Fox Tail off this wishlist")
+            tail.locator(".ext-out").click()
+            sure = page.locator("dialog.ask[open]")
+            self.assertIn("Take Fox Tail off this wishlist?", sure.inner_text())
+            sure.locator('button[value="no"]').click()
+            self.assertEqual(tail.count(), 1, "Cancel: still on it")
+            tail.locator(".ext-out").click()
+            sure.locator('button[value="yes"]').click()
+            tail.wait_for(state="detached")
             # folded stays folded, next time too
             page.reload()
             page.locator('details[data-fold="wish-buy"]').wait_for()
@@ -553,6 +630,29 @@ class InHoard(unittest.TestCase):
         self.assertIn("1 wishlist read, except Booth's", done["message"])
         self.assertIn("Not signed in to Booth", done["message"])
         self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"])
+
+    def test_stopped_part_way_keeps_the_lists_read(self):
+        """Stop or Force stop while a store's lists were being read (their pictures, say, which wait between pages)
+        ended the task as stopped, but the lists already read from the stores before it were thrown away."""
+        lists = [{"store": "gumroad", "list": "Winter", "url": "u", "products": [product("Snow Cap", "12.50 USD", "gumroad")]}]
+        from hoard import common, jobs
+
+        class Ctx:
+            def close(self):
+                pass
+        with mock.patch.object(jobs, "reachable", lambda s: True), mock.patch.object(jobs, "launch", lambda *a: Ctx()), \
+                mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                mock.patch.dict(wishlists.READERS, {"gumroad": lambda ctx, cfg, progress: lists,
+                                                    "booth": mock.Mock(side_effect=common.Cancelled())}):
+            self.api("/api/wishlists/read", {"stores": ["gumroad", "booth"]})
+            for _ in range(200):
+                if not self.srv.jobs.state["running"] and self.srv.jobs.history:
+                    break
+                time.sleep(0.05)
+        done = self.srv.jobs.history[0]
+        self.assertEqual(done["task"], "wishlists")
+        self.assertTrue(done["message"].startswith("Stopped"), done["message"])
+        self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"], "Gumroad's, kept")
 
 
 if __name__ == "__main__":

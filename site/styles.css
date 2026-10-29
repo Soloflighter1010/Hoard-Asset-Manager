@@ -236,6 +236,14 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .trust .sources { margin: 10px 0 0; font-size: .9rem; color: var(--dust); }
 .trust li h3 { margin-bottom: .3em; }
 .trust li p { margin: 0; }
+/* Acknowledgements (issue #227): each thing Hoard uses, its license and where it's used */
+.acks h2 { font-size: 1.3rem; margin: 0 0 .5em; }
+.acks ul { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 6px; }
+.acks li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 10px 14px;
+  background: var(--ledge); border: 1px solid var(--seam); border-radius: 10px; }
+.acks li a { font-weight: 700; }
+.acks .lic { font-size: .9rem; }
+.acks .where { margin-left: auto; font-size: .85rem; color: var(--dust); }
 
 /* the footer, as the app's: the mark, the links in a row, and the small print */
 .foot { max-width: 1160px; margin: 32px auto 0; padding: 22px 24px 48px; border-top: 1px solid var(--seam); display: flex;

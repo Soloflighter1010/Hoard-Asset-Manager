@@ -48,15 +48,18 @@ class UpdateRefused(Exception):
 
 
 def newer(candidate: str, than: str = __version__) -> bool:
+    """Is candidate a newer version than than (this copy's, unless given)?"""
     a, b = version_of(candidate), version_of(than)
     return bool(a and b and a > b)
 
 
 def _file_path() -> Path:
+    """Where the last update check is kept (when, and what it found)."""
     return data_dir() / "update.json"
 
 
 def updates_dir() -> Path:
+    """Where an installer is downloaded and checked before it runs."""
     return data_dir() / "updates"
 
 
@@ -87,6 +90,7 @@ def how_to_update(version: str) -> str:
 
 
 def _session():
+    """A session for GitHub's API, through egress, saying it's Hoard."""
     s = egress.session(f"Hoard/{__version__}")
     s.headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
     return s
@@ -109,6 +113,7 @@ def pick_latest(releases, betas: bool = False) -> dict | None:
 
 
 def _asset(release: dict, name: str) -> dict | None:
+    """The release's file of this name, if it has one."""
     return next((a for a in release.get("assets") or [] if isinstance(a, dict) and a.get("name") == name), None)
 
 
@@ -146,6 +151,7 @@ def parse_sums(text: str) -> dict[str, str]:
 
 
 def sha256_of(path: Path) -> str:
+    """A file's SHA-256, read a megabyte at a time."""
     h = hashlib.sha256()
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -261,8 +267,12 @@ class Updates:
         self.state = {"current": __version__, "checked": checked, "latest": latest, "busy": False, "message": "",
                       "error": ""}
         self.pending: Path | None = None   # checked and waiting to run once Hoard has stopped
+        self.on_available = None   # (version): a newer Hoard was found (issue #230)
+        self._told = ""
 
     def view(self, can_install: bool) -> dict:
+        """The update state, for the page: whether a newer version is available (a beta only with beta updates on), and
+        whether this copy can install it."""
         latest = self.state["latest"]
         if latest and is_beta(latest.get("version")) and not self.cfg.get("beta_updates"):
             latest = None   # found while beta updates were on, and they've been turned off since
@@ -273,17 +283,26 @@ class Updates:
                 "betas": bool(self.cfg.get("beta_updates")), "beta": bool(available and is_beta(latest["version"]))}
 
     def _save(self) -> None:
+        """Keep when Hoard last checked and what it found."""
         try:
             write_file_safely(_file_path(), json.dumps({"checked": self.state["checked"], "latest": self.state["latest"]}))
         except OSError:
             pass
 
     def check(self) -> dict:
-        """Ask GitHub now. Raises when it can't be reached or answers strangely; the last answer is kept."""
+        """Ask GitHub now. Raises when it can't be reached or answers strangely; the last answer is kept. A newer
+        version is news, once a run (issue #230: on_available, for notifications through Apprise)."""
         release = fetch_latest(bool(self.cfg.get("beta_updates")))
         with self._lock:
             self.state.update(checked=time.time(), latest=describe(release) if release else None, error="")
             self._save()
+        latest = self.view(False)
+        if latest["available"] and latest["latest"]["version"] != self._told and self.on_available:
+            self._told = latest["latest"]["version"]
+            try:
+                self.on_available(self._told)
+            except Exception:  # noqa: BLE001 - news never stops a check
+                pass
         return self.state
 
     def due(self) -> bool:
@@ -295,6 +314,7 @@ class Updates:
         then one a day for as long as Hoard stays open (it often does, in the taskbar). A check that fails (offline,
         say) is said in Hoard's log, and tried again next time."""
         def run():
+            """Check now, then once every so often, while automatic checks are on."""
             while True:
                 if self.due():
                     try:
@@ -313,6 +333,7 @@ class Updates:
             self.state.update(busy=True, message="Starting", error="")
 
         def run():
+            """Find the newest release, download and check its installer, then let Hoard close so it runs."""
             try:
                 release = fetch_latest(bool(self.cfg.get("beta_updates")))
                 if not release or not newer(describe(release)["version"]):

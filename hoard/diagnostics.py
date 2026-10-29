@@ -49,6 +49,7 @@ def install_exception_hooks() -> None:
         previous_thread = getattr(threading, "excepthook", None)
 
         def main_hook(exc_type, exc_value, exc_tb):
+            """Record a crash of the program itself, then let Python report it as usual."""
             if isinstance(exc_value, BaseException):
                 record_exception(exc_value, area="uncaught", task="application", include_traceback=True)
             previous_main(exc_type, exc_value, exc_tb)
@@ -56,6 +57,7 @@ def install_exception_hooks() -> None:
         sys.excepthook = main_hook
         if previous_thread is not None:
             def thread_hook(args):
+                """Record a crash of one of Hoard's threads, then let Python report it as usual."""
                 exc = args.exc_value
                 if isinstance(exc, BaseException):
                     record_exception(exc, area="uncaught-thread", task=args.thread.name, include_traceback=True)
@@ -79,11 +81,13 @@ def incidents_file() -> Path:
 
 
 def _clip(text: object, limit: int = 6000) -> str:
+    """Text cut to limit characters, saying so where it was cut."""
     value = str(text or "")
     return value if len(value) <= limit else value[:limit] + "\n[truncated]"
 
 
 def _path_text(path: Path | None) -> tuple[str, str]:
+    """A path as it resolves, and as it was given (both blank for none), to recognise either in a report."""
     try:
         resolved = str(path.resolve()) if path is not None else ""
         return resolved, str(path) if path is not None else ""
@@ -261,6 +265,7 @@ def _anon_assets(text: str, creators: dict[str, str] | None = None, assets: dict
     assets = assets if assets is not None else {}
 
     def anon(mapping: dict[str, str], value: str, label: str) -> str:
+        """A name from a log line, as its placeholder (<ASSET_001>), the same one each time it's seen."""
         clean = value.strip()
         if not clean or len(clean) > 240 or _placeholders_only(clean):   # (one the report already gave it)
             return value
@@ -324,6 +329,7 @@ def _anon_paths(text: str) -> str:
     "Booth/creator/product/file"), with every part that isn't a store folder, one of Hoard's own or a placeholder
     hidden: a product, file or creator the report doesn't know by name (deleted since, say) still isn't shown."""
     def path(m: re.Match) -> str:
+        """A path in a log line, with every folder and file name but Hoard's own replaced by <NAME>."""
         parts = re.split(r"([\\/]+)", m.group(2))
         return m.group(1) + "".join(p if not p or p[0] in "\\/" or _PATH_KEEP.fullmatch(p) else "<NAME>" for p in parts)
     return _IN_LIBRARY.sub(path, text)
@@ -340,6 +346,7 @@ def _trie_pattern(words: Iterable[str]) -> str:
         node[""] = True
 
     def build(node: dict) -> str:
+        """The pattern for the names under this node of the trie, longest first."""
         end = node.get("") is True
         branches = [re.escape(ch) + build(child) for ch, child in sorted((k, v) for k, v in node.items() if k)]
         if not branches:
@@ -371,6 +378,7 @@ class _ReportSanitizer:
         self._dirty: set[str] = set()
 
     def _add(self, value: object, label: str) -> None:
+        """Note a name from the library (a creator, a product or a file), to hide wherever it shows in the report."""
         clean = str(value or "").strip()
         if len(clean) < 3 or len(clean) > 240 or len(self._known) >= MAX_ANON_TERMS:
             return
@@ -384,11 +392,13 @@ class _ReportSanitizer:
             self._remember(key, placeholder, "seeded")
 
     def _remember(self, key: str, placeholder: str, group: str) -> None:
+        """Note a name's placeholder, in its group (seeded from the library, or found in the report)."""
         self._known[key] = placeholder
         self._groups[group].add(key)
         self._dirty.add(group)
 
     def seed_library(self, lib) -> None:
+        """Note every creator and product name in the library, to hide them in the report."""
         try:
             items, _stores = lib.snapshot()
         except Exception:
@@ -426,6 +436,7 @@ class _ReportSanitizer:
                 self._add(str(f).replace("\\", "/").rsplit("/", 1)[-1], "FILE")
 
     def _replace_known(self, text: str) -> str:
+        """The text with each name the report knows replaced by its placeholder."""
         for group in ("seeded", "found"):
             if group in self._dirty:
                 keys = self._groups[group]
@@ -433,6 +444,7 @@ class _ReportSanitizer:
                 self._dirty.discard(group)
 
         def name(m: re.Match) -> str:
+            """A name found in the text, as its placeholder, only where it stands as a word of its own."""
             found, a, b = m.group(0), m.start(), m.end()
             # a name is hidden where it stands as a name: "Hair" in "Hair_v2.zip", not in "chair"
             if (_LETTER.match(found[0]) and a and _LETTER.match(text[a - 1])) or \
@@ -445,6 +457,8 @@ class _ReportSanitizer:
         return text
 
     def text(self, value: object, *, asset_names: bool = False, limit: int | None = None) -> str:
+        """Text made safe for a report: credentials, paths and addresses hidden, and with asset_names, every product,
+        creator and file name too."""
         clean = sanitize_text(value, self.cfg, asset_names=False, limit=limit)
         if not asset_names:
             return clean
@@ -469,6 +483,8 @@ def _sanitize_urls(text: str, *, asset_names: bool = False) -> str:
     seen_hosts: dict[str, str] = {}
 
     def replace(match):
+        """A web address in a log line, as the report shows it: a store's host kept, any other host as a placeholder,
+        never its path."""
         scheme = match.group(1)
         host = match.group(2).lower()
         # Never preserve an arbitrary hostname from a user's log. A stable placeholder still lets repeated
@@ -506,6 +522,7 @@ def sanitize_json(obj, cfg: dict | None = None) -> object:
 
 
 def _read_tail(path: Path, max_bytes: int) -> str:
+    """The end of a log file, at most max_bytes of it, saying where earlier lines were left out."""
     try:
         with path.open("rb") as fh:
             size = path.stat().st_size
@@ -521,6 +538,7 @@ def _read_tail(path: Path, max_bytes: int) -> str:
 
 
 def _recent_incidents() -> list[dict]:
+    """The last problems Hoard recorded (incidents.jsonl), newest last; what can't be read is skipped."""
     path = incidents_file()
     try:
         lines = path.read_text("utf-8", errors="replace").splitlines()[-MAX_INCIDENTS:]
@@ -538,6 +556,7 @@ def _recent_incidents() -> list[dict]:
 
 
 def _write_incidents(incidents: Iterable[dict]) -> None:
+    """Keep these problems as the incidents file, the last MAX_INCIDENTS of them."""
     path = incidents_file()
     payload = "".join(json.dumps(x, ensure_ascii=False, separators=(",", ":")) + "\n" for x in list(incidents)[-MAX_INCIDENTS:])
     write_file_safely(path, payload)
@@ -578,6 +597,8 @@ def record_note(*, area: str, message: str, task: str | None = None, store: str 
 
 
 def _environment(cfg: dict, sanitizer: _ReportSanitizer) -> dict:
+    """What a report says about this copy of Hoard and the computer: versions, the window, the app or source, how
+    sign-ins are protected, and Windows' own protections."""
     import importlib.metadata as metadata
     try:
         playwright_version = metadata.version("playwright")
@@ -610,10 +631,33 @@ def _environment(cfg: dict, sanitizer: _ReportSanitizer) -> dict:
         "desktop_app": frozen,
         "store_signin_protection": sanitizer.text(signins_note or "unknown"),
         "downloads_folder_exists": _downloads_exists(cfg),
+        **({"windows_security": windows_security()} if platform.system() == "Windows" else {}),
     }
 
 
+def windows_security() -> dict:
+    """Issue #229: whether Smart App Control and Memory integrity (Core isolation) are on, as Windows' registry says,
+    for a report about something Windows stopped. ("unknown" when it doesn't say: an older Windows, say.)"""
+    try:
+        import winreg
+    except ImportError:
+        return {}
+
+    def read(path: str, name: str):
+        """A value from the registry (HKEY_LOCAL_MACHINE), or None when it isn't there."""
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as key:
+                return winreg.QueryValueEx(key, name)[0]
+        except OSError:
+            return None
+    sac = read(r"SYSTEM\CurrentControlSet\Control\CI\Policy", "VerifiedAndReputablePolicyState")
+    hvci = read(r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled")
+    return {"smart_app_control": {0: "off", 1: "on", 2: "evaluation"}.get(sac, "unknown"),
+            "memory_integrity": {0: "off", 1: "on"}.get(hvci, "unknown")}
+
+
 def _downloads_exists(cfg: dict) -> bool:
+    """Is the downloads folder there?"""
     try:
         from .config import root_dir
         return root_dir(cfg).is_dir()
@@ -622,6 +666,8 @@ def _downloads_exists(cfg: dict) -> bool:
 
 
 def _stores_summary(cfg: dict, lib, sanitizer: _ReportSanitizer) -> dict:
+    """Each store, for a report: switched on or not, how many products, how it was read, and its last error (names
+    hidden)."""
     try:
         _items, stores = lib.snapshot()
     except Exception:
@@ -658,6 +704,7 @@ def _export_incident(incident: dict, sanitizer: _ReportSanitizer) -> dict:
 
 
 def _job_summary(job: dict, sanitizer: _ReportSanitizer) -> dict:
+    """The task running (or last run), for a report: what it was, its store, and its message or error."""
     if not isinstance(job, dict):
         return {}
     keep = {"running", "task", "store", "message", "error", "sync", "scheduled"}
@@ -690,6 +737,8 @@ def _browser_in_use(cfg: dict) -> str | None:
 
 
 def _settings_summary(cfg: dict) -> dict:
+    """The settings a report needs to make sense of a problem: which stores are on, the browser, and the choices that
+    change what Hoard does (never a path or a key)."""
     from .config import DEFAULT_CONFIG   # the defaults themselves, so this never says other than Hoard does
     from .jobs import routine_hours   # (here: jobs uses this module)
     from .library import STORES
@@ -716,6 +765,7 @@ def _settings_summary(cfg: dict) -> dict:
 
 
 def _checks(cfg: dict) -> dict:
+    """What a report checks is there: the window toolkit, Playwright's driver and browser, and where Hoard can write."""
     try:
         __import__("webview")
         window = True
@@ -814,6 +864,7 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
 
 
 def _incident_text(incident: dict, sanitizer: _ReportSanitizer) -> str:
+    """One recorded problem, as the report's text says it."""
     lines = [
         f"Incident: {sanitizer.text(incident.get('id'))}",
         f"Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(float(incident.get('time', time.time()))))}",
@@ -827,6 +878,7 @@ def _incident_text(incident: dict, sanitizer: _ReportSanitizer) -> str:
 
 
 def _human_report(report: dict) -> str:
+    """The report's summary, as text for a person to read before sending it."""
     env = report["environment"]
     lines = [
         "Hoard Support Report",
@@ -865,6 +917,7 @@ def _human_report(report: dict) -> str:
 
 
 def _human_job(job: dict) -> str:
+    """The task, as the report's summary says it."""
     if not job:
         return "No active or recently completed job was available."
     parts = [f"Task: {job.get('task') or 'none'}"]

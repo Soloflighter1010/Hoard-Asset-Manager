@@ -19,6 +19,7 @@ FOLDER_NAME = re.compile(r"\d+\.\d+\.\d+[abfpcx]\d+(c\d+)?(-.*)?")
 
 
 def _hub_user_data() -> Path:
+    """Unity Hub's own settings folder on this system."""
     if sys.platform == "win32":
         return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "UnityHub"
     if sys.platform == "darwin":
@@ -27,6 +28,7 @@ def _hub_user_data() -> Path:
 
 
 def _hub_install_folder() -> Path:
+    """Where Unity Hub installs Unity editors unless told otherwise."""
     if sys.platform == "win32":
         return Path(os.environ.get("PROGRAMFILES") or "C:\\Program Files") / "Unity" / "Hub" / "Editor"
     if sys.platform == "darwin":
@@ -35,6 +37,7 @@ def _hub_install_folder() -> Path:
 
 
 def _global_config() -> Path:
+    """Unity's machine-wide settings folder, where an administrator can set Hub's install location."""
     if sys.platform == "win32":
         return Path(os.environ.get("ALLUSERSPROFILE") or "C:\\ProgramData") / "Unity" / "config"
     if sys.platform == "darwin":
@@ -52,6 +55,7 @@ def editor_in(folder: Path) -> Path:
 
 
 def _read(path: Path):
+    """A small JSON file's contents, or None when it's missing or isn't JSON."""
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             return json.loads(f.read(1 << 20))
@@ -60,6 +64,7 @@ def _read(path: Path):
 
 
 def _secondary_folder() -> Path | None:
+    """The other folder Unity Hub installs editors to, when one was chosen (by you or the machine's settings)."""
     chosen = _read(_hub_user_data() / "secondaryInstallPath.json")
     if isinstance(chosen, str) and chosen:
         return Path(chosen)
@@ -72,6 +77,7 @@ def _secondary_folder() -> Path | None:
 
 
 def _in_folder(folder: Path) -> list[tuple[UnityVersion, Path]]:
+    """The Unity editors installed in a folder, one subfolder each, with their versions."""
     found = []
     try:
         entries = list(os.scandir(folder))

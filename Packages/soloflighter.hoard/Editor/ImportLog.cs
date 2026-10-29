@@ -12,10 +12,12 @@ using UnityEditor;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>The project's record of what Hoard for Unity (and the app) imported into it.</summary>
     public static class ImportLog
     {
         static readonly string LogFile = Path.Combine("ProjectSettings", "Hoard", "imports.json");
 
+        /// <summary>One import: the product, the package, when, and how.</summary>
         public sealed class Entry
         {
             public string Store, Name, Creator, File, ImportedAt;
@@ -24,6 +26,7 @@ namespace SoloFlighter.Hoard.Editor
             public long Left;                                  // how many of its assets were already in the project
         }
 
+        /// <summary>The record (empty when there's none or it can't be read).</summary>
         public static List<Entry> Read()
         {
             bool readable;
@@ -53,8 +56,10 @@ namespace SoloFlighter.Hoard.Editor
             return list;
         }
 
+        /// <summary>Note that a product's package was imported.</summary>
         public static void Record(HoardAsset asset, string file) { Record(asset.Store, asset.Name, asset.Creator, file); }
 
+        /// <summary>Note that a package was imported, keeping the record within its size.</summary>
         public static void Record(string store, string name, string creator, string file)
         {
             bool readable;
@@ -81,6 +86,7 @@ namespace SoloFlighter.Hoard.Editor
             JsonBuild.WriteFile(LogFile, new UTF8Encoding(false).GetBytes(sb.ToString()));
         }
 
+        /// <summary>Whether a product was ever imported into this project.</summary>
         public static bool Imported(HoardAsset asset, List<Entry> log)
         {
             return log.Exists(e => e.Store == asset.Store && e.Name == asset.Name);
@@ -99,6 +105,7 @@ namespace SoloFlighter.Hoard.Editor
             return t.HasValue ? t.Value.ToLocalTime().ToString("d MMM yyyy, HH:mm", CultureInfo.InvariantCulture) : e.ImportedAt ?? "";
         }
 
+        /// <summary>Text as a JSON string ("null" for null).</summary>
         static string Q(string s)
         {
             if (s == null) return "null";
@@ -133,17 +140,21 @@ namespace SoloFlighter.Hoard.Editor
 
         public static bool Active { get { return Parts() != null; } }
 
+        /// <summary>Note that a package is being imported, until Unity says it's done (kept across a scripts
+        /// reload).</summary>
         public static void Start(HoardAsset asset, string path)
         {
             SessionState.SetString(Key, string.Join("\n", new[] { path, asset.Store ?? "", asset.Name ?? "", asset.Creator ?? "" }));
         }
 
+        /// <summary>The import waiting to finish: its path, store, name and creator; null when there's none.</summary>
         static string[] Parts()
         {
             string[] p = SessionState.GetString(Key, "").Split('\n');
             return p.Length == 4 && p[0].Length > 0 ? p : null;
         }
 
+        /// <summary>Unity finished importing a package: record it when it was imported, then go on.</summary>
         static void End(string packageName, bool done)
         {
             string[] p = Parts();
@@ -153,6 +164,7 @@ namespace SoloFlighter.Hoard.Editor
             Finish();
         }
 
+        /// <summary>Record the import waiting to finish.</summary>
         static void Log(string[] p)
         {
             try { ImportLog.Record(p[1], p[2], p[3], Path.GetFileName(p[0])); }
@@ -162,6 +174,7 @@ namespace SoloFlighter.Hoard.Editor
             }
         }
 
+        /// <summary>Nothing is waiting any more: say so, so the next import can start.</summary>
         static void Finish()
         {
             SessionState.EraseString(Key);   // first: whatever happens after, importing is never left paused

@@ -31,6 +31,28 @@ TAG_MAX_LENGTH = 40
 # What a tag is about (issue #157): a few kinds, so the filters can group them and Mix and match knows avatars from
 # clothes. A tag has one, or none.
 TAG_TYPES = ("avatar", "world", "clothing", "gimmick", "script", "texture", "other")   # as issue #157 lists them
+# What a product is (issue #223), a field of its own rather than a tag: every kind a tag can have, and a few more
+PRODUCT_TYPES = ("avatar", "clothing", "accessory", "hair", "texture", "shader", "gimmick", "script", "tool",
+                 "animation", "world", "other")
+# Hoard's guess, from the words of a product's name and the tags its creator gave it on its store, the first that
+# fits (so "Hoodie for Rusk avatar" is clothing, not an avatar). Words are matched whole in English; Japanese and
+# Korean ones (no spaces between words) anywhere in the name.
+TYPE_WORDS = (
+    ("shader", ("shader", "shaders", "poiyomi", "liltoon", "シェーダー", "셰이더")),
+    ("animation", ("animation", "animations", "emote", "emotes", "dance", "pose", "poses", "mmd", "モーション", "ダンス", "ポーズ", "애니메이션")),
+    ("hair", ("hair", "hairs", "hairstyle", "wig", "ponytail", "髪", "ヘア", "髪型", "헤어")),
+    ("clothing", ("outfit", "outfits", "clothing", "clothes", "hoodie", "shirt", "t-shirt", "dress", "skirt", "pants",
+                  "jacket", "coat", "sweater", "kimono", "uniform", "swimsuit", "bikini", "shoes", "boots", "socks",
+                  "gloves", "lingerie", "costume", "衣装", "服", "コート", "パーカー", "ワンピース", "スカート", "의상", "옷")),
+    ("accessory", ("accessory", "accessories", "ears", "tail", "tails", "horns", "wings", "glasses", "earrings",
+                   "necklace", "choker", "ring", "piercing", "hat", "cap", "bag", "collar", "アクセサリー", "耳", "しっぽ",
+                   "尻尾", "翼", "メガネ", "액세서리")),
+    ("texture", ("texture", "textures", "skin", "skins", "makeup", "tattoo", "decal", "テクスチャ", "スキン", "メイク", "텍스처")),
+    ("gimmick", ("gimmick", "gimmicks", "prefab", "toggle", "system", "ギミック", "기믹")),
+    ("tool", ("tool", "tools", "editor", "plugin", "addon", "add-on", "script", "scripts", "ツール", "툴")),
+    ("world", ("world", "worlds", "map", "room", "ワールド", "월드")),
+    ("avatar", ("avatar", "avatars", "base", "model", "character", "characters", "アバター", "아바타")),
+)
 
 
 TAG_LIMITS = {"tags": 1000, "matching": 200, "per_item": 100, "tagged_items": 50000, "keys_per_change": 5000}
@@ -85,6 +107,8 @@ def name_text(name: str) -> str:
 
 
 def _text_has_word(text: str, word: str) -> bool:
+    """Whether a product's name contains a tag's word: a whole word (or its plural) in English, anywhere in other
+    scripts."""
     if word.isascii():
         return re.search(rf"(?<![a-z0-9]){re.escape(word)}(?:s|es)?(?![a-z0-9])", text) is not None
     return word in text  # Japanese and other scripts don't separate words with spaces
@@ -124,6 +148,7 @@ class TagMatcher:
                 self.direct.append((tag, word))
 
     def tags(self, name: str) -> set:
+        """The tags whose words a product's name contains."""
         text = name_text(name)
         found = set()
         for run in set(_RUN.findall(text)):
@@ -192,7 +217,7 @@ class TagStore:
     @staticmethod
     def empty() -> dict:
         """A tag file with nothing in it."""
-        return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": []}
+        return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": [], "types": {}}
 
     @staticmethod
     def sanitize(raw) -> dict:
@@ -228,6 +253,9 @@ class TagStore:
                         data[field][key] = keep
         hidden = raw.get("hidden") if isinstance(raw.get("hidden"), list) else []
         data["hidden"] = sorted({w for w in hidden[:TAG_LIMITS["tags"]] if isinstance(w, str) and w and clean_tag(w) == w})
+        types = raw.get("types") if isinstance(raw.get("types"), dict) else {}   # a product's type, as you set it (#223)
+        data["types"] = {k: v for k, v in list(types.items())[:TAG_LIMITS["tagged_items"]]
+                         if isinstance(k, str) and TAG_KEY_RX.match(k) and v in PRODUCT_TYPES}
         return data
 
     def load(self) -> dict:
@@ -274,11 +302,13 @@ class TagStore:
         name = clean_tag(body.get("name"))
 
         def need(value, what="a tag name"):
+            """The value, or ValueError asking for it when it's empty."""
             if not value:
                 raise ValueError(f"Give {what}.")
             return value
 
         def drop(mapping, key, tag):
+            """Take a tag off one entry in a mapping, removing the entry once it has none."""
             left = [t for t in mapping.get(key, []) if t != tag]
             if left:
                 mapping[key] = left
@@ -333,6 +363,19 @@ class TagStore:
             tags[name] = {k: v for k, v in tags[name].items() if k != "type"}
             if kind:
                 tags[name]["type"] = kind
+        elif action == "set-type":   # what these products are (issue #223), or "" for Hoard's guess again
+            given = body.get("keys") if isinstance(body.get("keys"), list) else []
+            keys = [k for k in given[:TAG_LIMITS["keys_per_change"]] if isinstance(k, str) and TAG_KEY_RX.match(k)]
+            kind = body.get("type") or ""
+            if not keys or kind not in (*PRODUCT_TYPES, ""):
+                raise ValueError("Choose products and a type Hoard knows.")
+            for key in keys:
+                if kind:
+                    data["types"][key] = kind
+                else:
+                    data["types"].pop(key, None)
+            if len(data["types"]) > TAG_LIMITS["tagged_items"]:
+                raise ValueError("That's more products with a type than Hoard can keep.")
         elif action == "rename":
             new = need(clean_tag(body.get("to")), "a new name")
             if need(name) not in tags:
@@ -362,6 +405,37 @@ class TagStore:
             raise ValueError(f"At most {TAG_LIMITS['matching']} tags can match names. Turn matching off on some first.")
         if len(data["hidden"]) > TAG_LIMITS["tags"]:
             raise ValueError("That's too many hidden suggestions.")
+
+
+def _has_word(text: str, word: str) -> bool:
+    """A word of a type's list in a name or tag: whole, for words in Latin letters; anywhere, for Japanese and Korean."""
+    if word.isascii():
+        return re.search(rf"(?<![a-z0-9]){re.escape(word.lower())}(?![a-z0-9])", text) is not None
+    return word in text
+
+
+def guess_type(name: str, store_tags=()) -> str | None:
+    """Hoard's guess at what a product is (PRODUCT_TYPES), from its name and its store's tags, or None."""
+    text = " ".join([unicodedata.normalize("NFKC", name or "").lower(),
+                     *[t for t in store_tags or () if isinstance(t, str)]])
+    for kind, words in TYPE_WORDS:
+        if any(_has_word(text, w) for w in words):
+            return kind
+    return None
+
+
+def product_type(data: dict, key: str, name: str, mine=(), store_tags=()) -> tuple[str | None, str | None]:
+    """What a product is, and how Hoard knows: ("clothing", "yours") as you set it; from one of your tags' kinds
+    ("tag": a tag of kind Avatar, before 5.2.0 the way to say so); or Hoard's guess ("guess"). (None, None) when
+    nothing says."""
+    if data.get("types", {}).get(key) in PRODUCT_TYPES:
+        return data["types"][key], "yours"
+    kinds = [(data["tags"].get(t) or {}).get("type") for t in mine]
+    for kind in PRODUCT_TYPES:   # (in the types' own order, so a hoodie tagged Clothing and Avatar is clothing)
+        if kind in kinds and kind != "other":
+            return kind, "tag"
+    kind = guess_type(name, store_tags)
+    return (kind, "guess") if kind else (None, None)
 
 
 def tag_overview(data: dict, entries: list[dict]) -> dict:

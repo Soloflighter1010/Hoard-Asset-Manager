@@ -67,6 +67,7 @@ SETS = (("Photo studio", ("撮影スタジオ", "Mobile Studio", "VRChat Studio 
 
 
 def products(folder: Path) -> list[dict]:
+    """The products to show, from a folder of pictures (and its products.json, when there is one)."""
     listed = folder / "products.json"
     if listed.is_file():
         found = json.loads(listed.read_text("utf-8"))
@@ -141,6 +142,7 @@ def texture_package() -> bytes:
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.USTAR_FORMAT) as tar:
         def add(name: str, data: bytes):
+            """Add a file to the made-up package's archive."""
             info = tarfile.TarInfo(name)
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
@@ -275,6 +277,7 @@ def build(items: list[dict]) -> tuple[Path, dict]:
         lists.setdefault((p["store"], p["wishlist"]["list"]), []).append(p)
 
     def price(pair):
+        """A price as the library keeps one."""
         return {"text": pair[0], "amount": pair[1], "currency": pair[2]} if pair else None
     for when in ("was", "price"):
         store.put_wishlists([{"store": s, "list": lst, "products": [
@@ -315,6 +318,7 @@ SEEDED = "(() => { let s = 20261021; Math.random = () => (s = (s * 16807) % 2147
 
 
 def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None) -> None:
+    """Take every screenshot, in each theme, from a made-up library of the products."""
     from playwright.sync_api import sync_playwright
     root, made = build(items)
     made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style}
@@ -352,6 +356,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
             page.add_init_script(SEEDED)
 
             def snap(name, settle=500):
+                """Take one screenshot, after the page settles, with nothing hovered."""
                 if only and name not in only:
                     return
                 page.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
@@ -362,6 +367,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 shots.append(path)
 
             def click(selector, wait=None):
+                """Click something, and wait for what it opens."""
                 page.locator(selector).first.click()
                 if wait:
                     page.locator(wait).first.wait_for()

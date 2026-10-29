@@ -36,6 +36,7 @@ class ProjectError(Exception):
 
 
 def is_project(folder: Path) -> bool:
+    """Is this folder a Unity project (its ProjectVersion.txt, or Assets and ProjectSettings)?"""
     return (folder / PROJECT_VERSION).is_file() or ((folder / "Assets").is_dir() and (folder / "ProjectSettings").is_dir())
 
 
@@ -73,6 +74,8 @@ class UnityProject:
 
     @classmethod
     def load(cls, folder) -> "UnityProject":
+        """A project from its folder: its VPM manifest, its Unity packages and Unity version; raises ProjectError when
+        it isn't one."""
         p = cls(Path(folder))
         if not p.folder.is_dir():
             raise ProjectError("That folder isn't there any more.")
@@ -92,6 +95,7 @@ class UnityProject:
         return p
 
     def _read_manifest(self) -> None:
+        """The packages vpm-manifest.json asks for and has installed (locked), each checked as it's read."""
         deps = self.manifest_raw.get("dependencies")
         for name, entry in (deps.items() if isinstance(deps, dict) else ()):
             if valid_name(name) and isinstance(entry, dict):
@@ -114,6 +118,7 @@ class UnityProject:
             self.locked[name] = (version, ranges)
 
     def _read_packages(self) -> None:
+        """The packages in Packages/: each one installed from a repository, or the project's own."""
         packages = self.folder / "Packages"
         try:
             entries = sorted(os.scandir(packages), key=lambda e: e.name)
@@ -138,6 +143,8 @@ class UnityProject:
     # ---- what kind of project it is
 
     def project_type(self) -> int:
+        """What kind of project it is (VPM avatars or worlds, UPM, legacy), by the VRChat SDK it uses, as the Creator
+        Companion decides it."""
         if "com.vrchat.avatars" in self.locked:
             return AVATARS
         if "com.vrchat.worlds" in self.locked:
@@ -172,26 +179,33 @@ class UnityProject:
         return out
 
     def all_installed(self) -> list[Package]:
+        """Every package in the project: those installed from repositories, and its own."""
         return list(self.installed.values()) + [p for _, p in self.unlocked if p is not None]
 
     def unity_running(self) -> bool:
+        """Is the project open in Unity right now (its changes wait until it's closed)?"""
         from .unity import project_open_in_unity
         return project_open_in_unity(self.folder)
 
     # ---- changing the manifest (resolve.py decides what)
 
     def add_dependency(self, name: str, r: DependencyRange) -> None:
+        """Ask for a package in the project's dependencies, with this range."""
         self.dependencies[name] = r
 
     def add_locked(self, name: str, version: Version, deps: dict) -> None:
+        """Note a package as installed, at this version, with its dependencies."""
         self.locked[name] = (version, dict(deps))
 
     def remove(self, names) -> None:
+        """Take these packages out of the project's dependencies and installed packages."""
         for n in names:
             self.locked.pop(n, None)
             self.dependencies.pop(n, None)
 
     def manifest_json(self) -> dict:
+        """vpm-manifest.json as it would be written: its dependencies and installed packages, anything else kept as it
+        was."""
         out = dict(self.manifest_raw)   # anything else in the file stays as it was
         out["dependencies"] = {n: {"version": str(r)} for n, r in self.dependencies.items()}
         locked = {}
@@ -203,6 +217,7 @@ class UnityProject:
         return out
 
     def save(self) -> None:
+        """Write vpm-manifest.json."""
         environment.write_json(self.folder / VPM_MANIFEST, self.manifest_json())
         self.manifest_raw = self.manifest_json()
 
@@ -221,4 +236,5 @@ def summary(folder) -> dict:
 
 
 def dumps_manifest(project: UnityProject) -> str:
+    """The project's vpm-manifest.json, as it would be written now."""
     return json.dumps(project.manifest_json(), indent=2)

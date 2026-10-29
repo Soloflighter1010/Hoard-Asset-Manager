@@ -25,8 +25,8 @@ from .paths import documents_dir
 
 FORMAT = {"format": "hoard-backup", "version": 1}
 MAX_BYTES = 64 * 1024 * 1024
-SETTINGS = ("browser_channel", "offline_images", "check_for_updates", "beta_updates", "close_to_taskbar",
-            "notify_found", "routine_hours", "download_retries", "keep_previous", "new_days", "display",
+SETTINGS = ("browser_channel", "offline_images", "store_tags", "file_rules", "ask_files", "check_for_updates", "beta_updates", "close_to_taskbar",
+            "notify_found", "apprise_events", "routine_hours", "download_retries", "keep_previous", "new_days", "display",
             "request_delay", "payhip_shops", "stores")
 ITEM_FIELDS = ("store", "id", "name", "creator", "creator_url", "thumbnail", "url", "variants", "archived", "gift",
                "added")   # not download_url or files: those are links to download what you bought

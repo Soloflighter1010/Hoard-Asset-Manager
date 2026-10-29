@@ -370,6 +370,33 @@ class ClosingTheWindow(_Harness):
         srv.cfg["close_to_taskbar"] = True
         self.assertEqual(app.close_decision(srv), "background")
 
+    def test_shutting_down_always_quits(self):
+        """Issue #205: Windows asks every window whether the computer may shut down, restart or sign out, and pywebview
+        passes that on as the window closing. Going to the taskbar, or asking about a task, said no, and Windows
+        waited on Hoard ("preventing shutdown"). While the system is ending, closing quits, and quitting stops
+        everything at once."""
+        from unittest import mock
+        srv = types.SimpleNamespace(cfg={"close_to_taskbar": True}, jobs=types.SimpleNamespace(state={"running": True, "queue": [{"id": "q"}]}))
+        with mock.patch.object(app, "system_ending", lambda: True):
+            self.assertEqual(app.close_decision(srv), "quit")
+            self.assertEqual(app.close_decision(srv, quitting=True), "quit")
+            asked = []
+            lane = types.SimpleNamespace(state={"running": False}, cancel=lambda: asked.append("stop"),
+                                         force_stop=lambda: asked.append("force stop"))
+            stopped = []
+            app.quit_cleanly(types.SimpleNamespace(jobs=lane, shutdown=lambda: stopped.append(1), server_close=lambda: None))
+            self.assertEqual((asked, stopped), (["force stop"], [1]), "nothing waited on")
+        self.assertEqual(app.close_decision(srv), "background", "otherwise as before")
+        if sys.platform not in ("win32", "darwin"):
+            self.assertFalse(app.system_ending())
+        sys.modules["webview"] = wv = fake_webview()   # the window itself closes, with a task running
+        with mock.patch.object(app, "system_ending", lambda: True):
+            t, result, info = self.start()
+            wv.windows[0].close_button()
+            t.join(15)
+        self.assertTrue(wv.windows[0].closed.is_set())
+        self.assertEqual(result.get("code"), 0)
+
     def test_command_q_quits(self):
         """On a Mac, Command-Q (or Quit in the menu or Dock) went through the same closing event as the close
         button, so with the window going to the taskbar on close, Hoard couldn't be quit that way. A quit quits;

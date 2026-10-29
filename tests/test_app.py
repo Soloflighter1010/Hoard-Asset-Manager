@@ -340,6 +340,112 @@ class RoutineChecks(unittest.TestCase):
         self.assertIn("1 changed since Hoard downloaded it, 1 missing", downloader.integrity_summary(again))
         self.assertEqual(downloader.last_integrity()["changed"], ["Rusk (Booth): body.png"])
 
+    def test_dealing_with_what_it_found(self):
+        """Issue #231: each file a check finds changed or missing can be dealt with from its results: a change kept as
+        it is, a missing file forgotten, or either downloaded again (a changed one kept aside first)."""
+        png = self.folder / "body.png"
+        downloader.check_integrity(self.root)
+        png.write_bytes(b"mine")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 5_000_000_000))
+        found = downloader.check_integrity(self.root)
+        problems = downloader.last_integrity()["problems"]
+        self.assertEqual([(x["kind"], x["store"], x["path"], x["name"]) for x in problems],
+                         [("changed", "booth", "body.png", "Rusk"), ("missing", "booth", "gone.zip", "Rusk")])
+        self.assertEqual(problems, found["problems"])
+        changed, missing = problems
+        with self.assertRaises(ValueError):
+            downloader.resolve_problem(self.root, [], missing, "keep")   # (nothing there to keep)
+        with self.assertRaises(ValueError):
+            downloader.resolve_problem(self.root, [], {**changed, "base": "/elsewhere"}, "keep")
+        got = downloader.resolve_problem(self.root, [], changed, "keep")
+        self.assertEqual(got, {"key": tags.tag_key("booth", "Rusk"), "store": "booth", "name": "Rusk", "file": "body.png"})
+        self.assertEqual(downloader.last_integrity()["changed"], [], "off the results")
+        self.assertEqual(len(downloader.last_integrity()["problems"]), 1)
+        self.assertEqual(downloader.check_integrity(self.root)["changed"], [], "kept as it is: fine from now on")
+        downloader.resolve_problem(self.root, [], missing, "forget")
+        files = downloader.Manifest(self.root / "Booth").assets["111"]["files"]
+        self.assertNotIn("gone.zip", [f["path"] for f in files.values()])
+        self.assertEqual(downloader.check_integrity(self.root)["missing"], [])
+        # changed again: downloaded again, what's there kept aside first
+        png.write_bytes(b"also")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 9_000_000_000))
+        (again,) = downloader.check_integrity(self.root)["problems"]
+        downloader.resolve_problem(self.root, [], again, "again")
+        self.assertFalse(png.exists(), "for the download to bring back")
+        self.assertEqual([p.read_bytes() for p in (self.folder / "_Previous versions").rglob("body.png")], [b"also"])
+        with self.assertRaises(ValueError):
+            downloader.resolve_problem(self.root, [], again, "keep")
+
+    def test_the_results_in_the_page(self):
+        """Issue #231: the page lists what the check found and deals with it: a change kept, a missing file forgotten
+        (and left out of its product's downloads from now on), files downloaded again as one task; a hidden
+        product's files stay out of the list while the hidden library is locked."""
+        from unittest import mock
+        from hoard.marks import MarkStore
+        png = self.folder / "body.png"
+        downloader.check_integrity(self.root)
+        png.write_bytes(b"mine")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 5_000_000_000))
+        downloader.check_integrity(self.root)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(self.root), "file_skip": {}}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        started = []
+        for patch in (mock.patch.object(server, "save_config"),
+                      mock.patch.object(srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started")):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+        def call(method, path, body=None):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request(method, path, body=json.dumps(body) if body is not None else None,
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+            return r.status, data
+        status, got = call("GET", "/api/integrity")
+        self.assertEqual(status, 200)
+        changed, missing = got["problems"]
+        self.assertEqual((changed["kind"], changed["path"], changed["key"]), ("changed", "body.png", tags.tag_key("booth", "Rusk")))
+        self.assertEqual(call("GET", "/api/library")[0], 200)
+        self.assertEqual(call("GET", "/api/assets")[1]["integrity"]["listed"], 2)
+        srv.jobs.state["running"] = True   # a sync or check under way: its copy of the records would be saved over these
+        for action in ("keep", "forget", "again"):
+            self.assertEqual(call("POST", "/api/integrity/resolve", {"action": action, "problems": [missing, changed]})[0], 409)
+        srv.jobs.state["running"] = False
+        self.assertEqual((srv.cfg["file_skip"], started, len(call("GET", "/api/integrity")[1]["problems"])), ({}, [], 2))
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "keep", "problems": [missing]})[1]["ok"], False,
+                         "nothing there to keep")
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "forget", "problems": [missing]})[1],
+                         {"ok": True, "done": 1, "failed": [], "started": None})
+        self.assertEqual(srv.cfg["file_skip"], {tags.tag_key("booth", "Rusk"): ["gone.zip"]}, "and left out from now on")
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "again", "problems": [changed]})[1]["started"], "started")
+        self.assertEqual(started, [("download", ["booth"], {"keys": [tags.tag_key("booth", "Rusk")],
+                                    "chosen": {tags.tag_key("booth", "Rusk"): {"shown": ["body.png"], "chosen": ["body.png"]}}})])
+        self.assertEqual(call("GET", "/api/integrity")[1]["problems"], [], "dealt with")
+        self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "delete", "problems": [changed]})[0], 400)
+        # a hidden product's: left out of the list, and nothing done to it, while it's locked
+        png.write_bytes(b"more")
+        os.utime(png, ns=(png.stat().st_atime_ns, png.stat().st_mtime_ns + 9_000_000_000))
+        downloader.check_integrity(self.root)
+        with mock.patch.object(MarkStore, "keys", lambda self, kind: {tags.tag_key("booth", "Rusk")} if kind == "hidden" else set()):
+            got = call("GET", "/api/integrity")[1]
+            self.assertEqual((got["problems"], got["hidden_left_out"]), ([], 1))
+            hidden = downloader.last_integrity()["problems"][0]
+            self.assertEqual(call("POST", "/api/integrity/resolve", {"action": "keep", "problems": [hidden]})[0], 403)
+
+    def test_a_forgotten_file_is_left_out_by_the_name_its_store_gives_it(self):
+        """Issue #231: Forget (and Download again) name a file as its store's download leaves it out (left_out's file),
+        not by where it was saved: a Jinxxy button's label, itch.io's name for it, a Gumroad page picture's name."""
+        name = downloader.chosen_name
+        self.assertEqual(name("jinxxy", "k1", {"path": "Product_v1.2.unitypackage", "label": "Main package"}), "Main package")
+        self.assertEqual(name("jinxxy", "file #2", {"path": "Product.zip", "label": ""}), "file #2")
+        self.assertEqual(name("itch", "1234", {"path": "tail.zip", "label": "Tail (PC)", "shown": True}), "Tail (PC)")
+        self.assertEqual(name("booth", "5678", {"path": "Rusk.zip", "label": "Rusk_v1.zip"}), "Rusk_v1.zip")
+        self.assertEqual(name("booth", "5678", {"path": "Rusk.zip", "label": ""}), "Rusk.zip")
+        self.assertEqual(name("gumroad", "page-image:abc", {"path": "Page images/01 abc.png"}), "Page images/01 abc")
+        self.assertEqual(name("gumroad", "f1", {"path": "Rusk/Rusk.unitypackage"}), "Rusk/Rusk.unitypackage")
+
     def test_an_unchanged_file_isnt_read_again(self):
         downloader.check_integrity(self.root)
         from unittest import mock
@@ -742,6 +848,56 @@ class JobQueue(unittest.TestCase):
         self.assertEqual(self.ran, ["x"])
 
 
+class ForceStop(unittest.TestCase):
+    """Issue #201: Stop and Force stop end a task at once, not after a wait it was in the middle of (between a store's
+    pages, before trying a download again), nor when a quiet store's connection times out."""
+
+    def setUp(self):
+        from unittest import mock
+        self.job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        self.job.history = []
+        self.waiting = threading.Event()
+
+        def fake(stores, only, keys=None, check=False, **_kw):   # a download waiting to try again, saying nothing
+            self.job._set(task="download", message="Booth: trying again in 30 s")   # (as _download says)
+            self.waiting.set()
+            common.pause(30)
+            self.job._set(message="it carried on after the wait")
+        for patch in (mock.patch.object(self.job, "_download", fake),
+                      mock.patch.object(jobs, "tasks_file", lambda: Path(tempfile.mkdtemp()) / "tasks.json"),
+                      mock.patch.object(jobs, "end_browsers", lambda: False), mock.patch.object(jobs, "stop_install", lambda: None)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def ends_within(self, seconds):
+        started = time.monotonic()
+        while self.job.state["running"]:
+            if time.monotonic() - started > seconds:
+                self.fail(f"still running {seconds} s later")
+            time.sleep(0.02)
+        return self.job.history[-1]
+
+    def test_force_stop_ends_a_wait(self):
+        self.assertEqual(self.job.start("download", ["booth"], only="x"), "started")
+        self.assertTrue(self.waiting.wait(5))
+        self.assertTrue(self.job.force_stop())
+        done = self.ends_within(2)
+        self.assertEqual(done["outcome"], "stopped")
+        self.assertTrue(done["message"].startswith("Force stopped"), done["message"])
+        self.assertNotIn("carried on", done["message"])
+
+    def test_stop_ends_a_wait_too(self):
+        self.assertEqual(self.job.start("download", ["booth"], only="x"), "started")
+        self.assertTrue(self.waiting.wait(5))
+        self.assertTrue(self.job.cancel())
+        self.assertEqual(self.ends_within(2)["outcome"], "stopped")
+
+    def test_outside_a_job_a_pause_is_a_wait(self):
+        started = time.monotonic()
+        common.pause(0.05)
+        self.assertGreaterEqual(time.monotonic() - started, 0.04)
+
+
 class Retries(unittest.TestCase):
     """Issue #19: a file download that fails is tried again (download_retries more times) before it counts as
     failed, unless trying again can't help."""
@@ -1003,6 +1159,54 @@ class ArchiveHideRemove(unittest.TestCase):
         self.assertEqual(st.load()["archived"], set(), "moving back out of the archive undoes archiving")
         with self.assertRaises(Exception):
             st.change("hidden", {"booth:rusk"}, True)   # no PIN yet
+
+    def test_a_renamed_product_keeps_its_choice(self):
+        """Issue #224: a choice is kept by the product's name (as tags are), so a store renaming it, or a newer Hoard
+        reading its name differently, brought a removed product back into view. Each choice also remembers the
+        store's own key of what it was made for, and follows it to its new name."""
+        st = self.store()
+        st.change("removed", {"booth:oldsuit"}, True, {"booth:1": "booth:oldsuit", "booth:9": "booth:other", "bad": "booth:oldsuit"})
+        self.assertEqual(st.load()["ids"]["removed"], {"booth:1": "booth:oldsuit"}, "only the products marked, with good keys")
+        renamed = [{"key": "booth:1", "tag_key": "booth:newsuit"}, {"key": "booth:2", "tag_key": "booth:hat"}]
+        self.assertTrue(st.follow(renamed))
+        again = type(st)(st.path).load()
+        self.assertEqual(again["removed"], {"booth:oldsuit", "booth:newsuit"})
+        self.assertEqual(again["ids"]["removed"], {"booth:1": "booth:newsuit"})
+        self.assertFalse(st.follow(renamed), "nothing more to change, so nothing is written")
+        st.change("removed", {"booth:newsuit"}, False)   # restored under its new name: it stays restored
+        self.assertFalse(st.follow(renamed))
+        self.assertNotIn("booth:newsuit", st.load()["removed"])
+        st.change("removed", {"booth:hat"}, True)   # marked before Hoard kept store keys: they're learned
+        self.assertTrue(st.follow(renamed))
+        self.assertEqual(st.load()["ids"]["removed"]["booth:2"], "booth:hat")
+        self.assertTrue(st.follow([{"key": "booth:2", "tag_key": "booth:tophat"}]))
+        self.assertIn("booth:tophat", st.load()["removed"])
+
+    def test_the_library_follows_a_renamed_product(self):
+        from hoard import marks, tags
+        srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        lib = srv.lib
+        with lib.lock:
+            lib.data["items"] = [library.item("booth", "701", name="Fox Suit"), library.item("booth", "702", name="Plain Hat")]
+            lib.save()
+        self.addCleanup(lambda: marks.MarkStore().path.unlink(missing_ok=True))   # (the data folder is every test's)
+
+        def call(method, path, body=None):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request(method, path, body=json.dumps(body) if body is not None else None,
+                      headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: srv.key})
+            r = c.getresponse(); data = json.loads(r.read() or b"{}"); c.close()
+            return data
+        self.assertTrue(call("POST", "/api/marks", {"kind": "removed", "keys": [tags.tag_key("booth", "Fox Suit")], "on": True}).get("ok"))
+        with lib.lock:   # the store renamed it
+            lib.data["items"] = [library.item("booth", "701", name="Fox Suit Deluxe Edition"), library.item("booth", "702", name="Plain Hat")]
+            lib.save()
+        got = {i["name"]: i["mark"] for i in call("GET", "/api/library")["items"]}
+        self.assertEqual(got, {"Fox Suit Deluxe Edition": "removed", "Plain Hat": None})
+        self.assertIn(tags.tag_key("booth", "Fox Suit Deluxe Edition"), marks.MarkStore().load()["removed"])
 
     def test_pin(self):
         from hoard import marks
@@ -1951,6 +2155,50 @@ class ItchKeys(unittest.TestCase):
         self.assertIsNone(vault.load_key(cfg, "itch"))
         self.assertFalse(vault.forget_key(cfg, "itch"))
 
+    def test_a_connection_this_computer_refuses_says_so(self):
+        """Issue #196: saving the key said "itch.io didn't answer as expected: ('Connection aborted.',
+        PermissionError(13, 'Permission denied'))": Windows refusing the connection (WSAEACCES), as security software,
+        a firewall rule or a VPN's block does. It says that now, and what to do."""
+        from unittest import mock
+        import requests
+        from urllib3.exceptions import ProtocolError
+        from hoard import itch, net
+        refused = requests.exceptions.ConnectionError(ProtocolError("Connection aborted.", PermissionError(13, "Permission denied")))
+        self.assertTrue(net.blocked_here(refused))
+        self.assertTrue(net.blocked_here(OSError(10013, "An attempt was made to access a socket")))
+        self.assertTrue(net.is_network_error(refused), "a store that can't be reached, not one that failed")
+        # a file Hoard couldn't write (an antivirus holding library.json, say) is said as itself, not as a blocked connection
+        try:
+            try:
+                raise PermissionError(13, "Access is denied", "library.json")
+            except PermissionError as e:
+                raise RuntimeError("Booth couldn't be saved") from e
+        except RuntimeError as e:
+            not_the_network = e
+        for other in (requests.exceptions.ConnectionError(ProtocolError("Connection aborted.", ConnectionResetError(104, "reset"))),
+                      ValueError("Permission denied by the store"), RuntimeError("itch.io said: no"), not_the_network,
+                      PermissionError(13, "Permission denied"), PermissionError(13, "Access is denied", "C:/Hoard/library.json")):
+            self.assertFalse(net.blocked_here(other), other)
+            self.assertFalse(net.is_network_error(other), other)
+        self.assertIn("Something on this computer stopped Hoard connecting to itch.io", library.unreachable_message("itch", error=refused))
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "allow_unprotected_signins": True}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+
+        def failing(sess):
+            raise refused
+        with mock.patch.object(itch, "profile", failing):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", "/api/itch-key", body=json.dumps({"key": "GoodKey1234567890abcdef"}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse()
+            said = json.loads(r.read())
+            c.close()
+        self.assertEqual(r.status, 502)
+        self.assertIn("security software", said["error"])
+        self.assertNotIn("PermissionError", said["error"])
+
     @unittest.skipUnless(sys.platform.startswith("linux"), "the Linux keyring rule")
     def test_no_keyring_no_key(self):
         from unittest import mock
@@ -2727,6 +2975,69 @@ class CatalogSeal(unittest.TestCase):
             self.assertFalse(paths.store_python())
 
 
+class StoreTags(unittest.TestCase):
+    """Issue #206: the tags creators give their products on Booth, Jinxxy and itch.io, read from each product's public
+    page a few at a time as a store is read, kept with the product, and never read again once read."""
+
+    def setUp(self):
+        library._TAG_PAGE_FAILS.clear()   # (the pages that couldn't be read, this run: another test's aren't these)
+        self.addCleanup(library._TAG_PAGE_FAILS.clear)
+
+    def test_a_few_at_a_time_kept_and_not_read_again(self):
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("jinxxy", [library.item("jinxxy", str(n), name=f"Paw {n}", creator="kitsu",
+                                                  page=f"https://jinxxy.com/kitsu/Paw{n}") for n in range(5)])
+        pages = {"/Paw0": ["Fox", "Quest"], "/Paw2": [], "/Paw3": ["Ears"]}
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url)
+            tags = next((v for k, v in pages.items() if url.endswith(k)), None)
+            return None if tags is None else ('<meta property="og:title" content="Paw">"tags":' + json.dumps(tags), "text/html")
+        self.assertEqual(library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3), 2, "Paw 1 couldn't be reached")
+        got = {i["name"]: i.get("store_tags") for i in lib.data["items"]}
+        self.assertEqual(got, {"Paw 0": ["fox", "quest"], "Paw 1": None, "Paw 2": [], "Paw 3": None, "Paw 4": None})
+        asked.clear()
+        library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
+        self.assertEqual([u.rsplit("/", 1)[1] for u in asked], ["Paw3", "Paw4", "Paw1"],
+                         "only those not read yet, and the one that couldn't be read after the others")
+        # read again from the store: each keeps its tags, and a reload keeps them too
+        lib.replace_store("jinxxy", [library.item("jinxxy", str(n), name=f"Paw {n}", creator="kitsu") for n in range(5)])
+        again = library.Library(lib.path)
+        self.assertEqual({i["name"]: i.get("store_tags") for i in again.data["items"]}["Paw 3"], ["ears"])
+        self.assertEqual(library.store_tags_from_pages(lib, "gumroad", fetch), 0, "Gumroad's pages show none")
+
+    def test_only_a_public_page_is_read(self):
+        """A Jinxxy item Hoard knows only by your inventory (no public page yet) isn't read, and so isn't marked as
+        having no tags: once a refresh finds its page, it's read. A page that can't be read never holds up the rest."""
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("jinxxy", [library.item("jinxxy", "1", name="Paw", creator="kitsu", url="https://jinxxy.com/my/inventory/abc")]
+                          + [library.item("jinxxy", str(n), name=f"Gone {n}", creator="kitsu", page=f"https://jinxxy.com/kitsu/Gone{n}")
+                             for n in range(2, 5)]
+                          + [library.item("jinxxy", "9", name="Ears", creator="kitsu", page="https://jinxxy.com/kitsu/Ears")])
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url.rsplit("/", 1)[1])
+            return ('<meta property="og:title" content="Ears">"tags":["ears"]', "text/html") if url.endswith("/Ears") else None
+        library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
+        first = list(asked)
+        self.assertEqual(len(first), 3)
+        self.assertNotIn("abc", first, "never the inventory")
+        asked.clear()
+        library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
+        untried = ({"Gone2", "Gone3", "Gone4", "Ears"} - set(first)).pop()
+        self.assertEqual(asked[0], untried, "the one not tried yet before those that couldn't be read")
+        self.assertEqual(next(i for i in lib.data["items"] if i["name"] == "Ears").get("store_tags"), ["ears"])
+        self.assertNotIn("store_tags", next(i for i in lib.data["items"] if i["name"] == "Paw"), "read once it has a page")
+
+    def test_they_show_on_the_product_as_suggestions(self):
+        items = library.enrich([library.item("booth", "1", name="Fox Tail", creator="Kitsu", store_tags=["VRChat", "fox tail", 3])],
+                               {"min_count": 3, "max_share": 0.4})
+        self.assertEqual(items[0]["store_tags"], ["vrchat", "fox tail"], "as Hoard keeps tags")
+        self.assertEqual(items[0]["suggested"], [], "not the name's words: the page adds them, apart (shared.js)")
+
+
 class CopiesStack(unittest.TestCase):
     """Issue #111: copies of one product stack by their picture's hash, byte for byte, not by name: in beta 4's first
     build, "Hair Pack 1" and "Hair Pack 2" by one creator stacked into one tile."""
@@ -2791,6 +3102,38 @@ class CopiesStack(unittest.TestCase):
             self.assertFalse(any(e.get("look_for") for e in out))
             self.assertEqual(len({keys[0], keys[2], keys[4]}), 3)
 
+    def test_names_alike_by_one_creator_stack(self):
+        """Issue #217: one creator's listings of a product on two stores stack when their names are alike once what
+        listings add around a name is left out ([Asset], versions, "for VRChat", Free, emoji), not only when they're the
+        same. Numbers and bases still tell products apart, a store's own listings aren't compared, each stack says why
+        it's together, and a product you said is "Not a copy" never stacks."""
+        from unittest import mock
+        rows = [("gumroad", "[Asset] Fox Tail v2", "Kitsu"), ("booth", "Fox Tail", "Kitsu"),
+                ("gumroad", "Hair Pack 1", "Kitsu"), ("booth", "Hair Pack 2", "Kitsu"),
+                ("gumroad", "Hoodie for Rusk", "Kitsu"), ("booth", "Hoodie for Mochi", "Kitsu"),
+                ("jinxxy", "🐺 Wolf Ears (Free!)", "Kitsu"), ("booth", "Wolf Ears", "Kitsu"),
+                ("booth", "Paw Gloves", "Kitsu"), ("booth", "Paw Gloves v2", "Kitsu"),
+                ("gumroad", "Fluffy Mane", "Sesilaso"), ("jinxxy", "Fluffy Mane", "Sesilaso"),
+                ("gumroad", "Cat Tail", "Kitsu"), ("booth", "Cat Tail", "Someone Else"),
+                ("booth", "【Rusk】 Hoodie Asset", "Kitsu"), ("jinxxy", "[Karin] Hoodie", "Kitsu"),
+                ("booth", "【VRChat】Fox Ears [PC/Quest]", "Kitsu"), ("jinxxy", "Fox Ears", "Kitsu")]
+        items = [library.item(store, str(n), name=name, creator=creator) for n, (store, name, creator) in enumerate(rows)]
+        with mock.patch.object(library, "picture_looks", lambda: {}):
+            out = library.enrich(items, {})
+            keys = [e["stack_key"] for e in out]
+            self.assertTrue(keys[0] and keys[0] == keys[1], "[Asset] ... v2 on one store, the name alone on another")
+            self.assertEqual((out[0]["stack_why"], out[1]["stack_why"]), (["alike"], ["alike"]))
+            self.assertTrue(keys[6] and keys[6] == keys[7], "emoji and (Free!) left out")
+            self.assertEqual(keys[2:6], ["", "", "", ""], "Hair Pack 1 isn't 2; a hoodie for Rusk isn't one for Mochi")
+            self.assertEqual(keys[8:10], ["", ""], "one store's two listings: not compared by their names")
+            self.assertEqual(out[10]["stack_why"], ["name"])
+            self.assertEqual(keys[12:14], ["", ""], "two creators' names alike: not by name alone")
+            self.assertEqual(keys[14:16], ["", ""], "a label naming the avatar it's for stays: 【Rusk】 isn't [Karin]")
+            self.assertTrue(keys[16] and keys[16] == keys[17], "labels that only say what listings say are left out")
+            out = library.enrich(items, {}, apart={tags.tag_key("booth", "Fox Tail")})
+        self.assertEqual([e["stack_key"] for e in out[:2]], ["", ""], "Not a copy: never stacked")
+        self.assertEqual(out[0]["stack_why"], [])
+
     def test_items_without_a_name_dont_stack(self):
         """Items whose names are only marks ("!!!", "★") have no name to stack by: by one creator, they're not all
         one product."""
@@ -2834,6 +3177,48 @@ class TagKinds(unittest.TestCase):
             over = tags.tag_overview(store.load(), [{"tags": ["tops"], "suggested": []}])
             self.assertEqual(over["tags"], [{"name": "tops", "match": "hoodie", "type": "clothing", "count": 1}])
         self.assertEqual(tags.TAG_TYPES, ("avatar", "world", "clothing", "gimmick", "script", "texture", "other"))
+
+
+class ProductTypes(unittest.TestCase):
+    """Issue #223: what a product is, a field of its own: set by you, from one of your tags' kinds (how it was said
+    before 5.2.0), or Hoard's guess from its name and its store's tags; never by adding a tag."""
+
+    def test_hoards_guess(self):
+        guess = tags.guess_type
+        self.assertEqual(guess("Hoodie for Rusk Avatar"), "clothing", "the first that fits: a hoodie, not an avatar")
+        self.assertEqual(guess("Rusk Avatar Base"), "avatar")
+        self.assertEqual(guess("Fluffy Mane Hair"), "hair")
+        self.assertEqual(guess("Fox Ears & Tail"), "accessory")
+        self.assertEqual(guess("Earrings"), "accessory")
+        self.assertEqual(guess("Gearing Up"), None, "whole words: 'ring' isn't in 'gearing'")
+        self.assertEqual(guess("ふわふわ衣装セット"), "clothing", "Japanese, anywhere in the name")
+        self.assertEqual(guess("Quick Lighting", ["shader", "vrchat"]), "shader", "from its store's tags")
+        self.assertIsNone(guess("Mochi"))
+
+    def test_yours_first_then_a_tags_kind_then_the_guess(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = tags.TagStore(Path(tmp) / "tags.json")
+            hoodie, rusk = tags.tag_key("booth", "Hoodie"), tags.tag_key("booth", "Rusk")
+            store.change({"action": "create", "name": "bases"})
+            store.change({"action": "type", "name": "bases", "type": "avatar"})
+            data = store.load()
+            self.assertEqual(tags.product_type(data, rusk, "Rusk", ["bases"]), ("avatar", "tag"), "a type tag you have")
+            self.assertEqual(tags.product_type(data, hoodie, "Hoodie", []), ("clothing", "guess"))
+            self.assertEqual(tags.product_type(data, rusk, "Rusk", []), (None, None))
+            store.change({"action": "set-type", "keys": [hoodie, rusk], "type": "accessory"})
+            data = store.load()
+            self.assertEqual(tags.product_type(data, hoodie, "Hoodie", []), ("accessory", "yours"))
+            self.assertEqual(tags.product_type(data, rusk, "Rusk", ["bases"]), ("accessory", "yours"), "yours over a tag's")
+            self.assertEqual(data["tags"], {"bases": {"match": None, "type": "avatar"}}, "no tag added")
+            store.change({"action": "set-type", "keys": [hoodie], "type": ""})   # Hoard's guess again
+            self.assertEqual(tags.product_type(store.load(), hoodie, "Hoodie", []), ("clothing", "guess"))
+            for bad in ({"keys": [hoodie], "type": "vehicle"}, {"keys": [], "type": "hair"}, {"keys": ["x"], "type": "hair"}):
+                with self.assertRaises(ValueError):
+                    store.change({"action": "set-type", **bad})
+            self.assertEqual(tags.TagStore.sanitize({"types": {hoodie: "hair", "bad key": "hair", rusk: "<b>"}})["types"],
+                             {hoodie: "hair"})
+        items = library.enrich([library.item("booth", "1", name="Winter Coat", creator="Kitsu")], {"min_count": 3, "max_share": 0.4})
+        self.assertEqual((items[0]["type"], items[0]["type_from"]), ("clothing", "guess"))
 
 
 class TagMatching(unittest.TestCase):
@@ -2954,7 +3339,7 @@ class DownloadsIndex(unittest.TestCase):
         self.builds, self.started, self.release = 0, threading.Event(), threading.Event()
         self.release.set()
 
-        def slow_build(root, catalog, libraries=None):
+        def slow_build(root, catalog, libraries=None, progress=None):
             self.builds += 1
             self.started.set()
             self.release.wait(10)
@@ -3268,6 +3653,48 @@ class RoutineCheck(unittest.TestCase):
         self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 0), "damaged values read as defaults")
 
 
+class LoadingProgress(unittest.TestCase):
+    """Issue #200: how far Hoard has got reading what a page shows first, for its splash to count."""
+
+    def test_counting(self):
+        from hoard import loading
+        self.addCleanup(loading.finished, "library")
+        tick = loading.counter("library", "products", 60, every=25)
+        self.assertEqual(loading.view("library"), {"step": "products", "done": 0, "total": 60})
+        for n in range(1, 31):
+            tick(n)
+        self.assertEqual(loading.view("library")["done"], 25, "noted every so many")
+        tick(60)
+        self.assertEqual(loading.view("library")["done"], 60, "and the last")
+        self.assertEqual(loading.view("projects"), {})
+        loading.finished("library")
+        self.assertEqual(loading.view("library"), {})
+
+    def test_the_library_page_counts_its_products(self):
+        from unittest import mock
+        from hoard import loading
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tempfile.mkdtemp()}, lan=False)
+        with srv.lib.lock:
+            srv.lib.data["items"] = [library.item("booth", str(n), name=f"Product {n}", creator="Kitsu") for n in range(60)]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        steps = []
+        real = loading.step
+        with mock.patch.object(loading, "step", lambda *a: steps.append(a) or real(*a)):
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("GET", "/api/library", headers={ACCESS_HEADER: srv.key})
+            self.assertEqual(c.getresponse().status, 200)
+            c.close()
+        self.assertIn(("library", "products", 60, 60), steps)
+        self.assertIn(("library", "downloads", 0, 0), steps, "what's on disk, read for the first time")
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+        c.request("GET", "/api/loading?part=library", headers={ACCESS_HEADER: srv.key})
+        r = c.getresponse()
+        self.assertEqual((r.status, json.loads(r.read())), (200, {}), "done: nothing to count")
+        c.close()
+
+
 class DownloadChoices(unittest.TestCase):
     """Issue #107: what Download new and Update all would get, to untick first; products always skipped, left out
     of every download and sync, unless chosen by name. Issue #106: several products chosen at once, as one job."""
@@ -3318,6 +3745,67 @@ class DownloadChoices(unittest.TestCase):
         # the files each one has, where Hoard knows them first: to choose one by one
         self.assertEqual([e["names"] for e in c["new"]], [["Rusk.zip", "Rusk (Quest).zip"], []])
         self.assertEqual(c["updates"][0]["names"], ["Fox 1.1.zip"])
+
+    def test_files_left_out_by_your_rules_and_before(self):
+        """Issue #225: rules leave files out of every download (PSDs, and on Booth those named with Quest); they come
+        unticked in Download new's list, as do the files you left out of a product before."""
+        rusk = tags.tag_key("booth", "Rusk")
+        rules = [{"store": "booth", "words": "Quest, android"}, {"store": "all", "kind": "layered"},
+                 {"store": "payhip", "kind": "archive"}, {"store": "all", "kind": "nothing"}]
+        self.assertEqual(self.call("POST", "/api/settings", {"file_rules": rules})[0], 200)
+        self.assertEqual(self.srv.cfg["file_rules"], [{"store": "booth", "words": "quest android"}, {"store": "all", "kind": "layered"}],
+                         "only rules for stores Hoard downloads from, and kinds it knows")
+        self.assertEqual(self.call("GET", "/api/settings")[1]["file_rules"], self.srv.cfg["file_rules"])
+        c = self.call("GET", "/api/download-choices")[1]
+        self.assertEqual(c["new"][0]["out"], ["Rusk (Quest).zip"], "unticked to begin with")
+        self.assertEqual(c["updates"][0]["out"], [])
+        # what you leave out of a product is remembered; ticked again, it's forgotten
+        kept = server.remember_choice({}, {rusk: {"shown": ["Rusk.zip", "Rusk (Quest).zip"], "chosen": ["Rusk (Quest).zip"]}})
+        self.assertEqual(kept, {rusk: ["Rusk.zip"]})
+        self.srv.cfg["file_skip"], self.srv.cfg["file_rules"] = kept, []
+        self.assertEqual(self.call("GET", "/api/download-choices")[1]["new"][0]["out"], ["Rusk.zip"])
+        self.assertEqual(server.remember_choice({rusk: {"Rusk.zip", "Old.zip"}}, {rusk: {"shown": ["Rusk.zip"], "chosen": ["Rusk.zip"]}}),
+                         {rusk: ["Old.zip"]}, "one not shown this time stays left out")
+        self.srv.cfg["file_skip"] = {}
+
+    def test_what_a_product_has_to_choose_from(self):
+        """Issue #225: before a product downloads, Hoard asks which of its files to save. The files the page knows
+        already are answered at once, each with what your rules or an earlier choice leave out; a product it doesn't
+        know is read as a task of its own (See what's in it), and answered from what that found for ten minutes."""
+        from unittest import mock
+        rusk, mochi = tags.tag_key("booth", "Rusk"), tags.tag_key("gumroad", "Mochi")
+        self.srv.cfg["file_rules"], self.srv.cfg["file_skip"] = [{"store": "booth", "words": "quest"}], {mochi: ["Mochi.psd"]}
+        self.addCleanup(self.srv.cfg.update, {"file_rules": [], "file_skip": {}})
+        started = []
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"):
+            status, got = self.call("POST", "/api/product-files", {"keys": [rusk], "names": {rusk: ["Rusk.zip", "Rusk (Quest).zip", 7]}})
+            self.assertEqual(status, 200)
+            self.assertEqual(got, {"files": {rusk: {"files": ["Rusk.zip", "Rusk (Quest).zip"], "read": False,
+                                                    "out": ["Rusk (Quest).zip"]}}, "reading": False})
+            self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi]})[1], {"files": {}, "reading": False},
+                             "not asked to read it")
+            self.assertEqual(started, [], "nothing read")
+            got = self.call("POST", "/api/product-files", {"keys": [mochi, "no store", 5, "payhip:paw pack"], "read": True})[1]
+            self.assertEqual(got, {"files": {}, "reading": True})
+            self.assertEqual(started, [("list-files", ["gumroad"], {"keys": [mochi, "payhip:paw pack"]})], "Payhip isn't read")
+            with mock.patch.object(self.srv.jobs, "keys_of", lambda task: {mochi} if task == "list-files" else set()):
+                self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["reading"])
+                self.assertEqual(len(started), 1, "being read already: not asked for again")
+                # another product meanwhile: a read of its own, waiting its turn (it wasn't asked for at all)
+                self.assertTrue(self.call("POST", "/api/product-files", {"keys": [rusk], "read": True})[1]["reading"])
+                self.assertEqual(started[1], ("list-files", ["booth"], {"keys": [rusk]}))
+                self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi]})[1]["reading"], "its next look")
+            del started[1]
+            # read: its files, with the one you left out of it before
+            self.srv.jobs.listed[mochi] = {"store": "gumroad", "name": "Mochi", "creator": "Kitsu Studio",
+                                           "files": ["Mochi.zip", "Mochi.psd"], "at": time.monotonic(), "read": True}
+            got = self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]
+            self.assertEqual(got, {"files": {mochi: {"files": ["Mochi.zip", "Mochi.psd"], "read": True, "out": ["Mochi.psd"]}},
+                                   "reading": False})
+            self.srv.jobs.listed[mochi]["at"] -= 700
+            self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["files"], {},
+                             "read again after ten minutes")
+            self.assertEqual(len(started), 2)
 
     def test_always_skip(self):
         mochi = tags.tag_key("gumroad", "Mochi")
@@ -3491,6 +3979,15 @@ class ChosenFiles(unittest.TestCase):
         got = server.chosen_files({"gumroad:x": {"shown": ["a.zip", 5, "", "b.zip"], "chosen": ["a.zip", None]},
                                    7: {"shown": ["c"]}, "booth:y": ["a list"], "booth:z": {"shown": []}, "x" * 401: {"shown": ["d"]}})
         self.assertEqual(got, {"gumroad:x": {"shown": ["a.zip", "b.zip"], "chosen": ["a.zip"]}})
+        self.assertIsNone(server.chosen_files({"booth:x": {"all": True}}), "only files named: never all of a product")
+        # Download everything: what was listed, all ticked. Those are no longer left out; a file an update didn't
+        # list (left out before) still is (issue #225)
+        self.assertEqual(server.remember_choice({"booth:x": {"x.psd", "x (Quest).zip"}, "booth:z": {"z.psd"}},
+                                                {"booth:x": {"shown": ["x.psd", "x v2.zip"], "chosen": ["x.psd", "x v2.zip"]}}),
+                         {"booth:x": ["x (Quest).zip"], "booth:z": ["z.psd"]})
+        # one a rule leaves out isn't remembered as your choice: the rule keeps it out (and gives it back if it goes)
+        self.assertEqual(server.remember_choice({}, {"booth:x": {"shown": ["x.psd", "x.zip", "x (Quest).zip"], "chosen": ["x.zip"]}},
+                                                [{"store": "all", "kind": "layered"}]), {"booth:x": ["x (Quest).zip"]})
 
     def test_the_downloader_leaves_out_what_wasnt_chosen(self):
         from types import SimpleNamespace
@@ -3512,6 +4009,75 @@ class ChosenFiles(unittest.TestCase):
         check = SimpleNamespace(dry_run=True, files=args.files)
         self.assertFalse(downloader.left_out(check, report, "booth", "Rusk", "Rusk (Quest).zip"), "a check sees every file")
         self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=False), report, "booth", "Rusk", "x"), "the command line")
+
+    def test_a_rule_leaves_psds_out_of_every_download(self):
+        """Issue #225: a rule to leave out layered images (PSDs) keeps them out of every store's downloads; a file you
+        ticked for this download wins; a file you left out of a product before stays out; a check sees them all."""
+        from types import SimpleNamespace
+        rules = downloader.file_rules({"file_rules": [{"store": "all", "kind": "layered"}, {"store": "gumroad", "words": "quest"}]})
+        args = SimpleNamespace(dry_run=False, rules=rules, remembered={tags.tag_key("itch", "Tail Pack"): {"Tail.blend"}},
+                               files={tags.tag_key("booth", "Rusk"): {"shown": {"Rusk.psd"}, "chosen": {"Rusk.psd"}}})
+        report = downloader.Report()
+        with common.capture_log(lambda line: None):
+            for store in ("booth", "gumroad", "jinxxy", "itch"):
+                self.assertTrue(downloader.left_out(args, report, store, "Fox Ears", "textures/Fox Ears.PSD"), store)
+                self.assertFalse(downloader.left_out(args, report, store, "Fox Ears", "Fox Ears.unitypackage"), store)
+            self.assertTrue(downloader.left_out(args, report, "gumroad", "Fox Ears", "Fox Ears (Quest).zip"))
+            self.assertFalse(downloader.left_out(args, report, "booth", "Fox Ears", "Fox Ears (Quest).zip"), "Gumroad's rule")
+            self.assertFalse(downloader.left_out(args, report, "booth", "Rusk", "Rusk.psd"), "ticked for this download")
+            self.assertTrue(downloader.left_out(args, report, "itch", "Tail Pack", "Tail.blend"), "left out before")
+        self.assertEqual(report.skipped[0], "Booth: Fox Ears / textures/Fox Ears.PSD - left out by your rule (Layered images)")
+        self.assertIn("Itch.io: Tail Pack / Tail.blend - left out, as you chose before".lower(), [s.lower() for s in report.skipped])
+        self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=True, rules=rules), report, "booth", "Fox", "Fox.psd"),
+                         "a check for updates sees every file")
+        # Download everything for an update: what it listed, all ticked, comes whatever a rule says; what it didn't
+        # list (left out before, or by a rule) stays out
+        everything = SimpleNamespace(dry_run=False, rules=rules, remembered=args.remembered,
+                                     files={tags.tag_key("itch", "Tail Pack"): {"shown": {"Tail v2.psd"}, "chosen": {"Tail v2.psd"}}})
+        with common.capture_log(lambda line: None):
+            self.assertFalse(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail v2.psd"), "Download everything")
+            self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.blend"), "not listed: left out before")
+            self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.psd"), "not listed: the rule")
+
+    def test_a_listing_is_found_by_the_name_it_was_asked_for(self):
+        """Choose files on a Jinxxy item whose page names it differently from your library: what it lists is filed
+        under both names, so the page asking by its library name finds it."""
+        from types import SimpleNamespace
+        report = downloader.Report()
+        args = SimpleNamespace(listing=True)
+        with common.capture_log(lambda line: None):
+            downloader.would_get(args, report, "jinxxy", {}, "Foo Hoodie [PC/Quest] v2", "Kitsu", "Main package", False,
+                                 also="Foo Hoodie")
+            downloader.would_get(args, report, "jinxxy", {}, "Foo Hoodie [PC/Quest] v2", "Kitsu", "Textures", False,
+                                 also="Foo Hoodie")
+        self.assertEqual(report.listed[tags.tag_key("jinxxy", "Foo Hoodie")]["files"], ["Main package", "Textures"])
+        self.assertIs(report.listed[tags.tag_key("jinxxy", "Foo Hoodie")], report.listed[tags.tag_key("jinxxy", "Foo Hoodie [PC/Quest] v2")])
+
+    def test_reading_what_products_have(self):
+        """Issue #225: the task that reads what products have, to choose from: every file not on disk, and no
+        update noted; a product it couldn't find on its store is answered all the same, with nothing read."""
+        from unittest import mock
+        rusk, gone = tags.tag_key("booth", "Rusk"), tags.tag_key("booth", "Gone")
+        job = jobs.Jobs(config.load_config(), library.Library(Path(tempfile.mkdtemp()) / "library.json"))
+        seen = []
+
+        def sync(cfg, args):
+            seen.append(args)
+            report = downloader.Report()
+            downloader.would_get(args, report, "booth", {"files": {"Rusk.zip": {}}}, "Rusk", "Kitsu", "Rusk (Quest).zip", False)
+            downloader.would_get(args, report, "booth", {"files": {"Rusk.zip": {}}}, "Rusk", "Kitsu", "Rusk.zip", True)
+            downloader.would_get(args, report, "booth", {}, "Rusk", "Kitsu", "Rusk.zip", False)
+            self.assertEqual(report.available, [], "not an update")
+            return report
+        with mock.patch("hoard.downloader.cmd_sync", sync), mock.patch.object(job, "on_download_done", lambda: None), \
+                mock.patch("hoard.asset_updates.AssetUpdates", side_effect=AssertionError("no check recorded")), \
+                common.capture_log(lambda line: None):
+            job._download(["booth"], None, [rusk, gone], check=True, listing=True)
+        self.assertTrue(seen[0].listing and seen[0].dry_run)
+        self.assertEqual(seen[0].keys, {rusk, gone})
+        self.assertEqual({k: (v["files"], v["read"]) for k, v in job.listed.items()},
+                         {rusk: (["Rusk (Quest).zip", "Rusk.zip"], True), gone: ([], False)})
+        self.assertEqual(job.state["message"], "Read what 2 products have, to choose from.")
 
 
 class TasksAPI(unittest.TestCase):
@@ -3665,6 +4231,9 @@ class PageLayout(unittest.TestCase):
         # the sort, one for both pages: only one of theirs
         self.assertEqual(server.apply_settings(cfg, {"ui": {"sort": "added"}})["ui"], {"sort": "added"})
         self.assertEqual(server.apply_settings(cfg, {"ui": {"sort": "price"}})["ui"], {})
+        # the sets you added to last (issue #228): set ids only, ten at most
+        self.assertEqual(server.apply_settings(cfg, {"ui": {"recent_sets": ["a1", "../x", 5, "b2"] + ["c"] * 20}})["ui"],
+                         {"recent_sets": ["a1", "b2"] + ["c"] * 8})
         self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")
 
 

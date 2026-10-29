@@ -6,14 +6,15 @@ someone shared with you lists what it needs, and where to buy each.
 
 ## The Sets tab
 
-**Sets and wishlists** (called **Sets** before 5.1) is a tab beside the stores, in the [Library](Library) and in
-[Downloads](Downloads), with a colour and a heart of its own (and **Sets and wishlists** in the bar at the top of every
+**Sets and Wishlists** (called **Sets** before 5.1) is a tab beside the stores, in the [Library](Library) and in
+[Downloads](Downloads), with a colour and a heart of its own (and **Sets and Wishlists** in the bar at the top of every
 page opens it in the Library). Each set is a big square tile: the picture you chose for it (see
 [Its picture](#its-picture)), or four of its products' pictures, with how many products it has and how many are
 downloaded, yours to download, or still to buy.
 
 Sets are chosen as products are (**Select**, or Ctrl- or Shift-click). Right-click a set, or use the selection bar,
-for **Open**, **Share...**, **Download the N not downloaded**, **Choose a picture...**, **Rename** and **Delete**;
+for **Open**, **Share...**, **Download the N not downloaded**, **New project with this set...** (5.2.0: Projects'
+**New project**, with what's downloaded of the set already in it), **Choose a picture...**, **Rename** and **Delete**;
 with several chosen, **Download** and **Delete** work on them all.
 
 Open a set and it's a folder of its products. **Sets** above its name goes back to every set.
@@ -23,10 +24,11 @@ Open a set and it's a folder of its products. **Sets** above its name goes back 
   are all of its products here, whichever view (Library, Archive...) they're in.
 - **The rest** come after them, each with its picture and where it is. In the Library: **Not yours yet**, with
   **Buy on** its store (opens the product's page in your browser), and **Your own packages (Local)**. In Downloads,
-  also **In your library, not downloaded**, which opens it in the Library. **×** takes one out of the set.
+  also **In your library, not downloaded**, which opens it in the Library. **Remove** takes one out of the set (or off the wishlist), once you've said so
+  (5.2.0).
 
 A set also has **Share...**, **Download the N not downloaded** (every product of it that's yours and not downloaded,
-at once, as **Download** does in the Library), **Choose a picture...**, **Rename** and **Delete** (deleting a set
+at once, as **Download** does in the Library), **New project with this set...**, **Choose a picture...**, **Rename** and **Delete** (deleting a set
 leaves its products as they are), and under **Note and photos** (open to begin with) a **Note** (what it's for, or
 how to put it together) and **Photos** (below).
 
@@ -35,14 +37,20 @@ how to put it together) and **Photos** (below).
 - **New set**, in the Sets tab, then add products to it.
 - Choose products in the **Library** or in **Downloads** (tick their boxes, Ctrl- or Shift-click, or **Select**
   on a touch screen), then **Sets** in the selection bar (or right-click): **New set from these...**, or **Add to**
-  a set you have. In the Library that works whether they're downloaded or not.
+  a set you have: the five you added to last (or the newest), and **Add to another set...** for the rest, by name
+  (5.2.0). In the Library that works whether they're downloaded or not.
 - A product's details, in the Library or in Downloads, list its sets: **Add** puts it in another, **×** takes it
   out, and a set's name opens it in the Sets tab.
 - **Make a set** in **Projects** makes one of the products a Unity project uses.
-- **Add products by link...**, in an open set or wishlist (from 5.1): paste products' links on Booth, Gumroad,
+- **Add products by link...**, in an open wishlist (from 5.1; from 5.2.0 on wishlists only, as a set is made from
+  what's in your library): paste products' links on Booth, Gumroad,
   Jinxxy, Payhip or itch.io, one a line. Hoard reads each one's page as anyone sees it (no sign-in is sent), from the
   store's own site, for its name, creator, price and picture, and adds it, owned or not. A link that isn't a
   product's page, or whose page can't be read, is left out, and Hoard says why.
+- **Find more to add**, on an open wishlist (5.2.0): type what you're after, then choose **Nexyy** (a search
+  across the stores) or **Booth**, **Gumroad**, **Jinxxy** or **itch.io**: the search opens in your browser. Copy
+  the link of a product you want there and add it with **Add products by link...** (a link from Nexyy works too).
+  Hoard doesn't read these searches itself.
 
 A set remembers what each product is when it's added (its name, creator, store page and picture), so it can be
 shown and shared whether or not the product is in your library now. Products are known by the same key tags use
@@ -149,8 +157,8 @@ already in your library show as yours.
   save as "Webpage, Single File"), on your computer, with nothing sent anywhere. A long wishlist saved a page at a
   time comes together as one. Save each Gumroad wishlist's or Jinxxy list's own page, not the page listing them.
 - Each time a wishlist is read again, it holds what the store's list does now, and a product whose price changed
-  shows the new price with the old one struck through; one that's cheaper than before is marked, and **Tasks** lists
-  them. A name, note or picture you gave a wishlist stays.
+  shows the new price with the old one struck through; one that's cheaper than before is marked (an arrow down,
+  in gold), and one that costs more has an arrow up, and **Tasks** lists the cheaper ones. A name, note or picture you gave a wishlist stays.
 - A product a Jinxxy list sends you to on a site that isn't one of the stores (the creator's own, say) shows **Buy
   on** that site, and opens its page there (from 5.1.2). It stays in Hoard: a shared set leaves that link out, as its
   page opens only the stores' own.

@@ -33,6 +33,7 @@ _lock = threading.RLock()
 
 
 def vcc_dir() -> Path:
+    """The Creator Companion's folder (ALCOM's too): VRChatCreatorCompanion in your local app data, or HOARD_VCC_DIR."""
     if os.environ.get("HOARD_VCC_DIR"):
         return Path(os.environ["HOARD_VCC_DIR"]).expanduser()
     if sys.platform == "win32":
@@ -73,6 +74,7 @@ def write_json(path: Path, data) -> None:
 
 
 def _paths(value) -> list[str]:
+    """The paths in a list from settings.json, anything that isn't one left out."""
     return [p for p in value if isinstance(p, str) and p] if isinstance(value, list) else []
 
 
@@ -85,6 +87,8 @@ class Settings:
 
     @classmethod
     def load(cls, folder: Path | None = None) -> "Settings":
+        """settings.json (or ALCOM's backup of it, when it's missing); raises DataFileError when it isn't the Creator
+        Companion's."""
         folder = folder or vcc_dir()
         raw = read_json(folder / SETTINGS)
         if raw is None:
@@ -97,6 +101,7 @@ class Settings:
         return cls(raw, folder)
 
     def save(self) -> None:
+        """Write settings.json, and ALCOM's backup of it if it keeps one."""
         with _lock:
             write_json(self.folder / SETTINGS, self.raw)
             if (self.folder / SETTINGS_BACKUP).is_file():   # keep ALCOM's copy in step, as ALCOM does
@@ -110,24 +115,30 @@ class Settings:
         return _paths(self.raw["userProjects"]) if isinstance(self.raw.get("userProjects"), list) else None
 
     def user_repos(self) -> list[dict]:
+        """The repositories you've added."""
         repos = self.raw.get("userRepos")
         return [r for r in repos if isinstance(r, dict) and isinstance(r.get("localPath"), str)] if isinstance(repos, list) else []
 
     def user_package_folders(self) -> list[str]:
+        """The package folders you've added."""
         return _paths(self.raw.get("userPackageFolders"))
 
     def show_prerelease(self) -> bool:
+        """Do you want prerelease packages shown and chosen?"""
         return self.raw.get("showPrereleasePackages") is True
 
     def default_project_path(self) -> str | None:
+        """Where new projects go, if you've chosen."""
         v = self.raw.get("defaultProjectPath")
         return v if isinstance(v, str) and v else None
 
     def project_backup_path(self) -> str | None:
+        """Where project backups go, if you've chosen."""
         v = self.raw.get("projectBackupPath")
         return v if isinstance(v, str) and v else None
 
     def unity_hub(self) -> str:
+        """Where Unity Hub is, if the Creator Companion knows."""
         v = self.raw.get("pathToUnityHub")
         return v if isinstance(v, str) else ""
 
@@ -138,23 +149,28 @@ class Settings:
     # ---- changing it
 
     def set_projects(self, paths: list[str]) -> None:
+        """The project list (userProjects), each once."""
         self.raw["userProjects"] = list(dict.fromkeys(paths))
 
     def add_repo(self, entry: dict) -> None:
+        """Add a repository to your list."""
         repos = self.raw.get("userRepos") if isinstance(self.raw.get("userRepos"), list) else []
         repos.append(entry)
         self.raw["userRepos"] = repos
 
     def remove_repos(self, local_paths: set[str]) -> list[dict]:
+        """Take these repositories (by their kept file) off your list; returns the ones taken off."""
         repos = self.raw.get("userRepos") if isinstance(self.raw.get("userRepos"), list) else []
         gone = [r for r in repos if isinstance(r, dict) and r.get("localPath") in local_paths]
         self.raw["userRepos"] = [r for r in repos if r not in gone]
         return gone
 
     def set_package_folders(self, folders: list[str]) -> None:
+        """Your package folders, each once."""
         self.raw["userPackageFolders"] = list(dict.fromkeys(folders))
 
     def set(self, key: str, value) -> None:
+        """Change one setting."""
         self.raw[key] = value
 
 

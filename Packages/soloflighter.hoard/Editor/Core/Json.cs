@@ -8,8 +8,10 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>What a JSON value is.</summary>
     public enum JsonKind { Null, Bool, Number, String, Array, Object }
 
+    /// <summary>A JSON value, as read: its kind, and its value, items or members (in the order written).</summary>
     public sealed class JsonValue
     {
         public JsonKind Kind;
@@ -18,6 +20,7 @@ namespace SoloFlighter.Hoard
         public List<JsonValue> Items;                         // arrays
         public List<KeyValuePair<string, JsonValue>> Members; // objects, in file order (a repeated key keeps its last value)
 
+        /// <summary>An object's member, or null.</summary>
         public JsonValue Get(string key)
         {
             if (Kind != JsonKind.Object) return null;
@@ -25,12 +28,14 @@ namespace SoloFlighter.Hoard
             return null;
         }
 
+        /// <summary>An object's member as text, or null when it isn't text.</summary>
         public string Str(string key)
         {
             var v = Get(key);
             return v != null && v.Kind == JsonKind.String ? v.Text : null;
         }
 
+        /// <summary>An object's member as a whole number, or null when it isn't one.</summary>
         public long? Long(string key)
         {
             var v = Get(key);
@@ -38,6 +43,7 @@ namespace SoloFlighter.Hoard
             return v != null && v.Kind == JsonKind.Number && long.TryParse(v.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out n) ? n : (long?)null;
         }
 
+        /// <summary>An object's member as a list of text (anything else in it left out).</summary>
         public List<string> Strings(string key)
         {
             var v = Get(key);
@@ -51,11 +57,17 @@ namespace SoloFlighter.Hoard
     /// <summary>Building a document to write (Json.Canonical), and writing a file so it's never left half written.</summary>
     public static class JsonBuild
     {
+        /// <summary>A new JSON object.</summary>
         public static JsonValue Obj() { return new JsonValue { Kind = JsonKind.Object, Members = new List<KeyValuePair<string, JsonValue>>() }; }
+        /// <summary>A JSON array of these.</summary>
         public static JsonValue Arr(List<JsonValue> items) { return new JsonValue { Kind = JsonKind.Array, Items = items }; }
+        /// <summary>A JSON string.</summary>
         public static JsonValue Str(string s) { return new JsonValue { Kind = JsonKind.String, Text = s }; }
+        /// <summary>A JSON number.</summary>
         public static JsonValue Num(int n) { return new JsonValue { Kind = JsonKind.Number, Text = n.ToString(CultureInfo.InvariantCulture) }; }
+        /// <summary>JSON's null.</summary>
         public static JsonValue Null() { return new JsonValue { Kind = JsonKind.Null }; }
+        /// <summary>Add a member to a JSON object.</summary>
         public static void Put(JsonValue o, string k, JsonValue v) { o.Members.Add(new KeyValuePair<string, JsonValue>(k, v)); }
 
         /// <summary>Write bytes to a file through a temporary file beside it, replacing it in one step.</summary>
@@ -69,15 +81,18 @@ namespace SoloFlighter.Hoard
         }
     }
 
+    /// <summary>JSON that can't be read.</summary>
     public sealed class JsonException : Exception
     {
         public JsonException(string message) : base(message) { }
     }
 
+    /// <summary>A small, strict JSON reader, and the canonical form Hoard's seals are made over.</summary>
     public static class Json
     {
         const int MaxDepth = 64;
 
+        /// <summary>Read a JSON document. Throws JsonException when it isn't one (or has anything after it).</summary>
         public static JsonValue Parse(string text)
         {
             int i = 0;
@@ -87,11 +102,13 @@ namespace SoloFlighter.Hoard
             return value;
         }
 
+        /// <summary>Skip JSON's white space.</summary>
         static void SkipSpace(string s, ref int i)
         {
             while (i < s.Length && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r')) i++;
         }
 
+        /// <summary>Read one value, of whatever kind is next.</summary>
         static JsonValue ReadValue(string s, ref int i, int depth)
         {
             if (depth > MaxDepth) throw new JsonException("nested too deeply");
@@ -107,6 +124,7 @@ namespace SoloFlighter.Hoard
             return ReadNumber(s, ref i);
         }
 
+        /// <summary>Read a word (true, false, null) when it's next.</summary>
         static bool Match(string s, ref int i, string word)
         {
             if (string.CompareOrdinal(s, i, word, 0, word.Length) != 0) return false;
@@ -114,6 +132,7 @@ namespace SoloFlighter.Hoard
             return true;
         }
 
+        /// <summary>Read an object, its members in order.</summary>
         static JsonValue ReadObject(string s, ref int i, int depth)
         {
             var v = new JsonValue { Kind = JsonKind.Object, Members = new List<KeyValuePair<string, JsonValue>>() };
@@ -139,6 +158,7 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Read an array.</summary>
         static JsonValue ReadArray(string s, ref int i, int depth)
         {
             var v = new JsonValue { Kind = JsonKind.Array, Items = new List<JsonValue>() };
@@ -155,6 +175,7 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Read a string, its escapes undone.</summary>
         static string ReadString(string s, ref int i)
         {
             var sb = new StringBuilder();
@@ -196,6 +217,7 @@ namespace SoloFlighter.Hoard
             throw new JsonException("string never ends");
         }
 
+        /// <summary>Read a number, kept as its text.</summary>
         static JsonValue ReadNumber(string s, ref int i)
         {
             int start = i;
@@ -216,6 +238,7 @@ namespace SoloFlighter.Hoard
         // ---- the canonical form seals are made over: Python's json.dumps(obj, sort_keys=True,
         // separators=(",", ":"), ensure_ascii=False), encoded as UTF-8.
 
+        /// <summary>A value as its canonical bytes, as Python writes them for a seal.</summary>
         public static byte[] Canonical(JsonValue v)
         {
             var sb = new StringBuilder();
@@ -223,6 +246,7 @@ namespace SoloFlighter.Hoard
             return new UTF8Encoding(false).GetBytes(sb.ToString());
         }
 
+        /// <summary>Write a value in canonical form: an object's keys sorted, no spaces.</summary>
         static void Write(StringBuilder sb, JsonValue v)
         {
             switch (v.Kind)
@@ -252,6 +276,7 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Write a string as Python's json.dumps does, with ensure_ascii off.</summary>
         static void WriteString(StringBuilder sb, string s)
         {
             sb.Append('"');

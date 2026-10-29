@@ -59,10 +59,12 @@ TAG_VERSION = re.compile(r"(\d+)\.(\d+)")
 
 
 def git(*args: str, cwd: Path) -> str:
+    """Run git in cwd and return what it printed."""
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout
 
 
 def wanted(path: str, kinds: tuple) -> bool:
+    """Whether a file in a tool's repository is one of the kinds its GUIDs are collected for (shaders, components)."""
     if "shader" in kinds and path.endswith((".shader.meta", ".lilcontainer.meta")):
         return True
     if "component" in kinds and path.endswith((".cs.meta", ".dll.meta")):   # (a DLL's components are named by its GUID)
@@ -115,6 +117,7 @@ def version_label(places: list[tuple[str, str]]) -> str:
 
 
 def fetch(url: str) -> bytes:
+    """Download a URL's contents."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=120) as r:
         return r.read()
@@ -133,6 +136,7 @@ def stable_newest(versions) -> list[str]:
 
 
 def collect_vpm(tool: dict) -> tuple[dict, str]:
+    """The GUIDs of a tool's VPM packages (its newest stable versions), and the versions read."""
     listing = json.loads(fetch(tool["listing"]))["packages"]
     found, read = {}, []
     for name in tool["packages"]:
@@ -150,6 +154,7 @@ def collect_vpm(tool: dict) -> tuple[dict, str]:
 
 
 def main() -> int:
+    """Collect every known tool's GUIDs and write the list Hoard ships."""
     work = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(tempfile.mkdtemp(prefix="hoard-tools-"))
     work.mkdir(parents=True, exist_ok=True)
     tools, guids = {}, {}

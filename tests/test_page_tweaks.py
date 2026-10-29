@@ -9,7 +9,8 @@ from unittest import mock
 
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
-from hoard import config, downloader, server
+from hoard import config, downloader, library, server
+from tests.browsing import menu
 
 try:
     from tests.test_packages import BROWSER
@@ -75,13 +76,22 @@ class Tweaks(unittest.TestCase):
 
     def test_settings_jumps_to_its_parts(self):
         page = self.downloads()
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         jumps = page.locator(".setjump button")
-        self.assertEqual(jumps.count(), 9)   # with Hoard's folders
+        self.assertEqual(jumps.count(), 12)   # with Hoard's folders, Notifications, Support Hoard and Acknowledgements
         page.locator("#setStores input").first.wait_for()   # the stores' boxes are where they were (drawn once Settings loads)
         page.click("[data-jump='part-help']")
         page.wait_for_timeout(800)
         self.assertTrue(page.locator("#part-help").is_visible())
+        box, bar = page.locator("#part-help").bounding_box(), page.locator(".setjump").bounding_box()
+        beside = box["x"] >= bar["x"] + bar["width"] - 1   # (a wide window: its parts listed down the side)
+        self.assertTrue(beside or box["y"] >= bar["y"] + bar["height"] - 1, "not under the row")
+        page.click("[data-jump='part-thanks']")   # the last part, at the bottom
+        page.wait_for_timeout(800)
+        self.assertTrue(page.locator("#part-thanks").is_visible())
+        page.set_viewport_size({"width": 760, "height": 700})   # a narrow window: its parts in a row along the top
+        page.click("[data-jump='part-help']")
+        page.wait_for_timeout(800)
         box, bar = page.locator("#part-help").bounding_box(), page.locator(".setjump").bounding_box()
         self.assertGreaterEqual(box["y"], bar["y"] + bar["height"] - 1, "not under the row")
 
@@ -96,6 +106,25 @@ class Tweaks(unittest.TestCase):
         self.assertEqual(appearance, "none", "the app's own arrow, not the system's")
         self.assertEqual(height, add.evaluate(look)[1], "as tall as Add")
         self.assertEqual(size, add.evaluate(look)[2], "the same size text as Add")
+
+    def test_the_librarys_set_picker_matches_its_theme(self):
+        """Issue #218: the Library page's "Add it to a set" was still the system's own grey dropdown, in every theme."""
+        with self.srv.lib.lock:
+            self.srv.lib.data["items"] = [library.item("booth", "1", name="Rusk", creator="Kitsu")]
+        self.addCleanup(lambda: self.srv.lib.data.update(items=[]))
+        for scheme in ("dark", "light"):
+            page = self.browser.new_page(viewport={"width": 1280, "height": 820}, color_scheme=scheme)
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.click()
+            pick, add = page.locator("#setPick"), page.locator("#detail [data-act='toset']")
+            pick.wait_for()
+            look = "e => { const c = getComputedStyle(e); return [c.appearance, c.height, c.fontSize, c.backgroundColor, c.color]; }"
+            appearance, height, size, back, ink = pick.evaluate(look)
+            stone, bone = page.evaluate("() => ['--stone', '--bone'].map(k => { const t = document.createElement('i'); "
+                                        "t.style.color = `var(${k})`; document.body.append(t); const c = getComputedStyle(t).color; t.remove(); return c; })")
+            self.assertEqual((appearance, back, ink), ("none", stone, bone), f"the theme's own colours ({scheme})")
+            self.assertEqual((height, size), tuple(add.evaluate(look)[1:3]), "as tall as Add, the same size text")
+            page.close()
 
     def test_the_task_log_keeps_its_place(self):
         """Every new line drew the Tasks panel again, and the log went back to the top."""

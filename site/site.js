@@ -69,6 +69,7 @@
 
   // A moment's note at the foot of the window, as the app shows them
   let toastTimer;
+  // Show a short message at the bottom of the page.
   function toast(text) {
     let t = document.querySelector(".toast");
     if (!t) {
@@ -86,6 +87,7 @@
   // Everything shows every store's colour, drifting, as the app's library does.
   const STORES = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
   const glow = document.querySelector(".glow-in"), tabs = document.querySelectorAll(".seg [data-store]");
+  // Show one store's notes (and its colour in the glow).
   function showStore(store) {
     for (const b of tabs) b.setAttribute("aria-checked", String(b.dataset.store === store));
     for (const p of document.querySelectorAll(".store-notes [data-for]")) p.classList.toggle("here", p.dataset.for === store);
@@ -115,9 +117,12 @@
   const search = document.getElementById("docSearch"), results = document.getElementById("docResults");
   if (search && results) {
     let sections = null;
+    // The docs' search index, read once.
     const load = () => sections || fetch("search.json").then(r => r.json()).then(j => (sections = Array.isArray(j) ? j : []))
       .catch(() => (sections = []));
+    // Text folded for searching: lower case, without accents.
     const norm = s => String(s).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    // Show the docs' sections that have every word searched for.
     async function find() {
       const words = norm(search.value).split(/\s+/).filter(Boolean);
       results.replaceChildren();

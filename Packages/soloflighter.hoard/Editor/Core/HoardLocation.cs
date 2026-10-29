@@ -7,6 +7,7 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>Where Hoard's own files are, found the same way the app finds them.</summary>
     public static class HoardLocation
     {
         /// <summary>Hoard's private folder in this user account's app data (HOARD_DATA_DIR moves it, as in the app).</summary>
@@ -26,6 +27,7 @@ namespace SoloFlighter.Hoard
             return Path.Combine(string.IsNullOrEmpty(xdg) ? Path.Combine(home, ".local", "share") : xdg, "Hoard");
         }
 
+        /// <summary>The sealing key's file in Hoard's own folder.</summary>
         public static string KeyFile() { return Path.Combine(DataDir(), "integrity.key"); }
 
         /// <summary>Every place this user account's Hoard keeps its sealing key: Hoard's own folder and, on Windows,
@@ -37,6 +39,8 @@ namespace SoloFlighter.Hoard
                             RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
         }
 
+        /// <summary>Every file this account's Hoard may keep its sealing key in (Windows' private copy for Store Python
+        /// too).</summary>
         public static List<string> KeyFiles(string dataDir, string localAppData, bool windows)
         {
             var files = new List<string> { Path.Combine(dataDir, "integrity.key") };
@@ -75,6 +79,7 @@ namespace SoloFlighter.Hoard
             return Path.Combine(DocumentsDir(), "Hoard");
         }
 
+        /// <summary>The Documents folder, as the app finds it.</summary>
         static string DocumentsDir()
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -84,6 +89,7 @@ namespace SoloFlighter.Hoard
             return Directory.Exists(docs) ? docs : home;
         }
 
+        /// <summary>A path starting with ~, with the home folder in its place.</summary>
         static string ExpandHome(string path)
         {
             if (path == "~" || path.StartsWith("~/") || path.StartsWith("~\\"))

@@ -125,6 +125,7 @@ def check() -> list[str]:
 
 
 def write() -> int:
+    """Rewrite each translation's first lines (its link to the English page and the version it's from)."""
     all_names, changed = names(), 0
     for lang in LANGS:
         for en, (name, source_blob) in translations(lang).items():
@@ -140,6 +141,7 @@ def write() -> int:
 
 
 def done(lang: str, page: str) -> str:
+    """Mark a page's translation as up to date with the English page."""
     found = translations(lang).get(page)
     if not found:
         raise SystemExit(f"wiki/{lang} has no translation of {page}")
@@ -150,6 +152,7 @@ def done(lang: str, page: str) -> str:
 
 
 def main(argv: list[str]) -> int:
+    """Show which translations are behind, or mark one done (--done), or rewrite their first lines (--write)."""
     if argv[:1] == ["--write"]:
         print(f"Wrote the first lines of {write()} pages.")
         return 0

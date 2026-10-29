@@ -28,7 +28,7 @@ from urllib3.connection import HTTPSConnection
 from urllib3.connectionpool import HTTPSConnectionPool
 
 from .browser import _on_sites
-from .safety import _connect_public, move_into_place, open_part
+from .safety import _connect_public, move_into_place, note_connection, open_part
 
 try:
     from tqdm import tqdm
@@ -52,11 +52,14 @@ class _PublicConnection(HTTPSConnection):
     for the host name as usual."""
 
     def _new_conn(self):
-        """Connect to exactly the checked public address."""
-        return _connect_public(self._dns_host, self.port, self.timeout)
+        """Connect to exactly the checked public address (noted as this lane's, for Force stop)."""
+        sock = _connect_public(self._dns_host, self.port, self.timeout)
+        note_connection(self)
+        return sock
 
 
 class _PublicPool(HTTPSConnectionPool):
+    """A connection pool whose connections only ever go to public addresses, checked as they connect."""
     ConnectionCls = _PublicConnection
 
 
@@ -64,6 +67,7 @@ class _PublicAdapter(HTTPAdapter):
     """requests' adapter, with every https connection going through the public-only connection."""
 
     def init_poolmanager(self, *args, **kwargs):
+        """Use the public-address pool for every https connection."""
         super().init_poolmanager(*args, **kwargs)
         self.poolmanager.pool_classes_by_scheme = {"https": _PublicPool}
 
@@ -72,6 +76,7 @@ class _Refuse(HTTPAdapter):
     """For every scheme but https: refuse."""
 
     def send(self, request, **kwargs):
+        """Refuse a plain http request."""
         raise UnsafeRequest(f"refused a plain {urlparse(request.url).scheme} request")
 
 
@@ -93,6 +98,7 @@ class _NoCookies(http.cookiejar.DefaultCookiePolicy):
     """Keeps no cookie at all: the session for other sites stays cookie-free however many requests it makes."""
 
     def set_ok(self, cookie, request):
+        """Refuse every cookie (a request to a host that isn't the store's goes without any)."""
         return False
 
 
@@ -115,6 +121,7 @@ def _anon_for(store_sess: requests.Session) -> requests.Session:
 
 
 def _test_origin(url: str) -> bool:
+    """Is this address one the tests' stand-in stores use (excused from the https and public-address rules)?"""
     u = urlparse(url)
     return f"{u.scheme}://{u.netloc}" in _TEST_ORIGINS
 
@@ -224,6 +231,7 @@ def _whole_size(r: requests.Response) -> int | None:
 
 
 def _length(r: requests.Response) -> int | None:
+    """The size a response says it has (Content-Length), or None."""
     try:
         n = int(r.headers.get("Content-Length") or "")
     except ValueError:
@@ -327,6 +335,7 @@ def download(store_sess: requests.Session, url: str, dest: Path, sites, desc: st
 
 
 def _info_path(part: Path) -> Path:
+    """Where what the store said about a half-downloaded file is kept, beside its .part."""
     return part.with_name(part.name + "-info")
 
 
@@ -351,6 +360,8 @@ def _part_info(part: Path) -> dict:
 
 
 def _save_part_info(part: Path, info: dict) -> None:
+    """Keep what the store said about a file being downloaded (its ETag, date and size), to resume it only if it's the
+    same file."""
     try:
         _info_path(part).write_text(json.dumps(info), "utf-8")
     except OSError:

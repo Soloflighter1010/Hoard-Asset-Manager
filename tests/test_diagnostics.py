@@ -261,6 +261,37 @@ class Sanitizing(unittest.TestCase):
         self.assertIsNone(env["webview"])
 
 
+    def test_windows_security_features(self):
+        """Issue #229: on Windows, a report says whether Smart App Control and Memory integrity are on, as the
+        registry says (a stand-in registry here); elsewhere it says nothing about them."""
+        values = {("SYSTEM\\CurrentControlSet\\Control\\CI\\Policy", "VerifiedAndReputablePolicyState"): 2,
+                  ("SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity", "Enabled"): 1}
+
+        class Key:
+            def __init__(self, path):
+                self.path = path
+            def __enter__(self):
+                return self
+            def __exit__(self, *exc):
+                return False
+        fake = type(sys)("winreg")
+        fake.HKEY_LOCAL_MACHINE = object()
+        fake.OpenKey = lambda root, path: Key(path)
+
+        def query(key, name):
+            if (key.path, name) not in values:
+                raise OSError("not there")
+            return values[(key.path, name)], 4
+        fake.QueryValueEx = query
+        with mock.patch.dict(sys.modules, {"winreg": fake}), mock.patch.object(diagnostics.platform, "system", lambda: "Windows"):
+            env = diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg))
+            self.assertEqual(env["windows_security"], {"smart_app_control": "evaluation", "memory_integrity": "on"})
+            values.clear()
+            self.assertEqual(diagnostics.windows_security(), {"smart_app_control": "unknown", "memory_integrity": "unknown"})
+        with mock.patch.object(diagnostics.platform, "system", lambda: "Linux"):   # elsewhere, a report doesn't say
+            self.assertNotIn("windows_security", diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg)))
+
+
 class ServerExposure(unittest.TestCase):
     def test_default_export_folder_is_user_visible(self):
         expected = diagnostics.documents_dir() / "Hoard" / "Support Reports"

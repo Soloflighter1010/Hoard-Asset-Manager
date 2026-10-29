@@ -1,5 +1,143 @@
 # Changelog
 
+## 5.2.0-beta.1
+
+- **A new top bar** ([#203](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/203),
+  [#219](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/219)). The search box is in the middle of
+  the bar, with Library, Downloads and Local to its left, and Sets and Wishlists, Tasks, Projects and the tools to
+  its right. When the window is too narrow, the search goes on a row of its own: nothing hides or overlaps at any
+  width, text size or style. Tags, Stores and Settings (Tags, Rescan and Settings in Downloads) are in one **Menu**,
+  which works with the keyboard and carries Stores' warning dot.
+- **Sync asks first, and only in the Library** ([#214](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/214),
+  [#216](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/216)). **Sync** says what it does, and on
+  which stores, and starts when you choose **Start**. In Downloads, **Download new** is the gold button.
+- **Search for one kind of thing** ([#220](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/220),
+  [#221](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/221)). The search takes `creator:` (`by:`),
+  `tag:` (`#`), `store:` (`on:`), `type:` (`kind:`), `set:` (`in:`), `project:` (`pj:`) and `settings:` (`s:`).
+  Click into the empty box and it lists them, each with an example. Choose one and what it could be is offered
+  underneath. Sets, projects and settings found there are places to go: `settings:language` opens Settings at
+  **Language**.
+- **Back and Forward everywhere** ([#211](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/211)).
+  Each place you go is a step: a store's tab, a set or wishlist, a view of Downloads, a product's details, Settings,
+  Tasks, Projects (and a project), Stores and Tags. Your mouse's back and forward buttons, and Alt+Left and
+  Alt+Right, go through them, so Back closes a panel before it leaves the page.
+- **Choose which files to save** ([#225](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/225)).
+  Before a product downloads (**Download**, **Update**, and the new **Download more of it...**), Hoard asks "What
+  files do you want to save?" It says what the product contains ("2 Unity packages, 1 Substance Painter project,
+  and 3 compressed files"), then **Download everything** or **Choose files**. Where a store doesn't list a product's
+  files in advance, Hoard reads its download page first, without downloading anything. What you leave out is
+  remembered for next time. Settings has **Files to leave out**: rules by kind of file or by words in a file's name,
+  for every store or just one, and a switch to stop Hoard asking. The command line's sync follows the same rules.
+- **Notifications through Apprise** ([#230](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/230)).
+  Settings can send the news you choose to Discord, Telegram, ntfy, email and the many other services
+  [Apprise](https://github.com/caronc/apprise) reaches: new products and updates the routine check finds, wishlist
+  products that got cheaper, tasks that finish or fail, the routine check when it's done, and other news (a new
+  version of Hoard, files the check of your downloads found changed or missing). Nothing is sent unless you tick
+  it, and a message says how many, never a product's name. The addresses hold their services' tokens, so they're
+  kept as your API keys are (Windows' protected storage, the Keychain or the keyring), never in `config.json`.
+  **Send a test** checks them.
+- **Deal with what the check of your downloads finds** ([#231](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/231)).
+  **See what it found**, under the last check in the Downloads sidebar, lists the files found changed or missing,
+  product by product, each with **Download again** (a changed file is kept in `_Previous versions` first), **Keep
+  it as it is** (it counts as fine from then on), **Forget it** (a missing file, which is then left out of its
+  product's downloads) and **Show in folder**.
+- **Wishlists** ([#187](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/187),
+  [#208](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/208),
+  [#213](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/213)).
+  - **Find more to add:** type some words, then search [Nexyy](https://nexyy.com) (a search across the stores),
+    Booth, Gumroad, Jinxxy or itch.io in your browser. Copy a product's link from there into **Add products by
+    link...**, which takes Nexyy's links too.
+  - A product's price is a badge: a drop is ringed in gold with an arrow down, and a rise is in the warning colour
+    with an arrow up, the old price struck out beside it.
+  - Each product has a **Remove** button, and taking a product off a wishlist (or out of a set) asks first.
+  - **Add products by link...** is on wishlists only: a set is made from your library.
+- **Sets** ([#195](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/195),
+  [#228](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/228)). A set's menu has **New project
+  with this set...**, which starts a project with what's downloaded of the set already in it. The right-click
+  menu lists the five sets you added to last, and **Add to another set...** finds any other by name, instead of
+  every set in a menu taller than the window.
+- **What a product is** ([#223](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/223)). Each product
+  has a type (avatar, clothing, accessory, hair, texture, shader, gimmick, script, tool, animation, world, other).
+  Hoard guesses it from the product's name and its store's tags, or from a tag's kind. Set it yourself in the
+  product's details, filter by it beside the grid, or search `type:avatar`.
+- **Creators' own tags** ([#206](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/206)). The tags
+  creators give their products on Booth (and its category), Jinxxy and itch.io are read from each product's public
+  page, a few each time a store is read. They show in a product's details, to add as your own, and join the
+  suggested tags. They never change your tags; Settings, **Store tags**, turns them off.
+- **Copies with names alike stack** ([#217](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/217),
+  [#215](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/215)). One creator's listings of a product
+  on two stores now stack when their names are alike once the extras around a name are left out (labels in
+  brackets, versions, "for VRChat", emoji). Numbers, and the avatar a product is for, still tell products apart.
+  A product's details say why it's with its copies, with **Not a copy** to take it out for good. **Stack copies**
+  is a button that stays pressed while it's on.
+- **Projects** ([#190](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/190),
+  [#198](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/198),
+  [#199](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/199)).
+  - **Folders and tags:** each project has **Folder and tags...** to put it in a folder of your own and give it
+    tags. The folders show above the list, so you can see one folder at a time, and a project's tag shows the
+    others that have it.
+  - **In the Library's colours:** the logo's colours rise from the bottom of the window, each tab has a coloured
+    dot, and each kind of project has a colour of its own down its row and on its chip, beside its Unity version.
+    Products from your library show as the Library's own tiles.
+  - **Packages in steps:** putting a product in a project first asks which of its packages (each with its size,
+    and PC or Quest marked, with **Select all** and **Select none**), then, last, the packages they need.
+- **The splash counts as it loads** ([#200](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/200)).
+  While the Library, Downloads or Projects first loads, the splash shows a few friendly words, and how far Hoard has
+  got: the products read so far, what's downloaded, or the projects.
+- **Winter Hoard** ([#191](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/191)) joins Spooky Hoard
+  as a seasonal theme: snow and night skies, with holly red as its accent, in dark and light.
+- **Outline product cards** ([#222](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/222)). Settings,
+  Accessibility (and the setup assistant) can give every card an outline and a faint background of its own, clear
+  against the page in every theme and style.
+- **In Settings:** **Acknowledgements** ([#227](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/227))
+  lists everything Hoard uses or ships, with each one's license, and shows the license texts Hoard has; the website
+  has the same list. **Support Hoard** ([#226](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/226))
+  has **Tip on Ko-fi**. The side of Settings now lists Notifications, Support Hoard and Acknowledgements too.
+- **Hoard's Discord** ([#204](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/204)) is in the footer
+  of Hoard's pages, the website and the wiki.
+- **Windows' own protections** ([#229](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/229)).
+  Memory integrity and Smart App Control can stay on, and no TPM is needed: the wiki's Troubleshooting and Security
+  and Privacy pages explain why. A support report says whether Smart App Control and Memory integrity are on.
+- Put right: a removed product came back into the Library when its store renamed it, or Hoard read its name a
+  little differently ([#224](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/224)). Archived,
+  removed and hidden products are now also remembered by the store's own id.
+- Put right: **Stop** and **Force stop** could take a long time, while a task waited between a store's pages, before
+  trying a download again, or on a store that had gone quiet
+  ([#201](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/201)). They end it at once now; a picture
+  cut short isn't kept.
+- Put right: downloading everything the routine check (or **Download new**) found looked through every product on
+  every store, as a whole sync does ([#202](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/202)).
+  It goes straight to each product now.
+- Put right: Hoard could hold up shutting down, restarting or signing out of Windows ("Hoard is preventing
+  shutdown"), and logging out of a Mac while a task ran
+  ([#205](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/205)). It quits, stopping what's running.
+- Put right: saving an itch.io API key could fail with "Connection aborted, PermissionError(13)"
+  ([#196](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/196)). That's security software, a firewall
+  or a VPN on this computer refusing the connection: Hoard now says so, and what to check, there and wherever a
+  store couldn't be reached that way.
+- Put right: a product whose first picture is a video (Jinxxy's, say) showed no picture
+  ([#212](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/212)). Hoard takes the video's still, or the
+  picture on the product's public page.
+- Put right: in the Treasure style, something you own on two stores had a band of stripes across its picture. Its
+  frame is now striped in both stores' colours all the way round
+  ([#193](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/193)).
+- Put right: the Library's **Add it to a set** was the system's grey dropdown; it's in the theme's colours now
+  ([#218](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/218)). The tab is called **Sets and
+  Wishlists** everywhere ([#207](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/207)), and deleting a
+  project or a backup says "it can't be restored" ([#197](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/197)).
+- Safer: a product link you paste is rebuilt from its checked host and path before Hoard requests it, and reading a
+  saved Gumroad page can no longer be slowed to a crawl by a page built to do it
+  ([#232](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/232)).
+- **For people helping with Hoard:** a guide to how Hoard works, with a sync walked through end to end and a part
+  for stores ([#194](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/194)), a CONTRIBUTING guide,
+  the FAQ and Troubleshooting brought up to date ([#210](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/210)),
+  and a comment on every module, function and class, kept by a test
+  ([#209](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/209)).
+- **Hoard for Unity 0.10.0** ([#188](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/188),
+  [#189](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/189)): a stray file or two no longer marks a
+  product as in the project, and **Take it out of this project...** removes what a product's packages put in
+  `Assets` (to the trash), but never a file another product in the project uses. It lists what goes and asks first.
+
 ## 5.1.3
 
 - **Projects opens with Hoard's splash,** the logo and "Opening your projects", while it reads your projects, as

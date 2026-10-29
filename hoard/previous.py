@@ -27,15 +27,18 @@ _keep = 1   # set from the settings (set_keep) by the server and the command lin
 
 
 def set_keep(n) -> None:
+    """How many previous versions to keep of each file (keep_previous); 1 for anything that isn't a number."""
     global _keep
     _keep = max(0, min(MAX_KEEP, n)) if isinstance(n, int) and not isinstance(n, bool) else 1
 
 
 def keeping() -> int:
+    """How many previous versions are kept of each file."""
     return _keep
 
 
 def _plain_file(p: Path) -> os.stat_result | None:
+    """A file's details when it's a plain file (not a link or a folder), else None."""
     try:
         st = os.stat(p, follow_symlinks=False)
     except OSError:
@@ -186,4 +189,5 @@ def delete_all(folder: Path, files=()) -> int:
 
 
 def size(folder: Path, files=()) -> int:
+    """How much space the previous versions in a product's folder take."""
     return sum(v["size"] for v in listed(folder, files))

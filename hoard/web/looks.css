@@ -52,7 +52,14 @@
 [data-style="treasure"] .art { border-radius: 18px; }
 [data-style="treasure"] .slot.stacked .art > img, [data-style="treasure"] .slot.stacked .art > .ph { border-radius: 18px; }
 [data-style="treasure"] .notch { top: 0; height: auto; border-radius: inherit; background: none; box-shadow: inset 0 0 0 3px var(--c); pointer-events: none; }
-[data-style="treasure"] .notch.dup { background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px) bottom / 100% 7px no-repeat; }
+/* something you own on more than one store (issue #193): the frame itself striped in both stores' colours, all the way
+   round, rather than a band of stripes along the bottom with the first store's frame drawn over it. (A ring of its own,
+   so the store's tag inside the frame isn't masked away with the middle.) */
+[data-style="treasure"] .notch.dup { box-shadow: none; }
+[data-style="treasure"] .notch.dup::after { content: ""; position: absolute; inset: 0; padding: 3px; border-radius: inherit;
+  background: repeating-linear-gradient(135deg, var(--c) 0 9px, var(--c2) 9px 18px);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
 [data-style="treasure"] .notch[data-s]::before { content: attr(data-s); position: absolute; left: 9px; top: 9px; max-width: calc(100% - 52px);
   padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave); font: 700 10.5px/1.5 var(--body); letter-spacing: .06em;
   text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -86,7 +93,7 @@
 [data-style="treasure"] .win-bar { padding: 12px 14px 12px 22px; }
 [data-style="treasure"] .win-x { border-radius: 999px; }
 [data-style="treasure"] :is(.task, .proj, .pj-row, .librow, .note, .also, .update, .viewbar, .routine-note) { border-radius: 18px; }
-[data-style="treasure"] .bulk, [data-style="treasure"] .dlpanel, [data-style="treasure"] .selmenu { border-radius: 20px; }
+[data-style="treasure"] .bulk, [data-style="treasure"] .dlpanel, [data-style="treasure"] .selmenu, [data-style="treasure"] .barmenu, [data-style="treasure"] .qmenu { border-radius: 20px; }
 [data-style="treasure"] .chip[aria-pressed="true"], [data-style="treasure"] .pill { border-radius: 999px; }
 [data-style="treasure"] .theme-choice, [data-style="treasure"] .style-choice { border-radius: 16px; }
 
@@ -116,10 +123,10 @@
 [data-style="workbench"] :is(.ghost, .btn, .primary).sm { padding: 0 10px; font-size: 12.5px; }
 [data-style="workbench"] :is(.search input, .tools select, .shelf-tools select, .find, .settings .field input, .settings select,
   .settings textarea, .setup .field input, .setup textarea, .tagadd input, .newtag input, .bulk input, dialog.ask input, dialog.pin input) { border-radius: 6px; }
-[data-style="workbench"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card, .bulk, .dlpanel, .selmenu) { border-radius: 10px; }
+[data-style="workbench"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card, .bulk, .dlpanel, .selmenu, .barmenu, .qmenu) { border-radius: 10px; }
 [data-style="workbench"] :is(.task, .proj, .librow, .note, .also, .update, .viewbar, .routine-note, .saver, .support-safe, .support-result,
   .setup .status, .setup details, .setup .storepick label, .setup .closepick label, .setup .access-pick label, .theme-choice, .style-choice) { border-radius: 6px; }
-[data-style="workbench"] .selmenu button, [data-style="workbench"] .views button, [data-style="workbench"] .creators button { border-radius: 4px; }
+[data-style="workbench"] .selmenu button, [data-style="workbench"] .barmenu button, [data-style="workbench"] .qopt, [data-style="workbench"] .views button, [data-style="workbench"] .creators button { border-radius: 4px; }
 /* the bar: lower, the search box and buttons smaller */
 [data-style="workbench"] .bar { min-height: 56px; padding: 8px 20px; gap: 12px; }
 [data-style="workbench"] .brand svg { height: 28px; }
@@ -181,6 +188,7 @@
   gap: 0 12px; align-items: center; }
 [data-style="workbench"] .slot.ext .ext-price { grid-area: price; margin: 0; }
 [data-style="workbench"] .slot.ext .ext-row { grid-area: row; margin: 0; gap: 10px; }
+[data-style="workbench"] .ext-out span { display: none; }   /* (a list: the bin alone, its name said by its label) */
 [data-style="workbench"] .setview .sethead > .art { max-width: 160px; }
 /* as the list gets narrower (a smaller window, a larger text size, a product's details open beside it), the row keeps
    its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */
@@ -228,6 +236,7 @@
 [data-style="workbench"] .pj-row { padding: 8px 12px; border-radius: 0; background: none; box-shadow: none; border-top: 1px solid var(--seam); }
 [data-style="workbench"] .pj-row:first-child { border-top: 0; }
 [data-style="workbench"] .pj-row:hover { background: var(--stone); }
+[data-style="workbench"] .pj-row[class*="k-"] { box-shadow: inset 3px 0 0 var(--c); }   /* (its kind's colour: #198) */
 [data-style="workbench"] .pj-pk { border: 1px solid var(--seam); border-radius: 8px; border-collapse: separate; border-spacing: 0; overflow: hidden; }
 [data-style="workbench"] .pj-pk td { padding: 5px 8px; }
 [data-style="workbench"] .pj-pk tr:first-child td { border-top: 0; }
@@ -238,3 +247,13 @@
 [data-style="workbench"] .projects h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
 [data-style="workbench"] .setjump button { border-radius: 4px; }
 [data-style="workbench"] .setup-card { padding: 22px 26px; }
+
+/* ---------- Settings, Accessibility (issue #222): each product's card stands apart from the page, on a faint background
+   of its own (--stone: a step from the page in every theme, with text on it 11:1 or more) inside an outline as clear as
+   quiet text (--dust: 4.6:1 or more against the card and the page, in every theme), with room inside it. Every card:
+   the Library, Downloads, sets, wishlists and Projects. (Last here, so it holds in every style.) */
+[data-cards="outlined"] .slot { padding: 8px; background: var(--stone); border: 1px solid var(--dust); border-radius: 14px; }
+[data-cards="outlined"][data-style="workbench"] .grid { row-gap: 6px; }
+[data-cards="outlined"][data-style="workbench"] .grid .slot { border: 1px solid var(--dust); border-radius: 8px; }
+[data-cards="outlined"][data-style="workbench"] .grid .slot:first-child { border-top: 1px solid var(--dust); }
+[data-cards="outlined"][data-style="workbench"] .grid .slot:hover { background: var(--seam); }

@@ -7,11 +7,14 @@ using UnityEditor;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>Packages to import one after another (a set's), kept across the scripts reloads imports
+    /// cause.</summary>
     [InitializeOnLoad]
     public static class ImportQueue
     {
         const string Key = "SoloFlighter.Hoard.ImportQueue", TotalKey = "SoloFlighter.Hoard.ImportQueueTotal";
 
+        /// <summary>A package to import, and its product.</summary>
         public struct Item { public string Path, Store, Name, Creator; }
 
         static ImportQueue()
@@ -33,8 +36,10 @@ namespace SoloFlighter.Hoard.Editor
             Next();
         }
 
+        /// <summary>Stop: forget what's left to import.</summary>
         public static void Stop() { SessionState.EraseString(Key); SessionState.EraseInt(TotalKey); }
 
+        /// <summary>Import the next package, once the last one has finished.</summary>
         static void Next()
         {
             if (PendingImport.Active) return;   // one at a time: this is called again when that one ends
@@ -64,6 +69,7 @@ namespace SoloFlighter.Hoard.Editor
             Stop();
         }
 
+        /// <summary>What's left to import.</summary>
         static List<Item> Read()
         {
             var list = new List<Item>();
@@ -77,12 +83,14 @@ namespace SoloFlighter.Hoard.Editor
             return list;
         }
 
+        /// <summary>Keep what's left to import.</summary>
         static void Write(List<Item> items)
         {
             var lines = items.ConvertAll(i => string.Join("\t", new[] { i.Path, i.Store ?? "", Clean(i.Name), Clean(i.Creator) }));
             if (lines.Count == 0) SessionState.EraseString(Key); else SessionState.SetString(Key, string.Join("\n", lines.ToArray()));
         }
 
+        /// <summary>Text without tabs or line breaks, to keep in one field.</summary>
         static string Clean(string s) { return (s ?? "").Replace('\t', ' ').Replace('\n', ' '); }
     }
 }

@@ -12,6 +12,7 @@ from hoard import backup, config, library, server
 from hoard.marks import MarkStore
 from hoard.sets import SetStore
 from hoard.tags import TagStore, tag_key
+from tests.browsing import menu
 
 RUSK = tag_key("Booth", "Rusk")
 
@@ -257,7 +258,7 @@ class Page(unittest.TestCase):
             page.goto(srv.entry_url())
             page.wait_for_function("() => localStorage.getItem('hoard-key')")
             page.click("nav.apptabs a[href='/downloads']")
-            page.click("#settingsBtn")
+            menu(page, "#settingsBtn")
             page.click("#backupMake")
             # "Show in folder" comes once the file is saved: the hint already names Documents › Hoard backups, so
             # waiting for that text went on before the backup was written (seen on Windows)

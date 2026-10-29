@@ -57,12 +57,14 @@ class NotAPackage(ValueError):
 
 
 def can_look_inside(name: str) -> bool:
+    """Can Look inside read this file (a .unitypackage or a .zip)?"""
     return name.lower().endswith(KINDS)
 
 
 # ----------------------------------------------------------------------------- a .unitypackage, from a stream
 
 def _read_exactly(stream, n: int) -> bytes:
+    """n bytes of the stream, raising NotAPackage when it ends first."""
     data = stream.read(n)
     if len(data) != n:
         raise NotAPackage("the package ends partway")
@@ -70,6 +72,7 @@ def _read_exactly(stream, n: int) -> bytes:
 
 
 def _skip(stream, n: int) -> None:
+    """Move past n bytes of the stream, a megabyte at a time."""
     while n > 0:
         got = stream.read(min(n, 1 << 20))
         if not got:
@@ -78,11 +81,13 @@ def _skip(stream, n: int) -> None:
 
 
 def _field(h: bytes, at: int, length: int) -> str:
+    """A text field of a tar header, up to its first zero byte."""
     raw = h[at:at + length]
     return raw[:raw.index(0)].decode("utf-8", "replace") if 0 in raw else raw.decode("utf-8", "replace")
 
 
 def _octal(h: bytes, at: int, length: int) -> int:
+    """A number field of a tar header (octal); 0 when blank, -1 when it isn't a number."""
     s = _field(h, at, length).strip(" \x00")
     if not s:
         return 0
@@ -277,6 +282,7 @@ def _why(e: BaseException) -> str:
 # ----------------------------------------------------------------------------- the cache, and the page's view
 
 def cache_dir() -> Path:
+    """Where what Look inside read is kept, so a second look is quick."""
     return data_dir() / "cache" / "inside"
 
 
@@ -286,6 +292,8 @@ def cache_id(path: Path, st: os.stat_result) -> str:
 
 
 def _load(folder: Path) -> dict | None:
+    """What Look inside read of a file before (its inside.json), when it's still the format Hoard reads; None
+    otherwise."""
     try:
         data = json.loads((folder / "inside.json").read_text("utf-8"))
     except (OSError, ValueError):
@@ -306,11 +314,13 @@ def _prune(keep: int = KEEP, max_bytes: int = MAX_CACHE) -> None:
     except OSError:
         return
     def used(f: Path) -> float:
+        """When a kept look was last used (its inside.json's time)."""
         try:
             return (f / "inside.json").stat().st_mtime
         except OSError:
             return 0.0
     def size(f: Path) -> int:
+        """How much a kept look takes on disk."""
         try:
             return sum(e.stat(follow_symlinks=False).st_size for e in os.scandir(f))
         except OSError:
@@ -340,6 +350,7 @@ def look_inside(path: Path) -> dict:
         kept = [0]
 
         def keep(n: int, guid: str, data: bytes) -> bool:
+            """Keep one preview picture, while there's room for it (MAX_PREVIEW_BYTES in all)."""
             if kept[0] + len(data) > MAX_PREVIEW_BYTES:
                 return False   # a package with far more previews than any real one: the rest go without
             (work / f"{n}-{guid}.png").write_bytes(data)
@@ -467,9 +478,11 @@ class Writer:
                 raise self._failed(e, here) from e
 
     def folder(self, parts: list[str]) -> None:
+        """Make a folder of the package (an asset that's a folder), inside where it's taken out to."""
         self._inside(self.dest.joinpath(*parts))
 
     def _free(self, path: Path) -> bool:
+        """Is nothing at this path yet, nor taken by another file of this extraction?"""
         return str(path).casefold() not in self.taken and not os.path.lexists(path)
 
     def place(self, parts: list[str], meta: bool = False) -> tuple[Path, Path | None]:
@@ -556,6 +569,7 @@ def _take(stream, want: dict[str, dict], writer: Writer, under: list[str], metas
     left_out: set[str] = set()
 
     def leave(g: str, why: str) -> None:
+        """Leave an asset out, noting why, once."""
         if g not in left_out:
             left_out.add(g)
             skipped.append((label + want[g]["path"], why))
@@ -586,6 +600,8 @@ def _take(stream, want: dict[str, dict], writer: Writer, under: list[str], metas
         return spots[g]
 
     def on_asset(guid: str, part: str, size: int, gz) -> bool:
+        """One part of an asset as the package's stream reaches it (its file, or its .meta): written where it goes when
+        it's chosen; True when it was taken."""
         if (guid, part) not in todo:
             return False
         todo.discard((guid, part))

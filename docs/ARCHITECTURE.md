@@ -1,7 +1,8 @@
 # How Hoard is built
 
 A guide for anyone reading or changing the code. Both tools are plain Python with no build step: each
-page is a single HTML file with its styles and script inline, served by the tool itself.
+page is a single HTML file with its styles and script inline, served by the tool itself. For the map first (each
+part, where its code and files are, and a sync end to end), see [HOW-HOARD-WORKS.md](HOW-HOARD-WORKS.md).
 
 ## Repository layout
 
@@ -36,6 +37,10 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   cli.py               the command line (docs/COMMAND-LINE.md)
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   notify.py            a notification from the system when the routine check finds something to download
+  alerts.py            notifications through Apprise (issue #230): the news you choose, to the services you give
+                       addresses for; the addresses kept by vault.py, as API keys are
+  vault.py             API keys and other secrets, kept by the operating system (DPAPI, Keychain, keyring)
+  loading.py           how far reading what a page shows first has got, for its splash's count (issue #200)
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
   vpm/                 Projects: the Unity projects shared with ALCOM and the Creator Companion, their VPM packages,
                        and your library in them (see "Projects" below); templates/ holds vrc-get's VRChat templates
@@ -309,9 +314,9 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
 
 A fork's builds use the same share server; a fork can't deploy to it (see `share/README.md`, "In a fork").
 
-## Sets and wishlists (`sets.py`, `wishlists.py`)
+## Sets and Wishlists (`sets.py`, `wishlists.py`)
 
-Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with sets, in **Sets and wishlists**.
+Wishlists are sets of kind `wishlist` in `sets.json`; the page shows them, with sets, in **Sets and Wishlists**.
 
 - **A product's picture** in a set is `/setpic/<set>/<place>?p=<hash>` (`server.pic_for`: the first 12 hex digits
   of the SHA-256 of its product key). Taking a product out moves the rest up a place, so the server serves a picture

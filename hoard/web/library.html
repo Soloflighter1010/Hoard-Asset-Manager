@@ -73,11 +73,23 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
-/* top bar */
+/* top bar: the search in the middle, Library, Downloads and Local to its left, and Sets and Wishlists, Tasks,
+   Projects and the page's tools to its right (issue #203). The two sides are as wide as each other, so the search
+   is in the middle of the window. When they don't fit beside it, fitBar (shared.js) puts the search on a row of its
+   own under them, and when they don't fit side by side either, each side on a row of its own: nothing hides. */
 .bar {
   position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 24px; background: var(--cave);
+  display: grid; grid-template-columns: minmax(var(--bar-side, 0px), 1fr) minmax(220px, 560px) minmax(var(--bar-side, 0px), 1fr); align-items: center;
+  gap: 10px 18px; padding: 12px 24px; background: var(--cave);
 }
+.bar-side { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bar-end { justify-content: flex-end; }
+.bar[data-fit="rows"] { grid-template-columns: auto auto; justify-content: space-between; }
+.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: center; width: min(100%, 720px); }
+.bar[data-fit="stack"] { grid-template-columns: minmax(0, 1fr); }
+.bar[data-fit="stack"] .search { order: 1; }
+.bar[data-fit="stack"] :is(.bar-side, .apptabs, .tools) { flex-wrap: wrap; }
+.bar[data-fit="stack"] .bar-end { justify-content: flex-start; }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
@@ -97,7 +109,7 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 @keyframes confetti-fall { to { transform: translateY(calc(100vh + 32px)) rotate(var(--spin)); } }
 body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animation: none; }
 @media (prefers-reduced-motion: reduce) { .brand.has-update svg, .brand .boxes { animation: none; } }
-.search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
+.search { position: relative; display: block; min-width: 0; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
   width: 100%; height: 44px; padding: 0 44px; border-radius: 12px; border: 0;
@@ -109,9 +121,33 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font: 700 12px var(--body); color: var(--dust); background: var(--stone); border-radius: 6px; padding: 1px 7px;
 }
-/* The same room on both pages (Downloads has two more buttons), so the bar is laid out alike and doesn't jump, or
-   go to two rows on one page and not the other, when you switch */
-.tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; min-width: min(460px, 100%); }
+.tools { display: flex; align-items: center; gap: 10px; flex: none; }
+/* under the search box: the prefixes' guide, and what the prefix being typed could be (issues #220 and #221) */
+.qmenu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; max-height: min(440px, calc(var(--vh) - 120px));
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.qmenu[hidden] { display: none; }
+.qmenu-h, .qmenu-none { margin: 6px 10px 4px; font: 700 12px var(--body); color: var(--dust); }
+.qmenu-none { font-weight: 400; }
+.qopt { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.qopt:hover, .qopt[aria-selected="true"] { background: var(--stone); }
+.qopt[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.qopt-t { min-width: 0; color: var(--bone); font-size: 14px; overflow-wrap: anywhere; }
+.qopt-t code { padding: 1px 6px; border-radius: 5px; background: var(--cave); color: var(--gold-text); font: 700 12.5px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.qopt-s { flex: none; max-width: 45%; color: var(--dust); font-size: 12.5px; text-align: right; }
+.found { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 8px; }   /* a setting the search went to */
+/* the bar's Menu (issue #219): Tags, Stores or Rescan, and Settings */
+.barmenu-wrap { position: relative; }
+.bar.menu-up { z-index: 65; }   /* the Menu drops over an open panel (60) and its shade */
+.barmenu-btn svg { width: 16px; height: 16px; }
+.barmenu-btn .warn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.barmenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 6px; display: grid; gap: 2px;
+  border-radius: 12px; background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.barmenu[hidden] { display: none; }
+.barmenu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px;
+  background: none; color: var(--bone); font: 600 14px var(--body); text-align: left; white-space: nowrap; cursor: pointer; }
+.barmenu button:hover, .barmenu button:focus-visible { background: var(--stone); outline: none; }
+.barmenu button:focus-visible { box-shadow: inset 0 0 0 2px var(--gold); }
+.barmenu button[aria-expanded="true"]::after { content: ""; width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--gold); }
 .tools label { display: flex; align-items: center; gap: 8px; color: var(--dust); font-size: 13px; }
 .tools select {
   height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
@@ -150,7 +186,7 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; background: var(--c); transform: rotate(45deg); }
 .booth { --c: var(--booth); } .gumroad { --c: var(--gumroad); } .jinxxy { --c: var(--jinxxy); } .payhip { --c: var(--payhip); }
 .itch { --c: var(--itch); }
-/* Sets and wishlists: a colour of its own beside the stores', and a heart, as it isn't a store */
+/* Sets and Wishlists: a colour of its own beside the stores', and a heart, as it isn't a store */
 [data-store="Sets"] { --c: var(--sets); }
 .dot.sets { transform: none; width: 11px; height: 10px; border-radius: 0; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 18'%3E%3Cpath d='M10 18 1.6 9.6A5.2 5.2 0 0 1 9 2.3L10 3.3l1-1a5.2 5.2 0 0 1 7.4 7.3z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 18'%3E%3Cpath d='M10 18 1.6 9.6A5.2 5.2 0 0 1 9 2.3L10 3.3l1-1a5.2 5.2 0 0 1 7.4 7.3z'/%3E%3C/svg%3E") center / contain no-repeat; }
 
@@ -328,9 +364,7 @@ a.ghost { height: 42px; }
 @media (max-width: 860px) {
   :root { --slot-size: 136px; }
   .bar { padding: 12px 16px; gap: 10px; position: static; }
-  .search { order: 5; flex-basis: 100%; max-width: none; }
   .search kbd, .tools .zoom { display: none; }
-  .tools { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
   .seg { position: static; padding: 0 12px; }
   .only-narrow { display: inline-flex; }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -386,6 +420,18 @@ body.less-motion .slot:hover .art { transform: none; }
 .tagadd input, .bulk input, .newtag input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .tagadd input:focus, .bulk input:focus, .newtag input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+/* a product's "Add it to a set" (issue #218): as the Downloads page's, the theme's own colours, not the system's grey */
+.typepick { display: flex; }
+/* Settings' Files to leave out (issue #225) */
+.file-rules { margin: 8px 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.file-rules li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 8px;
+  background: var(--stone); font-size: 13.5px; }
+.file-rules li.none { background: none; padding: 0; color: var(--dust); }
+.rule-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rule-add input { flex: 1 1 160px; min-width: 0; }
+.tagadd select, .typepick select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
+  background-color: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
+.tagadd select:focus, .typepick select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .headrow .ghost { flex: none; }
 #selectBtn { margin-left: auto; }   /* (on the right, with or without the count beside it) */
@@ -463,6 +509,27 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-files summary { cursor: pointer; color: var(--dust); }
 .pick-list .pk-files label { padding: 4px 0; font-weight: 400; }
 .pick-list .pk-files span { overflow-wrap: anywhere; }
+/* What files do you want to save? (issue #225): what a product contains, then everything or the files you tick */
+/* Acknowledgements (issue #227): everything Hoard uses, with its license */
+.acks summary { cursor: pointer; font-weight: 700; font-size: 13.5px; margin: 4px 0; }
+#acksList h4 { margin: 12px 0 4px; font: 700 13px var(--body); color: var(--dust); }
+#acksList ul { list-style: none; margin: 0; padding: 0; }
+#acksList li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 3px 0; font-size: 13.5px; }
+#acksList li .lic { color: var(--dust); font-size: 12.5px; }
+dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
+  background: var(--cave); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; }
+/* issue #230: notifications through Apprise */
+#setApprise { width: 100%; box-sizing: border-box; font: 12.5px/1.5 ui-monospace, monospace; }
+.apprise-acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 8px; }
+.apprise-acts > button { width: auto; margin: 0; }
+.apprise-events { display: flex; flex-direction: column; }
+.apprise-events[aria-disabled="true"] { opacity: .6; }
+.files-dialog { width: min(560px, calc(var(--vw) - 32px)); }
+.files-of { margin: 0 0 4px; overflow-wrap: anywhere; }
+.files-has { margin: 0 0 12px; color: var(--dust); }
+.files-list { max-height: min(46vh, 420px); overflow: auto; margin: 0 0 12px; padding: 4px 10px 8px; border-radius: 10px; background: var(--stone); }
+.files-list .files-kind { margin: 10px 0 4px; font: 700 12px var(--body); color: var(--dust); }
+.files-list label { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; overflow-wrap: anywhere; }
 .pick-skipped { margin-top: 12px; }
 .pick-skipped summary { cursor: pointer; color: var(--dust); font-size: 13px; }
 .pick-go { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
@@ -510,7 +577,8 @@ body.selecting .toast { bottom: 96px; }
 #settingsPanel.win > .win-bar { padding-left: 28px; padding-right: 18px; }
 #settingsPanel.win > .win-body { display: flex; align-items: flex-start; gap: 40px; padding: 20px 28px 48px; }
 #settingsPanel.win .setjump { position: sticky; top: 0; flex: none; flex-direction: column; flex-wrap: nowrap; width: 200px; gap: 2px;
-  margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
+  margin: 0; padding: 0; background: none; border: 0; box-shadow: none;
+  max-height: calc(100vh - var(--bar-h, 64px) - 96px); overflow-y: auto; }   /* (a short window, or large text: it scrolls) */
 #settingsPanel.win .setjump button { padding: 7px 12px; border-radius: 9px; background: none; color: var(--dust); text-align: left; font: 700 14px var(--body); }
 #settingsPanel.win .setjump button:hover { color: var(--bone); background: var(--stone); }
 #settingsPanel.win .set-body { flex: 1 1 auto; min-width: 0; max-width: 780px; }
@@ -520,7 +588,7 @@ body.selecting .toast { bottom: 96px; }
 @media (max-width: 860px) {   /* a narrow window: its parts in a row along the top again */
   #settingsPanel.win > .win-body { display: block; padding: 0 16px 40px; }
   #settingsPanel.win .setjump { top: 0; z-index: 2; flex-direction: row; flex-wrap: wrap; width: auto; margin: 0 -16px 10px; padding: 10px 16px;
-    background: var(--cave); border-bottom: 1px solid var(--seam); }
+    background: var(--cave); border-bottom: 1px solid var(--seam); max-height: none; overflow: visible; }
   #settingsPanel.win .setjump button { padding: 5px 11px; border-radius: 999px; background: var(--stone); color: var(--bone); font: 600 12.5px var(--body); }
   #settingsPanel.win h3[id] { scroll-margin-top: 64px; }
 }
@@ -665,6 +733,14 @@ dialog.pin .row { display: flex; justify-content: space-between; align-items: ce
 .splash .b { animation: splash-hop 1.6s ease-in-out infinite; }
 .splash .b2 { animation-delay: .18s; } .splash .b3 { animation-delay: .36s; }
 .splash p { margin: 0; font: 700 15px var(--body); color: var(--dust); letter-spacing: .02em; }
+/* issue #200: a few friendly words that change while it reads, and how far it's got */
+.splash p.splash-quote { min-height: 1.5em; margin-top: -8px; font-weight: 500; font-size: 14px; font-style: italic; text-align: center; }
+.splash-count { display: grid; justify-items: center; gap: 6px; width: min(260px, 70vw); }
+.splash-count[hidden] { display: none; }
+.splash-bar { width: 100%; height: 6px; border-radius: 3px; background: var(--stone); overflow: hidden; }
+.splash-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--gold); transition: width .3s ease; }
+.splash-count .n { font-size: 12.5px; color: var(--dust); font-variant-numeric: tabular-nums; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .splash-bar i { transition: none; } }
 @keyframes splash-hop { 0%, 60%, 100% { translate: 0 0; } 30% { translate: 0 -9px; } }
 @media (prefers-reduced-motion: reduce) { .splash .b { animation: none; } .splash:not(.first) { animation-duration: 0s; } .splash { transition: none; } }
 .projects.win > .win-body { position: relative; }
@@ -737,7 +813,11 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 .slot.stacked .art { overflow: visible; min-height: 0; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
 .slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
 .badge.count { background: var(--bone); color: var(--cave); }
-.stack-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dust); cursor: pointer; }
+/* Stack copies (issue #215): a button that stays pressed while it's on */
+.stack-toggle { gap: 6px; height: var(--btn-h-sm); color: var(--dust); cursor: pointer; }
+.stack-toggle svg { width: 16px; height: 16px; flex: none; }
+.stack-toggle[aria-pressed="true"] { color: var(--bone); box-shadow: inset 0 0 0 2px var(--gold); }
+.stack-toggle[aria-pressed="true"] svg { color: var(--gold); }
 
 /* the sidebar: folds away to a strip, and each of its sections folds on its own */
 .side-fold { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 8px; padding: 6px 8px; border: 0; border-radius: 8px;
@@ -782,6 +862,20 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* Projects takes the whole window below the bar (it's a place of its own, not a panel over the page) */
 .projects.win { left: 0; right: 0; top: var(--bar-h); bottom: 0; transform: none; width: auto; max-height: none; border-radius: 0;
   box-shadow: inset 0 1px 0 var(--seam); background: var(--cave); }
+/* issue #198: Projects in the Library's colours: the logo's three rising from the bottom, as the Library's glow does */
+.projects.win { --pj-avatars: var(--jinxxy); --pj-worlds: var(--itch); --pj-other: var(--payhip);
+  background: radial-gradient(ellipse 60% 70% at 12% 112%, color-mix(in srgb, var(--jinxxy) 30%, transparent), transparent 75%),
+    radial-gradient(ellipse 60% 70% at 50% 116%, color-mix(in srgb, var(--gumroad) 24%, transparent), transparent 75%),
+    radial-gradient(ellipse 60% 70% at 88% 112%, color-mix(in srgb, var(--gold) 26%, transparent), transparent 75%), var(--cave); }
+body.no-glow .projects.win { background: var(--cave); }
+.pj-tab .dot { margin-right: 7px; vertical-align: 1px; }
+.pj-tab.t-list { --c: var(--jinxxy); } .pj-tab.t-repos { --c: var(--gumroad); } .pj-tab.t-backups { --c: var(--gold); }
+.pj-tab.t-settings { --c: var(--payhip); } .pj-tab.t-logs { --c: var(--itch); }
+.pj-row.k-avatars, .pj-chip.k-avatars { --c: var(--pj-avatars); } .pj-row.k-worlds, .pj-chip.k-worlds { --c: var(--pj-worlds); }
+.pj-row.k-other, .pj-chip.k-other { --c: var(--pj-other); }
+.pj-chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 1.6;
+  color: var(--bone); background: color-mix(in srgb, var(--c, var(--seam)) 26%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--seam)) 55%, transparent); }
+.pj-chip.unity { --c: var(--gold); }
 .projects.win > .win-bar { padding-left: 28px; padding-right: 18px; }   /* (all of the window's width: no column in the middle) */
 .projects.win > .win-body { padding: 0 28px 28px; }
 .pj-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--seam); }
@@ -873,6 +967,7 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pj-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "star main acts" "star what acts"; gap: 2px 12px;
   align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--stone); }
+.pj-row[class*="k-"] { box-shadow: inset 4px 0 0 var(--c); }   /* (its kind's colour down its side: #198) */
 .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main acts" "what acts"; }
 .pj-row.gone { opacity: .7; }
 .pj-star { grid-area: star; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--seam); font-size: 17px; line-height: 1; }
@@ -885,6 +980,15 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-row.gone .pj-what { color: var(--warn); }
 .pj-acts { grid-area: acts; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .pj-acts > button { width: auto; margin: 0; }
+/* issue #190: the list's folders, one shown at a time, and each project's tags */
+.pj-folders { margin: 2px 0 10px; }
+.pj-tags { display: flex; flex-wrap: wrap; gap: 0 10px; }
+.pj-tags .chip { font-size: 12.5px; font-weight: 600; }
+.pj-in { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; }
+.pj-in svg { width: 14px; height: 14px; flex: none; }
+dialog.ask .pj-orgf { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-weight: 700; font-size: 13.5px; }
+dialog.ask .pj-orgf input { font-weight: 400; }
+dialog.ask .pj-orgf + .hint { margin: 4px 0 0; font-size: 13px; color: var(--dust); }
 @media (max-width: 640px) {
   .pj-row, .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "what" "acts"; }
   .pj-row .pj-star { position: absolute; }
@@ -926,12 +1030,15 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 }
 .pj-pre { margin: 4px 0; padding-left: 18px; font-size: 13.5px; }
 /* Projects' tiles: what went into a project, and what Hoard for Unity found in one, as their library tiles */
-.pj-tiles { --slot-size: 150px; margin: 12px 0 4px; }
+.pj-tiles { margin: 12px 0 4px; }   /* (the Library's tiles, at the Library's size: #198) */
 .pj-tile .ext-main { padding: 0; border: 0; background: none; text-align: left; font: inherit; cursor: pointer; }
 .pj-tile button.ext-main:hover .art { transform: translateY(-3px); }
 .pj-tile button.ext-main:focus-visible { outline: none; }
 .pj-tile button.ext-main:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 3px; }
 .pj-below { display: flex; flex-direction: column; gap: 2px; margin-top: -3px; font-size: 12px; color: var(--dust); }
+.pj-files summary { cursor: pointer; width: fit-content; }
+.pj-files[open] summary { margin-bottom: 2px; }
+.pj-files .pj-file { display: block; }
 .pj-below .pj-file { color: var(--bone); overflow-wrap: anywhere; }
 .pj-below .st { font-weight: 700; }
 .pj-below .st.yes { color: #4CC38A; }
@@ -954,7 +1061,12 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 dialog.ask.pj-dlg.wide { width: min(720px, calc(var(--vw) - 32px)); }
 dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc(var(--vh) - 72px); }
 .pj-picklist { list-style: none; margin: 0 0 10px; padding: 0; overflow: auto; min-height: 0; flex: 0 1 auto; font-size: 13.5px; }
-.pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: break-word; }   /* (#199: never mid-word) */
+.pj-contents .pj-c { display: flex; flex-direction: column; min-width: 0; }
+.pj-contents .pj-tag { align-self: flex-start; margin-top: 2px; }
+.pj-stepno { display: block; margin-bottom: 2px; font-size: 12.5px; font-weight: 600; color: var(--dust); }
+.pj-allnone { display: flex; gap: 16px; margin: 0 0 6px; }
+.pj-allnone .linkish { font-size: 13px; }
 .pj-picklist li:first-child { border-top: 0; }
 .pj-picklist label.check { display: flex; align-items: flex-start; gap: 10px; }
 .pj-picklist label.check input { margin-top: 3px; flex: none; }
@@ -1007,10 +1119,26 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .ext-what { color: var(--dust); }
 .slot.ext.wanted .ext-what { color: var(--warn); }
 /* a wishlist product's price, and what it was when it changed (struck through); cheaper than before stands out */
-.ext-price { display: block; margin-top: -2px; font-size: 13px; font-weight: 700; color: var(--bone); overflow-wrap: anywhere; }
+/* a wishlist product's price, as a badge; a drop in gold, a rise in the warning colour, the old price struck out (#213) */
+.ext-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: -2px; font-size: 13px; overflow-wrap: anywhere; }
+.ext-price .price { padding: 2px 9px; border-radius: 999px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
+  color: var(--bone); font-weight: 800; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .ext-price .was { font-weight: 500; color: var(--dust); }
-.ext-price .price.down { color: var(--gold-text); }
+.ext-price .price.down { color: var(--gold-text); box-shadow: inset 0 0 0 2px var(--gold); }
 .ext-price .price.down::before { content: "\2193 "; }
+.ext-price .price.up { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
+.ext-price .price.up::before { content: "\2191 "; }
+/* taking it off: a button that looks like one, red on hover, and asked first */
+.ext-out { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border: 0; border-radius: 7px; flex: none;
+  background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); color: var(--dust); font: 600 12px var(--body); cursor: pointer; }
+.ext-out svg { width: 13px; height: 13px; }
+/* a wishlist's Find more to add (#187): your words, then the sites to search them on, in your browser */
+.wish-find { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.wish-find input { flex: 1 1 200px; min-width: 0; height: var(--btn-h-sm); padding: 0 12px; border: 0; border-radius: 8px;
+  background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.wish-find input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.wish-find + .hint { margin: 6px 0 0; }
+.ext-out:hover, .ext-out:focus-visible { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); outline: none; }
 .wish-h { margin-top: 30px; }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
@@ -1138,7 +1266,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
 /* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
 .proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
-.settings select, .proj select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+.settings select, .proj select, .tagadd select, .typepick select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 /* a store's buttons: on a line of their own under its name, in the same order on every row, so rows line up */
@@ -1146,9 +1274,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .stores-go { display: flex; gap: 8px; margin-top: 14px; }
 .stores-go > button { flex: 1 1 0; }
 .stores .stores-go .primary { margin-top: 0; width: auto; }
-/* the bar: the search box gives way first, so its buttons stay on the same row down to a narrower window */
-@media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
-.only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
+.only-narrow { display: none; }   /* (the rules above give every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
 /* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
 .tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
@@ -1185,29 +1311,40 @@ body.less-motion .tour-try::before { animation: none; }
       <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/></g>
     </svg>
     <p>Opening your hoard</p>
+    <p class="splash-quote" aria-hidden="true"></p>
+    <div class="splash-count" hidden><span class="splash-bar" role="progressbar" aria-valuemin="0" aria-label="Opening your hoard"><i></i></span><span class="n" aria-hidden="true"></span></div>
   </div>
 </div>
 <header class="bar">
+<div class="bar-side">
   <a class="brand" href="/"><svg viewBox="0 0 226 64" role="img" aria-label="Hoard"><g class="boxes" transform="translate(0 0) scale(1.0)">
   <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets and wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
-  <label class="search">
+  <nav class="apptabs" aria-label="Your hoard"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
+</div>
+  <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search your hoard" aria-label="Search your hoard" autocomplete="off">
     <kbd aria-hidden="true">/</kbd>
-  </label>
+  </div>
+<div class="bar-side bar-end">
+  <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <div class="tools">
-
-    <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
-    <button id="storesBtn" class="ghost stores-btn" aria-expanded="false" aria-controls="stores">Stores<span class="warn-dot" id="warnDot" hidden></span></button>
-    <button id="settingsBtn" class="ghost" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+    <div class="barmenu-wrap">
+      <button id="menuBtn" class="ghost barmenu-btn" aria-expanded="false" aria-controls="barMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu<span class="warn-dot" id="menuDot" hidden></span></button>
+      <div id="barMenu" class="barmenu" hidden>
+        <button id="tagsBtn" aria-expanded="false" aria-controls="tagPanel">Tags</button>
+        <button id="storesBtn" class="stores-btn" aria-expanded="false" aria-controls="stores">Stores<span class="warn-dot" id="warnDot" hidden></span></button>
+        <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+      </div>
+    </div>
     <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
+</div>
 </header>
 <div id="routineNote" class="routine-note" role="status" hidden>
   <span id="routineText"></span>
@@ -1226,7 +1363,7 @@ body.less-motion .tour-try::before { animation: none; }
         <option value="added">Recently added</option>
       </select>
     </label>
-    <label class="stack-toggle" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
+    <button id="stackCopies" class="ghost sm stack-toggle" aria-pressed="true" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="2"/><path d="M5 3.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 3v6a1.5 1.5 0 0 1-1.5 1.5H12"/></svg>Stack copies</button>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -1287,6 +1424,8 @@ body.less-motion .tour-try::before { animation: none; }
     <datalist id="tagList"></datalist>
     <h2 data-sec="show">Show</h2>
     <div id="disk" class="chips" role="group" aria-label="Downloaded, not yet, or new"></div>
+    <h2 data-sec="product-type">Product type</h2>
+    <div id="ptypes" class="chips" role="group" aria-label="Product type"></div>
     <h2 data-sec="creators">Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
     <ul id="creators" class="creators" translate="no"></ul>
@@ -1316,6 +1455,7 @@ body.less-motion .tour-try::before { animation: none; }
         <button class="linkish" id="updateNote" hidden></button></div>
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" id="reportProblem">Report a problem</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy</a>
@@ -1331,7 +1471,7 @@ body.less-motion .tour-try::before { animation: none; }
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button></nav>
+  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-apprise">Notifications</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button><button data-jump="part-tip">Support Hoard</button><button data-jump="part-thanks">Acknowledgements</button></nav>
   <div class="set-body">
   <p>Changes are saved as you make them.</p>
   <h3 id="part-folders">Downloads folder</h3>
@@ -1363,8 +1503,21 @@ body.less-motion .tour-try::before { animation: none; }
     address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from
     every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for
     you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.</p>
+  <h3>Store tags</h3>
+  <label class="check"><input type="checkbox" id="setStoreTags"> Read the tags creators give their products</label>
+  <p class="hint">On Booth, Jinxxy and itch.io: a few products' public pages each time a store is read, until each one
+    has been read once. Their tags show as suggestions on them, and you can filter by them; they never change yours.</p>
   <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
+  <label class="check"><input type="checkbox" id="setAskFiles"> Ask which files to save, before a product downloads</label>
+  <h3>Files to leave out</h3>
+  <p class="hint">Every download leaves these out, from every store or one: Sync, Download new, and a product's own
+    Download. When a product downloads, Hoard asks which of its files to save (above): what you leave out of it, it
+    remembers, and asks again next time.</p>
+  <ul id="fileRules" class="file-rules"></ul>
+  <div class="rule-add"><select id="ruleWhat" aria-label="What to leave out"></select>
+    <input id="ruleWords" maxlength="200" placeholder="quest, android" aria-label="Words in a file's name" hidden>
+    <select id="ruleStore" aria-label="From which store"></select><button class="ghost sm" id="ruleAdd">Add</button></div>
   <h3>New in your library</h3>
   <select id="setNewDays" aria-label="Mark new things as New for">
     <option value="0">Don't mark anything New</option>
@@ -1408,6 +1561,25 @@ body.less-motion .tour-try::before { animation: none; }
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
+  <h3 id="part-apprise">Notifications through Apprise</h3>
+  <p class="hint">Send the news you choose to Discord, Telegram, ntfy, email and many more, through
+    <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener noreferrer">Apprise</a>: an address
+    for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in
+    config.json. What's sent says how many, never a product's name.</p>
+  <p id="appriseKept" class="hint" aria-live="polite"></p>
+  <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
+    placeholder="discord://..."></textarea>
+  <div class="apprise-acts"><button class="ghost sm" id="appriseSave">Keep these addresses</button>
+    <button class="ghost sm" id="appriseTest">Send a test</button>
+    <button class="linkish" id="appriseForget">Forget them</button></div>
+  <div id="appriseEvents" class="apprise-events" role="group" aria-label="What to send">
+    <label class="check"><input type="checkbox" data-apprise-event="new"> New products the routine check finds</label>
+    <label class="check"><input type="checkbox" data-apprise-event="updates"> Updates the routine check finds</label>
+    <label class="check"><input type="checkbox" data-apprise-event="prices"> Products on my wishlists that got cheaper</label>
+    <label class="check"><input type="checkbox" data-apprise-event="tasks"> Tasks that finish or fail</label>
+    <label class="check"><input type="checkbox" data-apprise-event="routine"> The routine check, when it's done</label>
+    <label class="check"><input type="checkbox" data-apprise-event="other"> Other news: a new version of Hoard, files the check of my downloads found changed or missing</label>
+  </div>
   <h3 id="part-look">Appearance</h3>
   <label class="check">Language
     <select id="setLanguage" aria-label="Language">
@@ -1437,6 +1609,7 @@ body.less-motion .tour-try::before { animation: none; }
       <option value="dyslexic">OpenDyslexic, for dyslexia</option>
     </select></label>
   <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
+  <label class="check"><input type="checkbox" id="setCardOutlines"> Give product cards an outline and a faint background</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
@@ -1490,6 +1663,12 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
+  <h3 id="part-tip">Support Hoard</h3>
+  <p class="hint">Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.</p>
+  <div class="field"><a class="ghost sm" id="tipKofi" href="https://ko-fi.com/knowbodyonline" target="_blank" rel="noopener noreferrer">Tip on Ko-fi</a></div>
+  <h3 id="part-thanks">Acknowledgements</h3>
+  <p class="hint">Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.</p>
+  <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>
   </div>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
@@ -1503,6 +1682,8 @@ body.less-motion .tour-try::before { animation: none; }
         <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/></g>
       </svg>
       <p>Opening your projects</p>
+      <p class="splash-quote" aria-hidden="true"></p>
+      <div class="splash-count" hidden><span class="splash-bar" role="progressbar" aria-valuemin="0" aria-label="Opening your projects"><i></i></span><span class="n" aria-hidden="true"></span></div>
     </div>
   </div>
   <div id="pjJob" class="pj-job" hidden aria-live="polite"></div>
@@ -1555,6 +1736,15 @@ body.less-motion .tour-try::before { animation: none; }
   </div>
   <p class="muted" id="closeHow">Stopping keeps what's finished, and a half-downloaded file resumes next time where the
     store allows. <strong>Close now</strong> doesn't wait: use it if stopping takes too long.</p>
+</dialog>
+<dialog id="filesDialog" class="support-dialog files-dialog" aria-labelledby="filesTitle">
+  <h2 id="filesTitle">What files do you want to save?</h2>
+  <p class="files-of"><b id="filesName" translate="no"></b> <span id="filesBy" class="muted" translate="no"></span></p>
+  <p id="filesHas" class="files-has" aria-live="polite"></p>
+  <div id="filesList" class="files-list" hidden></div>
+  <div class="pick-go"><button class="ghost" data-files="cancel">Cancel</button>
+    <button class="ghost" data-files="pick" id="filesPick">Choose files</button>
+    <button class="primary" data-files="go" id="filesAll">Download everything</button></div>
 </dialog>
 <dialog id="pickDialog" class="support-dialog pick-dialog" aria-labelledby="pickTitle">
   <h2 id="pickTitle">Download</h2>
@@ -1643,21 +1833,28 @@ body.less-motion .tour-try::before { animation: none; }
 //@include shared.js
 const STORE_ORDER = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
 const shown = s => (DATA.enabled || {})[s] !== false;   // stores you don't use (Settings, or setup) are hidden
+// The stores shown, in the page's order.
 const usedStores = () => STORE_ORDER.filter(shown);
 // The stores you can import saved pages for, and the ones Hoard downloads from (Payhip is only read). The server
 // says which; these are the same, for before it has.
 const importable = s => (DATA.importable || ["booth", "jinxxy", "payhip", "itch"]).includes(s);
+// Whether Hoard downloads from a store.
 const downloadable = s => (DATA.downloadable || ["booth", "gumroad", "jinxxy", "itch"]).includes(s);
 let importStore = null, importing = null;
-const state = { view: "library", q: "", store: "", set: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false };
+const state = { view: "library", q: "", store: "", set: "", tags: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", copies: null, disk: "", fresh: false, ptype: "" };
 // Downloaded, or not yet (issue #17): "yes", "no", or "" for both
 const DISK = { yes: "Downloaded", no: "Not downloaded yet" };
+// Whether a product is downloaded.
 const onDisk = a => a.on_disk != null;
 let DATA = { items: [], stores: {}, labels: {}, job: {} }, byKey = new Map(), openKey = null, lastFocus = null, polling = null;
 
+// A store's name.
 const label = s => DATA.labels[s] || s;
+// A tile's letters and colour, for a product with no picture.
 const placeholder = a => `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b></span>`;
+// A product's picture (or its letters).
 const thumb = a => a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURIComponent(a.key))}" alt="" loading="lazy" decoding="async">` : placeholder(a);
+// How long ago a time was, in words ("5 min ago").
 function ago(iso) {
   if (!iso) return tr("never");
   const s = (Date.now() - Date.parse(iso)) / 1000;
@@ -1671,6 +1868,7 @@ function toast(msg) {
   clearTimeout(toastTimer);   // long enough to read: a longer message stays longer
   toastTimer = setTimeout(() => t.classList.remove("show"), Math.min(10000, Math.max(2600, String(msg).length * 60)));
 }
+// Send a change to Hoard, as JSON, and return its answer. Throws with Hoard's reason when it says no.
 async function post(url, body) {
   const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
@@ -1693,7 +1891,7 @@ async function load() {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
   }
   $("#version").textContent = DATA.version || "";
-  for (const a of DATA.items) a.hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
+  for (const a of DATA.items) withStoreTags(a).hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
   renderStores(); render(); showJob(DATA.job);
   if (DATA.job && DATA.job.running) startPolling();
@@ -1714,9 +1912,10 @@ function matches(a, skip) {
   if (skip !== "fresh" && state.fresh && !a.new) return false;
   if (state.store && !inSets() && a.store !== state.store) return false;   // (Sets: every set's tile, or the one open)
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
+  if (skip !== "ptype" && state.ptype && a.type !== state.ptype) return false;   // what it is (issue #223)
   if (!shown(a.store)) return false;
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
-  for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
+  if (state.q && !searchMatches(a, state.q)) return false;   // (words, and prefixes: creator:, tag:...)
   return true;
 }
 const SORTS = {
@@ -1726,14 +1925,17 @@ const SORTS = {
   // the newest first; items listed before Hoard kept the time they appeared go last (issue #18)
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || coll.compare(a.name, b.name),
 };
-const filtersActive = () => state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
+// Whether any search or filter is narrowing the library down.
+const filtersActive = () => state.ptype || state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
 /* ---------- rendering */
 // issue #111: copies of the same product (bought more than once, in several versions, or on two stores, by the same
 // picture, name and creator: hoard/library.py) show as one tile. Choosing it shows them all, as "Copies of". Not
 // while selecting, so each can be chosen.
 let STACK = true, stackSize = new Map(), stackStores = new Map();   // the first copy's key -> how many copies, and their stores
+// The key a product's copies share, or null.
 const stackKey = a => a.stack_key || null;
+// The products with each one's copies shown as one tile (counting them), unless copies aren't stacked.
 function stacked(list) {
   stackSize = new Map(); stackStores = new Map();
   if (!STACK || sel.on || state.copies) return list;
@@ -1754,6 +1956,7 @@ function showCopies(a, field = "match_key") {
   state.copies = { field, key: a[field], name: a.name, store: "" };
   state.q = ""; state.store = ""; state.creator = ""; state.disk = ""; state.fresh = false; state.tags.clear(); render();
 }
+// Draw the library as it is now: the tiles, filters, counts and status, and the address.
 function render() {
   if (!inSets()) state.set = "";
   wishScope();
@@ -1765,6 +1968,7 @@ function render() {
 // only as the library loaded, a load while you were in another view (a routine check finishing, say) left them
 // counting that view (all 0 in Hidden) once you came back.
 let storeSegShown = "";
+// The store tabs, each with how many products the view has from it.
 function renderStoreSeg() {
   const counts = {};
   const here = DATA.items.filter(inView);
@@ -1773,9 +1977,10 @@ function renderStoreSeg() {
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
       `<span class="dot ${s}"></span>${label(s)}<span class="n">${(counts[s] || 0).toLocaleString()}</span></button>`).join("") +
-    `<button role="radio" class="sets" data-store="Sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
+    `<button role="radio" class="sets" data-store="Sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and Wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
   if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
+// The Stores panel: each store, whether you're signed in, its count, and its buttons.
 function renderStores() {
   const job = DATA.job || {};
   $("#storeRows").innerHTML = usedStores().map(s => {
@@ -1811,7 +2016,9 @@ function renderStores() {
   $("#signinsMissing").hidden = !unprotected;
   if (DATA.signins_note && !unprotected) $("#signinsNote").textContent = DATA.signins_note;
   $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
+  $("#menuDot").hidden = $("#warnDot").hidden;   // (Stores is in the Menu)
 }
+// A product's tile: its picture, name, creator, store and marks (copies, downloaded, new).
 const slotHTML = a => {
     const n = stackSize.get(a.key) || 0;
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
@@ -1830,6 +2037,7 @@ function rowMeta(a) {
   return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store}"></span>${label(a.store)}</span>` +
     `<span class="rm-state ${how}">${esc(tr(state))}</span><span class="rm-when">${esc(shortDay(a.added))}</span></span>`;
 }
+// Draw the tiles (or why there are none).
 function renderGrid(list) {
   (cards = cards || lazyCards($("#grid"))).show(list, slotHTML);
   const empty = $("#empty");
@@ -1849,6 +2057,7 @@ function renderGrid(list) {
   }
   empty.hidden = list.length > 0 || (inSets() && !DATA.error && DATA.items.length > 0);   // (Sets says what it has)
 }
+// The filters for the products shown: tags, downloaded or not, and creators.
 function renderFacets(list) {
   renderTagFacets(list);
 
@@ -1870,6 +2079,7 @@ function renderFacets(list) {
       (both ? ` ${both} are owned on more than one store.` : "")
     : "";
 }
+// The status line: what's searched and filtered (each to clear), and how many things are shown.
 function renderStatus(list) {
   const pills = [];
   if (state.copies) pills.push(["copies", "", "Copies of", state.copies.name]);
@@ -1879,7 +2089,9 @@ function renderStatus(list) {
   if (state.disk) pills.push(["disk", "", "Show", DISK[state.disk]]);
   if (state.fresh) pills.push(["fresh", "", "Show", "New"]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
+  if (state.ptype) pills.push(["ptype", "", "Product type", tr(PRODUCT_TYPES[state.ptype] || state.ptype)]);
   const total = DATA.items.filter(a => inView(a) && shown(a.store)).length;   // this view: Library, Archive, ...
+  // "1 thing" or "n things".
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   for (const [a, here] of [[$('.apptabs a[href="/"]'), !inSets()], [$('.apptabs a[href="/#store=Sets"]'), inSets()]])
     if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
@@ -1893,6 +2105,7 @@ function renderStatus(list) {
       `<b>${l}</b> ${esc(text)}<span aria-hidden="true">×</span></button>`).join("") +
     (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
 }
+// Put the search box, tabs and sort as the state says, and the glow in the store's colour.
 function syncControls() {
   if ($("#q").value !== state.q) $("#q").value = state.q;
   for (const b of $("#storeSeg").children) b.setAttribute("aria-checked", String(b.dataset.store === state.store));
@@ -1909,6 +2122,7 @@ function showJob(job) {
   el.textContent = job && job.message || "";
   taskCount(job && job.running ? 1 + (job.queue || []).length : 0);
 }
+// Follow a job while it runs, reading the library again when its counts change.
 function startPolling() {
   if (polling) return;
   let lastCounts = JSON.stringify(DATA.stores);
@@ -1930,6 +2144,7 @@ function startPolling() {
     } catch (e) { clearInterval(polling); polling = null; showJob(null); }
   }, 1000);
 }
+// Start a sign-in, refresh or sign-out for some stores (all: every product, not only what's new).
 async function runJob(url, stores, all = false) {
   if (!navigator.onLine && !url.endsWith("logout")) {
     toast(url.endsWith("/login") ? "You're offline. Signing in needs a connection." : "You're offline. Refreshing needs a connection.");
@@ -1943,6 +2158,7 @@ async function runJob(url, stores, all = false) {
     if (url.endsWith("/login")) toast(`Sign in to ${label(stores[0])} in the window that opened, then close it.`);
   } catch (e) { toast(e.message); }
 }
+// Open the Stores panel or close it (open: which; else the other way).
 function openStores(open) {
   const p = $("#stores"); const show = open ?? p.hidden;
   p.hidden = !show; $("#storesBtn").setAttribute("aria-expanded", String(show));
@@ -1970,6 +2186,7 @@ async function addPayhipShops(add) {
   } catch (e) { return null; }
   return apiPost("/api/settings", { payhip_shops: [...current, ...add] });
 }
+// Add a Payhip shop to read, once you say so.
 async function addShop(shop) {
   const host = shop.replace(/^https:\/\//, "");
   if (!await ask(tr("Add {0} to your Payhip shops? Hoard will then open its products' links, and read your purchases there when you refresh Payhip. Only add a shop you bought from.", host), tr("Add it"))) return;
@@ -1978,6 +2195,7 @@ async function addShop(shop) {
     : r.ok ? tr("Added. Refresh Payhip to open its products from here.") : (r.data.error || tr("It wasn't added.")));
   if (r && r.ok) await load();
 }
+// Open a product's details: its picture, store, creator, tags, type, sets, files and buttons.
 function showDetail(a, focus = true) {
   openKey = a.key;
   markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
@@ -2005,6 +2223,7 @@ function showDetail(a, focus = true) {
             ["Added", esc(shortDay(a.added)) || "—"], ["Tags", a.tags.length]]) +
     (a.also_in.length ? `<p class="note">You also own this on ${a.also_in.map(label).join(" and ")}. ` +
       `<button class="linkish" data-act="others">Show all copies</button></p>` : "") +
+    stackNote(a) +
     `<div class="actions">${main}</div>` +
     `<p class="copy">${onDisk(a) ? `<span class="ondisk">On disk${a.update ? ", with an update" : ""}</span>`
       : downloadable(a.store) ? `<span class="muted">Not downloaded yet. Hoard keeps the copy in your downloads folder.</span>`
@@ -2018,12 +2237,15 @@ function showDetail(a, focus = true) {
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
   if (focus) $("#detail .x").focus();
+  saveHash();
 }
+// Close the details, focusing the tile they were for.
 function closeDetail() {
   if (!openKey) return;
   $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   const back = document.querySelector(`.slot[data-key="${CSS.escape(openKey)}"]`) || lastFocus;
   openKey = null; markCurrent(null); if (back) back.focus();
+  saveHash();
 }
 // Close the details and empty them, so nothing of the item stays in the page (it's only out of view once closed).
 function forgetDetail() {
@@ -2042,8 +2264,11 @@ function saveHash() {
   if (state.fresh) p.set("new", "1");
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.sort !== "name") p.set("sort", state.sort);
-  const h = p.toString(); history.replaceState(null, "", h ? "#" + h : location.pathname);
+  if (state.ptype) p.set("type", state.ptype);
+  if (openKey) p.set("open", openKey);   // (a product's details: a place, for Back and Forward)
+  setAddress(p);
 }
+// Read the search, filters and place from the address.
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
@@ -2051,6 +2276,7 @@ function readHash() {
   state.disk = DISK[p.get("downloaded")] ? p.get("downloaded") : "";
   state.fresh = p.get("new") === "1";
   state.sort = sortFrom(p.get("sort"), SORTS);
+  state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";
   if (p.get("open")) openKey = p.get("open").slice(0, 400);   // a product, from a set's folder in Downloads
@@ -2071,6 +2297,7 @@ $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
+// Download what's new from some stores (choosing what, in the downloads dialog).
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
 $("#downloadAll").addEventListener("click", () => downloadNew(usedStores().filter(downloadable)));
 // issue #106: download what's selected, from every store it's on, as one job
@@ -2096,11 +2323,13 @@ $("#storeRows").addEventListener("click", e => {
 });
 /* ---------- itch.io's API key: checked with itch.io and kept by Hoard (POST /api/itch-key), never shown again */
 let itchDone = null;
+// Ask for an itch.io API key (done runs once it's saved).
 function openItchKey(done) {
   itchDone = done || null;
   $("#itchKey").value = ""; $("#itchNote").textContent = ""; $("#itchSave").disabled = false;
   $("#itchDialog").showModal(); $("#itchKey").focus();
 }
+// Check the itch.io key with itch.io, then keep it.
 async function saveItchKey() {
   const key = $("#itchKey").value.trim();
   if (!key) { $("#itchNote").textContent = "Paste the key from itch.io first."; return; }
@@ -2123,6 +2352,7 @@ $("#itchDialog").addEventListener("close", () => { $("#itchKey").value = ""; });
    each page by hand. It sends nothing anywhere: the file goes to your downloads. (No backticks or "${" in it: it's
    kept in a String.raw template.) */
 const PAYHIP_SAVER = String.raw`(async () => {
+  // Show a message on the shop's page.
   const say = m => { note.textContent = m; };
   const note = document.createElement("div");
   note.style.cssText = "position:fixed;z-index:2147483647;left:50%;top:16px;transform:translateX(-50%);max-width:90vw;" +
@@ -2134,7 +2364,9 @@ const PAYHIP_SAVER = String.raw`(async () => {
   }
   document.body.appendChild(note);
   const start = location.href.split(/[?#]/)[0].split("/b-account")[0] + "/b-account";
+  // An element's text, its spaces collapsed.
   const text = e => ((e && e.textContent) || "").replace(/\s+/g, " ").trim();
+  // Whether a link is to one of your products in the shop's library.
   const isProduct = h => /\/b-account\/(digital|products?|downloads?)\/[^/?#]+\/?$/i.test(h);
   const parts = [], seen = new Set(), products = new Set();
   let url = start, first = null;
@@ -2199,9 +2431,11 @@ $("#payhipSaverCopy").addEventListener("click", async () => {
 const PAGE_FILE = /\.(mhtml|mht|html|htm)$/i;
 const IMPORT_BATCH = { pages: 10, bytes: 24 * 1024 * 1024 };   // per request, well inside what Hoard accepts
 const MOST_PAGES = 2000;
+// A count, with the word for one or many.
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const shopName = s => String(s).replace(/^https:\/\//, "");
 
+// Import saved store pages (as many as MOST_PAGES), saying what was found in them.
 async function importPages(files, store) {
   const all = files.filter(f => PAGE_FILE.test(f.name)), pages = all.slice(0, MOST_PAGES);
   if (!pages.length) {
@@ -2241,6 +2475,7 @@ async function importPages(files, store) {
     finishImport(done, files.length - all.length, stopped);
   }
 }
+// Send the pages to Hoard a few at a time, adding up what was found, until they're all sent or it's stopped.
 async function sendPages(files, store, trust, done) {
   let i = 0;
   while (i < files.length && !importing.stop) {
@@ -2280,6 +2515,7 @@ async function sendPages(files, store, trust, done) {
     done.added.push(...(r.data.added_shops || []));
   }
 }
+// Show the import panel's progress.
 function showImport(done, message, finished = false, title = "Importing pages") {
   $("#impPanel").hidden = false;
   $("#impTitle").textContent = title;
@@ -2290,6 +2526,7 @@ function showImport(done, message, finished = false, title = "Importing pages") 
   $("#impProblems").innerHTML = done.problems.map(p => `<li>${esc(p)}</li>`).join("");
   $("#impLog").textContent = done.log.join("\n");
 }
+// Say what an import found: the products from each store, and anything that couldn't be read.
 function finishImport(done, notPages, stopped) {
   if (notPages) done.problems.push(notPages === 1 ? tr("{0} file isn't a saved page (.mhtml or .html), so it was left alone.", notPages)
                                                   : tr("{0} files aren't saved pages (.mhtml or .html), so they were left alone.", notPages));
@@ -2319,9 +2556,11 @@ $("#importDir").addEventListener("change", e => {
   e.target.value = "";
   importPages(files, null);
 });
+// The files dropped on the window, with everything in the folders dropped (at most most of them).
 async function filesIn(entries, most = 5000) {
   // Files and folders dropped on the window, with everything inside the folders
   const out = [];
+  // Add a dropped file, or everything in a dropped folder.
   const walk = async entry => {
     if (out.length >= most) return;
     if (entry.isFile) { out.push(await new Promise((ok, fail) => entry.file(ok, fail))); return; }
@@ -2354,13 +2593,16 @@ document.addEventListener("drop", e => {
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
 });
+// Set the tiles' size.
 function setZoom(v) { document.documentElement.style.setProperty("--slot-size", v + "px"); zoom.value = v; }
 zoom.addEventListener("input", () => { setZoom(zoom.value); try { localStorage.setItem("hoard-tile-size", zoom.value); } catch (e) {} });
 zoom.addEventListener("change", () => uiSave({ tile_size: Number(zoom.value) }));   // kept with the other layout choices
 try { const z = localStorage.getItem("hoard-tile-size"); if (z) setZoom(z); } catch (e) {}
-function applyStack(on) { STACK = on !== false; $("#stackCopies").checked = STACK; }
-$("#stackCopies").addEventListener("change", e => { applyStack(e.target.checked); uiSave({ stack: STACK }); render(); });
+// Show copies as one tile, or each on its own.
+function applyStack(on) { STACK = on !== false; $("#stackCopies").setAttribute("aria-pressed", String(STACK)); }
+$("#stackCopies").addEventListener("click", () => { applyStack(!STACK); uiSave({ stack: STACK }); render(); });
 
+// Add a value to a set, or take it out when it's there.
 const toggle = (set, v) => set.has(v) ? set.delete(v) : set.add(v);
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), c = e.target.closest("[data-creator]"), d = e.target.closest("[data-disk]");
@@ -2376,12 +2618,13 @@ document.addEventListener("click", e => {
   if (e.target.closest("#openStores")) { openStores(true); return; }
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.copies = null; state.disk = ""; state.fresh = false; }
+  if (k === "all") { state.q = ""; state.store = ""; state.creator = ""; state.tags.clear(); state.copies = null; state.disk = ""; state.fresh = false; state.ptype = ""; }
   else if (k === "fresh") state.fresh = false;
   else if (k === "copies") state.copies = null;
   else if (k === "disk") state.disk = "";
   else if (k === "q") state.q = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v);
+  else if (k === "ptype") state.ptype = "";
   render();
 });
 $("#grid").addEventListener("click", e => {
@@ -2401,7 +2644,11 @@ $("#detail").addEventListener("click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = byKey.get(openKey);
   if (tagDetailAction(b.dataset.act, b, a)) return;
-  if (b.dataset.act === "download") { startDownload([a.store], a.name, a.key); return; }
+  if (b.dataset.act === "download") {   // which of its files, asked first (issue #225)
+    askFiles({ key: a.tag_key, store: a.store, name: a.name, creator: a.creator, names: (a.files || []).map(f => f.name) },
+             files => { DL_FILES = files; startDownload([a.store], a.name, a.key); });
+    return;
+  }
   if (b.dataset.act === "mark") { markItems([a], b.dataset.kind, b.dataset.on === "true"); return; }
   if (b.dataset.act === "purge") { purgeItems([a]); return; }
   if (b.dataset.act === "delete-files") { deleteFiles([a]); return; }
@@ -2412,6 +2659,7 @@ $("#detail").addEventListener("click", e => {
   if (b.dataset.act === "close") closeDetail();
   else if (b.dataset.act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
   else if (b.dataset.act === "others") showCopies(a);
+  else if (b.dataset.act === "apart") markItems([a], "apart", b.dataset.on === "true");
 });
 $("#scrim").addEventListener("click", closeDetail);
 document.addEventListener("keydown", e => {
@@ -2429,6 +2677,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h"
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-h", e.target.offsetHeight + "px")).observe($(".shelf"));
 {   // tabs out of sight (a very narrow window) fade at the edge they're beyond, so it shows there are more
   const seg = $(".shelf .seg");
+  // Fade the tabs' edges where there are more tabs beyond them.
   const edges = () => {
     seg.classList.toggle("more-left", seg.scrollLeft > 2);
     seg.classList.toggle("more-right", seg.scrollLeft + seg.clientWidth < seg.scrollWidth - 2);
@@ -2452,6 +2701,13 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  goTo: () => {   // Back or Forward (shared.js): the tab, set, filters and details the address names
+    const want = new URLSearchParams(location.hash.slice(1)).get("open"), was = openKey;
+    readHash();
+    if (!want) { openKey = was; closeDetail(); }
+    render();
+    if (want && byKey.has(want) && (want !== was || !$("#detail").classList.contains("open"))) showDetail(byKey.get(want), false);
+  },
   all: () => DATA.items,
   membersOf: key => {   // a stack's copies, all chosen together (as many as "Copies of" shows)
     const a = byKey.get(key), k = a && stackKey(a);
@@ -2465,6 +2721,7 @@ const T = {
       { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
   }),
 };
+// Do what a button in the tag manager says: keep a suggestion, hide it, rename a tag or delete one.
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2491,6 +2748,7 @@ async function tagPanelAction(b) {
     if (word !== null) return changeTags({ action: "match", name: t, match: word });
   }
 }
+// The tag manager's buttons and fields.
 function wireTags() {
   $("#tagsBtn").addEventListener("click", () => openTagPanel());
   $("#manageTags").addEventListener("click", () => openTagPanel(true));
@@ -2502,6 +2760,10 @@ function wireTags() {
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
   wireSelection();
+  wireBar();
+  wireSearch();
+  wireTypes();
+  wireFiles();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });
@@ -2568,6 +2830,7 @@ async function startDownload(stores, only, item, keys) {   // item: the library 
   showDownload({ running: true, message: "Starting", log: [] });
   pollDownload();
 }
+// Follow the download running, showing its progress, until it's done.
 async function pollDownload() {
   clearTimeout(dlTimer);
   let job;
@@ -2582,6 +2845,7 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+// Show a download's progress: what it's doing, each file's transfer, and what it found when it's done.
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
@@ -2609,7 +2873,7 @@ function showDownload(job) {
 
 /* ---------- the download panels beside the details (issue #85): the page's styles place them by these */
 function wireApp() {
-  $("#syncBtn").addEventListener("click", startSync);
+  $("#syncBtn").addEventListener("click", confirmSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
   wireSupportReport();
   wireBackup();
@@ -2703,13 +2967,16 @@ function setupPicked(st, s) {
   if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
   return !!((DATA.stores || {})[s] || {}).count;
 }
+// The setup assistant's steps (Payhip's and closing only when they apply).
 const setupSteps = () => ["language", "access", "look", "welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
+// What the setup assistant needs to know (the stores, the browser, the folders...).
 async function setupStatus() {
   SETUP.st = await (await api("/api/setup", { cache: "no-store" })).json();
   return SETUP.st;
 }
+// Open the setup assistant at its first step.
 async function openSetup() {
   try { await setupStatus(); } catch (e) { toast("Hoard isn't running. Open it again."); return; }
   closeSettings(); openStores(false); openTagPanel(false);
@@ -2723,6 +2990,7 @@ async function openSetup() {
   $("#setup").hidden = false;
   renderSetup();
 }
+// Close the setup assistant, following any sign-in it started.
 function closeSetup() {
   $("#setup").hidden = true; clearTimeout(SETUP.timer);
   // A sign-in or browser install the assistant started keeps going once it's closed: the library page follows it
@@ -2749,6 +3017,7 @@ const LANGUAGE_NAMES = { en: "English", ja: "日本語", ko: "한국어" };
 const SETUP_VIEWS = {
   language: () => {
     const now = (DATA.display || {}).language || "system", here = LANGUAGE_NAMES[document.documentElement.lang] || "English";
+    // A language to choose, in its own words.
     const choice = (v, label, own) => `<label><input type="radio" name="setupLang" value="${v}"${now === v ? " checked" : ""}>` +
       `<span>${own ? `<strong translate="no" lang="${v}">${label}</strong>` : `<strong>${label}</strong>`}</span></label>`;
     return `<h2 id="setupTitle">Choose your language</h2>
@@ -2772,6 +3041,7 @@ const SETUP_VIEWS = {
       <label><span>Light or dark</span><select id="setupMode">${opt("system", "Match my computer", d.mode || "system")}${opt("light", "Light", d.mode)}${opt("dark", "Dark", d.mode)}</select></label>
       <label><span>Store colours</span><select id="setupColours">${opt("standard", "Standard", d.colours === "custom" ? "standard" : d.colours)}${opt("colourblind", "Easier to tell apart (colour blindness)", d.colours)}</select></label>
       <label class="tick"><input type="checkbox" id="setupSpacing"${d.spacing ? " checked" : ""}> More space between letters, words and lines</label>
+      <label class="tick"><input type="checkbox" id="setupCardOutlines"${d.card_outlines ? " checked" : ""}> Give product cards an outline and a faint background</label>
       <label class="tick"><input type="checkbox" id="setupMotion"${d.reduce_motion ? " checked" : ""}> Reduce motion</label>
       <label class="tick"><input type="checkbox" id="setupPause"${d.pause_animations ? " checked" : ""}> Pause animated pictures</label>
     </div>
@@ -2841,6 +3111,7 @@ const SETUP_VIEWS = {
     <p class="muted">Run this again any time from Settings.</p>`,
 };
 
+// Follow a sign-in or install the assistant started, drawing its step again as it goes, until onDone.
 function pollSetup(onDone, show) {
   clearTimeout(SETUP.timer);
   SETUP.watching = true;
@@ -2863,8 +3134,10 @@ const SETUP_WIRES = {
     });
   },
   access: () => {
+    // The display choices made in the assistant.
     const read = () => ({ text_size: Number($("#setupTextSize").value), font: $("#setupFont").value, mode: $("#setupMode").value,
                           colours: $("#setupColours").value, spacing: $("#setupSpacing").checked,
+                          card_outlines: $("#setupCardOutlines").checked,
                           reduce_motion: $("#setupMotion").checked, pause_animations: $("#setupPause").checked });
     $("#setupBody .access-pick").addEventListener("change", async () => {
       const display = read();
@@ -2919,6 +3192,7 @@ const SETUP_WIRES = {
     });
   },
 };
+// Draw the setup assistant's step.
 function renderSetup() {
   const list = setupSteps(), name = list[Math.min(SETUP.step, list.length - 1)];
   $("#setupSteps").innerHTML = list.map((_, i) => `<span class="${i <= SETUP.step ? "done" : ""}"></span>`).join("");
@@ -2974,6 +3248,7 @@ function setupNotDone(name) {
     return { ask: "You haven't signed in to any store yet, so Hoard can't read your library until you do. Go on anyway?" };
   return null;
 }
+// The setup assistant's buttons: Next, Back and Skip.
 function wireSetup() {
   $("#setupNext").addEventListener("click", async () => {
     if (SETUP.busy) return;
@@ -3005,13 +3280,29 @@ function wireSetup() {
   });
 }
 
+/* ---------- issue #217: why copies are shown together, and "Not a copy" for one that isn't */
+const STACK_WHY = { picture: "the same picture", name: "the same name and creator", look: "the same name, and pictures that look alike",
+                    alike: "names alike, by the same creator" };
+// Why a product is shown with its copies (or isn't), with a button to change it.
+function stackNote(a) {
+  if (a.apart) return `<p class="note">${esc(tr("You said this isn't a copy of anything, so it's shown on its own."))} ` +
+    `<button class="linkish" data-act="apart" data-on="false">${esc(tr("Show it with its copies again"))}</button></p>`;
+  if (!a.stack_key || !(a.stack_why || []).length) return "";
+  return `<p class="note">${esc(tr("Shown with its copies, as they have {0}.", listed(a.stack_why.map(w => tr(STACK_WHY[w])))))} ` +
+    `<button class="linkish" data-act="apart" data-on="true">${esc(tr("Not a copy"))}</button></p>`;
+}
+
 /* ---------- archive, hide and remove; the hidden library and its PIN */
 const VIEWS = { library: "Library", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+// Whether a product belongs in the view shown (Library, Archive, Hidden or Removed).
 const inView = a => state.view === "library" ? !a.mark : state.view === "archive" ? a.mark === "archived" : a.mark === state.view;
+// The view a product is in.
 const viewOf = a => !a.mark ? "library" : a.mark === "archived" ? "archive" : a.mark;
+// The views to choose from, with their counts (Hidden only once there's a PIN, Removed only when it has some).
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.items) if (shown(a.store)) (count[viewOf(a)] ||= new Set()).add(a.key);   // as the grid counts
+  // How many products a view has.
   const n = v => (count[v] || new Set()).size;
   $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "library" || v === "archive" || state.view === v
       || (v === "removed" && n(v)) || (v === "hidden" && p.pin_set)).map(v =>
@@ -3026,7 +3317,9 @@ function renderViews() {
         <button class="ghost sm" data-privacy="phrase">${(DATA.privacy || {}).recovery_set ? "New recovery phrase" : "Create a recovery phrase"}</button>` : "";
   if (selecting()) markSelected();   // (the selection's actions follow the view)
 }
+// A product's buttons to archive, hide or remove it, or undo that.
 function markButtons(a) {
+  // One of those buttons.
   const b = (kind, on, text) => `<button class="ghost sm" data-act="mark" data-kind="${kind}" data-on="${on}">${text}</button>`;
   if (a.mark === "removed") return b("removed", false, "Restore") + `<button class="ghost sm" data-act="purge">Delete for good</button>` +
     (onDisk(a) ? `<button class="ghost sm" data-act="delete-files">Delete downloaded files</button>` : "");
@@ -3036,6 +3329,7 @@ function markButtons(a) {
     b("hidden", true, "Hide") + b("removed", true, "Remove") + del;
 }
 function markActions(v) {   // Archive, Hide and Remove, or their undoing, for the view you're in
+  // One of those actions, for the selection.
   const m = (kind, on, label) => ({ label, run: list => markItems(list, kind, on) });
   if (v === "removed") return [m("removed", false, "Restore")];
   if (v === "hidden") return [m("hidden", false, "Unhide"), m("removed", true, "Remove")];
@@ -3048,13 +3342,17 @@ const MARK_DONE = {   // [one, many]
   "removed false": ["Restored 1 item.", "Restored {0} items."],
   "hidden true": ["Hidden 1 item. It's in Hidden, behind your PIN.", "Hidden {0} items. They're in Hidden, behind your PIN."],
   "hidden false": ["1 item is no longer hidden.", "{0} items are no longer hidden."],
+  "apart true": ["Shown on its own now: it isn't stacked with other products.", "{0} items are shown on their own now."],
+  "apart false": ["It's stacked with its copies again.", "{0} items are stacked with their copies again."],
 };
+// Archive, hide or remove products, or undo that (a PIN is set first, the first time anything is hidden).
 async function markItems(list, kind, on) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
   if (!keys.length) { toast("Select some items first."); return; }
   if (kind === "hidden" && on && !(DATA.privacy || {}).pin_set && !(await pinDialog("set"))) return;
   const r = await apiPost("/api/marks", { kind, keys, on });
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  if (kind === "apart") state.copies = null;   // (its stack is changing: back to the library, where the change shows)
   sel.ids.clear(); T.closeDetail(); await load();
   toast(tr(MARK_DONE[`${kind} ${on}`][keys.length === 1 ? 0 : 1], keys.length));
   // issue #81: removing something you downloaded offers to delete its files too, so Downloads doesn't keep it
@@ -3063,6 +3361,7 @@ async function markItems(list, kind, on) {
     if (downloaded.length) await deleteFiles(downloaded, true);
   }
 }
+// Delete products' downloaded files, once you say so.
 async function deleteFiles(list, justRemoved = false) {
   const keys = [...new Set(list.filter(a => a && onDisk(a)).map(a => a.tag_key))];
   if (!keys.length) { toast("None of those are downloaded."); return; }
@@ -3082,6 +3381,7 @@ async function deleteFiles(list, justRemoved = false) {
          r.data.kept.length && tr(r.data.kept.length === 1 ? "A folder still has other files, so it was kept." : "{0} folders still have other files, so they were kept.",
                                   r.data.kept.length)].filter(Boolean).join(" "));
 }
+// Delete products from Hoard for good, once you say so.
 async function purgeItems(list) {
   const keys = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
   if (!keys.length) return;
@@ -3092,6 +3392,7 @@ async function purgeItems(list) {
   sel.ids.clear(); T.closeDetail(); await load();
   toast(tr(r.data.deleted === 1 ? "Deleted {0} item from Hoard's library." : "Deleted {0} items from Hoard's library.", r.data.deleted));
 }
+// Show a view (Hidden only once it's unlocked with the PIN).
 async function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {
     if (!(await pinDialog("unlock"))) return;
@@ -3109,6 +3410,7 @@ const PIN_TEXT = {
   recover: ["Reset your PIN", "Enter your 6 recovery words, then choose a new PIN. Your hidden items stay hidden."],
   phrase: ["Your recovery phrase", "Write these 6 words down, in order, and keep them somewhere safe away from this computer. They're the only way to reset your PIN, and Hoard won't show them again."],
 };
+// Set the PIN dialog out for what it's doing: setting, changing or checking the PIN, or the recovery phrase.
 function pinLayout(mode) {
   PIN.mode = mode;
   $("#pinTitle").textContent = PIN_TEXT[mode][0];
@@ -3125,6 +3427,7 @@ function pinLayout(mode) {
   $("#pinOk").textContent = mode === "phrase" ? "I've written them down" : "OK";
   $("#pinNote").textContent = "";
 }
+// Show the recovery phrase, asking for two of its words back.
 function showPhrase(phrase) {
   const words = phrase.split(" ");
   PIN.words = words;
@@ -3136,6 +3439,7 @@ function showPhrase(phrase) {
   pinLayout("phrase");
   $("#checkWordA").focus();
 }
+// Make a new recovery phrase, and show it.
 async function newPhrase() {
   const r = await apiPost("/api/pin/phrase");
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
@@ -3143,6 +3447,7 @@ async function newPhrase() {
   $("#pinDialog").showModal();
   showPhrase(r.data.recovery);
 }
+// Open the PIN dialog, resolving with whether it was done.
 function pinDialog(mode) {
   return new Promise(resolve => {
     PIN.resolve = resolve;
@@ -3152,14 +3457,17 @@ function pinDialog(mode) {
     (mode === "change" ? $("#pinCurrent") : $("#pinInput")).focus();
   });
 }
+// Close the PIN dialog, saying whether it was done.
 function pinDone(ok) {
   if ($("#pinDialog").open) $("#pinDialog").close();
   const r = PIN.resolve; PIN.resolve = null;
   if (r) r(ok);
 }
+// Send what was typed in the PIN dialog.
 async function pinSubmit() {
   const pin = $("#pinInput").value, note = $("#pinNote");
   if (PIN.mode === "phrase") {   // both check words must match (the first four letters are enough)
+    // Whether a word typed is the phrase's (its first four letters are enough).
     const same = (typed, word) => { const t = typed.trim().toLowerCase(); return t === word || (t.length >= 4 && word.startsWith(t)); };
     if (!same($("#checkWordA").value, PIN.words[PIN.checks[0]]) || !same($("#checkWordB").value, PIN.words[PIN.checks[1]])) {
       note.textContent = "Those don't match the words above. Check them, and try again."; return;
@@ -3188,6 +3496,7 @@ async function pinSubmit() {
   if (r.data.recovery) { showPhrase(r.data.recovery); return; }   // the first PIN: show its recovery phrase once
   pinDone(true);
 }
+// The views, and the PIN, lock and phrase buttons.
 function wirePrivacy() {
   $("#views").addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) showView(b.dataset.view); });
   $("#viewBar").addEventListener("click", async e => {

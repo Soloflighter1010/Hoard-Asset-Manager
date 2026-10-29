@@ -7,6 +7,7 @@ using System.Collections.Generic;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>How much of each product a project has, by the GUIDs of its packages' files.</summary>
     public static class ProjectShare
     {
         /// <summary>Of a package's GUIDs, how many this project has under Assets/ (have) out of how many could be
@@ -21,6 +22,53 @@ namespace SoloFlighter.Hoard
                 else if (InAssets(path)) { have++; total++; }           // in the project, as this product's
                 // else under Packages/ (or elsewhere): another package's file, not counted
             }
+        }
+
+        /// <summary>How much of a package the project has (issue #188): 2, all of it, or all but a few files of a big
+        /// one (a sample scene or a read-me you deleted); 1, part of it: enough of its own files that it isn't
+        /// chance; 0, none, or only a stray file or two of a big package, which another product could have brought
+        /// (a texture or a script both carry).</summary>
+        public static int Level(int have, int total)
+        {
+            if (total <= 0 || have <= 0) return 0;
+            if (have >= total || (total >= 20 && have * 100 >= total * 95)) return 2;
+            if (total <= 3) return 1;
+            return have >= 2 && have * 10 >= total ? 1 : 0;
+        }
+
+        /// <summary>Issue #189: what taking a product out of the project removes, its project paths in Assets/: the
+        /// files of its packages the project has, but not one another product in the project also carries (theirs:
+        /// the files of the other products here, a creator's shared shader say), so they keep working.</summary>
+        public static List<string> Removable(IEnumerable<string> guids, ICollection<string> theirs, Func<string, string> pathOf)
+        {
+            var paths = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (string g in guids)
+            {
+                if (theirs != null && theirs.Contains(g)) continue;
+                string path = (pathOf(g) ?? "").Replace('\\', '/');
+                if (InAssets(path)) paths.Add(path);
+            }
+            return new List<string>(paths);
+        }
+
+        /// <summary>The folders a removal leaves empty, deepest first, up to (not including) Assets/ itself: the
+        /// product's own folders. isEmpty tells whether a folder has nothing left in it once those paths are gone.</summary>
+        public static List<string> EmptiedFolders(IEnumerable<string> removed, Func<string, bool> isEmpty)
+        {
+            var found = new List<string>();
+            var asked = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string path in removed)
+            {
+                for (int i = path.LastIndexOf('/'); i > "Assets".Length; i = path.LastIndexOf('/', i - 1))
+                {
+                    string folder = path.Substring(0, i);
+                    if (!asked.Add(folder)) break;   // (looked at already, with what's above it)
+                    if (!isEmpty(folder)) break;
+                    found.Add(folder);
+                }
+            }
+            found.Sort((a, b) => b.Length != a.Length ? b.Length.CompareTo(a.Length) : string.CompareOrdinal(a, b));
+            return found;
         }
 
         /// <summary>Count, by the files that are the product's own (see SharedFiles).</summary>
@@ -69,8 +117,11 @@ namespace SoloFlighter.Hoard
             return changed;
         }
 
+        /// <summary>Whether a GUID is in more than one product's packages (so it can't say which is in the
+        /// project).</summary>
         public bool IsShared(string guid) { string was; return owner.TryGetValue(guid, out was) && was == null; }
 
+        /// <summary>Forget every GUID's product.</summary>
         public void Clear() { owner.Clear(); }
 
         /// <summary>The files a package is told by: those that are its product's own, or all of them if none are.</summary>

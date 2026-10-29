@@ -38,6 +38,7 @@ def _md(value) -> str:
 
 
 def _code(path) -> str:
+    """A path as Markdown code, its backticks swapped for quotes."""
     return "`" + _text(path, 400).replace("`", "'") + "`"
 
 
@@ -59,6 +60,7 @@ def entries(results: list[dict], when: str) -> list[dict]:
 
 
 def _add_to_log(project: Path, new: list[dict]) -> None:
+    """Add imports to the project's own record of what Hoard put in it (ProjectSettings/Hoard/imports.json)."""
     path = project.joinpath(*LOG_FILE)
     have: list = []
     if path.exists():

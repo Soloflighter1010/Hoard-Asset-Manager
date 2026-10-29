@@ -1,12 +1,12 @@
-Everyday choices are in **Settings** (top right). A few rarer ones only live in `config.json`.
+Everyday choices are in **Settings** (in the **Menu**, top right; or search for one with `settings:`). A few rarer ones only live in `config.json`.
 
 ## The Settings page
 
 Settings is a page of its own (from 5.1.3), the whole window below the bar, as [Projects](Projects) is: its parts
-are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Look**, **Sign-ins**,
-**Updates**, **Backup**, **Troubleshooting**) to jump to, or along the top in a narrow window. **×** or Escape
-closes it. Each change is **saved as you make it**: a box or a list straight away, a folder or the Payhip shops
-when you leave the field. The title bar says **Saved**.
+are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Notifications**,
+**Look**, **Sign-ins**, **Updates**, **Backup**, **Troubleshooting**, **Support Hoard**, **Acknowledgements**) to
+jump to, or along the top in a narrow window. **×** or Escape closes it. Each change is **saved as you make it**: a
+box or a list straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
 
 
 - **Downloads folder:** where downloaded files are saved. A `Hoard` folder in your Documents unless you choose
@@ -32,7 +32,18 @@ when you leave the field. The title bar says **Saved**.
 - **Payhip shops:** the shops you've bought from on Payhip, one per line, such as `myshop.store` or
   `payhip.com/ShopName`. Importing a shop's saved page adds it for you. Hoard lists what you bought there, and
   you download it from Payhip yourself. See [Stores](Stores#payhip).
+- **Store tags:** **Read the tags creators give their products** (5.2.0, on unless you turn it off): on Booth,
+  Jinxxy and itch.io, a few products' public pages each time a store is read. See [Tags](Tags).
 - **Offline:** **Save product images, so the library works offline**.
+- **Ask which files to save, before a product downloads** (5.2.0, on unless you turn it off): **Download** in an
+  item's details, **Update** and **Download more of it...** ask **What files do you want to save?** first. See
+  [Downloads](Downloads#which-files-to-save).
+- **Files to leave out** (5.2.0): files to leave out of every download, from every store or one: a kind of file
+  (**Unity packages**, **Archives**, **Layered images** such as PSDs, **Pictures and textures**, **Blender files**,
+  **Substance Painter projects**, **3D models**, **Sound**, **Video** or **Documents**), or files whose names have
+  words you give (such as `quest, android`). Sync, Download new and the routine check follow them; a file you tick
+  in Download new's list, or when Hoard asks which files to save, is downloaded all the same. See
+  [Downloads](Downloads#which-files-to-save).
 - **New in your library:** how long something that appeared in your library after a refresh keeps its **New**
   badge: a day, 3 days, a week (unless you choose otherwise), 2 weeks or a month, or never. See
   [Library](Library#finding-things).
@@ -47,6 +58,15 @@ when you leave the field. The title bar says **Saved**.
   downloads**: a sync you'd turned on keeps its timing. See [Downloads](Downloads#downloading).
   **Tell me when it finds something to download** (on unless you turn it off, from 3.1) shows a notification from
   your system when it finds new products or updates while Hoard is open in the background.
+- **Notifications through Apprise** (5.2.0): send the news you choose to Discord, Telegram, ntfy, email and
+  [many more](https://github.com/caronc/apprise/wiki), through Apprise. Type an address for each service, one a
+  line, then **Keep these addresses**, and **Send a test** to check it comes. Each address holds its service's
+  token, so Hoard keeps them as it keeps API keys (see [Security and Privacy](Security-and-Privacy)), never in
+  config.json; Settings only says how many are kept, and **Forget them** deletes them. Then tick what to send: new
+  products and updates the routine check finds, products on your wishlists that got cheaper, tasks that finish or
+  fail, the routine check when it's done, and other news (a new version of Hoard, files the check of your downloads
+  found changed or missing). Nothing is sent unless you tick it, and what's sent says how many, never a product's
+  name.
 - **Appearance** (from 3.2):
   - **Language** (from 3.3): **Match my computer**, **English**, **日本語** (Japanese) or **한국어** (Korean). Match
     my computer uses the first of these your system or browser asks for, and English if it asks for none of them.
@@ -57,7 +77,8 @@ when you leave the field. The title bar says **Saved**.
     one you choose.
   - **A theme**, each in a light and a dark version: **Hoard** (the cave and its gold), **Dragonfire**, **Frost
     Cave**, **Geode**, **Mossy Ruins**, **Synthwave**, **Sakura**, **Midnight & Paper** (true black, for OLED
-    screens, and white), **High contrast** and **Spooky Hoard**. In a theme whose accent is close to a store's
+    screens, and white), **High contrast**, and two for the seasons: **Spooky Hoard** and **Winter Hoard** (5.2.0:
+    snow and night skies, with holly red). In a theme whose accent is close to a store's
     colour, that store's colour shifts a little, so the two aren't mistaken for each other. **Store colours** (below)
     still apply in every theme.
   - **Style** (5.0): how Hoard lays everything out, apart from its colours. **Standard** is Hoard as it has always
@@ -76,6 +97,9 @@ when you leave the field. The title bar says **Saved**.
     letters; Japanese and Korean keep Hoard's own fonts.
   - **More space between letters, words and lines** (4.1.0): also easier to read for many, with or without
     OpenDyslexic.
+  - **Give product cards an outline and a faint background** (5.2.0): each product's card stands apart from the page,
+    in an outline as clear as quiet text, everywhere cards show (the Library, Downloads, sets, wishlists, Projects),
+    in every style and theme.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
     frame. Turn it off and they move again.
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
@@ -129,6 +153,12 @@ Also here:
   (asking first while something's running). On a Mac, **Command-Q** always quits, as **Quit Hoard** does.
 - **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
   window does: see [Closing Hoard while it's working](Downloads#closing-hoard-while-its-working).
+- **Support Hoard** (5.2.0): **Tip on Ko-fi** opens Hoard's Ko-fi page in your browser, to leave a tip if Hoard is
+  useful to you. Hoard itself sends nothing.
+- **Acknowledgements** (5.2.0): everything Hoard uses or ships (the browser it drives, its fonts, the Python
+  packages and what builds the apps), with each one's license. Choose one to read its license where Hoard has a
+  copy; the others link to theirs. The website's
+  [Acknowledgements](https://hoard.furryup.link/acknowledgements.html) page lists the same.
 
 ## Settings only in config.json
 
@@ -147,6 +177,7 @@ and keep it valid JSON.
 | `download_skip` | `[]` | Products to always skip when downloading, by tag key (**Always skip** in the list **Download new** shows; see [Downloads](Downloads)) |
 | `display.font` | `"standard"` | `"standard"` or `"dyslexic"` (OpenDyslexic; **Font** in Settings, **Accessibility**) |
 | `display.spacing` | `false` | More space between letters, words and lines (**Accessibility** in Settings) |
+| `display.card_outlines` | `false` | Product cards with an outline and a faint background (**Accessibility** in Settings) |
 | `display.glow` | `true` | The coloured glow behind the page (**Accessibility** in Settings) |
 | `display.colours` | `"standard"` | Store colours: `"standard"`, `"colourblind"` or `"custom"` (**Store colours** in Settings) |
 | `display.theme` | `"hoard"` | The theme: `hoard`, `dragonfire`, `frost`, `geode`, `moss`, `synthwave`, `sakura`, `midnight`, `contrast` or `spooky` (**Appearance** in Settings) |

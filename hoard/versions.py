@@ -20,5 +20,6 @@ def version_of(text) -> tuple[int, int, int, int, int] | None:
 
 
 def is_beta(text) -> bool:
+    """Whether a version is a beta ("3.1.0-beta.2")."""
     v = version_of(text)
     return bool(v and v[3] == 0)

@@ -23,26 +23,27 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, backup, diagnostics, i18n, itch, libraries, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, alerts, backup, credits, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
-                         restore_previous,
-                         edits_root, last_integrity, make_editable_copy, reseal_catalog)
+                         restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED, MAX_PROBLEMS, STORE_DIRS,
+                         edits_root, last_integrity, make_editable_copy, reseal_catalog, resolve_problem)
 from .downloads import build_index, library_status, reveal, with_tags
 from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
-from .net import is_network_error
+from .net import blocked_here, blocked_message, is_network_error
+from .wishlists import read_store_page   # (Add products by link: tests stand in for it here)
 from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, common_words, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
                       save_picture_looks, stack_by_picture)
 from .paths import LIBRARY_FILE, STORE_PYTHON_NOTE, WEB, default_downloads, store_python
 from .safety import (LOOPBACK, SECURITY_HEADERS, TLSServerMixin, check_access, contained_rel, content_security_policy,
-                     fetch_public, header_safe, network_tls, open_under, safe_join, safe_name, store_sites, UnsafePath)
+                     fetch_public, header_safe, network_tls, open_under, rel_to_path, safe_join, safe_name, store_sites, UnsafePath)
 from .app import token_matches
 from .marks import MarkStore, PinError, is_archived
 from .setup import browser_problem, migrate_from, setup_status, signed_in
-from .tags import TagStore, tag_key, tag_overview
+from .tags import TagStore, product_type, tag_key, tag_overview
 from .vpm import api as vpm_api, logbook as vpm_log
 
 PAGES = {"/": "library.html", "/index.html": "library.html", "/downloads": "downloads.html"}
@@ -57,13 +58,14 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/diagnostics/report", "/api/diagnostics/open-folder", "/api/check-updates",
            "/api/queue/remove", "/api/queue/clear", "/api/tasks/clear", "/api/delete-files", "/api/edit-copy", "/api/verify",
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
-           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip",
+           "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip", "/api/product-files",
+           "/api/integrity/resolve", "/api/apprise", "/api/apprise/test",
            "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
            "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
            # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
            "/api/vpm/preview", "/api/vpm/apply", "/api/vpm/create", "/api/vpm/preload", "/api/vpm/backup",
-           "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite",
+           "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite", "/api/vpm/organize",
            "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
            "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
            "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show", "/api/vpm/delete-project")
@@ -118,6 +120,7 @@ def display_settings(cfg: dict) -> dict:
             "glow": d.get("glow") is not False,
             # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
             "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
+            "card_outlines": bool(d.get("card_outlines")),   # each card outlined, on a background of its own (#222)
             "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
             "custom_colours": custom_colours(d.get("custom_colours")),
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
@@ -167,7 +170,7 @@ UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and D
 def ui_settings(cfg: dict) -> dict:
     """How you left the pages (kept in config.json, since the pages' own storage goes with the server's address, which
     is new each time Hoard starts): each window's place and size, the sidebar and its sections folded, the tile size,
-    and the sort, one for both pages."""
+    the sort, one for both pages, and the sets you added to last."""
     ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
     out: dict = {"windows": {}, "sections": {}}
     for wid, place in (ui.get("windows") or {}).items() if isinstance(ui.get("windows"), dict) else ():
@@ -185,6 +188,8 @@ def ui_settings(cfg: dict) -> dict:
             out[k] = ui[k]
     if ui.get("sort") in UI_SORTS:
         out["sort"] = ui["sort"]
+    if isinstance(ui.get("recent_sets"), list):   # the sets you added to last, first in the right-click menu (issue #228)
+        out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
     return out
 
 
@@ -223,7 +228,7 @@ def integrity_view(cfg: dict) -> dict:
     if last:
         view.update(checked=last["checked"], files=last["files"], fine=last["fine"], changed=len(last["changed"]),
                     missing=len(last["missing"]), data_changed=len(last["data_changed"]), complete=last["complete"],
-                    summary=integrity_summary(last))
+                    summary=integrity_summary(last), listed=len(last["problems"]))   # (to deal with: issue #231)
     return view
 
 
@@ -232,11 +237,14 @@ def public_settings(cfg: dict) -> dict:
     return {
         "root": str(root_dir(cfg)), "default_root": str(default_downloads()), "libraries": libraries.view(cfg),
         "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
+        "store_tags": bool(cfg.get("store_tags", True)), "file_rules": file_rules(cfg), "ask_files": bool(cfg.get("ask_files", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
         "beta_updates": bool(cfg.get("beta_updates")),
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "notify_found": cfg.get("notify_found", True) is not False,
+        # notifications through Apprise (issue #230): how many addresses are kept (never the addresses), and what's sent
+        "apprise": {"available": alerts.available(), "kept": alerts.kept(cfg), "events": sorted(alerts.chosen(cfg))},
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -282,6 +290,12 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["browser_channel"] = body["browser_channel"]
     if "offline_images" in body:
         change["offline_images"] = bool(body["offline_images"])
+    if "store_tags" in body:
+        change["store_tags"] = bool(body["store_tags"])
+    if "ask_files" in body:   # ask which of a product's files to download, before downloading it (issue #225)
+        change["ask_files"] = bool(body["ask_files"])
+    if "file_rules" in body:   # files to leave out of every download (issue #225), checked as downloads read them
+        change["file_rules"] = file_rules({"file_rules": body["file_rules"]})
     if "check_for_updates" in body:
         change["check_for_updates"] = bool(body["check_for_updates"])
     if "beta_updates" in body:
@@ -290,6 +304,9 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         change["close_to_taskbar"] = bool(body["close_to_taskbar"])
     if "notify_found" in body:
         change["notify_found"] = bool(body["notify_found"])
+    if "apprise_events" in body:   # issue #230: what's sent through Apprise (the addresses go to /api/apprise)
+        events = body["apprise_events"] if isinstance(body["apprise_events"], list) else []
+        change["apprise_events"] = [e for e in alerts.EVENTS if e in events]
     if "routine_hours" in body:   # issue #113
         if body["routine_hours"] not in ROUTINE_CHOICES or isinstance(body["routine_hours"], bool):
             raise ValueError("Choose how often to run the routine check from the list.")
@@ -316,7 +333,8 @@ def apply_settings(cfg: dict, body: dict) -> dict:
             if given["text_size"] not in TEXT_SIZES or isinstance(given["text_size"], bool):
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
-        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing") if k in given})
+        display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines")
+                        if k in given})
         if "font" in given:
             if given["font"] not in FONTS:
                 raise ValueError("Choose a font from the list.")
@@ -394,7 +412,7 @@ VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading
                "/api/vpm/refresh": "Refreshing the repositories", "/api/vpm/open": "Open in Unity",
                "/api/vpm/open-folder": "Open folder", "/api/vpm/add-project": "Add a project",
                "/api/vpm/remove-project": "Take off the list", "/api/vpm/delete-project": "Delete from this computer",
-               "/api/vpm/favorite": "Favourite", "/api/vpm/repos/add": "Add a repository",
+               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/repos/add": "Add a repository",
                "/api/vpm/repos/remove": "Remove a repository", "/api/vpm/settings": "Unity and folders",
                "/api/vpm/presets": "Presets", "/api/vpm/backups": "Backups", "/api/vpm/backups/settings": "Backups",
                "/api/vpm/backups/show": "Backups", "/api/vpm/backups/delete": "Delete backups",
@@ -414,6 +432,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         super().process_request(request, client_address)
 
     def process_request_thread(self, request, client_address):
+        """Serve the connection, then give its slot back."""
         try:
             super().process_request_thread(request, client_address)
         finally:
@@ -453,6 +472,10 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self._index, self._index_lock = None, threading.Lock()
         self._wanted, self._built_for, self._rebuild = 0, -1, None
         self.updates = updater.Updates(cfg)
+        # news, sent through Apprise as you chose (issue #230): counts, never a product's name
+        self.jobs.on_news = self.project_jobs.on_news = self._news
+        self.updates.on_available = lambda version: alerts.send(
+            self.cfg, "other", f"Hoard {version} is available. Open Hoard to update.")
         self.schedule = Schedule(cfg, self.jobs)
         previous.set_keep(keep_previous(cfg))
         # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
@@ -471,6 +494,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         return self.project_jobs if name == PROJECTS else self.jobs
 
     def lanes(self) -> tuple[Jobs, Jobs]:
+        """Both lanes' jobs: the main one's and Projects'."""
         return self.jobs, self.project_jobs
 
     def working(self) -> bool:
@@ -567,6 +591,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         enabled = {s for s in DOWNLOADABLE if srv.cfg[s].get("enabled", True)}
         out_of_view = lambda k: k in marks["removed"] or (k in marks["hidden"] and not unlocked)  # noqa: E731
         known, new = {}, {}
+        rules, kept = file_rules(srv.cfg), remembered_files(srv.cfg)   # what's left out, unticked to begin with (#225)
+        out = lambda store, key, names: sorted({n for n in names if n in kept.get(key, ()) or ruled_out(rules, store, n)})  # noqa: E731
         for i in srv.lib.snapshot()[0]:
             key = tag_key(i["store"], i["name"])
             if i["store"] not in DOWNLOADABLE or out_of_view(key):
@@ -574,9 +600,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or "",
                                    "names": [f["name"] for f in i.get("files") or [] if isinstance(f, dict) and f.get("name")][:500]})
             if i["store"] in enabled and key not in on_disk and key not in skip:
-                new.setdefault(key, known[key])
+                new.setdefault(key, {**known[key], "out": out(i["store"], key, known[key]["names"])})
         ups = [{"key": k, "store": e["store"], "name": e["name"], "creator": e["creator"], "files": len(e["files"]),
-                "names": [f["file"] for f in e["files"]][:500]}
+                "names": [f["file"] for f in e["files"]][:500], "out": out(e["store"], k, [f["file"] for f in e["files"]][:500])}
                for k, e in updates.items() if k in on_disk and k not in skip and e["store"] in enabled and not out_of_view(k)]
         skipped = [known.get(k) or {"key": k, "store": k.split(":", 1)[0], "name": k.split(":", 1)[-1], "creator": ""}
                    for k in sorted(skip) if not out_of_view(k)]
@@ -597,6 +623,28 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         except Exception:  # noqa: BLE001 - counts are a nicety; the folders still show
             pass
         return [{**f, "products": counts.get(f["n"], 0)} for f in libraries.view(self.cfg)]
+
+    def _news(self, kind: str, what) -> None:
+        """Issue #230: news from the tasks, sent through Apprise as you chose (hoard/alerts.py): how many, never names."""
+        if kind == "found":
+            for event in ("new", "updates"):
+                text = alerts.found_text(what, event)
+                if text:
+                    alerts.send(self.cfg, event, text)
+        elif kind == "cheaper":
+            alerts.send(self.cfg, "prices", f"{alerts.plural(what, 'product')} on your wishlists "
+                                            f"{'is' if what == 1 else 'are'} cheaper than before.")
+        elif kind == "checked":
+            parts = [alerts.plural(what[k], f"file {k}", f"files {k}") for k in ("changed", "missing") if what.get(k)]
+            alerts.send(self.cfg, "other", f"The check of your downloads found {' and '.join(parts)}. "
+                                           "Open Hoard to see what it found.")
+        elif kind == "finished" and what.get("task") == "routine":
+            counts = (what.get("report") or {}).get("routine") or {}
+            found = [alerts.plural(counts[k], one) for k, one in (("new", "new product"), ("updates", "update")) if counts.get(k)]
+            alerts.send(self.cfg, "routine", "The routine check failed." if what.get("outcome") == "failed" else
+                        f"The routine check found {' and '.join(found)}." if found else "The routine check found nothing new.")
+        elif kind == "finished" and what.get("task") not in ("list-files",):
+            alerts.send(self.cfg, "tasks", alerts.task_text(what))
 
     def index(self, rescan: bool = False, stale_ok: bool = False) -> dict:
         """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan.
@@ -624,8 +672,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             fresh = None
             try:
                 try:
-                    fresh = build_index(Path(root), collect_catalog(self.cfg, Path(root))[0],
-                                        libraries.roots(self.cfg, Path(root)))
+                    catalog = collect_catalog(self.cfg, Path(root))[0]   # (how far it's got, for the splash: #200)
+                    fresh = build_index(Path(root), catalog, libraries.roots(self.cfg, Path(root)),
+                                        progress=loading.counter("library", "downloads", len(catalog)))
                 except Exception as e:  # show the problem in the page instead of a blank grid
                     fresh = {"root": root, "assets": [], "status": library_status(Path(root)),
                              "error": f"Couldn't read the downloads: {e}"}
@@ -638,8 +687,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
-    timeout = 30   # seconds a connection may sit idle or trickle a request before it's closed
     """Answers the pages' requests."""
+    timeout = 30   # seconds a connection may sit idle or trickle a request before it's closed
     server: AppServer
 
     def log_message(self, *args):
@@ -677,7 +726,98 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _product_files(self, body: dict) -> dict:
+        """Issue #225: what each of these products has on its store, as a quick look at it read it (no file is
+        downloaded), each with the files your rules or an earlier choice leave out ("out"), for Hoard to ask which to
+        download. A product not read in the last ten minutes is read, with read: true, as a task of its own;
+        "reading" says one is under way. names: the files the page knows a product has already ({key: [names]}: an
+        update's, or Booth's from your library), answered with what's left out of them, without reading anything."""
+        srv = self.server
+        keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:20]
+                if isinstance(k, str) and 0 < len(k) <= 400 and ":" in k]
+        rules, kept = file_rules(srv.cfg), remembered_files(srv.cfg)
+        out = lambda k, names: sorted(n for n in names if n in kept.get(k, ()) or ruled_out(rules, k.split(":", 1)[0], n))  # noqa: E731
+        given = body.get("names") if isinstance(body.get("names"), dict) else {}
+        now, files = time.monotonic(), {}
+        for k in keys:
+            got, known = srv.jobs.listed.get(k), given.get(k)
+            if got and now - got["at"] < 600:
+                files[k] = {"files": got["files"], "read": got["read"], "out": out(k, got["files"])}
+            elif isinstance(known, list) and known:
+                names = [n for n in known[:500] if isinstance(n, str) and 0 < len(n) <= 500]
+                files[k] = {"files": names, "read": False, "out": out(k, names)}
+        missing = [k for k in keys if k not in files]
+        reading = srv.jobs.keys_of("list-files")   # (being read, or waiting its turn: asked for once, not again)
+        unread = [k for k in missing if k not in reading]
+        if unread and body.get("read") is True:   # a read of its own, waiting its turn behind another's if need be
+            stores = sorted({k.split(":", 1)[0] for k in unread} & set(DOWNLOADABLE))
+            if stores and srv.jobs.start("list-files", stores, keys=unread):
+                reading = reading | set(unread)
+        return {"files": files, "reading": any(k in reading for k in missing)}
+
+    def _resolve_integrity(self, body: dict):
+        """Issue #231: files the last check found changed or missing, dealt with: "keep" (a change, as it is now),
+        "forget" (a missing file, which is left out of its product's downloads from now on, so a sync doesn't bring it
+        back), "again" (downloaded again, all of them as one task), or "show" (one file, in its folder)."""
+        srv = self.server
+        action = body.get("action")
+        problems = [x for x in (body.get("problems") if isinstance(body.get("problems"), list) else [])[:MAX_PROBLEMS]
+                    if isinstance(x, dict)]
+        if action not in ("keep", "forget", "again", "show") or not problems:
+            return self._json({"error": "Nothing to do."}, 400)
+        root = root_dir(srv.cfg)
+        others = libraries.other_folders(srv.cfg)
+        if any(self._hidden_key(tag_key(str(x.get("store")), str(x.get("name")))) for x in problems):
+            return self._json({"error": "Unlock your hidden library first."}, 403)
+        if action == "show":
+            x = problems[0]
+            bases = {str(b): b for b in (root, *others)}
+            try:
+                if bases.get(x.get("base")) is None or x.get("store") not in STORE_DIRS:
+                    raise UnsafePath("not a library folder")
+                folder = rel_to_path(bases[x["base"]] / STORE_DIRS[x["store"]], str(x.get("folder")))
+                target = rel_to_path(folder, str(x.get("path")))
+                return self._json({"ok": True, "in": reveal(target if target.is_file() else folder if folder.is_dir() else folder.parent)})
+            except (UnsafePath, OSError):
+                return self._json({"error": "That folder couldn't be opened."}, 400)
+        if srv.jobs.state.get("running"):   # (a sync or check holds its own copy of a store's records, and saves it)
+            return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
+        done, failed, again = 0, [], {}
+        for x in problems:
+            try:
+                got = resolve_problem(root, others, x, action)
+            except (ValueError, OSError) as e:
+                failed.append({"path": str(x.get("path"))[:300], "error": str(e)[:300]})
+                continue
+            done += 1
+            if action == "forget":
+                with srv.cfg_lock:
+                    kept = remembered_files(srv.cfg)
+                    kept.setdefault(got["key"], set()).add(got["file"])
+                    srv.cfg["file_skip"] = {k: sorted(v) for k, v in kept.items()}
+                    srv.save_settings()
+            elif action == "again":
+                pick = again.setdefault(got["key"], {"store": got["store"], "shown": [], "chosen": []})
+                pick["shown"].append(got["file"]); pick["chosen"].append(got["file"])
+        started = None
+        if again:   # one download for all of them: those files, whatever was left out of them before
+            started = srv.jobs.start("download", sorted({v["store"] for v in again.values()}), keys=sorted(again),
+                                     chosen={k: {"shown": v["shown"], "chosen": v["chosen"]} for k, v in again.items()})
+        return self._json({"ok": not failed, "done": done, "failed": failed[:50], "started": started})
+
+    def _remember_files(self, chosen: dict | None) -> dict | None:
+        """The files you left out of a product, as you chose them to download, kept for its downloads from now on
+        (issue #225: Sync, Download new and the routine check leave them out too); one you ticked again is
+        forgotten. Returns chosen as it was."""
+        if chosen:
+            srv = self.server
+            with srv.cfg_lock:
+                srv.cfg["file_skip"] = remember_choice(remembered_files(srv.cfg), chosen, file_rules(srv.cfg))
+                srv.save_settings()
+        return chosen
+
     def _download_choices(self) -> dict:
+        """The download choices the page may see (hidden products only once unlocked)."""
         return self.server.download_choices(self._unlocked())
 
     def _hidden_names(self) -> list[str]:
@@ -750,8 +890,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/library":
             items, stores = srv.lib.snapshot()   # enrich() makes new items, so the library's own are never changed
             tagdata = TagStore().load()
-            items = enrich(items, srv.cfg["tags"], tagdata)
+            items = enrich(items, srv.cfg["tags"], tagdata, apart=MarkStore().keys("apart"),
+                           progress=loading.counter("library", "products", len(items)))   # (counted on the splash: #200)
             on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
+            loading.finished("library")
+            MarkStore().follow(items)   # a product renamed since it was removed (or hidden...) stays so (issue #224)
             marks, unlocked = MarkStore().view(), self._unlocked()
             updates = AssetUpdates().load()["items"]
             cutoff = new_cutoff(srv.cfg)
@@ -764,6 +907,7 @@ class Handler(BaseHTTPRequestHandler):
                 i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
                 i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                              else "archived" if is_archived(i, marks) else None)
+                i["apart"] = i["tag_key"] in marks["apart"]   # "Not a copy": never stacked (issue #217)
                 # hidden items never leave the server while it's locked: hidden by the mark itself, whatever else
                 # it's marked (a hidden product also removed is labelled removed, and was let out)
                 if i["tag_key"] not in marks["hidden"] or unlocked:
@@ -787,6 +931,7 @@ class Handler(BaseHTTPRequestHandler):
                                "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "setup_done": bool(srv.cfg.get("setup_done")), "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None,
                                "display": display_settings(srv.cfg), "ui": ui_settings(srv.cfg),
+                               "ask_files": bool(srv.cfg.get("ask_files", True)),   # (issue #225)
                                "routine": routine_record()["found"]}, compress=True)
         if path == "/api/download-choices":   # issue #107: what downloading new things, or updating, would get
             return self._json(self._download_choices(), compress=True)
@@ -794,17 +939,34 @@ class Handler(BaseHTTPRequestHandler):
             tasks, hidden = srv.tasks(), self._hidden_names()
             if hidden:
                 def mask(job):
+                    """A job as the page may see it: hidden products' names masked while Hoard is locked."""
                     return {**job, **public_job({k: job.get(k) for k in ("message", "log", "report", "label", "transfer") if k in job}, hidden)}
                 tasks = {"current": mask(tasks["current"]) if tasks["current"] else None,
                          "project": mask(tasks["project"]) if tasks["project"] else None,
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
+        if path == "/api/credits":   # issue #227: Acknowledgements (Settings): everything Hoard uses, with its license
+            return self._json(credits.view())
+        if path == "/api/credits/license":   # one of them's license text, where Hoard has it
+            text = credits.license_text((parse_qs(u.query).get("name") or [""])[0][:300])
+            return self._json({"text": text}) if text else self._json({"error": "Hoard has no copy of that license here: its link has it."}, 404)
+        if path == "/api/integrity":   # issue #231: the files the last check found, each to deal with
+            last = last_integrity() or {"problems": [], "changed": [], "missing": [], "data_changed": [], "checked": None}
+            hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
+            listed = [{**x, "key": tag_key(x["store"], x["name"])} for x in last["problems"]]
+            shown = [x for x in listed if x["key"] not in hidden]
+            return self._json({"checked": last["checked"], "problems": shown, "hidden_left_out": len(listed) - len(shown),
+                               "more": max(0, len(last["changed"]) + len(last["missing"]) - len(listed)),
+                               "data_changed": last["data_changed"]})
+        if path == "/api/loading":   # issue #200: how far reading what a page shows first has got, for its splash
+            return self._json(loading.view((parse_qs(u.query).get("part") or [""])[0]))
         if path == "/api/status":
             return self._json({"job": public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
                                "project_job": public_job(srv.project_jobs.state, self._hidden_names()),
                                "routine": routine_record()["found"]})
         if path == "/api/assets":
             index = with_tags(srv.index(rescan="rescan" in parse_qs(u.query)))
+            loading.finished("library")   # (the splash's count: issue #200)
             # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
             # page has the same views (issue #29); hidden products' downloads stay out of view while it's locked
             marks, unlocked = MarkStore().view(), self._unlocked()
@@ -813,7 +975,9 @@ class Handler(BaseHTTPRequestHandler):
             used = projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
             stacks, looks = {}, []   # copies of one product stack here as in the Library: by its products (hoard/library.py)
             listed = [dict(i) for i in srv.lib.snapshot()[0]]
-            stack_by_picture(listed)
+            store_tags = {tag_key(i["store"], i["name"]): i["store_tags"] for i in listed if i.get("store_tags")}   # (#206)
+            tagdata = TagStore().load()   # (for each product's type, as the Library has it: issue #223)
+            stack_by_picture(listed, apart=marks["apart"])
             for i in listed:
                 # a download's stack is its own product's (by store and name), even one that stacks with nothing:
                 # "Hair Pack 1" and "Hair Pack 2" share a product key (tag_key leaves numbers out), but the Library
@@ -832,7 +996,9 @@ class Handler(BaseHTTPRequestHandler):
                 mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
                         else "archived" if is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
+                    kind, known = product_type(tagdata, key, a["name"], a.get("tags") or [], store_tags.get(key, []))
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                                   "store_tags": store_tags.get(key, []), "type": kind, "type_from": known,
                                    "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
                                    "needs": needed.get(a["id"]),
                                    "own_picture": a.get("catalog_folder") in chosen,
@@ -848,7 +1014,7 @@ class Handler(BaseHTTPRequestHandler):
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
                      "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
-                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg),
+                               "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg), "ask_files": bool(srv.cfg.get("ask_files", True)),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
             found = self._visible_projects()
@@ -970,7 +1136,9 @@ class Handler(BaseHTTPRequestHandler):
                 marks = store.load()
                 if (keys & marks["hidden"]) and not self._unlocked() and not (kind == "hidden" and on):
                     return self._json({"error": "Unlock your hidden library first."}, 403)
-                store.change(kind, keys, on)
+                # each product's own key on its store, so the choice stays with it if the store renames it
+                ids = {i["key"]: k for i in srv.lib.snapshot()[0] if (k := tag_key(i["store"], i["name"])) in keys} if on else {}
+                store.change(kind, keys, on, ids)
             elif path == "/api/purge":   # removed products, deleted from Hoard's list for good
                 keys &= store.load()["removed"]
                 gone = srv.lib.forget_products(keys)
@@ -1029,6 +1197,7 @@ class Handler(BaseHTTPRequestHandler):
             return next((u for u in (sets.product_link(store, x) for x in links) if u), None)
 
         def details(key: str) -> dict | None:
+            """A product's details for the page, from the library or the downloads, with only its public link."""
             i = lib.get(key)
             if i:
                 return {"store": i["store"], "id": i.get("id"), "name": i["name"], "creator": i.get("creator"),
@@ -1092,13 +1261,17 @@ class Handler(BaseHTTPRequestHandler):
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 
     def _add_links(self, sid: str, links):
-        """Products added to a set or wishlist by their store links (at most 30): each one's public page read
-        (wishlists.from_product_page), what was added and what wasn't, and why."""
+        """Products added to a wishlist by their store links (at most 30): each one's public page read
+        (wishlists.from_product_page), what was added and what wasn't, and why. A set is made from what's in your
+        library, so it isn't added to by link (issue #208)."""
         from . import wishlists
         if not isinstance(links, list) or not links:
             return self._json({"error": "Paste a product's link."}, 400)
-        if not any(x["id"] == sid for x in sets.SetStore().load()["sets"]):
+        found = next((x for x in sets.SetStore().load()["sets"] if x["id"] == sid), None)
+        if not found:
             return self._json({"error": "That set isn't there anymore."}, 404)
+        if found.get("kind") != "wishlist":
+            return self._json({"error": "Products are added by link to wishlists. A set is made from what's in your library."}, 400)
         got, said = [], []
         for link in [str(x)[:2000] for x in links[:30]]:
             try:
@@ -1364,6 +1537,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---- Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, with your library in them
 
     def _hidden_key(self, key) -> bool:
+        """Whether a product is hidden and Hoard is locked, so the request is answered as if it weren't there."""
         return isinstance(key, str) and key in MarkStore().keys("hidden") and not self._unlocked()
 
     def _hidden_file(self, target: Path) -> bool:
@@ -1409,12 +1583,16 @@ class Handler(BaseHTTPRequestHandler):
             self._vpm_doing = None
 
     def _vpm_get(self, path: str, query: dict):
+        """Answer a Projects (VPM) GET request."""
         srv = self.server
         one = lambda k: (query.get(k) or [""])[0][:2000]  # noqa: E731
         try:
             if path == "/api/vpm":
-                return self._json({**srv.vpm.overview(), "job": public_job(srv.project_jobs.state, self._hidden_names())},
-                                  compress=True)
+                try:
+                    return self._json({**srv.vpm.overview(), "job": public_job(srv.project_jobs.state, self._hidden_names())},
+                                      compress=True)
+                finally:
+                    loading.finished("projects")
             if path == "/api/vpm/logs":   # Projects' log: this run's entries after the one numbered after
                 after = one("after")
                 return self._json({"run": vpm_log.book.run, "entries": vpm_log.book.entries(int(after) if after.isdigit() else 0),
@@ -1450,12 +1628,14 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, b"Not found", "text/plain")
 
     def _vpm_job(self, what: dict):
+        """Queue a Projects task, saying whether it waits its turn."""
         started = self.server.project_jobs.start("project", [], project=what)
         if not started:
             return self._json({"error": "That's already waiting its turn."}, 409)
         return self._json({"ok": True, "queued": started == "queued"})
 
     def _vpm_post(self, path: str, body: dict):
+        """Answer a Projects (VPM) POST request."""
         from .vpm import imports as vpm_imports, listing, presets as vpm_presets, templates as vpm_templates, unity as vpm_unity
         from .vpm.project import is_project
         srv = self.server
@@ -1562,6 +1742,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/vpm/favorite":
                 listing.note(srv.vpm.listed(body.get("path")), favorite=body.get("on") is True)
                 return self._json({"ok": True})
+            if path == "/api/vpm/organize":   # a project's folder and tags on Hoard's list (issue #190)
+                kept = listing.organize(srv.vpm.listed(body.get("path")), folder=body.get("folder"), tags=body.get("tags"))
+                return self._json({"ok": True, "folder": kept.get("folder"), "tags": kept.get("tags") or []})
             if path == "/api/vpm/repos/add":
                 from .vpm import repos as vpm_repos
                 try:
@@ -1741,7 +1924,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "itch.io didn't accept that key. Check you copied all of it, and that it hasn't "
                                         "been deleted on itch.io."}, 400)
         except Exception as e:
-            return self._json({"error": "Couldn't reach itch.io. Check your connection and try again." if is_network_error(e)
+            return self._json({"error": blocked_message("itch.io") if blocked_here(e)
+                               else "Couldn't reach itch.io. Check your connection and try again." if is_network_error(e)
                                else f"itch.io didn't answer as expected: {e}"}, 502)
         finally:
             sess.close()
@@ -1903,6 +2087,7 @@ class Handler(BaseHTTPRequestHandler):
                                             "so nothing was restored."}, 500)
 
             def add_folder(value: str) -> None:
+                """Add a library folder from the backup, checked as one added in Settings is."""
                 folder = str(libraries.check_new_folder(srv.cfg, value))
                 srv.cfg["library_folders"] = [str(f) for f in libraries.other_folders(srv.cfg)] + [folder]
             dropped = []
@@ -2007,6 +2192,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 srv.updates.check()
             except Exception as e:
+                if blocked_here(e):
+                    return self._json({"error": "Couldn't check for updates. " + blocked_message("GitHub")}, 502)
                 why = "you're offline, or GitHub can't be reached" if is_network_error(e) else str(e)[:200]
                 return self._json({"error": f"Couldn't check for updates: {why}."}, 502)
             return self._json({"ok": True, **srv.updates.view(srv.can_update())})
@@ -2096,6 +2283,29 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})
+        if path == "/api/apprise":   # issue #230: Apprise's addresses, kept as API keys are; none, or forget, forgets them
+            try:
+                addresses = [] if body.get("forget") is True else alerts.clean_urls(body.get("urls"))
+                if not addresses and body.get("forget") is not True:   # (forgetting them is asked for, and asked first)
+                    raise ValueError("Type an address first, one a line.")
+                alerts.save_urls(srv.cfg, addresses)
+            except (ValueError, SigninsUnprotected) as e:
+                return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": f"They couldn't be kept: {e}"}, 500)
+            return self._json({"ok": True, "kept": len(addresses)})
+        if path == "/api/apprise/test":   # a test notification, to every address kept, now
+            if not alerts.available():
+                return self._json({"error": "Apprise isn't installed. Run Setup again to install it."}, 400)
+            addresses = alerts.urls(srv.cfg)
+            if not addresses:
+                return self._json({"error": "Add an Apprise address first."}, 400)
+            problem = alerts.deliver(addresses, "This is a test from Hoard: notifications through Apprise work.")
+            return self._json({"ok": problem is None, "error": problem})
+        if path == "/api/integrity/resolve":   # issue #231: deal with what the last check found
+            return self._resolve_integrity(body)
+        if path == "/api/product-files":   # issue #225: what products have, to choose their files from before downloading
+            return self._json(self._product_files(body))
         if path == "/api/download-skip":   # issue #107: always skip these products when downloading, or stop
             keys = body.get("keys") if isinstance(body.get("keys"), list) else []
             keys = {k for k in keys[:MAX_SKIP] if isinstance(k, str) and 0 < len(k) <= 400 and ":" in k}
@@ -2191,7 +2401,7 @@ class Handler(BaseHTTPRequestHandler):
         started = srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
                                  skip_imported=bool(body.get("all")), only=only, keys=keys,
                                  items=[item] if item and task in ("download", "check-updates") else None,
-                                 chosen=chosen_files(body.get("files")) if task == "download" else None)
+                                 chosen=self._remember_files(chosen_files(body.get("files"))) if task == "download" else None)
         if not started:
             return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
         self._json({"ok": True, "queued": started == "queued"}, 202)
@@ -2214,8 +2424,10 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     looks = '<style id="looks">\n' + (WEB / "looks.css").read_text("utf-8").replace("\r\n", "\n") + "</style>\n"
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
     page = page.replace(b"</head>", looks.encode() + style.encode() + b"</head>", 1)
-    # the font, spacing (Settings, Accessibility) and style (Appearance) you chose, on the page from its first moment
+    # the font, spacing, card outlines (Settings, Accessibility) and style (Appearance) you chose, on the page from its
+    # first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
+    marks += ' data-cards="outlined"' if d.get("card_outlines") is True else ""
     if themes.style_id(d.get("style")) != "standard":
         marks += f' data-style="{themes.style_id(d.get("style"))}"'
     if marks:
@@ -2243,23 +2455,27 @@ def guide_source(query: dict) -> bytes:
     """The style guide (/styleguide, web/styleguide.html): every part of the pages, drawn with one page's own
     stylesheet (the Library's or Downloads'), web/looks.css and a theme, as the pages are served, so it never drifts
     from them. What it's shown in (page, style, theme, Light or Dark, font, spacing, colours, text size) is in its
-    address, chosen in its own bar. Nothing of yours is in it: every product, project and file in it is made up."""
+    address, chosen in its own bar (and card outlines). Nothing of yours is in it: every product, project and file in it
+    is made up."""
     def one(k):
+        """One value from the address (at most 40 characters)."""
         return (query.get(k) or [""])[0][:40]
     page = one("page") if one("page") in GUIDE_PAGES else "library"
     style, theme, mode = themes.style_id(one("style")), themes.theme_id(one("theme")), themes.mode_id(one("mode"))
     size = int(one("size")) if one("size") in {str(s) for s in GUIDE_SIZES} else 100
     font, spacing, colours = one("font") == "dyslexic", one("spacing") == "wide", one("colours") == "colourblind"
+    outlined = one("cards") == "outlined"
     own = _OWN_STYLE.search((WEB / GUIDE_PAGES[page]).read_bytes())
     styles = (b'<style id="page">' + (own.group(1) if own else b"") + b"</style>\n" +
               b'<style id="looks">\n' + (WEB / "looks.css").read_bytes() + b"</style>\n" +
               b'<style id="theme">\n' + themes.css(theme, mode).encode() + b"\n</style>\n")
     marks = (f' data-page="{page}"' + (f' data-style="{style}"' if style != "standard" else "") +
              (' data-font="dyslexic"' if font else "") + (' data-spacing="wide"' if spacing else "") +
-             (' data-colours="colourblind"' if colours else "") +
+             (' data-cards="outlined"' if outlined else "") + (' data-colours="colourblind"' if colours else "") +
              (f' style="zoom: {size / 100}; --zoom: {size / 100}"' if size != 100 else ""))
 
     def choice(name, label, options, chosen):
+        """One of the guide bar's dropdowns."""
         opts = "".join(f'<option value="{v}"{" selected" if v == chosen else ""}>{text}</option>' for v, text in options)
         return f'<label>{label} <select name="{name}">{opts}</select></label>'
     bar = (choice("page", "Page", [("library", "Library"), ("downloads", "Downloads")], page) +
@@ -2270,7 +2486,8 @@ def guide_source(query: dict) -> bytes:
            choice("size", "Text size", [(str(s), f"{s}%") for s in GUIDE_SIZES], str(size)) +
            choice("colours", "Store colours", [("standard", "Standard"), ("colourblind", "Easier to tell apart")],
                   "colourblind" if colours else "standard") +
-           f'<label class="check"><input type="checkbox" name="spacing" value="wide"{" checked" if spacing else ""}> Wider spacing</label>')
+           f'<label class="check"><input type="checkbox" name="spacing" value="wide"{" checked" if spacing else ""}> Wider spacing</label>'
+           f'<label class="check"><input type="checkbox" name="cards" value="outlined"{" checked" if outlined else ""}> Card outlines</label>')
     tokens = "".join(f'<li class="sg-tok"><i style="background: var(--{k})"></i><code>--{k}</code><small>{use}</small>'
                      f'<span class="sg-val" data-token="{k}"></span></li>' for k, use in TOKEN_USES.items())
     out = (WEB / GUIDE).read_bytes()
@@ -2281,16 +2498,34 @@ def guide_source(query: dict) -> bytes:
 
 def chosen_files(raw) -> dict[str, dict] | None:
     """The files you chose of each product, when choosing what to download: {tag_key: {"shown": the files the list
-    showed, "chosen": the ones left ticked}}, for the products you left some files out of. Only a file that was
-    shown and unticked is left out (downloader.left_out). Anything else in it is ignored."""
+    showed, "chosen": the ones left ticked}}. Only a file that was shown and unticked is left out, and one shown and
+    ticked is downloaded whatever an earlier choice or a rule says (downloader.left_out); a file that wasn't shown is
+    left to them. Anything else is ignored."""
     if not isinstance(raw, dict):
         return None
     names = lambda v: [n for n in v[:500] if isinstance(n, str) and 0 < len(n) <= 500] if isinstance(v, list) else []  # noqa: E731
     out = {}
     for key, pick in list(raw.items())[:5000]:
-        if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict) and names(pick.get("shown")):
+        if not (isinstance(key, str) and 0 < len(key) <= 400 and isinstance(pick, dict)):
+            continue
+        if names(pick.get("shown")):
             out[key] = {"shown": names(pick.get("shown")), "chosen": names(pick.get("chosen"))}
     return out or None
+
+
+def remember_choice(kept: dict[str, set], chosen: dict, rules=()) -> dict[str, list]:
+    """The files left out of each product from now on (config.json's "file_skip", issue #225), after choosing what
+    to download: those of the files shown that weren't ticked, and any left out before that weren't shown. One that
+    one of your rules leaves out isn't remembered: the rule keeps it out (and it comes back if you take the rule away)."""
+    kept = dict(kept)
+    for key, pick in chosen.items():
+        shown, store = set(pick["shown"]), key.split(":", 1)[0]
+        left = (kept.get(key, set()) - shown) | {n for n in shown - set(pick["chosen"]) if not ruled_out(rules, store, n)}
+        if left:
+            kept[key] = left
+        else:
+            kept.pop(key, None)
+    return {k: sorted(v) for k, v in list(kept.items())[-MAX_REMEMBERED:]}
 
 
 def read_photo_page(url: str) -> str | None:
@@ -2301,17 +2536,6 @@ def read_photo_page(url: str) -> str | None:
                                            "like Gecko) Chrome/140.0 Safari/537.36", "Accept": "text/html"},
                        sets.MAX_PHOTO_PAGE, hosts=sets.PAGE_HOSTS)
     return got[0].decode("utf-8", "replace") if got and got[1] in ("text/html", "application/xhtml+xml") else None
-
-
-def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:
-    """A store's public page (or Booth's item JSON), for Add products by link: only from those hosts (https,
-    redirects included), at public addresses, sending no sign-in. (Its text, its content type), or None."""
-    from .wishlists import MAX_PRODUCT_PAGE
-    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
-                                           "like Gecko) Chrome/140.0 Safari/537.36",
-                             "Accept": "application/json" if url.endswith(".json") else "text/html"},
-                       MAX_PRODUCT_PAGE, hosts=hosts)
-    return (got[0].decode("utf-8", "replace"), got[1]) if got else None
 
 
 def forget_short_links(records: list[dict]) -> None:

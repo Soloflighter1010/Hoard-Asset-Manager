@@ -26,8 +26,12 @@ changes. It's licensed under the SIL Open Font License 1.1: `fonts/OpenDyslexic-
 
 ## Software Hoard uses
 
-These aren't included in the release zip. Setup installs them from their official
-sources:
+Everything Hoard uses or ships is listed, with its license, in Hoard's Settings (**Acknowledgements**, where each
+license's text can be read) and on the website's
+[Acknowledgements](https://hoard.furryup.link/acknowledgements.html) page, both from `hoard/credits.json`.
+
+In a source install, these aren't included in the release zip: Setup installs them from their official
+sources. The main ones:
 
 | Software | License |
 |---|---|

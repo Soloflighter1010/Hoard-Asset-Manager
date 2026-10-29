@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using SoloFlighter.Hoard;
 
+/// <summary>Checks Hoard for Unity's Core against files the Python tests make (tests/test_unity.py runs it).</summary>
 public static class CoreTests
 {
     static int failures;
@@ -92,6 +93,7 @@ public static class CoreTests
         Directory.Delete(root, true);
     }
 
+    /// <summary>Pixels with their rows top first.</summary>
     static byte[] TopDown(byte[] bottomUp, int w, int h)
     {
         var o = new byte[bottomUp.Length];
@@ -99,6 +101,7 @@ public static class CoreTests
         return o;
     }
 
+    /// <summary>Bytes' SHA-256, as hex.</summary>
     static string Sha(byte[] b)
     {
         using (var sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(b)).Replace("-", "").ToLowerInvariant();
@@ -223,8 +226,30 @@ public static class CoreTests
         Check("shared: nothing of its own: told by all its files", have == 2 && total == 2, have + " of " + total);
         ProjectShare.Count(new[] { "coq", "x" }, null, fileOf, out have, out total);
         Check("shared: none known: every file counts", have == 1 && total == 2, have + " of " + total);
+
+        // issue #188: a stray file or two of a big package isn't the product being here; all but a few of a big one is
+        Check("level: none", ProjectShare.Level(0, 40) == 0 && ProjectShare.Level(0, 0) == 0 && ProjectShare.Level(3, 0) == 0);
+        Check("level: one file of a big package isn't it", ProjectShare.Level(1, 120) == 0 && ProjectShare.Level(2, 120) == 0);
+        Check("level: enough of it is part of it", ProjectShare.Level(12, 120) == 1 && ProjectShare.Level(2, 20) == 1);
+        Check("level: a small package's one file is part of it", ProjectShare.Level(1, 3) == 1 && ProjectShare.Level(1, 2) == 1);
+        Check("level: all of it, or all but a sample of a big one", ProjectShare.Level(5, 5) == 2 && ProjectShare.Level(96, 100) == 2
+            && ProjectShare.Level(9, 10) == 1);
+
+        // issue #189: taking a product out removes its files in Assets/, not those another product here still uses
+        var where = new Dictionary<string, string> { { "fox", "Assets/Kitsu/Fox/Fox.prefab" }, { "mat", "Assets\\Kitsu\\Fox\\Fox.mat" },
+            { "shader", "Assets/Kitsu/Shared/Fur.shader" }, { "sdk", "Packages/com.vrchat.base/x.cs" } };
+        Func<string, string> at = g => where.ContainsKey(g) ? where[g] : "";
+        var gone = ProjectShare.Removable(new[] { "fox", "mat", "shader", "sdk", "missing" }, new HashSet<string> { "shader" }, at);
+        Check("remove: its own files, in Assets/ only", string.Join("|", gone) == "Assets/Kitsu/Fox/Fox.mat|Assets/Kitsu/Fox/Fox.prefab", string.Join("|", gone));
+        var empty = new HashSet<string> { "Assets/Kitsu/Fox" };
+        var folders = ProjectShare.EmptiedFolders(gone, f => empty.Contains(f));
+        Check("remove: the folders it leaves empty, not one still in use", string.Join("|", folders) == "Assets/Kitsu/Fox", string.Join("|", folders));
+        empty.Add("Assets/Kitsu");
+        folders = ProjectShare.EmptiedFolders(new[] { "Assets/Kitsu/Fox/a/b.png", "Assets/Kitsu/Fox/c.png" }, f => empty.Contains(f) || f.EndsWith("/a"));
+        Check("remove: deepest first, never Assets itself", string.Join("|", folders) == "Assets/Kitsu/Fox/a|Assets/Kitsu/Fox|Assets/Kitsu", string.Join("|", folders));
     }
 
+    /// <summary>Print whether a check passed, counting failures.</summary>
     static void Check(string name, bool ok, string detail = "")
     {
         Console.WriteLine((ok ? "PASS " : "FAIL ") + name + (ok ? "" : ": " + detail));
@@ -272,6 +297,7 @@ public static class CoreTests
         Check("updates: a damaged list is nothing", Updates.ReadPending("{not json").Count == 0);
     }
 
+    /// <summary>Check a project's report and its credits.</summary>
     static void ProjectChecks(string dir)
     {
         string project = Path.Combine(dir, "My Avatar");
@@ -304,6 +330,7 @@ public static class CoreTests
         File.WriteAllText(Path.Combine(dir, "project_report_path.txt"), file);
     }
 
+    /// <summary>Run every check on the files in the folder given. 1 when any fails.</summary>
     public static int Main(string[] args)
     {
         string dir = args[0];

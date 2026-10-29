@@ -22,20 +22,25 @@ from .project import TYPE_NAMES, UNKNOWN, summary
 
 STATE = "vpm-projects.json"
 MAX_PRELOADED = 500
+MAX_PROJECT_TAGS = 12   # a project's tags (issue #190), and its folder: Hoard's own, never the Creator Companion's
 _lock = threading.RLock()
 
 
 def _key(path: str) -> str:
+    """A project's folder as it's compared and kept (case and separators as the system compares them)."""
     return os.path.normcase(os.path.normpath(path))
 
 
 # ---- Hoard's own notes
 
 def _state_path() -> Path:
+    """Where Hoard's own notes on projects are kept (vpm-projects.json)."""
     return data_dir() / STATE
 
 
 def load_state() -> dict:
+    """Hoard's notes on projects (favourites, folders and tags, what went in from your library, backup choices), or
+    none."""
     try:
         raw = read_json_file(_state_path(), 16 << 20)
     except FileNotFoundError:
@@ -47,6 +52,7 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    """Write Hoard's notes on projects."""
     import json
     write_file_safely(_state_path(), json.dumps(state, indent=1, ensure_ascii=False))
 
@@ -63,6 +69,7 @@ def backup_prefs() -> dict:
 
 
 def set_backup_prefs(**changes) -> dict:
+    """Change how old backups are told apart, or where they were last moved to; returns the choices as they are now."""
     with _lock:
         state = load_state()
         state["backups"] = {**backup_prefs(), **changes}
@@ -85,6 +92,20 @@ def note(path: str, **changes) -> dict:
             entry["preloaded"] = entry["preloaded"][-MAX_PRELOADED:]
         save_state(state)
         return entry
+
+
+def organize(path: str, folder=None, tags=None) -> dict:
+    """Issue #190: the folder a project is kept in on Hoard's list, and its tags, as you name them (ALCOM and the
+    Creator Companion have only a favourite). folder: a name, or "" for none; tags: words, as tags are kept."""
+    from ..tags import clean_tag
+    changes: dict = {}
+    if folder is not None:
+        name = clean_text(folder if isinstance(folder, str) else "", 60)
+        changes["folder"] = name or None
+    if tags is not None:
+        kept = list(dict.fromkeys(t for t in (clean_tag(x) for x in (tags if isinstance(tags, list) else [])[:40]) if t))
+        changes["tags"] = kept[:MAX_PROJECT_TAGS] or None
+    return note(path, **changes)
 
 
 def forget(path: str) -> None:
@@ -122,9 +143,10 @@ def shared_paths(settings: environment.Settings | None = None) -> tuple[list[str
     return listed, records
 
 
-def projects() -> list[dict]:
+def projects(progress=None) -> list[dict]:
     """Every project for the page: name, folder, Unity, kind, favourite, when made and opened, whether the folder is
-    still there; most recently opened first."""
+    still there; most recently opened first. progress(how many there are) gives a function to call with how many
+    are read (issue #200: Projects' splash counts them)."""
     try:
         settings = environment.Settings.load()
     except DataFileError as e:
@@ -132,7 +154,10 @@ def projects() -> list[dict]:
     listed, records = shared_paths(settings)
     state = load_state()["projects"]
     out, seen = [], set()
-    for path in listed:
+    tick = progress(len(listed)) if progress else None
+    for n, path in enumerate(listed, 1):
+        if tick:
+            tick(n)
         k = _key(path)
         if k in seen:
             continue
@@ -148,16 +173,20 @@ def projects() -> list[dict]:
             "favorite": bool(mine["favorite"]) if "favorite" in mine else record.get("Favorite") is True,
             "created": _ms(record.get("CreatedAt")) or None, "opened": opened or None,
             "preloaded": len(mine.get("preloaded") or []),
+            "folder": clean_text(mine.get("folder") if isinstance(mine.get("folder"), str) else "", 60) or None,   # (#190)
+            "tags": [t for t in mine.get("tags") or [] if isinstance(t, str)][:MAX_PROJECT_TAGS] if isinstance(mine.get("tags"), list) else [],
         })
     out.sort(key=lambda p: (p["opened"] or 0), reverse=True)
     return out
 
 
 def _ms(value) -> int:
+    """A time from the Creator Companion's database, in milliseconds (0 when there's none)."""
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else 0
 
 
 def _iso_ms(value) -> int:
+    """A time Hoard noted (ISO 8601), in milliseconds (0 when it can't be read)."""
     if not isinstance(value, str):
         return 0
     try:
@@ -190,6 +219,7 @@ def remove(path: str) -> bool:
 
 
 def is_listed(path: str) -> bool:
+    """Is this folder on the project list?"""
     return find(path) is not None
 
 

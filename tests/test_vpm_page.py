@@ -66,7 +66,14 @@ class ProjectsPanel(unittest.TestCase):
         page = self.page
         rows = page.locator("#projectsBody .pj-row")
         self.assertEqual(rows.count(), 3)
-        self.assertIn("Avatars · Unity 2022.3.22f1", rows.nth(0).inner_text())
+        self.assertEqual(rows.nth(0).locator(".pj-chip").all_inner_texts(), ["Avatars", "Unity 2022.3.22f1"])
+        # issue #198: in the Library's colours: each kind of project its own, down its row's side and on its chip
+        self.assertIn("k-avatars", rows.nth(0).get_attribute("class"))
+        side, chip = page.evaluate("""() => { const r = document.querySelector('.pj-row.k-avatars');
+          return [getComputedStyle(r).boxShadow, getComputedStyle(r.querySelector('.pj-chip')).backgroundColor]; }""")
+        self.assertIn("inset", side)
+        self.assertNotIn(chip, ("rgba(0, 0, 0, 0)", "transparent"))
+        self.assertEqual(page.locator(".pj-tab .dot").count(), 5, "each tab its colour")
         self.assertIn("The folder isn't there", rows.nth(1).inner_text(), "a project whose folder has gone")
         self.assertIn("Opened in Unity with Hoard, not on the list", page.locator("#projectsBody").inner_text())
         self.assertIn("1 asset from Hoard", rows.nth(2).inner_text())
@@ -82,6 +89,83 @@ class ProjectsPanel(unittest.TestCase):
         page.locator("dialog.ask .primary").click()
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
+
+    def test_folders_and_tags(self):
+        """Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have
+        only a favourite): one folder shown at a time, a project's tags on its row, and each tag shows those with it."""
+        page = self.page
+        page.locator(".pj-row", has_text="Rusk Avatar").locator("[data-pj=organize]").click()
+        dlg = page.locator("dialog.ask[open]")
+        dlg.locator("#pjOrgFolder").fill("Avatars WIP")
+        dlg.locator("#pjOrgTags").fill("Quest, poiyomi,, quest")
+        dlg.locator("#pjOrgTags").press("Enter")   # (Enter saves)
+        bar = page.locator("#projectsBody .pj-folders")
+        bar.wait_for()
+        self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])
+        rusk = page.locator(".pj-row", has_text="Rusk Avatar")
+        self.assertEqual(rusk.locator(".pj-tags .chip").all_inner_texts(), ["quest", "poiyomi"], "as tags are kept")
+        self.assertIn("Avatars WIP", rusk.locator(".pj-what").inner_text())
+        bar.locator(".chip", has_text="Avatars WIP").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 1")
+        self.assertEqual(page.locator(".pj-list").first.locator(".pj-row b").all_inner_texts(), ["Rusk Avatar"])
+        self.assertNotIn("Avatars WIP", rusk.locator(".pj-what").inner_text(), "not said again in its own folder")
+        bar.locator(".chip", has_text="Not in a folder").click()
+        page.wait_for_function("() => document.querySelector('.pj-list:first-of-type .pj-row b').textContent === 'Old World'")
+        bar.locator(".chip", has_text="All projects").click()
+        # a tag: the projects that have it
+        rusk.locator(".pj-tags .chip", has_text="poiyomi").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 1")
+        self.assertEqual(bar.locator(".chip[aria-pressed=true]").all_inner_texts(), ["All projects2", "poiyomi ×"])
+        page.fill("#pjFind", "wip")   # Find a project looks at its folder and tags too
+        self.assertEqual(page.locator(".pj-list").first.locator(".pj-row:visible").count(), 1)
+        page.fill("#pjFind", "")
+        bar.locator(".chip", has_text="poiyomi ×").click()
+        page.wait_for_function("() => document.querySelectorAll('.pj-list:first-of-type .pj-row').length === 2")
+        # emptied: out of the folder, and with no folder left, no folders to choose from
+        rusk.locator("[data-pj=organize]").click()
+        self.assertEqual(dlg.locator("#pjOrgFolder").input_value(), "Avatars WIP")
+        dlg.locator("#pjOrgFolder").fill("")
+        dlg.locator("#pjOrgTags").fill("")
+        dlg.locator(".primary").click()
+        page.wait_for_function("() => !document.querySelector('#projectsBody .pj-folders')")
+        self.assertEqual(rusk.locator(".pj-tags").count(), 0)
+
+    def test_choosing_a_products_packages_in_steps(self):
+        """Issue #199: a product with several packages: first which of them (each with its size, a variant marked,
+        Select all or none), then, last, the packages it needs; a long package name breaks at its dots."""
+        page = self.page
+        page.evaluate("""() => { window.__got = undefined; pjChooseContents({ name: "Fox Outfits", key: "booth:foxoutfits", already: [],
+          contents: [{ kind: "unitypackage", file: "Fox.zip", member: "Fox/Fox_PC.unitypackage", label: "Fox_PC.unitypackage", size: 2500000 },
+                     { kind: "unitypackage", file: "Fox.zip", member: "Fox/Fox_Quest.unitypackage", label: "Fox_Quest.unitypackage", size: 1200000 },
+                     { kind: "vpm", file: "Fox.zip", member: "Fox/tool.zip", label: "Fox Tool", size: 40000 }],
+          suggested: [{ package: "com.vrcfury.vrcfury", repo: "https://vcc.vrcfury.com", repo_added: false }] }).then(g => window.__got = g); }""")
+        dlg = page.locator("dialog.pj-dlg[open]")
+        step1, step2 = dlg.locator("[data-step='1']"), dlg.locator("[data-step='2']")
+        self.assertIn("Step 1 of 2: its packages", step1.inner_text())
+        self.assertTrue(step2.is_hidden(), "what it needs comes last")
+        rows = step1.locator(".pj-contents li")
+        self.assertEqual(rows.count(), 3)
+        self.assertEqual([rows.nth(n).locator(".pj-tag").all_inner_texts() for n in range(3)], [["PC"], ["Quest"], []])
+        self.assertIn("Unity package · 2.4 MB", rows.nth(0).inner_text())
+        self.assertEqual([rows.nth(n).locator("input").is_checked() for n in range(3)], [False, False, True],
+                         "one of the variants to choose")
+        nxt = step1.locator(".primary")
+        step1.locator("[data-all='0']").click()
+        self.assertTrue(nxt.is_disabled(), "nothing ticked: nothing to go on with")
+        step1.locator("[data-all='1']").click()
+        rows.nth(1).locator("input").uncheck()
+        nxt.click()
+        self.assertTrue(step1.is_hidden())
+        self.assertIn("Step 2 of 2: what it needs", step2.inner_text())
+        self.assertIn("com.<wbr>vrcfury.<wbr>vrcfury", step2.locator(".pj-picklist").inner_html())
+        step2.locator("[data-step-go='1']").click()   # Back: the choice as it was
+        self.assertFalse(rows.nth(1).locator("input").is_checked())
+        nxt.click()
+        step2.locator(".primary").click()
+        page.wait_for_function("() => window.__got !== undefined")
+        got = page.evaluate("window.__got")
+        self.assertEqual([x["label"] for x in got["picks"]], ["Fox_PC.unitypackage", "Fox Tool"])
+        self.assertEqual([x["package"] for x in got["suggested"]], ["com.vrcfury.vrcfury"])
 
     SAMPLE_SPLASH = """window.__splash = 0;   // how visible Projects' splash got, sampled while it's on show
         setInterval(() => { const e = document.getElementById("pjSplash");
@@ -385,9 +469,12 @@ class ProjectsPanel(unittest.TestCase):
         tile = page.locator(".pj-part .pj-tile", has_text="Rusk")
         tile.wait_for()
         self.assertEqual(page.locator(".pj-part .pj-tile").count(), 1, "one tile a product")
+        self.assertIn("2 packages · just now", tile.inner_text())
+        self.assertEqual(tile.locator(".cr").inner_text(), page.evaluate("T.all().find(a => a.name === 'Rusk').creator"),
+                         "the Library's own tile (#198): its creator as the Library shows it")
+        tile.locator(".pj-files summary").click()   # its packages, in its details
         self.assertIn("rusk.unitypackage", tile.inner_text())
         self.assertIn("rusk-quest.unitypackage", tile.inner_text())
-        self.assertIn("just now", tile.inner_text())
         self.assertEqual(tile.locator(".pj-file", has_text="rusk.unitypackage").first.get_attribute("title"), "Added: Assets/Rusk")
         # Escape, while choosing, goes back too
         page.click("[data-pj=addprod]")
@@ -541,6 +628,28 @@ class ProjectsPanel(unittest.TestCase):
         page.locator(".selmenu [role=menuitem]", has_text="New project with these...").click()
         page.locator("#projectsWin #pjName").wait_for()
         self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "already in the new project")
+
+    def test_a_new_project_with_a_set(self):
+        """Issue #195: a set's right-click menu, and its own page, offer New project with this set..., which opens New
+        project with what's downloaded of the set in it. Issue #208: a set's page doesn't offer Add products by link
+        (a wishlist's does: test_wishlists)."""
+        page = self.page
+        page.keyboard.press("Escape")
+        page.locator("#projectsWin").wait_for(state="hidden")
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        key = page.evaluate("DATA.items.find(a => a.name === 'Rusk').tag_key")
+        page.evaluate(post, ["/api/sets", {"action": "create", "name": "Rusk outfit", "items": [key]}])
+        page.evaluate("load()")
+        page.click("nav.apptabs a[href='/#store=Sets']")
+        tile = page.locator("#setView .settile", has_text="Rusk outfit")
+        tile.click()
+        page.locator('[data-setx="project"]').wait_for()
+        self.assertEqual(page.locator('[data-setx="addlinks"]').count(), 0, "a set: no Add products by link")
+        page.click('[data-setx="back"]')
+        tile.click(button="right")
+        page.locator(".selmenu [role=menuitem]", has_text="New project with this set...").click()
+        page.locator("#projectsWin #pjName").wait_for()
+        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "the set's product, in it")
 
 
 if __name__ == "__main__":

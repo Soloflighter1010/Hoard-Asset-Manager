@@ -28,6 +28,7 @@ class Broken(Exception):
 
 
 def version() -> str:
+    """Hoard's version, from hoard/__init__.py."""
     return re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py").read_text("utf-8")).group(1)
 
 
@@ -85,6 +86,7 @@ def with_release(text: str, ver: str, date: str) -> str:
 
 
 def main(argv: list[str]) -> int:
+    """Check the Flatpak's metainfo file, or write it with this version's release listed."""
     ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     ap.add_argument("--check", action="store_true", help="only check the file")
     ap.add_argument("--out", help="write the metainfo, with this version listed, here")

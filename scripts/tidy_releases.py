@@ -61,6 +61,7 @@ def plan(releases: list[dict], early_before: tuple | None = None) -> tuple[list[
 
 
 def early_version(text: str | None) -> tuple | None:
+    """The version --early-before names, as numbers, or None when it isn't given."""
     if not text:
         return None
     found = info(f"v{text}")
@@ -70,10 +71,12 @@ def early_version(text: str | None) -> tuple | None:
 
 
 class GitHub:
+    """The repository's releases on GitHub's API."""
     def __init__(self, repo: str, token: str | None):
         self.repo, self.token = repo, token
 
     def call(self, method: str, path: str, body: dict | None = None):
+        """One API request, as its JSON."""
         req = urllib.request.Request(f"{API}/repos/{self.repo}{path}", method=method,
                                      data=json.dumps(body).encode() if body is not None else None,
                                      headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
@@ -84,6 +87,7 @@ class GitHub:
             return json.loads(r.read() or b"null")
 
     def releases(self) -> list[dict]:
+        """Every release, page by page."""
         out, page = [], 1
         while True:
             batch = self.call("GET", f"/releases?per_page=100&page={page}")
@@ -93,6 +97,7 @@ class GitHub:
             page += 1
 
     def latest_id(self) -> int | None:
+        """The id of the release GitHub calls latest, or None when there's none."""
         try:
             return self.call("GET", "/releases/latest").get("id")
         except urllib.error.HTTPError as e:
@@ -102,6 +107,7 @@ class GitHub:
 
 
 def why(e: Exception) -> str:
+    """Why a GitHub request failed, with GitHub's own message."""
     if isinstance(e, urllib.error.HTTPError):
         try:
             detail = json.loads(e.read() or b"{}").get("message") or ""
@@ -112,6 +118,7 @@ def why(e: Exception) -> str:
 
 
 def main(argv: list[str]) -> int:
+    """Show (or with --apply, make) the release titles and status changes."""
     ap = argparse.ArgumentParser(description="Tidy the titles and status of Hoard's releases on GitHub.")
     ap.add_argument("--apply", action="store_true", help="make the changes (without it, only show them)")
     ap.add_argument("--early-before", metavar="VERSION", help='add "(early)" to app releases older than this')

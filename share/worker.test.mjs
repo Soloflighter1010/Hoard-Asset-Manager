@@ -5,10 +5,14 @@ import worker from "./worker.mjs";
 import { fakeKV, fakeLimit } from "./fake_kv.mjs";
 
 const HERE = "https://hoard-share.furryup.link";
+// Bytes as URL-safe base64.
 const b64 = bytes => Buffer.from(bytes).toString("base64url");
+// A made-up encrypted set: n random bytes, as Hoard sends one.
 const locked = (n = 200) => b64(crypto.getRandomValues(new Uint8Array(n)));
+// The SHA-256 of some text, as URL-safe base64.
 const sha256 = async text => b64(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
 
+// One request to the Worker, as Hoard makes them (JSON, and its token when it has one).
 function call(env, method, path, { body, token, headers = {} } = {}) {
   const init = { method, headers: { ...headers } };
   if (body !== undefined) {
@@ -18,6 +22,7 @@ function call(env, method, path, { body, token, headers = {} } = {}) {
   if (token) init.headers.Authorization = `Bearer ${token}`;
   return worker.fetch(new Request(HERE + path, init), env);
 }
+// An answer's status, headers and JSON.
 const json = async r => ({ status: r.status, headers: r.headers, ...(r.status === 204 ? {} : await r.json()) });
 
 test("a set is kept, read, updated and deleted, and only by the Hoard that made it", async () => {

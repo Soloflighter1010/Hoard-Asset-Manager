@@ -153,7 +153,9 @@ The same fields as one `<asset>` above, plus `"format": "hoard-asset"` and `"ver
 
 Your archive, hidden and removed choices, sealed like the other files. Each of `archived`, `unarchived`,
 `removed` and `hidden` is a sorted list of product keys (the same keys tags use, such as
-`booth:rusk`), so a choice applies in the Library and in Downloads. `pin` holds the hidden library's
+`booth:rusk`), so a choice applies in the Library and in Downloads. Those keys come from products' names, so
+`ids` holds, for each of the four, the store's own key of each product it was made for (`{"booth:4242":
+"booth:rusk"}`): when a product's name changes, its new name gets the same choice. `pin` holds the hidden library's
 PIN as an scrypt hash with its own salt and parameters, `recovery` holds the recovery phrase the same
 way (never the words themselves), and `failures` and `wait_until` hold the
 lockout after wrong guesses. If the file is changed outside Hoard, the choices are kept but the PIN is

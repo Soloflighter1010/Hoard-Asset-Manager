@@ -3,11 +3,17 @@ The **Library** shows everything you own on the stores you use, whether or not y
 
 ## Finding things
 
-- **Search** matches names, creators, stores, variants and tags.
+- **Search** (in the middle of the bar at the top) matches names, creators, stores, variants and tags. A prefix
+  searches one kind of thing (5.2.0): `creator:` (or `by:`), `tag:` (or `#`), `store:` (or `on:`) and `type:` (or
+  `kind:`: a tag's kind, such as avatar, or in Downloads a kind of file) narrow the products; `set:` (or `in:`)
+  narrows them to a set's and offers to go to it; `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)
+  a setting: `settings:language` opens Settings at Language. Put a name with spaces in quotes, as in
+  `creator:"Kitsu Studio"`. Click in the empty box, or press **/**, to see them all with an example: choose one and
+  it goes in the box, then what it could be is offered under it (the arrow keys and Enter work there too).
 - **The store tabs** above the grid narrow it to one store, with a count for each. The tab you're looking at is
   raised, and the page glows up from the bottom in that store's colour (on **Everything**, the colours of the
   stores you're signed in to drift through it).
-- **Filters** on the left: your tags, suggested tags, **Show** (**Downloaded**, **Not downloaded yet** and
+- **Filters** on the left: your tags, suggested tags, **Product type** (see [Tags](Tags#product-types)), **Show** (**Downloaded**, **Not downloaded yet** and
   **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
@@ -23,16 +29,25 @@ The **Library** shows everything you own on the stores you use, whether or not y
     their Gumroad and Jinxxy). Each store saves a picture its own way, so Hoard compares how the pictures look:
     the page works that out once and Hoard keeps it in `picture-looks.json`. Two creators' products with the same
     name and different pictures stay apart;
-  - **a picture several creators use and a name nearly the same** (a word more or less, the same numbers).
+  - **a picture several creators use and a name nearly the same** (a word more or less, the same numbers);
+  - **names alike, by the same creator on two stores** (5.2.0): alike once what listings add around a name is left
+    out ([Asset], versions such as v2 or 1.0.3, "for VRChat", Free, emoji), so "[Asset] Fox Tail v2" on Gumroad
+    and "Fox Tail" on Booth stack. Their other numbers still have to match, and a hoodie "for" one avatar isn't
+    the one for another.
 
   A picture several creators use for different names (a store's default banner) stacks nothing. Choose a stack to
-  see every copy. Downloads stacks the same copies, and lists the others in a copy's details. Untick **Stack
-  copies**, beside **Sort** on either page, to show each on its own; Hoard remembers. While you're choosing
+  see every copy. A copy's details say why it's shown with the others; if it isn't one, choose **Not a copy** and
+  it's shown on its own from then on (**Show it with its copies again** undoes it). Downloads stacks the same copies, and lists the others in a copy's details. Turn off **Stack
+  copies** (a button beside **Sort** on either page, pressed while it's on) to show each on its own; Hoard remembers. While you're choosing
   several, and in Disk space, each copy shows.
 - **New:** something that appeared in your library after a refresh has a **New** badge for a week (**New in your
   library** in Settings). What was already there when Hoard first read a store isn't new.
 
-Your search, filters and sort are kept in the page's address, so going back returns you to the same view.
+Your search, filters and sort are kept in the page's address, so going back returns you to the same view. Each
+place you go is a step back and forward (5.2.0): a store's tab, Sets and Wishlists, a set or wishlist, a view of
+Downloads, a product's details, and Settings, Tasks, Projects (and a project in it), Stores and Tags. The mouse's
+back and forward buttons, or Alt+Left and Alt+Right, go through them, so Back closes a panel before it leaves the
+page.
 
 ## An item's details
 

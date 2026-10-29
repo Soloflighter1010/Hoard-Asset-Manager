@@ -8,6 +8,7 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>Whether a file Hoard wrote is as Hoard left it.</summary>
     public enum SealState
     {
         Sealed,     // made by Hoard on this computer, unchanged since
@@ -17,6 +18,8 @@ namespace SoloFlighter.Hoard
         NoKey,      // Hoard's key isn't readable, so the seal can't be checked
     }
 
+    /// <summary>Checks the seal Hoard puts on the files it writes, so a file changed by anything else isn't
+    /// trusted.</summary>
     public static class Seal
     {
         /// <summary>Hoard's 32-byte key, from integrity.key (hex), or null if it can't be read.</summary>
@@ -47,11 +50,13 @@ namespace SoloFlighter.Hoard
             return keys;
         }
 
+        /// <summary>A key's id, as a seal names the key it was made with.</summary>
         public static string KeyId(byte[] key)
         {
             using (var sha = SHA256.Create()) return Hex(sha.ComputeHash(key)).Substring(0, 16);
         }
 
+        /// <summary>Whether a document's seal was made with this key (or none), over the document as it is.</summary>
         public static SealState Check(JsonValue doc, byte[] key)
         {
             return Check(doc, key == null ? new List<byte[]>() : new List<byte[]> { key });
@@ -83,6 +88,7 @@ namespace SoloFlighter.Hoard
             return diff == 0;
         }
 
+        /// <summary>Bytes as lower-case hex.</summary>
         static string Hex(byte[] bytes)
         {
             var sb = new StringBuilder(bytes.Length * 2);

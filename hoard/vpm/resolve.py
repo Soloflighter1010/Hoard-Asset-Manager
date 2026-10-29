@@ -43,10 +43,14 @@ class ResolveError(Exception):
 
 
 class _Missing(dict):
+    """The packages no repository has a fitting version of, each with the range (all the ranges asked for, together) it
+    would need."""
     def add(self, name: str, r: VersionRange) -> None:
+        """Note name as missing, needing r (and whatever else asked for it)."""
         self[name] = r.intersect(self[name]) if name in self else r
 
     def error(self) -> ResolveError:
+        """The error to show: which packages no repository has a fitting version of."""
         names = ", ".join(f"{n} ({r})" for n, r in sorted(self.items()))
         return ResolveError(f"No repository has a version of these packages that fits: {names}.", dict(self))
 
@@ -54,6 +58,8 @@ class _Missing(dict):
 # ---- working out which packages (package_resolution.rs)
 
 class _Dep:
+    """What the resolver knows of one package: the version in use, who asks for which range of it, what it depends on,
+    and what replaces it or it replaces."""
     __slots__ = ("using", "current", "requirements", "dependencies", "modern", "legacy", "allow_pre", "touched")
 
     def __init__(self):
@@ -68,15 +74,19 @@ class _Dep:
 
     @property
     def is_legacy(self) -> bool:
+        """Has a newer package replaced this one?"""
         return bool(self.modern)
 
     def using_info(self, version: Version, dependencies) -> None:
+        """Note the version in use and what it depends on."""
         self.allow_pre |= version.is_pre
         self.current = version
         self.dependencies = set(dependencies)
 
 
 class _Context:
+    """The resolver's work in progress (vrc-get's ResolutionContext): the packages still to look at, and what's known of
+    each."""
     def __init__(self, allow_prerelease: bool, packages: list[Info]):
         self.allow_prerelease = allow_prerelease
         self.queue = list(packages)
@@ -88,11 +98,14 @@ class _Context:
         self.deps[""] = _Dep()
 
     def dep(self, name: str) -> _Dep:
+        """What's known of a package, a new entry for one not seen yet."""
         if name not in self.deps:
             self.deps[name] = _Dep()
         return self.deps[name]
 
     def next(self):
+        """The next package to look at, and whether it's one asked for (which is taken whatever is installed); None when
+        there are none."""
         if not self.queue:
             return None
         force = self.forced > 0
@@ -100,13 +113,16 @@ class _Context:
         return self.queue.pop(), force
 
     def pending(self, name: str) -> Info | None:
+        """The version of name still waiting to be looked at, if any."""
         return next((p for p in self.queue if p.name == name), None)
 
     def add_pending(self, p: Info) -> None:
+        """Queue a package to look at, in place of any version of it already queued."""
         self.queue = [q for q in self.queue if q.name != p.name]
         self.queue.append(p)
 
     def add_root(self, name: str, r: VersionRange, allow_pre: bool) -> None:
+        """A package the project itself asks for (its vpm-manifest.json's dependencies), with its range."""
         self.deps[""].requirements[name] = r
         d = _Dep()
         d.requirements[""] = r
@@ -114,6 +130,7 @@ class _Context:
         self.deps[name] = d
 
     def add_locked(self, name: str, version: Version, deps: dict, env: Collection) -> None:
+        """A package the project has installed: its version, its dependencies, and the packages it replaces."""
         info = self.dep(name)
         info.using_info(version, deps.keys())
         found = env.find(name, Selector.specific(version))
@@ -125,6 +142,7 @@ class _Context:
             self.dep(dep).requirements[name] = r
 
     def add_unlocked(self, manifest) -> None:
+        """A package of the project's own (in Packages/): its version and dependencies, and the packages it replaces."""
         info = self.dep(manifest.name)
         info.using_info(manifest.version, manifest.dependencies.keys())
         info.legacy = list(manifest.legacy_packages)
@@ -134,6 +152,8 @@ class _Context:
             self.dep(dep).requirements[manifest.name] = r
 
     def add_package(self, p: Info, force: bool) -> bool:
+        """Take this version of a package: note it, and move what it asks for from the old version's dependencies to its
+        own. False when it's been replaced, or is one of the project's own and not asked for."""
         entry = self.dep(p.name)
         if entry.is_legacy or (not force and p.name in self.unlocked):
             return False
@@ -156,6 +176,7 @@ class _Context:
         return True
 
     def should_add(self, name: str, r: VersionRange) -> bool:
+        """Is a version of name in range r still to be found (nothing in use, or waiting, already fits)?"""
         entry = self.dep(name)
         if entry.is_legacy or name in self.unlocked:
             return False
@@ -166,6 +187,8 @@ class _Context:
         return not (entry.current is not None and r.match_pre(entry.current, accept))
 
     def result(self):
+        """What the resolver found: the packages to install, and the conflicts (packages asking for versions of another
+        that the one chosen doesn't meet)."""
         conflicts: dict[str, list[str]] = {}
         for name, info in self.deps.items():
             if info.is_legacy or not info.touched or info.current is None:
@@ -215,6 +238,8 @@ def collect(dependencies, locked, unlocked, get_locked, unity, env: Collection, 
                 continue
 
             def find(u, accept, dep=dep, r=r):
+                """The newest version of dep in its range that suits Unity u (None: any), under the prerelease rule
+                accept."""
                 return env.find(dep, Selector.range(u, r, accept))
             if allow_prerelease:
                 tries = ((unity, ALLOW), (None, ALLOW))
@@ -236,6 +261,8 @@ REQUESTED, LEGACY, UNUSED = "requested", "legacy", "unused"
 
 
 class Install:
+    """A package to install (package, when it's to go in the project's packages), and the range to write in its
+    dependencies, if any."""
     __slots__ = ("package", "add_to_locked", "to_dependencies")
 
     def __init__(self, package: Info | None = None, add_to_locked: bool = False,
@@ -244,6 +271,7 @@ class Install:
 
 
 class Remove:
+    """A package to remove, and why: asked for, replaced by a newer package (LEGACY), or nothing uses it any more."""
     __slots__ = ("reason",)
 
     def __init__(self, reason: str):
@@ -251,6 +279,8 @@ class Remove:
 
 
 class Conflict:
+    """Why a package can't be as asked: which packages ask for versions of it that can't all be met, whether it doesn't
+    suit the project's Unity, and which of the project's own packages are in the way."""
     __slots__ = ("packages", "unity", "unlocked")
 
     def __init__(self):
@@ -271,6 +301,7 @@ class Changes:
     # building
 
     def add_to_dependencies(self, name: str, r: DependencyRange) -> None:
+        """Write r as name's range in the project's dependencies."""
         c = self.packages.get(name)
         if c is None:
             self.packages[name] = Install(to_dependencies=r)
@@ -278,6 +309,7 @@ class Changes:
             c.to_dependencies = r
 
     def install(self, p: Info, add_to_locked: bool = True, replace: bool = False) -> None:
+        """Install p (and add it to the project's installed packages); replace: in place of a version chosen already."""
         c = self.packages.get(p.name)
         if c is None:
             self.packages[p.name] = Install(p, add_to_locked)
@@ -285,24 +317,31 @@ class Changes:
             c.package, c.add_to_locked = p, add_to_locked
 
     def remove(self, name: str, reason: str) -> None:
+        """Remove name, for this reason (unless something else is already planned for it)."""
         if name not in self.packages:
             self.packages[name] = Remove(reason)
 
     def conflict(self, name: str) -> Conflict:
+        """The conflict noted for name, a new one if there isn't one yet."""
         return self.conflicts.setdefault(name, Conflict())
 
     def dependencies_for(self, name: str) -> DependencyRange | None:
+        """The range to write for name in the project's dependencies, if one is planned."""
         c = self.packages.get(name)
         return c.to_dependencies if isinstance(c, Install) else None
 
     def installing(self, name: str) -> Info | None:
+        """The version of name to be installed, if one is."""
         c = self.packages.get(name)
         return c.package if isinstance(c, Install) and c.add_to_locked else None
 
     def all_installing(self) -> list[Info]:
+        """Every package to be installed."""
         return [c.package for c in self.packages.values() if isinstance(c, Install) and c.add_to_locked and c.package]
 
     def finish(self, project: UnityProject) -> "Changes":
+        """Finish working out the changes: packages that don't suit the project's Unity are conflicts, packages nothing
+        uses any more go, and the old files and folders the new packages replace are listed."""
         installs = self.all_installing()
         if project.unity is not None:
             for p in installs:
@@ -315,6 +354,7 @@ class Changes:
     def _sweep(self, project: UnityProject) -> None:
         """Mark packages nothing uses any more (a dependency of one being removed or replaced) for removal."""
         def mark(entry, deps_of):
+            """Every package reached from entry by following deps_of."""
             seen, queue = set(entry), list(entry)
             while queue:
                 for d in deps_of(queue.pop()):
@@ -324,6 +364,7 @@ class Changes:
             return seen
 
         def locked_deps(name):
+            """What an installed package depends on."""
             return project.locked[name][1].keys() if name in project.locked else ()
         entry = [n for n, c in self.packages.items()
                  if n in project.locked and (isinstance(c, Remove) or (isinstance(c, Install) and c.add_to_locked))]
@@ -336,6 +377,7 @@ class Changes:
         roots += installing
 
         def using_deps(name):
+            """What a package depends on, as it will be: the version being installed, or the one installed now."""
             c = self.packages.get(name)
             if isinstance(c, Install) and c.package is not None:
                 return c.package.package.dependencies.keys()
@@ -362,10 +404,12 @@ class Changes:
         return out
 
     def empty(self) -> bool:
+        """Would these changes change nothing?"""
         return not any(isinstance(c, Remove) or (isinstance(c, Install) and c.package) for c in self.packages.values())
 
 
 def _source(p: Info) -> str:
+    """Where a package comes from, as Hoard says it: its repository's name, or your package folder."""
     return p.repo.label() if p.repo is not None else "your package folder"
 
 
@@ -380,11 +424,14 @@ def add(project: UnityProject, env: Collection, packages: list[Info], operation:
     changes, adding = Changes(), []
 
     def keep_newer(p: Info) -> None:
+        """Install p, unless the project already has the same or a newer version."""
         was = project.locked.get(p.name)
         if was is None or was[0] < p.version:
             adding.append(p)
 
     def to_dependencies(p: Info) -> None:
+        """Install p, and write it in the project's dependencies unless they already ask for that version or a newer
+        one."""
         current = project.dependencies.get(p.name)
         single = current.single_version() if current else None
         if current is None or single is None or single < p.version:
@@ -392,6 +439,8 @@ def add(project: UnityProject, env: Collection, packages: list[Info], operation:
         keep_newer(p)
 
     def downgrade(p: Info) -> None:
+        """Install p, an older version, and write it in the project's dependencies where their range doesn't allow
+        it."""
         current = project.dependencies.get(p.name)
         if current is not None and not current.matches(p.version):
             changes.add_to_dependencies(p.name, DependencyRange.version(p.version))
@@ -442,6 +491,7 @@ def add(project: UnityProject, env: Collection, packages: list[Info], operation:
 
 
 def _locked(project: UnityProject, name: str):
+    """A package the project has installed, as (name, version, its dependencies); None when it hasn't."""
     if name not in project.locked:
         return None
     version, deps = project.locked[name]
@@ -506,6 +556,8 @@ def repair(project: UnityProject, env: Collection) -> Changes:
 
 
 def _repair_dependencies(project, env, changes: Changes, missing: _Missing) -> None:
+    """Repair: each package the project asks for but hasn't installed, the newest version that fits, with what it needs;
+    what no repository has is noted as missing."""
     to_install, names = [], set()
     for name, dep in project.dependencies.items():
         if name in project.locked:
@@ -531,6 +583,7 @@ def _repair_dependencies(project, env, changes: Changes, missing: _Missing) -> N
 
 
 def _repair_unlocked(project, env, changes: Changes, missing: _Missing) -> None:
+    """Repair: what the project's own packages (in Packages/, not from a repository) need and don't have yet."""
     own = [p for _, p in project.unlocked if p is not None]
     if not own:
         return
@@ -584,6 +637,7 @@ def _inside(project: Path, rel: str) -> Path | None:
 
 
 def _meta_guid(meta: Path) -> str | None:
+    """The GUID a Unity .meta file gives its asset, lower case; None when it has none or can't be read."""
     try:
         with open(meta, "r", encoding="utf-8", errors="replace") as f:
             for _ in range(50):
@@ -646,6 +700,7 @@ def cache_paths(vcc_folder: Path, p: Info) -> tuple[Path, Path]:
 
 
 def _sha256(path: Path) -> str:
+    """A file's SHA-256, read a megabyte at a time."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -672,6 +727,7 @@ def package_zip(vcc_folder: Path, p: Info) -> Path:
     log(f"Downloading the package {p.package.label()} {p.version}")
 
     def progress(got, whole):
+        """Say how much of the package has come."""
         tick(f"{p.package.label()}: {got // 1024} KB" + (f" of {whole // 1024} KB" if whole else ""))
     try:
         got = fetch.download(p.package.url, zip_path, headers, progress=progress)
@@ -687,6 +743,7 @@ def package_zip(vcc_folder: Path, p: Info) -> Path:
 
 
 def _member_path(name: str) -> PurePosixPath | None:
+    """A path in a package's zip, made safe: None for one that's absolute, has a drive or goes up out of the package."""
     name = name.replace("\\", "/")
     if name.startswith("/") or ":" in name or "\0" in name:
         return None
@@ -718,12 +775,15 @@ def unzip(zip_path: Path, dest: Path) -> None:
 
 
 def _copy_folder(src: Path, dest: Path) -> None:
+    """Copy a folder (a package from your package folder), leaving out links."""
     def ignore(folder, names):
+        """Which of a folder's entries are links, to leave out of the copy."""
         return [n for n in names if os.path.islink(os.path.join(folder, n))]
     shutil.copytree(src, dest, ignore=ignore)
 
 
 def _rmtree(path: Path) -> None:
+    """Delete a folder and what's in it (or a link to one, just the link), read-only files included."""
     def retry(func, p, _exc):   # Windows: read-only files (git checkouts) can't be deleted until made writable
         try:
             os.chmod(p, stat.S_IWRITE)

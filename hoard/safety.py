@@ -16,8 +16,10 @@ import stat
 import ssl
 import sys
 import tempfile
+import threading
 import time
 import unicodedata
+import weakref
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
@@ -223,6 +225,8 @@ def _canonical(obj) -> bytes:
 
 
 def _key_id(key: bytes) -> str:
+    """A short id for a sealing key (the start of its SHA-256), so a record says which key sealed it without giving it
+    away."""
     return hashlib.sha256(key).hexdigest()[:16]
 
 
@@ -235,6 +239,7 @@ def seal(obj: dict) -> dict:
 
 
 def _path_id(path: Path) -> str:
+    """A short id for a file's real path, to remember which files Hoard sealed itself."""
     return hashlib.sha256(os.path.normcase(os.path.realpath(path)).encode("utf-8", "surrogatepass")).hexdigest()[:32]
 
 
@@ -311,6 +316,15 @@ def safe_url(value) -> str | None:
     return value.strip() if u.scheme in ("http", "https") and u.netloc else None
 
 
+_VIDEO_FILE = re.compile(r"\.(?:mp4|m4v|webm|mov|mkv|ogv|avi)\Z", re.I)
+
+
+def is_video_address(value) -> bool:
+    """Is this the address of a video rather than a picture (a store whose first picture of a product is a video,
+    issue #212)? Hoard never fetches those for a tile: it looks for the product's still instead."""
+    return isinstance(value, str) and bool(_VIDEO_FILE.search(urlparse(value.strip()).path))
+
+
 def _is_public(ip) -> bool:
     """True for addresses on the public internet (not this computer, your network, or reserved ranges)."""
     return ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast
@@ -341,6 +355,49 @@ def public_http_url(url: str) -> bool:
         return False
 
 
+_open_connections: dict = {}   # lane -> its connections to the stores and their pictures (WeakSet), for Force stop
+_open_lock = threading.Lock()
+
+
+def note_connection(conn) -> None:
+    """Remember a connection Hoard opened (to a store, or for a picture) as its lane's, so Force stop can cut it:
+    a socket, or a connection that keeps its socket as .sock (urllib3's, while its answer is read). Only a job's: one
+    opened by anything else (a page's request, the update's download) is never cut by Force stop."""
+    from .common import job_lane
+    lane = job_lane()
+    if lane is None:
+        return
+    with _open_lock:
+        _open_connections.setdefault(lane, weakref.WeakSet()).add(conn)
+
+
+def cut_connections(lane: str) -> int:
+    """Force stop (issue #201): end every connection lane's job has open, so one waiting on a store that went quiet
+    (a download part way through, a page being read) ends at once instead of when it times out. Returns how many
+    were cut. (Shut down rather than closed, elsewhere: closing doesn't wake a thread waiting to read from it. On
+    Windows it's the other way round: shutting down doesn't, and closing the socket's handle does.)"""
+    with _open_lock:
+        conns = list(_open_connections.pop(lane, ()))
+    cut = 0
+    for conn in conns:
+        # (a connection's socket as it is now: wrapped for TLS once it connected)
+        sock = conn if isinstance(conn, socket.socket) else getattr(conn, "sock", None)
+        if sock is None:
+            continue
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+            cut += 1
+        except OSError:
+            continue   # already closed
+        if os.name == "nt":
+            # a response being read holds the socket open (close() waits for it), so its handle is closed itself
+            try:
+                socket.close(sock.detach())
+            except (OSError, ValueError):
+                pass
+    return cut
+
+
 def _connect_public(host: str, port: int, timeout) -> socket.socket:
     """Connect to one of the public addresses host resolved to, using exactly the address that was checked.
 
@@ -348,6 +405,7 @@ def _connect_public(host: str, port: int, timeout) -> socket.socket:
     can use (a name that answers with a public address for the check and a private one for the connection).
     """
     last: Exception | None = None
+    tried = []
     for family, sockaddr in _public_addresses(host, port):
         sock = socket.socket(family, socket.SOCK_STREAM)
         if timeout is not None and timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
@@ -357,7 +415,10 @@ def _connect_public(host: str, port: int, timeout) -> socket.socket:
             return sock
         except OSError as e:
             last = e
+            tried.append(f"{sockaddr[0]}: {type(e).__name__} {getattr(e, 'winerror', None) or e.errno or ''}".strip())
             sock.close()
+    if len(tried) > 1:   # (only the last one's error goes on: Hoard's log says how each went, for a support report)
+        print(f"Couldn't connect to {host} at any of its addresses: {'; '.join(tried)}", flush=True)
     raise last or OSError(f"couldn't connect to {host}")
 
 
@@ -367,6 +428,7 @@ class _PublicHTTPConnection(http.client.HTTPConnection):
     def connect(self):
         """Connect to a checked public address instead of looking the host up again."""
         self.sock = _connect_public(self.host, self.port, self.timeout)
+        note_connection(self.sock)   # (the socket: urllib lets go of the connection's once the answer starts)
 
 
 class _PublicHTTPSConnection(http.client.HTTPSConnection):
@@ -376,6 +438,7 @@ class _PublicHTTPSConnection(http.client.HTTPSConnection):
         """Connect to a checked public address, then start TLS for the original host name."""
         sock = _connect_public(self.host, self.port, self.timeout)
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        note_connection(self.sock)
 
 
 class _PublicHTTPHandler(urllib.request.HTTPHandler):
@@ -455,6 +518,9 @@ def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20,
             data = r.read(max_bytes + 1)
             if len(data) > max_bytes:
                 return None
+            length = (r.headers.get("Content-Length") or "").strip()
+            if length.isdigit() and len(data) < int(length):
+                return None   # cut short (a dropped connection, or Force stop): never kept as if it were the picture
             return data, r.headers.get_content_type()
     except urllib.error.HTTPError:
         return None   # the store said no (a picture that's gone): nothing to note
@@ -680,6 +746,7 @@ def _final_path(fd: int) -> str | None:
 
 
 def _same_place(a: str, b: Path) -> bool:
+    """Do two paths name the same place (case and separators as the system compares them)?"""
     return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(str(b)))
 
 
@@ -796,6 +863,8 @@ class _Inert(HTMLParser):
         self.raw: str | None = None   # the raw-text element being written, while inside one
 
     def _attrs(self, attrs) -> str:
+        """A tag's attributes as kept: event handlers and nonsense names left out, and links that could run code made
+        harmless."""
         kept = []
         for name, value in attrs:
             name = (name or "").lower()
@@ -811,6 +880,7 @@ class _Inert(HTMLParser):
         return "".join(kept)
 
     def _dropped(self, tag: str, attrs) -> bool:
+        """Is this tag left out (a frame, an embed, a base, a meta refresh), what's inside it kept?"""
         if tag in _DROP_TAG:
             return True
         if tag == "meta" and any((n or "").lower() == "http-equiv" for n, _ in attrs):
@@ -818,6 +888,8 @@ class _Inert(HTMLParser):
         return False
 
     def handle_starttag(self, tag, attrs):
+        """An opening tag: kept with safe attributes, left out, or (a script, say) left out with everything inside
+        it."""
         if self.skip:
             if tag == self.skip[-1] and tag in _NESTS:
                 self.skip.append(tag)
@@ -832,11 +904,13 @@ class _Inert(HTMLParser):
             self.raw = tag
 
     def handle_startendtag(self, tag, attrs):
+        """A self-closing tag, kept as it was written, with safe attributes, unless it's one left out."""
         if self.skip or tag in _DROP_WITH_CONTENT or self._dropped(tag, attrs):
             return
         self.out.append(f"<{tag}{self._attrs(attrs)} />")   # written as it was, so it's read as it would have been
 
     def handle_endtag(self, tag):
+        """A closing tag: kept, unless its opening tag was left out."""
         if self.skip:
             if tag == self.skip[-1]:
                 self.skip.pop()
@@ -848,6 +922,7 @@ class _Inert(HTMLParser):
         self.out.append(f"</{tag}>")
 
     def handle_data(self, data):
+        """Text: escaped, so none of it can be read as a tag (CSS kept as it is, but for <)."""
         if self.skip:
             return
         if self.raw:   # CSS, written as read except for "<": no tag can start inside it, whichever way it's read
@@ -856,18 +931,22 @@ class _Inert(HTMLParser):
             self.out.append(html.escape(data, quote=False))
 
     def handle_entityref(self, name):
+        """A named character (&amp;), kept when it's a real name, escaped otherwise."""
         if not self.skip:
             self.out.append(f"&{name};" if name.isalnum() else html.escape(f"&{name}", quote=False))
 
     def handle_charref(self, name):
+        """A numbered character (&#39;), kept when it's a real number, escaped otherwise."""
         if not self.skip:
             self.out.append(f"&#{name};" if name.isalnum() else html.escape(f"&#{name}", quote=False))
 
     def handle_decl(self, decl):
+        """The page's doctype, kept."""
         if not self.skip and decl.lower().startswith("doctype") and ">" not in decl:
             self.out.append(f"<!{decl}>")
 
     def unknown_decl(self, data):
+        """CDATA (text inside SVG), kept as escaped text; anything else left out."""
         if not self.skip and data.startswith("CDATA[") and "]]>" not in data:   # text inside SVG
             self.out.append(html.escape(data[6:], quote=False))
 

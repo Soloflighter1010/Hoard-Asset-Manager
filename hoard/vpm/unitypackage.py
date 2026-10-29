@@ -34,6 +34,8 @@ META_GUID = re.compile(rb"^guid:\s*([0-9a-f]{32})\s*$", re.M)
 
 
 class ImportResult:
+    """What an import did: assets placed, and those skipped because they were there already or something was in the
+    way."""
     def __init__(self):
         self.placed = 0
         self.skipped_same = 0        # the project already has that asset (by GUID)
@@ -41,11 +43,14 @@ class ImportResult:
         self.paths: list[str] = []   # the top folders it went into, for the page
 
     def as_dict(self) -> dict:
+        """The result, for the page."""
         return {"placed": self.placed, "already_there": self.skipped_same, "in_the_way": self.skipped_taken,
                 "folders": sorted(set(self.paths))[:20]}
 
 
 def _clean_pathname(raw: bytes) -> str:
+    """An asset's path in the package, as Unity reads it: its first line, with forward slashes. Raises NotAPackage for
+    one that isn't safe to use."""
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -163,6 +168,7 @@ def project_guids(project: Path) -> dict[str, str]:
 
 
 def _inside(project: Path, rel: str) -> Path | None:
+    """Where an asset's path is in the project, or None when it would land outside it."""
     path = project.joinpath(*rel.split("/"))
     try:
         real, root = path.parent.resolve(), project.resolve()

@@ -61,6 +61,7 @@ def public_link(store: str, url) -> str | None:
 
 
 def adult(*texts: str) -> bool:
+    """Whether any of the texts looks like an adult product, which the screenshots leave out."""
     return any(ADULT.search(t or "") for t in texts)
 
 
@@ -91,11 +92,13 @@ def downloaded_pictures(root: Path) -> dict[str, Path]:
 
 
 def slug(text: str) -> str:
+    """A short file name from a product's name."""
     s = re.sub(r"[^\w]+", "-", text.lower()).strip("-")
     return s[:40] or "product"
 
 
 def main(argv: list[str]) -> int:
+    """Export products from your library (their pictures and details) for the screenshots to use."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("out")
     ap.add_argument("--limit", type=int, default=24, help="how many products (default 24)")

@@ -24,13 +24,16 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const B64 = /^[A-Za-z0-9_-]+$/;
 const LETTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
+// Bytes as URL-safe base64.
 const b64 = bytes => {
   let s = "";
   for (let n = 0; n < bytes.length; n += 0x8000) s += String.fromCharCode(...bytes.subarray(n, n + 0x8000));
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
+// URL-safe base64 as bytes.
 const unb64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - text.length % 4) % 4)),
                                       c => c.charCodeAt(0));
+// The SHA-256 of some text, as URL-safe base64.
 const sha256 = async text => b64(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
 
 // A new id: 10 letters and digits, each equally likely (bytes past 247 are skipped: 248 is 4 times 62)
@@ -42,6 +45,7 @@ function newId() {
   return id;
 }
 
+// A JSON answer, never cached or sniffed.
 function answer(status, body, extra = {}) {
   return new Response(body === null ? null : JSON.stringify(body), { status, headers: {
     ...(body === null ? {} : { "Content-Type": "application/json" }), "Cache-Control": "no-store",
@@ -92,6 +96,7 @@ async function owned(request, env, id) {
     : answer(403, { error: "That short link was made by someone else's Hoard." });
 }
 
+// Keep a set's code for LIFETIME, returning when it ends.
 async function keep(env, id, data, hash) {
   const expires = Math.floor(Date.now() / 1000) + LIFETIME;
   await env.SETS.put(id, data.buffer, { expiration: expires, metadata: { h: hash, e: expires } });

@@ -3,16 +3,20 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>Hoard's window in Unity: your downloaded products, to import, with what's in the project and what each
+    /// needs.</summary>
     public sealed class HoardWindow : EditorWindow
     {
         const string RootPref = "SoloFlighter.Hoard.DownloadsFolder";
         static readonly string[] StoreNames = Prepend("All stores", HoardCatalog.Stores);   // the catalog's own list
 
+        /// <summary>A list with one more at its start.</summary>
         static string[] Prepend(string first, string[] rest)
         {
             var all = new string[rest.Length + 1];
@@ -68,6 +72,7 @@ namespace SoloFlighter.Hoard.Editor
         [MenuItem("Hoard/Open Hoard", false, 0)]
         public static void Open() { OpenWindow(); }
 
+        /// <summary>Open Hoard's window, or bring it to the front.</summary>
         static HoardWindow OpenWindow()
         {
             var w = GetWindow<HoardWindow>("Hoard");
@@ -76,6 +81,7 @@ namespace SoloFlighter.Hoard.Editor
             return w;
         }
 
+        /// <summary>Open Create Credits List (the Hoard menu's).</summary>
         [MenuItem("Hoard/Create Credits List", false, 1)]
         static void OpenCredits() { CreditsWindow.Open(OpenWindow()); }
 
@@ -295,6 +301,7 @@ namespace SoloFlighter.Hoard.Editor
             return missing;
         }
 
+        /// <summary>What a product needs, as a list in words.</summary>
         static string Listed(List<HoardNeed> needs)
         {
             var names = needs.ConvertAll(n => n.Label);
@@ -338,6 +345,8 @@ namespace SoloFlighter.Hoard.Editor
             return ProjectStatus(a) >= InProject.Partly && pending.TryGetValue(Updates.Key(a.Store, a.Name), out n) ? n : 0;
         }
 
+        /// <summary>The updates Hoard found for each product, from its asset-updates.json (none when it can't be
+        /// read).</summary>
         static Dictionary<string, int> ReadPending()
         {
             try
@@ -368,6 +377,7 @@ namespace SoloFlighter.Hoard.Editor
 
         // ---- "Which Product Is This From?" (Assets menu, and the Project window's right-click menu)
 
+        /// <summary>Which Product Is This From?: the products the selected files came from.</summary>
         [MenuItem("Hoard/Which Product Is This From?", false, 20)]
         [MenuItem("Assets/Hoard/Which Product Is This From?", false, 1500)]
         static void WhichProduct()
@@ -379,6 +389,7 @@ namespace SoloFlighter.Hoard.Editor
             w.FindOrigins();
         }
 
+        /// <summary>Whether there's a selection to ask about.</summary>
         [MenuItem("Hoard/Which Product Is This From?", true)]
         [MenuItem("Assets/Hoard/Which Product Is This From?", true)]
         static bool CanWhichProduct() { return Selection.assetGUIDs != null && Selection.assetGUIDs.Length > 0; }
@@ -1218,6 +1229,16 @@ namespace SoloFlighter.Hoard.Editor
             if (folder != null) GUILayout.Space(6);
             if (HoardCatalog.StoreLink(a.Store, a.Url) && Look.LayoutButton("Store page", Look.Kind.Ghost, a.Url)) Application.OpenURL(a.Url);
             GUILayout.EndHorizontal();
+            if (ProjectStatus(a) >= InProject.Partly && a.PackagePaths.Count > 0)
+            {
+                GUILayout.Space(6);
+                if (Look.LayoutButton("Take it out of this project...", Look.Kind.Ghost,
+                        "Delete what its packages added to Assets/, except files another product here still uses"))
+                {
+                    TakeOut(a);
+                    GUIUtility.ExitGUI();
+                }
+            }
             GUILayout.Space(18);
             GUILayout.EndVertical();
             GUILayout.Space(18);
@@ -1329,6 +1350,49 @@ namespace SoloFlighter.Hoard.Editor
             }
             Selection.objects = found.ToArray();
             if (found.Count > 0) EditorGUIUtility.PingObject(found[0]);
+        }
+
+        /// <summary>Issue #189: take a product out of the project, cleanly. Everything its packages put in Assets/ is
+        /// deleted (to the system's trash where Unity can), and the folders that leaves empty, but not a file another
+        /// product in the project also carries (a creator's shared shader), which that product still needs. Asked first,
+        /// listing what goes.</summary>
+        void TakeOut(HoardAsset a)
+        {
+            var mine = new List<string>();
+            foreach (string p in a.PackagePaths) mine.AddRange(packages.Guids(p));
+            var theirs = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var other in catalog.Assets)
+            {
+                if (other == a || ProjectStatus(other) < InProject.Partly) continue;
+                foreach (string p in other.PackagePaths) theirs.UnionWith(packages.Guids(p));
+            }
+            var paths = ProjectShare.Removable(mine, theirs, AssetDatabase.GUIDToAssetPath);
+            if (paths.Count == 0)
+            {
+                EditorUtility.DisplayDialog("Hoard", "Nothing of " + a.Name + " is in this project's Assets folder to take out.", "OK");
+                return;
+            }
+            var shown = new StringBuilder();
+            for (int i = 0; i < paths.Count && i < 12; i++) shown.Append("\n").Append(paths[i]);
+            if (paths.Count > 12) shown.Append("\n...and ").Append(paths.Count - 12).Append(" more");
+            if (!EditorUtility.DisplayDialog("Hoard", "Take " + a.Name + " out of this project? " + paths.Count +
+                    (paths.Count == 1 ? " file goes" : " files go") + ", and the folders that leaves empty. Files another product here " +
+                    "also uses stay." + shown, "Take it out", "Cancel"))
+                return;
+            var failed = new List<string>();
+            AssetDatabase.StartAssetEditing();
+            try
+            {
+                AssetDatabase.MoveAssetsToTrash(paths.ToArray(), failed);   // (any it couldn't move are in failed)
+            }
+            finally { AssetDatabase.StopAssetEditing(); }
+            var folders = ProjectShare.EmptiedFolders(paths, f => AssetDatabase.IsValidFolder(f) && AssetDatabase.FindAssets("", new[] { f }).Length == 0);
+            foreach (string f in folders) AssetDatabase.MoveAssetToTrash(f);
+            AssetDatabase.Refresh();
+            packages.ProjectChanged(); Forget(); Repaint(); ReportSoon();
+            if (failed.Count > 0)
+                EditorUtility.DisplayDialog("Hoard", failed.Count + (failed.Count == 1 ? " file" : " files") + " of " + a.Name +
+                    " couldn't be taken out (open elsewhere, or read-only), for example " + failed[0] + ".", "OK");
         }
 
         void SelectInProject(string packagePath)

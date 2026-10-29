@@ -3,7 +3,8 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
 
 ## Downloading
 
-- **Sync** (top right) reads what you own from each store you use, then downloads anything new, as one job.
+- **Sync** (top right in the Library) reads what you own from each store you use, then downloads anything new,
+  as one job. It says what it does, and on which stores, and starts when you choose **Start** (5.2.0).
 - **The routine check** (in **Settings**: off unless you choose every 6 or 12 hours, once a day, once a week or
   once a month) runs by itself while Hoard is open: it reads your stores, checks your downloads (see [Checking
   your downloads](#checking-your-downloads)) and checks for updates. It downloads nothing itself: when it found
@@ -15,19 +16,22 @@ creators update their files. Payhip is listed, not downloaded: see [Payhip](#pay
   Turn that off in [Settings](Settings).
 - **Your tasks go first.** Start something while the routine check runs and the check stops safely to make way;
   Tasks says so, and it carries on after yours. Anything you start also waits ahead of automatic ones in Tasks.
-- **Download new** (in Downloads) and **Download everything new** (in **Stores**) download without refreshing
+- **Download new** (top right in Downloads) and **Download everything new** (in **Stores**) download without refreshing
   your Library list first, from the stores switched on in [Settings](Settings). A store's **Download** button does
   one store. Each first lists what it would get:
   what's in your library with nothing on disk yet, and the updates the last check found. Untick anything you
   don't want this time; left all ticked, it downloads everything new as before. Where Hoard knows a product's
   files before downloading (an update's new and changed files, and a Booth product's files), **Choose files**
-  under it lists them to untick one by one; what you leave out is listed as skipped, and downloaded another time
-  if you choose it. **Always skip** leaves a product
+  under it lists them to untick one by one; what you leave out is listed as skipped, and Hoard remembers it (5.2.0):
+  it's left out of that product's downloads from then on, Sync and the routine check included, and comes unticked
+  in this list, to tick again whenever you like. Files your rules leave out (**Files to leave out**, in
+  [Settings](Settings): PSDs, say, or files named with Quest) come unticked too. **Always skip** leaves a product
   out of every download and sync, including automatic ones, until you choose **Stop skipping** (under **Always
   skipped** in the same list). **Update all** lists the updates the same way.
 - **Download** in an item's details (in the Library) downloads just that product, and so do **Update** in
   Downloads and **Download** for several selected products in the Library. A product you always skip still
-  downloads when you choose it like this. Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
+  downloads when you choose it like this. For one product, Hoard first asks which of its files to save: see
+  [Which files to save](#which-files-to-save). Hoard goes straight to it on Jinxxy (its item page) and Gumroad (its download
   page). On Booth it still reads your library list (Booth lists the files there), and on itch.io it asks
   itch.io's API.
 
@@ -35,6 +39,27 @@ Progress shows as Hoard works. At the end, a summary lists what's new, what was 
 anything that couldn't be downloaded, with the reason. A file that fails to download is tried again first (twice,
 after a short wait; **Failed downloads** in [Settings](Settings)), unless the store says it isn't there or isn't
 yours.
+
+### Which files to save
+
+Before one product downloads (**Download** in its details, **Update** in Downloads), Hoard asks **What files do
+you want to save?** (5.2.0). It says what the product contains, such as "2 Unity packages, 1 Substance Painter
+project, and 3 compressed files", then:
+
+- **Download everything** gets all of it.
+- **Choose files** lists its files by kind, to untick what you don't want this time; **Download these** gets the
+  rest.
+
+Where the store doesn't list a product's files before downloading (Gumroad, Jinxxy and itch.io, and Booth when
+your library list doesn't have them), Hoard looks at its download page first, as a short task of its own (**See
+what's in it** in Tasks). Nothing is downloaded, and **Download everything** works while it looks.
+
+Hoard remembers what you leave out of each product, and asks again whenever you download from it later or it gets
+an update: what you left out before, and what your rules leave out (**Files to leave out**, in
+[Settings](Settings)), comes unticked. Tick everything and Hoard forgets the choice. **Download more of it...**, in
+a downloaded product's details in Downloads, lists only the files it has that aren't on disk, to choose from the
+same way. To download straight away instead, turn off **Ask which files to save, before a product downloads** in
+[Settings](Settings): what your rules and earlier choices leave out still stays out.
 
 ### One thing at a time, in turn
 
@@ -194,13 +219,14 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
 
 ## The Downloads view
 
-- **Search** matches names, creators, tags and file names. Filter by store, creator, tag or **File types**, and
+- **Search** matches names, creators, tags and file names, with the Library's prefixes (`type:zip` is a kind of
+  file here: see [Finding things](Library#finding-things)). Filter by store, creator, tag or **File types**, and
   sort by name, creator, store, **Recently added** or **Largest**. The sort you choose is the Library's too, and Hoard
   remembers it next time it starts (5.0); **Largest** is only here, so the Library sorts by name meanwhile.
 - Open a product to see its files, sizes and folder. **Open folder** opens it in Explorer (or Finder), **Show in
   folder** shows one file there, and **Copy path** copies the folder's location.
-- A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** checks the folder again,
-  say after you've tidied it yourself.
+- A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** (in the **Menu**) checks the
+  folder again, say after you've tidied it yourself.
 - **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without importing
   anything, and takes nothing out until you choose **Extract** (below). A Unity package's files are listed in their folders (each opens as you choose it), with
   their sizes and the preview pictures Unity keeps inside the package; **Search in it** finds a file wherever it
@@ -239,9 +265,20 @@ since. The first check reads each file in full and keeps its fingerprint (SHA-25
 size or modified time changed, so they're quick. A file downloaded since the last check isn't read until the
 next one: it was checked as it came in. It also checks the seal on Hoard's own records.
 
-The Downloads sidebar says when it last checked and what it found, with **Check now**. The check is a task like a
-sync, so Tasks lists it, with the files that are missing or changed. A file that changed may be your own edit;
-see the next section for editing safely. Delete a changed file and sync to download it again as the store has it.
+The Downloads sidebar says when it last checked and what it found, with **Check now**. When it found files changed
+or missing, **See what it found** (5.2.0) lists them by product, each with what you can do about it:
+
+- **Download again** gets it again as the store has it. A changed file is first moved to the product's
+  `_Previous versions` folder, so nothing of yours is lost. Several at once go as one task.
+- **Keep it as it is** (a changed file): it may be your own edit. Hoard takes its fingerprint again, so it's fine
+  from then on.
+- **Forget it** (a missing file): Hoard stops expecting it, and leaves it out of that product's downloads from then
+  on, so a sync doesn't bring it back. Tick it again when Hoard asks which files to save to get it back.
+- **Show in folder** opens its folder.
+
+**Keep every change** and **Download them all again** do the same for all of them. The check is a task like a
+sync, so Tasks lists it too, with its log. A file that changed may be your own edit; see the next section for
+editing safely.
 
 ### Disk space
 

@@ -42,6 +42,7 @@ BUILT_IN = "0000000000000000"   # Unity's own resources (the default material, b
 
 
 def index_file() -> Path:
+    """Where what each package names and has is kept (package-needs.json), so packages are read once."""
     return data_dir() / "package-needs.json"
 
 
@@ -63,10 +64,12 @@ def known() -> dict:
 # ----------------------------------------------------------------------------- reading one file
 
 def _clean(guids) -> list[str]:
+    """GUIDs as kept: well-formed, each once, sorted, Unity's own built-in ones left out."""
     return sorted(g for g in guids if isinstance(g, str) and packages.GUID.fullmatch(g) and not g.startswith(BUILT_IN))
 
 
 def _one(stream) -> dict:
+    """What one .unitypackage has (its assets' GUIDs) and names that it doesn't have (what it needs from elsewhere)."""
     refs: set = set()
     assets = packages.read_unitypackage(stream, refs=refs)
     own = set(assets)
@@ -123,6 +126,7 @@ class NeedsIndex:
 
     @staticmethod
     def _valid(path, entry) -> bool:
+        """Is a kept entry as Hoard writes it (an absolute path, the file's size and time, and its packages' GUIDs)?"""
         if not isinstance(path, str) or not os.path.isabs(path) or not isinstance(entry, dict):
             return False
         if not isinstance(entry.get("size"), int) or not isinstance(entry.get("mtime_ns"), int):
@@ -149,6 +153,7 @@ class NeedsIndex:
         return e["size"] == st.st_size and e["mtime_ns"] == st.st_mtime_ns
 
     def put(self, path: str, entry: dict) -> None:
+        """Keep what a file has and names."""
         with self.lock:
             self.files[path] = entry
             self.changed_at = time.monotonic()
@@ -163,10 +168,12 @@ class NeedsIndex:
                 self.changed_at = time.monotonic()
 
     def get(self, path: str) -> dict | None:
+        """What a file has and names, if it's been read."""
         with self.lock:
             return self.files.get(path)
 
     def save(self) -> None:
+        """Write what's kept, sealed."""
         with self.lock:
             data = json.dumps(seal({**FORMAT, "files": self.files}), separators=(",", ":"), ensure_ascii=False)
         write_file_safely(self.path, data)
@@ -233,6 +240,8 @@ def work_out(assets: list[dict], index: NeedsIndex) -> dict:
                     holders.setdefault(g, set()).add(_who(by_id[other]))
 
         def weak(o: int) -> bool:
+            """Is a product's match too weak to count: only GUIDs many products carry, or a few shared with another of
+            the same creator's?"""
             shared = all(len(holders[g]) >= SHARED_BY for g in counts[o])
             maker = _who(by_id[o])[0]
             return shared or (bool(maker) and maker == _who(a)[0] and len(counts[o]) < SAME_CREATOR_MIN)
@@ -261,6 +270,7 @@ VERSION = re.compile(r"\d{1,3}\.\d{1,3}")
 
 
 def tool_urls() -> set:
+    """The websites of the tools Hoard knows (lilToon, Modular Avatar...)."""
     return {t["url"] for t in known()["tools"].values()}
 
 
@@ -313,6 +323,7 @@ def valid_needs(value, stores) -> bool:
 
 
 def _version_key(v: str):
+    """A version's numbers, to sort by (1.10 after 1.9)."""
     try:
         return [int(n) for n in v.split(".")]
     except ValueError:
@@ -370,6 +381,7 @@ class NeedsReader:
         return read
 
     def run_forever(self, stop: threading.Event) -> None:
+        """Read new and changed packages in the background, a little at a time, until Hoard stops."""
         time.sleep(20)   # after Hoard has started up
         while not stop.is_set():
             try:

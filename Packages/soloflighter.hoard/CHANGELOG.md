@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0
+
+- **A stray file isn't a product.** A file or two of a big package no longer marks its product as in the project
+  (another product could have brought them). Part of a product counts once enough of its own files are there, and
+  all but a few files of a big one (a sample or read-me you deleted) counts as all of it.
+- **Take it out of this project...** In a product's details, while it's in the project: deletes what its packages put
+  in `Assets` (to your system's trash, where Unity can) and the folders that leaves empty, but never a file another
+  product in the project also uses. It lists what goes and asks first.
+
 ## 0.9.0
 
 - **What the Hoard app put in the project, and where.** Hoard 5.0's Projects puts products from your library in a

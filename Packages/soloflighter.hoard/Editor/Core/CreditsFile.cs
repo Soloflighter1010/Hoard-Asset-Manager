@@ -8,6 +8,8 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>A project's credits as you've made them (the title, the format, what's added and what's left out), kept
+    /// in the project.</summary>
     public sealed class CreditsFile
     {
         public const int MaxAdded = 500;
@@ -45,6 +47,7 @@ namespace SoloFlighter.Hoard
             return f;
         }
 
+        /// <summary>Write the credits file, never leaving it half written.</summary>
         public void Save(string path)
         {
             var root = Obj();
@@ -66,9 +69,13 @@ namespace SoloFlighter.Hoard
             JsonBuild.WriteFile(path, Json.Canonical(root));
         }
 
+        /// <summary>A new JSON object.</summary>
         static JsonValue Obj() { return JsonBuild.Obj(); }
+        /// <summary>A JSON array of these.</summary>
         static JsonValue Arr(List<JsonValue> items) { return JsonBuild.Arr(items); }
+        /// <summary>A JSON string.</summary>
         static JsonValue Str(string s) { return JsonBuild.Str(s); }
+        /// <summary>Add a member to a JSON object.</summary>
         static void Put(JsonValue o, string k, JsonValue v) { JsonBuild.Put(o, k, v); }
     }
 }

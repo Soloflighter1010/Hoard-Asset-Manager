@@ -11,13 +11,18 @@ tagged in the other. Filter by any tag from the sidebar; filters combine.
 
 - **One item:** open it, then type a tag under **Tags**, or click a suggestion to add it. Remove a tag with the
   **×** next to it. A tag you add applies to every copy of that product you own on other stores.
+- **Its creator's tags** (5.2.0): on Booth, Jinxxy and itch.io, the tags a creator gave a product on its store's
+  page show in its details, under its suggestions: click one to make it your tag on it. They're among the suggested
+  tags beside the grid too, to filter by, and the search finds them (`tag:`). They never change your own tags.
+  Hoard reads a few products' pages each time it reads a store, until each one has been read once; turn it off in
+  [Settings](Settings) (**Store tags**). Gumroad's and Payhip's product pages don't show their tags.
 - **Many items:** choose them (tick their boxes, Ctrl- or Shift-click, or **Select** then click; or **Select all
   shown** after filtering, say by a creator), then **Tags** in the selection bar, or right-click: **Add a tag** or
   **Remove a tag**.
 
 ## The Tags panel
 
-The **Tags** button opens a list of all your tags and the suggestions:
+**Tags** (in the **Menu**, top right) opens a list of all your tags and the suggestions:
 
 - **Keep** a suggestion to make it your tag on every item whose name has that word, including items you buy
   later. **Hide** one to stop it being suggested.
@@ -31,6 +36,15 @@ A tag of yours can say what it's about: **Avatar**, **World**, **Clothing**, **G
 are then grouped by kind, and [Mix and match](Sets#mix-and-match) takes avatars and clothes from them: tag your bases
 with an Avatar tag, and your outfits with Clothing tags (one tag for each kind of thing, such as tops, shoes or hair, if
 you'd like a pick of each).
+
+## Product types
+
+What a product is (**Avatar**, **Clothing**, **Accessory**, **Hair**, **Texture**, **Shader**, **Gimmick**,
+**Script**, **Tool**, **Animation**, **World** or **Other**) is a field of its own, not a tag (5.2.0). Hoard guesses
+it from the product's name and its creator's tags on its store, or one of your tags says (a tag of kind Avatar, as
+you said it before 5.2.0). Set it yourself in a product's details, under **Product type**; **Let Hoard guess** goes
+back. Filter by it with **Product type** beside the grid, or search for `type:avatar`. Your tags stay for your own
+words.
 
 ## What a tag can be
 

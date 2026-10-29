@@ -91,6 +91,7 @@ def download(url: str, dest: Path, headers: dict | None = None, max_bytes: int =
 
 
 def _why(e: Exception) -> str:
+    """Why a download failed, in plain words."""
     from ..net import is_network_error, plain_error
     if is_network_error(e):
         return "it couldn't be reached (is this computer online?)"

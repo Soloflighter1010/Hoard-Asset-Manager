@@ -9,14 +9,13 @@ reaches with a session that carries nothing of yours.
 from __future__ import annotations
 
 import re
-import time
 import uuid
 from urllib.parse import urlencode, urlparse
 
 import requests
 
 from . import __version__, egress
-from .common import NotLoggedIn
+from .common import NotLoggedIn, pause
 
 API = "https://api.itch.io"
 KEYS_PAGE = "https://itch.io/user/settings/api-keys"   # where you make one
@@ -91,7 +90,7 @@ def owned_keys(sess: requests.Session, delay: float = 0.0, progress=lambda m: No
             per_page = 50
         if not new or len(data.get("owned_keys") or []) < per_page:
             break
-        time.sleep(delay)
+        pause(delay)
     return list(found.values())
 
 

@@ -16,7 +16,7 @@ from urllib.parse import unquote, urljoin, urlparse
 import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context, settle
-from .common import NotLoggedIn, log, now_iso, tick
+from .common import NotLoggedIn, log, now_iso, pause, tick
 from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards, scroll_inventory
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
@@ -106,6 +106,8 @@ class Report:
     available: list = field(default_factory=list)
     got: set = field(default_factory=set)             # products (tag_key) that had a file saved in this run
     got_files: set = field(default_factory=set)       # (tag_key, file) saved in this run, named as a check names it
+    # what each product has on its store, read without downloading it (issue #225: to choose from): {tag_key: {...}}
+    listed: dict = field(default_factory=dict)
 
     def saved(self, store: str, name: str, file: str, *also: str | None) -> None:
         """A file saved: its product, and the file as Check for updates names it, so only what came is taken off
@@ -174,31 +176,108 @@ def direct_targets(library_items: list[dict], stores: list[str], only: str | Non
 
 
 def would_get(args, report: Report, store: str, rec: dict, name: str, creator: str, file: str, changed: bool,
-              deleted_here: bool = False) -> None:
+              deleted_here: bool = False, also: str | None = None) -> None:
     """A dry run: note a file the store has that isn't on disk. For a product already downloaded, a file the store
     changed or added goes on the list of updates the Downloads page shows (issue #26); one downloaded before and
-    since deleted from disk, unchanged, isn't an update (it's downloaded again all the same)."""
+    since deleted from disk, unchanged, isn't an update (it's downloaded again all the same). also: the product's name
+    in your library, when its page names it differently (a chosen Jinxxy item's)."""
     log(f"    would {'update' if changed else 'download again' if deleted_here else 'download'}: {file}")
+    if getattr(args, "listing", False):   # what's there to choose from (issue #225), and not an update either way
+        entry = report.listed.setdefault(tag_key(store, name), {"store": store, "name": name, "creator": creator, "files": []})
+        if also:   # (the same list, under the name it was asked for by)
+            report.listed.setdefault(tag_key(store, also), entry)
+        if file not in entry["files"] and len(entry["files"]) < 500:
+            entry["files"].append(file)
+        return
     if rec.get("files") and not deleted_here:
         report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
                                  "file": file, "kind": "changed" if changed else "new"})
 
 
+# Files to leave out of every download (issue #225): a rule names a kind of file (by the end of its name) or words in
+# its name, for every store or one. config.json's "file_rules": [{"store": "all" or a store, "kind": ...} or
+# {"store": ..., "words": "quest android"}]. A product's own files you left out are remembered too ("file_skip").
+FILE_KINDS = {
+    "unitypackage": ("Unity packages", (".unitypackage",)),
+    "archive": ("Archives", (".zip", ".7z", ".rar", ".tar", ".gz")),
+    "layered": ("Layered images", (".psd", ".psb", ".clip", ".kra", ".sai", ".sai2", ".xcf")),
+    "picture": ("Pictures and textures", (".png", ".jpg", ".jpeg", ".tga", ".tif", ".tiff", ".exr", ".webp", ".dds", ".bmp")),
+    "blender": ("Blender files", (".blend", ".blend1")),
+    "substance": ("Substance Painter projects", (".spp", ".sbsar", ".sbs")),
+    "model": ("3D models", (".fbx", ".obj", ".vrm", ".glb", ".gltf", ".dae", ".3ds", ".max", ".ma", ".mb")),
+    "audio": ("Sound", (".wav", ".mp3", ".ogg", ".flac", ".m4a")),
+    "video": ("Video", (".mp4", ".mov", ".webm", ".mkv", ".avi")),
+    "document": ("Documents", (".pdf", ".txt", ".md", ".rtf", ".docx")),
+}
+MAX_RULES = 50
+MAX_REMEMBERED = 5000   # products whose files you left out, remembered
+
+
+def file_rules(cfg: dict) -> list[dict]:
+    """Your rules for files to leave out, checked: each {"store": "all" or a store, "kind" or "words"}."""
+    out: list[dict] = []
+    raw = cfg.get("file_rules") if isinstance(cfg.get("file_rules"), list) else []
+    for r in raw[:MAX_RULES]:
+        if not isinstance(r, dict) or r.get("store") not in ("all", *DOWNLOADABLE):
+            continue
+        if r.get("kind") in FILE_KINDS:
+            out.append({"store": r["store"], "kind": r["kind"]})
+        elif isinstance(r.get("words"), str):
+            words = [w for w in re.split(r"[\s,]+", unicodedata.normalize("NFKC", r["words"]).lower()) if 0 < len(w) <= 40][:20]
+            if words:
+                out.append({"store": r["store"], "words": " ".join(dict.fromkeys(words))})
+    return out
+
+
+def ruled_out(rules: list[dict], store: str, file: str) -> str | None:
+    """Why one of your rules leaves this file out ("Layered images", or the word its name has), or None."""
+    name = unicodedata.normalize("NFKC", file or "").lower()
+    for r in rules:
+        if r["store"] not in ("all", store):
+            continue
+        if "kind" in r and name.endswith(FILE_KINDS[r["kind"]][1]):
+            return FILE_KINDS[r["kind"]][0]
+        for w in r.get("words", "").split():
+            if (re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", name) if w.isascii() else w in name):
+                return f"named with {w}"
+    return None
+
+
+def remembered_files(cfg: dict) -> dict[str, set]:
+    """The files you left out of each product (Download new's Choose files), by its tag key: left out from then on."""
+    raw = cfg.get("file_skip") if isinstance(cfg.get("file_skip"), dict) else {}
+    return {k: {n for n in v[:500] if isinstance(n, str) and n} for k, v in list(raw.items())[:MAX_REMEMBERED]
+            if isinstance(k, str) and 0 < len(k) <= 400 and isinstance(v, list)}
+
+
 def left_out(args, report: Report, store: str, name: str, file: str, *also: str) -> bool:
-    """A file you left out when choosing what to download (args.files: {tag_key: {"shown": the files listed,
-    "chosen": the ones ticked}}). Only a file that was listed and unticked is left out: one that wasn't listed (a
-    product whose name makes the same key, a file the creator added or relabelled since) is downloaded as usual.
-    also: other names the product goes by (a chosen Jinxxy item's name in your library, besides its page's). It's
-    named in the summary as skipped, and downloaded another time if you choose it. Checks for updates see every
-    file."""
+    """A file left out of this download. First what you chose for it now (args.files: {tag_key: {"shown": the files
+    listed, "chosen": the ones ticked}}): only a file that was listed and unticked is left out, and one you ticked is
+    downloaded whatever a rule says. Then a file you left out of the product before (args.remembered), and then one
+    your rules name (args.rules: issue #225). A file that wasn't listed (a product whose name makes the same key, a
+    file the creator added or relabelled since) is only left out by a rule. also: other names the product goes by (a
+    chosen Jinxxy item's name in your library, besides its page's). It's named in the summary as skipped. Checks for
+    updates see every file."""
+    if getattr(args, "dry_run", False):
+        return False
+    keys = [tag_key(store, n) for n in (name, *also) if n]
     chosen = getattr(args, "files", None)
-    if not isinstance(chosen, dict) or args.dry_run:
-        return False
-    pick = next((chosen[k] for k in (tag_key(store, n) for n in (name, *also) if n) if k in chosen), None)
-    if not isinstance(pick, dict) or file not in pick.get("shown", ()) or file in pick.get("chosen", ()):
-        return False
-    log(f"    left out, as you chose: {file}")
-    report.skipped.append(f"{STORES[store]['label'] if store in STORES else store}: {name} / {file} - left out, as you chose")
+    pick = next((chosen[k] for k in keys if k in chosen), None) if isinstance(chosen, dict) else None
+    label = STORES[store]["label"] if store in STORES else store
+    if isinstance(pick, dict) and file in pick.get("shown", ()):
+        if file in pick.get("chosen", ()):
+            return False
+        why = "left out, as you chose"
+    elif isinstance(remembered := getattr(args, "remembered", None), dict) and any(file in remembered.get(k, ()) for k in keys):
+        why = "left out, as you chose before"
+    else:
+        rules = getattr(args, "rules", None)   # (only what a sync gave it: a stand-in's arguments may have anything)
+        rule = ruled_out(rules if isinstance(rules, list) else [], store, file)
+        if not rule:
+            return False
+        why = f"left out by your rule ({rule})"
+    log(f"    {why}: {file}")
+    report.skipped.append(f"{label}: {name} / {file} - {why}")
     return True
 
 
@@ -209,6 +288,8 @@ NO_RETRY_STATUS = {400, 401, 403, 404, 410, 451}   # a store's answer that won't
 
 
 def download_retries(cfg: dict) -> int:
+    """How many times a failed file download is tried again (Settings, Failed downloads): 0 to 5, 2 unless you chose
+    otherwise."""
     n = cfg.get("download_retries", 2)
     return n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 5 else 2
 
@@ -233,7 +314,7 @@ def worth_retrying(e: BaseException) -> bool:
     return status not in NO_RETRY_STATUS
 
 
-def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
+def with_retries(report: "Report", what: str, attempt, sleep=None):
     """attempt(), tried again (up to download_retries more times, waiting a little longer each time) when it fails
     in a way that might go differently next time: a dropped connection, a timeout, a busy server, a checksum that
     didn't match. The last failure is raised as it was. A download stopped with Stop still stops at once."""
@@ -246,7 +327,7 @@ def with_retries(report: "Report", what: str, attempt, sleep=time.sleep):
                 raise
             wait = RETRY_WAITS[min(n, len(RETRY_WAITS) - 1)]
             log(f"    {what}: {e} - trying again in {wait:.0f} s ({n + 1} of {tries})")   # Stop is noticed here
-            sleep(wait)
+            (sleep or pause)(wait)   # (and during the wait)
 
 
 def amount(n: int) -> str:
@@ -311,6 +392,7 @@ def browser_download_file(dl) -> Path | None:
 
 
 def _file_size(path: Path) -> int | None:
+    """A file's size, or None when it isn't there."""
     try:
         return path.stat().st_size
     except OSError:
@@ -366,7 +448,7 @@ def _pause(dl, seconds: float) -> None:
     try:
         dl.page.wait_for_timeout(seconds * 1000)
     except Exception:
-        time.sleep(seconds)
+        pause(seconds)
 
 
 SAVE_EVERY = 10.0   # seconds: while downloading, a store's manifest is saved at most this often (Manifest.checkpoint)
@@ -440,6 +522,7 @@ class Manifest:
             self.save_changes()
 
     def _contents(self) -> str:
+        """The manifest as text, to tell whether it changed since it was read or saved."""
         return json.dumps(self.data, sort_keys=True, ensure_ascii=False)
 
     def record(self, key: str, creator: str, name: str) -> dict:
@@ -500,10 +583,12 @@ class StoreRecords:
         return rel_to_path(self._owner.get(id(rec), self.main).store_dir, rec["folder"])
 
     def checkpoint(self) -> None:
+        """Save each library folder's records, at most once every SAVE_EVERY seconds."""
         for m in (self.main, *self.others):
             m.checkpoint()
 
     def save_changes(self) -> None:
+        """Save whatever changed in each library folder's records."""
         for m in (self.main, *self.others):
             m.save_changes()
 
@@ -558,6 +643,7 @@ def removed_product(store: str, name: str, report: "Report") -> bool:
 
 
 def _removed_keys() -> set:
+    """The products you removed from your library, which no download or sync gets."""
     from .marks import MarkStore   # read again once it changes: removing something takes effect on the next product
     return MarkStore().keys("removed")
 
@@ -609,7 +695,7 @@ class Gumroad:
 
     def page(self, url: str, params: dict | None = None) -> dict:
         """Load a Gumroad page and return its embedded page data (component and props)."""
-        time.sleep(self.delay)
+        pause(self.delay)
         r = egress.get(self.sess, url, STORE_SITES["gumroad"], params=params, timeout=60)
         if "/login" in urlparse(r.url).path:
             raise NotLoggedIn("Gumroad session expired")
@@ -653,6 +739,7 @@ def gumroad_page_images(content: dict) -> list[str]:
     found: list[str] = []
 
     def walk(node):
+        """Note each picture from Gumroad's own file host in this part of the page, and in what's under it."""
         if isinstance(node, dict):
             if node.get("type") == "image":
                 src = (node.get("attrs") or {}).get("src")
@@ -996,6 +1083,8 @@ def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
     page_links: list[str] = []
 
     def read() -> int:
+        """Read the links now on the page: products noted, and numbered pages of the inventory kept for later; returns
+        how many products are known."""
         for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
             u = urlparse(href)
             if not jinxxy_link(u):
@@ -1036,9 +1125,11 @@ def click_download(ctx, page, idx: int, timeout_s: int):
     popups = []
 
     def on_download(d):
+        """Note a download the click started."""
         captured.append(d)
 
     def on_page(pg):
+        """Watch a tab the click opened for its download too."""
         pg.on("download", on_download)
         hooked.append(pg)
         popups.append(pg)
@@ -1158,7 +1249,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         if left_out(args, report, store.lower(), name, label or k, listed_name or ""):
             continue
         if args.dry_run:
-            would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None)
+            would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None, listed_name)
             continue
         def named(raw: str, k=k):
             """The file's name in the product's folder, the file it replaces (if any), and whether it's an update."""
@@ -1291,7 +1382,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
             reopened = 0
             for n, url in enumerate(links, 1):
                 tick(f"Jinxxy: item {n} of {len(links)}")   # Stop is noticed here, even when items fail fast
-                time.sleep(delay)
+                pause(delay)
                 for again in (False, True):
                     if page.is_closed():
                         if reopened >= REOPENS:
@@ -1476,6 +1567,7 @@ def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, t
     started: list = []
 
     def on_download(download):
+        """Note the download the click started."""
         started.append(download)
 
     page.on("download", on_download)
@@ -1606,7 +1698,7 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                         report.saved("booth", name, f["name"] or guess)
                         got_any = True
                         man.checkpoint()
-                        time.sleep(delay)
+                        pause(delay)
 
                     if got_any and is_new_asset:
                         report.new_assets.append(f"Booth: {creator} / {name}")
@@ -1658,7 +1750,7 @@ def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
                 continue
             if removed_product("itch", name, report) or man.away(str(g["id"]), f"itch.io: {name}", report):
                 continue
-            time.sleep(delay)
+            pause(delay)
             try:
                 _itch_project(sess, k, g, name, creator, man, store_dir, cfg["itch"], args, report)
             except NotLoggedIn:
@@ -1711,6 +1803,8 @@ def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRec
         prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
         is_update = old is not None or prev is not None or target.exists()
         def fetch(fid=fid, target=target, fname=fname, u=u):
+            """Download one of the project's files from itch.io, deleting it when it doesn't match itch.io's
+            checksum."""
             got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname,
                                  progress=downloading(fname))
             expected = str(u.get("md5_hash") or "").lower()
@@ -1762,6 +1856,7 @@ def cmd_probe(cfg: dict, args) -> None:
         page.on("response", responses.append)
 
         def dump(stage):
+            """Record the JSON responses seen so far, for this stage of the probe, with any key or pass taken out."""
             for r in responses:
                 try:
                     if "json" not in r.headers.get("content-type", "") and "graphql" not in r.url:
@@ -2239,6 +2334,7 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
 
 
 def integrity_file() -> Path:
+    """Where the last check of your downloads keeps what it found."""
     from .paths import data_dir
     return data_dir() / "integrity.json"
 
@@ -2255,7 +2351,22 @@ def last_integrity() -> dict | None:
     texts = lambda k: [str(x)[:500] for x in raw[k][:200]] if isinstance(raw.get(k), list) else []  # noqa: E731
     return {"checked": raw["checked"][:40], "products": num("products"), "files": num("files"), "fine": num("fine"),
             "changed": texts("changed"), "missing": texts("missing"), "data_changed": texts("data_changed"),
-            "complete": raw.get("complete") is not False}
+            "complete": raw.get("complete") is not False,
+            "problems": [p for p in (_problem(x) for x in (raw.get("problems") or [])[:MAX_PROBLEMS]
+                                     if isinstance(raw.get("problems"), list)) if p]}
+
+
+MAX_PROBLEMS = 1000   # the files a check lists to deal with (issue #231): the counts go on past it
+
+
+def _problem(x) -> dict | None:
+    """One file a check found changed or missing, as integrity.json keeps it (each field checked: it's a file on disk)."""
+    if not isinstance(x, dict) or x.get("kind") not in ("changed", "missing") or x.get("store") not in STORE_DIRS:
+        return None
+    text = lambda k, n: x[k][:n] if isinstance(x.get(k), str) else ""  # noqa: E731
+    out = {"kind": x["kind"], "store": x["store"], "base": text("base", 1000), "folder": text("folder", 1000),
+           "path": text("path", 1000), "name": text("name", 300)}
+    return out if out["base"] and out["folder"] and out["path"] else None
 
 
 def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since: str | None = None) -> dict:
@@ -2272,7 +2383,16 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
     from .safety import _is_link
     say = progress or (lambda line: None)
     result = {"checked": now_iso(), "products": 0, "files": 0, "fine": 0, "changed": [], "missing": [],
-              "data_changed": [], "complete": True, "away": []}
+              "data_changed": [], "complete": True, "away": [], "problems": []}
+    store_ids = {d: s for s, d in STORE_DIRS.items()}
+
+    def found(kind: str, shown: str, base: Path, store: str, rec: dict, rel: str) -> None:
+        """A file that isn't as Hoard downloaded it: named in the summary's list, and kept with what it takes to
+        deal with it from the check's results (issue #231)."""
+        result[kind].append(shown)
+        if len(result["problems"]) < MAX_PROBLEMS:
+            result["problems"].append({"kind": kind, "base": str(base), "store": store_ids.get(store, store.lower()),
+                                       "folder": rec["folder"], "path": rel, "name": str(rec.get("name") or "")[:300]})
     bases = [root]
     for lib in others:
         (bases.append(lib) if lib.is_dir() and not lib.is_symlink() else result["away"].append(str(lib)))
@@ -2313,10 +2433,10 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
                     target = rel_to_path(folder, rel)
                     st = os.stat(target, follow_symlinks=False)
                 except (UnsafePath, OSError):
-                    result["missing"].append(shown)
+                    found("missing", shown, base, store, rec, rel)
                     continue
                 if _is_link(st) or not _stat.S_ISREG(st.st_mode) or (f.get("size") is not None and st.st_size != f["size"]):
-                    result["changed"].append(shown)
+                    found("changed", shown, base, store, rec, rel)
                     continue
                 if f.get("sha256") and f.get("mtime_ns") == st.st_mtime_ns:
                     result["fine"] += 1
@@ -2330,10 +2450,10 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
                         for block in iter(lambda: fh.read(1024 * 1024), b""):
                             digest.update(block)
                 except (UnsafePath, OSError):
-                    result["missing"].append(shown)
+                    found("missing", shown, base, store, rec, rel)
                     continue
                 if f.get("sha256") and f["sha256"] != digest.hexdigest():
-                    result["changed"].append(shown)
+                    found("changed", shown, base, store, rec, rel)
                     continue
                 f.update(sha256=digest.hexdigest(), mtime_ns=st.st_mtime_ns)   # the fingerprint, taken once
                 result["fine"] += 1
@@ -2346,6 +2466,91 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
     except OSError as e:
         log(f"Couldn't save what the check found: {e}")
     return result
+
+
+def resolve_problem(root: Path, others, problem: dict, action: str) -> dict:
+    """Issue #231: deal with a file the last check found changed or missing (problem: as last_integrity lists it).
+    action: "keep" (a changed file as it is now: its fingerprint is taken again, so it's fine from now on), "forget"
+    (a missing file: taken off its product's record), or "again" (to be downloaded again: a changed file is moved to
+    _Previous versions first, so nothing of yours is lost). It's taken off the check's results. Returns the product
+    ({"key", "store", "name", "file"}) for what the caller does next (a download, a file to leave out); raises
+    ValueError when it can't be done (the file's record has gone, or it's back as it was)."""
+    import stat as _stat
+    from . import previous
+    from .safety import _is_link
+    bases = {str(b): b for b in (root, *others)}
+    base, store = bases.get(problem.get("base")), problem.get("store")
+    if base is None or store not in STORE_DIRS or action not in ("keep", "forget", "again"):
+        raise ValueError("That isn't something Hoard can do.")
+    sdir = base / STORE_DIRS[store]
+    manifest = Manifest(sdir)
+    rec = next((r for r in manifest.assets.values() if r.get("folder") == problem.get("folder") and not r.get("location")), None)
+    fkey = next((k for k, f in (rec or {}).get("files", {}).items() if f.get("path") == problem.get("path")), None)
+    if fkey is None:
+        _drop_problem(problem)
+        raise ValueError("Hoard has no record of that file now: check your downloads again.")
+    f, rel = rec["files"][fkey], rec["files"][fkey]["path"]
+    try:
+        target = rel_to_path(rel_to_path(sdir, rec["folder"]), rel)
+        st = os.stat(target, follow_symlinks=False)
+    except UnsafePath:
+        raise ValueError("That file's folder isn't one Hoard can use.") from None
+    except OSError:
+        st = None
+    plain = st is not None and not _is_link(st) and _stat.S_ISREG(st.st_mode)
+    if action == "keep":
+        if not plain:
+            raise ValueError("That file isn't there now: check your downloads again.")
+        digest = hashlib.sha256()
+        with open_under(base, f"{STORE_DIRS[store]}/{rec['folder']}/{rel}") as fh:
+            for block in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(block)
+        f.update(size=st.st_size, sha256=digest.hexdigest(), mtime_ns=st.st_mtime_ns)
+    elif action == "forget":
+        if st is not None:
+            raise ValueError("That file is there now: check your downloads again.")
+        del rec["files"][fkey]
+    elif st is not None:   # again: what's there now is kept aside, so the download is a whole new copy
+        if not plain or (previous.keep(target, max(1, previous.keeping())) is None and st.st_size):
+            raise ValueError("That file couldn't be moved aside, so it wasn't downloaded again.")
+        target.unlink(missing_ok=True)   # (an empty file: nothing to keep)
+    manifest.save()
+    _drop_problem(problem)
+    return {"key": tag_key(store, rec.get("name") or ""), "store": store, "name": rec.get("name") or "",
+            "file": chosen_name(store, fkey, f)}
+
+
+def chosen_name(store: str, fkey: str, f: dict) -> str:
+    """The name a downloaded file is left out by (left_out's file), from its record: what its store called it when it
+    was downloaded (a Jinxxy button's label, itch.io's name for it, Booth's), else its path."""
+    if f.get("label"):
+        return f["label"]
+    if store == "gumroad" and fkey.startswith("page-image:"):
+        return f["path"].rsplit(".", 1)[0]   # (a page's pictures are left out by their name before their type is known)
+    if "label" in f and store in ("jinxxy", "payhip"):
+        return fkey   # (a button with no words is left out by its key)
+    return f["path"]
+
+
+def _drop_problem(problem: dict) -> None:
+    """Take a file dealt with off the last check's results (and its count)."""
+    try:
+        raw = read_json_file(integrity_file())
+    except (DataFileError, OSError):
+        return
+    same = lambda x: isinstance(x, dict) and all(x.get(k) == problem.get(k) for k in ("base", "store", "folder", "path"))  # noqa: E731
+    gone = [x for x in raw.get("problems") or [] if same(x)]
+    if not gone:
+        return
+    raw["problems"] = [x for x in raw["problems"] if not same(x)]
+    for x in gone:
+        shown = f"{x.get('name')} ({STORE_DIRS.get(x.get('store'), '')}): {x.get('path')}"
+        if shown in (raw.get(x["kind"]) or []):
+            raw[x["kind"]].remove(shown)
+    try:
+        write_file_safely(integrity_file(), json.dumps(raw, ensure_ascii=False))
+    except OSError as e:
+        log(f"Couldn't save what the check found: {e}")
 
 
 def integrity_summary(r: dict) -> str:
@@ -2368,6 +2573,7 @@ def integrity_summary(r: dict) -> str:
 
 
 def _still_there(folder: Path, rel) -> bool:
+    """Is the file (or a link of that name) still in the product's folder?"""
     try:
         return os.path.lexists(rel_to_path(folder, rel))
     except UnsafePath:

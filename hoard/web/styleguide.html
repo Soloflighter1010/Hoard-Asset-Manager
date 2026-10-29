@@ -63,7 +63,7 @@
   <li><a href="#buttons">Buttons</a></li><li><a href="#inputs">Fields</a></li><li><a href="#chips">Chips and tags</a></li>
   <li><a href="#bar">Top bar and shelf</a></li><li><a href="#tiles">Tiles</a></li><li><a href="#details">Details</a></li>
   <li><a href="#windows">Windows</a></li><li><a href="#dialogs">Questions and menus</a></li>
-  <li><a href="#tasks">Tasks</a></li><li><a href="#projects">Projects</a></li><li><a href="#sets">Sets and wishlists</a></li>
+  <li><a href="#tasks">Tasks</a></li><li><a href="#projects">Projects</a></li><li><a href="#sets">Sets and Wishlists</a></li>
   <li><a href="#guides">Setup and the tour</a></li>
 </ul>
 
@@ -80,9 +80,9 @@
   <span><span class="dot booth"></span> Booth</span><span><span class="dot gumroad"></span> Gumroad</span>
   <span><span class="dot jinxxy"></span> Jinxxy</span><span><span class="dot payhip"></span> Payhip</span>
   <span><span class="dot itch"></span> itch.io</span><span><span class="dot local"></span> Local</span>
-  <span data-store="Sets"><span class="dot sets"></span> Sets and wishlists</span>
+  <span data-store="Sets"><span class="dot sets"></span> Sets and Wishlists</span>
 </div></div>
-<p>Sets and wishlists isn't a store: its tab has a colour of its own (<code>--sets</code>, set on
+<p>Sets and Wishlists isn't a store: its tab has a colour of its own (<code>--sets</code>, set on
   <code>[data-store="Sets"]</code>) and a heart for its dot (<code>dot sets</code>).</p>
 
 <h2 class="sg-h" id="type">Text</h2>
@@ -121,7 +121,7 @@
   </div>
   <div class="sg-ex on-ledge">
     <div class="shelf-tools" style="margin: 0"><label>Sort <select><option>Name</option><option>Creator</option><option>Store</option><option>Recently added</option></select></label>
-      <label class="stack-toggle"><input type="checkbox" checked> Stack copies</label></div>
+      <button class="ghost sm stack-toggle" aria-pressed="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="2"/><path d="M5 3.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 3v6a1.5 1.5 0 0 1-1.5 1.5H12"/></svg>Stack copies</button></div>
   </div>
   <div class="sg-ex on-ledge">
     <div class="projects"><label class="check"><input type="checkbox" checked> Offer prerelease versions of packages</label>
@@ -144,8 +144,10 @@
 <h2 class="sg-h" id="bar">Top bar and shelf</h2>
 <div class="sg-ex">
   <header class="bar">
-    <nav class="apptabs" aria-label="Views"><a href="#bar" aria-current="page">Library</a><a href="#bar">Downloads</a><a href="#bar">Local</a><a href="#bar">Sets</a><button>Tasks<span class="tab-n">2</span></button><button>Projects</button></nav>
-    <div class="tools"><button class="ghost">Tags</button><button class="ghost stores-btn">Stores<span class="warn-dot"></span></button><button class="ghost">Settings</button><button class="primary">Sync</button></div>
+    <div class="bar-side"><nav class="apptabs" aria-label="Your hoard"><a href="#bar" aria-current="page">Library</a><a href="#bar">Downloads</a><a href="#bar">Local</a></nav></div>
+    <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg><input type="search" placeholder="Search your hoard" aria-label="Search your hoard"></label>
+    <div class="bar-side bar-end"><nav class="apptabs" aria-label="Sets, tasks and projects"><a href="#bar">Sets and Wishlists</a><button>Tasks<span class="tab-n">2</span></button><button>Projects</button></nav>
+      <div class="tools"><button class="ghost barmenu-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu<span class="warn-dot"></span></button><button class="primary">Sync</button></div></div>
   </header>
   <div class="shelf">
     <div class="seg" role="radiogroup" aria-label="Store"><button role="radio" aria-checked="false">Everything<span class="n">140</span></button><button role="radio" class="booth" aria-checked="true"><span class="dot booth"></span>Booth<span class="n">72</span></button><button role="radio" class="gumroad" aria-checked="false"><span class="dot gumroad"></span>Gumroad<span class="n">41</span></button><button role="radio" class="jinxxy" aria-checked="false"><span class="dot jinxxy"></span>Jinxxy<span class="n">27</span></button><button role="radio" class="sets" aria-checked="false">Sets<span class="n">4</span></button></div>
@@ -211,7 +213,7 @@
 <h2 class="sg-h" id="dialogs">Questions, menus and messages</h2>
 <p>Ask before what can't be undone, in Hoard's own dialog (ask() in shared.js), never the browser's. A menu
   (openSelMenu) holds a group's actions; a toast says what just happened.</p>
-<div class="sg-ex"><dialog class="ask" open aria-labelledby="sgAsk"><div id="sgAsk"><p>Delete 2 backups (1.3 GB)? They can't be got back.</p></div>
+<div class="sg-ex"><dialog class="ask" open aria-labelledby="sgAsk"><div id="sgAsk"><p>Delete 2 backups (1.3 GB)? They can't be restored.</p></div>
     <div class="ask-row"><button class="ghost" value="no">Cancel</button><button class="primary danger" value="yes">Delete</button></div></dialog></div>
 <div class="sg-cols" style="margin-top: 16px">
   <div class="sg-ex"><div class="selmenu" role="menu"><p class="selmenu-h" role="presentation">Sets</p><button role="menuitem">New set from these...</button><button role="menuitem" translate="no">Add to Rusk, winter</button><hr role="separator"><button role="menuitem" class="danger">Remove</button></div></div>
@@ -256,11 +258,11 @@
   <div class="pj-addbar"><span class="muted">1 chosen</span><button class="primary sm">Add the chosen packages</button></div>
 </div></div>
 
-<h2 class="sg-h" id="sets">Sets and wishlists</h2>
+<h2 class="sg-h" id="sets">Sets and Wishlists</h2>
 <div class="sg-ex">
   <div class="grid setgrid">
     <button class="slot settile" aria-label="Rusk, winter: 3 products"><span class="art"><span class="collage n2"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%2356D1DC'/%3E%3C/svg%3E" alt=""><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%23FF8AD8'/%3E%3C/svg%3E" alt=""></span><i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">Rusk, winter</span><span class="cr">3 products, all yours</span></button>
-    <div class="slot ext wanted"><a class="ext-main" href="#sets"><span class="art"><span class="ph" style="--h:330" translate="no"><b>FE</b></span><i class="notch jinxxy" data-s="Jinxxy"></i></span><span class="nm-t" translate="no">Fox Ears</span><span class="cr" translate="no">by Tails · Jinxxy</span></a><span class="ext-price"><span class="price down" translate="no">$8.00</span> <s class="was" translate="no"><span class="visually-hidden">was </span>$12.00</s></span><span class="ext-row"><span class="ext-what">Buy on Jinxxy</span></span></div>
+    <div class="slot ext wanted"><a class="ext-main" href="#sets"><span class="art"><span class="ph" style="--h:330" translate="no"><b>FE</b></span><i class="notch jinxxy" data-s="Jinxxy"></i></span><span class="nm-t" translate="no">Fox Ears</span><span class="cr" translate="no">by Tails · Jinxxy</span></a><span class="ext-price"><span class="price down" translate="no">$8.00</span> <s class="was" translate="no"><span class="visually-hidden">was </span>$12.00</s></span><span class="ext-row"><span class="ext-what">Buy on Jinxxy</span><button class="ext-out" title="Take it off this wishlist"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6"/></svg><span>Remove</span></button></span></div>
   </div>
   <h3 class="sg-h">A wishlist open</h3>
   <p class="muted">Its suggested tags, your tags on what you have of it and its creators are in the filters beside it, as the Library's are.</p>

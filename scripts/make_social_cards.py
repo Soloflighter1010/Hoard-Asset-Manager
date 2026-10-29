@@ -43,6 +43,7 @@ TILES = [(14, "OL", "#FF6259", "New"), (186, "UN", "#56D1DC", "Update"), (320, "
 
 
 def card(tab: str, title: str, line: str) -> str:
+    """One page's social card, as HTML to draw: its tab, title and line beside Hoard's logo and a shelf of tiles."""
     def font(name: str) -> str:   # inline: a page drawn from a string can't load files
         return "data:font/woff2;base64," + base64.b64encode((SITE / "fonts" / name).read_bytes()).decode()
     stores = "".join(f'<span class="st"><i style="background:{c}"></i>{n}</span>' for n, c in STORES)
@@ -96,6 +97,7 @@ p {{ margin-top: 18px; color: #C9BDAE; font-size: 25px; text-wrap: pretty; max-w
 
 
 def main() -> int:
+    """Draw every page's social card as a 1200 by 630 picture."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch()

@@ -4,6 +4,7 @@ using System;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>Drawing only the rows of a long list that show, so a list of thousands scrolls smoothly.</summary>
     public static class ListView
     {
         /// <summary>The first and last row (inclusive) that show in a view viewHeight tall, scrolled to scrollY,

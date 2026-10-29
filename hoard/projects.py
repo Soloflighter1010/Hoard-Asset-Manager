@@ -29,10 +29,12 @@ STORE_LABELS = {"Itch": "itch.io"}
 
 
 def projects_dir() -> Path:
+    """The folder Hoard keeps its saved projects (product lists) in."""
     return data_dir() / "projects"
 
 
 def _text(v, limit: int) -> str:
+    """A value as clean text of at most limit characters, or empty when it isn't text."""
     return clean_text(v, limit) if isinstance(v, str) else ""
 
 
@@ -113,10 +115,12 @@ def forget(project_id: str) -> bool:
 # ---- the credits list, as the Unity window makes it (Credits.cs)
 
 def _who(e: dict) -> str:
+    """A product's creator, for the list, or "Unknown creator"."""
     return e["creator"] or "Unknown creator"
 
 
 def _md(s: str) -> str:
+    """Text with Markdown's special characters escaped, so a product's name shows as written."""
     return "".join("\\" + c if c in "\\`*_{}[]()<>#+-.!|~" else c for c in s)
 
 

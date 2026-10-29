@@ -12,6 +12,7 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>One file in a .zip: its name, sizes, and where it starts.</summary>
     public sealed class ZipEntry
     {
         public string Name;
@@ -21,6 +22,7 @@ namespace SoloFlighter.Hoard
         public bool Locked;   // encrypted: it can't be read without its password
     }
 
+    /// <summary>Reads a .zip's list of files (Zip64 too), and any one of them, without unpacking the rest.</summary>
     public static class ZipReader
     {
         const int MaxEntries = 100000;
@@ -118,6 +120,7 @@ namespace SoloFlighter.Hoard
             }
         }
 
+        /// <summary>Read an entry's Zip64 sizes and offset, where its own are too small to hold them.</summary>
         static void ReadZip64(byte[] b, int at, int len, ZipEntry e)
         {
             int end = at + len;
@@ -151,6 +154,7 @@ namespace SoloFlighter.Hoard
         }
 
         static readonly uint[] Table = MakeTable();
+        /// <summary>The CRC-32 table.</summary>
         static uint[] MakeTable()
         {
             var t = new uint[256];
@@ -163,10 +167,14 @@ namespace SoloFlighter.Hoard
             return t;
         }
 
+        /// <summary>Two bytes, little-endian.</summary>
         static int U16(byte[] b, int at) { return b[at] | b[at + 1] << 8; }
+        /// <summary>Four bytes, little-endian.</summary>
         static uint U32(byte[] b, int at) { return (uint)(b[at] | b[at + 1] << 8 | b[at + 2] << 16 | b[at + 3] << 24); }
+        /// <summary>Eight bytes, little-endian.</summary>
         static ulong U64(byte[] b, int at) { return U32(b, at) | (ulong)U32(b, at + 4) << 32; }
 
+        /// <summary>Read exactly n bytes. Throws when the zip ends first.</summary>
         static void ReadFull(Stream s, byte[] buf, int n)
         {
             int got = 0;
@@ -184,6 +192,7 @@ namespace SoloFlighter.Hoard
             readonly Stream inner;
             long at, left;
             public Part(Stream inner, long start, long length) { this.inner = inner; at = start; left = length; }
+            /// <summary>Read from the part, never past its end.</summary>
             public override int Read(byte[] buffer, int offset, int count)
             {
                 if (left <= 0) return 0;
@@ -198,9 +207,13 @@ namespace SoloFlighter.Hoard
             public override bool CanWrite { get { return false; } }
             public override long Length { get { throw new NotSupportedException(); } }
             public override long Position { get { throw new NotSupportedException(); } set { throw new NotSupportedException(); } }
+            /// <summary>Nothing to flush: it only reads.</summary>
             public override void Flush() { }
+            /// <summary>Not supported: it's read once, in order.</summary>
             public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+            /// <summary>Not supported: it only reads.</summary>
             public override void SetLength(long value) { throw new NotSupportedException(); }
+            /// <summary>Not supported: it only reads.</summary>
             public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
         }
     }

@@ -33,10 +33,12 @@ class PresetError(ValueError):
 
 
 def _path() -> Path:
+    """The presets file, in Hoard's own folder."""
     return data_dir() / FILE
 
 
 def load() -> list[dict]:
+    """The presets kept, each cleaned; none when the file is missing or unreadable."""
     try:
         raw = read_json_file(_path(), 8 << 20)
     except (FileNotFoundError, DataFileError, OSError):
@@ -97,6 +99,7 @@ def save(raw: dict) -> dict:
 
 
 def delete(preset_id: str) -> bool:
+    """Delete a preset. False when there's none with that id."""
     with _lock:
         keep = load()
         left = [p for p in keep if p["id"] != preset_id]

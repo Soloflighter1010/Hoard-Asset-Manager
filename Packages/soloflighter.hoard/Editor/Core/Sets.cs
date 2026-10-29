@@ -6,12 +6,14 @@ using System.Text.RegularExpressions;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>A set from Hoard: its name and its products.</summary>
     public sealed class HoardSet
     {
         public string Name;
         public List<string> Folders = new List<string>();   // its products, by their folder in the catalog
     }
 
+    /// <summary>The order to import a set's products in, and which of each product's packages to import.</summary>
     public static class SetOrder
     {
         /// <summary>The set's products in the order to import them: a product another one needs (an outfit's avatar,
@@ -49,8 +51,11 @@ namespace SoloFlighter.Hoard
     /// a product that's only face tracking keeps its packages.</summary>
     public static class SetPicks
     {
+        /// <summary>Why a package was picked: chosen, the only one, or a face tracking one beside the
+        /// avatar's.</summary>
         public enum Why { Chosen, Older, FaceTracking }
 
+        /// <summary>A package picked to import, and why.</summary>
         public sealed class Pick
         {
             public string Path;
@@ -69,6 +74,7 @@ namespace SoloFlighter.Hoard
         static readonly Regex Numbers = new Regex(@"\d+");
         static readonly Regex NotWord = new Regex(@"[\W_]+");
 
+        /// <summary>Whether a package's name says it's for face tracking.</summary>
         public static bool IsFaceTracking(string name) { return FaceTrackingName.IsMatch(name ?? ""); }
 
         /// <summary>A package's name without its version, as the newest of each is picked: "Rusk_v1.2.unitypackage"
@@ -97,6 +103,7 @@ namespace SoloFlighter.Hoard
             return null;
         }
 
+        /// <summary>Compare two versions, number by number.</summary>
         static int Compare(List<int> a, List<int> b)
         {
             for (int i = 0; i < Math.Max(a.Count, b.Count); i++)

@@ -71,11 +71,23 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 [hidden] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
-/* top bar */
+/* top bar: the search in the middle, Library, Downloads and Local to its left, and Sets and Wishlists, Tasks,
+   Projects and the page's tools to its right (issue #203). The two sides are as wide as each other, so the search
+   is in the middle of the window. When they don't fit beside it, fitBar (shared.js) puts the search on a row of its
+   own under them, and when they don't fit side by side either, each side on a row of its own: nothing hides. */
 .bar {
   position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 24px; background: var(--cave);
+  display: grid; grid-template-columns: minmax(var(--bar-side, 0px), 1fr) minmax(220px, 560px) minmax(var(--bar-side, 0px), 1fr); align-items: center;
+  gap: 10px 18px; padding: 12px 24px; background: var(--cave);
 }
+.bar-side { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bar-end { justify-content: flex-end; }
+.bar[data-fit="rows"] { grid-template-columns: auto auto; justify-content: space-between; }
+.bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: center; width: min(100%, 720px); }
+.bar[data-fit="stack"] { grid-template-columns: minmax(0, 1fr); }
+.bar[data-fit="stack"] .search { order: 1; }
+.bar[data-fit="stack"] :is(.bar-side, .apptabs, .tools) { flex-wrap: wrap; }
+.bar[data-fit="stack"] .bar-end { justify-content: flex-start; }
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; margin-right: 6px; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
@@ -95,7 +107,7 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 @keyframes confetti-fall { to { transform: translateY(calc(100vh + 32px)) rotate(var(--spin)); } }
 body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animation: none; }
 @media (prefers-reduced-motion: reduce) { .brand.has-update svg, .brand .boxes { animation: none; } }
-.search { position: relative; flex: 1 1 220px; max-width: 620px; display: block; }
+.search { position: relative; display: block; min-width: 0; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--dust); pointer-events: none; }
 .search input {
   width: 100%; height: 44px; padding: 0 44px; border-radius: 12px; border: 0;
@@ -107,9 +119,33 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   font: 700 12px var(--body); color: var(--dust); background: var(--stone); border-radius: 6px; padding: 1px 7px;
 }
-/* The same room on both pages (Downloads has two more buttons), so the bar is laid out alike and doesn't jump, or
-   go to two rows on one page and not the other, when you switch */
-.tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; min-width: min(460px, 100%); }
+.tools { display: flex; align-items: center; gap: 10px; flex: none; }
+/* under the search box: the prefixes' guide, and what the prefix being typed could be (issues #220 and #221) */
+.qmenu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; max-height: min(440px, calc(var(--vh) - 120px));
+  overflow: auto; padding: 6px; border-radius: 12px; background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.qmenu[hidden] { display: none; }
+.qmenu-h, .qmenu-none { margin: 6px 10px 4px; font: 700 12px var(--body); color: var(--dust); }
+.qmenu-none { font-weight: 400; }
+.qopt { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.qopt:hover, .qopt[aria-selected="true"] { background: var(--stone); }
+.qopt[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.qopt-t { min-width: 0; color: var(--bone); font-size: 14px; overflow-wrap: anywhere; }
+.qopt-t code { padding: 1px 6px; border-radius: 5px; background: var(--cave); color: var(--gold-text); font: 700 12.5px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.qopt-s { flex: none; max-width: 45%; color: var(--dust); font-size: 12.5px; text-align: right; }
+.found { outline: 2px solid var(--gold); outline-offset: 4px; border-radius: 8px; }   /* a setting the search went to */
+/* the bar's Menu (issue #219): Tags, Stores or Rescan, and Settings */
+.barmenu-wrap { position: relative; }
+.bar.menu-up { z-index: 65; }   /* the Menu drops over an open panel (60) and its shade */
+.barmenu-btn svg { width: 16px; height: 16px; }
+.barmenu-btn .warn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.barmenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 6px; display: grid; gap: 2px;
+  border-radius: 12px; background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 16px 40px rgb(0 0 0 / .45); }
+.barmenu[hidden] { display: none; }
+.barmenu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px;
+  background: none; color: var(--bone); font: 600 14px var(--body); text-align: left; white-space: nowrap; cursor: pointer; }
+.barmenu button:hover, .barmenu button:focus-visible { background: var(--stone); outline: none; }
+.barmenu button:focus-visible { box-shadow: inset 0 0 0 2px var(--gold); }
+.barmenu button[aria-expanded="true"]::after { content: ""; width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--gold); }
 .tools label { display: flex; align-items: center; gap: 8px; color: var(--dust); font-size: 13px; }
 .tools select {
   height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 0; background: var(--ledge);
@@ -148,7 +184,7 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; background: var(--c); transform: rotate(45deg); }
 .booth { --c: var(--booth); } .gumroad { --c: var(--gumroad); } .jinxxy { --c: var(--jinxxy); } .payhip { --c: var(--payhip); }
 .itch { --c: var(--itch); }
-/* Sets and wishlists: a colour of its own beside the stores', and a heart, as it isn't a store */
+/* Sets and Wishlists: a colour of its own beside the stores', and a heart, as it isn't a store */
 [data-store="Sets"] { --c: var(--sets); }
 .dot.sets { transform: none; width: 11px; height: 10px; border-radius: 0; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 18'%3E%3Cpath d='M10 18 1.6 9.6A5.2 5.2 0 0 1 9 2.3L10 3.3l1-1a5.2 5.2 0 0 1 7.4 7.3z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 18'%3E%3Cpath d='M10 18 1.6 9.6A5.2 5.2 0 0 1 9 2.3L10 3.3l1-1a5.2 5.2 0 0 1 7.4 7.3z'/%3E%3C/svg%3E") center / contain no-repeat; }
 .local { --c: var(--local); }
@@ -325,9 +361,7 @@ a.ghost { height: 42px; }
 @media (max-width: 860px) {
   :root { --slot-size: 136px; }
   .bar { padding: 12px 16px; gap: 10px; position: static; }
-  .search { order: 5; flex-basis: 100%; max-width: none; }
   .search kbd, .tools .zoom { display: none; }
-  .tools { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; min-width: 0; }
   .seg { position: static; padding: 0 12px; }
   .only-narrow { display: inline-flex; }
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -364,7 +398,11 @@ body.less-motion .slot:hover .art { transform: none; }
 .slot.stacked .art { overflow: visible; min-height: 0; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
 .slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
 .flag.count { right: auto; left: 8px; background: var(--bone); color: var(--cave); }
-.stack-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--dust); cursor: pointer; }
+/* Stack copies (issue #215): a button that stays pressed while it's on */
+.stack-toggle { gap: 6px; height: var(--btn-h-sm); color: var(--dust); cursor: pointer; }
+.stack-toggle svg { width: 16px; height: 16px; flex: none; }
+.stack-toggle[aria-pressed="true"] { color: var(--bone); box-shadow: inset 0 0 0 2px var(--gold); }
+.stack-toggle[aria-pressed="true"] svg { color: var(--gold); }
 .update { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-size: 14px; }
 .update ul { margin: 6px 0 10px; padding-left: 18px; overflow-wrap: anywhere; }
 .update .muted { display: block; margin-top: 8px; color: var(--dust); font-size: 13px; }
@@ -407,9 +445,17 @@ body.less-motion .slot:hover .art { transform: none; }
 .tagadd input, .bulk input, .newtag input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); box-shadow: inset 0 0 0 1px var(--seam); }
 .tagadd input:focus, .bulk input:focus, .newtag input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
-.tagadd select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
+.typepick { display: flex; }
+/* Settings' Files to leave out (issue #225) */
+.file-rules { margin: 8px 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.file-rules li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 8px;
+  background: var(--stone); font-size: 13.5px; }
+.file-rules li.none { background: none; padding: 0; color: var(--dust); }
+.rule-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rule-add input { flex: 1 1 160px; min-width: 0; }
+.tagadd select, .typepick select { flex: 1; min-width: 0; height: var(--btn-h-sm); padding: 0 30px 0 12px; border-radius: 8px; border: 0;
   background-color: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
-.tagadd select:focus, .bulkmove select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.tagadd select:focus, .bulkmove select:focus, .typepick select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
 .headrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .headrow .ghost { flex: none; }
 #selectBtn { margin-left: auto; }   /* (on the right, with or without the count beside it) */
@@ -503,6 +549,40 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-files summary { cursor: pointer; color: var(--dust); }
 .pick-list .pk-files label { padding: 4px 0; font-weight: 400; }
 .pick-list .pk-files span { overflow-wrap: anywhere; }
+/* What files do you want to save? (issue #225): what a product contains, then everything or the files you tick */
+/* Acknowledgements (issue #227): everything Hoard uses, with its license */
+.acks summary { cursor: pointer; font-weight: 700; font-size: 13.5px; margin: 4px 0; }
+#acksList h4 { margin: 12px 0 4px; font: 700 13px var(--body); color: var(--dust); }
+#acksList ul { list-style: none; margin: 0; padding: 0; }
+#acksList li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 3px 0; font-size: 13.5px; }
+#acksList li .lic { color: var(--dust); font-size: 12.5px; }
+dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
+  background: var(--cave); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; }
+/* issue #230: notifications through Apprise */
+#setApprise { width: 100%; box-sizing: border-box; font: 12.5px/1.5 ui-monospace, monospace; }
+.apprise-acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 8px; }
+.apprise-acts > button { width: auto; margin: 0; }
+.apprise-events { display: flex; flex-direction: column; }
+.apprise-events[aria-disabled="true"] { opacity: .6; }
+.files-dialog { width: min(560px, calc(var(--vw) - 32px)); }
+/* issue #231: what the check found, each file with what can be done about it */
+.check-dialog { width: min(720px, calc(var(--vw) - 32px)); }
+.check-list { max-height: min(56vh, 520px); overflow: auto; margin: 0 0 12px; }
+.check-list h3 { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; font: 700 14px var(--body); overflow-wrap: anywhere; }
+.check-list h3:first-child { margin-top: 0; }
+.check-list ul { list-style: none; margin: 0; padding: 0; }
+.check-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 10px; border-radius: 9px; background: var(--stone); margin-bottom: 4px; }
+.check-list .cf { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; }
+.check-list .cf b { font-weight: 600; overflow-wrap: anywhere; }
+.check-list .cf .warn { font-size: 12.5px; }
+.check-list .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.check-list .acts button { width: auto; margin: 0; }
+.check-list .none { color: var(--dust); }
+.files-of { margin: 0 0 4px; overflow-wrap: anywhere; }
+.files-has { margin: 0 0 12px; color: var(--dust); }
+.files-list { max-height: min(46vh, 420px); overflow: auto; margin: 0 0 12px; padding: 4px 10px 8px; border-radius: 10px; background: var(--stone); }
+.files-list .files-kind { margin: 10px 0 4px; font: 700 12px var(--body); color: var(--dust); }
+.files-list label { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; overflow-wrap: anywhere; }
 .pick-skipped { margin-top: 12px; }
 .pick-skipped summary { cursor: pointer; color: var(--dust); font-size: 13px; }
 .pick-go { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
@@ -550,7 +630,8 @@ body.selecting .toast { bottom: 96px; }
 #settingsPanel.win > .win-bar { padding-left: 28px; padding-right: 18px; }
 #settingsPanel.win > .win-body { display: flex; align-items: flex-start; gap: 40px; padding: 20px 28px 48px; }
 #settingsPanel.win .setjump { position: sticky; top: 0; flex: none; flex-direction: column; flex-wrap: nowrap; width: 200px; gap: 2px;
-  margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
+  margin: 0; padding: 0; background: none; border: 0; box-shadow: none;
+  max-height: calc(100vh - var(--bar-h, 64px) - 96px); overflow-y: auto; }   /* (a short window, or large text: it scrolls) */
 #settingsPanel.win .setjump button { padding: 7px 12px; border-radius: 9px; background: none; color: var(--dust); text-align: left; font: 700 14px var(--body); }
 #settingsPanel.win .setjump button:hover { color: var(--bone); background: var(--stone); }
 #settingsPanel.win .set-body { flex: 1 1 auto; min-width: 0; max-width: 780px; }
@@ -560,7 +641,7 @@ body.selecting .toast { bottom: 96px; }
 @media (max-width: 860px) {   /* a narrow window: its parts in a row along the top again */
   #settingsPanel.win > .win-body { display: block; padding: 0 16px 40px; }
   #settingsPanel.win .setjump { top: 0; z-index: 2; flex-direction: row; flex-wrap: wrap; width: auto; margin: 0 -16px 10px; padding: 10px 16px;
-    background: var(--cave); border-bottom: 1px solid var(--seam); }
+    background: var(--cave); border-bottom: 1px solid var(--seam); max-height: none; overflow: visible; }
   #settingsPanel.win .setjump button { padding: 5px 11px; border-radius: 999px; background: var(--stone); color: var(--bone); font: 600 12.5px var(--body); }
   #settingsPanel.win h3[id] { scroll-margin-top: 64px; }
 }
@@ -640,6 +721,14 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .splash .b { animation: splash-hop 1.6s ease-in-out infinite; }
 .splash .b2 { animation-delay: .18s; } .splash .b3 { animation-delay: .36s; }
 .splash p { margin: 0; font: 700 15px var(--body); color: var(--dust); letter-spacing: .02em; }
+/* issue #200: a few friendly words that change while it reads, and how far it's got */
+.splash p.splash-quote { min-height: 1.5em; margin-top: -8px; font-weight: 500; font-size: 14px; font-style: italic; text-align: center; }
+.splash-count { display: grid; justify-items: center; gap: 6px; width: min(260px, 70vw); }
+.splash-count[hidden] { display: none; }
+.splash-bar { width: 100%; height: 6px; border-radius: 3px; background: var(--stone); overflow: hidden; }
+.splash-bar i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--gold); transition: width .3s ease; }
+.splash-count .n { font-size: 12.5px; color: var(--dust); font-variant-numeric: tabular-nums; text-align: center; }
+@media (prefers-reduced-motion: reduce) { .splash-bar i { transition: none; } }
 @keyframes splash-hop { 0%, 60%, 100% { translate: 0 0; } 30% { translate: 0 -9px; } }
 @media (prefers-reduced-motion: reduce) { .splash .b { animation: none; } .splash:not(.first) { animation-duration: 0s; } .splash { transition: none; } }
 .projects.win > .win-body { position: relative; }
@@ -778,6 +867,20 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 /* Projects takes the whole window below the bar (it's a place of its own, not a panel over the page) */
 .projects.win { left: 0; right: 0; top: var(--bar-h); bottom: 0; transform: none; width: auto; max-height: none; border-radius: 0;
   box-shadow: inset 0 1px 0 var(--seam); background: var(--cave); }
+/* issue #198: Projects in the Library's colours: the logo's three rising from the bottom, as the Library's glow does */
+.projects.win { --pj-avatars: var(--jinxxy); --pj-worlds: var(--itch); --pj-other: var(--payhip);
+  background: radial-gradient(ellipse 60% 70% at 12% 112%, color-mix(in srgb, var(--jinxxy) 30%, transparent), transparent 75%),
+    radial-gradient(ellipse 60% 70% at 50% 116%, color-mix(in srgb, var(--gumroad) 24%, transparent), transparent 75%),
+    radial-gradient(ellipse 60% 70% at 88% 112%, color-mix(in srgb, var(--gold) 26%, transparent), transparent 75%), var(--cave); }
+body.no-glow .projects.win { background: var(--cave); }
+.pj-tab .dot { margin-right: 7px; vertical-align: 1px; }
+.pj-tab.t-list { --c: var(--jinxxy); } .pj-tab.t-repos { --c: var(--gumroad); } .pj-tab.t-backups { --c: var(--gold); }
+.pj-tab.t-settings { --c: var(--payhip); } .pj-tab.t-logs { --c: var(--itch); }
+.pj-row.k-avatars, .pj-chip.k-avatars { --c: var(--pj-avatars); } .pj-row.k-worlds, .pj-chip.k-worlds { --c: var(--pj-worlds); }
+.pj-row.k-other, .pj-chip.k-other { --c: var(--pj-other); }
+.pj-chip { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; line-height: 1.6;
+  color: var(--bone); background: color-mix(in srgb, var(--c, var(--seam)) 26%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--seam)) 55%, transparent); }
+.pj-chip.unity { --c: var(--gold); }
 .projects.win > .win-bar { padding-left: 28px; padding-right: 18px; }   /* (all of the window's width: no column in the middle) */
 .projects.win > .win-body { padding: 0 28px 28px; }
 .pj-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--seam); }
@@ -869,6 +972,7 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .pj-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "star main acts" "star what acts"; gap: 2px 12px;
   align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--stone); }
+.pj-row[class*="k-"] { box-shadow: inset 4px 0 0 var(--c); }   /* (its kind's colour down its side: #198) */
 .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main acts" "what acts"; }
 .pj-row.gone { opacity: .7; }
 .pj-star { grid-area: star; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--seam); font-size: 17px; line-height: 1; }
@@ -881,6 +985,15 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 .pj-row.gone .pj-what { color: var(--warn); }
 .pj-acts { grid-area: acts; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .pj-acts > button { width: auto; margin: 0; }
+/* issue #190: the list's folders, one shown at a time, and each project's tags */
+.pj-folders { margin: 2px 0 10px; }
+.pj-tags { display: flex; flex-wrap: wrap; gap: 0 10px; }
+.pj-tags .chip { font-size: 12.5px; font-weight: 600; }
+.pj-in { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; }
+.pj-in svg { width: 14px; height: 14px; flex: none; }
+dialog.ask .pj-orgf { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-weight: 700; font-size: 13.5px; }
+dialog.ask .pj-orgf input { font-weight: 400; }
+dialog.ask .pj-orgf + .hint { margin: 4px 0 0; font-size: 13px; color: var(--dust); }
 @media (max-width: 640px) {
   .pj-row, .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "what" "acts"; }
   .pj-row .pj-star { position: absolute; }
@@ -922,12 +1035,15 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 }
 .pj-pre { margin: 4px 0; padding-left: 18px; font-size: 13.5px; }
 /* Projects' tiles: what went into a project, and what Hoard for Unity found in one, as their library tiles */
-.pj-tiles { --slot-size: 150px; margin: 12px 0 4px; }
+.pj-tiles { margin: 12px 0 4px; }   /* (the Library's tiles, at the Library's size: #198) */
 .pj-tile .ext-main { padding: 0; border: 0; background: none; text-align: left; font: inherit; cursor: pointer; }
 .pj-tile button.ext-main:hover .art { transform: translateY(-3px); }
 .pj-tile button.ext-main:focus-visible { outline: none; }
 .pj-tile button.ext-main:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 3px; }
 .pj-below { display: flex; flex-direction: column; gap: 2px; margin-top: -3px; font-size: 12px; color: var(--dust); }
+.pj-files summary { cursor: pointer; width: fit-content; }
+.pj-files[open] summary { margin-bottom: 2px; }
+.pj-files .pj-file { display: block; }
 .pj-below .pj-file { color: var(--bone); overflow-wrap: anywhere; }
 .pj-below .st { font-weight: 700; }
 .pj-below .st.yes { color: #4CC38A; }
@@ -950,7 +1066,12 @@ body.side-folded .side-fold svg { transform: rotate(180deg); }
 dialog.ask.pj-dlg.wide { width: min(720px, calc(var(--vw) - 32px)); }
 dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc(var(--vh) - 72px); }
 .pj-picklist { list-style: none; margin: 0 0 10px; padding: 0; overflow: auto; min-height: 0; flex: 0 1 auto; font-size: 13.5px; }
-.pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: break-word; }   /* (#199: never mid-word) */
+.pj-contents .pj-c { display: flex; flex-direction: column; min-width: 0; }
+.pj-contents .pj-tag { align-self: flex-start; margin-top: 2px; }
+.pj-stepno { display: block; margin-bottom: 2px; font-size: 12.5px; font-weight: 600; color: var(--dust); }
+.pj-allnone { display: flex; gap: 16px; margin: 0 0 6px; }
+.pj-allnone .linkish { font-size: 13px; }
 .pj-picklist li:first-child { border-top: 0; }
 .pj-picklist label.check { display: flex; align-items: flex-start; gap: 10px; }
 .pj-picklist label.check input { margin-top: 3px; flex: none; }
@@ -1003,10 +1124,26 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .ext-what { color: var(--dust); }
 .slot.ext.wanted .ext-what { color: var(--warn); }
 /* a wishlist product's price, and what it was when it changed (struck through); cheaper than before stands out */
-.ext-price { display: block; margin-top: -2px; font-size: 13px; font-weight: 700; color: var(--bone); overflow-wrap: anywhere; }
+/* a wishlist product's price, as a badge; a drop in gold, a rise in the warning colour, the old price struck out (#213) */
+.ext-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: -2px; font-size: 13px; overflow-wrap: anywhere; }
+.ext-price .price { padding: 2px 9px; border-radius: 999px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
+  color: var(--bone); font-weight: 800; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .ext-price .was { font-weight: 500; color: var(--dust); }
-.ext-price .price.down { color: var(--gold-text); }
+.ext-price .price.down { color: var(--gold-text); box-shadow: inset 0 0 0 2px var(--gold); }
 .ext-price .price.down::before { content: "\2193 "; }
+.ext-price .price.up { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); }
+.ext-price .price.up::before { content: "\2191 "; }
+/* taking it off: a button that looks like one, red on hover, and asked first */
+.ext-out { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border: 0; border-radius: 7px; flex: none;
+  background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); color: var(--dust); font: 600 12px var(--body); cursor: pointer; }
+.ext-out svg { width: 13px; height: 13px; }
+/* a wishlist's Find more to add (#187): your words, then the sites to search them on, in your browser */
+.wish-find { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.wish-find input { flex: 1 1 200px; min-width: 0; height: var(--btn-h-sm); padding: 0 12px; border: 0; border-radius: 8px;
+  background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.wish-find input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.wish-find + .hint { margin: 6px 0 0; }
+.ext-out:hover, .ext-out:focus-visible { color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); outline: none; }
 .wish-h { margin-top: 30px; }
 .setphotos { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .setphotos li { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--ledge); font-size: 12px; }
@@ -1134,7 +1271,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .settings .field input, .settings select { height: var(--btn-h-sm); }
 /* a panel's dropdowns look like Sort's: the same arrow, not the system's own (Projects' Credits too) */
 .proj select { height: var(--btn-h-sm); padding-left: 12px; font-size: 13px; }
-.settings select, .proj select, .tagadd select, .bulkmove select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+.settings select, .proj select, .tagadd select, .bulkmove select, .typepick select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   background-image: linear-gradient(45deg, transparent 50%, var(--dust) 50%), linear-gradient(135deg, var(--dust) 50%, transparent 50%);
   background-position: calc(100% - 16px) 15px, calc(100% - 11px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 .bulkmove select { background-position: calc(100% - 16px) 13px, calc(100% - 11px) 13px; }   /* 30px tall: the arrow centred */
@@ -1143,9 +1280,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 .stores-go { display: flex; gap: 8px; margin-top: 14px; }
 .stores-go > button { flex: 1 1 0; }
 .stores .stores-go .primary { margin-top: 0; width: auto; }
-/* the bar: the search box gives way first, so its buttons stay on the same row down to a narrower window */
-@media (min-width: 861px) { .search { flex: 1 1 160px; min-width: 160px; } .bar { gap: 12px; } }
-.only-narrow { display: none; }   /* (the rule above gives every button a display: this keeps Filters for narrow windows) */
+.only-narrow { display: none; }   /* (the rules above give every button a display: this keeps Filters for narrow windows) */
 @media (max-width: 860px) { .only-narrow { display: inline-flex; } }
 /* the tour (shared.js): a ring round the part it's about, the rest dimmed, and a card beside it */
 .tour-ring { position: fixed; z-index: 88; pointer-events: none; border-radius: 12px;
@@ -1182,30 +1317,40 @@ body.less-motion .tour-try::before { animation: none; }
       <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/></g>
     </svg>
     <p>Opening your hoard</p>
+    <p class="splash-quote" aria-hidden="true"></p>
+    <div class="splash-count" hidden><span class="splash-bar" role="progressbar" aria-valuemin="0" aria-label="Opening your hoard"><i></i></span><span class="n" aria-hidden="true"></span></div>
   </div>
 </div>
 <header class="bar">
+<div class="bar-side">
   <a class="brand" href="/"><svg viewBox="0 0 226 64" role="img" aria-label="Hoard"><g class="boxes" transform="translate(0 0) scale(1.0)">
   <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
   <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Views"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a><a href="/#store=Sets">Sets and wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
-  <label class="search">
+  <nav class="apptabs" aria-label="Your hoard"><a href="/">Library</a><a href="/downloads" aria-current="page">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
+</div>
+  <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
     <input id="q" type="search" placeholder="Search downloads" aria-label="Search your downloads: names, creators, tags and files" autocomplete="off">
     <kbd aria-hidden="true">/</kbd>
-  </label>
+  </div>
+<div class="bar-side bar-end">
+  <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
   <div class="tools">
-
-    <button id="tagsBtn" class="ghost" aria-expanded="false" aria-controls="tagPanel">Tags</button>
-    <button id="rescan" class="ghost" title="Re-read what's on disk">Rescan</button>
-    <button id="settingsBtn" class="ghost" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
-    <button id="downloadNew" class="ghost" title="Download anything new, without reading your stores first">Download new</button>
-    <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new">Sync</button>
+    <div class="barmenu-wrap">
+      <button id="menuBtn" class="ghost barmenu-btn" aria-expanded="false" aria-controls="barMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu</button>
+      <div id="barMenu" class="barmenu" hidden>
+        <button id="tagsBtn" aria-expanded="false" aria-controls="tagPanel">Tags</button>
+        <button id="rescan" title="Re-read what's on disk">Rescan</button>
+        <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+      </div>
+    </div>
+    <button id="downloadNew" class="primary" title="Download anything new, without reading your stores first">Download new</button>
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
+</div>
 </header>
 <div id="routineNote" class="routine-note" role="status" hidden>
   <span id="routineText"></span>
@@ -1221,7 +1366,7 @@ body.less-motion .tour-try::before { animation: none; }
     <button role="radio" class="payhip" data-store="Payhip" aria-checked="false"><span class="dot payhip"></span>Payhip<span class="n"></span></button>
     <button role="radio" class="itch" data-store="Itch" aria-checked="false"><span class="dot itch"></span>itch.io<span class="n"></span></button>
     <button role="radio" class="local" data-store="Local" aria-checked="false" title="Your own packages (issue #80)"><span class="dot local"></span>Local<span class="n"></span></button>
-    <button role="radio" class="sets" data-store="Sets" aria-checked="false" title="Products you use together, and products you want"><span class="dot sets" aria-hidden="true"></span>Sets and wishlists<span class="n"></span></button>
+    <button role="radio" class="sets" data-store="Sets" aria-checked="false" title="Products you use together, and products you want"><span class="dot sets" aria-hidden="true"></span>Sets and Wishlists<span class="n"></span></button>
     <span id="drives" class="drives" role="radiogroup" aria-label="Library folder" hidden></span>
   </div>
   <div class="shelf-tools">
@@ -1236,7 +1381,7 @@ body.less-motion .tour-try::before { animation: none; }
         <option value="size">Largest</option>
       </select>
     </label>
-    <label class="stack-toggle" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><input type="checkbox" id="stackCopies" checked> Stack copies</label>
+    <button id="stackCopies" class="ghost sm stack-toggle" aria-pressed="true" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="2"/><path d="M5 3.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 3v6a1.5 1.5 0 0 1-1.5 1.5H12"/></svg>Stack copies</button>
     <label class="zoom" title="Tile size"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg><input id="zoom" type="range" min="120" max="300" step="12" value="172" aria-label="Tile size"></label>
   </div>
 </div>
@@ -1266,6 +1411,8 @@ body.less-motion .tour-try::before { animation: none; }
     <datalist id="tagList"></datalist>
     <h2 data-sec="file-types">File types</h2>
     <div id="types" class="chips"></div>
+    <h2 data-sec="product-type">Product type</h2>
+    <div id="ptypes" class="chips" role="group" aria-label="Product type"></div>
     <h2 data-sec="creators">Creators</h2>
     <input id="creatorFind" class="find" type="search" placeholder="Find a creator" aria-label="Find a creator">
     <ul id="creators" class="creators" translate="no"></ul>
@@ -1290,6 +1437,7 @@ body.less-motion .tour-try::before { animation: none; }
 </g></svg><span translate="no">Hoard <span id="version"></span></span></div>
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" id="reportProblem">Report a problem</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy</a>
@@ -1340,7 +1488,7 @@ body.less-motion .tour-try::before { animation: none; }
 </section>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button></nav>
+  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-apprise">Notifications</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button><button data-jump="part-tip">Support Hoard</button><button data-jump="part-thanks">Acknowledgements</button></nav>
   <div class="set-body">
   <p>Changes are saved as you make them.</p>
   <h3 id="part-folders">Downloads folder</h3>
@@ -1372,8 +1520,21 @@ body.less-motion .tour-try::before { animation: none; }
     address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from
     every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for
     you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.</p>
+  <h3>Store tags</h3>
+  <label class="check"><input type="checkbox" id="setStoreTags"> Read the tags creators give their products</label>
+  <p class="hint">On Booth, Jinxxy and itch.io: a few products' public pages each time a store is read, until each one
+    has been read once. Their tags show as suggestions on them, and you can filter by them; they never change yours.</p>
   <h3 id="part-downloading">Offline</h3>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
+  <label class="check"><input type="checkbox" id="setAskFiles"> Ask which files to save, before a product downloads</label>
+  <h3>Files to leave out</h3>
+  <p class="hint">Every download leaves these out, from every store or one: Sync, Download new, and a product's own
+    Download. When a product downloads, Hoard asks which of its files to save (above): what you leave out of it, it
+    remembers, and asks again next time.</p>
+  <ul id="fileRules" class="file-rules"></ul>
+  <div class="rule-add"><select id="ruleWhat" aria-label="What to leave out"></select>
+    <input id="ruleWords" maxlength="200" placeholder="quest, android" aria-label="Words in a file's name" hidden>
+    <select id="ruleStore" aria-label="From which store"></select><button class="ghost sm" id="ruleAdd">Add</button></div>
   <h3>New in your library</h3>
   <select id="setNewDays" aria-label="Mark new things as New for">
     <option value="0">Don't mark anything New</option>
@@ -1417,6 +1578,25 @@ body.less-motion .tour-try::before { animation: none; }
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
   <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
+  <h3 id="part-apprise">Notifications through Apprise</h3>
+  <p class="hint">Send the news you choose to Discord, Telegram, ntfy, email and many more, through
+    <a href="https://github.com/caronc/apprise/wiki" target="_blank" rel="noopener noreferrer">Apprise</a>: an address
+    for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in
+    config.json. What's sent says how many, never a product's name.</p>
+  <p id="appriseKept" class="hint" aria-live="polite"></p>
+  <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
+    placeholder="discord://..."></textarea>
+  <div class="apprise-acts"><button class="ghost sm" id="appriseSave">Keep these addresses</button>
+    <button class="ghost sm" id="appriseTest">Send a test</button>
+    <button class="linkish" id="appriseForget">Forget them</button></div>
+  <div id="appriseEvents" class="apprise-events" role="group" aria-label="What to send">
+    <label class="check"><input type="checkbox" data-apprise-event="new"> New products the routine check finds</label>
+    <label class="check"><input type="checkbox" data-apprise-event="updates"> Updates the routine check finds</label>
+    <label class="check"><input type="checkbox" data-apprise-event="prices"> Products on my wishlists that got cheaper</label>
+    <label class="check"><input type="checkbox" data-apprise-event="tasks"> Tasks that finish or fail</label>
+    <label class="check"><input type="checkbox" data-apprise-event="routine"> The routine check, when it's done</label>
+    <label class="check"><input type="checkbox" data-apprise-event="other"> Other news: a new version of Hoard, files the check of my downloads found changed or missing</label>
+  </div>
   <h3 id="part-look">Appearance</h3>
   <label class="check">Language
     <select id="setLanguage" aria-label="Language">
@@ -1446,6 +1626,7 @@ body.less-motion .tour-try::before { animation: none; }
       <option value="dyslexic">OpenDyslexic, for dyslexia</option>
     </select></label>
   <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
+  <label class="check"><input type="checkbox" id="setCardOutlines"> Give product cards an outline and a faint background</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
@@ -1499,6 +1680,12 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
+  <h3 id="part-tip">Support Hoard</h3>
+  <p class="hint">Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.</p>
+  <div class="field"><a class="ghost sm" id="tipKofi" href="https://ko-fi.com/knowbodyonline" target="_blank" rel="noopener noreferrer">Tip on Ko-fi</a></div>
+  <h3 id="part-thanks">Acknowledgements</h3>
+  <p class="hint">Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.</p>
+  <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>
   </div>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">
@@ -1512,6 +1699,8 @@ body.less-motion .tour-try::before { animation: none; }
         <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/></g>
       </svg>
       <p>Opening your projects</p>
+      <p class="splash-quote" aria-hidden="true"></p>
+      <div class="splash-count" hidden><span class="splash-bar" role="progressbar" aria-valuemin="0" aria-label="Opening your projects"><i></i></span><span class="n" aria-hidden="true"></span></div>
     </div>
   </div>
   <div id="pjJob" class="pj-job" hidden aria-live="polite"></div>
@@ -1558,6 +1747,23 @@ body.less-motion .tour-try::before { animation: none; }
   </div>
   <p class="muted" id="closeHow">Stopping keeps what's finished, and a half-downloaded file resumes next time where the
     store allows. <strong>Close now</strong> doesn't wait: use it if stopping takes too long.</p>
+</dialog>
+<dialog id="filesDialog" class="support-dialog files-dialog" aria-labelledby="filesTitle">
+  <h2 id="filesTitle">What files do you want to save?</h2>
+  <p class="files-of"><b id="filesName" translate="no"></b> <span id="filesBy" class="muted" translate="no"></span></p>
+  <p id="filesHas" class="files-has" aria-live="polite"></p>
+  <div id="filesList" class="files-list" hidden></div>
+  <div class="pick-go"><button class="ghost" data-files="cancel">Cancel</button>
+    <button class="ghost" data-files="pick" id="filesPick">Choose files</button>
+    <button class="primary" data-files="go" id="filesAll">Download everything</button></div>
+</dialog>
+<dialog id="checkDialog" class="support-dialog check-dialog" aria-labelledby="checkTitle">
+  <h2 id="checkTitle">What the check found</h2>
+  <p id="checkWhen" class="muted"></p>
+  <div id="checkList" class="check-list"></div>
+  <div class="pick-go"><button class="ghost" data-check-all="keep" id="checkKeepAll">Keep every change</button>
+    <button class="ghost" data-check-all="again" id="checkAgainAll">Download them all again</button>
+    <button class="primary" data-check-close>Done</button></div>
 </dialog>
 <dialog id="pickDialog" class="support-dialog pick-dialog" aria-labelledby="pickTitle">
   <h2 id="pickTitle">Download</h2>
@@ -1614,22 +1820,27 @@ body.less-motion .tour-try::before { animation: none; }
 "use strict";   // first, or it applies to nothing
 //@include shared.js
 const grid = $("#grid"), detail = $("#detail");
-const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "" };
+const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "", ptype: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
+// A store's name, from its folder's.
 const storeName = folder => folder === "Itch" ? "itch.io" : folder;
 const isLocal = a => a.store === "Local";   // your own (issue #80)   // a store as people write it, from its folder's name
+// The address of a downloaded file (v: its version, so a changed picture isn't cached).
 const fileUrl = (p, v) => keyed("/files/" + p.split("/").map(encodeURIComponent).join("/") + (v ? `?v=${+v}` : ""));
+// A size in B, KB, MB, GB or TB.
 function fmtSize(n) {
   if (n == null) return "";
   const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + " " + u[i];
 }
+// A tile's letters, colour and file type, for a download with no picture.
 function placeholder(a) {
   return `<span class="ph" style="--h:${hue(a.creator)}"><b>${esc(initials(a.name))}</b>` +
          `<small>${a.types[0] ? "." + esc(a.types[0]) : ""}</small></span>`;
 }
+// A download's picture (or its letters).
 const art = a => a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="" loading="lazy" decoding="async">` : placeholder(a);
 
 /* ---------- highlights and accessibility */
@@ -1656,7 +1867,7 @@ async function load(rescan = false) {
   }
   $("#version").textContent = DATA.version || "";
   for (const a of DATA.assets) {
-    a.hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path)].join(" "));
+    withStoreTags(a).hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path)].join(" "));
   }
   byId = new Map(DATA.assets.map(a => [a.id, a]));
   stackMembers = new Map();
@@ -1680,9 +1891,10 @@ function matches(a, skip) {
   if (state.store && !inSets() && a.store !== state.store) return false;   // (Sets: every set's tile, or the one open)
   if (state.lib !== "" && String(a.library || 0) !== state.lib) return false;   // a library folder's tab
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
+  if (skip !== "ptype" && state.ptype && a.type !== state.ptype) return false;   // what it is (issue #223)
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
   for (const t of state.types) if (!a.types.includes(t)) return false;
-  for (const tok of norm(state.q).split(/\s+/)) if (tok && !a.hay.includes(tok)) return false;
+  if (state.q && !searchMatches(a, state.q)) return false;   // (words, and prefixes: creator:, tag:...)
   return true;
 }
 const storeRank = folder => { const i = Object.keys(STORE_NAMES).indexOf(String(folder).toLowerCase()); return i < 0 ? 99 : i; };   // Local last
@@ -1693,12 +1905,14 @@ const SORTS = {
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
   size: (a, b) => b.size - a.size,
 };
+// How many of a list have each value of a list-valued field (types, tags...).
 const countBy = (list, key) => {
   const m = new Map();
   for (const a of list) for (const v of a[key]) m.set(v, (m.get(v) || 0) + 1);
   return m;
 };
-const filtersActive = () => state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size || state.set;
+// Whether any search or filter is narrowing the downloads down.
+const filtersActive = () => state.ptype || state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size || state.set;
 
 /* ---------- rendering */
 function render() {
@@ -1712,15 +1926,19 @@ function render() {
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
 const VIEWS = { downloads: "Downloads", updates: "Updates", archive: "Archive", removed: "Removed", hidden: "Hidden", space: "Disk space" };
+// The view a download is in (Downloads, Archive, Hidden or Removed).
 const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
 // Updates: what the last check found, from the Downloads and the Archive (issue #26)
 const hasUpdate = a => !!(a.update && a.update.length);
+// Whether a download belongs in the view shown (Updates and Disk space are views of their own).
 const inView = a => state.view === "updates" ? hasUpdate(a) && a.mark !== "removed"
   : state.view === "space" ? inSpace(a) : viewOf(a) === state.view;
+// The views to choose from, with their counts (Disk space's: the size downloads take).
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.assets) count[viewOf(a)] = (count[viewOf(a)] || 0) + 1;
   count.updates = DATA.assets.filter(a => hasUpdate(a) && a.mark !== "removed").length;
+  // How many downloads a view has.
   const n = v => count[v] || 0;
   const onDisk = DATA.assets.filter(takesSpace).reduce((t, a) => t + a.size, 0);   // Disk space: its count is the size
   $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === "updates" || v === state.view || n(v)
@@ -1739,14 +1957,18 @@ function renderViews() {
 /* ---------- updates (issue #26): a check reads your stores without downloading anything, and lists what each
    download is missing that its store has now: files the creator added or changed. Update downloads just those. */
 const STORE_IDS = { booth: "booth", gumroad: "gumroad", jinxxy: "jinxxy", itch: "itch", payhip: "payhip" };
+// A download's store, as Hoard's settings name it.
 const storeId = a => STORE_IDS[a.store.toLowerCase()] || a.store.toLowerCase();
+// Whether Hoard can download a product again (not Payhip's or your own).
 const canDownload = a => storeId(a) !== "payhip" && !isLocal(a);
+// When updates were last checked, in words.
 function whenChecked() {
   const times = Object.values(DATA.updates_checked || {}).filter(Boolean).sort();
   if (!times.length) return "";
   const d = new Date(times[times.length - 1]);   // the latest check
   return isNaN(d) ? "" : d.toLocaleString(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+// The Updates view's bar: how many have newer files, when they were checked, and its buttons.
 function updatesBar(n) {
   const when = whenChecked();
   const say = [n ? tr(n === 1 ? "1 download has newer files on the store: files the creator added or changed since you downloaded them."
@@ -1761,6 +1983,7 @@ afterSetMade = () => load();   // (shared.js: a set made from a project shows in
 function previousSection(a) {
   const list = a.previous || [];
   if (!list.length) return "";
+  // A previous version's time, as this computer writes one.
   const when = s => { const m = /^(\d{4})-(\d\d)-(\d\d) (\d\d)(\d\d)/.exec(s);
     return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).toLocaleString(document.documentElement.lang || undefined,
       { dateStyle: "medium", timeStyle: "short" }) : s; };
@@ -1770,6 +1993,7 @@ function previousSection(a) {
       `<button class="ghost sm" data-act="restore" data-stamp="${esc(v.stamp)}" data-file="${esc(v.file)}">Restore</button></li>`).join("")}</ul>` +
     `<p class="sub">Restore puts it back, and keeps the one it replaces here, so you can change your mind.</p>`;
 }
+// Put a previous version of a file back, once you say so (the current one is kept as a previous version).
 async function restorePrevious(a, b) {
   if (!await ask(tr("Put back {0} from {1}? The current one is kept here as a previous version.", b.dataset.file, b.closest("li").querySelector(".muted").textContent),
                  "Restore")) return;
@@ -1797,19 +2021,24 @@ function needsSection(a) {
   if (!rows.length && !unknown) return head + `<p class="sub">${esc(tr("Nothing from elsewhere: everything it uses is in it."))}</p>`;
   return head + (rows.length ? `<ul class="needs">${rows.join("")}</ul>` : "") + unknown;
 }
+// A download's details: its update (what's newer, to download), or a button to check for one.
 function updateSection(a) {
   if (!canDownload(a)) return "";
   if (!hasUpdate(a)) return `<div class="update"><button class="ghost sm" data-act="check-one">Check for updates</button>` +
-    `<span class="muted">Reads ${storeName(a.store)} for this one, without downloading anything.</span></div>`;
+    `<span class="muted">Reads ${storeName(a.store)} for this one, without downloading anything.</span></div>` +
+    `<div class="update"><button class="ghost sm" data-act="more">${esc(tr("Download more of it..."))}</button>` +
+    `<span class="muted">${esc(tr("Its files you haven't downloaded, to choose from."))}</span></div>`;
   return `<div class="update"><strong>Update available</strong><ul>${a.update.map(f =>
       `<li>${esc(f.file)} <span class="muted-inline">(${f.kind === "changed" ? "changed" : "new"})</span></li>`).join("")}</ul>` +
     `<button class="primary sm" data-act="update-one">Update</button> <button class="ghost sm" data-act="check-one">Check again</button></div>`;
 }
+// Download the updates of some downloads.
 function updateItems(list) {
   const chosen = list.filter(a => canDownload(a));
   if (!chosen.length) { takeFiles(); return; }
   startDownload([...new Set(chosen.map(storeId))], null, chosen.map(a => a.tag_key));
 }
+// Check the stores for updates (of some downloads, or all of them).
 async function checkUpdates(list) {
   if (!navigator.onLine) { toast("You're offline. Checking for updates needs a connection."); return; }
   const body = list ? { stores: [...new Set(list.map(storeId))], keys: list.map(a => a.tag_key) } : {};
@@ -1833,7 +2062,9 @@ $("#viewBar").addEventListener("click", e => {
    folder, archived or deleted, a few at a time with Select. */
 let SPACE = null;   // /api/space: {groups, unchecked, projects}, read when Disk space is opened
 const takesSpace = a => !a.linked;   // (a folder of your own, listed where it is, isn't Hoard's to free)
+// The files of a download that are kept elsewhere too, or null.
 const copiesOf = a => (SPACE && SPACE.of.get(a.id)) || null;
+// Whether a download is in Disk space's list, as its chips choose (all, copies, unused...).
 function inSpace(a) {
   if (!takesSpace(a)) return false;
   if (state.space === "copies") return !!copiesOf(a);
@@ -1845,6 +2076,7 @@ function inSpace(a) {
    one store's copy and remove the others. A copy removed leaves your library (Library, Removed, where Restore
    brings it back), so syncing doesn't download it again, and its downloaded files are deleted. */
 const dupeKeep = new Map();   // stack_key -> the id of the copy to keep; none chosen: all of them stay
+// The products downloaded from more than one store, each as a group of its copies.
 function dupeGroups() {
   const by = new Map();
   for (const a of DATA.assets) if (a.stack_key && takesSpace(a) && !isLocal(a) && !a.mark) by.set(a.stack_key, [...(by.get(a.stack_key) || []), a]);
@@ -1852,6 +2084,7 @@ function dupeGroups() {
     .map(g => g.sort((x, y) => coll.compare(storeName(x.store), storeName(y.store)) || y.size - x.size))
     .sort((x, y) => coll.compare(x[0].name, y[0].name));
 }
+// Every download that's in such a group.
 const dupeIds = () => new Set(dupeGroups().flat().map(a => a.id));
 /* A copy is removed (marked Removed, its files deleted) by its product key, the key tags use: a store and a name
    without versions or (labels), so "Hair Pack 1" and "Hair Pack 2" from one store share one. So a copy goes only
@@ -1868,6 +2101,7 @@ function dupeRemovals(groups = dupeGroups()) {
     return g.filter(a => a.tag_key !== keep.tag_key && here.get(a.tag_key) === count.get(a.tag_key));
   });
 }
+// The products downloaded from more than one store: which copy of each to keep.
 function dupesPanel() {
   const groups = dupeGroups();
   if (!groups.length) return `<p class="muted">${esc(tr("Nothing here is downloaded from more than one store."))}</p>`;
@@ -1881,6 +2115,7 @@ function dupesPanel() {
     `<button class="linkish" data-dupe="none">${esc(tr("Keep them all"))}</button></div>` +
     `<ul class="dupelist">${groups.map(g => {
       const k = g[0].stack_key, keep = dupeKeep.get(k), name = `dk-${g[0].id}`;
+      // Which copy to keep, as a radio button.
       const opt = (v, label, on) => `<label><input type="radio" name="${name}" data-stack="${esc(k)}" value="${v}"${on ? " checked" : ""}> ${label}</label>`;
       const twice = st => g.filter(a => a.store === st).length > 1;   // two from one store: which is which, by name
       return `<li><span class="nm"><b translate="no">${esc(g[0].name)}</b> <span class="muted" translate="no">${esc(tr("by {0}", g[0].creator))}</span></span><span class="opts">` +
@@ -1890,10 +2125,12 @@ function dupesPanel() {
     }).join("")}</ul>` +
     `<button class="primary sm danger" data-dupe="go"${going.length ? "" : " disabled"}>${dupeGoText(going, bytes)}</button></div>`;
 }
+// The button's words: how many copies go, and the room it frees.
 function dupeGoText(going, bytes) {
   return esc(going.length ? tr(going.length === 1 ? "Remove 1 copy ({1})" : "Remove {0} copies ({1})", going.length.toLocaleString(), sizeText(bytes))
                           : tr("Choose the copies to keep"));
 }
+// Remove the copies not kept (their files deleted), once you say so.
 async function removeDupes() {
   const going = dupeRemovals();
   if (!going.length) return;
@@ -1914,6 +2151,7 @@ async function removeDupes() {
   if (state.view === "space") loadSpace();
   toast(tr(going.length === 1 ? "Removed 1 copy and deleted {1}." : "Removed {0} copies and deleted {1}.", going.length.toLocaleString(), sizeText(r.data.bytes)));
 }
+// Read Disk space's findings: the same files kept twice, and how much room that takes.
 async function loadSpace() {
   let j;
   try { const r = await api("/api/space", { cache: "no-store" }); if (!r.ok) throw new Error(); j = await r.json(); }
@@ -1939,9 +2177,11 @@ function mapSpace(j) {   // (again after each reload of the downloads, whose ids
   }
   SPACE = { ...j, of, saving, files };
 }
+// Disk space's bar: how much room downloads take, and its chips.
 function spaceBar() {
   const here = DATA.assets.filter(takesSpace), total = here.reduce((t, a) => t + a.size, 0);
   const unused = here.filter(a => !isLocal(a) && !(a.used_in || []).length);
+  // One of Disk space's chips, with its count.
   const chip = (v, label, n) => `<button class="chip" data-space="${v}" aria-pressed="${state.space === v}">${label}` +
     (n != null ? `<span class="n">${esc(String(n))}</span>` : "") + `</button>`;
   const copies = !SPACE ? `<span class="muted">Looking for copies…</span>`
@@ -1959,6 +2199,7 @@ function spaceBar() {
     `${chip("unused", "Not in any Unity project", unused.length.toLocaleString())}</div>` +
     notes.map(t => `<p class="muted">${t}</p>`).join("") + (state.space === "dupes" ? dupesPanel() : "");
 }
+// A download's details: the files of it that are kept elsewhere too.
 function spaceSection(a) {
   const e = copiesOf(a);
   if (!e) return "";
@@ -1986,6 +2227,7 @@ $("#viewBar").addEventListener("click", e => {
   const b = e.target.closest("[data-space]"); if (!b) return;
   state.space = state.space === b.dataset.space ? "" : b.dataset.space; sel.ids.clear(); render();
 });
+// Show a view (Hidden only once it's unlocked with the PIN).
 async function showView(v) {
   if (v === "hidden" && !(DATA.privacy || {}).unlocked) {   // the same PIN as the Library's Hidden
     if (!(await unlockDialog())) return;
@@ -2004,6 +2246,7 @@ $("#viewBar").addEventListener("click", async e => {
 });
 /* unlocking hidden items: setting, changing or resetting the PIN is the Library's */
 let pinResolve = null;
+// Ask for the PIN, resolving with whether it unlocked Hidden.
 function unlockDialog() {
   return new Promise(resolve => {
     pinResolve = resolve;
@@ -2012,11 +2255,13 @@ function unlockDialog() {
     $("#pinInput").focus();
   });
 }
+// Close the PIN dialog, saying whether it unlocked.
 function pinDone(ok) {
   if ($("#pinDialog").open) $("#pinDialog").close();
   const r = pinResolve; pinResolve = null;
   if (r) r(ok);
 }
+// Send the PIN typed.
 async function pinSubmit() {
   const r = await apiPost("/api/unlock", { pin: $("#pinInput").value });
   if (!r.ok) { $("#pinNote").textContent = r.data.error || "That didn't work."; $("#pinInput").select(); return; }
@@ -2034,6 +2279,7 @@ $("#views").addEventListener("click", e => { const b = e.target.closest("[data-v
 /* copies of one product (bought twice, in versions, or on two stores: hoard/library.py's stack_key) as one tile, as in
    the Library: its details list the others. Every copy shows while selecting, and in Disk space (each takes space). */
 let stackSize = new Map();   // the first copy's id -> how many copies its tile stands for
+// The downloads with each one's copies shown as one tile (counting them), unless copies aren't stacked.
 function stacked(list) {
   stackSize = new Map();
   if (UI.stack === false || sel.on || state.view === "space") return list;
@@ -2048,11 +2294,13 @@ function stacked(list) {
 }
 // the other copies of a product: on another store by the same creator (also_in), or in its stack
 let stackMembers = new Map();   // stack_key -> its copies (made with byId, in load)
+// A download's copies: on other stores, and versions of it.
 function otherCopies(a) {
   const ids = new Set(a.also_in.map(o => o.id));
   for (const o of (a.stack_key && stackMembers.get(a.stack_key)) || []) if (o.id !== a.id) ids.add(o.id);
   return [...ids].map(id => byId.get(id)).filter(Boolean);
 }
+// A download's tile: its picture, name, creator, store, size and marks.
 const slotHTML = a => {
     const n = stackSize.get(a.id) || 0, others = otherCopies(a);
     const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
@@ -2075,6 +2323,7 @@ function rowMeta(a) {
   return `<span class="row-meta" aria-hidden="true"><span class="rm-store"><span class="dot ${a.store.toLowerCase()}"></span>${storeName(a.store)}</span>` +
     `<span class="rm-state ${how}">${esc(state)}</span><span class="rm-when">${esc(shortDay(a.added || (a.modified && new Date(a.modified * 1000).toISOString())))}</span></span>`;
 }
+// Draw the tiles (or why there are none).
 function renderGrid(list) {
   (cards = cards || lazyCards(grid)).show(list, slotHTML);
 
@@ -2110,6 +2359,7 @@ function renderGrid(list) {
   empty.hidden = list.length > 0 || (inSets() && !DATA.error && DATA.assets.length > 0);   // (Sets says what it has)
 }
 
+// The filters for the downloads shown: tags, file types, library folders and creators.
 function renderFacets(list) {
   renderTagFacets(list);
 
@@ -2146,10 +2396,64 @@ function renderIntegrity() {
   const when = !v.checked ? tr("Not checked yet.") : !v.complete ? tr("Checked {0} (stopped part way).", ago(v.checked))
     : tr("Checked {0}:", ago(v.checked));
   const found = !v.checked || !v.complete ? "" : (v.changed || v.missing || v.data_changed)
-    ? ` <strong class="warn">${esc(v.summary)}</strong> ${esc(tr("Which files is in Tasks."))}` : ` ${esc(v.summary)}`;
+    ? ` <strong class="warn">${esc(v.summary)}</strong> ` + (v.listed ? `<button class="linkish" data-check-open>${esc(tr("See what it found"))}</button>`
+      : esc(tr("Which files is in Tasks."))) : ` ${esc(v.summary)}`;
   el.innerHTML = `${esc(when)}${found} ${esc(every ? tr("Hoard checks {0}, in its routine check (Settings).", tr(every)) : tr("Hoard checks only when you ask (Settings)."))} ` +
     `<button class="linkish" id="checkNow">Check now</button>`;
 }
+// Issue #231: the files the last check found changed or missing, each with what can be done about it: a change kept as
+// it is (it's fine from then on), a missing file forgotten (and left out of its product's downloads), either
+// downloaded again (a changed one kept in _Previous versions first), or shown in its folder
+const CHECK = { list: [], hidden: 0, more: 0 };
+// Open what the last integrity check found, each file to deal with.
+async function openCheck() {
+  const r = await api("/api/integrity", { cache: "no-store" });
+  if (!r.ok) { toast(tr("That can't be done.")); return; }
+  const v = await r.json();
+  Object.assign(CHECK, { list: v.problems || [], hidden: v.hidden_left_out || 0, more: v.more || 0 });
+  $("#checkWhen").textContent = v.checked ? tr("Checked {0}.", ago(v.checked)) + (CHECK.hidden ? " " +
+    tr("Hidden items are left out while your hidden library is locked.") : "") : "";
+  drawCheck();
+  if (!$("#checkDialog").open) $("#checkDialog").showModal();
+}
+// Draw what the check found, by product, each with Keep, Forget and Download again.
+function drawCheck() {
+  const by = new Map();
+  CHECK.list.forEach((x, i) => { const k = `${x.store}:${x.name}`; if (!by.has(k)) by.set(k, []); by.get(k).push([x, i]); });
+  $("#checkList").innerHTML = !CHECK.list.length ? `<p class="none">${esc(tr("Nothing left to deal with."))}</p>`
+    : [...by.values()].map(xs => `<h3><span class="dot ${esc(xs[0][0].store)}"></span><span translate="no">${esc(xs[0][0].name)}</span></h3><ul>` +
+      xs.map(([x, i]) => `<li><span class="cf"><b translate="no">${esc(x.path)}</b><span class="warn">${esc(x.kind === "changed"
+          ? tr("Changed since Hoard downloaded it") : tr("Missing"))}</span></span><span class="acts">` +
+        `<button class="ghost sm" data-check="again" data-i="${i}">${esc(tr("Download again"))}</button>` +
+        (x.kind === "changed" ? `<button class="ghost sm" data-check="keep" data-i="${i}">${esc(tr("Keep it as it is"))}</button>`
+          : `<button class="ghost sm" data-check="forget" data-i="${i}">${esc(tr("Forget it"))}</button>`) +
+        `<button class="ghost sm" data-check="show" data-i="${i}">${esc(tr("Show in folder"))}</button></span></li>`).join("") + `</ul>`).join("") +
+    (CHECK.more ? `<p class="muted">${esc(tr("{0} more are named in the check's log, in Tasks.", CHECK.more))}</p>` : "");
+  $("#checkKeepAll").hidden = !CHECK.list.some(x => x.kind === "changed");
+  $("#checkAgainAll").hidden = CHECK.list.length < 2;
+}
+// Deal with files the check found (forgetting them once you say so).
+async function resolveCheck(action, list) {
+  if (action === "forget" && !await ask(tr(list.length === 1 ? "Forget {0}? Hoard stops expecting it, and leaves it out of that product's downloads from now on."
+      : "Forget these {0} files? Hoard stops expecting them, and leaves them out of their products' downloads from now on.",
+      list.length === 1 ? list[0].path : list.length), tr("Forget"))) return;
+  const r = await apiPost("/api/integrity/resolve", { action, problems: list });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  if (action === "show") return;
+  if (r.data.failed && r.data.failed.length) toast(r.data.failed[0].error);
+  else if (action === "again") toast(r.data.started === "queued" ? tr("Downloading them again: it starts when what's running now is done.")
+    : tr("Downloading them again. Follow it in Tasks."));
+  await openCheck();
+  load();
+}
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-check-open]")) { openCheck(); return; }
+  if (e.target.closest("[data-check-close]")) { $("#checkDialog").close(); return; }
+  const one = e.target.closest("[data-check]"), all = e.target.closest("[data-check-all]");
+  if (one) resolveCheck(one.dataset.check, [CHECK.list[+one.dataset.i]]);
+  else if (all) resolveCheck(all.dataset.checkAll, all.dataset.checkAll === "keep" ? CHECK.list.filter(x => x.kind === "changed") : CHECK.list);
+});
+// Start an integrity check of the downloads.
 async function checkDownloads() {
   const r = await apiPost("/api/verify");
   if (!r.ok) { toast(r.data.error || "The check didn't start."); return; }
@@ -2158,6 +2462,7 @@ async function checkDownloads() {
 }
 document.addEventListener("click", e => { if (e.target.closest("#checkNow, [data-checknow]")) checkDownloads(); });
 
+// The status line: what's searched and filtered (each to clear), and how many things are shown.
 function renderStatus(list) {
   const total = DATA.assets.filter(inView).length;   // this view: Downloads, Archive, ...
   const pills = [];
@@ -2167,6 +2472,8 @@ function renderStatus(list) {
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
+  if (state.ptype) pills.push(["ptype", "", "Product type", tr(PRODUCT_TYPES[state.ptype] || state.ptype)]);
+  // "1 thing" or "n things".
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
   const local = state.store === "Local";
@@ -2186,6 +2493,7 @@ function renderStatus(list) {
     (pills.length > 1 ? `<button class="linkish" data-clear="all">Clear all</button>` : "");
 }
 
+// Put the search box, store tabs, library folders and sort as the state says.
 function syncControls() {
   const q = $("#q"); if (q.value !== state.q) q.value = state.q;
   renderDrives();
@@ -2250,7 +2558,9 @@ function showDetail(a, focus = true) {
   detail.classList.add("open"); document.body.classList.add("panel-open");
   $("#scrim").hidden = !matchMedia("(max-width: 820px)").matches;
   if (focus) detail.querySelector(".x").focus();
+  saveHash();
 }
+// Close the details, focusing the tile they were for.
 function closeDetail() {
   if (openId == null) return;
   detail.classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
@@ -2258,7 +2568,9 @@ function closeDetail() {
   openId = null;
   markCurrent(null);
   if (back) back.focus();
+  saveHash();
 }
+// Show a downloaded file or folder in the system's file manager.
 async function reveal(path) {
   try {
     const r = await api("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
@@ -2266,6 +2578,7 @@ async function reveal(path) {
     toast(r.ok ? tr("Opened in {0}", tr(j.opened_in)) : j.error);
   } catch (e) { toast("Couldn't reach the library server."); }
 }
+// Copy the open download's folder's path.
 async function copyPath() {
   const text = byId.get(openId).abs_folder;
   try { await navigator.clipboard.writeText(text); }
@@ -2280,11 +2593,13 @@ async function copyPath() {
 /* ---------- Look inside: what a .unitypackage or .zip holds, read without extracting it (hoard/packages.py) */
 const canLookInside = name => /\.(unitypackage|zip)$/i.test(name);
 let INSIDE = null;   // what's shown: {id, kind, items | files + packages, nodes: folders drawn when opened}
+// Open Look inside, or close it (open: which; else the other way).
 function openInside(open) {
   const w = $("#insideWin"), show = open ?? w.hidden;
   w.hidden = !show;
   if (!show) INSIDE = null;
 }
+// Look inside a package or .zip: read what's in it, and show it.
 async function lookInside(path) {
   const body = $("#insideBody"), name = path.split("/").pop();
   INSIDE = null;
@@ -2318,6 +2633,7 @@ function insideTree(items) {
   })(root);
   return root;
 }
+// A file's preview in Look inside (its type, when it has no picture).
 function previewImg(it, n) {
   const ext = (it.name || it.path).split(".").pop();
   return it.preview ? `<img class="pv" loading="lazy" alt="" src="${keyed(`/inside/${INSIDE.id}/${n}-${it.guid}.png`)}">`
@@ -2332,6 +2648,7 @@ function insideFolder(node, n) {   // one folder's contents: its folders (closed
   }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
     `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
 }
+// What's in a package, as a tree of folders, with how many files and their size.
 function insidePackage(items, n, open) {
   const tree = insideTree(items);
   if (!tree.count) return `<p class="sum">${esc(tr("No files in it."))}</p>`;
@@ -2340,6 +2657,7 @@ function insidePackage(items, n, open) {
 }
 function insideFound(q) {   // searching: every file whose path has these words, wherever it is
   const words = q.toLowerCase().split(/\s+/).filter(Boolean), found = [];
+  // Note the files in a package that have every word searched for.
   const look = (items, n, where) => {
     for (const it of items) if (it.size != null && words.every(w => it.path.toLowerCase().includes(w))) found.push({ ...it, n, where });
   };
@@ -2354,6 +2672,7 @@ function insideFound(q) {   // searching: every file whose path has these words,
       `<span class="nm" translate="no">${esc(f.path)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
     (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
 }
+// Draw Look inside: the package (or each in the .zip), or the files matching what's searched for.
 function drawInside(q = "") {
   const I = INSIDE, body = $("#insideBody");
   I.nodes = [];
@@ -2381,6 +2700,7 @@ function pickedUnder(key) {   // in a folder that's chosen (so chosen with it)
   const [kind, n, ...rest] = key.split(":"), path = rest.join(":");
   return kind !== "z" && [...INSIDE.pick.keys()].some(k => k !== key && k.startsWith(`d:${n}:`) && path.startsWith(k.slice(`d:${n}:`.length) + "/"));
 }
+// A file's or folder's tick, to take it out (one in a folder ticked is ticked with it).
 function pickBox(key, count, name) {
   const under = pickedUnder(key), on = under || INSIDE.pick.has(key);
   return `<input type="checkbox" class="pick" data-pick="${esc(key)}" data-count="${count}"${on ? " checked" : ""}${under ? " disabled" : ""}` +
@@ -2394,6 +2714,7 @@ function insideBar() {   // (while files are being taken out, its buttons stay o
     `<button class="ghost sm" data-x="extract" data-what="all"${busy}>${esc(tr("Extract everything"))}</button>` +
     (packaged ? `<label class="check"><input type="checkbox" id="insideMetas"${INSIDE.metas ? " checked" : ""}> ${esc(tr("With Unity's .meta files"))}</label>` : "") + `</div>`;
 }
+// Note a tick: a folder's brings everything in it, no longer chosen on its own.
 function pickChanged(box) {
   const key = box.dataset.pick;
   if (box.checked) INSIDE.pick.set(key, Number(box.dataset.count)); else INSIDE.pick.delete(key);   // (an empty folder: 0)
@@ -2410,9 +2731,11 @@ function pickChanged(box) {
   const bar = $("#insideBody .inside-bar");
   if (bar) bar.outerHTML = insideBar();
 }
+// Take what's ticked out of the package (or all of it) into a folder, then open it.
 async function extractInside(what) {
   const I = INSIDE, picks = what === "all" ? ["all"] : [...I.pick.keys()];
   if (!picks.length || I.busy) return;
+  // Draw Look inside's bar again.
   const redraw = () => { const bar = INSIDE === I && $("#insideBody .inside-bar"); if (bar) bar.outerHTML = insideBar(); };
   I.busy = true;
   redraw();
@@ -2428,10 +2751,12 @@ async function extractInside(what) {
     (r.data.skipped.length ? " " + tr(r.data.skipped.length === 1 ? "1 file was left out: {0}." : "{0} files were left out.",
       r.data.skipped.length === 1 ? `${r.data.skipped[0].name} (${tr(r.data.skipped[0].why)})` : r.data.skipped.length) : ""));
 }
+// Fill a folder of the package's tree, the first time it's opened.
 function fillPackage(d) {
   const slot = d.querySelector("[data-pkg-node]");
   if (slot && !slot.childElementCount) { const { node, n } = INSIDE.nodes[+slot.dataset.pkgNode]; slot.innerHTML = insideFolder(node, n); }
 }
+// Look inside's window, its search, ticks and buttons.
 function wireInside() {
   makeWindow($("#insideWin"));
   WINDOWS.insideWin = () => openInside(false);
@@ -2477,11 +2802,13 @@ function saveHash() {
   if (state.types.size) p.set("types", [...state.types].join(","));
   if (state.set) p.set("set", state.set);
   if (state.sort !== "name") p.set("sort", state.sort);
+  if (state.ptype) p.set("type", state.ptype);
   if (state.view !== "downloads") p.set("view", state.view);
   if (state.view === "space" && state.space) p.set("space", state.space);
-  const h = p.toString();
-  history.replaceState(null, "", h ? "#" + h : location.pathname);
+  if (openId != null) p.set("open", openId);   // (a product's details: a place, for Back and Forward)
+  setAddress(p);
 }
+// Read the search, filters and place from the address.
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
@@ -2491,6 +2818,7 @@ function readHash() {
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";   // (a set's folder; and "Show in Downloads" from 4.1)
   state.sort = sortFrom(p.get("sort"), SORTS);
+  state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";
   state.space = ["copies", "unused"].includes(p.get("space")) ? p.get("space") : "";
   if (/^\d+$/.test(p.get("open") || "")) openId = +p.get("open");  // "Show it in Downloads" from the Library
@@ -2542,6 +2870,7 @@ async function bulkArchive() {
   toast(tr(chosen.length === 1 ? "Archived {0}. Its files stay where they are: find it in Archive." : "Archived {0} products. Their files stay where they are: find them in Archive.",
            chosen.length === 1 ? chosen[0].name : chosen.length));
 }
+// Delete the selected downloads' files, once you say so.
 async function bulkDelete() {
   const chosen = [...sel.ids].map(T.byId).filter(a => a && !isLocal(a) && !a.linked);
   if (!chosen.length) { toast("Your own packages leave Local from their own panel: Take out of Local."); return; }
@@ -2561,6 +2890,7 @@ async function bulkDelete() {
 /* ---------- a tab for each library folder (hoard/libraries.py): shown once there's more than the downloads folder */
 const libName = n => { const l = (DATA.libraries || []).find(l => String(l.n) === String(n)); return l ? libText(l) : tr("Another folder"); };
 let drivesShown = "";
+// The library folders, each with how many downloads it has, to show only one.
 function renderDrives() {
   const libs = DATA.libraries || [];
   if (state.lib !== "" && !libs.some(l => String(l.n) === state.lib)) state.lib = "";   // a folder taken out
@@ -2576,6 +2906,7 @@ function renderDrives() {
 $("#sort").addEventListener("change", e => { state.sort = e.target.value; if (state.view !== "space") uiSave({ sort: state.sort }); render(); });
 $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.value; render(); });
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
+// Download what's new from some stores (choosing what, in the downloads dialog).
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, keys) : startDownload(stores));
 $("#downloadNew").addEventListener("click", () => downloadNew(Object.keys(STORE_NAMES)));
 $("#rescan").addEventListener("click", async () => {
@@ -2585,12 +2916,14 @@ $("#rescan").addEventListener("click", async () => {
 $("#filtersToggle").addEventListener("click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
 });
+// Set the tiles' size.
 function setZoom(v) { document.documentElement.style.setProperty("--slot-size", v + "px"); zoom.value = v; }
 zoom.addEventListener("input", () => { setZoom(zoom.value); try { localStorage.setItem("hoard-dl-tile-size", zoom.value); } catch (e) {} });
 zoom.addEventListener("change", () => uiSave({ dl_tile_size: Number(zoom.value) }));   // kept with the other layout choices
 const TILE_KEY = "dl_tile_size";   // this page's own tile size (see applyUi)
 try { const z = localStorage.getItem("hoard-dl-tile-size"); if (z) setZoom(z); } catch (e) {}
 
+// Add a value to a set, or take it out when it's there.
 function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); }
 $("#filters").addEventListener("click", e => {
   const t = e.target.closest("[data-tag]"), ty = e.target.closest("[data-type]"), c = e.target.closest("[data-creator]");
@@ -2603,9 +2936,10 @@ $("#filters").addEventListener("click", e => {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; }
+  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; state.ptype = ""; }
   else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v); else if (k === "type") state.types.delete(v);
+  else if (k === "ptype") state.ptype = "";
   render();
 });
 grid.addEventListener("click", e => {
@@ -2628,6 +2962,7 @@ function localSection(a) {
     (a.own_picture ? `<button class="ghost" data-act="local-unpicture">${esc(tr(a.linked ? "Use one of its own pictures" : "Take the picture off"))}</button>` : "") +
     `<button class="ghost" data-act="local-remove">Remove from Local</button></div>`;
 }
+// Do what a button on one of your own packages says: its picture, details, or taking it out of Local.
 async function localAction(act, a) {
   if (!a) return;
   if (act === "local-picture" || act === "local-unpicture") {   // (kept in Hoard's own folder for it: see local.py)
@@ -2654,6 +2989,7 @@ async function localAction(act, a) {
   toast(act === "local-rescan" ? tr(r.data.files === 1 ? "Rescanned: 1 file." : "Rescanned: {0} files.", r.data.files)
         : tr("Took {0} out of Local.", a.name));
 }
+// Open Add to Local, or close it (open: which; else the other way).
 function openLocal(open) {
   const panel = $("#localPanel");
   const show = open ?? panel.hidden;
@@ -2669,6 +3005,7 @@ function openLocal(open) {
 }
 // issue #109: each folder some levels down as its own package: what that would add, before adding it
 let previewFor = "";
+// Show what adding a folder to Local would add: one product, or one for each folder in it.
 async function previewLocal() {
   const depth = Number($("#localDepth").value), path = $("#localPath").value.trim(), list = $("#localPreview");
   $("#localNameRow").hidden = depth > 0;
@@ -2689,6 +3026,7 @@ async function previewLocal() {
       `${p.creator ? ` <span class="muted" translate="no">${esc(tr("by {0}", p.creator))}</span>` : ""}${p.added ? ` <span>${esc(tr("(already in Local: left as it is)"))}</span>` : ""}</li>`).join("") +
     (n > 200 ? `<li class="muted">${esc(tr("and {0} more", n - 200))}</li>` : "");
 }
+// Add a folder (or each of its folders) to Local.
 async function addLocal() {
   const depth = Number($("#localDepth").value);
   const body = { path: $("#localPath").value, name: depth ? "" : $("#localName").value, creator: $("#localCreator").value,
@@ -2714,6 +3052,7 @@ async function addLocal() {
     return;
   }
 }
+// Add to Local's window, its fields and buttons.
 function wireLocal() {
   makeWindow($("#localPanel"));
   WINDOWS.localPanel = () => openLocal(false);
@@ -2752,6 +3091,7 @@ async function editableCopy(a, button) {
 }
 // Library folders (Settings): a product kept in one of them can be moved to another
 const libLabel = l => `${libText(l)} (${l.path})`;
+// A download's details: the library folder it's in, and moving it to another.
 function librarySection(a) {
   const libs = DATA.libraries || [];
   if (isLocal(a) || a.linked || libs.length < 2) return "";
@@ -2762,6 +3102,7 @@ function librarySection(a) {
       `</select><button class="ghost sm" data-act="move">Move here</button></div>`
       : `<p class="sub">Your other library folders' drives aren't connected.</p>`);
 }
+// Move a download to another library folder, once you say so (copied, checked, then deleted here).
 async function moveProduct(a, button) {
   const to = +$("#moveTo").value, lib = (DATA.libraries || []).find(l => l.n === to);
   if (!a || !lib) return;
@@ -2811,7 +3152,12 @@ detail.addEventListener("click", e => {
   else if (act === "showset") showSet(b.dataset.set);
   else if (act === "copy") copyPath();
   else if (act === "goto") showDetail(byId.get(+b.dataset.id));
-  else if (act === "update-one") updateItems([byId.get(openId)]);
+  else if (act === "update-one" || act === "more") {   // which of its files, asked first (issue #225)
+    const a = byId.get(openId), more = act === "more";
+    askFiles({ key: a.tag_key, store: storeId(a), name: a.name, creator: a.creator, more,
+               names: more ? null : (a.update || []).map(f => f.file) },
+             files => { DL_FILES = files; updateItems([a]); });
+  }
   else if (act === "check-one") checkUpdates([byId.get(openId)]);
   else if (act === "delete-files") deleteFiles(byId.get(openId));
   else if (act === "edit-copy") editableCopy(byId.get(openId), b);
@@ -2837,6 +3183,7 @@ new ResizeObserver(([e]) => document.documentElement.style.setProperty("--bar-h"
 new ResizeObserver(([e]) => document.documentElement.style.setProperty("--shelf-h", e.target.offsetHeight + "px")).observe($(".shelf"));
 {   // tabs out of sight (a very narrow window) fade at the edge they're beyond, so it shows there are more
   const seg = $(".shelf .seg");
+  // Fade the tabs' edges where there are more tabs beyond them.
   const edges = () => {
     seg.classList.toggle("more-left", seg.scrollLeft > 2);
     seg.classList.toggle("more-right", seg.scrollLeft + seg.clientWidth < seg.scrollWidth - 2);
@@ -2859,6 +3206,13 @@ const T = {
   closeDetail: () => closeDetail(),
   closeOtherPanels: () => {},   // windows stay open side by side
   render: () => render(),
+  goTo: () => {   // Back or Forward (shared.js): the tab, view, filters and details the address names
+    const want = new URLSearchParams(location.hash.slice(1)).get("open"), was = openId;
+    readHash();
+    if (!want) { openId = was; closeDetail(); }
+    render();
+    if (want && byId.has(+want) && (+want !== was || !detail.classList.contains("open"))) showDetail(byId.get(+want), false);
+  },
   pickHere: () => {   // Projects' Put in products from your library: what's downloaded, to choose from (pickStart)
     if (state.store === "Sets") { state.store = ""; state.set = ""; }
     state.view = "downloads";
@@ -2880,6 +3234,7 @@ const T = {
     return { main: [], groups };
   },
 };
+// Do what a button in the tag manager says: keep a suggestion, hide it, rename a tag or delete one.
 async function tagPanelAction(b) {
   const t = b.dataset.tag, act = b.dataset.tact;
   if (act === "keep") return changeTags({ action: "keep", name: t }, `#${t} is now yours, on every item whose name has “${t}”.`);
@@ -2903,6 +3258,7 @@ async function tagPanelAction(b) {
     if (word !== null) return changeTags({ action: "match", name: t, match: word });
   }
 }
+// The tag manager's buttons and fields.
 function wireTags() {
   $("#tagsBtn").addEventListener("click", () => openTagPanel());
   $("#manageTags").addEventListener("click", () => openTagPanel(true));
@@ -2914,6 +3270,10 @@ function wireTags() {
   $("#newTagBtn").addEventListener("click", createTag);
   $("#newTag").addEventListener("keydown", e => { if (e.key === "Enter") createTag(); });
   wireSelection();
+  wireBar();
+  wireSearch();
+  wireTypes();
+  wireFiles();
   document.addEventListener("keydown", e => {
     if (e.key === "Enter" && e.target && e.target.id === "tagInput") { const a = T.open(); if (a) addTyped(a); }
   });
@@ -2958,6 +3318,7 @@ function ago(iso) {   // the Library page has this in its own part; the Download
   const [n, u] = s < 3600 ? [s / 60, "minute"] : s < 86400 ? [s / 3600, "hour"] : [s / 86400, "day"];
   const r = Math.round(n); return tr(`{0} ${u}${r === 1 ? "" : "s"} ago`, r);
 }
+// Whether a new version of Hoard is out, in words.
 function describeUpdate(u) {
   if (u.error) return u.error;
   if (u.busy) return u.message || tr("Getting the update");
@@ -2966,6 +3327,7 @@ function describeUpdate(u) {
   if (u.checked) return tr("Hoard {0} is the newest version.", verText(u.current)) + " " + tr("Last checked {0}.", ago(new Date(u.checked * 1000).toISOString()));
   return tr("You have Hoard {0}.", verText(u.current));
 }
+// Start a download (of some stores, only some kinds, or some products), with the files chosen.
 async function startDownload(stores, only, keys) {
   const files = takeFiles();   // the files chosen of each product, if some were left out (taken first: never kept for later)
   if (!navigator.onLine) { toast("You're offline. Downloading needs a connection."); return; }
@@ -2976,6 +3338,7 @@ async function startDownload(stores, only, keys) {
   showDownload({ running: true, message: "Starting", log: [] });
   pollDownload();
 }
+// Follow the download running, showing its progress, until it's done.
 async function pollDownload() {
   clearTimeout(dlTimer);
   let job;
@@ -2990,6 +3353,7 @@ async function pollDownload() {
   if (running) { dlActive = true; dlTimer = setTimeout(pollDownload, 1000); }
   else if (dlActive) { dlActive = false; T.reload(); }
 }
+// Show a download's progress: what it's doing, each file's transfer, and what it found when it's done.
 function showDownload(job) {
   $("#dlPanel").hidden = false;
   const stopped = /^Stopped/.test(job.message || "");
@@ -3028,10 +3392,14 @@ function applyUi(ui) {   // once, when the page first has its data
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);
   const tile = UI[typeof TILE_KEY === "string" ? TILE_KEY : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
-  $("#stackCopies").checked = UI.stack !== false;   // the same choice as the Library's
+  $("#stackCopies").setAttribute("aria-pressed", String(UI.stack !== false));   // the same choice as the Library's
   if (state.view !== "space") state.sort = sortFrom(new URLSearchParams(location.hash.slice(1)).get("sort"), SORTS);   // the sort last chosen
 }
-$("#stackCopies").addEventListener("change", e => { uiSave({ stack: e.target.checked }); render(); });
+$("#stackCopies").addEventListener("click", e => {
+  const on = e.currentTarget.getAttribute("aria-pressed") !== "true";
+  e.currentTarget.setAttribute("aria-pressed", String(on));
+  uiSave({ stack: on }); render();
+});
 /* ---------- the sidebar: folds away to a strip, and each section in it (tags, suggestions, creators...) folds on its own.
    Both are remembered. */
 /* ---------- Settings save as you change them: a box or list straight away, a folder or the Payhip shops when you
@@ -3063,7 +3431,6 @@ async function watchJobs() {
 /* ---------- closing Hoard while it's working: stop it first, carry on in the background, or close at once */
 /* ---------- the download panels beside the details (issue #85): the page's styles place them by these */
 function wireApp() {
-  $("#syncBtn").addEventListener("click", startSync);
   $("#settingsBtn").addEventListener("click", () => openSettings());
   wireSupportReport();
   wireBackup();

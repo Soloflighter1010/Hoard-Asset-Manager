@@ -9,6 +9,7 @@ using UnityEditor;
 
 namespace SoloFlighter.Hoard.Editor
 {
+    /// <summary>Notes when the project's files change in a way that changes what Hoard's window shows.</summary>
     public sealed class ProjectWatch : AssetPostprocessor
     {
         const double Window = 5;   // seconds: a change Unity reported this long ago is no longer the one projectChanged means
@@ -30,6 +31,7 @@ namespace SoloFlighter.Hoard.Editor
             return path;
         }
 
+        /// <summary>Unity changed some assets: note whether any of it matters to what's shown.</summary>
         static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
             double now = EditorApplication.timeSinceStartup;
@@ -40,6 +42,8 @@ namespace SoloFlighter.Hoard.Editor
             if (counts) present.Clear();
         }
 
+        /// <summary>Whether a change matters: a file deleted or moved, or one imported that's in a package Hoard
+        /// read.</summary>
         static bool Counts(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
             var matters = Matters;

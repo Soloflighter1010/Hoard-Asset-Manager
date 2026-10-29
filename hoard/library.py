@@ -8,7 +8,6 @@ import json
 import os
 import re
 import threading
-import time
 import unicodedata
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -18,11 +17,11 @@ from urllib.parse import urlparse
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
 from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check, has_password_field, hops_text, settle
-from .common import NotLoggedIn, log, now_iso
-from .net import STORE_HOSTS, plain_error
+from .common import NotLoggedIn, log, now_iso, pause
+from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
-from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
-from .tags import TagMatcher, TagStore, tag_key
+from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, is_video_address, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
+from .tags import TagMatcher, TagStore, clean_tag, product_type, tag_key
 
 
 STORES = {
@@ -53,6 +52,8 @@ def item(store: str, id_, **fields) -> dict:
     for k in ("creator_url", "url", "download_url", "page"):  # links you can open: only to this store's own website
         d[k] = store_link(store, d[k])
     d["thumbnail"] = safe_url(d["thumbnail"])       # images come from the stores' image hosts
+    if is_video_address(d["thumbnail"]):            # (a video's address isn't a picture: issue #212)
+        d["thumbnail"] = None
     d["files"] = [{"name": clean_text(f.get("name"), 200) or "File", "url": store_link(store, f.get("url"))}
                   for f in d["files"][:500] if store_link(store, f.get("url"))]
     d["name"] = clean_text(d["name"], 300) or "Untitled"
@@ -61,6 +62,9 @@ def item(store: str, id_, **fields) -> dict:
     d["archived"], d["gift"] = d["archived"] is True, d["gift"] is True
     added = d.get("added")
     d["added"] = added if isinstance(added, str) and ADDED_TIME.fullmatch(added) else None
+    if "store_tags" in d:   # the tags its creator gave it on its store's page (issue #206): read, even if none
+        tags = d["store_tags"] if isinstance(d["store_tags"], list) else []
+        d["store_tags"] = list(dict.fromkeys(c for c in (clean_tag(x) for x in tags[:60] if isinstance(x, str)) if c))[:30]
     return d
 
 
@@ -72,21 +76,36 @@ GR_LIBRARY = "https://app.gumroad.com/library"
 def extract_page_json(text: str):
     """The page data Gumroad embeds in its HTML (component and props), or None. (Reading the library and
     downloading both use this.)"""
-    m = re.search(r'<script[^>]*\bdata-page="app"[^>]*>(.*?)</script>', text, re.S)
-    if m:
-        return json.loads(m.group(1))
+    found = next((inside for attrs, inside in script_tags(text) if re.search(r'\bdata-page="app"', attrs)), None)
+    if found is not None:
+        return json.loads(found)
     m = re.search(r'\bdata-page="(\{[^"]*)"', text)
     if m:
         return json.loads(html.unescape(m.group(1)))
     # Older react-on-rails markup, kept as a fallback
     best = None
-    for m in re.finditer(r'<script[^>]*js-react-on-rails-component[^>]*data-component-name="([^"]+)"[^>]*>(.*?)</script>',
-                         text, re.S):
-        if best is None or len(m.group(2)) > len(best[1]):
-            best = (m.group(1), m.group(2))
+    for attrs, inside in script_tags(text):
+        m = re.search(r'data-component-name="([^"]+)"', attrs) if "js-react-on-rails-component" in attrs else None
+        if m and (best is None or len(inside) > len(best[1])):
+            best = (m.group(1), inside)
     if best:
         return {"component": best[0], "props": json.loads(best[1])}
     return None
+
+
+def script_tags(text: str):
+    """Each <script ...>...</script> in a page, in order: (its opening tag's attributes, what's inside it). Found by
+    looking for each one's ends, reading the page once: a regular expression for them (<script[^>]*...>(.*?)</script>)
+    took time growing with the square of a page's length when it had many <script tags left open, as a saved page
+    you import might (45 seconds for 70 KB)."""
+    start = text.find("<script")
+    while start != -1:
+        tag_end = text.find(">", start)
+        close = text.find("</script>", tag_end) if tag_end != -1 else -1
+        if close == -1:
+            return
+        yield text[start + len("<script"):tag_end], text[tag_end + 1:close]
+        start = text.find("<script", close + len("</script>"))
 
 
 def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None):
@@ -105,7 +124,7 @@ def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_pag
             if page_no >= pages:
                 break
             page_no += 1
-            time.sleep(delay)
+            pause(delay)
 
 
 def gumroad_page(profile_url, permalink) -> str | None:
@@ -135,6 +154,8 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
     items, seen = [], set()
 
     def read_props(params: dict) -> dict:
+        """One page of Gumroad's library, as the page's own data; raises NotLoggedIn when Gumroad asks you to sign
+        in."""
         r = ctx.request.get(GR_LIBRARY, params=params, timeout=60000)
         if "/login" in urlparse(r.url).path:
             raise NotLoggedIn()
@@ -146,6 +167,7 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         return data.get("props") or {}
 
     def on_page(archived, page_no, pages):
+        """Say which page of the library is being read."""
         progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
     for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
                               float(cfg.get("request_delay", 0.8)), on_page):
@@ -259,7 +281,7 @@ def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[
             progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
             if not new:   # past the last page
                 break
-            time.sleep(delay)
+            pause(delay)
     return list(cards.values())
 
 
@@ -371,11 +393,11 @@ JX_CARDS_JS = r"""
     if (!creator && byLine) creator = byLine.replace(/^by\s+/i, '');
     const heading = [...c.querySelectorAll('h1, h2, h3, h4, h5, h6, [class*="title" i]')]
       .map(h => linesOf(h)[0]).find(t => t && !GENERIC.test(t));
-    const img = c.querySelector('img');
+    const img = c.querySelector('img'), vid = c.querySelector('video');   // (a product shown by its video: its still)
     const name = heading || lines.find(s => s !== byLine && s !== creator) || (img && img.alt) || '';
     if (!creator) creator = lines.find(s => s !== name && s !== byLine) || '';
     out.push({ key: keyOf(a), url: a.href.split(/[?#]/)[0], name, creator, creator_url: creatorUrl, page: productUrl,
-               thumbnail: img ? (img.currentSrc || img.src || '') : '', lines });
+               thumbnail: img ? (img.currentSrc || img.src || '') : vid ? vid.poster : '', video: !img && !!vid, lines });
   }
   return out;
 }
@@ -442,10 +464,12 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
         visited, pending = {page.url}, []
         for _ in range(100):  # numbered pages
             def read() -> int:
+                """Note the products now on the inventory page, and its other pages to visit; returns how many are
+                known."""
                 for c in page.evaluate(JX_CARDS_JS, pattern):
                     old = found.get(c["key"], {})
                     found[c["key"]] = {k: old.get(k) or c.get(k)
-                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail", "page")}
+                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail", "page", "video")}
                 for href in jinxxy_inventory_pages(page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")):
                     if href not in visited and href not in pending:
                         pending.append(href)
@@ -473,8 +497,12 @@ def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
     JX_PAGE_VISITS in one refresh, with the usual pause between pages. An item whose page can't be read keeps its
     creator's page."""
     known = cfg.pop("_known_pages", None) or {}
+    pictures = cfg.pop("_known_pictures", None) or {}   # (each product's picture a refresh found before)
+    stillless = lambda c: c.get("video") and (not c.get("thumbnail") or is_video_address(c["thumbnail"]))  # noqa: E731
     for c in found.values():
         c["page"] = c.get("page") or known.get(jinxxy_key(c))
+        if stillless(c) and pictures.get(jinxxy_key(c)):
+            c["thumbnail"] = pictures[jinxxy_key(c)]
     todo = [c for c in found.values() if not c.get("page") and store_link("jinxxy", c.get("url"))][:JX_PAGE_VISITS]
     delay = float(cfg.get("request_delay", 0.8))
     for n, c in enumerate(todo, 1):
@@ -483,12 +511,26 @@ def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
             goto(page, c["url"])
             settle(page)
             c["page"] = jinxxy_product_page(page.evaluate(JX_PRODUCT_JS), c.get("creator_url"))
+            if stillless(c):   # (shown by its video: the video's still, while here)
+                c["thumbnail"] = page.evaluate(STILL_JS) or c.get("thumbnail")
         except Exception as e:   # (one page that won't open never stops the refresh)
             print(f"Jinxxy: couldn't read the product page of {c.get('name')!r}: {str(e)[:200]}", flush=True)
-        time.sleep(delay)
+        pause(delay)
+    # a product its card showed by a video, with no still: the picture its public page gives (issue #212)
+    from .wishlists import pictures_from_pages, read_store_page
+    pictures_from_pages([c for c in found.values() if stillless(c) and c.get("page")], read_store_page, progress, delay,
+                        page_of=lambda c: c["page"])
+
+
+# An inventory item's video still, when its first picture is a video (issue #212): a still the page gives the video
+STILL_JS = r"""() => {
+  const vid = document.querySelector('video[poster]');
+  return vid ? vid.poster : '';
+}"""
 
 
 def jinxxy_key(c: dict) -> str:
+    """A Jinxxy product's key in your library (jinxxy:<its id>)."""
     return "jinxxy:" + c["key"].rsplit("/", 1)[-1]
 
 
@@ -647,7 +689,7 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
         if not result["next"] or result["next"] == url:
             break
         url = result["next"]
-        time.sleep(float(cfg.get("request_delay", 0.8)))
+        pause(float(cfg.get("request_delay", 0.8)))
     return list(cards.values())
 
 
@@ -1118,7 +1160,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift", "added", "page")}
+                                             "variants", "archived", "gift", "added", "page", "store_tags")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:
@@ -1155,6 +1197,8 @@ class Library:
             i["added"] = before[i["key"]].get("added") if i["key"] in before else now
             if not i.get("page") and i["key"] in before:   # (its public page, found by an earlier refresh)
                 i["page"] = before[i["key"]].get("page")
+            if "store_tags" not in i and "store_tags" in before.get(i["key"], {}):   # (its store's tags, read before)
+                i["store_tags"] = before[i["key"]]["store_tags"]
         return first
 
     def replace_store(self, store: str, items: list[dict], keep_others: bool = False) -> None:
@@ -1277,8 +1321,9 @@ def common_words(names: list[str], min_count: int, max_share: float, block=froze
     return [ts & keep for ts in toks]
 
 
-def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[dict]:
-    """Add your tags, suggested tags (words shared by several names) and cross-store matches."""
+def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=frozenset(), progress=None) -> list[dict]:
+    """Add your tags, suggested tags (words shared by several names) and cross-store matches (apart: products you
+    said aren't copies of anything, stack_by_picture). progress: called with how many are done (issue #200)."""
     tagdata = tagdata or TagStore.empty()
     block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
     suggestions = common_words([i["name"] for i in items], int(tcfg.get("min_count", 3)),
@@ -1287,11 +1332,14 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
     groups: dict[str, list] = {}
     out = []
     matcher = TagMatcher(tagdata["tags"])
-    for i, ts in zip(items, suggestions):
+    for n, (i, ts) in enumerate(zip(items, suggestions), 1):
+        if progress:
+            progress(n)
         key = tag_key(i["store"], i["name"])
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
+        kind, known = product_type(tagdata, key, i["name"], mine, i.get("store_tags"))   # what it is (issue #223)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted(ts - set(mine)),
-             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": ""}
+             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": "", "type": kind, "type_from": known}
         for k in ("creator_url", "url", "download_url", "page"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))
@@ -1301,7 +1349,7 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None) -> list[d
             e["payhip_shop"], e["payhip_shop_added"] = shop, bool(store_link("payhip", shop + "/"))
         out.append(e)
         groups.setdefault(e["match_key"], []).append(e)
-    stack_by_picture(out)
+    stack_by_picture(out, apart=apart)
     for g in groups.values():
         by_store: dict[str, set] = {}
         for e in g:
@@ -1387,6 +1435,7 @@ _LOOKS_CACHE: dict = {"at": None, "looks": {}}
 
 
 def _looks_file() -> Path:
+    """Where what Hoard worked out about each product picture (how it looks, to stack copies by) is kept."""
     from .paths import data_dir
     return data_dir() / PICTURE_LOOKS_FILE
 
@@ -1424,6 +1473,7 @@ def save_picture_looks(new: dict) -> int:
 
 
 def _is_hex(value, n: int) -> bool:
+    """Is value n hexadecimal digits?"""
     return isinstance(value, str) and len(value) == n and all(c in "0123456789abcdef" for c in value)
 
 
@@ -1436,11 +1486,12 @@ def stack_name(name: str) -> str:
 
 
 def _maker(creator: str) -> str:
+    """A creator's name as copies are matched by (letters and digits only, any case); blank for an unknown creator."""
     key = re.sub(r"[\W_]+", "", unicodedata.normalize("NFKC", creator or "").casefold())
     return "" if key in ("", "unknowncreator") else key
 
 
-def _names_alike(a: str, b: str) -> bool:
+def _names_alike(a: str, b: str, enough: float = 0.8) -> bool:
     """Two stack names that are probably one product's: the same, or nearly (a word more or less), with the same
     numbers in them."""
     if a == b:
@@ -1448,10 +1499,42 @@ def _names_alike(a: str, b: str) -> bool:
     if not a or not b or re.findall(r"\d+", a) != re.findall(r"\d+", b):
         return False
     from difflib import SequenceMatcher
-    return SequenceMatcher(None, a, b).ratio() >= 0.8
+    return SequenceMatcher(None, a, b).ratio() >= enough
 
 
-def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
+# words a store's listing adds around a product's name, not part of it (issue #217)
+_FILLER = re.compile(r"\b(?:for vrchat|vrchat|vrc|assets?|unitypackage|unity package|free|ver|version|edition|new|updated?)\b")
+_VERSION = re.compile(r"\bv\d+(?:\.\d+)*[a-z]?\b|\b\d+(?:\.\d+)+\b")   # v2, 1.0.3 (a plain number is the name's: Pack 2)
+
+
+# what a [label] says that isn't the product (besides _FILLER and versions): what it runs on, and where it's sold
+_LABEL_WORDS = re.compile(r"\b(?:pc|quest|android|ios|mobile|sale|3d|model|booth|gumroad|jinxxy|payhip|itch(?:\.io)?|unity)\b")
+_LABEL_JA = re.compile(r"無料|想定|向け|対応|モデル|オリジナル|新作|セール")   # (free, made for, works with, model...)
+
+
+def _label(m: re.Match) -> str:
+    """A 【label】 or [label] in a name: gone when it only says what listings say ([Asset], 【VRChat】, [PC/Quest]),
+    kept when it names anything else (the avatar it's for: 【Rusk】)."""
+    inside = m.group(0)[1:-1]
+    rest = _LABEL_WORDS.sub(" ", _FILLER.sub(" ", _VERSION.sub(" ", _LABEL_JA.sub(" ", inside))))
+    return f" {inside} " if re.sub(r"[\W_]+", "", rest) else " "
+
+
+def fuzzy_name(name: str) -> str:
+    """A product's name with what listings add around it left out, to tell two stores' listings of it apart from
+    other products (issue #217): no case, punctuation, emoji, labels that only say what listings say ([Asset],
+    【VRChat】), versions (v2, 1.0.3), or words like VRChat, Asset or Free. Its other numbers stay, so "Hair Pack 1"
+    isn't "Hair Pack 2"; and the avatar it's for stays ("for <base>", or 【Rusk】), as a hoodie for one avatar isn't
+    the hoodie for another."""
+    s = re.sub(r"【[^】]*】|\[[^\]]*\]", _label, unicodedata.normalize("NFKC", name or "").casefold())
+    s = _FILLER.sub(" ", _VERSION.sub(" ", s))
+    return re.sub(r"[\W_]+", "", s)
+
+
+STACK_WHY = ("picture", "name", "look", "alike")   # why copies stack: the same picture, name, a look-alike picture, names alike
+
+
+def stack_by_picture(items: list[dict], looks: dict | None = None, apart=frozenset()) -> None:
     """Give each item a stack_key: copies of one product show as one tile (issue #111), from any store. Copies are:
 
     - items with the same picture, byte for byte, when no other creator uses it (bought twice, or in versions);
@@ -1461,27 +1544,40 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
     - items with the same name by creators named differently (one shop under two names) whose pictures look the
       same (picture_looks): the same picture saved again by another store isn't the same bytes.
 
+    - items by the same creator on two stores whose names are alike once what listings add around a name is left
+      out (fuzzy_name: "[Asset] Fox Tail v2" and "Fox Tail"), with the same numbers in them (issue #217).
+
     "Hair Pack 1" and "Hair Pack 2" stay apart unless they have the same picture. An item that might stack, once
     it's known how its picture looks, gets look_for: its picture's SHA-256, for the page to work out (save_picture_looks).
     An item with nothing to stack with gets "", as does one whose picture isn't saved yet unless its name and
-    creator say it's a copy."""
+    creator say it's a copy. Each item in a stack gets stack_why: why its stack's copies were put together (STACK_WHY).
+    apart: product keys you said aren't copies of anything ("Not a copy"): they never stack."""
     looks = picture_looks() if looks is None else looks
     hashes = picture_hashes(i["thumbnail"] for i in items if i.get("thumbnail"))
     pic = [hashes.get(i.get("thumbnail") or "", "") for i in items]
     names = [stack_name(i.get("name") or "") for i in items]
     makers = [_maker(i.get("creator") or "") for i in items]
+    kept_apart = [bool(apart) and (i.get("tag_key") or tag_key(str(i.get("store") or ""), i.get("name") or "")) in apart
+                  for i in items]
     parent = list(range(len(items)))
+    why: dict[int, set] = {}   # a stack's root -> why its copies were put together
 
     def find(x: int) -> int:
+        """The group a product is in (the first product of it)."""
         while parent[x] != x:
             parent[x] = parent[parent[x]]
             x = parent[x]
         return x
 
-    def union(a: int, b: int) -> None:
+    def union(a: int, b: int, reason: str = "picture") -> None:
+        """Put two products in one group of copies, for this reason (unless you said either isn't a copy)."""
+        if kept_apart[a] or kept_apart[b]:
+            return
         ra, rb = find(a), find(b)
         if ra != rb:
-            parent[max(ra, rb)] = min(ra, rb)
+            root, other = min(ra, rb), max(ra, rb)
+            parent[other] = root
+            why[root] = why.get(root, set()) | why.pop(other, set()) | {reason}
 
     by_pic: dict[str, list[int]] = {}
     for n, h in enumerate(pic):
@@ -1507,7 +1603,7 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
         for n in group:
             if makers[n]:
                 if makers[n] in first_by_maker:
-                    union(first_by_maker[makers[n]], n)
+                    union(first_by_maker[makers[n]], n, "name")
                 else:
                     first_by_maker[makers[n]] = n
         for x, a in enumerate(group):
@@ -1517,9 +1613,24 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
                 la, lb = looks.get(pic[a]), looks.get(pic[b])
                 if la and lb:
                     if bin(int(la, 16) ^ int(lb, 16)).count("1") <= LOOK_DISTANCE:
-                        union(a, b)
+                        union(a, b, "look")
                 else:
                     look_for.update(n for n, known in ((a, la), (b, lb)) if not known)
+    # issue #217: one creator's listings on two stores whose names are alike once what listings add is left out. Only
+    # names starting alike are compared, a creator's few at a time, so a big library stays quick to read
+    loose = [fuzzy_name(i.get("name") or "") for i in items]
+    by_start: dict[tuple, list[int]] = {}
+    for n, f in enumerate(loose):
+        if makers[n] and len(f) >= 4:
+            by_start.setdefault((makers[n], f[:4]), []).append(n)
+    for group in by_start.values():
+        if not 2 <= len(group) <= 60:
+            continue
+        for x, a in enumerate(group):
+            for b in group[x + 1:]:
+                if items[a].get("store") != items[b].get("store") and find(a) != find(b) \
+                        and _names_alike(loose[a], loose[b], 0.86):
+                    union(a, b, "alike")
     members: dict[int, list[int]] = {}
     for n in range(len(items)):
         members.setdefault(find(n), []).append(n)
@@ -1530,13 +1641,63 @@ def stack_by_picture(items: list[dict], looks: dict | None = None) -> None:
                                                    for n in group)).encode()).hexdigest()[:24]
         for n in group:
             items[n]["stack_key"] = key
+            items[n]["stack_why"] = [w for w in STACK_WHY if w in why.get(root, ())] if key else []
     for n in look_for:
         items[n]["look_for"] = pic[n]
 
 
-def unreachable_message(store: str, what: str = "refreshed") -> str:
-    """What to tell you when a store's website can't be reached."""
+STORE_TAG_PAGES = 40   # products' public pages read for their store's tags, at most, each time a store is read
+
+
+_TAG_PAGE_FAILS: dict[str, int] = {}   # products whose page couldn't be read, and how often, this run: tried after the rest
+
+
+def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: None, delay: float = 0.0,
+                          limit: int = STORE_TAG_PAGES) -> int:
+    """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
+    from each product's public page as anyone sees it, a few each time the store is read, until every product has
+    been read once (each keeps "store_tags", empty when its page has none). Only a product with a public page is read
+    (one without, a Jinxxy item Hoard knows only by your inventory, waits until it has one). A page that couldn't be
+    read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Returns
+    how many products' pages were read."""
+    from .sets import product_link
+    from .wishlists import TAGGED_STORES, LinkError, from_product_page
+    if store not in TAGGED_STORES:
+        return 0
+    with lib.lock:
+        waiting = [(i["key"], link) for i in lib.data["items"] if i["store"] == store and "store_tags" not in i
+                   and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
+    todo = sorted(waiting, key=lambda w: _TAG_PAGE_FAILS.get(w[0], 0))[:limit]   # (otherwise in the library's order)
+    read: dict[str, list] = {}
+    for n, (key, page) in enumerate(todo, 1):
+        progress(f"The tags creators gave their products, {n} of {len(todo)}")
+        try:
+            read[key] = from_product_page(page, fetch).get("store_tags") or []
+        except LinkError as e:
+            if "couldn't be read" not in str(e):   # (its page is there, and isn't a product's: nothing to read later)
+                read[key] = []
+            else:
+                _TAG_PAGE_FAILS[key] = _TAG_PAGE_FAILS.get(key, 0) + 1
+        except Exception as e:   # (anything else leaves it to try again next time)
+            _TAG_PAGE_FAILS[key] = _TAG_PAGE_FAILS.get(key, 0) + 1
+            print(f"Couldn't read the store's tags for {key!r}: {str(e)[:200]}", flush=True)
+        if n < len(todo):
+            pause(delay)
+    if read:
+        with lib.lock:
+            for i in lib.data["items"]:
+                if i["key"] in read:
+                    i["store_tags"] = item(i["store"], i["id"], store_tags=read[i["key"]])["store_tags"]
+            lib.save()
+    return len(read)
+
+
+def unreachable_message(store: str, what: str = "refreshed", error: BaseException | None = None) -> str:
+    """What to tell you when a store's website can't be reached (error: why, when it's known: something on this
+    computer refusing the connection is said as that, net.blocked_message)."""
     host = STORE_HOSTS[store].replace("accounts.", "").replace("app.", "")
+    if error is not None and blocked_here(error):
+        return blocked_message(host.replace("api.", ""))
     return (f"Couldn't reach {host}, so {STORES[store]['label']} wasn't {what}. You may be offline, or the store may "
             "be down. Your saved list is unchanged; try again when you're connected.")
 

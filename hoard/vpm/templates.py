@@ -44,6 +44,7 @@ class TemplateError(Exception):
 
 
 def _builtin_archive(template_id: str, unity: UnityVersion) -> Path | None:
+    """The VRChat template Hoard ships for an avatars or worlds project in that Unity version, or None."""
     kind = {AVATARS: "avatars", WORLDS: "worlds"}.get(template_id)
     return BUILTIN / f"{kind}-{unity}.tar.gz" if kind and str(unity) in VRCHAT_UNITY else None
 
@@ -137,6 +138,8 @@ def templates(vcc_folder: Path, installed_unity: list[str]) -> list[dict]:
 
 
 def _resolve(all_templates: dict, template_id: str, unity: UnityVersion, depth: int = 0) -> dict:
+    """What a template makes: its base (an archive, a folder or nothing) and the packages it and its bases ask for.
+    Raises TemplateError for a template that can't be used."""
     if depth > 20:
         raise TemplateError("That template's bases go round in a loop.")
     if template_id in (AVATARS, WORLDS):
@@ -175,6 +178,7 @@ def check_name(base: Path, name: str) -> tuple[str | None, str | None]:
 
 
 def _unpack(archive: Path, dest: Path) -> None:
+    """Unpack a template archive into the new project, skipping anything that would land outside it, and links."""
     with tarfile.open(archive, "r:gz") as tar:
         for m in tar.getmembers():
             parts = [p for p in m.name.replace("\\", "/").split("/") if p not in ("", ".")]
@@ -190,6 +194,7 @@ def _unpack(archive: Path, dest: Path) -> None:
 
 
 def _yaml_quote(value: str) -> str:
+    """A string as a double-quoted YAML scalar."""
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
 
 
@@ -201,6 +206,7 @@ def set_product(project: Path, name: str) -> None:
     except OSError:
         return
     def put(text, key, value):
+        """Replace the first value of key in the settings text."""
         return re.sub(rf"(?m)^(\s*{key}: ).*$", lambda m: m.group(1) + value, text, count=1)
     text = put(text, "productGUID", uuid.uuid4().hex)
     text = put(text, "productName", _yaml_quote(name))
@@ -225,6 +231,7 @@ def create(vcc_folder: Path, installed_unity: list[str], template_id: str, locat
             _unpack(source, project)
         elif kind == "folder":
             def ignore(folder, names):
+                """What not to copy from a template folder: links, and its own package.json."""
                 return [n for n in names if (Path(folder) / n).is_symlink()] + (["package.json"] if Path(folder) == source else [])
             shutil.copytree(source, project, ignore=ignore, dirs_exist_ok=True)
         else:

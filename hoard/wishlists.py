@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import re
 import time
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
 from .browser import goto, goto_past_check, has_password_field, settle
-from .common import NotLoggedIn
+from .common import NotLoggedIn, pause
 from .config import payhip_shops
-from .safety import clean_text, inert_html, offline_page, safe_url
+from .safety import clean_text, fetch_public, inert_html, is_video_address, offline_page, safe_url
 
 MAX_PAGES = 200            # pages of one list (Booth shows 20 on each: 4,000 products)
 MAX_LISTS = 50             # lists from one store
@@ -83,7 +83,7 @@ def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=Non
     if isinstance(elsewhere, str) and elsewhere:
         u = urlparse(elsewhere)
         out["elsewhere"] = urlunparse((u.scheme, u.netloc, u.path, "", u.query, ""))   # (another site may need its query)
-    if safe_url(thumbnail):
+    if safe_url(thumbnail) and not is_video_address(thumbnail):   # (a video isn't a picture: issue #212)
         out["thumbnail"] = safe_url(thumbnail)
     if isinstance(price, dict) or isinstance(price, str):
         p = price if isinstance(price, dict) else parse_price(price)
@@ -93,6 +93,7 @@ def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=Non
 
 
 def _store_of(url: str) -> str | None:
+    """Which store a page is on (booth, gumroad, jinxxy, payhip, itch), by its address; None for any other site."""
     host = (urlparse(url or "").hostname or "").lower()
     if host == "booth.pm" or host.endswith(".booth.pm"):
         return "booth"
@@ -112,6 +113,11 @@ def _store_of(url: str) -> str | None:
 # each store's own site, which a product's page may send you on to (besides the page's own host, a creator's)
 LINK_HOSTS = {"booth": ("booth.pm",), "gumroad": ("gumroad.com",), "jinxxy": ("jinxxy.com", "www.jinxxy.com"),
               "payhip": ("payhip.com", "www.payhip.com"), "itch": ()}
+# where a product's page is read from (Booth's item JSON is read from booth.pm itself): the store's own site, or a
+# creator's one level under it
+PAGE_SITES = {"gumroad": r"(?:[a-z0-9-]{1,63}\.)?gumroad\.com", "jinxxy": r"(?:www\.)?jinxxy\.com",
+              "payhip": r"(?:www\.)?payhip\.com", "itch": r"[a-z0-9-]{1,63}\.itch\.io"}
+_PAGE_PATH = r"(?:/[A-Za-z0-9_.~-]{1,120}){1,2}"
 MAX_PRODUCT_PAGE = 3 * 1024 * 1024
 
 
@@ -145,9 +151,11 @@ def from_product_page(link: str, fetch) -> dict:
         if not isinstance(data, dict) or not data.get("name"):
             raise LinkError("Booth didn't show that item (it may be gone, or for adults only)")
         pics = [x.get("original") or x.get("resized") for x in data.get("images") or [] if isinstance(x, dict)]
-        return product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
-                       url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
-    got = fetch(url, tuple(dict.fromkeys((host,) + LINK_HOSTS[store])))
+        got = product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
+                      url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
+        return {**got, "store_tags": store_tags_in("booth", data)} if got else got
+    address = page_address(store, url)
+    got = fetch(address, tuple(dict.fromkeys((host,) + LINK_HOSTS[store]))) if address else None
     if not got or "html" not in got[1]:
         raise LinkError("its page couldn't be read")
     page = got[0]
@@ -164,7 +172,89 @@ def from_product_page(link: str, fetch) -> dict:
     price = parse_price(f"{amount} {currency}") if amount not in (None, "") and currency else None
     if price is None and amount not in (None, "") and str(amount).strip() in ("0", "0.0", "0.00"):
         price = {"text": "Free", "amount": 0.0, "currency": ""}
-    return product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+    got = product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
+    return {**got, "store_tags": store_tags_in(store, page)} if got else got
+
+
+TAGGED_STORES = ("booth", "jinxxy", "itch")   # where a product's own page shows the tags its creator gave it
+MAX_STORE_TAGS = 30
+
+
+def store_tags_in(store: str, got) -> list[str]:
+    """Issue #206: the tags a product's creator gave it on its store, as Hoard keeps tags (clean_tag): Booth's, and its
+    category, from its item JSON (got, a dict); Jinxxy's from its page's data and itch.io's from its page's Tags row
+    (got, the page). Gumroad's and Payhip's pages don't show any. At most MAX_STORE_TAGS, in the store's order."""
+    import json
+    import html as html_text
+    from .tags import clean_tag
+    raw: list = []
+    if store == "booth" and isinstance(got, dict):
+        raw = [t.get("name") for t in got.get("tags") or [] if isinstance(t, dict)]
+        cat = got.get("category") if isinstance(got.get("category"), dict) else {}
+        raw += [cat.get("name"), (cat.get("parent") or {}).get("name") if isinstance(cat.get("parent"), dict) else None]
+    elif store == "jinxxy" and isinstance(got, str):   # (in the page's data, as JSON inside a script's string)
+        m = re.search(r'\\"tags\\":(\[[^\]]{0,4000}\])', got) or re.search(r'"tags":(\[[^\]]{0,4000}\])', got)
+        try:
+            raw = json.loads(m.group(1).replace('\\"', '"')) if m else []
+        except ValueError:
+            raw = []
+    elif store == "itch" and isinstance(got, str):   # the page's More information: <td>Tags</td><td><a>...</a>...</td>
+        m = re.search(r"<td>Tags</td>\s*<td>(.*?)</td>", got, re.S)
+        raw = [html_text.unescape(x) for x in re.findall(r"<a[^>]*>([^<]{1,80})</a>", m.group(1))] if m else []
+    out: list[str] = []
+    for t in raw if isinstance(raw, list) else []:
+        tag = clean_tag(t) if isinstance(t, str) else ""
+        if tag and tag not in out:
+            out.append(tag)
+    return out[:MAX_STORE_TAGS]
+
+
+def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:
+    """A store's public page (or Booth's item JSON), as Add products by link reads it: only from those hosts (https,
+    redirects included), at public addresses, sending no sign-in. (Its text, its content type), or None."""
+    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
+                                           "like Gecko) Chrome/140.0 Safari/537.36",
+                             "Accept": "application/json" if url.endswith(".json") else "text/html"},
+                       MAX_PRODUCT_PAGE, hosts=hosts)
+    return (got[0].decode("utf-8", "replace"), got[1]) if got else None
+
+
+PICTURE_PAGES = 60   # products' public pages read for their pictures, at most, each time a store is read
+
+
+def pictures_from_pages(items: list[dict], fetch, progress=lambda m: None, delay: float = 0.0, page_of=None,
+                        limit: int = PICTURE_PAGES) -> int:
+    """Issue #212: products that came with no picture (a store showing a video first: the video isn't one), given the
+    picture their public page shows (from_product_page: its JSON-LD, Open Graph tag, or Booth's item JSON). Changes
+    items' "thumbnail" in place; page_of(item) is its public page (its "url"). At most limit pages, delay apart.
+    Returns how many were found."""
+    page_of = page_of or (lambda x: x.get("url"))
+    todo = [x for x in items if (not x.get("thumbnail") or is_video_address(x.get("thumbnail"))) and page_of(x)][:limit]
+    found = 0
+    for n, x in enumerate(todo, 1):
+        progress(f"Pictures, {n} of {len(todo)}")
+        try:
+            still = from_product_page(page_of(x), fetch).get("thumbnail")
+        except Exception as e:   # (a page that can't be read leaves its product as it was)
+            print(f"Couldn't read the picture of {x.get('name')!r}: {str(e)[:200]}", flush=True)
+            still = None
+        if still:
+            x["thumbnail"] = still
+            found += 1
+        if n < len(todo):
+            pause(delay)
+    return found
+
+
+def page_address(store: str, url: str) -> str | None:
+    """Where a product's page is read from, or None: put back together from its link's host and path, each checked
+    here, where the address is made, to be the store's site or a creator's on it (PAGE_SITES) and a page's path. So
+    the request only ever asks the store, whatever was pasted (product_link has checked the link once already)."""
+    parts = urlsplit(url)
+    host, path = parts.hostname or "", parts.path
+    if store in PAGE_SITES and re.fullmatch(PAGE_SITES[store], host) and re.fullmatch(_PAGE_PATH, path):
+        return f"https://{host}{path}"
+    return None
 
 
 def _meta(page: str, prop: str) -> str:
@@ -270,11 +360,14 @@ JINXXY_JS = r"""(base) => {
     const creator = [...card.querySelectorAll('a[href]')].find(x => x !== a && abs(x) !== url && path.length > 1
       && abs(x) && new URL(abs(x)).pathname.replace(/\/$/, '') === '/' + path[0]);
     const name = h.textContent.trim();
-    // its picture is the one in the other link to the same product (beside the name, not in the box around it)
+    // its picture is the one in the other link to the same product (beside the name, not in the box around it), or the
+    // still of the video it shows first (issue #212)
     const img = [...document.querySelectorAll('a[href] img')].find(i => abs(i.closest('a')) === url && !/profile picture/i.test(i.alt || ''));
+    const vid = [...document.querySelectorAll('a[href] video[poster]')].find(v => abs(v.closest('a')) === url);
     const price = [...card.querySelectorAll('span')].map(s => s.textContent.trim())
       .find(t => /^(\d[\d.,]*(\s*-\s*\d[\d.,]*)?\s*[A-Z]{3}|Free)$/.test(t));
-    cards.push({url, name, creator: creator ? creator.textContent.trim() : '', thumbnail: img ? img.src : '', price: price || ''});
+    cards.push({url, name, creator: creator ? creator.textContent.trim() : '', thumbnail: img ? img.src : vid ? vid.poster : '',
+                price: price || ''});
   }
   const lists = [...document.querySelectorAll('a[href*="/my/lists/"]')].map(a => ({url: abs(a),
     name: (a.querySelector('h3') || {}).textContent || ''})).filter(l => l.name.trim());
@@ -303,11 +396,14 @@ PAYHIP_JS = r"""() => {
 
 
 def booth_products(cards) -> list[dict]:
+    """Booth's wishlist cards, as products."""
     return [p for p in (product("booth", c.get("name"), id_=c.get("id"), creator=c.get("creator"), url=c.get("url"),
                                 thumbnail=c.get("thumbnail"), price=c.get("price")) for c in cards) if p]
 
 
 def jinxxy_products(cards) -> list[dict]:
+    """Jinxxy's wishlist and likes cards, as products: one Jinxxy lists from another store is that store's, and one from
+    a site that isn't a store keeps that page as its link."""
     out = []
     for c in cards:
         store = _store_of(c.get("url"))   # a product Jinxxy lists from another store is that store's; one on a site
@@ -355,6 +451,7 @@ def gumroad_card_products(cards) -> list[dict]:
 
 
 def payhip_products(cards) -> list[dict]:
+    """A Payhip shop's wishlist cards, as products."""
     return [p for p in (product("payhip", c.get("name"), url=c.get("url"), thumbnail=c.get("thumbnail"),
                                 price=c.get("price")) for c in cards) if p]
 
@@ -362,12 +459,14 @@ def payhip_products(cards) -> list[dict]:
 # ----------------------------------------------------------------------------- reading them, signed in
 
 def _with_page(url: str, n: int) -> str:
+    """The address with its page number set (none for the first page)."""
     u = urlparse(url)
     q = {k: v for k, v in parse_qs(u.query).items() if k != "page"}
     return urlunparse(u._replace(query=urlencode({**q, **({"page": n} if n > 1 else {})}, doseq=True)))
 
 
 def _signed_in(page, host: str) -> None:
+    """Raise NotLoggedIn when the store showed its sign-in page instead of your list."""
     u = urlparse(page.url)
     if u.hostname != host or re.search(r"sign_in|login|/auth/", u.path) or has_password_field(page):
         raise NotLoggedIn()
@@ -379,6 +478,7 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
     delay = float(cfg.get("request_delay", 0.8))
     try:
         def read_all(url: str, label: str) -> list[dict]:
+            """Every product on one of your Booth lists, page by page."""
             found: dict[str, dict] = {}
             goto(page, url)
             settle(page, 900)
@@ -464,6 +564,7 @@ def read_jinxxy(ctx, cfg, progress) -> list[dict]:
     delay = float(cfg.get("request_delay", 0.8))
     try:
         def read_all(url: str, label: str) -> tuple[list[dict], list[dict]]:
+            """Every product on one of your Jinxxy lists, page by page, and the other lists it links to."""
             cards: dict[str, dict] = {}
             lists: dict[str, dict] = {}
             visited = set()
@@ -514,6 +615,7 @@ def read_payhip(ctx, cfg, progress) -> list[dict]:
 
 
 def _payhip_lists(cards, shop: str, url: str) -> list[dict]:
+    """A Payhip shop's wishlists, one list for each name the shop gives them, named with the shop."""
     by: dict[str, list] = {}
     for c in cards:
         by.setdefault(c.get("list") or "Wishlist", []).append(c)
@@ -545,6 +647,7 @@ def page_kind(url: str | None) -> str | None:
 
 
 def _list_name(kind: str, url: str, page) -> str:
+    """The name a saved list page's list goes by: the store's own list name, or the one you gave it."""
     path = urlparse(url).path.rstrip("/")
     if kind == "booth":
         q = parse_qs(urlparse(url).query)

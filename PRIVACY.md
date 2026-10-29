@@ -29,6 +29,7 @@ information.
 | The window's own storage (its layout choices) | So the window remembers how you left it | `window` in Hoard's app-data folder |
 | What you've archived, hidden or removed, and your hidden library's PIN (only as a salted, slow hash, never the PIN itself) | So those choices last, even after refreshing | `marks.json` in the same private `Hoard` folder |
 | Your settings | So Hoard remembers your choices | `config.json` in Hoard's app-data folder |
+| The Apprise addresses you give Hoard (5.2.0), which hold your notification services' tokens | To send the news you choose to those services | Kept as API keys are: encrypted for your Windows account in `keys` in Hoard's app-data folder, in your Keychain on macOS, in your keyring on Linux. Never in `config.json` |
 | The last 60 finished jobs (refreshes, syncs, downloads): what each did, how it went, and its progress, which names products and creators | So the Tasks window can show them after Hoard restarts | `tasks.json` in Hoard's app-data folder (Clear in Tasks empties it) |
 | Troubleshooting files, only when you run `debug` or `probe` | So you can see why a store isn't being read | `debug` in Hoard's app-data folder |
 | Backups you make (4.0): your settings, tags, sets, choices and library list, without sign-ins, keys or download links; hidden items only if you made it while they were unlocked | So you can keep what you've set up, or move it to another computer | `Documents/Hoard backups`, only when you choose **Make a backup** (or restore one, which saves how things were first) |
@@ -54,6 +55,10 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   Hoard does this by itself while it's open, as often as you chose, to see what's new or updated. It downloads
   nothing without you.
 - **The image hosts those stores use,** to fetch product images.
+- **The notification services you give Hoard addresses for, only if you do** (5.2.0: **Notifications through
+  Apprise** in **Settings**, for Discord, Telegram, ntfy, email and many more). Hoard sends them only the news you
+  tick, which says how many (3 new products, a task done) and never names a product. Each service handles it under
+  its own privacy policy.
 - **Hoard's share server, only when you share a set** (**Make a short link** in **Share...**, in the Sets tab: from
   5.0 a set is shared only by a short link to the set viewer on Hoard's website, `hoard.furryup.link`), and when
   you or someone else opens one. A shared set holds its name, note and photo links, and each product's store, name,

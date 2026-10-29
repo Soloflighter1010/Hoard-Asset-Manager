@@ -6,6 +6,7 @@ using System.Text;
 
 namespace SoloFlighter.Hoard
 {
+    /// <summary>One product to credit: its store, name, creator and link.</summary>
     public sealed class CreditEntry
     {
         public string Store, Name, Creator, Url;
@@ -13,8 +14,10 @@ namespace SoloFlighter.Hoard
         public string Key { get { return (Store ?? "") + "/" + (Name ?? ""); } }
     }
 
+    /// <summary>How the credits are written: a list, Markdown, or grouped by creator.</summary>
     public enum CreditFormat { List, Markdown, ByCreator }
 
+    /// <summary>A project's credits list, written out to paste where you share it.</summary>
     public static class Credits
     {
         public static readonly string[] FormatNames = { "List", "Markdown", "By creator" };
@@ -39,12 +42,14 @@ namespace SoloFlighter.Hoard
             return list;
         }
 
+        /// <summary>Credits in order: by creator, then by name.</summary>
         static int Order(CreditEntry x, CreditEntry y)
         {
             int c = string.Compare(Who(x), Who(y), StringComparison.CurrentCultureIgnoreCase);
             return c != 0 ? c : string.Compare(x.Name, y.Name, StringComparison.CurrentCultureIgnoreCase);
         }
 
+        /// <summary>A product's creator, or "Unknown creator".</summary>
         static string Who(CreditEntry e) { return e.Creator.Length > 0 ? e.Creator : "Unknown creator"; }
 
         /// <summary>The list, ready to paste.</summary>

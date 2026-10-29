@@ -230,6 +230,7 @@ class ProfileLock:
 def _remove_tree(path: Path) -> None:
     """Delete a folder tree, clearing read-only flags that would otherwise stop Windows deleting it."""
     def retry(func, p, _exc):
+        """Make what couldn't be deleted writable, and delete it again."""
         os.chmod(p, 0o700)
         func(p)
     shutil.rmtree(path, onerror=retry)
@@ -272,6 +273,7 @@ def linux_keyring() -> str | None:
 
 
 def _find_keyring() -> str | None:
+    """Which keyring Chromium should keep its cookie key in (the --password-store it takes), or None without one."""
     names = _dbus_names()
     if "org.freedesktop.secrets" in names:        # GNOME Keyring, KeePassXC and other Secret Service keyrings
         return "gnome-libsecret"
@@ -431,6 +433,8 @@ _open_lock = threading.Lock()
 
 
 def _track(ctx, cleanup=None) -> None:
+    """Keep a browser on the list of those open, so it can be ended from any thread. Closing it again after it was ended
+    by force does nothing."""
     try:
         with _open_lock:
             _open[ctx] = cleanup
@@ -439,6 +443,7 @@ def _track(ctx, cleanup=None) -> None:
         return
 
     def close(*args, **kwargs):
+        """Close the browser, unless it was already ended by force."""
         if ctx in _ended:
             return None
         return real_close(*args, **kwargs)
@@ -447,6 +452,7 @@ def _track(ctx, cleanup=None) -> None:
 
 
 def _forget(ctx) -> None:
+    """Take a browser off the list of those open, once it has closed."""
     with _open_lock:
         _open.pop(ctx, None)
 
@@ -729,6 +735,7 @@ class SignInWindow:
                    close_fds=True)
 
     def is_open(self) -> bool:
+        """Whether the window is still open: its process, or another browser using its profile."""
         return self.proc.poll() is None or _profile_in_use(self.profile)
 
     def wait_released(self, timeout: float = 20.0) -> None:
@@ -962,6 +969,7 @@ def goto(page, url: str):
     hops = []
 
     def seen(r):
+        """Note each page the main frame goes to, to say where a page that didn't load was sent."""
         try:
             if r.request.is_navigation_request() and r.frame == page.main_frame:
                 hops.append((r.status, r.url))

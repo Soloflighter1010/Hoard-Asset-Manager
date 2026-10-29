@@ -126,6 +126,7 @@ def sample_projects(root: Path) -> dict:
 
 
 def collect(lang: str) -> list[str]:
+    """Every piece of English text the pages show, gathered by opening each page and dialog in a browser."""
     from playwright.sync_api import sync_playwright
     found: dict[str, None] = {}
     from unittest import mock
@@ -164,6 +165,7 @@ def collect(lang: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    """List the pages' text that isn't translated into a language yet."""
     lang = argv[0] if argv else "ja"
     if lang not in i18n.LANGUAGES or lang == "en":
         print(f"Choose one of: {', '.join(k for k in i18n.LANGUAGES if k != 'en')}", file=sys.stderr)

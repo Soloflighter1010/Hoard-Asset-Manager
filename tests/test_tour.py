@@ -11,6 +11,7 @@ from unittest import mock
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, downloader, library, server  # noqa: E402
+from tests.browsing import menu  # noqa: E402
 
 try:
     from tests.test_packages import BROWSER
@@ -127,9 +128,9 @@ class Tour(unittest.TestCase):
         self.title(page, "Tags")
         page.fill("#tagInput", "tour-tag")
         page.locator('#detail [data-act="addtyped"]').click()
-        self.title(page, "Sets and wishlists")
+        self.title(page, "Sets and Wishlists")
         page.click('#stores [data-store="Sets"]')   # opened: its wishlists and Mix and match are shown there
-        self.title(page, re.compile(r"^Wishlists$"))   # (not "Sets and wishlists", which has_text would match too)
+        self.title(page, re.compile(r"^Wishlists$"))   # (not "Sets and Wishlists", which has_text would match too)
         self.nxt(page)
         self.title(page, "Mix and match")
         self.nxt(page)
@@ -141,7 +142,7 @@ class Tour(unittest.TestCase):
         self.title(page, "Free some room")
         self.nxt(page)
         page.wait_for_function("() => state.view === 'downloads'")
-        for step in ("Local", "Projects", "Tasks", "Settings"):
+        for step in ("Local", "Projects", "Tasks", "Menu"):   # (the Menu: Tags, Rescan and Settings)
             self.title(page, step)
             self.nxt(page)
         self.title(page, "That's the tour")
@@ -163,7 +164,7 @@ class Tour(unittest.TestCase):
         self.assertFalse(page.locator("#tourNote").is_visible())
         page.wait_for_function("() => !uiPending")
         self.assertTrue(self.srv.cfg["ui"]["toured"])
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.click("#tourAgain")
         self.title(page, "A quick tour of Hoard")
         self.assertTrue(page.locator("#settingsPanel").is_hidden())
@@ -176,7 +177,7 @@ class Tour(unittest.TestCase):
         self.assertEqual(page.locator(".tour-ring").count(), 0)
         page.goto(self.srv.entry_url().replace("/#", "/downloads#", 1))   # and from Downloads' Settings: in the Library
         page.locator("#grid .slot").first.wait_for()
-        page.click("#settingsBtn")
+        menu(page, "#settingsBtn")
         page.click("#tourAgain")
         self.title(page, "A quick tour of Hoard")
         self.assertEqual(self.errors, [])

@@ -1,7 +1,14 @@
 ## Is Hoard free?
 
 Yes. It's open source under the [MIT license](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE),
-with no accounts, ads or tracking.
+with no accounts, ads or tracking. If it's useful to you, you can leave a tip: Settings, **Support Hoard**,
+**Tip on Ko-fi**.
+
+## Where can I ask a question?
+
+On Hoard's [Discord](https://discord.gg/psNsAGj75Q) (it's in the footer of Hoard's pages, the website and this wiki), or in a GitHub
+[issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) (**Report a problem** in Hoard's footer).
+A security problem goes privately, as [SECURITY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md) says.
 
 ## Does Hoard see my store passwords?
 
@@ -29,6 +36,32 @@ updated. See [Downloads](Downloads).
 
 Booth, Gumroad, Jinxxy, Payhip and itch.io. Hoard lists what you own on all of them, and downloads from all but
 Payhip, where you download the files yourself from each product's download page. See [Stores](Stores).
+
+## Can I choose which files of a product to download?
+
+Yes. Before one product downloads, Hoard asks **What files do you want to save?**: **Download everything**, or
+**Choose files** to untick what you don't want (a Quest version, say, or the PSDs). It remembers what you left out
+and asks again next time, and rules in **Settings** (**Files to leave out**) leave a kind of file out of every
+download. See [Downloads](Downloads#which-files-to-save).
+
+## Can Hoard put my assets into my Unity projects?
+
+Yes. **Projects** lists the same projects as ALCOM and the VRChat Creator Companion: it makes new ones, adds VPM
+packages, and puts in products from your library (a `.unitypackage` goes in without opening Unity), with what they
+need. Hoard for Unity, a package in the project, shows which of your products it uses, with their credits. See
+[Projects](Projects) and [Hoard for Unity](Hoard-for-Unity).
+
+## What are sets and wishlists?
+
+A set groups products you use together (an avatar and its outfits, say), to download, put in a project, or share by
+a short link that only someone with the link can open. A wishlist is a set of what you'd like: read from your stores'
+wishlists or added by a product's link, with its price, and Hoard says when one gets cheaper. See [Sets](Sets).
+
+## I removed a product. Will it come back?
+
+No. A removed product stays out of your library, and out of every download and sync, after each refresh, even when
+the store renames it. The **Removed** view lists them, to put back whenever you like. See
+[Your library](Library#archive-removed-and-hidden).
 
 ## Where do my files go?
 
@@ -58,6 +91,19 @@ again. With **Check for updates automatically** on, Hoard checks in the backgrou
 day while it's open, and shows **Update to** at the bottom of the page when there's a new version. From 5.1 it's on
 to begin with in a new Hoard (one you had before keeps your choice). See
 [Installing Hoard](Installing-Hoard#updating).
+
+## Can Hoard tell me about new things on my phone?
+
+Yes, through Apprise: in **Settings**, **Notifications through Apprise**, add an address for Discord, Telegram,
+ntfy, email or many more, then tick what to send. Only counts are sent, never a product's name. See
+[Settings](Settings).
+
+## Why does my antivirus or Windows warn about Hoard?
+
+Windows warns about programs from a publisher it doesn't know well yet, and Hoard drives a real browser and
+downloads files, which some security software watches closely. Hoard is code-signed and open source, and every
+release is scanned by VirusTotal before it's published. See
+[Troubleshooting](Troubleshooting#security-software-stops-hoard-or-its-browser).
 
 ## Is the hidden library encrypted?
 

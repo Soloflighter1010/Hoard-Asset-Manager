@@ -29,6 +29,7 @@ SKIPPED_TOP = {"library", "logs", "obj", "temp"}
 
 
 def default_folder() -> Path:
+    """Where ALCOM keeps project backups unless told otherwise."""
     return Path.home() / "ALCOM" / "Backups"
 
 
@@ -137,6 +138,7 @@ def overview(folder: Path, moved_to: Path | None, keep: int, days: int) -> dict:
 
 
 def _same(a: Path, b: Path) -> bool:
+    """Whether two paths are the same folder (links and case followed)."""
     try:
         return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
     except OSError:
