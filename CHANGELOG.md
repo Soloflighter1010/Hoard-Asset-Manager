@@ -1,5 +1,69 @@
 # Changelog
 
+## 5.2.0-beta.2
+
+- **The search beside the logo** ([#236](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/236)). The top bar reads the logo and the search, then on the other side
+  Library, Downloads, Local, Sets and Wishlists, Tasks and Projects, then **Menu** and **Sync**. A narrow window
+  still puts the search on a row of its own, under the logo.
+- **Projects** ([#246](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/246), [#250](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/250), [#253](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/253)).
+  - **A project's details:** choose a project and its details open beside the list: where it is, its folder and
+    tags, what's new for it, and **Open in Unity**, **Manage**, **Show in folder**, **Folder and tags...** and the
+    favourite. The row keeps only what you need at a glance.
+  - **List or tiles:** show projects as a list or as tiles, as ALCOM's and the Creator Companion's grid view do;
+    Hoard remembers which. As tiles, a folder of projects is one folder tile that opens to them.
+  - **What's new, two ways apart:** a project says how many of its VPM packages have newer versions (outlined), and,
+    apart from that, how many products from your library in it have updates (filled). Its details lead to each.
+- **Sets** ([#242](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/242), [#256](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/256), [#258](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/258)).
+  - **Add to another set...** shows every set's tile to choose from (yours, the ones you added from a link, your
+    wishlists), with a box to find one by its name, then asks before anything's added.
+  - A set's note and photos, once saved, show as they're shared, with **Edit**: nothing changes by accident, and
+    nothing's sent until **Save**.
+  - Sets you added from someone's link show apart from your own, under **Sets you added from a link**.
+  - A set's photos hint says in a line what they're for and every site they can come from ([#255](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/255)).
+- **A Seasonal sort** ([#261](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/261)): the season's products first, by their names and tags (Christmas's and winter's
+  from November until early January, Halloween's the rest of the year), then the rest as Recently added.
+- **Seasonal Secrets** ([#260](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/260)). While Hoard is in the background, Spooky Hoard gathers dust and cobwebs round
+  the page's edges, and Winter Hoard snow and ice. Move the mouse about to clear it away, or switch tabs to clear
+  it at once. It keeps to the edges and never gets in the way of a click; it's off with Reduce motion, and Settings,
+  Accessibility, turns it off.
+- **Gifts come wrapped** ([#263](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/263)). A gift someone sent you on Booth is wrapped in its store's colours, with a
+  ribbon and a bow, until you first open its details. Hoard remembers the ones you've opened.
+- **A tile names its stores** ([#251](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/251)). Point at a tile, or move to it with the keyboard, and its picture names
+  every store you own it on. Treasure's copies count is small again.
+- **What's new, pointed out once** ([#244](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/244)). After an update, something new that's easy to miss has a short note
+  beside it the first time you open Hoard (this time **Product type**, in the filters). **Got it** puts it away for
+  good. A new install has none: the tour shows everything.
+- **Every dropdown in the theme's colours** ([#243](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/243), [#241](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/241)), on both pages and in every window, the tag
+  manager's kind dropdown included, with its open list too where the system allows it.
+- **Readable over the glow** ([#240](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/240), [#257](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/257)). What's written where the glow shows (the sidebar, the footer,
+  tiles' names) sits on the page's own colour, so it reads at 4.5:1 or more over the brightest glow, in every theme,
+  Winter Hoard's included. The footer is a card of its own.
+- **Notifications through Apprise** ([#237](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/237), [#238](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/238), [#239](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/239)).
+  - **Send a test** works in the apps: Apprise couldn't find its services there, so nothing was sent. A service
+    that doesn't take a notification now says what it answered (a wrong token, an address that isn't there).
+  - Hoard's log notes each notification: what it was for, which services took it, and why one didn't, with every
+    address taken out.
+  - **Build an address:** choose a service (Discord, Telegram, ntfy, email, Pushover, Slack, Matrix, Gotify or a
+    webhook), fill in what it gives you, and it goes in the box. Nothing goes anywhere until you keep it.
+- **Jinxxy's limit** ([#262](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/262)). Hoard never sends Jinxxy more than 120 requests a minute, the limit Jinxxy's API
+  sets for creators, counting its pages' own requests too. When a minute's are used up, it waits, and says so.
+- **The hidden library locks itself again** ([#248](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/248)). The page checking for news kept it unlocked for as long as it
+  was open; now only using it does, and after 15 minutes left alone it locks, and the page shows it locked.
+- **The tour takes its time** ([#265](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/265)). Between steps the ring moves to what's next, and the card follows a moment
+  later, so you can see where to look. With Reduce motion, both at once.
+- Put right: Booth's files couldn't be seen to choose from, and downloads stalled ([#267](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/267)). Hoard reads a product's
+  files however Booth names its buttons, and from a purchase's order page when the library shows none.
+- Put right: a product shown with its copies wasn't stacked with them when a filter, or a store's tab, left them out
+  ([#247](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/247)). A stack counts its copies in the view whatever you've filtered by; a copy you've archived, removed or
+  hidden isn't one, and then its details don't say so.
+- Put right: typing a search left Settings or Projects over the results ([#249](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/249)), and Settings' scroll carried on
+  into the page behind it ([#264](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/264)).
+- Put right: the check of your downloads offered **Show in folder** for a missing file, and checked products you'd
+  removed ([#259](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/259)).
+- Put right: a wishlist's search on Jinxxy used the wrong address ([#245](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/245)).
+- Fewer words: lines that only said what was already in front of you are gone ([#254](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/254)), and project backups'
+  buttons read **Delete Selected** and **Move Selected** ([#252](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/252)).
+
 ## 5.2.0-beta.1
 
 - **A new top bar** ([#203](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/203),
