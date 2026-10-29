@@ -44,6 +44,14 @@ file first, see [Installing Hoard](Installing-Hoard#checking-a-download).
 - **A TPM isn't needed.** Your store sign-ins and API keys are protected by your Windows account (DPAPI), which
   works the same with or without a TPM, and whether or not BitLocker or Windows Hello use one.
 
+### Security software stops Hoard, or its browser
+
+Some security software (an antivirus's web protection, a firewall rule, a VPN's block list) stops Hoard's browser
+or its connections, as it does other new programs that download files. Hoard then says "Something on this computer
+stopped Hoard connecting to ...". Allow Hoard, and the browser it installs, in that software, or report it to the
+software's maker as a false positive. Hoard is code-signed and open source, and every release is scanned by
+VirusTotal before it's published.
+
 ## Signing in
 
 ### Signing in with Google, Discord or X doesn't work
@@ -123,6 +131,11 @@ When importing ends, Hoard lists each page it couldn't use, and why:
 The key was mistyped or cut short when it was copied, or it was deleted on itch.io. Make a new one on itch.io
 (Settings, API keys), then choose **Change API key** on itch.io's row in **Stores**. See [Stores](Stores#itchio).
 
+### itch.io: "Something on this computer stopped Hoard connecting to itch.io"
+
+itch.io didn't refuse it: security software, a firewall rule or a VPN on this computer did. Allow Hoard in it (see
+[Security software stops Hoard](#security-software-stops-hoard-or-its-browser)), then save the key again.
+
 ### itch.io skips some of my files
 
 Files the creator marked as a program for Windows, macOS, Linux or Android are game builds, skipped unless you
@@ -166,6 +179,31 @@ hidden until you refresh your stores. To keep them, copy that computer's `integr
 
 Hoard couldn't read that file, set it aside rather than overwriting it, and carried on. A refresh or sync
 rebuilds what it held.
+
+### The check of my downloads found changed or missing files
+
+Choose **See what it found** beside the summary in Downloads: each file is listed with **Download again**, **Keep
+it as it is** (your own edit, say) or **Forget it**. See [Downloads](Downloads#checking-your-downloads).
+
+### A task won't stop
+
+**Stop** stops a download or sync safely within a few seconds. When a task doesn't answer (a refresh or a sign-in
+stuck on a page), **Force stop** in **Tasks** ends it at once: it closes the store's browser or the sign-in window,
+and keeps what finished.
+
+### A product I removed came back
+
+From 5.2.0, a removed product stays removed even when its store renames it. One that came back in an earlier
+version: remove it again, and Hoard remembers it by the store's own number for it too.
+
+## Notifications
+
+### Notifications through Apprise don't arrive
+
+Choose **Send a test** in **Settings**. If it says a service didn't take it, check that address against the
+service's page in [Apprise's wiki](https://github.com/caronc/apprise/wiki), and that the service can be reached
+from this computer. If Settings says Apprise isn't installed (running Hoard from its source), run Setup again.
+Hoard's log notes each notification that wasn't sent, without its address.
 
 ## The hidden library
 
