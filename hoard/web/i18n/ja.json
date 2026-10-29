@@ -2159,5 +2159,14 @@
  "Forgotten.": "忘れました。",
  "Kept 1 address.": "1つのアドレスを保管しました。",
  "Kept {0} addresses.": "{0}個のアドレスを保管しました。",
- "Send the news you choose to Discord, Telegram, ntfy, email and many more, through <0>Apprise</0>: an address for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in config.json. What's sent says how many, never a product's name.": "選んだお知らせを、<0>Apprise</0>経由でDiscord、Telegram、ntfy、メールなど多くのサービスに送ります。サービスごとにアドレスを1行に1つ書きます。アドレスにはそれぞれのサービスのトークンが含まれるので、HoardはAPIキーと同じように保管し、config.jsonには書きません。送る内容は件数だけで、商品の名前は送りません。"
+ "Send the news you choose to Discord, Telegram, ntfy, email and many more, through <0>Apprise</0>: an address for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in config.json. What's sent says how many, never a product's name.": "選んだお知らせを、<0>Apprise</0>経由でDiscord、Telegram、ntfy、メールなど多くのサービスに送ります。サービスごとにアドレスを1行に1つ書きます。アドレスにはそれぞれのサービスのトークンが含まれるので、HoardはAPIキーと同じように保管し、config.jsonには書きません。送る内容は件数だけで、商品の名前は送りません。",
+ "Acknowledgements": "謝辞",
+ "Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.": "Hoardはほかの人たちの成果の上に作られています。Hoardが使うもの、同梱するものすべてを、それぞれのライセンスとともに並べます。",
+ "Show them all": "すべて表示",
+ "License": "ライセンス",
+ "What Hoard runs on": "Hoardを動かすもの",
+ "Hoard's window": "Hoardのウィンドウ",
+ "Fonts": "フォント",
+ "Other parts": "そのほかの部品",
+ "Building the apps": "アプリのビルド"
 }

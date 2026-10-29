@@ -350,6 +350,25 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_acknowledgements(self):
+        """Issue #227: Settings lists everything Hoard uses or ships, with its license, and shows a license's text."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel:not([hidden])").wait_for()
+        page.click("#acks summary")
+        page.locator("#acksList li", has_text="Apprise").wait_for()
+        self.assertIn("BSD-2-Clause", page.locator("#acksList li", has_text="Apprise").inner_text())
+        self.assertGreater(page.locator("#acksList li").count(), 40)
+        self.assertEqual(page.locator("#acksList h4").first.inner_text(), "What Hoard runs on")
+        page.locator("#acksList li", has_text="Zen Maru Gothic").get_by_role("button", name="License").click()
+        dialog = page.locator("dialog.ask[open]")
+        dialog.locator(".ack-text").wait_for()
+        self.assertIn("SIL OPEN FONT LICENSE", dialog.locator(".ack-text").inner_text().upper())
+        dialog.get_by_role("button", name="Close").click()
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_what_the_check_found(self):
         """Issue #231: what the check of the downloads found, each file with what can be done about it, from the
         Downloads page's summary (it said "Which files is in Tasks")."""

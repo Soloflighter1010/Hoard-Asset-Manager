@@ -6,7 +6,9 @@ import re
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import json
+
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 REPO = Path(SPECPATH).parent
 WINDOWS, MAC = sys.platform == "win32", sys.platform == "darwin"
@@ -19,6 +21,7 @@ datas = [
     (str(REPO / "hoard" / "web"), "hoard/web"),                          # the pages and their fonts
     (str(REPO / "hoard" / "recovery_words.txt"), "hoard"),                # the hidden library's recovery words
     (str(REPO / "hoard" / "known_tools.json"), "hoard"),                  # What it needs: the tools Hoard knows (hoard/needs.py)
+    (str(REPO / "hoard" / "credits.json"), "hoard"),                      # Acknowledgements (hoard/credits.py: issue #227)
     (str(REPO / "hoard" / "vpm" / "templates"), "hoard/vpm/templates"),   # Projects: VRChat's templates, from vrc-get (MIT)
     (str(REPO / "CHANGELOG.md"), "."),                                    # What's new, in the app (hoard/changelog.py)
 ]
@@ -26,6 +29,13 @@ datas += collect_data_files("playwright")                                 # Play
 hidden = collect_submodules("hoard")
 hidden += collect_submodules("apprise")                                    # its services, loaded by name (issue #230)
 datas += collect_data_files("apprise")
+# each library's own details, with its license files, so Acknowledgements (Settings) can show its license
+for credit in (i for g in json.loads((REPO / "hoard" / "credits.json").read_text("utf-8"))["groups"] for i in g["items"]):
+    if credit.get("package") and credit["in"] != "build":
+        try:
+            datas += copy_metadata(credit["package"])
+        except Exception:   # (one this computer's app doesn't have: the Mac's PyObjC on Windows, say)
+            pass
 if WINDOWS or MAC:
     datas += collect_data_files("webview")   # pywebview's parts (WebView2, or the Mac's WebKit; its build rules do the rest)
 

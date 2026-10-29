@@ -2159,5 +2159,14 @@
  "Forgotten.": "잊었어요.",
  "Kept 1 address.": "주소 1개를 보관했어요.",
  "Kept {0} addresses.": "주소 {0}개를 보관했어요.",
- "Send the news you choose to Discord, Telegram, ntfy, email and many more, through <0>Apprise</0>: an address for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in config.json. What's sent says how many, never a product's name.": "고른 소식을 <0>Apprise</0>를 통해 Discord, Telegram, ntfy, 이메일 등 여러 서비스로 보내요. 서비스마다 주소를 한 줄에 하나씩 써요. 주소에는 각 서비스의 토큰이 들어 있어서, Hoard는 API 키처럼 보관하고 config.json에는 쓰지 않아요. 보내는 내용은 개수뿐이고, 상품 이름은 보내지 않아요."
+ "Send the news you choose to Discord, Telegram, ntfy, email and many more, through <0>Apprise</0>: an address for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in config.json. What's sent says how many, never a product's name.": "고른 소식을 <0>Apprise</0>를 통해 Discord, Telegram, ntfy, 이메일 등 여러 서비스로 보내요. 서비스마다 주소를 한 줄에 하나씩 써요. 주소에는 각 서비스의 토큰이 들어 있어서, Hoard는 API 키처럼 보관하고 config.json에는 쓰지 않아요. 보내는 내용은 개수뿐이고, 상품 이름은 보내지 않아요.",
+ "Acknowledgements": "감사의 말",
+ "Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.": "Hoard는 다른 사람들의 작업 위에 만들어졌어요. Hoard가 쓰거나 함께 담은 모든 것을 각각의 라이선스와 함께 보여 줘요.",
+ "Show them all": "모두 보기",
+ "License": "라이선스",
+ "What Hoard runs on": "Hoard를 움직이는 것",
+ "Hoard's window": "Hoard의 창",
+ "Fonts": "글꼴",
+ "Other parts": "그 밖의 부분",
+ "Building the apps": "앱 빌드"
 }

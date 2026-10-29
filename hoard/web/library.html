@@ -510,6 +510,14 @@ body.selecting .toast { bottom: 96px; }
 .pick-list .pk-files label { padding: 4px 0; font-weight: 400; }
 .pick-list .pk-files span { overflow-wrap: anywhere; }
 /* What files do you want to save? (issue #225): what a product contains, then everything or the files you tick */
+/* Acknowledgements (issue #227): everything Hoard uses, with its license */
+.acks summary { cursor: pointer; font-weight: 700; font-size: 13.5px; margin: 4px 0; }
+#acksList h4 { margin: 12px 0 4px; font: 700 13px var(--body); color: var(--dust); }
+#acksList ul { list-style: none; margin: 0; padding: 0; }
+#acksList li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 3px 0; font-size: 13.5px; }
+#acksList li .lic { color: var(--dust); font-size: 12.5px; }
+dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
+  background: var(--cave); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; }
 /* issue #230: notifications through Apprise */
 #setApprise { width: 100%; box-sizing: border-box; font: 12.5px/1.5 ui-monospace, monospace; }
 .apprise-acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 8px; }
@@ -1653,6 +1661,9 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
+  <h3 id="part-thanks">Acknowledgements</h3>
+  <p class="hint">Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.</p>
+  <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>
   </div>
 </section>
 <section id="projectsWin" class="stores projects" hidden aria-labelledby="projectsTitle">

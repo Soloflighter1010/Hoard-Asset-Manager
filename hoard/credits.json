@@ -1,0 +1,372 @@
+{
+ "_about": "Everything Hoard uses or ships, with its license (issue #227): shown in Settings, Acknowledgements, and on the website (scripts/build_acknowledgements.py). \"in\": all (every copy of Hoard), windows, mac, linux (the Flatpak), build (only to build the apps, not in them). tests/test_credits.py checks every locked package is here.",
+ "groups": [
+  {
+   "title": "What Hoard runs on",
+   "items": [
+    {
+     "name": "Playwright for Python",
+     "package": "playwright",
+     "license": "Apache-2.0",
+     "url": "https://github.com/microsoft/playwright-python",
+     "in": "all"
+    },
+    {
+     "name": "Chromium (Playwright's build)",
+     "license": "BSD-3-Clause, and its components' licenses",
+     "url": "https://www.chromium.org/Home/chromium-security/",
+     "in": "all"
+    },
+    {
+     "name": "greenlet",
+     "package": "greenlet",
+     "license": "MIT AND PSF-2.0",
+     "url": "https://github.com/python-greenlet/greenlet",
+     "in": "all"
+    },
+    {
+     "name": "pyee",
+     "package": "pyee",
+     "license": "MIT",
+     "url": "https://github.com/jfhbrook/pyee",
+     "in": "all"
+    },
+    {
+     "name": "Requests",
+     "package": "requests",
+     "license": "Apache-2.0",
+     "url": "https://github.com/psf/requests",
+     "in": "all"
+    },
+    {
+     "name": "urllib3",
+     "package": "urllib3",
+     "license": "MIT",
+     "url": "https://github.com/urllib3/urllib3",
+     "in": "all"
+    },
+    {
+     "name": "certifi",
+     "package": "certifi",
+     "license": "MPL-2.0",
+     "url": "https://github.com/certifi/python-certifi",
+     "in": "all"
+    },
+    {
+     "name": "charset-normalizer",
+     "package": "charset-normalizer",
+     "license": "MIT",
+     "url": "https://github.com/jawah/charset_normalizer",
+     "in": "all"
+    },
+    {
+     "name": "idna",
+     "package": "idna",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/kjd/idna",
+     "in": "all"
+    },
+    {
+     "name": "tqdm",
+     "package": "tqdm",
+     "license": "MPL-2.0 AND MIT",
+     "url": "https://github.com/tqdm/tqdm",
+     "in": "all"
+    },
+    {
+     "name": "colorama",
+     "package": "colorama",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/tartley/colorama",
+     "in": "all"
+    },
+    {
+     "name": "typing_extensions",
+     "package": "typing-extensions",
+     "license": "PSF-2.0",
+     "url": "https://github.com/python/typing_extensions",
+     "in": "all"
+    },
+    {
+     "name": "Python",
+     "license": "PSF-2.0",
+     "url": "https://www.python.org/",
+     "in": "all"
+    }
+   ]
+  },
+  {
+   "title": "Notifications through Apprise",
+   "items": [
+    {
+     "name": "Apprise",
+     "package": "apprise",
+     "license": "BSD-2-Clause",
+     "url": "https://github.com/caronc/apprise",
+     "in": "all"
+    },
+    {
+     "name": "Requests-OAuthlib",
+     "package": "requests-oauthlib",
+     "license": "ISC",
+     "url": "https://github.com/requests/requests-oauthlib",
+     "in": "all"
+    },
+    {
+     "name": "OAuthLib",
+     "package": "oauthlib",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/oauthlib/oauthlib",
+     "in": "all"
+    },
+    {
+     "name": "Click",
+     "package": "click",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/pallets/click",
+     "in": "all"
+    },
+    {
+     "name": "Python-Markdown",
+     "package": "markdown",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/Python-Markdown/markdown",
+     "in": "all"
+    },
+    {
+     "name": "PyYAML",
+     "package": "pyyaml",
+     "license": "MIT",
+     "url": "https://github.com/yaml/pyyaml",
+     "in": "all"
+    },
+    {
+     "name": "tzdata",
+     "package": "tzdata",
+     "license": "Apache-2.0",
+     "url": "https://github.com/python/tzdata",
+     "in": "all"
+    }
+   ]
+  },
+  {
+   "title": "Hoard's window",
+   "items": [
+    {
+     "name": "pywebview",
+     "package": "pywebview",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/r0x0r/pywebview",
+     "in": "windows mac linux"
+    },
+    {
+     "name": "bottle",
+     "package": "bottle",
+     "license": "MIT",
+     "url": "https://github.com/bottlepy/bottle",
+     "in": "windows mac linux"
+    },
+    {
+     "name": "proxy_tools",
+     "package": "proxy-tools",
+     "license": "MIT",
+     "url": "https://github.com/jtushman/proxy_tools",
+     "in": "windows mac linux"
+    },
+    {
+     "name": "Microsoft Edge WebView2",
+     "license": "Microsoft's license, part of Windows",
+     "url": "https://developer.microsoft.com/microsoft-edge/webview2/",
+     "in": "windows"
+    },
+    {
+     "name": "Python.NET",
+     "package": "pythonnet",
+     "license": "MIT",
+     "url": "https://github.com/pythonnet/pythonnet",
+     "in": "windows"
+    },
+    {
+     "name": "clr-loader",
+     "package": "clr-loader",
+     "license": "MIT",
+     "url": "https://github.com/pythonnet/clr-loader",
+     "in": "windows"
+    },
+    {
+     "name": "cffi",
+     "package": "cffi",
+     "license": "MIT-0",
+     "url": "https://github.com/python-cffi/cffi",
+     "in": "windows"
+    },
+    {
+     "name": "pycparser",
+     "package": "pycparser",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/eliben/pycparser",
+     "in": "windows"
+    },
+    {
+     "name": "PyObjC",
+     "package": "pyobjc-core",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/pyobjc",
+     "in": "mac"
+    },
+    {
+     "name": "PyObjC: Cocoa",
+     "package": "pyobjc-framework-cocoa",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/pyobjc",
+     "in": "mac"
+    },
+    {
+     "name": "PyObjC: Quartz",
+     "package": "pyobjc-framework-quartz",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/pyobjc",
+     "in": "mac"
+    },
+    {
+     "name": "PyObjC: Security",
+     "package": "pyobjc-framework-security",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/pyobjc",
+     "in": "mac"
+    },
+    {
+     "name": "PyObjC: UniformTypeIdentifiers",
+     "package": "pyobjc-framework-uniformtypeidentifiers",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/pyobjc",
+     "in": "mac"
+    },
+    {
+     "name": "PyObjC: WebKit",
+     "package": "pyobjc-framework-webkit",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/pyobjc",
+     "in": "mac"
+    },
+    {
+     "name": "WebKitGTK and the GNOME runtime",
+     "license": "LGPL-2.1 and their components' licenses",
+     "url": "https://webkitgtk.org/",
+     "in": "linux"
+    }
+   ]
+  },
+  {
+   "title": "Fonts",
+   "items": [
+    {
+     "name": "Dela Gothic One",
+     "license": "OFL-1.1",
+     "url": "https://github.com/syakuzen/DelaGothic",
+     "in": "all",
+     "text": "hoard/web/fonts/DelaGothicOne-OFL.txt"
+    },
+    {
+     "name": "Zen Maru Gothic",
+     "license": "OFL-1.1",
+     "url": "https://github.com/googlefonts/zen-marugothic",
+     "in": "all",
+     "text": "hoard/web/fonts/ZenMaruGothic-OFL.txt"
+    },
+    {
+     "name": "OpenDyslexic",
+     "license": "OFL-1.1",
+     "url": "https://opendyslexic.org/",
+     "in": "all",
+     "text": "hoard/web/fonts/OpenDyslexic-OFL.txt"
+    }
+   ]
+  },
+  {
+   "title": "Other parts",
+   "items": [
+    {
+     "name": "vrc-get's VRChat project templates (Projects)",
+     "license": "MIT",
+     "url": "https://github.com/vrc-get/vrc-get",
+     "in": "all",
+     "text": "hoard/vpm/templates/LICENSE-vrc-get.txt"
+    },
+    {
+     "name": "BIP-39 English word list (the hidden library's recovery words)",
+     "license": "MIT",
+     "url": "https://github.com/trezor/python-mnemonic",
+     "in": "all"
+    }
+   ]
+  },
+  {
+   "title": "Building the apps",
+   "items": [
+    {
+     "name": "PyInstaller",
+     "package": "pyinstaller",
+     "license": "GPL-2.0-or-later WITH Bootloader-exception",
+     "url": "https://github.com/pyinstaller/pyinstaller",
+     "in": "build"
+    },
+    {
+     "name": "pyinstaller-hooks-contrib",
+     "package": "pyinstaller-hooks-contrib",
+     "license": "GPL-2.0-or-later OR Apache-2.0",
+     "url": "https://github.com/pyinstaller/pyinstaller-hooks-contrib",
+     "in": "build"
+    },
+    {
+     "name": "altgraph",
+     "package": "altgraph",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/altgraph",
+     "in": "build"
+    },
+    {
+     "name": "macholib",
+     "package": "macholib",
+     "license": "MIT",
+     "url": "https://github.com/ronaldoussoren/macholib",
+     "in": "build"
+    },
+    {
+     "name": "pefile",
+     "package": "pefile",
+     "license": "MIT",
+     "url": "https://github.com/erocarrera/pefile",
+     "in": "build"
+    },
+    {
+     "name": "pywin32-ctypes",
+     "package": "pywin32-ctypes",
+     "license": "BSD-3-Clause",
+     "url": "https://github.com/enthought/pywin32-ctypes",
+     "in": "build"
+    },
+    {
+     "name": "packaging",
+     "package": "packaging",
+     "license": "Apache-2.0 OR BSD-2-Clause",
+     "url": "https://github.com/pypa/packaging",
+     "in": "build"
+    },
+    {
+     "name": "setuptools",
+     "package": "setuptools",
+     "license": "MIT",
+     "url": "https://github.com/pypa/setuptools",
+     "in": "build"
+    },
+    {
+     "name": "Inno Setup (the Windows installer)",
+     "license": "Inno Setup License",
+     "url": "https://jrsoftware.org/isinfo.php",
+     "in": "build"
+    }
+   ]
+  }
+ ]
+}

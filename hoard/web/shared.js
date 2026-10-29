@@ -2000,6 +2000,28 @@ function fillApprise() {
   $("#appriseTest").disabled = $("#appriseForget").hidden = !a.kept;
   $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
 }
+// Acknowledgements (issue #227): everything Hoard uses or ships, with its license (/api/credits), read the first time
+// it's opened; a license's text where Hoard has it, in a dialog
+async function showAcks() {
+  const box = $("#acksList");
+  if (box.dataset.read) return;
+  const r = await api("/api/credits");
+  if (!r.ok) { box.textContent = tr("That can't be done."); return; }
+  box.dataset.read = "1";
+  box.innerHTML = (await r.json()).groups.map(g => `<h4>${esc(tr(g.title))}</h4><ul>${g.items.map(i =>
+    `<li><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(i.name)}</a>` +
+    `<span class="lic" translate="no">${esc(i.license)}</span>` +
+    (i.text ? `<button class="linkish" data-ack="${esc(i.name)}">${esc(tr("License"))}</button>` : "") + `</li>`).join("")}</ul>`).join("");
+}
+async function showAckText(name) {
+  const r = await api(`/api/credits/license?name=${encodeURIComponent(name)}`);
+  const data = await r.json();
+  if (!r.ok) { toast(data.error || tr("That can't be done.")); return; }
+  pjDialog(`<p><b translate="no">${esc(name)}</b></p><pre class="ack-text" translate="no">${esc(data.text)}</pre>` +
+    `<div class="ask-row"><button class="primary" value="yes">${esc(tr("Close"))}</button></div>`, "wide");
+}
+document.addEventListener("toggle", e => { if (e.target.id === "acks" && e.target.open) showAcks(); }, true);
+document.addEventListener("click", e => { const b = e.target.closest("[data-ack]"); if (b) showAckText(b.dataset.ack); });
 async function appriseAct(id) {
   if (id === "appriseTest") {
     winNote("settingsPanel", tr("Sending a test..."));

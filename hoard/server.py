@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, alerts, backup, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, alerts, backup, credits, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
@@ -938,6 +938,11 @@ class Handler(BaseHTTPRequestHandler):
                          "project": mask(tasks["project"]) if tasks["project"] else None,
                          "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
             return self._json(tasks, compress=True)
+        if path == "/api/credits":   # issue #227: Acknowledgements (Settings): everything Hoard uses, with its license
+            return self._json(credits.view())
+        if path == "/api/credits/license":   # one of them's license text, where Hoard has it
+            text = credits.license_text((parse_qs(u.query).get("name") or [""])[0][:300])
+            return self._json({"text": text}) if text else self._json({"error": "Hoard has no copy of that license here: its link has it."}, 404)
         if path == "/api/integrity":   # issue #231: the files the last check found, each to deal with
             last = last_integrity() or {"problems": [], "changed": [], "missing": [], "data_changed": [], "checked": None}
             hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
