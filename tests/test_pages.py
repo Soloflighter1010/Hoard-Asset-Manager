@@ -1235,6 +1235,15 @@ class CopiesAndActions(unittest.TestCase):
         page.close()
 
 
+    def after(self, page, seen, before, dialog="#pickDialog"):
+        """The job the page started once its dialog closed (asked for just after it closes, so waited for)."""
+        page.wait_for_function(f"() => !document.querySelector('{dialog}').open")
+        for _ in range(100):
+            if len(seen) > before:
+                return seen[-1]
+            page.wait_for_timeout(50)
+        self.fail("nothing was started")
+
     def started(self):
         """Jobs started from the page, kept instead of run."""
         from unittest import mock
@@ -1265,8 +1274,9 @@ class CopiesAndActions(unittest.TestCase):
             dialog.get_by_role("button", name="Stop skipping").click()
             page.wait_for_function("() => document.querySelectorAll('#pickList input').length === 1")
             self.assertEqual(self.srv.cfg["download_skip"], [])
+            before = len(seen)
             page.click("#pickGo")   # everything ticked: still the products listed, each gone to straight away (#202)
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][0], "download")
             self.assertEqual(seen[-1][1], ["gumroad"], "the stores of what's chosen")
             self.assertEqual(seen[-1][2].get("keys"), ["gumroad:ghostfollower"], "not a walk through every product")
@@ -1356,8 +1366,9 @@ class CopiesAndActions(unittest.TestCase):
             page.locator("#routineNote:not([hidden])").wait_for()
             page.click("#routineChoose")
             page.locator("#pickDialog").wait_for()
+            before = len(seen)
             page.click("#pickGo")
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual((seen[-1][0], seen[-1][2].get("keys")), ("download", ["gumroad:ghostfollower"]))
             page.close()
 
@@ -1380,8 +1391,9 @@ class CopiesAndActions(unittest.TestCase):
             dialog.locator(f"input[data-file='{names[1]}']").uncheck()
             self.assertIn("2 of 3", dialog.locator(".pk-files summary").inner_text())
             self.assertTrue(dialog.locator(f"input[data-file='{names[0]}']").is_visible(), "the list stays open")
+            before = len(seen)
             page.click("#pickGo")
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][0], "download")
             self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": [names[0], names[2]]}})
             # every file unticked: the product itself is unticked
@@ -1418,8 +1430,9 @@ class CopiesAndActions(unittest.TestCase):
             dialog.locator(".pk-files summary").click()
             self.assertFalse(dialog.locator("input[data-file='Avatar.psd']").is_checked())
             dialog.locator("input[data-file='Avatar.psd']").check()
+            before = len(seen)
             page.click("#pickGo")
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": names, "chosen": names}},
                              "all ticked, said so: no longer left out")
             page.close()
@@ -1465,8 +1478,9 @@ class CopiesAndActions(unittest.TestCase):
             self.assertEqual(dialog.locator("input[data-file]").count(), 2)
             self.assertIn("(2 files)", dialog.locator(".pk-files").inner_text())
             dialog.locator("input[data-file='Avatar.zip']").uncheck()
+            before = len(seen)
             page.click("#pickGo")
-            page.wait_for_function("() => !document.querySelector('#pickDialog').open")
+            self.after(page, seen, before)
             self.assertEqual(seen[-1][2].get("chosen"), {"gumroad:ghostfollower": {"shown": ["Avatar.zip", "Read me.txt"],
                                                                                     "chosen": ["Read me.txt"]}})
             page.close()
