@@ -27,6 +27,7 @@ MARK = """<svg viewBox="0 0 64 64" aria-hidden="true" width="22" height="22"><g 
   <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" style="stroke: var(--cave)" stroke-width="3" transform="rotate(-4 31.5 22)"/>
   <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
 </g></svg>"""
+DISCORD = "https://discord.gg/psNsAGj75Q"   # Hoard's Discord server (issue #204)
 TABS = [("./", "Home"), ("how-it-works.html", "How it works"), ("trust.html", "Trust"), ("./#unity", "Unity"),
         ("docs/", "Docs"), ("changelog.html", "What's new"), ("testers.html", "Testers")]
 FOOT_LINKS = [("docs/", "Docs"), ("how-it-works.html", "How it works"), ("changelog.html", "What's new"),
@@ -35,7 +36,7 @@ FOOT_LINKS = [("docs/", "Docs"), ("how-it-works.html", "How it works"), ("change
               ("vcc/", "VCC listing"), ("trust.html", "How you can trust Hoard"),
               ("stores.html", "For stores"),
               ("ai.html", "AI disclosure"), ("acknowledgements.html", "Acknowledgements"), ("press.html", "Press kit"),
-              (GITHUB, "GitHub")]
+              (DISCORD, "Discord"), (GITHUB, "GitHub")]
 # which tab each page is (the rest are none, or are in docs/)
 CURRENT = {"index.html": "./", "how-it-works.html": "how-it-works.html", "trust.html": "trust.html",
            "testers.html": "testers.html", "changelog.html": "changelog.html"}

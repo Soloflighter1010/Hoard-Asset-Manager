@@ -630,7 +630,8 @@ dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0
 #settingsPanel.win > .win-bar { padding-left: 28px; padding-right: 18px; }
 #settingsPanel.win > .win-body { display: flex; align-items: flex-start; gap: 40px; padding: 20px 28px 48px; }
 #settingsPanel.win .setjump { position: sticky; top: 0; flex: none; flex-direction: column; flex-wrap: nowrap; width: 200px; gap: 2px;
-  margin: 0; padding: 0; background: none; border: 0; box-shadow: none; }
+  margin: 0; padding: 0; background: none; border: 0; box-shadow: none;
+  max-height: calc(100vh - var(--bar-h, 64px) - 96px); overflow-y: auto; }   /* (a short window, or large text: it scrolls) */
 #settingsPanel.win .setjump button { padding: 7px 12px; border-radius: 9px; background: none; color: var(--dust); text-align: left; font: 700 14px var(--body); }
 #settingsPanel.win .setjump button:hover { color: var(--bone); background: var(--stone); }
 #settingsPanel.win .set-body { flex: 1 1 auto; min-width: 0; max-width: 780px; }
@@ -640,7 +641,7 @@ dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0
 @media (max-width: 860px) {   /* a narrow window: its parts in a row along the top again */
   #settingsPanel.win > .win-body { display: block; padding: 0 16px 40px; }
   #settingsPanel.win .setjump { top: 0; z-index: 2; flex-direction: row; flex-wrap: wrap; width: auto; margin: 0 -16px 10px; padding: 10px 16px;
-    background: var(--cave); border-bottom: 1px solid var(--seam); }
+    background: var(--cave); border-bottom: 1px solid var(--seam); max-height: none; overflow: visible; }
   #settingsPanel.win .setjump button { padding: 5px 11px; border-radius: 999px; background: var(--stone); color: var(--bone); font: 600 12.5px var(--body); }
   #settingsPanel.win h3[id] { scroll-margin-top: 64px; }
 }
@@ -1436,6 +1437,7 @@ body.less-motion .tour-try::before { animation: none; }
 </g></svg><span translate="no">Hoard <span id="version"></span></span></div>
       <nav class="foot-links" aria-label="About Hoard">
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer">Updates</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" id="reportProblem">Report a problem</a>
         <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">Privacy</a>
@@ -1486,7 +1488,7 @@ body.less-motion .tour-try::before { animation: none; }
 </section>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button></nav>
+  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-apprise">Notifications</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button><button data-jump="part-tip">Support Hoard</button><button data-jump="part-thanks">Acknowledgements</button></nav>
   <div class="set-body">
   <p>Changes are saved as you make them.</p>
   <h3 id="part-folders">Downloads folder</h3>
@@ -1678,6 +1680,9 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button>: what Hoard can do, shown with your own library.</p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
+  <h3 id="part-tip">Support Hoard</h3>
+  <p class="hint">Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.</p>
+  <div class="field"><a class="ghost sm" id="tipKofi" href="https://ko-fi.com/knowbodyonline" target="_blank" rel="noopener noreferrer">Tip on Ko-fi</a></div>
   <h3 id="part-thanks">Acknowledgements</h3>
   <p class="hint">Hoard is built on other people's work. Here's everything it uses or ships, with each one's license.</p>
   <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>

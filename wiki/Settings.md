@@ -3,10 +3,10 @@ Everyday choices are in **Settings** (in the **Menu**, top right; or search for 
 ## The Settings page
 
 Settings is a page of its own (from 5.1.3), the whole window below the bar, as [Projects](Projects) is: its parts
-are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Look**, **Sign-ins**,
-**Updates**, **Backup**, **Troubleshooting**) to jump to, or along the top in a narrow window. **×** or Escape
-closes it. Each change is **saved as you make it**: a box or a list straight away, a folder or the Payhip shops
-when you leave the field. The title bar says **Saved**.
+are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Notifications**,
+**Look**, **Sign-ins**, **Updates**, **Backup**, **Troubleshooting**, **Support Hoard**, **Acknowledgements**) to
+jump to, or along the top in a narrow window. **×** or Escape closes it. Each change is **saved as you make it**: a
+box or a list straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
 
 
 - **Downloads folder:** where downloaded files are saved. A `Hoard` folder in your Documents unless you choose
@@ -153,6 +153,12 @@ Also here:
   (asking first while something's running). On a Mac, **Command-Q** always quits, as **Quit Hoard** does.
 - **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
   window does: see [Closing Hoard while it's working](Downloads#closing-hoard-while-its-working).
+- **Support Hoard** (5.2.0): **Tip on Ko-fi** opens Hoard's Ko-fi page in your browser, to leave a tip if Hoard is
+  useful to you. Hoard itself sends nothing.
+- **Acknowledgements** (5.2.0): everything Hoard uses or ships (the browser it drives, its fonts, the Python
+  packages and what builds the apps), with each one's license. Choose one to read its license where Hoard has a
+  copy; the others link to theirs. The website's
+  [Acknowledgements](https://hoard.furryup.link/acknowledgements.html) page lists the same.
 
 ## Settings only in config.json
 

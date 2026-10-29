@@ -1688,7 +1688,12 @@ document.addEventListener("click", e => {
   const art = e.target.closest(".d-art");
   if (art && art.querySelector("img")) art.classList.toggle("big");
   const jump = e.target.closest("[data-jump]");
-  if (jump) { const h = document.getElementById(jump.dataset.jump); if (h) h.scrollIntoView({ block: "start", behavior: motionOk() ? "smooth" : "auto" }); }
+  const h = jump && document.getElementById(jump.dataset.jump);
+  if (!h) return;
+  // the row of parts stays at the top, a line or more tall as the window's width has it: the part lands below it
+  const row = jump.closest(".setjump"), across = row && getComputedStyle(row).flexDirection === "row";
+  h.style.scrollMarginTop = across ? `${row.offsetHeight + 12}px` : "";
+  h.scrollIntoView({ block: "start", behavior: motionOk() ? "smooth" : "auto" });
 });
 /* ---------- Settings, Backup (hoard/backup.py): what you've set up, in one file; and putting one back */
 function wireBackup() {

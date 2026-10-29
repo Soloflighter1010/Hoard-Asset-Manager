@@ -1,7 +1,14 @@
 ## Is Hoard free?
 
 Yes. It's open source under the [MIT license](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE),
-with no accounts, ads or tracking.
+with no accounts, ads or tracking. If it's useful to you, you can leave a tip: Settings, **Support Hoard**,
+**Tip on Ko-fi**.
+
+## Where can I ask a question?
+
+On Hoard's [Discord](https://discord.gg/psNsAGj75Q) (it's in the footer of Hoard's pages, the website and this wiki), or in a GitHub
+[issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) (**Report a problem** in Hoard's footer).
+A security problem goes privately, as [SECURITY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md) says.
 
 ## Does Hoard see my store passwords?
 
