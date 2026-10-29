@@ -32,18 +32,28 @@ def is_network_error(error: Exception) -> bool:
 def blocked_here(error: BaseException) -> bool:
     """Did something on this computer refuse Hoard's connection (security software's web protection, a firewall rule,
     a VPN's block), rather than the network or the store? Windows says so as WSAEACCES (10013), which Python shows as
-    PermissionError 13, however deep in the error it is (issue #196: requests' "Connection aborted.")."""
-    seen, stack = set(), [error]
+    PermissionError 13, however deep in the error it is (issue #196: requests' "Connection aborted."). Only a
+    connection's: a file Hoard couldn't write (a PermissionError naming it, as an antivirus holding it gives) isn't
+    the network's doing, so it's said as itself."""
+    seen, stack, chain = set(), [error], []
     while stack:
         e = stack.pop()
         if not isinstance(e, BaseException) or id(e) in seen:
             continue
         seen.add(id(e))
-        if isinstance(e, PermissionError) or getattr(e, "winerror", None) == 10013 or getattr(e, "errno", None) in (13, 10013):
-            return True
+        chain.append(e)
         stack += [e.__cause__, e.__context__, *(getattr(e, "args", None) or ())]
-    text = str(error)
-    return "PermissionError(13" in text or "WinError 10013" in text
+    text = " ".join(str(e) for e in chain)
+    connecting = "Connection aborted" in text or any(
+        isinstance(e, ConnectionError) or type(e).__name__ in ("ConnectionError", "ProtocolError", "NewConnectionError")
+        for e in chain)
+    for e in chain:
+        if getattr(e, "winerror", None) == 10013 or getattr(e, "errno", None) == 10013:   # (a socket's own code)
+            return True
+        if (isinstance(e, PermissionError) or getattr(e, "errno", None) == 13) and connecting \
+                and getattr(e, "filename", None) is None:
+            return True
+    return "WinError 10013" in text or (connecting and "PermissionError(13" in text)
 
 
 def blocked_message(site: str) -> str:

@@ -2167,9 +2167,19 @@ class ItchKeys(unittest.TestCase):
         self.assertTrue(net.blocked_here(refused))
         self.assertTrue(net.blocked_here(OSError(10013, "An attempt was made to access a socket")))
         self.assertTrue(net.is_network_error(refused), "a store that can't be reached, not one that failed")
+        # a file Hoard couldn't write (an antivirus holding library.json, say) is said as itself, not as a blocked connection
+        try:
+            try:
+                raise PermissionError(13, "Access is denied", "library.json")
+            except PermissionError as e:
+                raise RuntimeError("Booth couldn't be saved") from e
+        except RuntimeError as e:
+            not_the_network = e
         for other in (requests.exceptions.ConnectionError(ProtocolError("Connection aborted.", ConnectionResetError(104, "reset"))),
-                      ValueError("Permission denied by the store"), RuntimeError("itch.io said: no")):
+                      ValueError("Permission denied by the store"), RuntimeError("itch.io said: no"), not_the_network,
+                      PermissionError(13, "Permission denied"), PermissionError(13, "Access is denied", "C:/Hoard/library.json")):
             self.assertFalse(net.blocked_here(other), other)
+            self.assertFalse(net.is_network_error(other), other)
         self.assertIn("Something on this computer stopped Hoard connecting to itch.io", library.unreachable_message("itch", error=refused))
         srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "allow_unprotected_signins": True}, lan=False)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -2969,6 +2979,10 @@ class StoreTags(unittest.TestCase):
     """Issue #206: the tags creators give their products on Booth, Jinxxy and itch.io, read from each product's public
     page a few at a time as a store is read, kept with the product, and never read again once read."""
 
+    def setUp(self):
+        library._TAG_PAGE_FAILS.clear()   # (the pages that couldn't be read, this run: another test's aren't these)
+        self.addCleanup(library._TAG_PAGE_FAILS.clear)
+
     def test_a_few_at_a_time_kept_and_not_read_again(self):
         lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
         lib.replace_store("jinxxy", [library.item("jinxxy", str(n), name=f"Paw {n}", creator="kitsu",
@@ -2985,12 +2999,37 @@ class StoreTags(unittest.TestCase):
         self.assertEqual(got, {"Paw 0": ["fox", "quest"], "Paw 1": None, "Paw 2": [], "Paw 3": None, "Paw 4": None})
         asked.clear()
         library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
-        self.assertEqual([u.rsplit("/", 1)[1] for u in asked], ["Paw1", "Paw3", "Paw4"], "only those not read yet")
+        self.assertEqual([u.rsplit("/", 1)[1] for u in asked], ["Paw3", "Paw4", "Paw1"],
+                         "only those not read yet, and the one that couldn't be read after the others")
         # read again from the store: each keeps its tags, and a reload keeps them too
         lib.replace_store("jinxxy", [library.item("jinxxy", str(n), name=f"Paw {n}", creator="kitsu") for n in range(5)])
         again = library.Library(lib.path)
         self.assertEqual({i["name"]: i.get("store_tags") for i in again.data["items"]}["Paw 3"], ["ears"])
         self.assertEqual(library.store_tags_from_pages(lib, "gumroad", fetch), 0, "Gumroad's pages show none")
+
+    def test_only_a_public_page_is_read(self):
+        """A Jinxxy item Hoard knows only by your inventory (no public page yet) isn't read, and so isn't marked as
+        having no tags: once a refresh finds its page, it's read. A page that can't be read never holds up the rest."""
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("jinxxy", [library.item("jinxxy", "1", name="Paw", creator="kitsu", url="https://jinxxy.com/my/inventory/abc")]
+                          + [library.item("jinxxy", str(n), name=f"Gone {n}", creator="kitsu", page=f"https://jinxxy.com/kitsu/Gone{n}")
+                             for n in range(2, 5)]
+                          + [library.item("jinxxy", "9", name="Ears", creator="kitsu", page="https://jinxxy.com/kitsu/Ears")])
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url.rsplit("/", 1)[1])
+            return ('<meta property="og:title" content="Ears">"tags":["ears"]', "text/html") if url.endswith("/Ears") else None
+        library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
+        first = list(asked)
+        self.assertEqual(len(first), 3)
+        self.assertNotIn("abc", first, "never the inventory")
+        asked.clear()
+        library.store_tags_from_pages(lib, "jinxxy", fetch, limit=3)
+        untried = ({"Gone2", "Gone3", "Gone4", "Ears"} - set(first)).pop()
+        self.assertEqual(asked[0], untried, "the one not tried yet before those that couldn't be read")
+        self.assertEqual(next(i for i in lib.data["items"] if i["name"] == "Ears").get("store_tags"), ["ears"])
+        self.assertNotIn("store_tags", next(i for i in lib.data["items"] if i["name"] == "Paw"), "read once it has a page")
 
     def test_they_show_on_the_product_as_suggestions(self):
         items = library.enrich([library.item("booth", "1", name="Fox Tail", creator="Kitsu", store_tags=["VRChat", "fox tail", 3])],

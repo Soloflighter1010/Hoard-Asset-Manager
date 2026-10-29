@@ -1649,18 +1649,25 @@ def stack_by_picture(items: list[dict], looks: dict | None = None, apart=frozens
 STORE_TAG_PAGES = 40   # products' public pages read for their store's tags, at most, each time a store is read
 
 
+_TAG_PAGE_FAILS: dict[str, int] = {}   # products whose page couldn't be read, and how often, this run: tried after the rest
+
+
 def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: None, delay: float = 0.0,
                           limit: int = STORE_TAG_PAGES) -> int:
     """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
     from each product's public page as anyone sees it, a few each time the store is read, until every product has
-    been read once (each keeps "store_tags", empty when its page has none). A page that couldn't be reached is tried
-    again next time. Returns how many products' pages were read."""
+    been read once (each keeps "store_tags", empty when its page has none). Only a product with a public page is read
+    (one without, a Jinxxy item Hoard knows only by your inventory, waits until it has one). A page that couldn't be
+    read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Returns
+    how many products' pages were read."""
+    from .sets import product_link
     from .wishlists import TAGGED_STORES, LinkError, from_product_page
     if store not in TAGGED_STORES:
         return 0
     with lib.lock:
-        todo = [(i["key"], i.get("page") or i.get("url")) for i in lib.data["items"]
-                if i["store"] == store and "store_tags" not in i and (i.get("page") or i.get("url"))][:limit]
+        waiting = [(i["key"], link) for i in lib.data["items"] if i["store"] == store and "store_tags" not in i
+                   and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
+    todo = sorted(waiting, key=lambda w: _TAG_PAGE_FAILS.get(w[0], 0))[:limit]   # (otherwise in the library's order)
     read: dict[str, list] = {}
     for n, (key, page) in enumerate(todo, 1):
         progress(f"The tags creators gave their products, {n} of {len(todo)}")
@@ -1669,7 +1676,10 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
         except LinkError as e:
             if "couldn't be read" not in str(e):   # (its page is there, and isn't a product's: nothing to read later)
                 read[key] = []
+            else:
+                _TAG_PAGE_FAILS[key] = _TAG_PAGE_FAILS.get(key, 0) + 1
         except Exception as e:   # (anything else leaves it to try again next time)
+            _TAG_PAGE_FAILS[key] = _TAG_PAGE_FAILS.get(key, 0) + 1
             print(f"Couldn't read the store's tags for {key!r}: {str(e)[:200]}", flush=True)
         if n < len(todo):
             pause(delay)
