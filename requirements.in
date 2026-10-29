@@ -7,3 +7,4 @@ tqdm>=4.66,<5
 colorama              # tqdm needs it on Windows; listed so the Windows install is hash-checked too
 apprise>=1.9,<3       # notifications through Apprise (issue #230): only used once you give Hoard an address
 tzdata                # apprise needs it on Windows; listed so the Windows install is hash-checked too
+markdown<3.11          # apprise needs it; 3.11 and later need Python 3.11, and Hoard runs on 3.10 and newer
