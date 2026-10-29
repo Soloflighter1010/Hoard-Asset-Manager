@@ -1384,6 +1384,7 @@ body.less-motion .tour-try::before { animation: none; }
         <option value="creator">Creator</option>
         <option value="store">Store</option>
         <option value="added">Recently added</option>
+        <option value="season">Seasonal</option>
         <option value="size">Largest</option>
       </select>
     </label>
@@ -1911,6 +1912,7 @@ const SORTS = {
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || (b.modified || 0) - (a.modified || 0),
   size: (a, b) => b.size - a.size,
 };
+SORTS.season = seasonSort(SORTS.added);   // the season's first (issue #261: shared.js)
 // How many of a list have each value of a list-valued field (types, tags...).
 const countBy = (list, key) => {
   const m = new Map();
@@ -3401,6 +3403,7 @@ function showDownload(job) {
 function applyUi(ui) {   // once, when the page first has its data
   if (uiApplied || !ui) return;
   uiApplied = true;
+  seasonLabel();   // (which season the Seasonal sort puts first: shared.js)
   UI = { windows: {}, sections: {}, ...ui };
   for (const [name, open] of Object.entries(UI.sections || {})) if (SECTIONS[name]) SECTIONS[name](open, false);
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);

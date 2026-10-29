@@ -2438,6 +2438,32 @@ class WindowsTabsAndTasks(unittest.TestCase):
             page.close()
         self.assertEqual(server.ui_settings({"ui": {"spots_seen": ["product-type", "<b>", 4]}})["spots_seen"], ["product-type"])
 
+    def test_the_seasonal_sort(self):
+        """Issue #261: Seasonal puts the season's products first (by their names and tags: Halloween's in the autumn,
+        Christmas's and winter's from November until early January), then the rest as Recently added; its name says
+        which. It's remembered as the other sorts are."""
+        page = self.browser.new_page(viewport={"width": 1400, "height": 860})
+        page.clock.set_fixed_time("2026-10-20T12:00:00")
+        goto(page, self.srv.entry_url())
+        page.locator(".slot", has_text="Mochi").wait_for()
+        self.assertEqual(page.evaluate("[new Date(2026, 9, 31), new Date(2026, 10, 1), new Date(2027, 0, 6), new Date(2027, 0, 7)].map(seasonNow)"),
+                         ["halloween", "christmas", "christmas", "halloween"])
+        self.assertEqual(page.locator('#sort option[value="season"]').inner_text(), "Seasonal: Halloween first")
+        order = page.evaluate("""() => {
+          const a = [{ name: 'Plain Hat', added: '2026-10-09' }, { name: 'Pumpkin Hat', added: '2026-01-02' },
+                     { name: 'Winter Coat', added: '2026-10-08' }, { name: 'Cape', added: '2026-03-01', hay: 'cape kitsu ハロウィン' }];
+          return a.sort(SORTS.season).map(x => x.name); }""")
+        self.assertEqual(order, ["Cape", "Pumpkin Hat", "Plain Hat", "Winter Coat"], "Halloween's first (a tag too), then the newest")
+        from unittest import mock
+        self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("sort", None))
+        with mock.patch.object(server, "save_config"):
+            page.select_option("#sort", "season")
+            page.wait_for_function("() => state.sort === 'season'")
+            page.evaluate("uiFlush()")
+            page.wait_for_timeout(300)
+        self.assertEqual(self.srv.cfg["ui"]["sort"], "season", "remembered")
+        page.close()
+
     def test_seasonal_secrets(self):
         """Issue #260: while Hoard's window is in the background, Spooky Hoard gathers dust and cobwebs round the edges
         (Winter Hoard snow and ice); moving the mouse about clears it a little at a time, switching tabs at once. Never
@@ -2563,7 +2589,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
 
     def test_the_right_click_menu_names_a_few_sets(self):
         """Issue #228: the right-click menu named every set, taller than the window with 16 of them. Now it names the
-        five you added to last (the newest, before you have), and Add to another set... finds the rest by name."""
+        five you added to last (the newest, before you have), and Add to another set... shows every set's tile to choose
+        from, with a box to find one, then asks before adding (issue #242); sets added from a link are apart (#258)."""
         page = self.open()
         post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
         made = [page.evaluate(post, ["/api/sets", {"action": "create", "name": f"Set {n:02}", "items": []}])["made"] for n in range(16)]
@@ -2576,8 +2603,18 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(adds(), ["Add to Set 15", "Add to Set 14", "Add to Set 13", "Add to Set 12", "Add to Set 11",
                                       "Add to another set..."], "the newest five, then the rest by name")
             page.locator(".selmenu [role=menuitem]", has_text="Add to another set...").click()
-            page.locator("dialog.ask #askName").fill("set 03")
-            page.keyboard.press("Enter")
+            picker = page.locator("dialog.setpick-dlg")
+            picker.wait_for()
+            self.assertEqual(picker.locator(".settile").count(), 16, "every set")
+            self.assertEqual(picker.locator("h4").all_inner_texts(), ["Your sets"])
+            picker.locator(".setpick-find").fill("set 03")
+            self.assertEqual(picker.locator(".settile:not([hidden]) .nm-t").all_inner_texts(), ["Set 03"])
+            picker.locator(".settile", has_text="Set 03").click()
+            page.locator("#askDialog[open]").wait_for()
+            self.assertIn("Add it to Set 03?", page.locator("#askText").inner_text())
+            page.wait_for_timeout(200)
+            self.assertEqual(page.evaluate("id => DATA.sets.find(s => s.id === id).items.length", made[3]), 0, "not before it's confirmed")
+            page.click("#askDialog button.primary")
             page.wait_for_function("id => (DATA.sets.find(s => s.id === id) || {}).items.length === 1", arg=made[3])
             page.locator(".slot", has_text="Anko").click(button="right")
             page.locator(".selmenu").wait_for()

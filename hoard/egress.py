@@ -27,6 +27,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.connection import HTTPSConnection
 from urllib3.connectionpool import HTTPSConnectionPool
 
+from . import pace
 from .browser import _on_sites
 from .safety import _connect_public, move_into_place, note_connection, open_part
 
@@ -136,8 +137,10 @@ def check_hop(url: str) -> None:
 
 
 def _send(store_sess: requests.Session, anon: requests.Session, url: str, sites, **kwargs) -> requests.Response:
-    """One hop: the store's session for its own sites, the cookie-free one for anything else."""
+    """One hop: the store's session for its own sites, the cookie-free one for anything else (kept to Jinxxy's limit:
+    pace.py)."""
     check_hop(url)
+    pace.sending(url)
     host = urlparse(url).hostname or ""
     sess = store_sess if _on_sites(host, sites) else anon
     if _test_origin(url):   # tests only: stand-in stores on this computer, plain http

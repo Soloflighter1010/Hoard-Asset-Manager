@@ -61,6 +61,10 @@ person to sign in on this computer never sees what you bought. Your downloaded f
   drops part way isn't Booth turning it away: the file is tried again, and carries on where it stopped.
 - Your free downloads are listed without their files, so for those Hoard opens the item's own page and takes the
   download buttons from there.
+- A purchase whose library entry shows no files has them read from its order page instead: when nothing of it is
+  downloaded yet, or you chose it (to download, or to see its files before downloading). In 5.2.0 beta 1, Hoard could
+  miss a Booth product's files, so there was nothing to choose from and downloads stalled; from 5.2.0 beta 2 it reads
+  them however Booth names its buttons, and from the order page when the library shows none.
 - Booth signs you in through pixiv.
 
 ## Gumroad
@@ -82,6 +86,9 @@ person to sign in on this computer never sees what you bought. Your downloaded f
   only new items are opened later, at most 150 in one refresh, with the usual pause between pages.
 - Jinxxy shows its own banner where a product has no picture. Hoard doesn't keep that banner as the
   product's picture.
+- Hoard never sends Jinxxy more than 120 requests a minute, the limit Jinxxy's API sets for creators: the requests
+  its pages make themselves are counted too, and when a minute's are used up, Hoard waits (and says so) before the
+  next page or file (5.2.0 beta 2).
 
 ## Payhip
 

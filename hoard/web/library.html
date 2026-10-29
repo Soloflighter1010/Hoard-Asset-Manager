@@ -1382,6 +1382,7 @@ body.less-motion .tour-try::before { animation: none; }
         <option value="creator">Creator</option>
         <option value="store">Store</option>
         <option value="added">Recently added</option>
+        <option value="season">Seasonal</option>
       </select>
     </label>
     <button id="stackCopies" class="ghost sm stack-toggle" aria-pressed="true" title="Show copies of the same product (bought twice, in versions, or on two stores) as one tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="2"/><path d="M5 3.5V3a1.5 1.5 0 0 1 1.5-1.5h6A1.5 1.5 0 0 1 14 3v6a1.5 1.5 0 0 1-1.5 1.5H12"/></svg>Stack copies</button>
@@ -1947,6 +1948,7 @@ const SORTS = {
   // the newest first; items listed before Hoard kept the time they appeared go last (issue #18)
   added: (a, b) => (b.added || "").localeCompare(a.added || "") || coll.compare(a.name, b.name),
 };
+SORTS.season = seasonSort(SORTS.added);   // the season's first (issue #261: shared.js)
 // Whether any search or filter is narrowing the library down.
 const filtersActive = () => state.ptype || state.q || state.store || state.creator || state.tags.size || state.copies || state.disk || state.fresh;
 
@@ -2966,6 +2968,7 @@ function wireApp() {
 function applyUi(ui) {   // once, when the page first has its data
   if (uiApplied || !ui) return;
   uiApplied = true;
+  seasonLabel();   // (which season the Seasonal sort puts first: shared.js)
   UI = { windows: {}, sections: {}, ...ui };
   for (const [name, open] of Object.entries(UI.sections || {})) if (SECTIONS[name]) SECTIONS[name](open, false);
   if (setSideFold && typeof UI.side_folded === "boolean") setSideFold(UI.side_folded, false);

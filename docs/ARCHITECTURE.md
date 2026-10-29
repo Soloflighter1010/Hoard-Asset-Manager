@@ -16,6 +16,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   safety.py            data files, seals, store links, and the web rules for the local server
   net.py               is a store reachable?
   egress.py            the one path for store pages, data and files: https, public addresses, hop by hop
+  pace.py              keeping to a store's rate limit: Jinxxy's 120 requests a minute (issue #262)
   browser.py           store sign-ins and the store browser
   tags.py              your tags
   library.py           reading what you own from each store; the library list

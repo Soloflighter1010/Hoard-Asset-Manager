@@ -21,7 +21,7 @@ from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumro
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
-from . import egress, itch, vault
+from . import egress, itch, pace, vault
 from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, open_under, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
 from .tags import TagMatcher, TagStore, clean_tag, tag_key
 
@@ -1113,6 +1113,7 @@ def jinxxy_item_links(page, pattern: str) -> list[str]:
             break
         nxt = pending.pop(0)
         visited.add(nxt)
+        pace.before(nxt)
         page.goto(nxt, wait_until="domcontentloaded")
         settle(page)
     return list(found)
@@ -1282,6 +1283,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
                     return fname, prev, is_update
             dl = click_download(ctx, page, match["idx"], timeout_s)
             if page.url.split("#")[0].rstrip("/") != url.split("#")[0].rstrip("/"):  # the click navigated away
+                pace.before(url)
                 page.goto(url, wait_until="domcontentloaded")
                 settle(page)
             if not dl:
@@ -1371,6 +1373,7 @@ def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
                 listed = {i["url"]: i.get("name") for i in chosen}
                 log(f"Jinxxy: {len(links)} chosen {'item' if len(links) == 1 else 'items'}")
             else:
+                pace.before(JX_INVENTORY)
                 page.goto(JX_INVENTORY, wait_until="domcontentloaded")
                 settle(page, 1500)
                 jinxxy_require_login(page)
@@ -1443,6 +1446,7 @@ def reopen_tab(p, cfg: dict, args, store: str, browser: dict):
 def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None,
                  listed_name: str | None = None) -> None:
     """Open one Jinxxy item and download the files its page offers."""
+    pace.before(url)
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
     jinxxy_require_login(page)
@@ -1544,8 +1548,15 @@ BOOTH_ITEM_FILES_JS = r"""
 """
 
 
+def chosen_here(args) -> bool:
+    """Was this download (or look at what's there to choose from) of products chosen, not a whole store's?"""
+    return bool(getattr(args, "keys", None) or getattr(args, "only", None) or getattr(args, "listing", False))
+
+
 def booth_item_files(page, url: str) -> list[dict]:
-    """The files on a Booth item's own page, for an item the library lists without them (free downloads)."""
+    """The files on a Booth item's own page (a free download), or on a purchase's order page, for an item the library
+    lists without them."""
+    pace.before(url)
     page.goto(url, wait_until="domcontentloaded")
     settle(page)
     u = urlparse(page.url)   # (an item page is public: only a move to the sign-in page means the session ended)
@@ -1642,13 +1653,20 @@ def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
                     rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
                     folder = man.folder_of(rec)
                     log(f"\n[Booth] {creator} / {name}")
-                    if not b["files"] and store_url(b.get("url"), ["booth.pm"]):   # free items: on the item's page
-                        try:
-                            b["files"] = booth_item_files(page, b["url"])
-                        except NotLoggedIn:
-                            raise
-                        except Exception as e:
-                            log(f"    couldn't read the item's page for its files: {e}")
+                    if not b["files"] and (not b.get("order_url") or not rec["files"] or chosen_here(args)):
+                        # none on its library card: a free item's are on its own page (looked at every time, as
+                        # before); a purchase's on its order page (issue #267: Booth's library card has stopped listing
+                        # them before), looked at when nothing of it is downloaded yet, or it was chosen, so a sync of
+                        # a big library doesn't open every order
+                        for where, what in ((b.get("order_url"), "order"), (b.get("url"), "item")):
+                            if b["files"] or not store_url(where, ["booth.pm"]):
+                                continue
+                            try:
+                                b["files"] = booth_item_files(page, where)
+                            except NotLoggedIn:
+                                raise
+                            except Exception as e:
+                                log(f"    couldn't read the {what}'s page for its files: {e}")
                     if not b["files"]:
                         report.skipped.append(f"Booth: {name} - no files listed in your library or on its page")
                         continue
@@ -1869,6 +1887,7 @@ def cmd_probe(cfg: dict, args) -> None:
                                       "response": redact(body[:30000])}, ensure_ascii=False) + "\n")
             responses.clear()
 
+        pace.before(JX_INVENTORY)
         page.goto(JX_INVENTORY, wait_until="domcontentloaded")
         settle(page, 2000)
         jinxxy_require_login(page)
@@ -1883,6 +1902,7 @@ def cmd_probe(cfg: dict, args) -> None:
         log(f"Item links matching item_link_pattern: {len(links)}")
 
         if links:
+            pace.before(links[0])
             page.goto(links[0], wait_until="domcontentloaded")
             settle(page, 2000)
             dump("item")

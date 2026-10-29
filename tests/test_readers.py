@@ -290,6 +290,18 @@ class BoothAndPayhip(unittest.TestCase):
                               ("Manual.pdf", "https://booth.pm/downloadables/502")])  # no preview or app duplicates
             self.assertEqual(len(items["222"]["files"]), 1)
 
+    def test_booth_library_with_its_buttons_renamed(self):
+        """Issue #267: Booth renaming its file buttons (it has before) left every card without files, so there was
+        nothing to choose from and nothing to download. Any file button counts, but the other routes to the same file."""
+        pg = self.page_at("https://accounts.booth.pm/library", BOOTH_2026)
+        for renamed in (BOOTH_2026.replace('data-test="downloadable"', 'data-test="download-file-button"'),
+                        BOOTH_2026.replace(' data-test="downloadable"', "")):
+            pg.set_content(renamed)
+            items = {i["id"]: i for i in pg.evaluate(library.BOOTH_JS)}
+            self.assertEqual([(f["name"], f["url"]) for f in items["111"]["files"]],
+                             [("Avatar.unitypackage", "https://booth.pm/downloadables/501"),
+                              ("Manual.pdf", "https://booth.pm/downloadables/502")], "not Open in Browser or the app's")
+
     def test_payhip_shop_library(self):
         pg = self.page_at("https://testshop.store/b-account", PAYHIP_SHOP)
         cards = pg.evaluate(library.PAYHIP_SHOP_JS)["cards"]

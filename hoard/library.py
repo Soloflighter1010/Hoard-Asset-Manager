@@ -219,9 +219,10 @@ BOOTH_JS = r"""
     // Booth Library Manager links (/deeplink) are other ways to the same file, so they're skipped.
     const FILE_SEL = '[data-href*="/downloadables/"], a[href*="/downloadables/"]';
     const addr = el => el.getAttribute('data-href') || el.getAttribute('href') || '';
+    // (however Booth names its buttons, which it has changed before: only the other routes are left out, issue #267)
     const fileId = el => {
-      const h = addr(el), m = h.match(/\/downloadables\/(\d+)(?:[?#]|$)/);
-      return m && !/[?&]browse=/.test(h) && (el.getAttribute('data-test') || 'downloadable') === 'downloadable' ? m[1] : null;
+      const h = addr(el), m = h.match(/\/downloadables\/(\d+)(?:[?#]|$)/), t = (el.getAttribute('data-test') || '').toLowerCase();
+      return m && !/[?&]browse=/.test(h) && !/brows|other|deeplink|manager/.test(t) ? m[1] : null;
     };
     const seen = new Set(), files = [];
     for (const d of c.querySelectorAll(FILE_SEL)) {

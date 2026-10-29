@@ -13,6 +13,7 @@ import weakref
 from pathlib import Path
 from urllib.parse import urlparse
 
+from . import pace
 from .net import reachable
 from .paths import HERE, data_dir
 
@@ -590,6 +591,7 @@ def launch_context(p, cfg: dict, headless: bool, store: str):
         lock.release()
         raise
     ctx.on("close", lambda _ctx: lock.release())
+    pace.count_requests(ctx)   # (what its pages ask Jinxxy for counts toward Jinxxy's limit: issue #262)
     with _open_lock:
         if ctx in _open:
             _open[ctx] = lock.release   # ended by force, it never says it closed: its sign-in is let go then
@@ -967,6 +969,7 @@ def goto(page, url: str):
     """Navigate and fail loudly on an error or bot-check page, so it never looks like an empty library. A page that
     doesn't load at all raises PageLoadError, with the browser's reason and the redirects it went through."""
     hops = []
+    pace.before(url)   # (Jinxxy's: kept to its limit, issue #262)
 
     def seen(r):
         """Note each page the main frame goes to, to say where a page that didn't load was sent."""

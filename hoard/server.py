@@ -166,7 +166,7 @@ def mask_names(text: str, names: list[str]) -> str:
 
 
 UI_WINDOWS = ("tagPanel", "stores", "settingsPanel", "tasksWin")
-UI_SORTS = ("name", "creator", "store", "added", "size")   # the Library's and Downloads' Sort (size: Downloads only)
+UI_SORTS = ("name", "creator", "store", "added", "season", "size")   # the Library's and Downloads' Sort (size: Downloads only)
 
 
 def ui_settings(cfg: dict) -> dict:
@@ -1273,7 +1273,7 @@ class Handler(BaseHTTPRequestHandler):
                     row["words"] = sorted(words)
             out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                         "cover": f"/setcover/{s['id']}/{s['picture']}" if sets.picture_file(s) else None,
-                        "short": (s.get("short") or {}).get("expires"), "items": rows,
+                        "short": (s.get("short") or {}).get("expires"), "items": rows, "from_link": s.get("from_link") is True,
                         **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
         return {"sets": out, "hidden_left_out": left_out, "viewer": sets.VIEWER, "photo_hosts": list(sets.PHOTO_HOSTS)}
 

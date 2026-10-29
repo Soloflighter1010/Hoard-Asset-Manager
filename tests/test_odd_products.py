@@ -16,7 +16,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import common, config, downloader  # noqa: E402
+from hoard import common, config, downloader, tags  # noqa: E402
 
 downloader.RETRY_WAITS = (0.0, 0.0, 0.0)
 
@@ -212,6 +212,65 @@ class BoothNewFileInAProductYouHave(unittest.TestCase):
         report = run()
         self.assertEqual(report.updated, [], "a file new to the product isn't an update")
         self.assertEqual(report.new_files, ["Booth: Mochi / Rusk / Rusk Quest.zip"])
+
+
+class BoothFilesFromTheOrder(unittest.TestCase):
+    """Issue #267: a purchase whose library card lists no files has them read from its order page (a free item's
+    from its own page, as before), when nothing of it is downloaded yet or it was chosen: then it's listed to choose
+    from, and downloaded."""
+
+    def run_sync(self, root, item, args, opened):
+        cfg = {**config.load_config(), "root": str(root), "request_delay": 0}
+        cfg["booth"] = {**cfg["booth"], "save_thumbnails": False}
+
+        def fetch(page, sess, f, folder, fid, route, timeout_s, name_for=lambda n: n):
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f["name"]).write_bytes(b"zip")
+            return f["name"], 3
+
+        def files_at(page, url):
+            opened.append(url)
+            return [{"name": "Rusk.zip", "url": "https://booth.pm/downloadables/9"}] if "/orders/" in url else []
+        ctx = mock.MagicMock()
+        ctx.pages = [mock.MagicMock()]
+        report = downloader.Report()
+        with mock.patch.object(downloader, "_playwright", lambda: (lambda: contextlib.nullcontext(None))), \
+                mock.patch.object(downloader, "launch_context", lambda *a, **k: ctx), \
+                mock.patch.object(downloader, "booth_library", lambda page, cfg: [dict(item, files=[])]), \
+                mock.patch.object(downloader, "session_from_context", lambda *a: mock.MagicMock()), \
+                mock.patch.object(downloader, "booth_item_files", files_at), \
+                mock.patch.object(downloader, "booth_fetch", fetch):
+            downloader.sync_booth(cfg, root, args, report)
+        return report
+
+    def test_a_purchase_without_files_on_its_card(self):
+        root = Path(tempfile.mkdtemp())
+        item = {"id": "77", "name": "Rusk", "creator": "Mochi", "url": "https://booth.pm/en/items/77", "thumbnail": "",
+                "gift": False, "order_url": "https://accounts.booth.pm/orders/123"}
+        whole = SimpleNamespace(dry_run=False, headed=False, only=None, keys=None, store="booth", targets={})
+        opened = []
+        report = self.run_sync(root, item, whole, opened)
+        self.assertEqual(opened, ["https://accounts.booth.pm/orders/123"], "its order page, not its item page")
+        self.assertEqual(report.new_files, ["Booth: Mochi / Rusk / Rusk.zip"])
+        opened.clear()
+        self.run_sync(root, item, whole, opened)
+        self.assertEqual(opened, [], "downloaded already, and not chosen: a sync doesn't open every order")
+        listing = SimpleNamespace(dry_run=True, headed=False, only=None, keys={tags.tag_key("booth", "Rusk")}, store="booth",
+                                  targets={}, listing=True)
+        (root / "Booth" / "Mochi" / "Rusk" / "Rusk.zip").unlink(missing_ok=True)
+        report = self.run_sync(root, item, listing, opened)
+        self.assertEqual(opened, ["https://accounts.booth.pm/orders/123"], "chosen: looked at")
+        self.assertEqual(report.listed[tags.tag_key("booth", "Rusk")]["files"], ["Rusk.zip"], "to choose from")
+
+    def test_a_free_item_still_has_its_page_read(self):
+        root = Path(tempfile.mkdtemp())
+        item = {"id": "78", "name": "Free Hat", "creator": "Mochi", "url": "https://booth.pm/en/items/78", "thumbnail": "",
+                "gift": False, "order_url": ""}
+        opened = []
+        args = SimpleNamespace(dry_run=False, headed=False, only=None, keys=None, store="booth", targets={})
+        self.run_sync(root, item, args, opened)
+        self.run_sync(root, item, args, opened)
+        self.assertEqual(opened, ["https://booth.pm/en/items/78"] * 2, "every time, as before")
 
 
 class BoothDirectRoute(unittest.TestCase):

@@ -342,6 +342,34 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 // Text folded for searching: the same width, lower case.
 const norm = s => String(s || "").normalize("NFKC").toLowerCase();
 const coll = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+/* The Seasonal sort (issue #261): the season's products first, by words in their names and tags, then the rest as
+   Recently added. From November until early January, Christmas's and winter's; the rest of the year, Halloween's. */
+const SEASON_WORDS = {
+  halloween: ["halloween", "ハロウィン", "ハロウィーン", "할로윈", "핼러윈", "pumpkin", "かぼちゃ", "カボチャ", "호박", "witch", "魔女",
+    "마녀", "vampire", "吸血鬼", "뱀파이어", "ghost", "おばけ", "お化け", "유령", "spooky", "skeleton", "骸骨", "zombie", "ゾンビ",
+    "좀비", "jack-o", "trick or treat"],
+  christmas: ["christmas", "xmas", "x'mas", "クリスマス", "크리스마스", "santa", "サンタ", "산타", "reindeer", "トナカイ", "순록",
+    "snowman", "雪だるま", "눈사람", "gingerbread", "mistletoe", "noel", "winter", "冬", "겨울", "snow", "雪", "knit", "ニット", "니트"],
+};
+// The season now: Christmas from November 1 until January 6, else Halloween (the one coming).
+const seasonNow = (d = new Date()) => d.getMonth() >= 10 || (d.getMonth() === 0 && d.getDate() <= 6) ? "christmas" : "halloween";
+const seasonSeen = new WeakMap();   // product -> [season, whether it's the season's], worked out once
+// Whether a product is the season's (by its name and tags: the words it's searched by).
+function inSeason(a) {
+  const now = seasonNow(), got = seasonSeen.get(a);
+  if (got && got[0] === now) return got[1];
+  const hay = a.hay || norm(a.name), yes = SEASON_WORDS[now].some(w => hay.includes(norm(w)));
+  seasonSeen.set(a, [now, yes]);
+  return yes;
+}
+// A page's Seasonal sort, from its Recently added.
+const seasonSort = added => (a, b) => (inSeason(b) - inSeason(a)) || added(a, b);
+// The Seasonal sort's name says which season it puts first.
+function seasonLabel() {
+  const o = document.querySelector('#sort option[value="season"]');
+  const winter = seasonNow() === "christmas";
+  if (o) o.textContent = winter ? tr("Seasonal: Christmas and winter first") : tr("Seasonal: Halloween first");
+}
 // A hue from a name, the same each time, for a tile with no picture.
 const hue = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 // Up to two initials of a name, for a tile with no picture.
@@ -3895,17 +3923,40 @@ function setsInMenu() {
   const recent = (UI.recent_sets || []).map(id => byId.get(id)).filter(Boolean);
   return [...new Set([...recent, ...[...all].reverse()])].slice(0, SETS_IN_MENU);
 }
-async function addToAnotherSet(list) {   // any set, by its name: the box offers them as you type
-  const all = DATA.sets || [];
-  let names = $("#setNames");
-  if (!names) { names = document.createElement("datalist"); names.id = "setNames"; document.body.appendChild(names); }
-  names.innerHTML = all.map(s => `<option value="${esc(s.name)}">`).join("");
-  const name = await askName("Add to which set?", "", { list: "setNames", max: 80 });
-  if (!name) return;
-  const exact = all.filter(s => norm(s.name) === norm(name)), near = all.filter(s => norm(s.name).includes(norm(name)));
-  const found = exact.length ? exact : near;
-  if (found.length === 1) return addToSet(list, found[0].id);
-  toast(found.length ? tr("More than one set has {0} in its name: type more of it.", name) : tr("There's no set called {0}.", name));
+// Add to another set (issue #242): every set to choose from, as Sets and Wishlists shows them (your own, the ones you
+// added from a link, your wishlists), a box to find one by its name; then a yes before anything's added.
+async function addToAnotherSet(list) {
+  const items = [...new Set(list.filter(Boolean).map(a => a.tag_key))];
+  if (!items.length) return;
+  let sets = SETS && SETS.for === DATA && !SETS.error ? SETS.sets : null;
+  if (!sets) {
+    const r = await api("/api/sets", { cache: "no-store" }).catch(() => null);
+    sets = r && r.ok ? (await r.json()).sets : (DATA.sets || []).map(s => ({ ...s, items: [] }));
+  }
+  // A set's tile to choose (its picture, name and counts), and a group of them under a heading.
+  const tile = s => `<button class="slot settile" value="${esc(s.id)}" data-name="${esc(norm(s.name))}"><span class="art">${setArt(s)}</span>` +
+    `<span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(setCounts(s).text)}</span></button>`;
+  // (a group with none in it isn't shown)
+  const group = (title, some) => some.length ? `<h4>${esc(tr(title))}</h4><div class="setpick-grid">${some.map(tile).join("")}</div>` : "";
+  const shown = pjDialog(`<p><b>${esc(tr("Add to which set?"))}</b></p>` +
+    `<p><input type="search" class="setpick-find" placeholder="${esc(tr("Find a set"))}" aria-label="${esc(tr("Find a set"))}"></p>` +
+    `<div class="setpick">${group("Your sets", sets.filter(s => !isWish(s) && !s.from_link))}` +
+    group("Sets you added from a link", sets.filter(s => !isWish(s) && s.from_link)) + group("Wishlists", sets.filter(isWish)) + `</div>` +
+    `<div class="ask-row"><button class="ghost" value="no">${esc(tr("Cancel"))}</button></div>`, "wide setpick-dlg");
+  const dlg = [...document.querySelectorAll(".setpick-dlg")].pop();
+  const find = dlg.querySelector(".setpick-find");
+  find.addEventListener("input", () => {   // (by its name, as you type: a group with none left is put away)
+    const words = norm(find.value).split(/\s+/).filter(Boolean);
+    for (const b of dlg.querySelectorAll(".settile")) b.hidden = !words.every(w => b.dataset.name.includes(w));
+    for (const g of dlg.querySelectorAll(".setpick-grid")) g.previousElementSibling.hidden = g.hidden = !g.querySelector(".settile:not([hidden])");
+  });
+  find.addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });   // (not the form's first button)
+  find.focus();
+  const { value } = await shown;
+  const s = sets.find(x => x.id === value);
+  if (!s) return;
+  if (!await ask(tr(items.length === 1 ? "Add it to {0}?" : "Add {1} products to {0}?", s.name, items.length), tr("Add"))) return;
+  return addToSet(list, s.id);
 }
 /* Mix and match (issue #156): an outfit picked at random from what you own, to try something new with what you have.
    An avatar from your tags whose kind is Avatar, and one product from each tag whose kind is Clothing (tops, shoes,
@@ -4067,11 +4118,15 @@ function setsRoot() {
     `<button class="ghost sm" data-setx="mix">${esc(tr("Mix and match..."))}</button></div>` +
     (SETS.hidden_left_out ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "");
   if (SETS.error) return top + `<p class="none">${esc(tr("Your sets couldn't be read just now."))}</p>`;
-  const plain = SETS.sets.filter(s => !isWish(s)), wishes = SETS.sets.filter(isWish);
-  const sets = plain.length ? `<div class="grid setgrid">${plain.map(setTile).join("")}</div>`
+  // your own sets, then the ones you added from someone's link (issue #258), then your wishlists
+  const plain = SETS.sets.filter(s => !isWish(s) && !s.from_link), added = SETS.sets.filter(s => !isWish(s) && s.from_link);
+  const wishes = SETS.sets.filter(isWish);
+  const sets = (plain.length ? `<div class="grid setgrid">${plain.map(setTile).join("")}</div>`
     : `<p class="none">No sets yet. A set groups products you use together, such as an avatar,
     its outfits and the shaders they need, downloaded or not. Make one here, or choose products in the Library or Downloads and
-    use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`;
+    use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`) +
+    (added.length ? `<h3 class="setmore-h added-h">${esc(tr("Sets you added from a link"))} <span class="n">${added.length.toLocaleString()}</span></h3>` +
+      `<div class="grid setgrid">${added.map(setTile).join("")}</div>` : "");
   return top + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
     `<div class="row sets-top"><button class="primary sm" data-setx="readwish">${esc(tr("Read my wishlists..."))}</button>` +
     `<button class="ghost sm" data-setx="importwish">${esc(tr("Import saved wishlist pages..."))}</button>` +
@@ -4116,15 +4171,36 @@ function setHead(s) {
       (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
       `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div>` +
       (isWish(s) ? wishFindHTML() : "") + `</div></div>` +
-    `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>` +
-      `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
-      `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(s.note || "")}</textarea>` +
-      `<div class="row"><button class="ghost sm" data-setx="note">Save the note</button></div>` +
-      (s.photos.length ? `<ul class="setphotos">${s.photos.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
-        `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a><button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button></li>`).join("")}</ul>` : "") +
-      `<p class="hint">${esc(tr("Photos to show off the set: links from Imgur, Gyazo, X, Bluesky, Reddit, Postimages, ImgBB, Discord, or a store's own pictures."))}</p>` +
-      `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div></details>`;
+    `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>${setExtraHTML(s)}</details>`;
 }
+/* A set's note and photos (issue #256): once saved, shown as they're shared, and changed only after Edit, which opens
+   the note's box and the photos' × with Save and Cancel; nothing's sent until Save. With none saved yet, it's open
+   to begin with. */
+let SETEDIT = null;   // {id, note, photos}: the set being edited, as it's being changed
+// A set's note and photos: as they're shared, with Edit; or being changed, with Save and Cancel.
+function setExtraHTML(s) {
+  const editing = SETEDIT && SETEDIT.id === s.id, saved = !!(s.note || s.photos.length);
+  const photos = editing ? SETEDIT.photos : s.photos;
+  // The photos' links (each with its × while they're being changed).
+  const links = (list, out) => list.length ? `<ul class="setphotos">${list.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
+    `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a>` +
+    (out ? `<button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button>` : "") + `</li>`).join("")}</ul>` : "";
+  if (saved && !editing) {
+    return (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
+      (photos.length ? links(photos, false) : `<p class="none">${esc(tr("No photos."))}</p>`) +
+      `<div class="row"><button class="ghost sm" data-setx="edit">${esc(tr("Edit"))}</button></div>`;
+  }
+  return `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
+      `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(editing ? SETEDIT.note : s.note || "")}</textarea>` +
+    links(photos, true) +
+    `<p class="hint">${esc(tr("Photos to show off the set: links from Imgur, Gyazo, X, Bluesky, Reddit, Postimages, ImgBB, Discord, or a store's own pictures."))}</p>` +
+    `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div>` +
+    `<div class="row"><button class="primary sm" data-setx="save">${esc(tr("Save"))}</button>` +
+    (saved ? `<button class="ghost sm" data-setx="cancel">${esc(tr("Cancel"))}</button>` : "") + `</div>`;
+}
+// Start changing a set's note and photos (none saved yet: as they are).
+const setEditStart = s => { if (!SETEDIT || SETEDIT.id !== s.id) SETEDIT = { id: s.id, note: s.note || "", photos: [...s.photos] }; };
+document.addEventListener("input", e => { if (e.target.matches("#setView [data-setnote]") && SETEDIT) SETEDIT.note = e.target.value; });
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
 // Downloads); in Downloads, ones not downloaded. Each says where it is, or where to buy it.
 function setMoreHTML(s) {
@@ -4526,15 +4602,30 @@ async function setAct(e) {
     const it = s.items.find(i => i.key === b.dataset.key), name = it ? it.name : "";
     if (!await ask(isWish(s) ? tr("Take {0} off this wishlist?", name) : tr("Take {0} out of {1}?", name, s.name), tr("Take it off"), true)) return;
     changeSets({ action: "remove", id: s.id, items: [b.dataset.key] });
-  } else if (act === "note") {
-    const done = await changeSets({ action: "note", id: s.id, note: $("#setView [data-setnote]").value });
-    if (done) toast("Saved the note.");
+  } else if (act === "edit") {
+    setEditStart(s); setExtraOpen = true; drawSets();
+    const box = $("#setView [data-setnote]");
+    if (box) box.focus();
+  } else if (act === "cancel") {
+    SETEDIT = null; drawSets();
+  } else if (act === "save") {   // the note, then the photos, as they're changed (a photo link that's no good stays to fix)
+    setEditStart(s);
+    SETEDIT.note = $("#setView [data-setnote]").value;
+    const want = SETEDIT;
+    if (want.note !== (s.note || "") && !await changeSets({ action: "note", id: s.id, note: want.note })) return;
+    if (want.photos.join("\n") !== s.photos.join("\n") && !await changeSets({ action: "photos", id: s.id, photos: want.photos })) {
+      SETEDIT = want; drawSets(); return;
+    }
+    SETEDIT = null; drawSets(); toast("Saved the note and photos.");
   } else if (act === "photo") {
-    if (s.photos.length >= 8) { toast("A set has up to 8 photos."); return; }
+    setEditStart(s);
+    SETEDIT.note = ($("#setView [data-setnote]") || {}).value ?? SETEDIT.note;
+    if (SETEDIT.photos.length >= 8) { toast("A set has up to 8 photos."); return; }
     const url = await askName("Paste a picture's link, or its page on a photo site (Imgur, Gyazo, ImgBB, Bluesky...)", "", { max: 600 });
-    if (url) changeSets({ action: "photos", id: s.id, photos: [...s.photos, url] });
+    if (url) { SETEDIT.photos.push(url.trim()); drawSets(); }
   } else if (act === "unphoto") {
-    changeSets({ action: "photos", id: s.id, photos: s.photos.filter((u, n) => n !== +b.dataset.n) });
+    setEditStart(s);
+    SETEDIT.photos = SETEDIT.photos.filter((u, n) => n !== +b.dataset.n); drawSets();
   }
 }
 // Read my wishlists: from each store chosen, in its own signed-in window, as a task (hoard/wishlists.py)
@@ -4885,6 +4976,7 @@ const tourCount = () => (ON_DOWNLOADS ? DATA.assets : DATA.items || []).length;
 function tourClearSearch() {
   const q = $("#q");
   if (q && q.value) { q.value = ""; q.dispatchEvent(new Event("input", { bubbles: true })); }
+  closeSearchMenu();   // (its list, under the search beside the logo, would cover the first tiles: issue #236)
 }
 // Open the tour's product's details, when they're not.
 function tourEnsureDetail() {

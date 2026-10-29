@@ -17,7 +17,9 @@ The **Library** shows everything you own on the stores you use, whether or not y
   **New**) and creators (**Find a creator** to search a long list). Filters combine; **Clear filters** starts
   again. Each section folds away by its heading, and **Hide filters** folds the whole sidebar to a thin strip;
   both stay as you left them.
-- **Sort** by name, creator, store or **Recently added** (the newest first), beside the store tabs. Hoard remembers
+- **Sort** by name, creator, store, **Recently added** (the newest first) or **Seasonal** (5.2.0 beta 2: the season's
+  products first, by their names and tags, then the rest as Recently added: Christmas's and winter's from November
+  until early January, Halloween's the rest of the year; the sort's name says which), beside the store tabs. Hoard remembers
   the sort you choose, on this page and in Downloads, and next time it starts (5.0).
 - **Stack copies:** copies of the same product show as one tile with a count on it (×3): bought more than once,
   in several versions, or on two stores (from 3.1). Hoard knows copies by:
