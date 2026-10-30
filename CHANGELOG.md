@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.2.0-beta.3
+
+- **A project's details, as a product's** ([#246](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/246)). Choose a project and its details open beside the list as
+  a product's open beside the Library, as tall as the window: its letters in its kind's colour, where it is, its size
+  on disk, when it was last opened and made, how many packages and backups it has, and what's new. Then **Open in
+  Unity**, **Manage** and **Show in folder**; **Organise** (the favourite, **Back up...** and **Take off the list**);
+  its folder and tags, changed right there (**New folder...** names one); what takes its room (its assets, its
+  packages, Unity's cache, which a backup leaves out, and everything else); its packages, each with any newer version;
+  what Hoard put in it from your library; and its backups, with **Back up...** and **See backups**.
+- **Wider project tiles** ([#250](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/250)). As tiles, a project's tile and a folder's are twice as wide as they're tall.
+- **The search in the middle of a wide window** ([#236](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/236)). With room for it, the search sits in the middle of
+  the bar, the pages and tools on one side and the logo on the other; a narrower window keeps it beside the logo.
+- **One box under a tile's picture** ([#240](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/240), [#257](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/257)). A product's name and creator share one box,
+  the picture's width, where the glow shows, instead of a box each.
+
 ## 5.2.0-beta.2
 
 - **The search beside the logo** ([#236](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/236)). The top bar reads the logo and the search, then on the other side
