@@ -489,6 +489,57 @@ class Server(unittest.TestCase):
         got = self.call("GET", "/api/vpm/updates")[1]["projects"][project]
         self.assertEqual(got, {"packages": 1, "names": ["com.vrchat.base"]})
 
+    def test_a_projects_details(self):
+        """A project's details beside the list: its size on disk, what's Unity's own cache apart from what's yours
+        (and a link inside it not followed), its packages with any newer version, what Hoard put in it (a hidden
+        product left out while the hidden library is locked), and its own backups, here and moved to another drive."""
+        from hoard.marks import MarkStore
+        from hoard.vpm import listing
+        status, made = self.call("POST", "/api/vpm/create", {
+            "name": "Fox", "location": str(self.tmp / "Projects"), "template": "com.anatawa12.vrc-get.vrchat.avatars",
+            "unity": "2022.3.22f1", "packages": {}, "picks": []})
+        self.assertEqual(status, 200, made)
+        self.assertEqual(self.wait()["outcome"], "done")
+        project = self.tmp / "Projects" / "Fox"
+        (project / "Assets" / "big.bin").write_bytes(b"a" * 10_000)
+        (project / "Library").mkdir(exist_ok=True)
+        (project / "Library" / "cache.bin").write_bytes(b"c" * 50_000)
+        (project / "Temp").mkdir(exist_ok=True)
+        (project / "Temp" / "t.bin").write_bytes(b"t" * 3_000)
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "huge.bin").write_bytes(b"h" * 900_000)
+        try:
+            os.symlink(elsewhere, project / "Assets" / "linked", target_is_directory=True)
+        except OSError:
+            pass   # (Windows without the right to make links: nothing to follow)
+        settings = json.loads((self.vcc / "settings.json").read_text())
+        backups, away = self.tmp / "Backups", self.tmp / "E" / "Moved"
+        (self.vcc / "settings.json").write_text(json.dumps({**settings, "projectBackupPath": str(backups)}))
+        for folder, names in ((backups, ("Fox-2026-09-01T10-00-00.zip", "Fox-2026-10-01T10-00-00.zip", "Wolf-2026-10-02T10-00-00.zip")),
+                              (away, ("Fox-2026-01-01T10-00-00.zip",))):
+            folder.mkdir(parents=True)
+            for name in names:
+                (folder / name).write_bytes(b"PK" + b"0" * 98)
+        listing.set_backup_prefs(moved_to=str(away))
+        listing.add_preloaded(str(project), [{"tag_key": "booth:hoodie", "name": "Hoodie", "file": "Hoodie.unitypackage"},
+                                             {"tag_key": "booth:secret", "name": "Secret", "file": "Secret.unitypackage"}])
+        MarkStore().set_pin("2468")
+        MarkStore().change("hidden", ["booth:secret"], True)
+        status, got = self.call("GET", "/api/vpm/about?path=" + quote(str(project)))
+        self.assertEqual(status, 200, got)
+        size = got["size"]
+        self.assertEqual((size["cache"], size["complete"]), (53_000, True), "Library and Temp: Unity's cache")
+        self.assertGreaterEqual(size["assets"], 10_000)
+        self.assertLess(size["assets"], 900_000, "a link inside it isn't followed")
+        self.assertGreater(size["packages"], 0)
+        self.assertEqual(size["total"], size["assets"] + size["packages"] + size["cache"] + size["other"])
+        self.assertEqual(sorted(p["name"] for p in got["packages"]), ["com.vrchat.avatars", "com.vrchat.base"])
+        self.assertTrue(all(p["latest"] is None for p in got["packages"]))
+        self.assertEqual([p["name"] for p in got["preloaded"]], ["Hoodie"], "a hidden product isn't said while it's locked")
+        self.assertEqual(got["backups"], {"count": 2, "size": 200, "newest": "2026-10-01T10:00:00", "moved": 1}, "its own, not Wolf's")
+        self.assertEqual(self.call("GET", "/api/vpm/about?path=" + quote(str(self.tmp / "Nowhere")))[0], 400, "only a listed project")
+
     def test_versions_to_choose_from(self):
         """Manage project's and Add packages' version choice (#160): newest first, only those that work in the
         project's Unity, never a yanked one, and prereleases when they're offered or one is installed."""

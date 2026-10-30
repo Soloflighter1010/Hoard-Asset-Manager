@@ -22,7 +22,7 @@ from .logbook import Warn
 from .manifest import valid_name
 from .preload import apply as put_in
 from .preload import contents, suggested_packages
-from .project import TYPE_NAMES, ProjectError, UnityProject, is_project
+from .project import TYPE_NAMES, ProjectError, UnityProject, disk_use, is_project
 from .repos import Selector
 from .version import UnityVersion, Version, VersionError, VersionRange
 
@@ -31,6 +31,7 @@ MAX_PACKAGES_LISTED = 5000
 HOARD_PACKAGE = "soloflighter.hoard"
 HOARD_REPO = "https://hoard.furryup.link/index.json"
 MAX_VERSIONS_LISTED = 2000   # (VRCFury alone has well over a thousand)
+SIZE_KEPT = 300   # seconds a project's size on disk is shown before it's counted again
 
 
 class ProjectsError(Exception):
@@ -43,6 +44,7 @@ class Service:
     def __init__(self):
         self._lock = threading.RLock()
         self._collection: repos.Collection | None = None
+        self._sizes: dict[str, tuple[float, dict]] = {}   # each project's size on disk, by path, as last counted
 
     def settings(self) -> environment.Settings:
         """The Creator Companion's settings; raises ProjectsError when they can't be read."""
@@ -109,6 +111,35 @@ class Service:
                 if found and found.version > version:
                     newer.append(name)
             out[listed["path"]] = {"packages": len(newer), "names": newer[:20]}
+        return out
+
+    def about(self, path: str) -> dict:
+        """A project's details beside Projects' list: its size on disk (counted again after a few minutes), its
+        packages, each with any newer version, the products Hoard put in it, and its backups."""
+        path = self.listed(path)
+        counted = self._sizes.get(path)
+        if counted is None or time.time() - counted[0] > SIZE_KEPT:
+            counted = (time.time(), disk_use(path))
+            self._sizes[path] = counted
+        out = {"path": path, "size": counted[1], "packages": [], "own_packages": 0}
+        try:
+            p = UnityProject.load(path)
+            coll, show_pre = self.collection(), self.settings().show_prerelease()
+            out["packages"] = [self._package_row(coll, p, name, version, p.installed.get(name), own=False, show_pre=show_pre)
+                               for name, (version, _deps) in sorted(p.locked.items())]
+            out["own_packages"] = sum(1 for _name, pkg in p.unlocked if pkg is not None)
+        except (ProjectError, ProjectsError, OSError, ValueError):
+            pass   # (a project that can't be read just now: its size still shows)
+        state = listing.load_state()["projects"].get(listing._key(path), {})
+        out["preloaded"] = [{"tag_key": i.get("tag_key"), "name": i.get("name"), "when": i.get("when")}
+                            for i in state.get("preloaded") or [] if isinstance(i, dict)]
+        out["backed_up"] = state.get("backed_up")
+        prefs, name = listing.backup_prefs(), Path(path).name.lower()
+        moved = Path(prefs["moved_to"]) if prefs["moved_to"] and Path(prefs["moved_to"]).is_dir() else None
+        mine = [b for b in backup.found(self.backups_folder()) if b["project"].lower() == name]
+        away = [b for b in backup.found(moved) if b["project"].lower() == name] if moved else []
+        out["backups"] = {"count": len(mine), "size": sum(b["size"] for b in mine), "newest": mine[0]["when"] if mine else None,
+                          "moved": len(away)}
         return out
 
     @staticmethod

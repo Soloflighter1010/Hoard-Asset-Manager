@@ -17,19 +17,25 @@ favourite, at the top of the list. From 5.2.0 beta 2, a project also shows what'
 of its packages have newer versions (outlined), and how many products from your library in it have updates (filled,
 from what [Hoard for Unity](Hoard-for-Unity) reported of it).
 
-Choose a project to open its details beside the list (5.2.0 beta 2): where it is, its folder and tags, what's new
-(each leads to it: its packages in **Manage**, its products in what Hoard for Unity reported), and its buttons:
-**Open in Unity**, **Manage** (its packages and more), **Show in folder**, **Folder and tags...** and the favourite.
-Choose it again, or **×**, to put them away. A project whose folder has gone (moved, or on a drive that isn't
-connected) says so, with **Take off the list** in its details.
+Choose a project to open its details beside the list (5.2.0 beta 2), as a product's open beside the Library: its
+letters in its kind's colour, where it is, its size on disk, when it was last opened and made, how many packages and
+backups it has, and what's new (each leads to it: its packages in **Manage**, its products in what Hoard for Unity
+reported). Then **Open in Unity**, **Manage** (its packages and more) and **Show in folder**; under **Organise**, the
+favourite, **Back up...** and **Take off the list**; its folder and tags, changed right there; what takes its room
+(its assets, its packages, Unity's cache, and everything else); its packages, each with any newer version; what Hoard
+put in it from your library; and its backups, with **Back up...** and **See backups**. Unity's cache (its `Library`
+and `Temp` folders) is made again when the project's opened, and a backup leaves it out. Choose the project again, or
+**×**, to put its details away. A project whose folder has gone (moved, or on a drive that isn't connected) says so,
+with **Take off the list** in its details.
 
 **List** and **Tiles** (beside **Add a project...**, 5.2.0 beta 2) choose how the list shows, as ALCOM's and the
-Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, and
-(with all projects shown) each folder is one folder tile, with its projects inside: choose it to see them.
+Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, twice
+as wide as it's tall, and (with all projects shown) each folder is one folder tile, with its projects inside: choose it
+to see them.
 
-**Folder and tags...** (5.2.0) puts a project in a folder of your own and gives it tags: words to find it by, such
-as `quest` or `poiyomi`, with commas between them. They're Hoard's own (the Creator Companion and ALCOM have only a
-favourite). Once a project is in a folder, the folders show above the list: choose one to see just its projects,
+A project's details (5.2.0) put it in a folder of your own (**Folder**: one you have, **New folder...**, or **Not in
+a folder**) and give it tags (**Tags**: type one and **Add**, or **×** to take one off): words to find it by, such as
+`quest` or `poiyomi`. They're Hoard's own (the Creator Companion and ALCOM have only a favourite). Once a project is in a folder, the folders show above the list: choose one to see just its projects,
 **Not in a folder** for the rest, or **All projects**. Choose a tag in a project's details to see those that have it,
 and choose it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
 

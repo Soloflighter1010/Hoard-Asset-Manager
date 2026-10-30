@@ -235,6 +235,44 @@ def summary(folder) -> dict:
     return {"exists": True, "unity": str(unity) if unity else None, "type": kind}
 
 
+# What a project's folders hold, for its size on disk: Unity's own cache (made again when the project's opened, and
+# left out of a backup) apart from what's yours
+DISK_PARTS = {"assets": "assets", "packages": "packages", "library": "cache", "temp": "cache", "logs": "cache", "obj": "cache"}
+MAX_COUNTED = 2_000_000   # files: a size counted past this many says it's at least that
+
+
+def disk_use(folder) -> dict:
+    """How much room a project takes on its drive (its details beside Projects' list): {total, assets, packages,
+    cache, other, files, complete}. Links and junctions aren't followed (what they lead to isn't the project's)."""
+    from ..safety import _is_link
+    out = {"total": 0, "assets": 0, "packages": 0, "cache": 0, "other": 0, "files": 0, "complete": True}
+    stack = [(Path(folder), "other", True)]
+    while stack:
+        here, part, top = stack.pop()
+        try:
+            entries = list(os.scandir(here))
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                st = e.stat(follow_symlinks=False)
+                if _is_link(st):
+                    continue
+                where = DISK_PARTS.get(e.name.lower(), "other") if top else part
+                if e.is_dir(follow_symlinks=False):
+                    stack.append((Path(e.path), where, False))
+                    continue
+            except OSError:
+                continue
+            out[where] += st.st_size
+            out["total"] += st.st_size
+            out["files"] += 1
+            if out["files"] >= MAX_COUNTED:
+                out["complete"] = False
+                return out
+    return out
+
+
 def dumps_manifest(project: UnityProject) -> str:
     """The project's vpm-manifest.json, as it would be written now."""
     return json.dumps(project.manifest_json(), indent=2)

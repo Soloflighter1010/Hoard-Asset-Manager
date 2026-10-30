@@ -414,7 +414,7 @@ MAX_CONNECTIONS = 64      # at once; more are closed straight away, so held-open
 
 # Projects' requests, as Projects' log names one it couldn't do (hoard/vpm/logbook.py); those not here (a name checked
 # as it's typed, a product's contents, the log itself) aren't logged
-VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading a project",
+VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading a project", "/api/vpm/about": "Reading a project",
                "/api/vpm/packages": "Reading the packages", "/api/vpm/versions": "Reading a package's versions",
                "/api/vpm/preview": "Working out the changes", "/api/vpm/apply": "Changing packages",
                "/api/vpm/create": "New project", "/api/vpm/preload": "Putting products in", "/api/vpm/backup": "Back up",
@@ -1630,6 +1630,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**found, "report": report}, compress=True)
             if path == "/api/vpm/updates":   # issue #253: each project's packages with newer versions, for the list
                 return self._json({"projects": srv.vpm.updates()}, compress=True)
+            if path == "/api/vpm/about":   # a project's details beside the list: its size on disk, packages, backups
+                found = srv.vpm.about(one("path"))
+                hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
+                found["preloaded"] = [x for x in found["preloaded"] if x.get("tag_key") not in hidden]
+                return self._json(found, compress=True)
             if path == "/api/vpm/packages":
                 return self._json({"packages": srv.vpm.packages(one("unity"), one("pre") == "1")}, compress=True)
             if path == "/api/vpm/versions":

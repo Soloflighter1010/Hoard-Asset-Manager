@@ -74,9 +74,9 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 * { scrollbar-width: thin; scrollbar-color: var(--seam) transparent; }
 
 /* top bar: the logo with the search beside it, and on the other side the pages (Library, Downloads, Local, Sets and
-   Wishlists, Tasks, Projects), then Menu and Sync (issue #236). When they don't fit beside the search, fitBar
-   (shared.js) puts the search on a row of its own under them, and when they don't fit side by side either, each side
-   on a row of its own: nothing hides. */
+   Wishlists, Tasks, Projects), then Menu and Sync (issue #236). In a wide window the search is in the middle of it.
+   When they don't fit beside the search, fitBar (shared.js) puts the search on a row of its own under them, and when
+   they don't fit side by side either, each side on a row of its own: nothing hides. */
 .bar {
   position: sticky; top: 0; z-index: 10; min-height: 72px;   /* not --bar-h: that is measured from the bar, so it could only ever grow */
   display: grid; grid-template-columns: auto minmax(220px, 1fr) auto; align-items: center;
@@ -86,6 +86,8 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .bar-end { justify-content: flex-end; }
 .bar > .search { justify-self: start; width: min(100%, 560px); }   /* (beside the logo) */
 .bar-side .apptabs + .apptabs { margin-left: -8px; }   /* (the pages in one row: the gap between their tabs) */
+.bar[data-fit="centre"] { grid-template-columns: minmax(0, 1fr) var(--bar-middle, 560px) minmax(0, 1fr); }
+.bar[data-fit="centre"] > .search { justify-self: stretch; width: auto; }   /* (in the middle of the window) */
 .bar[data-fit="rows"] { grid-template-columns: auto auto; justify-content: space-between; }
 .bar[data-fit="rows"] .search { grid-row: 2; grid-column: 1 / -1; justify-self: start; width: min(100%, 720px); }
 .bar[data-fit="stack"] { grid-template-columns: minmax(0, 1fr); }
@@ -1000,13 +1002,8 @@ body.no-glow .projects.win { background: var(--cave); }
 .pj-acts > button { width: auto; margin: 0; }
 /* issue #190: the list's folders, one shown at a time, and each project's tags */
 .pj-folders { margin: 2px 0 10px; }
-.pj-tags { display: flex; flex-wrap: wrap; gap: 0 10px; }
-.pj-tags .chip { font-size: 12.5px; font-weight: 600; }
 .pj-in { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; }
 .pj-in svg { width: 14px; height: 14px; flex: none; }
-dialog.ask .pj-orgf { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-weight: 700; font-size: 13.5px; }
-dialog.ask .pj-orgf input { font-weight: 400; }
-dialog.ask .pj-orgf + .hint { margin: 4px 0 0; font-size: 13px; color: var(--dust); }
 @media (max-width: 640px) {
   .pj-row, .pj-row:not(:has(.pj-star)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "what" "acts"; }
   .pj-row .pj-star { position: absolute; }

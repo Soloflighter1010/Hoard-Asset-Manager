@@ -1003,9 +1003,10 @@ function openBarMenu(first = false) {
   $(".bar").classList.add("menu-up");   // (above an open panel and its shade, which the menu drops over)
   if (first) m.querySelector("button").focus();
 }
-/** Which way the bar fits: "" (the search in the middle, a side either side of it), "rows" (the sides on one row,
- *  the search under them) or "stack" (each side on a row of its own, then the search). Worked out from how wide each
- *  side is on one line, which doesn't change with the way it's laid out, so it doesn't flip back and forth. */
+/** Which way the bar fits: "centre" (a wide window: the search in the middle of it), "" (the search beside the logo,
+ *  the pages and tools on the other side), "rows" (the sides on one row, the search under them) or "stack" (each side
+ *  on a row of its own, then the search). Worked out from how wide each side is on one line, which doesn't change with
+ *  the way it's laid out, so it doesn't flip back and forth. */
 function fitBar() {
   const bar = $(".bar");
   if (!bar || !bar.offsetWidth) return;
@@ -1021,7 +1022,11 @@ function fitBar() {
   };
   const [left, right] = [...bar.querySelectorAll(":scope > .bar-side")].map(wide);
   const room = bar.getBoundingClientRect().width - px(bar, "paddingLeft", "paddingRight"), gap = px(bar, "columnGap");
-  const fit = left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
+  // a wide window: the search in the middle of it (both sides as wide as the wider one, the search what's left, up to
+  // its whole width); else beside the logo, as wide as there's room for
+  const middle = Math.min(560 * scale, room - 2 * Math.max(left, right) - 2 * gap);
+  const fit = middle >= 420 * scale ? "centre" : left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
+  bar.style.setProperty("--bar-middle", `${Math.floor(Math.max(0, middle) / scale)}px`);
   if ((bar.dataset.fit || "") !== fit) { if (fit) bar.dataset.fit = fit; else delete bar.dataset.fit; }
 }
 // The top bar's menu button and its keys, and fitting the bar to the window.
@@ -2691,6 +2696,7 @@ const PJ = { view: "list", data: null, project: null, find: "", form: null, asse
   job: {},               // what Projects' own lane is doing (it runs beside the rest of Hoard's tasks)
   folder: null, tag: "",   // issue #190: the list's folder shown (null: all of them, "": those in none) and tag
   selected: null,          // issue #246: the project whose details are open beside the list (its path)
+  about: null, aboutError: false,   // its size on disk, packages and backups, as /api/vpm/about read them
   updates: null };         // issue #253: each project's packages with newer versions, by path (/api/vpm/updates)
 const PJ_KINDS = { 0: "Unknown", 1: "Legacy SDK2", 2: "Legacy Worlds", 3: "Legacy Avatars", 4: "UPM Worlds", 5: "UPM Avatars",
   6: "UPM Starter", 7: "Worlds", 8: "Avatars", 9: "VPM Starter" };
@@ -2707,6 +2713,8 @@ const pjChips = p => `<span class="pj-chip k-${pjHue(p.type)}">${esc(pjKind(p.ty
   (p.unity ? ` <span class="pj-chip unity" translate="no">Unity ${esc(p.unity)}</span>` : "");
 // A project's path, for a request's address.
 const pjQ = path => `?path=${encodeURIComponent(path)}`;
+// A project's name, by its path (the list's, or the project open).
+const pjNamed = path => ((PJ.data && PJ.data.projects || []).find(x => x.path === path) || PJ.project || {}).name || "";
 function openProjects(open) {   // Projects takes the whole window below the bar, until it's closed
   const w = $("#projectsWin"), show = open ?? w.hidden;
   w.hidden = !show;
@@ -2737,6 +2745,7 @@ async function loadProjects(view) {
     if (PJ.view === "backups") await pjLoadBackups();
     drawProjects();
     pjLoadUpdates();   // (issue #253: read after the list, which shows at once)
+    if (PJ.selected && PJ.view === "list") pjLoadAbout(PJ.selected);   // (its details: what a task may have changed)
   } catch (e) { body.innerHTML = `<p class="none">${esc(tr("Projects couldn't be read just now."))} ${esc(e.message || "")}</p>`; }
   finally { if (pjSplashing) pjSplashing(); }
 }
@@ -2856,24 +2865,94 @@ function pjUpdateMarks(p) {
       `${esc(tr(u.products === 1 ? "1 product updated" : "{0} products updated", u.products))}</span>` : "") +
     (u.packages || u.products ? `</span>` : "");
 }
-// A project's details (issue #246), beside the list: what it is, where, its folder and tags, what's new, and what to do.
+/* A project's details (issue #246), beside the list as a product's are beside the Library: its picture (its letters,
+   in its kind's colour), what it is and where, what's new, what to do, its folder and tags (changed right there), and
+   what /api/vpm/about reads once it's open: its size on disk, its packages, what Hoard put in it, and its backups */
 function pjDetail(p) {
-  const u = pjUpdates(p), rep = pjReportOf(p);
-  return `<aside class="pj-detail" data-path="${esc(p.path)}"${rep ? ` data-report="${esc(rep.id)}"` : ""} aria-label="${esc(p.name)}">` +
-    `<button class="win-x" data-pj="undetail" aria-label="${esc(tr("Close"))}">×</button>` +
-    `<h3 class="pj-h"><b translate="no">${esc(p.name)}</b></h3><p class="meta" translate="no">${esc(p.path)}</p>` +
-    `<p>${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}</p>` +
-    `<p class="muted">${p.folder ? `${FOLDER_ICON} <span translate="no">${esc(p.folder)}</span>` : esc(tr("Not in a folder"))}</p>` +
-    ((p.tags || []).length ? `<p class="pj-tags">${p.tags.map(t => `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" ` +
-      `aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>`).join("")}</p>` : "") +
-    (u.packages ? `<p><button class="linkish pj-up-go" data-pj="manage">${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}</button></p>` : "") +
-    (u.products ? `<p><button class="linkish pj-up-go" data-pj="report">${esc(tr(u.products === 1 ? "1 product in it has an update" : "{0} products in it have updates", u.products))}</button></p>` : "") +
-    `<div class="row">${p.exists ? `<button class="primary sm" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
-      `<button class="ghost sm" data-pj="manage">${esc(tr("Manage"))}</button>` +
-      `<button class="ghost sm" data-pj="folder">${esc(tr("Show in folder"))}</button>`
-      : `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>`}` +
-    `<button class="ghost sm" data-pj="organize">${esc(tr("Folder and tags..."))}</button>` +
-    `<button class="ghost sm" data-pj="star" aria-pressed="${p.favorite}">${esc(tr(p.favorite ? "Favourite" : "Make it a favourite"))}</button></div></aside>`;
+  const u = pjUpdates(p), rep = pjReportOf(p), folders = pjFolders(PJ.data.projects || []).map(([f]) => f);
+  return `<aside class="pj-detail k-${pjHue(p.type)}" data-path="${esc(p.path)}"${rep ? ` data-report="${esc(rep.id)}"` : ""} aria-label="${esc(p.name)}">` +
+    `<button class="win-x" data-pj="undetail" aria-label="${esc(tr("Close details"))}">×</button>` +
+    `<div class="pj-d-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></div>` +
+    `<h2 class="pj-d-name" translate="no">${esc(p.name)}</h2><p class="pj-d-path" translate="no">${esc(p.path)}</p>` +
+    `<p class="pj-d-kind">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</p>` +
+    pjFacts(p) +
+    (u.packages ? `<p class="pj-d-new"><button class="linkish pj-up-go" data-pj="manage">${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}</button></p>` : "") +
+    (u.products ? `<p class="pj-d-new"><button class="linkish pj-up-go" data-pj="report">${esc(tr(u.products === 1 ? "1 product in it has an update" : "{0} products in it have updates", u.products))}</button></p>` : "") +
+    `<div class="actions">${p.exists ? `<button class="primary" data-pj="unity">${esc(tr("Open in Unity"))}</button>` +
+      `<button class="ghost" data-pj="manage">${esc(tr("Manage"))}</button>` +
+      `<button class="ghost" data-pj="folder">${esc(tr("Show in folder"))}</button>` : ""}</div>` +
+    `<h3>${esc(tr("Organise"))}</h3><div class="marks">` +
+      `<button class="ghost sm" data-pj="star" aria-pressed="${p.favorite}">${esc(tr(p.favorite ? "Favourite" : "Make it a favourite"))}</button>` +
+      (p.exists ? `<button class="ghost sm" data-pj="backup">${esc(tr("Back up..."))}</button>` : "") +
+      `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button></div>` +
+    `<h3><label for="pjDFolder">${esc(tr("Folder"))}</label></h3>` +
+    `<select id="pjDFolder" class="pj-d-folder"><option value="">${esc(tr("Not in a folder"))}</option>` +
+      folders.map(f => `<option value="${esc(f)}"${f === p.folder ? " selected" : ""} translate="no">${esc(f)}</option>`).join("") +
+      `<option value="+" data-new>${esc(tr("New folder..."))}</option></select>` +
+    `<h3>${esc(tr("Tags"))}</h3><div class="chips">${(p.tags || []).map(t => `<span class="tagpill">` +
+      `<button class="chip" data-pj="tagpick" data-tag="${esc(t)}" aria-pressed="${PJ.tag === t}" translate="no">${esc(t)}</button>` +
+      `<button class="untag" data-pj="untag" data-tag="${esc(t)}" aria-label="${esc(tr("Remove the tag {0}", t))}">×</button></span>`).join("") ||
+      `<span class="none">${esc(tr("No tags yet"))}</span>`}</div>` +
+    `<div class="tagadd"><input id="pjTagInput" maxlength="40" placeholder="${esc(tr("Add a tag"))}" aria-label="${esc(tr("Add a tag"))}">` +
+      `<button class="ghost sm" data-pj="tagadd">${esc(tr("Add"))}</button></div>` +
+    `<div class="pj-d-about">${pjAboutHTML(p)}</div></aside>`;
+}
+// What a project's details say at a glance: its size on disk, when it was opened and made, its packages and backups.
+function pjFacts(p) {
+  const a = PJ.about && PJ.about.path === p.path ? PJ.about : null, reading = tr("Reading...");
+  const size = !a ? reading : a.size.complete ? sizeText(a.size.total) : tr("over {0}", sizeText(a.size.total));
+  return `<dl class="pj-facts">` + [["Size on disk", size],
+    ["Opened", p.opened ? ago(new Date(p.opened).toISOString()) : "—"], ["Made", p.created ? shortDay(new Date(p.created).toISOString()) : "—"],
+    ["Packages", a ? String(a.packages.length + a.own_packages) : reading], ["Backups", a ? String(a.backups.count) : reading]]
+    .map(([k, v]) => `<div><dt>${esc(tr(k))}</dt><dd>${esc(v)}</dd></div>`).join("") + `</dl>`;
+}
+// The rest of a project's details, once they're read: what takes its room, its packages, what Hoard put in it from your
+// library (and what Hoard for Unity found there), and its backups.
+function pjAboutHTML(p) {
+  const a = PJ.about && PJ.about.path === p.path ? PJ.about : null;
+  if (!p.exists) return "";
+  if (!a) return `<p class="muted">${esc(tr(PJ.aboutError ? "Its size and packages couldn't be read just now." : "Reading its size and packages..."))}</p>`;
+  const s = a.size, most = Math.max(1, s.assets, s.packages, s.cache, s.other);
+  const parts = [["Assets", s.assets], ["Packages", s.packages], ["Unity's cache", s.cache], ["Everything else", s.other]];
+  const newer = a.packages.filter(x => x.latest), shown = [...newer, ...a.packages.filter(x => !x.latest)].slice(0, 12);
+  const rep = pjReportOf(p), updated = ((rep || {}).assets || []).filter(x => x.update);
+  const put = [...new Map(a.preloaded.filter(x => x.name).map(x => [x.tag_key || x.name, x])).values()].reverse();
+  const b = a.backups;
+  return `<h3>${esc(tr("Size on disk"))}</h3><ul class="pj-sizes">` + parts.map(([k, n]) =>
+      `<li><span>${esc(tr(k))}</span><b>${esc(sizeText(n))}</b><i style="--w:${(100 * n / most).toFixed(1)}%" aria-hidden="true"></i></li>`).join("") + `</ul>` +
+    `<p class="sub">${esc(tr("Unity's cache (Library and Temp) is made again when the project's opened, and isn't in a backup."))}</p>` +
+    `<h3>${esc(tr("Packages"))}</h3>` + (shown.length ? `<ul class="pj-d-list">` + shown.map(x => `<li><span translate="no">${esc(x.label || x.name)}</span>` +
+      `<span class="v" translate="no">${esc(x.version)}${x.latest ? ` <b class="pj-up pkg">→ ${esc(x.latest)}</b>` : ""}</span></li>`).join("") + `</ul>` +
+      (a.packages.length > shown.length ? `<p class="sub"><button class="linkish" data-pj="manage">${esc(tr("All {0} in Manage", a.packages.length))}</button></p>` : "")
+      : `<p class="none">${esc(tr("No packages from repositories"))}</p>`) +
+    (a.own_packages ? `<p class="sub">${esc(tr(a.own_packages === 1 ? "and 1 package of its own" : "and {0} packages of its own", a.own_packages))}</p>` : "") +
+    `<h3>${esc(tr("From your library"))}</h3>` + (put.length ? `<ul class="pj-d-list">` + put.slice(0, 10).map(x => `<li><span translate="no">${esc(x.name)}</span>` +
+      `<span class="v">${esc(shortDay(x.when))}</span></li>`).join("") + `</ul>` : `<p class="none">${esc(tr("Nothing put in by Hoard yet"))}</p>`) +
+    (put.length > 10 ? `<p class="sub">${esc(tr("and {0} more", put.length - 10))}</p>` : "") +
+    (rep ? `<p class="sub"><button class="linkish" data-pj="report">${esc(tr(updated.length ? "What Hoard for Unity found in it, with updates" : "What Hoard for Unity found in it"))}</button></p>` : "") +
+    `<h3>${esc(tr("Backups"))}</h3><p>${esc(b.count ? tr(b.count === 1 ? "1 backup, {1}, made {2}" : "{0} backups, {1}, the newest made {2}", b.count, sizeText(b.size), shortDay(b.newest))
+      : tr("No backups yet"))}${b.moved ? ` ${esc(tr(b.moved === 1 ? "(and 1 moved to another drive)" : "(and {0} moved to another drive)", b.moved))}` : ""}</p>` +
+    `<div class="marks"><button class="ghost sm" data-pj="backup">${esc(tr("Back up..."))}</button>` +
+      `<button class="ghost sm" data-pj="backups">${esc(tr("See backups"))}</button></div>`;
+}
+// Read a project's size, packages and backups for its details, then show them (if it's still the one open).
+async function pjLoadAbout(path) {
+  PJ.aboutError = false;
+  const r = await api("/api/vpm/about" + pjQ(path), { cache: "no-store" }).catch(() => null);
+  const data = r && r.ok ? await r.json().catch(() => null) : null;
+  if (PJ.selected !== path) return;
+  if (data) PJ.about = data; else PJ.aboutError = true;
+  const panel = $("#projectsBody .pj-detail"), p = (PJ.data.projects || []).find(x => x.path === path);
+  if (!panel || !p || panel.dataset.path !== path) return;
+  panel.querySelector(".pj-facts").outerHTML = pjFacts(p);
+  panel.querySelector(".pj-d-about").innerHTML = pjAboutHTML(p);
+}
+// A project's folder or tags, changed in its details: saved, and the list drawn again.
+async function pjOrganizeSome(path, change) {
+  const r = await apiPost("/api/vpm/organize", { path, ...change });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  if (r.data.folder && PJ.folder != null && PJ.folder !== r.data.folder) PJ.folder = r.data.folder;   // (shown where it went)
+  return loadProjects();
 }
 // Read each project's packages with newer versions, once the list is shown (then draw it again with them).
 async function pjLoadUpdates() {
@@ -2907,28 +2986,6 @@ function pjFolderBar(list) {
       (loose ? chip(-2, tr("Not in a folder"), loose, PJ.folder === "") : "") : "") +
     (PJ.tag ? `<button class="chip" data-pj="tagpick" data-tag="${esc(PJ.tag)}" aria-pressed="true" translate="no" ` +
       `aria-label="${esc(tr("Stop showing only {0}", PJ.tag))}">${esc(PJ.tag)} ×</button>` : "") + `</div>`;
-}
-async function pjOrganize(p) {   // a project's folder and tags, as a dialog
-  const folders = pjFolders(PJ.data.projects || []).map(([f]) => f);
-  const dlgP = pjDialog(`<p><b translate="no">${esc(p.name)}</b> <span class="muted">${esc(tr("Folder and tags"))}</span></p>` +
-    `<label class="pj-orgf">${esc(tr("Folder"))}<input id="pjOrgFolder" list="pjOrgFolders" maxlength="60" autocomplete="off" value="${esc(p.folder || "")}">` +
-    `<datalist id="pjOrgFolders">${folders.map(f => `<option value="${esc(f)}">`).join("")}</datalist></label>` +
-    `<p class="hint">${esc(tr("Projects in a folder are shown together. Leave it empty for none."))}</p>` +
-    `<label class="pj-orgf">${esc(tr("Tags"))}<input id="pjOrgTags" maxlength="600" autocomplete="off" value="${esc((p.tags || []).join(", "))}"></label>` +
-    `<p class="hint">${esc(tr("Words to find it by, with commas between them (up to 12)."))}</p>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Save"))}</button></div>`);
-  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
-  dlg.querySelectorAll("input").forEach(el => el.addEventListener("keydown", e => {   // (Enter saves, not Cancel)
-    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); dlg.close("yes"); }
-  }));
-  const res = await dlgP;
-  if (!res.ok) return;
-  const folder = res.dlg.querySelector("#pjOrgFolder").value.trim();
-  const tags = res.dlg.querySelector("#pjOrgTags").value.split(/[,、，]/).map(t => t.trim()).filter(Boolean);
-  const r = await apiPost("/api/vpm/organize", { path: p.path, folder, tags });
-  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
-  if (r.data.folder && PJ.folder != null && PJ.folder !== r.data.folder) PJ.folder = r.data.folder;   // (shown where it went)
-  return loadProjects();
 }
 // Projects Hoard for Unity reported (opened in Unity with Hoard's window) that aren't on the list: what's in them,
 // and their credits, with a button to list them
@@ -3779,9 +3836,23 @@ async function pjAct(b) {
   }
   if (act === "tagpick") { PJ.tag = PJ.tag === b.dataset.tag ? "" : b.dataset.tag; return drawProjects(); }
   if (act === "details") {   // a project's details, beside the list (issue #246); chosen again, put away
-    PJ.selected = PJ.selected === path ? null : path; drawProjects();
+    PJ.selected = PJ.selected === path ? null : path;
+    if (!PJ.about || PJ.about.path !== PJ.selected) PJ.about = null;
+    drawProjects();
     const panel = $("#projectsBody .pj-detail");
     if (panel) panel.querySelector(".win-x").focus();
+    if (PJ.selected) pjLoadAbout(PJ.selected);
+    return;
+  }
+  if (act === "untag" || act === "tagadd") {   // a project's tags, changed in its details
+    const p = (PJ.data.projects || []).find(x => x.path === path), input = $("#pjTagInput");
+    if (!p) return;
+    const typed = act === "tagadd" ? (input ? input.value.trim() : "") : "";
+    if (act === "tagadd" && !typed) { if (input) input.focus(); return; }
+    const tags = act === "untag" ? (p.tags || []).filter(t => t !== b.dataset.tag) : [...(p.tags || []), typed];
+    await pjOrganizeSome(path, { tags });
+    const again = $("#pjTagInput");
+    if (act === "tagadd" && again) again.focus();   // (another one can be typed straight away)
     return;
   }
   if (act === "undetail") {
@@ -3791,11 +3862,6 @@ async function pjAct(b) {
     return;
   }
   if (act === "layout") { uiSave({ pj_layout: b.dataset.v }); return drawProjects(); }   // list or tiles (issue #250)
-  if (act === "organize") {
-    const p = (PJ.data.projects || []).find(x => x.path === path) || PJ.project;
-    if (p) await pjOrganize(p);
-    return;
-  }
   if (act === "star") {
     const on = b.getAttribute("aria-pressed") !== "true";
     await apiPost("/api/vpm/favorite", { path, on });
@@ -3813,7 +3879,7 @@ async function pjAct(b) {
     return;
   }
   if (act === "forget") {
-    if (!await ask(tr("Take {0} off the list? Its folder is left as it is, and you can add it again.", (row && row.querySelector("b") || {}).textContent || PJ.project.name), tr("Take off"))) return;
+    if (!await ask(tr("Take {0} off the list? Its folder is left as it is, and you can add it again.", pjNamed(path)), tr("Take off"))) return;
     const r = await apiPost("/api/vpm/remove-project", { path });
     if (!r.ok) toast(r.data.error || tr("That can't be done."));
     PJ.view = "list"; PJ.project = null;
@@ -3832,7 +3898,7 @@ async function pjAct(b) {
     return loadProjects();
   }
   if (act === "backup") {
-    const res = await pjDialog(`<p>${esc(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", PJ.project.name))}</p>` +
+    const res = await pjDialog(`<p>${esc(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path)))}</p>` +
       `<label class="check"><input type="checkbox" id="pjLeaveOut"> ${esc(tr("Leave out packages from repositories (they're downloaded again when it's opened)"))}</label>` +
       `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Back up"))}</button></div>`);
     if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.dlg.querySelector("#pjLeaveOut").checked });
@@ -3985,6 +4051,13 @@ function wireProjects() {
   win.addEventListener("change", async e => {
     if (e.target.matches(".pj-addlist input[type=checkbox]")) return pjPickChanged(e.target);   // Add packages
     if (e.target.matches(".pj-addlist .pj-pick-ver")) { PJ.pick.set(e.target.dataset.name, e.target.value); return; }
+    if (e.target.id === "pjDFolder") {   // a project's folder, chosen in its details (or a new one named)
+      const path = e.target.closest("[data-path]").dataset.path, p = (PJ.data.projects || []).find(x => x.path === path);
+      const named = e.target.selectedOptions[0].hasAttribute("data-new");   // (New folder...)
+      const folder = named ? (await askName("Name the new folder", "", { max: 60 }) || "").trim() : e.target.value;
+      if ((named && !folder) || (p && (p.folder || "") === folder)) { e.target.value = (p && p.folder) || ""; return; }   // (left as it was)
+      return pjOrganizeSome(path, { folder });
+    }
     const sel = e.target.closest("[data-proj-style]");
     if (sel) { sel.closest(".proj").querySelector("textarea").value = pjShownReport().credits_text[sel.value]; return; }
     if (e.target.id === "pjOther" && e.target.value) {
@@ -4019,7 +4092,11 @@ function wireProjects() {
     PJ.busy = true;
     try { await pjAct(b); } finally { PJ.busy = false; }
   });
-  win.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "pjRepoUrl") { e.preventDefault(); $("[data-pj=addrepo]").click(); } });
+  win.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.target.id === "pjRepoUrl") { e.preventDefault(); $("[data-pj=addrepo]").click(); }
+    if (e.target.id === "pjTagInput") { e.preventDefault(); $("#projectsBody [data-pj=tagadd]").click(); }   // (a project's tag)
+  });
   win.addEventListener("change", async e => {   // the backups panel's rule for which are old
     if (e.target.id !== "pjBkKeep" && e.target.id !== "pjBkDays") return;
     const r = await apiPost("/api/vpm/backups/settings", { keep: Number($("#pjBkKeep").value), days: Number($("#pjBkDays").value) });

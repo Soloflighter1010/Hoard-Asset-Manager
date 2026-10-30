@@ -37,9 +37,12 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
    and what's new: packages outlined, products filled), and choosing one opens its details beside the list */
 .pj-layout { display: inline-flex; gap: 4px; margin-left: auto; }
 .pj-layout [aria-checked="true"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--gold); }
-.pj-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.pj-split.with-detail { grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); }
-@media (max-width: 900px) { .pj-split.with-detail { grid-template-columns: minmax(0, 1fr); } .pj-split .pj-detail { order: -1; position: static; } }
+.pj-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.pj-split.with-detail { grid-template-columns: minmax(0, 1fr) min(470px, 40%); }
+@media (max-width: 900px) {
+  .pj-split.with-detail { grid-template-columns: minmax(0, 1fr); }
+  .pj-split .pj-detail { order: -1; position: static; max-height: none; }
+}
 .pj-row:has(> .pj-open) { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "star open"; }
 .pj-open { grid-area: open; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main ups" "what ups";
   gap: 2px 12px; align-items: center; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left;
@@ -51,19 +54,50 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 .pj-up { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
 .pj-up.pkg { color: var(--gold-text); box-shadow: inset 0 0 0 1.5px var(--gold); }
 .pj-up.prod { background: var(--gold); color: var(--gold-ink); }
-.pj-detail { position: sticky; top: 8px; padding: 16px; border-radius: 14px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); min-width: 0; }
-.pj-detail .win-x { float: right; margin: -6px -6px 0 0; }
-.pj-detail .pj-h { margin: 0 32px 2px 0; overflow-wrap: anywhere; }
-.pj-detail .meta { overflow-wrap: anywhere; }
-.pj-detail p { margin: 6px 0; }
-.pj-detail p svg { width: 14px; height: 14px; vertical-align: -2px; }
-.pj-detail .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 14px; }
+/* a project's details: a panel beside the list, as tall as the window, as a product's are beside the Library */
+.pj-detail { position: sticky; top: 0; min-width: 0; max-height: calc(var(--vh) - var(--bar-h) - 76px); overflow: auto;
+  padding: 18px 24px 30px; border-radius: 16px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-detail.k-avatars { --c: var(--pj-avatars); } .pj-detail.k-worlds { --c: var(--pj-worlds); } .pj-detail.k-other { --c: var(--pj-other); }
+.pj-detail .win-x { position: sticky; top: 0; float: right; z-index: 1; margin: -4px -8px 0 0; }
+.pj-d-art { position: relative; clear: both; aspect-ratio: 2 / 1; max-height: 30vh; margin: 8px 0 0; display: grid; place-items: center;
+  border-radius: 14px; background: color-mix(in srgb, var(--c, var(--seam)) 22%, var(--stone)); box-shadow: inset 0 -6px 0 var(--c, var(--seam)); }
+.pj-d-art b { font: 400 64px var(--display); color: var(--bone); }
+.pj-d-art .pj-fav { top: 10px; left: 14px; font-size: 18px; }
+.pj-d-name { font: 400 26px/1.2 var(--display); margin: 18px 0 4px; padding: 0; border: 0; overflow-wrap: anywhere; }
+.pj-d-path { margin: 0; color: var(--dust); font-size: 13px; overflow-wrap: anywhere; }
+.pj-d-kind { margin: 10px 0 0; }
+.pj-d-new { margin: 8px 0 0; }
+.pj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 16px 0 0; }
+.pj-facts > div { padding: 8px 10px; border-radius: 12px; background: var(--stone); min-width: 0; }
+.pj-facts dt { font-size: 11.5px; color: var(--dust); }
+.pj-facts dd { margin: 1px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.pj-detail .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 4px; }
+.pj-detail .marks { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.pj-detail h3 { font: 700 13px var(--body); color: var(--dust); margin: 24px 0 10px; }
+.pj-detail .sub { font-size: 12px; color: var(--dust); margin: 8px 0 6px; }
+.pj-detail .chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.pj-detail .tagadd { display: flex; gap: 6px; margin-top: 12px; }
+.pj-detail .tagadd input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--stone);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; }
+.pj-detail .tagadd input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.pj-d-folder { width: 100%; }
+.pj-sizes, .pj-d-list { list-style: none; margin: 0; padding: 0; }
+.pj-sizes li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 5px 0; font-size: 14px; }
+.pj-sizes li b { font-weight: 700; }
+.pj-sizes li i { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--stone); position: relative; overflow: hidden; }
+.pj-sizes li i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); border-radius: inherit; background: var(--c, var(--gold)); }
+.pj-d-list li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 14px; }
+.pj-d-list li:first-child { border-top: 0; }
+.pj-d-list li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.pj-d-list .v { flex: none; color: var(--dust); }
+.pj-d-list .pj-up { margin-left: 4px; }
+/* issue #250's tiles, twice as wide as they're tall: a project's tile, and a folder's */
+.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 16px; }
 .pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
   text-align: left; font: inherit; cursor: pointer; }
 .pj-tile.k-avatars, .pj-mini i.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds, .pj-mini i.k-worlds { --c: var(--pj-worlds); }
 .pj-tile.k-other, .pj-mini i.k-other { --c: var(--pj-other); }
-.pj-tile-art { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;
+.pj-tile-art { position: relative; aspect-ratio: 2 / 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;
   background: color-mix(in srgb, var(--c, var(--seam)) 22%, var(--ledge)); box-shadow: inset 0 -5px 0 var(--c, var(--seam)); }
 .pj-tile-art b { font: 400 34px var(--display); color: var(--bone); }
 .pj-tile:hover .pj-tile-art { transform: translateY(-2px); }
@@ -75,8 +109,8 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 .pj-tile .pj-ups { justify-content: flex-start; }
 .pj-fav { position: absolute; top: 8px; left: 10px; font-style: normal; color: var(--gold-text); }
 .pj-folder-tile .pj-tile-art { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
-.pj-folder-tile .pj-tile-art > svg { width: 70%; height: 70%; color: var(--dust); }
-.pj-mini { position: absolute; inset: 40% 27% 27%; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.pj-folder-tile .pj-tile-art > svg { position: absolute; inset: 12% 0; margin: auto; width: auto; height: 76%; color: var(--dust); }
+.pj-mini { position: absolute; inset: 42% 39% 22%; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
 .pj-mini i { display: grid; place-items: center; border-radius: 4px; font: 700 10px var(--body); font-style: normal;
   background: color-mix(in srgb, var(--c) 45%, var(--stone)); color: var(--bone); }
 body.less-motion .pj-tile-art { transition: none; }
@@ -132,12 +166,14 @@ body.less-motion .pj-tile-art { transition: none; }
 /* Text over the glow (issues #240, #257). The glow rises behind the page in the stores' colours, so what's written where
    it shows (the sidebar, the footer, a tile's name and creator, a Workbench row) sits on the page's own colour with the
    glow faint through it, never on the glow itself: tests/test_themes.py checks it reads at 4.5:1 over the brightest
-   glow, in every theme. (Where there's no glow, it's the page's colour on itself: nothing shows.) */
+   glow, in every theme. (Where there's no glow, it's the page's colour on itself: nothing shows.) A tile's name and
+   creator share one box, the tile's width, under its picture. */
 .side, .foot, [data-style="workbench"] .grid .slot:not(:hover):not([aria-current="true"]) {
   background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
 html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm, .cr) {
-  width: fit-content; max-width: calc(100% + 8px); margin-inline: -4px; padding-inline: 4px; border-radius: 6px;
-  background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
+  padding-inline: 8px; background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
+html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm) { padding-top: 3px; border-radius: 8px 8px 0 0; }
+html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot .cr { margin-top: -7px; padding-block: 1px 4px; border-radius: 0 0 8px 8px; }
 .foot { padding: 18px 18px 20px; border-top: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--seam); }
 
 /* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */
