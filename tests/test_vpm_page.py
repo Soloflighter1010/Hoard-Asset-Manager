@@ -25,11 +25,25 @@ except ImportError:
 
 def pj_details(page, name):
     """A listed project's details (issue #246: its buttons are there, beside the list), opened from its row."""
-    panel = page.locator("#projectsBody .pj-detail", has=page.locator("b", has_text=name))
+    panel = page.locator("#projectsBody .pj-detail", has=page.locator(".pj-d-name", has_text=name))
     if not panel.count():
         page.locator(".pj-row", has_text=name).locator(".pj-open").click()
         panel.wait_for()
     return panel
+
+
+def pj_folder(page, name, folder):
+    """Put a listed project in a folder, in its details: one there is, a new one (named when it's chosen), or none ("")."""
+    choose = pj_details(page, name).locator("#pjDFolder")
+    if not folder:
+        choose.select_option(value="")
+    elif folder in choose.locator("option").all_inner_texts():
+        choose.select_option(label=folder)
+    else:
+        choose.select_option(label="New folder...")
+        page.fill("dialog[open] #askName", folder)
+        page.keyboard.press("Enter")
+    page.wait_for_function("f => PJ.data.projects.some(p => (p.folder || '') === f)", arg=folder)
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -100,29 +114,45 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 
     def test_a_projects_details(self):
-        """Issue #246: a row says what's needed at a glance; choosing it opens its details beside the list, where its
-        buttons are (Open in Unity, Manage, Show in folder, Folder and tags, a favourite), and Close puts them away."""
+        """Issue #246: a row says what's needed at a glance; choosing it opens its details beside the list, as a
+        product's open beside the Library: its picture (its letters, in its kind's colour), what it is, its size on
+        disk, Open in Unity, Manage and Show in folder, Organise, its folder and tags, what takes its room, its
+        packages, what Hoard put in it, and its backups; Close puts them away."""
         page = self.page
         row = page.locator(".pj-row", has_text="Rusk Avatar")
-        self.assertEqual(row.locator("[data-pj=unity], [data-pj=manage], [data-pj=organize]").count(), 0, "not on the row")
+        self.assertEqual(row.locator("[data-pj=unity], [data-pj=manage], [data-pj=backup]").count(), 0, "not on the row")
         panel = pj_details(page, "Rusk Avatar")
-        self.assertEqual(panel.locator(".row button").all_inner_texts(),
-                         ["Open in Unity", "Manage", "Show in folder", "Folder and tags...", "Make it a favourite"])
+        self.assertEqual(panel.locator(".pj-d-art b").inner_text(), "RA")
+        self.assertIn("k-avatars", panel.get_attribute("class"))
+        self.assertEqual(panel.locator(".actions button").all_inner_texts(), ["Open in Unity", "Manage", "Show in folder"])
+        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(), ["Make it a favourite", "Back up...", "Take off the list"])
         self.assertIn("Unity 2022.3.22f1", panel.inner_text())
         self.assertEqual(row.locator(".pj-open").get_attribute("aria-pressed"), "true")
+        # what's read once it's open: its size on disk (Unity's cache apart), its packages, and its backups
+        panel.locator(".pj-sizes").wait_for()
+        facts = dict(zip(panel.locator(".pj-facts dt").all_inner_texts(), panel.locator(".pj-facts dd").all_inner_texts()))
+        about = page.evaluate("PJ.about")
+        self.assertEqual(facts["Size on disk"], page.evaluate("n => sizeText(n)", about["size"]["total"]))
+        self.assertGreater(about["size"]["total"], 0)
+        self.assertEqual(facts["Packages"], str(len(about["packages"]) + about["own_packages"]))
+        self.assertEqual(facts["Backups"], str(about["backups"]["count"]))
+        self.assertEqual(panel.locator(".pj-sizes li span").all_inner_texts(), ["Assets", "Packages", "Unity's cache", "Everything else"])
+        self.assertEqual(panel.locator(".pj-d-list").first.locator("li").count(), min(12, len(about["packages"])))
+        backups = about["backups"]
+        self.assertGreater(backups["count"], 1, "(the sample's)")
+        self.assertIn(f"{backups['count']} backups, {page.evaluate('n => sizeText(n)', backups['size'])}, the newest made", panel.inner_text())
         panel.locator("[data-pj=undetail]").click()
         self.assertEqual(page.locator(".pj-detail").count(), 0)
         self.assertTrue(page.evaluate("document.activeElement.classList.contains('pj-open')"), "back to its row")
-        gone = pj_details(page, "Old World")
-        self.assertEqual(gone.locator(".row button").all_inner_texts(), ["Take off the list", "Folder and tags...", "Make it a favourite"])
+        gone = pj_details(page, "Old World")   # (its folder has gone: nothing to open, or read)
+        self.assertEqual(gone.locator(".actions button").count(), 0)
+        self.assertEqual(gone.locator(".marks button").all_inner_texts(), ["Make it a favourite", "Take off the list"])
+        self.assertEqual(gone.locator(".pj-d-about").inner_text(), "")
 
     def test_projects_as_tiles_with_folder_tiles(self):
         """Issue #250: projects as tiles (remembered), and a folder of them as one folder tile that opens to them."""
         page = self.page
-        pj_details(page, "Rusk Avatar").locator("[data-pj=organize]").click()
-        dlg = page.locator("dialog.ask[open]")
-        dlg.locator("#pjOrgFolder").fill("Avatars WIP")
-        dlg.locator(".primary").click()
+        pj_folder(page, "Rusk Avatar", "Avatars WIP")
         page.locator("#projectsBody .pj-folders").wait_for()
         page.click("[data-pj=layout][data-v=tiles]")
         page.locator(".pj-tiles").wait_for()
@@ -131,6 +161,9 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(folder.locator(".nm-t").inner_text(), "Avatars WIP")
         self.assertIn("1 project", folder.inner_text())
         self.assertEqual(page.locator(".pj-tile:not(.pj-folder-tile) .nm-t").all_inner_texts(), ["Old World"], "its project inside it")
+        for art in (".pj-folder-tile .pj-tile-art", ".pj-tile:not(.pj-folder-tile) .pj-tile-art"):   # twice as wide as tall
+            box = page.locator(art).first.bounding_box()
+            self.assertAlmostEqual(box["width"] / box["height"], 2, delta=0.05)
         page.click("[data-pj=undetail]")   # (its details were open from before: choosing it again would put them away)
         folder.click()
         page.wait_for_function("() => [...document.querySelectorAll('.pj-tile .nm-t')].map(e => e.textContent).join() === 'Rusk Avatar'")
@@ -170,18 +203,21 @@ class ProjectsPanel(unittest.TestCase):
 
     def test_folders_and_tags(self):
         """Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have
-        only a favourite): one folder shown at a time, a project's tags in its details, and each tag shows those with it."""
+        only a favourite): one folder shown at a time, a project's folder and tags changed in its details, and each tag
+        shows those with it."""
         page = self.page
-        pj_details(page, "Rusk Avatar").locator("[data-pj=organize]").click()
-        dlg = page.locator("dialog.ask[open]")
-        dlg.locator("#pjOrgFolder").fill("Avatars WIP")
-        dlg.locator("#pjOrgTags").fill("Quest, poiyomi,, quest")
-        dlg.locator("#pjOrgTags").press("Enter")   # (Enter saves)
+        pj_folder(page, "Rusk Avatar", "Avatars WIP")
+        tags = page.locator(".pj-detail .tagpill .chip")
+        for typed in ("Quest", "poiyomi", "quest"):   # (Enter adds one; a tag it has already isn't added twice)
+            page.fill("#pjTagInput", typed)
+            page.press("#pjTagInput", "Enter")
+            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n", arg=1 if typed == "Quest" else 2)
         bar = page.locator("#projectsBody .pj-folders")
         bar.wait_for()
         self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])
         rusk = page.locator(".pj-row", has_text="Rusk Avatar")
-        self.assertEqual(page.locator(".pj-detail .pj-tags .chip").all_inner_texts(), ["quest", "poiyomi"], "as tags are kept")
+        self.assertEqual(tags.all_inner_texts(), ["quest", "poiyomi"], "as tags are kept")
+        self.assertEqual(page.locator("#pjDFolder").input_value(), "Avatars WIP")
         self.assertIn("Avatars WIP", rusk.locator(".pj-what").inner_text())
         bar.locator(".chip", has_text="Avatars WIP").click()
         page.wait_for_function("() => document.querySelectorAll('.pj-items .pj-list .pj-row').length === 1")
@@ -191,7 +227,7 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => document.querySelector('.pj-items .pj-list .pj-row b').textContent === 'Old World'")
         bar.locator(".chip", has_text="All projects").click()
         # a tag: the projects that have it
-        page.locator(".pj-detail .pj-tags .chip", has_text="poiyomi").click()
+        tags.filter(has_text="poiyomi").click()
         page.wait_for_function("() => document.querySelectorAll('.pj-items .pj-list .pj-row').length === 1")
         self.assertEqual(bar.locator(".chip[aria-pressed=true]").all_inner_texts(), ["All projects2", "poiyomi ×"])
         page.fill("#pjFind", "wip")   # Find a project looks at its folder and tags too
@@ -199,14 +235,14 @@ class ProjectsPanel(unittest.TestCase):
         page.fill("#pjFind", "")
         bar.locator(".chip", has_text="poiyomi ×").click()
         page.wait_for_function("() => document.querySelectorAll('.pj-items .pj-list .pj-row').length === 2")
-        # emptied: out of the folder, and with no folder left, no folders to choose from
-        pj_details(page, "Rusk Avatar").locator("[data-pj=organize]").click()
-        self.assertEqual(dlg.locator("#pjOrgFolder").input_value(), "Avatars WIP")
-        dlg.locator("#pjOrgFolder").fill("")
-        dlg.locator("#pjOrgTags").fill("")
-        dlg.locator(".primary").click()
+        # emptied: out of the folder, and with no folder left, no folders to choose from; its tags taken off one by one
+        pj_folder(page, "Rusk Avatar", "")
         page.wait_for_function("() => !document.querySelector('#projectsBody .pj-folders')")
-        self.assertEqual(page.locator(".pj-detail .pj-tags").count(), 0)
+        for left in (1, 0):
+            page.locator(".pj-detail .tagpill .untag").first.click()
+            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n", arg=left)
+        self.assertEqual(tags.count(), 0)
+        self.assertIn("No tags yet", page.locator(".pj-detail").inner_text())
 
     def test_choosing_a_products_packages_in_steps(self):
         """Issue #199: a product with several packages: first which of them (each with its size, a variant marked,
@@ -272,7 +308,7 @@ class ProjectsPanel(unittest.TestCase):
         box = page.locator("#projectsWin .win-bar").bounding_box()
         self.assertGreater(box["height"], 0, "Projects' own bar, with its Close, stays above it")
         page.locator(".pj-open").first.click()   # nothing in the way once it's gone
-        page.locator(".pj-detail .row [data-pj=manage]").click()
+        page.locator(".pj-detail .actions [data-pj=manage]").click()
         page.locator("[data-pj=back]").first.wait_for()
 
         # the other page, in the same window: not straight away, and only once reading takes a while
@@ -346,7 +382,7 @@ class ProjectsPanel(unittest.TestCase):
         # Delete from this computer: the button waits for its name
         ran = []
         self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
-        pj_details(page, "Picked Project").locator(".row [data-pj=manage]").click()
+        pj_details(page, "Picked Project").locator(".actions [data-pj=manage]").click()
         page.click("[data-pj=delete]")
         sure = page.locator("dialog.pj-dlg", has_text="Delete Picked Project from this computer?")
         self.assertTrue(sure.locator("#pjDelBackup").is_checked(), "backed up first, unless you untick it")
@@ -371,7 +407,7 @@ class ProjectsPanel(unittest.TestCase):
             return "Done."
         self.addCleanup(going.set)
         self.srv.project_jobs.project_runner = slow
-        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
         page.click("[data-pj=backup]")
         page.locator("dialog.pj-dlg button[value=yes]").click()
         strip = page.locator("#pjJob")
@@ -384,7 +420,7 @@ class ProjectsPanel(unittest.TestCase):
 
     def test_a_project(self):
         page = self.page
-        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
         page.locator(".pj-pk").wait_for()
         text = page.locator("#projectsBody").inner_text()
         self.assertIn("Some packages aren't installed the way the project says.", text)
@@ -497,7 +533,7 @@ class ProjectsPanel(unittest.TestCase):
         page = self.page
         ran = []
         self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
-        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
         page.click("[data-pj=sub][data-sub=library]")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")
@@ -581,7 +617,7 @@ class ProjectsPanel(unittest.TestCase):
         page.route("**/api/vpm/repos/add", lambda route: added.append(json.loads(route.request.post_data)["url"]) or route.fulfill(json={"ok": True}))
         page.route("**/api/vpm/preview", lambda route: route.fulfill(status=400, json={"error": "(not in the sample)"}))
         self.srv.project_jobs.project_runner = lambda what: "Done."
-        pj_details(page, "Rusk Avatar").locator(".row [data-pj=manage]").click()
+        pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
         page.click("[data-pj=sub][data-sub=library]")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")

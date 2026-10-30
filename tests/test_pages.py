@@ -2746,7 +2746,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
     def test_the_bar_reads_logo_search_then_the_buttons(self):
         """Issues #203, #236: the bar reads the logo with the search beside it, then on the other side the pages
         (Library, Downloads, Local, Sets and Wishlists, Tasks, Projects), Menu and Sync, at every width, text size and
-        style; when there isn't room, the search goes under them, and nothing hides or overlaps."""
+        style; in a wide window the search is in the middle of it; when there isn't room, the search goes under them,
+        and nothing hides or overlaps."""
         page = self.open()
         check = """() => {
           const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
@@ -2759,7 +2760,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
               if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
           }
           const r = sel => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
-          const pages = r('.bar .apptabs > *'), tools = r('.bar .tools > *'), one = !document.querySelector('.bar').dataset.fit;
+          const fit = document.querySelector('.bar').dataset.fit || 'one', one = fit === 'one' || fit === 'centre';
+          const pages = r('.bar .apptabs > *'), tools = r('.bar .tools > *');
           const brand = document.querySelector('.bar .brand').getBoundingClientRect();
           const end = document.querySelector('.bar > .bar-end');
           const sides = { left: [...document.querySelector('.bar > .bar-side').querySelectorAll('a, button')].map(e => e.className),
@@ -2767,7 +2769,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
                           tools: [...end.querySelectorAll('.tools button, .tools a')].filter(e => e.getClientRects().length && !e.closest('.barmenu')).map(e => e.id) };
           const order = one ? brand.right <= search.left + 1 && pages.concat(tools).every(p => p.left >= search.right - 1)
                             : pages.concat(tools).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
-          return { order, wide: search.width, over, sides, fit: document.querySelector('.bar').dataset.fit || 'one' };
+          const middle = Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2);
+          return { order, wide: search.width, over, sides, fit, middle };
         }"""
         seen = set()
         for path in ("", "downloads"):
@@ -2776,7 +2779,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
                 page.locator("#menuBtn").wait_for()   # (nothing downloaded here)
                 page.wait_for_load_state("networkidle")
             for style in ("", "treasure", "workbench"):
-                for width, zoom in ((1800, 1), (1350, 1), (1000, 1), (700, 1), (420, 1), (1800, 1.5), (1000, 1.5)):
+                for width, zoom in ((2600, 1), (1800, 1), (1350, 1), (1000, 1), (700, 1), (420, 1), (1800, 1.5), (1000, 1.5)):
                     with self.subTest(path=path or "library", style=style or "standard", width=width, zoom=zoom):
                         page.set_viewport_size({"width": width, "height": 800})
                         page.evaluate(f"""() => {{ document.documentElement.style.zoom = '{zoom}';
@@ -2790,7 +2793,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
                         self.assertEqual([b for b in got["sides"]["tools"] if b != "filtersToggle"], ["menuBtn", "syncBtn"] if not path else ["menuBtn", "downloadNew"])
                         self.assertGreater(got["wide"], 150, got)
                         self.assertEqual(got["over"], [], got)
-        self.assertEqual(seen, {"one", "rows", "stack"}, "each way the bar fits was tried")
+                        if got["fit"] == "centre":   # (a wide window: the search in the middle of it, its whole width)
+                            self.assertLess(got["middle"], 3, got)
+                            self.assertGreater(got["wide"], 400, got)
+        self.assertEqual(seen, {"centre", "one", "rows", "stack"}, "each way the bar fits was tried")
         self.assertEqual(self.errors, [])
         page.close()
 
