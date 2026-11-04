@@ -443,6 +443,57 @@ class Server(unittest.TestCase):
         self.assertEqual([z.name.startswith("Old Idea-") for z in backups.glob("*.zip")], [True], "backed up first")
         self.assertNotIn(str(project), [p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"]])
 
+    def test_rename_a_project(self):
+        """Issue #290: its folder is renamed where it is, and it's listed where it was under its new name, with Hoard's
+        notes on it (favourite, folder, tags, what went in) and what Hoard for Unity reported; refused when it isn't on
+        the list, the name is taken or can't be a folder's, or Unity has it open."""
+        from hoard import projects as reports
+        from hoard.vpm import listing
+        unity = self.tmp / "Unity"
+        for name in ("Old Idea", "Taken", "Other"):
+            for sub in ("Assets", "Packages", "ProjectSettings"):
+                (unity / name / sub).mkdir(parents=True)
+            (unity / name / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        old, other = unity / "Old Idea", unity / "Other"
+        (old / "Assets" / "Scene.unity").write_text("scene")
+        body = {"path": str(old), "name": "Fresh Idea"}
+        self.assertEqual(self.call("POST", "/api/vpm/rename", body)[0], 400, "not on the list")
+        for p in (other, old):
+            self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(p)})[0], 200)
+        listing.note(str(old), favorite=True, preloaded=[{"tag_key": "booth/hoodie", "file": "Hoodie.unitypackage"}])
+        listing.organize(str(old), folder="Ideas", tags=["wip"])
+        reports.projects_dir().mkdir(parents=True, exist_ok=True)
+        (reports.projects_dir() / "aaaaaaaaaaaaaaaa.json").write_text(json.dumps(
+            {"format": "hoard-project", "version": 1, "name": "Old Idea", "path": str(old), "assets": []}))
+        for name, why in (("Taken", "A folder with that name is already there."), ("CON", "That name can't be used as a folder name."),
+                          ("a/b", "That name can't be used as a folder name."), ("", "That name can't be used as a folder name."),
+                          ("Old Idea", "That's its name already.")):
+            with self.subTest(name):
+                status, answer = self.call("POST", "/api/vpm/rename", {**body, "name": name})
+                self.assertEqual((status, answer.get("error")), (400, why))
+        (old / "Temp").mkdir()
+        (old / "Temp" / "UnityLockFile").write_text("")
+        with mock.patch("hoard.vpm.unity.project_open_in_unity", lambda folder: True):
+            status, answer = self.call("POST", "/api/vpm/rename", body)
+        self.assertEqual((status, answer.get("error")), (400, "Unity has this project open. Close it first."))
+        status, answer = self.call("POST", "/api/vpm/rename", body)
+        self.assertEqual(status, 200, answer)
+        fresh = unity / "Fresh Idea"
+        self.assertEqual(answer, {"ok": True, "path": str(fresh), "name": "Fresh Idea"})
+        self.assertFalse(old.exists())
+        self.assertEqual((fresh / "Assets" / "Scene.unity").read_text(), "scene", "the same folder, renamed")
+        listed = self.call("GET", "/api/vpm")[1]["projects"]
+        self.assertEqual(sorted(p["name"] for p in listed), ["Fresh Idea", "Other"])
+        self.assertEqual([Path(p).name for p in json.loads((self.vcc / "settings.json").read_text())["userProjects"]],
+                         ["Fresh Idea", "Other"], "where it was on the list")
+        mine = next(p for p in listed if p["name"] == "Fresh Idea")
+        self.assertEqual((mine["favorite"], mine["folder"], mine["tags"], mine["preloaded"]), (True, "Ideas", ["wip"], 1))
+        self.assertEqual([(r["name"], r["path"]) for r in reports.read_all()], [("Fresh Idea", str(fresh))])
+        # a change of case alone
+        status, answer = self.call("POST", "/api/vpm/rename", {"path": str(fresh), "name": "fresh idea"})
+        self.assertEqual((status, answer.get("name")), (200, "fresh idea"), answer)
+        self.assertEqual(sorted(p.name for p in unity.iterdir()), ["Other", "Taken", "fresh idea"])
+
     def test_a_deleted_project_listed_by_another_name_comes_off_the_list(self):
         """On Windows the list can hold a short name (C:\\Users\\RUNNER~1\\...) that resolves to a longer one: the
         project was deleted but stayed on the list. A link to its folder stands in for a short name here."""

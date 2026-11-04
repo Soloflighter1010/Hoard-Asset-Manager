@@ -2255,5 +2255,8 @@
  "Search itch.io": "itch.ioで検索",
  "Search {0} for {1}": "{0}で「{1}」を検索",
  "Search {0}": "{0}で検索",
- "Opens in your browser": "ブラウザーで開きます"
+ "Opens in your browser": "ブラウザーで開きます",
+ "Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.": "{0}の名前を変更: フォルダーの名前が変わり、一覧とHoardのメモもそれについていきます。Unity Hubの一覧とバックアップは古い名前のままです。",
+ "Renamed it {0}.": "{0}に名前を変えました。",
+ "Rename...": "名前を変更..."
 }

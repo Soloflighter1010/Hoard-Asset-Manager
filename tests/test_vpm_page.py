@@ -140,7 +140,7 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(panel.locator(".pj-d-art b").inner_text(), "RA")
         self.assertIn("k-avatars", panel.get_attribute("class"))
         self.assertEqual(panel.locator(".actions button").all_inner_texts(), ["Open in Unity", "Manage", "Show in folder"])
-        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(), ["Make it a favourite", "Back up...", "Take off the list"])
+        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(), ["Make it a favourite", "Back up...", "Rename...", "Take off the list"])
         self.assertIn("Unity 2022.3.22f1", panel.inner_text())
         self.assertEqual(row.locator(".pj-open").get_attribute("aria-pressed"), "true")
         # what's read once it's open: its size on disk (Unity's cache apart), its packages, and its backups
@@ -163,6 +163,29 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(gone.locator(".actions button").count(), 0)
         self.assertEqual(gone.locator(".marks button").all_inner_texts(), ["Make it a favourite", "Take off the list"])
         self.assertEqual(gone.locator(".pj-d-about").inner_text(), "")
+
+    def test_rename_a_project(self):
+        """Issue #290: Rename... in a project's details renames its folder, and its details stay open under the new
+        name; a name that can't be used is refused, and nothing changes."""
+        page = self.page
+        panel = pj_details(page, "Rusk Avatar")
+        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(),
+                         ["Make it a favourite", "Back up...", "Rename...", "Take off the list"])
+        panel.locator("[data-pj=rename]").click()
+        page.locator("dialog[open] #askName").wait_for()
+        self.assertEqual(page.input_value("dialog[open] #askName"), "Rusk Avatar")
+        page.fill("dialog[open] #askName", "CON")
+        page.keyboard.press("Enter")
+        page.locator(".toast", has_text="can't be used as a folder name").wait_for()
+        self.assertTrue((self.tmp / "Unity" / "Rusk Avatar").is_dir())
+        pj_details(page, "Rusk Avatar").locator("[data-pj=rename]").click()
+        page.fill("dialog[open] #askName", "Rusk Avatar 2")
+        page.keyboard.press("Enter")
+        page.locator(".toast", has_text="Renamed it Rusk Avatar 2.").wait_for()
+        page.locator("#projectsBody .pj-detail .pj-d-name", has_text="Rusk Avatar 2").wait_for()
+        self.assertTrue((self.tmp / "Unity" / "Rusk Avatar 2").is_dir())
+        self.assertFalse((self.tmp / "Unity" / "Rusk Avatar").exists())
+        self.assertIn("Rusk Avatar 2", page.locator(".pj-row b").all_inner_texts())
 
     def test_projects_as_tiles_with_folder_tiles(self):
         """Issue #250: projects as tiles (remembered), and a folder of them as one folder tile that opens to them."""

@@ -349,10 +349,10 @@ class Service:
             return self._delete(path, backup_first=what.get("backup") is not False)
         raise ProjectsError("Hoard doesn't know that project task.")
 
-    def deletable(self, path: str) -> Path:
-        """The project's folder, when it's safe to delete: on the list, a Unity project, closed in Unity, and holding
-        none of Hoard's own folders (its data, the downloads, the project backups), nor being a drive's top or your
-        home folder. Raises ProjectsError saying why not."""
+    def deletable(self, path: str, doing: str = "delete") -> Path:
+        """The project's folder, when it's safe to delete (or, doing "rename", to rename): on the list, a Unity project,
+        closed in Unity, and holding none of Hoard's own folders (its data, the downloads, the project backups), nor
+        being a drive's top or your home folder. Raises ProjectsError saying why not."""
         from ..config import load_config, root_dir   # (here: the config isn't Projects' own)
         from ..paths import data_dir
         keep = [data_dir(), root_dir(load_config()), self.backups_folder()]
@@ -362,22 +362,51 @@ class Service:
         except OSError:
             raise ProjectsError("Its folder isn't there any more: take it off the list instead.") from None
         if not real.is_dir() or not is_project(real):
-            raise ProjectsError("That folder isn't a Unity project, so Hoard won't delete it.")
+            raise ProjectsError(f"That folder isn't a Unity project, so Hoard won't {doing} it.")
         if real.parent == real or real == Path.home().resolve() or len(real.parts) < 3:
-            raise ProjectsError("Hoard won't delete a folder that high up.")
+            raise ProjectsError(f"Hoard won't {doing} a folder that high up.")
         for other in keep:
             try:
                 inside = Path(other).resolve()
             except OSError:
                 continue
             if inside == real or real in inside.parents:
-                raise ProjectsError(f"{inside} is inside this project, so it would go too. Move it somewhere else first.")
+                went = "go" if doing == "delete" else "move"
+                raise ProjectsError(f"{inside} is inside this project, so it would {went} too. Move it somewhere else first.")
         try:
             if UnityProject.load(str(real)).unity_running():
                 raise ProjectsError("Unity has this project open. Close it first.")
         except ProjectError:
             pass   # (a project whose files can't be read is still deleted when you ask)
         return real
+
+    def rename(self, path: str, name) -> str:
+        """Rename a project's folder (issue #290), where it is: as a delete is, only on the list and closed in Unity,
+        and only to a name a folder can have that isn't taken beside it. The list and Hoard's notes follow it (and
+        what Hoard for Unity reported about it); returns its new path."""
+        folder = self.deletable(path, "rename")
+        name = str(name or "").strip()
+        if name == folder.name:
+            raise ProjectsError("That's its name already.")
+        case_only = name.lower() == folder.name.lower()
+        why, _warning = templates.check_name(folder.parent, name)
+        if why and not (case_only and (folder.parent / name).exists()):
+            raise ProjectsError(why)
+        listed = self.listed(path)
+        to = Path(listed).parent / name
+        try:
+            if case_only:   # (Windows and macOS don't see a change of case alone: by way of another name)
+                step = folder.with_name(f"{folder.name}.renaming-{os.getpid()}")
+                folder.rename(step)
+                step.rename(folder.parent / name)
+            else:
+                folder.rename(folder.parent / name)
+        except OSError as e:
+            raise ProjectsError(f"Couldn't rename it: {e.strerror or e}") from None
+        listing.rename(listed, str(to))
+        from .. import projects as reports   # (what Hoard for Unity reported, by its folder)
+        reports.moved(listed, str(to))
+        return str(to)
 
     def _delete(self, path: str, backup_first: bool) -> str:
         """Delete a project from this computer: backed up first (unless you said not to), taken off the list, then its

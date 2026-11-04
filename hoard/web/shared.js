@@ -2927,7 +2927,8 @@ function pjDetail(p) {
       `<button class="ghost" data-pj="folder">${esc(tr("Show in folder"))}</button>` : ""}</div>` +
     `<h3>${esc(tr("Organise"))}</h3><div class="marks">` +
       `<button class="ghost sm" data-pj="star" aria-pressed="${p.favorite}">${esc(tr(p.favorite ? "Favourite" : "Make it a favourite"))}</button>` +
-      (p.exists ? `<button class="ghost sm" data-pj="backup">${esc(tr("Back up..."))}</button>` : "") +
+      (p.exists ? `<button class="ghost sm" data-pj="backup">${esc(tr("Back up..."))}</button>` +
+        `<button class="ghost sm" data-pj="rename">${esc(tr("Rename..."))}</button>` : "") +
       `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button></div>` +
     `<h3><label for="pjDFolder">${esc(tr("Folder"))}</label></h3>` +
     `<select id="pjDFolder" class="pj-d-folder"><option value="">${esc(tr("Not in a folder"))}</option>` +
@@ -3926,6 +3927,17 @@ async function pjAct(b) {
     const r = await apiPost("/api/vpm/open-folder", { path, show: "imports" });
     if (!r.ok) toast(r.data.error || tr("That can't be done."));
     return;
+  }
+  if (act === "rename") {   // its folder, where it is (issue #290): the list and Hoard's notes follow it
+    const was = pjNamed(path);
+    const name = (await askName(tr("Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.", was), was, { max: 255 })).trim();
+    if (!name || name === was) return;
+    const r = await apiPost("/api/vpm/rename", { path, name });
+    if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+    if (PJ.selected === path) PJ.selected = r.data.path;
+    if (PJ.project && PJ.project.path === path) PJ.project = { ...PJ.project, path: r.data.path, name: r.data.name };
+    toast(tr("Renamed it {0}.", r.data.name));
+    return loadProjects();
   }
   if (act === "forget") {
     if (!await ask(tr("Take {0} off the list? Its folder is left as it is, and you can add it again.", pjNamed(path)), tr("Take off"))) return;

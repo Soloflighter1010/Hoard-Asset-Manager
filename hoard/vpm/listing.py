@@ -218,6 +218,21 @@ def remove(path: str) -> bool:
         return True
 
 
+def rename(old: str, new: str) -> None:
+    """A project's folder renamed (issue #290): the list (settings.json) has it where it was, by its new path, and
+    Hoard's notes on it (favourite, folder and tags, what went in from your library) follow it."""
+    with _lock:
+        settings = environment.Settings.load()
+        listed, _ = shared_paths(settings)
+        settings.set_projects([new if _key(p) == _key(old) else p for p in listed])
+        settings.save()
+        state = load_state()
+        entry = state["projects"].pop(_key(old), None)
+        if entry is not None:
+            state["projects"][_key(new)] = {**entry, "path": new}
+            save_state(state)
+
+
 def is_listed(path: str) -> bool:
     """Is this folder on the project list?"""
     return find(path) is not None

@@ -21,12 +21,17 @@ Choose a project to open its details beside the list (5.2.0 beta 2), as a produc
 letters in its kind's colour, where it is, its size on disk, when it was last opened and made, how many packages and
 backups it has, and what's new (each leads to it: its packages in **Manage**, its products in what Hoard for Unity
 reported). Then **Open in Unity**, **Manage** (its packages and more) and **Show in folder**; under **Organise**, the
-favourite, **Back up...** and **Take off the list**; its folder and tags, changed right there; what takes its room
+favourite, **Back up...**, **Rename...** and **Take off the list**; its folder and tags, changed right there; what takes its room
 (its assets, its packages, Unity's cache, and everything else); its packages, each with any newer version; what Hoard
 put in it from your library; and its backups, with **Back up...** and **See backups**. Unity's cache (its `Library`
 and `Temp` folders) is made again when the project's opened, and a backup leaves it out. Choose the project again, or
 **×**, to put its details away. A project whose folder has gone (moved, or on a drive that isn't connected) says so,
 with **Take off the list** in its details.
+
+**Rename...** (5.2.0 beta 4) renames the project's folder where it is, and it stays where it was on the list, under
+its new name, with Hoard's notes on it (its favourite, folder and tags, what went in from your library). It's refused
+while Unity has the project open, and for a name that's taken beside it or that a folder can't have. Unity Hub's
+list and the project's backups keep the old name: add it to the Hub again if you use it.
 
 **List** and **Tiles** (beside **Add a project...**, 5.2.0 beta 2) choose how the list shows, as ALCOM's and the
 Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, twice

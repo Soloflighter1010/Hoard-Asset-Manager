@@ -98,6 +98,31 @@ def read_all() -> list[dict]:
     return found[:MAX_PROJECTS]
 
 
+def moved(old: str, new: str) -> int:
+    """A project renamed in Hoard (issue #290): each report Hoard for Unity wrote about it says its new folder and name,
+    until Unity opens it again and writes its own. Returns how many were changed."""
+    import json
+    import os
+    from .safety import write_file_safely
+    same = lambda a: isinstance(a, str) and os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(old))  # noqa: E731
+    changed = 0
+    try:
+        files = [f for f in projects_dir().glob("*.json") if ID.fullmatch(f.stem)]
+    except OSError:
+        return 0
+    for f in files[:MAX_PROJECTS * 5]:
+        try:
+            raw = read_json_file(f, 4 * 1024 * 1024)
+            if not isinstance(raw, dict) or raw.get("format") != "hoard-project" or not same(raw.get("path")):
+                continue
+            raw["path"], raw["name"] = new, Path(new).name
+            write_file_safely(f, json.dumps(raw, indent=1, ensure_ascii=False))
+            changed += 1
+        except (DataFileError, OSError, ValueError):
+            continue
+    return changed
+
+
 def forget(project_id: str) -> bool:
     """Take a project out of Projects (its report is deleted; opening the project in Unity again brings it back)."""
     if not isinstance(project_id, str) or not ID.fullmatch(project_id):

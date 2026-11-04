@@ -66,6 +66,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
            "/api/vpm/preview", "/api/vpm/apply", "/api/vpm/create", "/api/vpm/preload", "/api/vpm/backup",
            "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite", "/api/vpm/organize",
+           "/api/vpm/rename",
            "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
            "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
            "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show", "/api/vpm/delete-project")
@@ -421,7 +422,7 @@ VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading
                "/api/vpm/refresh": "Refreshing the repositories", "/api/vpm/open": "Open in Unity",
                "/api/vpm/open-folder": "Open folder", "/api/vpm/add-project": "Add a project",
                "/api/vpm/remove-project": "Take off the list", "/api/vpm/delete-project": "Delete from this computer",
-               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/repos/add": "Add a repository",
+               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/rename": "Rename a project", "/api/vpm/repos/add": "Add a repository",
                "/api/vpm/repos/remove": "Remove a repository", "/api/vpm/settings": "Unity and folders",
                "/api/vpm/presets": "Presets", "/api/vpm/backups": "Backups", "/api/vpm/backups/settings": "Backups",
                "/api/vpm/backups/show": "Backups", "/api/vpm/backups/delete": "Delete backups",
@@ -1765,6 +1766,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "Type the project's name to delete it."}, 400)
                 srv.vpm.deletable(where)   # (said now when it can't be: Unity has it open, say)
                 return self._vpm_job({"op": "delete", "path": where, "name": Path(where).name, "backup": body.get("backup") is not False})
+            if path == "/api/vpm/rename":   # its folder, where it is (issue #290): the list and Hoard's notes follow it
+                where = srv.vpm.listed(body.get("path"))
+                renamed = srv.vpm.rename(where, str(body.get("name") or "")[:300])
+                vpm_log.info(f"Renamed {Path(where).name} to {Path(renamed).name} ({renamed})")
+                return self._json({"ok": True, "path": renamed, "name": Path(renamed).name})
             if path == "/api/vpm/favorite":
                 listing.note(srv.vpm.listed(body.get("path")), favorite=body.get("on") is True)
                 return self._json({"ok": True})
