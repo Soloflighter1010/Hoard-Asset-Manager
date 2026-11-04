@@ -5,7 +5,7 @@ in each language, each in the theme and style its scene shows off, at 1920 x 108
     python3 promo/capture.py PRODUCTS_FOLDER OUT_FOLDER [--lang=en,ja,ko] [--only=library,stores]
 
 PRODUCTS_FOLDER is a library as scripts/screenshots.py takes one (scripts/export_screenshot_products.py makes one from
-your own Hoard, and promo/art.py draws made-up ones). OUT_FOLDER gets <shot>-<lang>.png for each shot in SHOTS, and
+your own Hoard). OUT_FOLDER gets <shot>-<lang>.png for each shot in SHOTS, and
 shots.json: what each one is, the theme it's in (for the video's lower third), and where its parts are, in each
 language (for the video's rings and camera: FOCUS). Needs Playwright.
 """

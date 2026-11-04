@@ -9,8 +9,6 @@ Hoard restarted, or a one-time link opened twice. Open Hoard again from the Star
 the front), or, if you started it as a server, open the address it printed. See
 [Using Hoard on other devices](Using-Hoard-on-Other-Devices#the-access-key).
 
-**Video:** [the steps, in 14 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-page-not-recognised-en.mp4)
-
 ### "Hoard is already running, but isn't answering"
 
 Another copy of Hoard is open but not responding. Close it (in Task Manager, end **Hoard**), or restart your
@@ -32,8 +30,6 @@ Windows says this about apps from a publisher it doesn't know well yet. Hoard is
 info** and the publisher shows as Hoard's maintainer. A new publisher earns Microsoft's trust as
 people install its releases, so the warning fades with time. Choose **Run anyway**. To check the
 file first, see [Installing Hoard](Installing-Hoard#checking-a-download).
-
-**Video:** [the steps, in 23 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-windows-en.mp4)
 
 ### Smart App Control, Memory integrity and TPM (Windows 11)
 
@@ -65,14 +61,10 @@ refuses (or you set `"automated_sign_in": true` in `config.json`), set a passwor
 usual browser, then sign in with that in Hoard's window. See
 [Getting started](Getting-Started#signing-in-without-your-saved-passwords) for finding saved passwords.
 
-**Video:** [the steps, in 19 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-sign-in-en.mp4)
-
 ### "Not signed in to Booth", or "session expired"
 
 The store ended Hoard's sign-in, as stores do from time to time. In **Stores**, choose **Sign in** on that store
 again.
-
-**Video:** [the steps, in 14 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-booth-sign-in-en.mp4)
 
 ### "The other Hoard tool is using your ... sign-in right now"
 
@@ -111,8 +103,6 @@ Complete it in the window Payhip opens in, and Hoard carries on (it waits up to 
 let Hoard in, save each shop's library page from your usual browser and import them all instead. See
 [Stores](Stores#payhip).
 
-**Video:** [the steps, in 15 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-payhip-check-en.mp4)
-
 ### Payhip shows nothing, or only some of what I bought
 
 Payhip keeps purchases in each shop, each on pages of 15, so Hoard only sees the shops you've added, or the
@@ -140,8 +130,6 @@ When importing ends, Hoard lists each page it couldn't use, and why:
 
 The key was mistyped or cut short when it was copied, or it was deleted on itch.io. Make a new one on itch.io
 (Settings, API keys), then choose **Change API key** on itch.io's row in **Stores**. See [Stores](Stores#itchio).
-
-**Video:** [the steps, in 15 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-itch-key-en.mp4)
 
 ### itch.io: "Something on this computer stopped Hoard connecting to itch.io"
 
@@ -174,8 +162,6 @@ The connection ended before the file was complete. Nothing is lost: the next syn
 The summary at the end of each download gives the reason for everything that failed or was skipped. On Gumroad,
 "no download page" means a refund or a membership that ended, and files Gumroad only streams can't be downloaded.
 Products you removed from your library are skipped on purpose.
-
-**Video:** [the steps, in 15 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-download-fails-en.mp4)
 
 ### A record "was changed by something other than Hoard"
 
@@ -221,8 +207,6 @@ If Settings says Apprise isn't installed (running Hoard from its source), run Se
 sent nothing at all, as Apprise couldn't find its services in them; 5.2.0 beta 2 fixes that. Hoard's log notes each
 notification: what it was for, which services took it, and why one didn't, without its address (from 5.2.0 beta 2).
 
-**Video:** [the steps, in 15 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-notifications-en.mp4)
-
 ## The hidden library
 
 - **Forgot your PIN?** Choose **Forgot your PIN?** and enter your 6 recovery words to set a new one. Nothing is
@@ -232,8 +216,6 @@ notification: what it was for, which services took it, and why one didn't, witho
   (30 seconds, doubling, up to an hour), even if Hoard restarts.
 
 See [Your library](Library#the-hidden-library).
-
-**Video:** [the steps, in 14 seconds](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/troubleshooting-pin-en.mp4)
 
 ## Reporting a problem
 

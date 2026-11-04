@@ -7,7 +7,7 @@ name: Media
 # takes an hour or two.
 #
 # Everything is made in code: Hoard's own screens, photographed from a made-up data folder (promo/capture.py) with
-# the products in promo/products (and made-up ones promo/art.py draws), shapes and words, and music synthesised note
+# the products in promo/products (nothing is made up or drawn for them), shapes and words, and music synthesised note
 # by note. No diffusion. The release is never marked Latest: that stays on the newest release of the app.
 
 on:
@@ -38,9 +38,7 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Make the videos, the posters and the music
         run: |
-          products=-   # (none: made-up products only)
-          if [ -f promo/products/products.json ]; then products=promo/products; fi
-          python promo/make.py "$products" promo/out --jobs=3
+          python promo/make.py promo/products promo/out --jobs=3   # (it says so when there are no products to show)
       - name: Put them on the media release
         env:
           GH_TOKEN: ${{ github.token }}

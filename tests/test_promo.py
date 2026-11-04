@@ -1,7 +1,7 @@
 """Hoard's videos, posters and music (promo/): every scene has its words in English, Japanese and Korean, the
 screens and parts it names are ones promo/capture.py takes, a video builds into what the player draws, the player
-draws the same frame every time, the music loops, and each troubleshooting video is linked from the wiki section that
-explains its problem."""
+draws the same frame every time, the music loops, and each troubleshooting video has the wiki section that explains its
+problem, to be linked from."""
 from __future__ import annotations
 
 import ast
@@ -142,19 +142,9 @@ class Build(unittest.TestCase):
                             self.assertEqual(len(s["chip"]["swatches"]), 4)
                     self.assertIn("<svg", v["logo"])
 
-    def test_credits_leave_out_the_made_up(self):
-        import art
-        name, made_up = art.PRODUCTS[0][0], art.PRODUCTS[0][1]
-        items = json.loads((self.library / "products.json").read_text("utf-8"))
-        items.append({"image": "x.png", "name": name, "creator": made_up, "store": "booth", "tags": []})
-        (self.library / "products.json").write_text(json.dumps(items), "utf-8")
+    def test_credits_name_every_creator_shown(self):
         names = scenes.credit_names(self.library)
-        self.assertIn("Maker 0", names)
-        self.assertNotIn(made_up, names)
-        # a real product by a creator who happens to share a made-up one's name is credited
-        items.append({"image": "y.jpg", "name": "A real product", "creator": made_up, "store": "booth", "tags": []})
-        (self.library / "products.json").write_text(json.dumps(items), "utf-8")
-        self.assertIn(made_up, scenes.credit_names(self.library))
+        self.assertEqual(names, [f"Maker {i}" for i in range(5)])
 
     def test_posters(self):
         for p in scenes.POSTERS:
@@ -194,17 +184,28 @@ class Music(unittest.TestCase):
 
 
 class Wiki(unittest.TestCase):
-    PAGES = {"en": ("Troubleshooting.md", "FAQ.md"), "ja": ("ja/トラブルシューティング.md", "ja/よくある質問.md"),
-             "ko": ("ko/문제-해결.md", "ko/자주-묻는-질문.md")}
+    """promo/wiki_links.py links each troubleshooting video from the wiki once the media release has it: each video has
+    its section, in each language, to go under."""
 
-    def test_each_troubleshooting_video_is_linked(self):
-        base = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/"
-        for lang, (trouble, faq) in self.PAGES.items():
-            text = (REPO / "wiki" / trouble).read_text("utf-8")
-            for key in scenes.TROUBLESHOOTING:
-                self.assertIn(f"{base}troubleshooting-{key}-{lang}.mp4", text, f"{trouble}: no link to {key}")
-            self.assertIn(f"{base}troubleshooting-windows-{lang}.mp4", (REPO / "wiki" / faq).read_text("utf-8"))
+    def test_each_troubleshooting_video_has_its_wiki_section(self):
+        import wiki_links
+        for lang in scenes.LANGS:
+            path, sections = wiki_links.SECTIONS[lang]
+            lines = {s.strip() for s in (REPO / path).read_text("utf-8").split("\n")}
+            for heading in sections:
+                self.assertIn(heading, lines, f"{path}: no {heading!r}")
+            self.assertEqual(set(sections.values()), set(scenes.TROUBLESHOOTING), path)
+            faq, heading = wiki_links.FAQ[lang]
+            self.assertIn(heading, {s.strip() for s in (REPO / faq).read_text("utf-8").split("\n")}, faq)
 
+    def test_a_link_goes_at_the_end_of_its_section_once(self):
+        import wiki_links
+        page = "# Page\n\n### One\n\nFirst.\n\nSecond.\n\n### Two\n\nThird.\n"
+        link = wiki_links.line("pin", "en")
+        self.assertIn(wiki_links.url("pin", "en"), link)
+        once = wiki_links.insert(page, "### One", link)
+        self.assertEqual(once, page.replace("Second.\n", f"Second.\n\n{link}\n"))
+        self.assertEqual(wiki_links.insert(once, "### One", link), once)
 
 if __name__ == "__main__":
     unittest.main()

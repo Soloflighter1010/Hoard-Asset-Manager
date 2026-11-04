@@ -84,8 +84,8 @@ def sketch(dur, says=()):
 
 # ---- the words
 
-TAGLINE = W("Every avatar asset you've bought, in one pile.", "買ったアバターアセットを、ぜんぶひとつの場所に。",
-            "구매한 아바타 에셋을 전부 한곳에.")
+TAGLINE = W("Your avatar assets and projects, in one pile.", "アバターアセットもプロジェクトも、ぜんぶひとつの場所に。",
+            "아바타 에셋도 프로젝트도 전부 한곳에.")
 STORES_LINE = W("Booth, Gumroad, Jinxxy, Payhip and itch.io", "Booth、Gumroad、Jinxxy、Payhip、itch.io",
                 "Booth, Gumroad, Jinxxy, Payhip, itch.io")
 GET = W("Get Hoard", "Hoardを手に入れる", "Hoard 받기")
@@ -372,12 +372,14 @@ def videos():
 
 POSTERS = [
     {"name": "poster", "shot": "library", "title": TAGLINE,
-     "body": W("Booth, Gumroad, Jinxxy, Payhip and itch.io, in a single library you can search, filter and keep.",
-               "Booth、Gumroad、Jinxxy、Payhip、itch.ioで買ったものを、検索・絞り込み・保管ができるひとつのライブラリに。",
-               "Booth, Gumroad, Jinxxy, Payhip, itch.io에서 산 것을 검색하고, 거르고, 보관할 수 있는 하나의 라이브러리로."),
+     "body": W("Booth, Gumroad, Jinxxy, Payhip and itch.io in one library you can search and keep, and the Unity "
+               "projects you make with them.",
+               "Booth、Gumroad、Jinxxy、Payhip、itch.ioで買ったものを、検索・保管ができるひとつのライブラリに。それで作るUnityプロジェクトも。",
+               "Booth, Gumroad, Jinxxy, Payhip, itch.io에서 산 것을 검색하고 보관할 수 있는 하나의 라이브러리로. 그걸로 만드는 Unity 프로젝트도."),
      "points": [W("Downloaded, and kept up to date", "ダウンロードして、最新に保つ", "다운로드하고 최신으로 유지"),
                 W("Sets, and wishlists with their prices", "セットと、値段つきのほしい物リスト", "세트, 가격이 보이는 위시리스트"),
-                W("Your Unity projects, with Git", "Unityのプロジェクトも、Gitで", "Unity 프로젝트도 Git으로")]},
+                W("Projects: packages, backups and Git", "プロジェクト：パッケージ、バックアップ、Git",
+                  "프로젝트: 패키지, 백업, Git")]},
 ]
 
 
@@ -444,19 +446,15 @@ def _wordmark() -> str:
 
 
 def credit_names(library: Path) -> list[str]:
-    """The creators of the products shown: the products' own (not the made-up ones promo/art.py draws)."""
-    sys.path.insert(0, str(HERE))
-    import art
-    made_up = {(p[0], p[1]) for p in art.PRODUCTS}
+    """The creators of the products shown."""
     items = json.loads((library / "products.json").read_text("utf-8"))
-    names = {i["creator"].strip() for i in items if i.get("creator") and (i.get("name"), i["creator"]) not in made_up}
+    names = {i["creator"].strip() for i in items if i.get("creator") and i["creator"].strip()}
     return sorted(names, key=str.casefold)
 
 
 CREDITS = W("Products shown, by", "映っている商品のクリエイター", "화면에 나온 상품의 제작자")
-CREDITS_NOTE = W("Thank you to their creators. Products not listed here were made up for this video, drawn in code.",
-                 "クリエイターのみなさんに感謝します。ここにない商品は、この動画のためにコードで描いた架空のものです。",
-                 "제작자 여러분께 감사드려요. 여기에 없는 상품은 이 영상을 위해 코드로 그린 가상의 상품이에요.")
+CREDITS_NOTE = W("Thank you to their creators: every product shown is theirs.", "クリエイターのみなさんに感謝します。映っている商品は、すべてみなさんのものです。",
+                 "제작자 여러분께 감사드려요. 화면에 나온 상품은 모두 여러분의 것이에요.")
 
 
 def build(scenes, lang: str, layout: str, screens: Path, library: Path) -> dict:
