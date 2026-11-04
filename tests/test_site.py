@@ -280,14 +280,17 @@ class TheOtherPages(unittest.TestCase):
             foot = re.search(r'<footer class="foot">.*?</footer>', page, re.S).group(0)
             if name.startswith("docs/"):
                 up = "../" * name.count("/")
-                self.assertEqual(bar, site_chrome.header("docs/", up=up), name)
+                compare = name.rsplit("/", 1)[-1] == "Hoard-and-Other-Tools.html"   # (issue #293: a tab of its own)
+                tab = site_chrome.COMPARE if compare else "docs/"
+                self.assertEqual(bar, site_chrome.header(tab, up=up), name)
                 self.assertEqual(foot, site_chrome.footer(up=up), name)
-                self.assertIn(f'<a href="{up}docs/" aria-current="page">Docs</a>', bar)
+                self.assertIn(f'<a href="{up}{tab}" aria-current="page">{"Compare" if compare else "Docs"}</a>', bar)
             else:
                 self.assertEqual(bar, site_chrome.header(site_chrome.CURRENT.get(name)), name)
                 self.assertIn(foot, (site_chrome.footer(), site_chrome.footer(
                     ' This page is built from <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/CHANGELOG.md">CHANGELOG.md</a>.')), name)
-            self.assertIn('class="boxes"', bar, f"{name}: the app's logo, whose boxes move")
+            self.assertIn('class="boxes heap"', bar, f"{name}: the app's logo, the Heap")
+            self.assertIn('class="hb"', bar, f"{name}: whose boxes move")
         css = (SITE / "styles.css").read_text("utf-8")
         self.assertIn(".seg button[aria-checked=\"true\"]", css, "the store tabs are the app's folder tabs")
         self.assertIn("@media (prefers-reduced-motion: reduce)", css)

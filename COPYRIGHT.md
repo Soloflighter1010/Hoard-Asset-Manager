@@ -7,7 +7,7 @@ Hoard is copyright (c) 2026 Soloflighter1010 and released under the MIT license
 
 ## The Hoard name and logo
 
-The name "Hoard" and the logo (the tile pile and the "hoard" wordmark, in `brand/` and in Hoard) are
+The name "Hoard" and the logo (the Heap of boxes and the "hoard" wordmark, in `brand/` and in Hoard) are
 the project's identity. You're welcome to use them to refer to Hoard, for example in an article, a video
 or a link to the project. Please don't use them for a fork or another product in a way that suggests it's
 the official Hoard.

@@ -1051,6 +1051,8 @@ class Handler(BaseHTTPRequestHandler):
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
                      "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
+                               # the logo's boxes: the stores you use (issue #278)
+                               "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg), "ask_files": bool(srv.cfg.get("ask_files", True)),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)

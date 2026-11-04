@@ -519,3 +519,33 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 .pj-plan-cols h4 { margin: 6px 0 4px; font: 700 13px var(--body); }
 .pj-plan-list li { font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .pj-plan-cols { grid-template-columns: 1fr; } .pj-git-head .row { margin-left: 0; } }
+/* The Heap, Hoard's logo (issues #277, #279): its boxes stack up, fall over and build themselves up again, in a loop,
+   on the splash and while you point at the logo. Poked five times (shared.js), they topple one by one and build back
+   up, the gold one landing last with its sparkle. Each box falls the way it leans (--fx, --fr) in its turn (--i),
+   from where it sits (heap.py places it): with Reduce motion, none of it (body.less-motion stops every animation). */
+.heap .hb { transform-box: fill-box; transform-origin: 50% 100%; }
+.splash .heap .hb, .brand:hover .heap .hb { animation: heap-loop 3.6s cubic-bezier(.3, .7, .4, 1) infinite both;
+  animation-delay: calc(var(--i) * 90ms); }
+@keyframes heap-loop {
+  0%, 22% { transform: none; opacity: 1; }
+  38% { transform: translate(var(--fx), 14px) rotate(var(--fr)); opacity: 0; }
+  46% { transform: translateY(-26px); opacity: 0; }
+  60% { transform: none; opacity: 1; }
+  65% { transform: translateY(-2.5px); }
+  70%, 100% { transform: none; opacity: 1; }
+}
+.brand.tumble .heap .hb { animation: heap-tumble 2.6s ease both; animation-delay: calc(var(--i) * 160ms); }
+@keyframes heap-tumble {
+  0% { transform: none; opacity: 1; }
+  16% { transform: translate(var(--fx), 12px) rotate(var(--fr)); opacity: 0; }
+  52% { transform: translateY(-24px); opacity: 0; }
+  72% { transform: none; opacity: 1; }
+  80% { transform: translateY(-3px); }
+  88%, 100% { transform: none; opacity: 1; }
+}
+.heap .spark { transform-box: fill-box; transform-origin: center; }
+.brand.tumble .heap .spark { animation: heap-spark .8s ease both; animation-delay: calc(var(--i) * 160ms + 2s); }
+@keyframes heap-spark { 0%, 100% { transform: none; } 45% { transform: scale(1.9) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) { .heap .hb, .heap .spark { animation: none !important; } }
+/* the Konami code's confetti: the heap's boxes, outlined as the logo's are */
+.heap-confetti i { width: 13px; height: 13px; border-radius: 4px; box-shadow: 0 0 0 2px #211C18; }

@@ -2129,6 +2129,78 @@ async function showUpdate(u) {
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
 }
+/* ---------- the Heap, Hoard's logo (issues #277, #278): the gold box with its sparkle on a box for each store you use,
+   in its colour, and the Projects box (a small cube on it), always. Drawn as hoard/heap.py draws it (the
+   same text: a test holds the two to it), so the logo the page starts with is the one it draws. Each box is placed
+   where it lands, around a <g class="hb"> that the animations move: stacking up, falling over, building up again. */
+const HEAP = { gold: "#F0B429", spark: "#FFF8E6", cave: "#211C18",
+  colours: { jinxxy: "#56D1DC", gumroad: "#FF8AD8", payhip: "#95A0FF", booth: "#FF6259", itch: "#7ED67A", projects: "#EDE4D3" },
+  order: ["jinxxy", "gumroad", "payhip", "booth", "itch", "projects"],   // nearest the gold first
+  tilt: { jinxxy: -9, gumroad: 7, payhip: -8, booth: 3, itch: -5, projects: 5, gold: -4 },
+  box: 17, goldBox: 18, line: 2.6, round: 4.6, pitch: 18.8, rise: 15.4, most: 1.6 };
+// How many boxes in each row, the bottom first, for n under the gold one: a pyramid, each row one fewer; a box that
+// would be alone on top falls down beside the bottom row instead (heap.py's rows).
+function heapRows(n) {
+  let bottom = 1;
+  while (bottom * (bottom + 1) / 2 - 1 < n) bottom += 1;
+  let out = [];
+  for (let left = n, size = bottom; left > 0; size -= 1) { out.push(Math.min(size, left)); left -= out[out.length - 1]; }
+  if (out.length > 1 && out[out.length - 1] === 1) out = [out[0] + 1, ...out.slice(1, -1)];
+  return out;
+}
+// Where each box lands in the 64 x 64 square, the bottom row first and the gold one last.
+function heapLayout(boxes) {
+  const chosen = HEAP.order.filter(b => boxes.includes(b)), sizes = heapRows(chosen.length), placed = [];
+  const byRow = sizes.map(() => []);
+  for (let r = sizes.length - 1, taken = 0; r >= 0; r -= 1) { byRow[r] = chosen.slice(taken, taken + sizes[r]); taken += sizes[r]; }
+  byRow.forEach((row, r) => row.forEach((b, j) =>
+    placed.push({ box: b, x: (j - (row.length - 1) / 2) * HEAP.pitch, y: -r * HEAP.rise, size: HEAP.box, tilt: HEAP.tilt[b] })));
+  placed.push({ box: "gold", x: 0, y: -sizes.length * HEAP.rise - (HEAP.goldBox - HEAP.box) / 2, size: HEAP.goldBox, tilt: HEAP.tilt.gold });
+  // Half a box's width as it's tilted, with its outline.
+  const reach = p => { const t = p.tilt * (Math.PI / 180); return p.size / 2 * (Math.abs(Math.cos(t)) + Math.abs(Math.sin(t))) + HEAP.line / 2; };
+  const left = Math.min(...placed.map(p => p.x - reach(p))), right = Math.max(...placed.map(p => p.x + reach(p)));
+  const top = Math.min(...placed.map(p => p.y - reach(p))), bottom = Math.max(...placed.map(p => p.y + reach(p)));
+  const scale = Math.min(60 / (right - left), 60 / (bottom - top), HEAP.most), midX = (left + right) / 2, midY = (top + bottom) / 2;
+  return placed.map(p => ({ ...p, x: 32 + (p.x - midX) * scale, y: 32 + (p.y - midY) * scale, size: p.size * scale, scale }));
+}
+// A number as the SVG has it: two places at most, no trailing zeros.
+const heapN = v => { const s = v.toFixed(2).replace(/\.?0+$/, ""); return s === "-0" ? "0" : s; };
+// The gold box's sparkle, in the box's own coordinates.
+function heapSparkle(s) {
+  const cx = 0.2 * s, cy = -0.12 * s, a = 0.2 * s, w = 0.055 * s;
+  const pts = [[cx, cy - a], [cx + w, cy - w], [cx + a, cy], [cx + w, cy + w], [cx, cy + a], [cx - w, cy + w], [cx - a, cy], [cx - w, cy - w]];
+  return "M" + pts.map(([x, y]) => `${heapN(x)} ${heapN(y)}`).join(" L") + "Z";
+}
+// The small cube on the Projects box.
+function heapCube(s) {
+  const r = 0.27 * s, h = 0.27 * s * Math.cos(30 * (Math.PI / 180));
+  const ring = [[0, -r], [h, -r / 2], [h, r / 2], [0, r], [-h, r / 2], [-h, -r / 2]].map(([x, y]) => `${heapN(x)} ${heapN(y)}`).join(" L");
+  return `M${ring}Z M${heapN(-h)} ${heapN(-r / 2)} L0 0 L${heapN(h)} ${heapN(-r / 2)} M0 0 L0 ${heapN(r)}`;
+}
+// The heap's boxes as SVG, with these boxes (store names, and "projects"), outlined in the page's background.
+function heapMarkup(boxes) {
+  return heapLayout(boxes).map((p, i) => {
+    const s = p.size, drift = p.x < 31 ? -1 : 1, stroke = ' style="stroke: var(--cave)"';
+    const extra = p.box === "gold" ? `<path class="spark" d="${heapSparkle(s)}" fill="${HEAP.spark}"/>`
+      : p.box === "projects" ? `<path d="${heapCube(s)}" fill="none" stroke="${HEAP.cave}" stroke-width="${heapN(1.5 * p.scale)}" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+    return `<g transform="translate(${heapN(p.x)} ${heapN(p.y)}) rotate(${p.tilt})">` +
+      `<g class="hb" data-box="${p.box}" style="--i:${i};--fx:${drift * 9}px;--fr:${drift * 55}deg">` +
+      `<rect x="${heapN(-s / 2)}" y="${heapN(-s / 2)}" width="${heapN(s)}" height="${heapN(s)}" rx="${heapN(HEAP.round * p.scale)}" ` +
+      `fill="${p.box === "gold" ? HEAP.gold : HEAP.colours[p.box]}"${stroke} stroke-width="${heapN(HEAP.line * p.scale)}"/>${extra}</g></g>`;
+  }).join("\n");
+}
+// The boxes the logo has: the stores you use (switched on in Settings), and Projects.
+const heapBoxes = () => HEAP.order.filter(b => b === "projects" || (DATA.enabled || {})[b] !== false);
+// Draw the logo (the bar's, and Projects' splash) with your boxes, when they've changed.
+function drawHeap() {
+  if (!DATA || !DATA.version) return;
+  const want = heapBoxes().join(",");
+  for (const g of document.querySelectorAll(".heap[data-live]")) {
+    if (g.dataset.boxes === want) continue;
+    g.dataset.boxes = want;
+    g.innerHTML = heapMarkup(want ? want.split(",") : []);
+  }
+}
 /* The logo glows, and shakes now and then, while an update to Hoard is waiting; choosing it then opens Updates */
 function markBrand() {
   const b = $(".brand");
@@ -5678,14 +5750,15 @@ function queuedToast(r) {   // a job started while another runs waits its turn
 
 /* ---------- a few things to find. Nothing here reads or changes your library; each stays still with reduced motion */
 const motionOk = () => !document.body.classList.contains("less-motion") && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-function confetti(n = 90) {   // every store's colour, falling
+function confetti(n = 90) {   // the heap's boxes (issue #279): each store's colour, and the gold, falling
   if (!motionOk()) return;
   const box = document.createElement("div");
-  box.className = "confetti"; box.setAttribute("aria-hidden", "true");
+  box.className = "confetti heap-confetti"; box.setAttribute("aria-hidden", "true");
+  const colours = [...Object.values(HEAP.colours).slice(0, 5), HEAP.gold];
   for (let i = 0; i < n; i++) {
     const p = document.createElement("i");
     p.style.left = `${Math.random() * 100}vw`;
-    p.style.background = `var(--${STRIPE_STORES[i % STRIPE_STORES.length]})`;
+    p.style.background = colours[i % colours.length];
     p.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
     p.style.animationDelay = `${Math.random() * 0.9}s`;
     p.style.setProperty("--spin", `${Math.round(Math.random() * 1080 - 540)}deg`);
@@ -5704,7 +5777,7 @@ document.addEventListener("keydown", e => {
   if (konami === KONAMI.length) { konami = 0; confetti(); toast("Every store at once. A fine hoard."); }
 });
 // the logo: while an update waits, it opens Updates; on the Library with nothing filtered, poking it five times...
-let pokes = [];
+let pokes = [], tumbled = 0;
 document.addEventListener("click", e => {
   const b = e.target.closest(".brand");
   if (!b || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
@@ -5714,8 +5787,10 @@ document.addEventListener("click", e => {
   const now = Date.now();
   pokes = [...pokes.filter(t => now - t < 2500), now];
   if (pokes.length < 5) return;
-  pokes = [];
+  pokes = [];   // (issue #279: the heap topples one box at a time and builds itself back up, the gold one last)
+  clearTimeout(tumbled);
   b.classList.remove("tumble"); void b.offsetWidth; b.classList.add("tumble");
+  tumbled = setTimeout(() => b.classList.remove("tumble"), 3600);   // (then pointing at it plays its loop again)
   toast("Careful: everything in here is somebody's treasure.");
 });
 // a few words in the search box

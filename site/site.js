@@ -163,14 +163,15 @@
 
   // ---------- a few things to find, as in the app. Each stays still when motion is reduced.
   const motionOk = () => !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function confetti(n = 90) {   // every store's colour, falling
+  function confetti(n = 90) {   // the heap's boxes (issue #279): every store's colour, and the gold, falling
     if (!motionOk()) return;
     const box = document.createElement("div");
-    box.className = "confetti"; box.setAttribute("aria-hidden", "true");
+    box.className = "confetti heap-confetti"; box.setAttribute("aria-hidden", "true");
+    const colours = [...STORES.map(s => `var(--${s})`), "#F0B429"];
     for (let i = 0; i < n; i++) {
       const p = document.createElement("i");
       p.style.left = `${Math.random() * 100}vw`;
-      p.style.background = `var(--${STORES[i % STORES.length]})`;
+      p.style.background = colours[i % colours.length];
       p.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
       p.style.animationDelay = `${Math.random() * 0.9}s`;
       p.style.setProperty("--spin", `${Math.round(Math.random() * 1080 - 540)}deg`);
@@ -189,7 +190,7 @@
     if (konami === KONAMI.length) { konami = 0; confetti(); toast("Every store at once. A fine hoard."); }
   });
   // the logo, poked five times on the front page
-  let pokes = [];
+  let pokes = [], tumbled = 0;
   const brand = document.querySelector(".brand");
   if (brand) {
     brand.addEventListener("click", e => {
@@ -200,7 +201,9 @@
       pokes = [...pokes.filter(t => now - t < 2500), now];
       if (pokes.length < 5) return;
       pokes = [];
+      clearTimeout(tumbled);   // (the heap topples one box at a time and builds itself back up: issue #279)
       brand.classList.remove("tumble"); void brand.offsetWidth; brand.classList.add("tumble");
+      tumbled = setTimeout(() => brand.classList.remove("tumble"), 3600);
       toast("Careful: everything in here is somebody's treasure.");
     });
   }

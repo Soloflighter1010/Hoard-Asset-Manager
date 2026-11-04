@@ -86,12 +86,31 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .brand { display: flex; align-items: center; color: var(--bone); text-decoration: none; flex: none; }
 .brand svg { height: 34px; width: auto; display: block; }
 .brand .word { fill: currentColor; }
-.brand .boxes { transform-box: fill-box; transform-origin: 50% 85%; }
-.brand:hover .boxes { animation: brand-shake 1.1s ease-in-out; }
-@keyframes brand-shake { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-9deg); } 35% { transform: rotate(8deg); }
-  55% { transform: rotate(-5deg); } 75% { transform: rotate(3deg); } }
-.brand.tumble .boxes { animation: brand-tumble .9s cubic-bezier(.3, 1.4, .5, 1); }
-@keyframes brand-tumble { 30% { transform: translateY(-7px) rotate(-25deg); } 70% { transform: translateY(1px) rotate(370deg); } 100% { transform: rotate(360deg); } }
+/* The Heap (issues #277, #279), as the app has it: pointed at, its boxes fall over and build themselves up again, in a
+   loop; poked five times on the front page, they topple one by one and build back up, the gold one last with its
+   sparkle. Each falls the way it leans (--fx, --fr), in its turn (--i). */
+.heap .hb { transform-box: fill-box; transform-origin: 50% 100%; }
+.brand:hover .heap .hb { animation: heap-loop 3.6s cubic-bezier(.3, .7, .4, 1) infinite both; animation-delay: calc(var(--i) * 90ms); }
+@keyframes heap-loop {
+  0%, 22% { transform: none; opacity: 1; }
+  38% { transform: translate(var(--fx), 14px) rotate(var(--fr)); opacity: 0; }
+  46% { transform: translateY(-26px); opacity: 0; }
+  60% { transform: none; opacity: 1; }
+  65% { transform: translateY(-2.5px); }
+  70%, 100% { transform: none; opacity: 1; }
+}
+.brand.tumble .heap .hb { animation: heap-tumble 2.6s ease both; animation-delay: calc(var(--i) * 160ms); }
+@keyframes heap-tumble {
+  0% { transform: none; opacity: 1; }
+  16% { transform: translate(var(--fx), 12px) rotate(var(--fr)); opacity: 0; }
+  52% { transform: translateY(-24px); opacity: 0; }
+  72% { transform: none; opacity: 1; }
+  80% { transform: translateY(-3px); }
+  88%, 100% { transform: none; opacity: 1; }
+}
+.heap .spark { transform-box: fill-box; transform-origin: center; }
+.brand.tumble .heap .spark { animation: heap-spark .8s ease both; animation-delay: calc(var(--i) * 160ms + 2s); }
+@keyframes heap-spark { 0%, 100% { transform: none; } 45% { transform: scale(1.9) rotate(45deg); } }
 .apptabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .apptabs a { padding: 7px 12px; border-radius: 9px; font-weight: 700; font-size: 15px; color: var(--dust); text-decoration: none; }
 .apptabs a:hover { color: var(--bone); background: var(--stone); }
@@ -404,8 +423,9 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 30; overflow: hidden; }
 .confetti i { position: absolute; top: -16px; width: 10px; height: 10px; border-radius: 3px; animation: confetti-fall linear forwards; }
 @keyframes confetti-fall { to { transform: translateY(calc(100vh + 32px)) rotate(var(--spin)); } }
+.heap-confetti i { width: 13px; height: 13px; border-radius: 4px; box-shadow: 0 0 0 2px #211C18; }   /* (the heap's boxes) */
 @media (prefers-reduced-motion: reduce) {
-  .brand:hover .boxes, .brand.tumble .boxes { animation: none; }
+  .heap .hb, .heap .spark { animation: none !important; }
   .art, .seg button { transition: none; }
   .slot:hover .art, figure:hover .art { transform: none; }
 }

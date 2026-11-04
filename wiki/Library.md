@@ -7,6 +7,11 @@ The bar at the top has the pages beside the logo (**Library**, **Downloads**, **
 in Downloads) and **Report a problem**. In a window without room for them, they're in the **Menu** (5.2.0 beta 4).
 **Privacy**, **Terms** and **Made with AI** stay at the bottom of the page.
 
+The logo is the Heap (5.2.0 beta 4): a box for each store you use, in its colour, the Projects box with a small cube on
+it, and Hoard's gold box with its sparkle on top. It stacks itself again when you switch a store on or off in
+[Settings](Settings). Point at it and its boxes fall over and build themselves up again. With **Reduce motion**, it
+stays still.
+
 ## Finding things
 
 - **Search** (at the top: after the logo and the pages, or in the middle of a wide window) matches names, creators, stores, variants and tags. A prefix

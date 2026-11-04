@@ -22,7 +22,7 @@ DARK, LIGHT = "#211C18", "#F4EDE3"   # the site's cave and bone: its background 
 # name: (the SVG, the outline round its boxes (the background it's on), the word's colour, width of its PNG)
 LOGOS = {
     "hoard-logo-on-dark": (LOGO, DARK, LIGHT, 1800),
-    "hoard-logo-on-light": (LOGO, "#FFFFFF", DARK, 1800),
+    "hoard-logo-on-light": (LOGO, DARK, DARK, 1800),   # (the Heap's boxes are outlined in the cave on light too)
     "hoard-mark": (MARK, DARK, None, 1024),
 }
 
@@ -34,7 +34,8 @@ def standalone(svg: str, outline: str, word: str | None) -> str:
     svg = svg.replace('<g class="word">', f'<g fill="{word}">') if word else svg
     svg = re.sub(r"<svg [^>]*>", lambda m: re.sub(r' (?:role|aria-label|aria-hidden|width|height)="[^"]*"', "", m[0]),
                  svg, count=1)   # (the page's label and size: the <svg> tag's own, not its boxes')
-    svg = re.sub(r'<g class="boxes"', "<g", svg)
+    svg = re.sub(r'<g class="boxes[^"]*"', "<g", svg)
+    svg = re.sub(r' class="hb" data-box="[^"]*" style="[^"]*"', "", svg)   # (what the site's animations move)
     return svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ', 1) + "\n"
 
 
