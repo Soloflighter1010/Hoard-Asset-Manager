@@ -2258,5 +2258,9 @@
  "Opens in your browser": "ブラウザーで開きます",
  "Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.": "{0}の名前を変更: フォルダーの名前が変わり、一覧とHoardのメモもそれについていきます。Unity Hubの一覧とバックアップは古い名前のままです。",
  "Renamed it {0}.": "{0}に名前を変えました。",
- "Rename...": "名前を変更..."
+ "Rename...": "名前を変更...",
+ "Make a set with these": "これでセットを作る",
+ "Add to a set...": "セットに追加...",
+ "Move into {0}": "{0}に移動",
+ "Make a folder with these": "これでフォルダーを作る"
 }

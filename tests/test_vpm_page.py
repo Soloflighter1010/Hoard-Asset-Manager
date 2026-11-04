@@ -164,6 +164,33 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(gone.locator(".marks button").all_inner_texts(), ["Make it a favourite", "Take off the list"])
         self.assertEqual(gone.locator(".pj-d-about").inner_text(), "")
 
+    def test_drag_projects_into_folders(self):
+        """Issue #281: a project dropped on another makes a folder of them, named as it's made; one dropped on a folder
+        (its tile, or its button above the list) goes in it. What a drop will do shows as you drag."""
+        page = self.page
+        row = lambda name: page.locator("#projectsBody .pj-row", has_text=name)  # noqa: E731
+        self.assertEqual(row("Rusk Avatar").get_attribute("draggable"), "true")
+        row("Rusk Avatar").drag_to(row("Old World"))
+        page.locator("dialog[open] #askName").wait_for()
+        page.fill("dialog[open] #askName", "Duo")
+        page.keyboard.press("Enter")
+        page.wait_for_function("() => PJ.data.projects.filter(p => p.folder === 'Duo').length === 2")
+        # out of it, then dropped on its button above the list: in it again
+        pj_folder(page, "Rusk Avatar", "")
+        chip = page.locator('#projectsBody .pj-folders [data-folder="Duo"]')
+        chip.wait_for()
+        page.wait_for_timeout(300)   # (the list drawn again once it's out)
+        hint = page.evaluate("""() => { const dt = new DataTransfer(), from = [...document.querySelectorAll('#projectsBody .pj-row')].find(r => r.textContent.includes('Rusk Avatar'));
+          const to = document.querySelector('#projectsBody .pj-folders [data-folder="Duo"]');
+          from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          const said = to.dataset.dropHint;
+          document.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+          return said; }""")
+        self.assertEqual(hint, "Move into Duo")
+        row("Rusk Avatar").drag_to(chip)
+        page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').folder === 'Duo'")
+
     def test_rename_a_project(self):
         """Issue #290: Rename... in a project's details renames its folder, and its details stay open under the new
         name; a name that can't be used is refused, and nothing changes."""

@@ -2258,5 +2258,9 @@
  "Opens in your browser": "브라우저에서 열려요",
  "Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.": "{0} 이름 바꾸기: 폴더 이름이 바뀌고, 목록과 Hoard의 메모도 따라가요. Unity Hub의 목록과 백업은 예전 이름 그대로예요.",
  "Renamed it {0}.": "{0}(으)로 이름을 바꿨어요.",
- "Rename...": "이름 바꾸기..."
+ "Rename...": "이름 바꾸기...",
+ "Make a set with these": "이것들로 세트 만들기",
+ "Add to a set...": "세트에 추가...",
+ "Move into {0}": "{0}(으)로 옮기기",
+ "Make a folder with these": "이것들로 폴더 만들기"
 }

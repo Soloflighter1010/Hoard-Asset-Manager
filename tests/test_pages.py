@@ -2292,6 +2292,48 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.locator(".slot", has_text="Mochi").wait_for()
         return page
 
+    def test_drag_products_into_a_set(self):
+        """Issue #281: a product dropped on another makes a set of them, named as it's made (and those chosen with it
+        go too); dropped on Sets and Wishlists, it's added to a set you choose. What a drop will do shows as you drag."""
+        page = self.open()
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        made = []
+        tile = lambda name: page.locator("#grid .slot", has_text=name)  # noqa: E731
+        self.assertEqual(tile("Rusk").get_attribute("draggable"), "true")
+        # what it'll do, under the pointer as you drag
+        page.evaluate("""() => { const dt = new DataTransfer(), from = [...document.querySelectorAll('#grid .slot')].find(s => s.textContent.includes('Rusk'));
+          const to = [...document.querySelectorAll('#grid .slot')].find(s => s.textContent.includes('Anko'));
+          from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); }""")
+        self.assertEqual(tile("Anko").get_attribute("data-drop-hint"), "Make a set with these")
+        self.assertIn("drop-on", tile("Anko").get_attribute("class"))
+        page.evaluate("() => document.dispatchEvent(new DragEvent('dragend', { bubbles: true }))")
+        self.assertIsNone(tile("Anko").get_attribute("data-drop-hint"), "let go: nothing marked")
+        # dropped: a set of both, named now
+        tile("Rusk").drag_to(tile("Anko"))
+        page.locator("dialog[open] #askName").wait_for()
+        page.fill("dialog[open] #askName", "Kitsu pair")
+        page.keyboard.press("Enter")
+        page.locator(".toast", has_text="Made the set Kitsu pair, with 2 products in it.").wait_for()
+        sets = page.evaluate("DATA.sets")
+        pair = next(x for x in sets if x["name"] == "Kitsu pair")
+        made.append(pair["id"])
+        keys = page.evaluate("DATA.items.filter(a => a.name === 'Rusk' || a.name === 'Anko').map(a => a.tag_key).sort()")
+        self.assertEqual(sorted(pair["items"]), keys)
+        # on Sets and Wishlists: which set, then yes
+        tile("Mochi").drag_to(page.locator('#storeSeg [data-store="Sets"]'))
+        which = page.locator("dialog.setpick-dlg")
+        which.wait_for()
+        which.locator(".settile", has_text="Kitsu pair").click()
+        page.locator("dialog.ask .primary", has_text="Add").click()
+        page.locator(".toast", has_text="Added it to Kitsu pair.").wait_for()
+        self.assertEqual(len(next(x for x in page.evaluate("DATA.sets") if x["id"] == pair["id"])["items"]), 3)
+        for i in made:   # (the next test starts with no sets)
+            page.evaluate(post, ["/api/sets", {"action": "delete", "id": i}])
+        made.clear()
+        self.assertEqual(self.errors, [])
+        page.close()
+
     def test_one_panel_at_a_time(self):
         """Issue #84: Tags, Stores, Settings and Tasks open in one panel over the page, one at a time, instead of
         floating windows that pile up; Escape, the × or a click around it closes it."""

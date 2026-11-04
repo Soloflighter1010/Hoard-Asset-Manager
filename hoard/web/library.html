@@ -2085,7 +2085,7 @@ const slotHTML = a => {
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
                   a.also_in.length && tr("also on {0}", listed(a.also_in.map(label))), onDisk(a) && tr("downloaded"), a.new && tr("new"),
                   wrapped && tr("a gift, not opened yet")];
-    return `<button class="slot ${a.store}${n > 1 ? " stacked" : ""}${wrapped ? " wrapped" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
+    return `<button draggable="true" class="slot ${a.store}${n > 1 ? " stacked" : ""}${wrapped ? " wrapped" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
         (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +

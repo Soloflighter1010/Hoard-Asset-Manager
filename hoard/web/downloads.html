@@ -2339,7 +2339,7 @@ const slotHTML = a => {
     const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, storeName(a.store)), n > 1 && tr("{0} copies", n),
                   also.length && tr("also from {0}", listed(also))];
-    return `<button class="slot ${a.store.toLowerCase()}${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
+    return `<button draggable="true" class="slot ${a.store.toLowerCase()}${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
       `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
         `${n > 1 ? `<span class="flag count" aria-hidden="true">×${n}</span>` : ""}` +

@@ -943,7 +943,101 @@ function allActions() {
   return [...(main.length ? [{ name: "", items: main }] : []), ...groups];
 }
 // The selection bar's buttons and menus, and selecting with a click, Shift, Ctrl and the keys.
+/* ---------- drag and drop (issue #281). A product dropped on another makes a set of them (those chosen with it go
+   too), and on Sets and Wishlists it's added to a set you choose; a project dropped on another makes a folder of
+   them (or goes in the other's folder), and on a folder it goes in it. What a drop will do shows on what's under it
+   as you drag; Escape (the browser's own) or letting go anywhere else does nothing. Right-click does it all too. */
+const DRAG = { what: "", ids: [], over: null };
+// The products a tile drags: those chosen with it, or it alone.
+function dragProducts(slot) {
+  const id = tileId(slot);
+  if (sel.kind === "items" && sel.ids.has(id)) return chosenItems();
+  const a = T.byId(id);
+  return a ? [a] : [];
+}
+// What dropping here would do: { el (what's under it), hint (said on it), run }, or null for nothing.
+function dropTarget(el) {
+  if (!el || !el.closest) return null;
+  if (DRAG.what === "products") {
+    const list = DRAG.ids.map(T.byId).filter(Boolean);
+    const slot = el.closest("#grid .slot[draggable=true]");
+    if (slot && !DRAG.ids.includes(tileId(slot)) && T.byId(tileId(slot)))
+      return { el: slot, hint: tr("Make a set with these"), run: () => addToSet([...list, T.byId(tileId(slot))], "new") };
+    const sets = el.closest('#storeSeg [data-store="Sets"], .apptabs a[href="/#store=Sets"]');
+    if (sets) return { el: sets, hint: tr("Add to a set..."), run: () => addToAnotherSet(list) };
+    return null;
+  }
+  if (DRAG.what === "project") {
+    const path = DRAG.ids[0], mine = (PJ.data.projects || []).find(p => p.path === path) || {};
+    const folder = el.closest("#projectsBody [data-folder]");
+    if (folder && folder.dataset.folder !== (mine.folder || ""))
+      return { el: folder, hint: tr("Move into {0}", folder.dataset.folder), run: () => pjOrganizeSome(path, { folder: folder.dataset.folder }) };
+    const other = el.closest("#projectsBody [data-path][draggable=true]");
+    const them = other && (PJ.data.projects || []).find(p => p.path === other.dataset.path);
+    if (!them || them.path === path) return null;
+    if (them.folder && them.folder !== mine.folder)   // (already in a folder: this one goes in it too)
+      return { el: other, hint: tr("Move into {0}", them.folder), run: () => pjOrganizeSome(path, { folder: them.folder }) };
+    if (them.folder) return null;
+    return { el: other, hint: tr("Make a folder with these"), run: () => pjFolderOf([path, them.path]) };
+  }
+  return null;
+}
+// Two projects dropped on each other: a new folder, named now, with both in it.
+async function pjFolderOf(paths) {
+  const name = (await askName("Name the new folder", "", { max: 60 })).trim();
+  if (!name) return;
+  for (const path of paths) {
+    const r = await apiPost("/api/vpm/organize", { path, folder: name });
+    if (!r.ok) { toast(r.data.error || tr("That can't be done.")); break; }
+  }
+  return loadProjects();
+}
+// Show what a drop would do on what's under the pointer (and nothing on what it's left).
+function dropShow(t) {
+  if (DRAG.over === (t && t.el)) return;
+  if (DRAG.over) { DRAG.over.classList.remove("drop-on"); delete DRAG.over.dataset.dropHint; }
+  DRAG.over = t ? t.el : null;
+  if (t) { t.el.classList.add("drop-on"); t.el.dataset.dropHint = t.hint; }
+}
+// The drag is over: nothing marked any more.
+function dragDone() { dropShow(null); DRAG.what = ""; DRAG.ids = []; }
+// Dragging products and projects, and dropping them on each other (issue #281).
+function wireDragging() {
+  document.addEventListener("dragstart", e => {
+    const el = e.target.closest ? e.target : e.target.parentElement;
+    const slot = el && el.closest("#grid .slot[draggable=true]"), project = !slot && el && el.closest("#projectsBody [data-path][draggable=true]");
+    if (slot) {
+      const list = dragProducts(slot);
+      if (!list.length) return;
+      Object.assign(DRAG, { what: "products", ids: list.map(T.id) });
+      e.dataTransfer.effectAllowed = "copy";
+      e.dataTransfer.setData("text/plain", list.map(a => a.name).join("\n"));
+    } else if (project) {
+      Object.assign(DRAG, { what: "project", ids: [project.dataset.path] });
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", pjNamed(project.dataset.path));
+    }
+  });
+  document.addEventListener("dragover", e => {
+    if (!DRAG.what) return;
+    const t = dropTarget(e.target);
+    dropShow(t);
+    if (t) { e.preventDefault(); e.dataTransfer.dropEffect = DRAG.what === "products" ? "copy" : "move"; }
+  });
+  document.addEventListener("drop", e => {
+    if (!DRAG.what) return;
+    const t = dropTarget(e.target);
+    dragDone();
+    if (!t) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();   // (not a page dropped to import)
+    t.run();
+  }, true);
+  document.addEventListener("dragend", dragDone);
+}
+// Choosing several products or sets, and what's done with them (the bar, its menus and a right-click).
 function wireSelection() {
+  wireDragging();
   $("#bulk").addEventListener("click", e => {
     const m = e.target.closest("[data-main]"), g = e.target.closest("[data-group]");
     if (e.target.closest("[data-pickcancel]")) pickEnd();
@@ -2865,20 +2959,20 @@ function pjList() {
     const loose = grouped ? ordered.filter(p => !p.folder) : ordered;
     body = `<div class="pj-tiles">` + folders.map(([f, n]) => {
       const inside = list.filter(p => p.folder === f), ups = inside.reduce((t, p) => t + pjUpdateCount(p), 0);
-      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" ` +
+      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" data-folder="${esc(f)}" ` +
         `data-hay="${esc(norm([f, ...inside.map(p => p.name)].join(" ")))}" aria-label="${esc(tr("Folder {0}, {1} projects", f, n))}">` +
         `<span class="pj-tile-art folder">${FOLDER_ICON}<span class="pj-mini">${inside.slice(0, 4).map(p =>
           `<i class="k-${pjHue(p.type)}">${esc(initials(p.name))}</i>`).join("")}</span></span>` +
         `<span class="nm-t" translate="no">${esc(f)}</span><span class="cr">${esc(tr(n === 1 ? "1 project" : "{0} projects", n))}` +
         `${ups ? ` · ${esc(tr("updates inside"))}` : ""}</span></button>`;
     }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
-        `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}">` +
+        `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}" draggable="true">` +
         `<span class="pj-tile-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></span>` +
         `<span class="nm-t" translate="no">${esc(p.name)}</span>${pjLastMark(p)}<span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
         pjUpdateMarks(p) + `</button>`).join("") + `</div>`;
   } else {   // issue #246: a row says what you need at a glance; choosing it opens its details
     body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
-      `data-path="${esc(p.path)}" data-hay="${hay(p)}">` +
+      `data-path="${esc(p.path)}" data-hay="${hay(p)}" draggable="true">` +
       `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
       `<button class="pj-open" data-pj="details" aria-pressed="${PJ.selected === p.path}">` +
       `<span class="pj-main"><span class="pj-name"><b translate="no">${esc(p.name)}</b>${pjLastMark(p)}</span><span class="meta" translate="no">${esc(p.path)}</span></span>` +
@@ -3024,7 +3118,7 @@ function pjFolderBar(list) {
   if (!folders.length && !PJ.tag) return "";
   // A folder's button.
   const chip = (i, label, n, on, raw) => `<button class="chip" data-pj="folderpick" data-i="${i}" aria-pressed="${on}"` +
-    `${raw ? ' translate="no"' : ""}>${esc(label)}<span class="n">${n}</span></button>`;
+    `${raw ? ` translate="no" data-folder="${esc(label)}"` : ""}>${esc(label)}<span class="n">${n}</span></button>`;   // (a folder's takes a project dropped on it)
   return `<div class="pj-folders chips" role="group" aria-label="${esc(tr("Folders"))}">` +
     (folders.length ? chip(-1, tr("All projects"), list.length, PJ.folder == null) +
       folders.map(([f, n], i) => chip(i, f, n, PJ.folder === f, true)).join("") +

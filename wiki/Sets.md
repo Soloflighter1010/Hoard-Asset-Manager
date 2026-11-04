@@ -37,6 +37,9 @@ them as they were) (5.2.0 beta 2).
 ## Making a set
 
 - **New set**, in the Sets tab, then add products to it.
+- **Drag and drop** (5.2.0 beta 4): drop a product on another to make a set of them, named as it's made (the
+  products chosen with it go too), or on **Sets and Wishlists** (the tab above the tiles, or in the bar) to add it
+  to a set you choose. What a drop will do shows on what's under the pointer as you drag; Escape cancels.
 - Choose products in the **Library** or in **Downloads** (tick their boxes, Ctrl- or Shift-click, or **Select**
   on a touch screen), then **Sets** in the selection bar (or right-click): **New set from these...**, or **Add to**
   a set you have: the five you added to last (or the newest), and **Add to another set...** for the rest (5.2.0):

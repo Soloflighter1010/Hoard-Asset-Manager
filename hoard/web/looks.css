@@ -435,3 +435,11 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-cards="outlined"][data-style="workbench"] .grid .slot { border: 1px solid var(--dust); border-radius: 8px; }
 [data-cards="outlined"][data-style="workbench"] .grid .slot:first-child { border-top: 1px solid var(--dust); }
 [data-cards="outlined"][data-style="workbench"] .grid .slot:hover { background: var(--seam); }
+
+/* Drag and drop (issue #281): what a drop will do, said on what's under the pointer as you drag (a set of these, a
+   set to add to, a folder) */
+.drop-on { outline: 3px dashed var(--gold); outline-offset: 3px; position: relative; }
+.drop-on::after { content: attr(data-drop-hint); position: absolute; left: 50%; top: -10px; transform: translate(-50%, -100%);
+  z-index: 40; padding: 5px 10px; border-radius: 8px; background: var(--gold); color: var(--gold-ink); box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+  font: 700 12px/1.3 var(--body); white-space: nowrap; pointer-events: none; }
+[draggable="true"]:active { cursor: grabbing; }

@@ -43,6 +43,8 @@ a folder**) and give it tags (**Tags**: type one and **Add**, or **×** to take 
 `quest` or `poiyomi`. They're Hoard's own (the Creator Companion and ALCOM have only a favourite). Once a project is in a folder, the folders show above the list: choose one to see just its projects,
 **Not in a folder** for the rest, or **All projects**. Choose a tag in a project's details to see those that have it,
 and choose it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
+Or drag (5.2.0 beta 4): drop a project on another to make a folder of them, named as it's made (on one that's in a
+folder, it goes in that folder), or on a folder's tile or its button above the list to move it in.
 
 **Add a project...** lists one you already have: in Hoard's own window it opens your computer's folder picker, in your
 projects folder (in a web browser, you type the folder's full path). **Take off the list** leaves its folder as it is;
