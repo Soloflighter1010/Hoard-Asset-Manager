@@ -1,5 +1,68 @@
 # Changelog
 
+## 5.2.0-beta.4
+
+- **The top bar** ([#270](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/270)). The logo, then the pages (Library, Downloads, Local, Sets and Wishlists, Tasks,
+  Projects), the search, then Hoard's version, GitHub, Discord, **Hoard updates** and **Report a problem**, before
+  **Menu** and **Sync**. Without room for them, those links go in the Menu, with **Update to ...**. The footer keeps
+  Privacy, Terms, Made with AI and the license. **Hoard updates** (new versions of Hoard) and **Asset updates** (newer
+  files for your downloads: the Downloads view that was Updates) are named apart.
+- **Search other sites from the search box** ([#271](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/271)). `nexyy:`, `booth:`, `gumroad:`, `jinxxy:` and `itch:` search
+  that site for what you type after them, in your browser, under a heading of their own in the search box's list.
+  They never filter your own products.
+- **Source control with Git, for projects** ([#296](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/296), [#297](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/297), [#298](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/298), [#299](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/299)). Hoard runs the Git you have installed.
+  - **Set up Git...** shows first what it writes: the ignore rules for Unity and for VRChat's packages (your
+    project's own files kept, Unity's cache and packages it can restore left out). An ignore file that's there is
+    only added to.
+  - **Changes:** staged, not staged, new, renamed and in conflict, each staged or unstaged by you; a file's changes
+    line by line; **Commit**, asking for your name and email the first time; the history, and each commit's files and
+    changes.
+  - **Remotes**, with **Fetch**, **Pull** and **Push** as tasks you can stop, how far ahead and behind you are, and
+    branches made, switched to and deleted. Switching and pulling wait until Unity is closed.
+  - Conflicts listed, with **Abort the merge**; Git LFS said when it's missing; your Git app; **Get from a Git
+    address...** (a clone, then on the list); backups leave `.git` out and can put the history in as a Git bundle; a
+    project's details say its branch and its changes.
+  - Signing in to a remote is Git's own (Git Credential Manager or SSH): Hoard keeps no Git passwords, and refuses an
+    address with one in it.
+- **Rename a project** ([#290](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/290)). **Rename...** in a project's details renames its folder where it is, and its
+  favourite, folder, tags and what went in from your library follow it. Not while Unity has it open.
+- **Projects** ([#282](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/282), [#283](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/283), [#294](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/294)). **Add Assets** (it was "Put in products from your library"); a project with
+  nothing from your library reads like an empty Library; the project you opened last says **Last opened**, on its row,
+  its tile and in its details.
+- **Drag and drop** ([#281](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/281)). A product dropped on another makes a set of them (the products chosen with it go too);
+  dropped on Sets and Wishlists, it goes in a set you choose. A project dropped on another makes a folder of them;
+  dropped on a folder, it moves in. What a drop will do shows as you drag, and Escape stops it.
+- **A set's or wishlist's page, laid out like a product's details** ([#272](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/272)): its picture large beside its name,
+  what's in it and where it's from, **Share** on its own and the rest in a quieter row; its note and photos a card of
+  their own; a wishlist's **Find more to add** and price range together, just above its products.
+- **Notifications through Apprise** ([#285](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/285), [#286](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/286), [#287](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/287), [#288](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/288)).
+  - Each address on its own in Settings, by its service and what tells it apart (never its token), with **Send a
+    test**, **Change...** and **Remove**.
+  - Messages read well where they land: on Discord, a card in Hoard's gold with its name, icon and a link; bold and
+    links where a service shows formatting. Wishlist products that got cheaper are named, with the old price struck
+    out, the new one, a link and a picture.
+  - The setup assistant has a notifications step, where Apprise is installed.
+  - Links go to Apprise's new documentation site (appriseit.com), and the address builder links each service's own
+    page.
+- **Quick refresh** ([#300](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/300)). Beside **Refresh all stores** in **Stores**, it reads only the start of each library
+  and list (its first 2 pages, or its first 50 products, whichever is fewer), then the start of the wishlists you keep.
+  What it doesn't reach is kept, so it never takes anything out: a full refresh does that.
+- **Jinxxy** ([#275](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/275), [#276](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/276)). Gifts are marked as gifts, and say who sent them; the Gifts tab is read too. A refresh
+  is much faster: products' pages come from what Jinxxy's own page loaded, so it no longer opens every item.
+- **The Heap: Hoard's new logo** ([#277](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/277), [#278](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/278), [#279](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/279), [#280](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/280)). The gold box with its sparkle on a heap of boxes, one in
+  each store's colour, and the Projects box with a cube on it. In the app it's yours: a box for each store you use,
+  and Projects always. Point at it and its boxes fall over and build themselves up again (it stays still with Reduce
+  motion); poke it five times for more. It's in the app's bar, splashes, footer and tab, the apps' icons, the website,
+  the press kit and Hoard for Unity's window (its package 0.10.1).
+- **Tiles' names over the glow** ([#284](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/284)) keep a drop shadow instead of a box.
+- **Hoard and other tools** ([#293](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/293)): a page comparing Hoard with the Creator Companion, ALCOM and KonoAsset, on the
+  website and in the wiki, in English, Japanese and Korean, with a **Compare** tab on the website.
+- **Videos, posters and music** ([#273](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/273), [#274](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/274), [#289](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/289), [#291](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/291), [#292](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/292)), made in code from Hoard's own screens, with no
+  diffusion: a long and a short promo, landscape and portrait, in English, Japanese and Korean; a short video for each
+  problem the wiki's Troubleshooting page explains most, linked from it; a mockup of a sketch to record in VRChat;
+  posters for VRChat worlds; and a looping music track. They're on a release of their own, `media`; `promo/` in the
+  repository makes them.
+
 ## 5.2.0-beta.3
 
 - **A project's details, as a product's** ([#246](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/246)). Choose a project and its details open beside the list as
