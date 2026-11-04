@@ -5,6 +5,7 @@
 // - Copy copies the VCC listing's address,
 // - the store tabs on the front page tint the glow and say what Hoard does on each store, as the app's tabs do,
 // - the docs' search box finds any section of the docs (docs/search.json, or docs/ja/search.json in Japanese),
+// - a screenshot, clicked (or chosen with the keyboard), opens bigger, with the others a key away,
 // - and there are a few things to find, as in the app.
 (() => {
   "use strict";
@@ -189,6 +190,57 @@
     konami = k === KONAMI[konami] ? konami + 1 : k === KONAMI[0] ? 1 : 0;
     if (konami === KONAMI.length) { konami = 0; confetti(); toast("Every store at once. A fine hoard."); }
   });
+  // A screenshot, clicked, opens bigger over the page: its full size (in the light or dark it's shown in), its caption,
+  // and the page's other screenshots before and after it (the arrow keys, or the buttons). Escape, the close button or
+  // a click beside it closes it, and the keyboard goes back to the screenshot it opened from.
+  const shots = [...document.querySelectorAll(".hero .shot img, .gallery figure img")];
+  if (shots.length && typeof HTMLDialogElement === "function") {
+    // an element of the lightbox, with its class and words
+    const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+    const box = make("dialog", "lightbox");
+    box.setAttribute("aria-label", "Screenshot");
+    const fig = make("figure"), big = make("img"), cap = make("figcaption"), count = make("p", "lb-count");
+    const close = make("button", "lb-close", "\u00d7"), prev = make("button", "lb-prev", "\u2039"), next = make("button", "lb-next", "\u203a");
+    close.setAttribute("aria-label", "Close"); prev.setAttribute("aria-label", "The one before"); next.setAttribute("aria-label", "The next one");
+    for (const b of [close, prev, next]) b.type = "button";
+    fig.append(big, cap);
+    box.append(count, fig, prev, next, close);
+    document.body.append(box);
+    let at = 0, from = null;
+    // its full-size picture (the page shows a smaller copy): the same name without its width
+    const full = img => (img.currentSrc || img.src).replace(/-(800|1200)\.webp$/, ".webp");
+    // the nth screenshot in the lightbox (going round from the last to the first), with its caption and count
+    const show = n => {
+      at = (n + shots.length) % shots.length;
+      const img = shots[at], words = img.closest("figure") && img.closest("figure").querySelector("figcaption");
+      big.src = full(img);
+      big.alt = img.alt;
+      cap.textContent = "";
+      if (words) for (const node of words.childNodes) cap.append(node.cloneNode(true));   // (its words, as they are)
+      count.textContent = `${at + 1} of ${shots.length}`;
+      prev.hidden = next.hidden = shots.length < 2;
+    };
+    // the lightbox opened on the nth screenshot, the keyboard on its close button
+    const open = n => { from = shots[n]; show(n); box.showModal(); close.focus(); };
+    shots.forEach((img, n) => {
+      img.dataset.lightbox = "";
+      img.tabIndex = 0;
+      img.setAttribute("role", "button");
+      img.setAttribute("aria-label", `See it bigger: ${img.alt}`);
+      img.addEventListener("click", () => open(n));
+      img.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(n); } });
+    });
+    close.addEventListener("click", () => box.close());
+    prev.addEventListener("click", () => show(at - 1));
+    next.addEventListener("click", () => show(at + 1));
+    box.addEventListener("click", e => { if (e.target === box || e.target === fig) box.close(); });   // (beside the picture)
+    box.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") { e.preventDefault(); show(at - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); show(at + 1); }
+    });
+    box.addEventListener("close", () => { big.removeAttribute("src"); if (from) from.focus(); });
+  }
+
   // the logo, poked five times on the front page
   let pokes = [], tumbled = 0;
   const brand = document.querySelector(".brand");

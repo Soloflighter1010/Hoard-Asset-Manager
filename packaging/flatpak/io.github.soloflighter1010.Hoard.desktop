@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=Hoard
-GenericName=Asset library
-Comment=Everything you've bought for VRChat, from Booth, Gumroad, Jinxxy, Payhip and itch.io, in one library
+GenericName=Asset and project manager
+Comment=Everything you've bought for VRChat, from Booth, Gumroad, Jinxxy, Payhip and itch.io, and the Unity projects you make with it
 Exec=hoard
 Icon=io.github.soloflighter1010.Hoard
 Terminal=false

@@ -25,12 +25,12 @@ C:\\Users\\you\\..., as a usual computer's would be.
 """
 from __future__ import annotations
 
-import base64
 import gzip
 import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tarfile
@@ -100,45 +100,20 @@ def cache_picture(url: str, picture: Path) -> None:
     shutil.copy(picture, THUMB_DIR / f"{hashlib.sha1(url.encode()).hexdigest()}.{PICTURES[picture.suffix.lower()]}")
 
 
-def swatch(rgb: tuple, size: int = 128) -> bytes:
-    """A plain square picture (a texture's preview, in the sample's own package)."""
-    try:
-        from PIL import Image
-    except ImportError:
-        return b""
-    out = io.BytesIO()
-    Image.new("RGB", (size, size), rgb).save(out, "PNG")
-    return out.getvalue()
-
-
-def swatches(colours: tuple, size: int = 512) -> bytes:
-    """Your texture set's own picture: its colours, side by side."""
-    try:
-        from PIL import Image
-    except ImportError:
-        return b""
-    img, w = Image.new("RGB", (size, size)), size // 2
-    for n, c in enumerate(colours[:4]):
-        img.paste(Image.new("RGB", (w, w), c), ((n % 2) * w, (n // 2) * w))
-    out = io.BytesIO()
-    img.save(out, "PNG")
-    return out.getvalue()
-
-
 def texture_package() -> bytes:
-    """Your own texture set, as a real .unitypackage (Look inside reads it): folders, textures with previews and
-    materials. Made up here, so no one else's work is shown inside."""
-    files = [("Assets/My Texture Set", None, None),
-             ("Assets/My Texture Set/Fabric", None, None),
-             ("Assets/My Texture Set/Fabric/Denim.png", 2_400_000, (52, 78, 120)),
-             ("Assets/My Texture Set/Fabric/Wool.png", 2_100_000, (168, 120, 96)),
-             ("Assets/My Texture Set/Fabric/Velvet.png", 1_900_000, (110, 40, 72)),
-             ("Assets/My Texture Set/Metal", None, None),
-             ("Assets/My Texture Set/Metal/Brushed Steel.png", 2_600_000, (150, 156, 162)),
-             ("Assets/My Texture Set/Metal/Gold Leaf.png", 2_300_000, (196, 160, 72)),
-             ("Assets/My Texture Set/Materials", None, None),
-             ("Assets/My Texture Set/Materials/Denim.mat", 4_200, None),
-             ("Assets/My Texture Set/Materials/Gold Leaf.mat", 4_100, None)]
+    """Your own texture set, as a real .unitypackage (Look inside reads it): folders, textures and materials, by name
+    and size only (no pictures are made up for it: Hoard shows each file's kind)."""
+    files = [("Assets/My Texture Set", None),
+             ("Assets/My Texture Set/Fabric", None),
+             ("Assets/My Texture Set/Fabric/Denim.png", 2_400_000),
+             ("Assets/My Texture Set/Fabric/Wool.png", 2_100_000),
+             ("Assets/My Texture Set/Fabric/Velvet.png", 1_900_000),
+             ("Assets/My Texture Set/Metal", None),
+             ("Assets/My Texture Set/Metal/Brushed Steel.png", 2_600_000),
+             ("Assets/My Texture Set/Metal/Gold Leaf.png", 2_300_000),
+             ("Assets/My Texture Set/Materials", None),
+             ("Assets/My Texture Set/Materials/Denim.mat", 4_200),
+             ("Assets/My Texture Set/Materials/Gold Leaf.mat", 4_100)]
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.USTAR_FORMAT) as tar:
         def add(name: str, data: bytes):
@@ -146,16 +121,12 @@ def texture_package() -> bytes:
             info = tarfile.TarInfo(name)
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
-        for n, (path, size, colour) in enumerate(files):
+        for path, size in files:
             guid = hashlib.md5(path.encode()).hexdigest()
             add(f"{guid}/pathname", path.encode())
             add(f"{guid}/asset.meta", b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n")
             if size is not None:
                 add(f"{guid}/asset", bytes(size))
-            if colour:
-                preview = swatch(colour)
-                if preview:
-                    add(f"{guid}/preview.png", preview)
     return gzip.compress(raw.getvalue())
 
 
@@ -253,17 +224,15 @@ def build(items: list[dict]) -> tuple[Path, dict]:
     for tag in {t for p in items if not p.get("wishlist") for t in p.get("tags") or ()}:   # what each tag is about
         if tag in KINDS:
             tags.change({"action": "type", "name": tag, "type": KINDS[tag]})
-    cfg = {**config.load_config(), "root": str(root), "setup_done": True, "ui": {"toured": True}}
-    own = WORK / "My Texture Set"   # your own: a texture set, copied into Local (no one else's picture)
+    spots = re.findall(r'\{ id: "([a-z0-9-]+)", at:', (REPO / "hoard" / "web" / "shared.js").read_text("utf-8"))
+    cfg = {**config.load_config(), "root": str(root), "setup_done": True,
+           "ui": {"toured": True, "spots_seen": spots}}   # (the "new here" notes: the pictures outlast them)
+    own = WORK / "My Texture Set"   # your own: a texture set, copied into Local (with Hoard's own placeholder picture)
     (own / "Textures").mkdir(parents=True)
     (own / "My Texture Set.unitypackage").write_bytes(texture_package())
     (own / "Textures" / "README.txt").write_text("Fabric and metal textures, 2048px.", "utf-8")
     from hoard import local
     local.add(cfg, root, str(WORK / "My Texture Set"), note="A commission", copy=True)
-    picture = swatches(((52, 78, 120), (196, 160, 72), (110, 40, 72), (150, 156, 162)))
-    if picture:   # its picture, chosen as you would (Choose a picture...)
-        key = next(iter(downloader.Manifest(local.local_dir(root)).assets))
-        local.choose_picture(cfg, root, key, base64.b64encode(picture).decode())
     downloader.build_catalog(cfg, root)
     # sets of them, and wishlists from Booth and Gumroad: read twice, so one of each is cheaper now
     named = {p["name"]: p for p in items if not p.get("wishlist")}
@@ -301,8 +270,23 @@ def build(items: list[dict]) -> tuple[Path, dict]:
     imports.note(made["My Avatar"], put_in)
     listing.add_preloaded(str(made["My Avatar"]), [{"tag_key": tag_key(str(e["store"]).lower(), e["name"]), "name": e["name"],
                                                     "file": e["file"], "added": e["added"]} for e in put_in])
+    git_project(made["My Avatar"])
     downloader.check_integrity(root)
     return root, {"items": lib_items, "cfg": cfg, "now": now}
+
+
+def git_project(path: Path) -> None:
+    """The project under source control (issue #296), with a commit and a change since, for its Source control tab.
+    Without Git installed, the tab shows how to get it."""
+    from hoard.vpm import git
+    try:
+        git.set_up(path)
+        git.set_identity(path, "You", "you@example.com")
+        git.stage(path, [f["path"] for f in git.state(path)["files"]])
+        git.commit(path, "My avatar, with its outfit")
+        (path / "Assets" / "Outfit.mat").write_text("color: pink\nshine: 0.4\n", "utf-8")
+    except git.GitError as e:
+        print(f"No Git repository for the project: {e}")
 
 
 # Paths on the pages as a usual computer's (the made-up folder is in a temporary one): shown only, never saved
@@ -314,6 +298,9 @@ SHOW_PATHS = """work => {
   const r = document.querySelector("#setRoot");
   if (r) r.value = "C:\\\\Users\\\\you\\\\Documents\\\\Hoard";
 }"""
+# Hoard's version isn't shown in the bar: the pictures outlast it
+NO_VERSION = ("document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
+              "s.textContent = '#version, [data-version] { display: none !important; }'; document.head.appendChild(s); });")
 SEEDED = "(() => { let s = 20261021; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })()"   # (Mix and match's picks, the same each time)
 
 
@@ -354,6 +341,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
         for theme in themes:
             page = browser.new_page(viewport=SIZE, color_scheme=theme)
             page.add_init_script(SEEDED)
+            page.add_init_script(NO_VERSION)
 
             def snap(name, settle=500):
                 """Take one screenshot, after the page settles, with nothing hovered."""
@@ -367,7 +355,9 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 shots.append(path)
 
             def click(selector, wait=None):
-                """Click something, and wait for what it opens."""
+                """Click something, and wait for what it opens (from the bar's Menu, when it's in there)."""
+                if selector in ("#tagsBtn", "#storesBtn", "#settingsBtn") and not page.locator(selector).first.is_visible():
+                    page.click("#menuBtn")
                 page.locator(selector).first.click()
                 if wait:
                     page.locator(wait).first.wait_for()
@@ -384,15 +374,22 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 click(button)
                 snap(name, 700)
                 page.keyboard.press("Escape")
-            # Projects: the list, a project's packages, a new project, and the backups
-            click("#projectsTab", "[data-pj=manage]")
-            page.locator("#pjSplash").wait_for(state="detached")   # (its splash, the first time it's opened)
+            # Projects: the list, a project's details, its packages and its source control, a new project, the backups
+            click("#projectsTab", ".pj-row")
+            page.locator("#pjSplash").wait_for(state="hidden")   # (its splash, the first time it's opened)
             snap("projects", 900)
-            for button, name in (("[data-pj=manage]", "project-manage"), ("[data-pj=new]", "project-new"),
-                                 ("[data-pj=backups]", "project-backups")):
+            page.locator(".pj-row", has_text="My Avatar").locator(".pj-open").first.click()
+            page.locator(".pj-detail").first.wait_for()
+            snap("project-details", 1500)   # (its size and packages, read as it opens)
+            click(".pj-detail [data-pj=manage]", "[data-pj=back]")
+            snap("project-manage", 900)
+            click(".pj-subs [data-sub=git]", ".pj-git")
+            snap("project-git", 1200)
+            click("[data-pj=back]", ".pj-row")
+            for button, name in (("[data-pj=new]", "project-new"), ("[data-pj=backups]", "project-backups")):
                 click(button, "[data-pj=back]")
                 snap(name, 900)
-                click("[data-pj=back]", "[data-pj=manage]")
+                click("[data-pj=back]", ".pj-row")
             page.keyboard.press("Escape")
             # Sets: every set and wishlist, a set opened, a wishlist with its prices, and Mix and match
             click('#storeSeg [data-store="Sets"]', "[data-setopen]")

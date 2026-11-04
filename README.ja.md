@@ -16,8 +16,8 @@
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge" alt="ライセンス"></a>
 </p>
 
-<p align="center"><b>買ったアバターアセットを、ぜんぶひとつの場所に。</b><br>
-Booth、Gumroad、Jinxxy、Payhip、itch.ioで購入したものを、検索・絞り込み・保管ができるひとつのライブラリにまとめます。</p>
+<p align="center"><b>買ったアバターアセットも、それで作るプロジェクトも、ぜんぶひとつの場所に。</b><br>
+Booth、Gumroad、Jinxxy、Payhip、itch.ioで購入したものを、検索・絞り込み・保管ができるひとつのライブラリにまとめ、それで作るUnityプロジェクトも管理します。</p>
 
 あのパーカー、買ったのはBoothでしたか、それともGumroad?クリエイターはアップデートしましたか?ファイルはまだ手元にありますか?
 Hoardなら、タブを4つも開かずに答えが分かります。
@@ -28,6 +28,7 @@ Hoardなら、タブを4つも開かずに答えが分かります。
 
 - **ライブラリ:** Booth、Gumroad、Jinxxy、Payhip、itch.ioで持っているものを、検索・絞り込み・タグづけができる1つのページに。複数のストアで持っている商品も見つけます。
 - **ダウンロード:** `<ストア>/<クリエイター>/<商品>` の整ったフォルダーにローカルコピーを保存し、クリエイターがファイルを更新したら最新に保ちます(Payhipは一覧表示のみで、ダウンロードはしません。下記参照)。
+- **プロジェクト:** Creator CompanionやALCOMと同じ一覧の、自分のUnityプロジェクト。VRChatのテンプレートからライブラリの商品入りで作り、パッケージを更新し、バックアップし、Gitで履歴を残せます。
 - アプリもサインインもタグもひとつだけ。オフラインでも使えます。
 
 <p align="center">
@@ -40,12 +41,20 @@ Hoardなら、タブを4つも開かずに答えが分かります。
   <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoardのダウンロードページ:タイルの横に商品の詳細が開き、ストア、使っているUnityプロジェクト、フォルダーを開くボタンと編集用コピーを作るボタンがあります。">
 </picture>
 <picture>
+  <source srcset="site/img/project-details-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-details-dark.webp" width="49%" alt="Hoardのプロジェクト:Creator Companionの一覧にあるUnityプロジェクトと、その横にプロジェクトの詳細(サイズ、パッケージ、バックアップ、ブランチ)。">
+</picture>
+<picture>
+  <source srcset="site/img/project-git-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-git-dark.webp" width="49%" alt="プロジェクトのソース管理タブ:ブランチ、ステージする変更、コミットメッセージの欄、履歴、リモート。">
+</picture>
+<picture>
   <source srcset="site/img/project-manage-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/project-manage-dark.webp" width="49%" alt="HoardでのUnityプロジェクトの管理:VRChatのパッケージと更新、選べるほかのバージョン、ライブラリから入れた商品とそれぞれが追加したフォルダー、Hoard for Unityが見つけたものがあります。">
 </picture>
 <picture>
   <source srcset="site/img/inside-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/inside-dark.webp" width="49%" alt="Unityパッケージの中身を見る:フォルダーとファイルをUnityのプレビューつきで、展開せずに表示します。">
+  <img src="site/img/inside-dark.webp" width="49%" alt="Unityパッケージの中身を見る:フォルダーとファイルを、展開せずに表示します。">
 </picture>
 <picture>
   <source srcset="site/img/sets-light.webp" media="(prefers-color-scheme: light)">
@@ -65,7 +74,7 @@ Hoardなら、タブを4つも開かずに答えが分かります。
 </picture>
 </p>
 
-<sub>ライブラリ、ダウンロードの商品の詳細、プロジェクトのUnityプロジェクト、中身を見る、セット、ほしい物リスト、組み合わせ、自分のものの追加の画面です。メンテナー自身のライブラリにある実際の商品を、クリエイターの画像とともに表示しています。<a href="https://hoard.furryup.link/credits.html">それぞれの作者と入手先</a>。素敵な作品をありがとうございます。</sub>
+<sub>ライブラリ、ダウンロードの商品の詳細、プロジェクトの詳細・ソース管理・パッケージ、中身を見る、セット、ほしい物リスト、組み合わせ、自分のものの追加の画面です。メンテナー自身のライブラリにある実際の商品を、クリエイターの画像とともに表示しています。<a href="https://hoard.furryup.link/credits.html">それぞれの作者と入手先</a>。素敵な作品をありがとうございます。</sub>
 
 インストールからトラブル解決まで、すべてのガイドは**[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/ホーム)**にあります(日本語。[英語版](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)もあります)。
 

@@ -379,7 +379,8 @@ class TheOtherPages(unittest.TestCase):
         for store in ("booth", "gumroad", "jinxxy", "payhip", "itch"):
             self.assertIn(f'class="store {store}"', page)
         steps = re.findall(r"<li>\s*<h3>([^<]+)</h3>", page)
-        self.assertEqual(len(steps), 6, steps)
+        self.assertEqual(len(steps), 7, steps)
+        self.assertIn("It looks after your projects", steps)
         self.assertIn('aria-current="page"', page)
 
     def test_trust_and_the_ai_disclosure_link_their_sources(self):
@@ -624,6 +625,36 @@ class InABrowser(unittest.TestCase):
             for _ in range(5):
                 page.click(".brand")
             page.get_by_text("somebody's treasure").wait_for()
+            browser.close()
+
+    def test_a_screenshot_opens_bigger(self):
+        """A screenshot clicked (or chosen with the keyboard) opens full size over the page, with its caption and the
+        others a key away; Escape closes it, and the keyboard goes back to where it was."""
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 860})
+            page.route("https://**", lambda route: route.abort())
+            page.goto((SITE / "index.html").as_uri())
+            page.wait_for_function("() => document.documentElement.classList.contains('js')")
+            shots = page.locator(".hero .shot img, .gallery figure img")
+            total = shots.count()
+            shots.nth(1).click()
+            page.wait_for_selector("dialog.lightbox[open]")
+            self.assertRegex(page.get_attribute(".lightbox img", "src"), r"/img/[a-z-]+-(dark|light)\.webp$", "its full size, in the light or dark shown")
+            self.assertEqual(page.inner_text(".lb-count"), f"2 of {total}")
+            self.assertTrue(page.inner_text(".lightbox figcaption").strip(), "its caption")
+            page.keyboard.press("ArrowRight")
+            self.assertEqual(page.inner_text(".lb-count"), f"3 of {total}")
+            page.keyboard.press("ArrowLeft")
+            page.keyboard.press("ArrowLeft")
+            page.keyboard.press("ArrowLeft")
+            self.assertEqual(page.inner_text(".lb-count"), f"{total} of {total}", "round from the first to the last")
+            page.keyboard.press("Escape")
+            self.assertFalse(page.eval_on_selector("dialog.lightbox", "d => d.open"))
+            self.assertEqual(page.evaluate("document.activeElement === document.querySelectorAll('.hero .shot img, .gallery figure img')[1]"), True)
+            page.keyboard.press("Enter")
+            page.wait_for_selector("dialog.lightbox[open]")
             browser.close()
 
 if __name__ == "__main__":

@@ -61,9 +61,15 @@
   website and in the wiki, in English, Japanese and Korean, with a **Compare** tab on the website.
 - **Videos, posters and music** ([#273](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/273), [#274](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/274), [#289](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/289), [#291](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/291), [#292](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/292)), made in code from Hoard's own screens, with no
   diffusion: a long and a short promo, landscape and portrait, in English, Japanese and Korean; a short video for each
-  problem the wiki's Troubleshooting page explains most, linked from it; a mockup of a sketch to record in VRChat;
-  posters for VRChat worlds; and a looping music track. They're on a release of their own, `media`; `promo/` in the
-  repository makes them.
+  problem the wiki's Troubleshooting page explains most; a mockup of a sketch to record in VRChat; posters for VRChat
+  worlds; and a looping music track. Only the products given are shown, with their own pictures, and the credits name
+  their creators. They go on a release of their own, `media`, and `promo/wiki_links.py` then links each troubleshooting
+  video from the wiki; `promo/` in the repository makes them all.
+- **The website, the README and the press kit** say what Hoard is now: your VRChat assets, and the Unity projects you
+  make with them. Every screenshot is new, of every part of Hoard (Projects, a project's details, its packages and its
+  Git too), showing real products whose creators are credited, and each opens bigger when clicked, with the arrow keys
+  going through them. How Hoard works has a step for projects, and the Flatpak's summary and the privacy policy say
+  what Projects and Git talk to.
 
 ## 5.2.0-beta.3
 
