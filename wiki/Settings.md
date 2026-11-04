@@ -4,7 +4,7 @@ Everyday choices are in **Settings** (in the **Menu**, top right; or search for 
 
 Settings is a page of its own (from 5.1.3), the whole window below the bar, as [Projects](Projects) is: its parts
 are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Notifications**,
-**Look**, **Sign-ins**, **Updates**, **Backup**, **Troubleshooting**, **Support Hoard**, **Acknowledgements**) to
+**Look**, **Sign-ins**, **Hoard updates**, **Backup**, **Troubleshooting**, **Support Hoard**, **Acknowledgements**) to
 jump to, or along the top in a narrow window. **×** or Escape closes it. Each change is **saved as you make it**: a
 box or a list straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
 
@@ -193,7 +193,7 @@ and keep it valid JSON.
 | `display.style` | `"standard"` | The style: `"standard"`, `"treasure"` or `"workbench"` (**Appearance** in Settings) |
 | `display.language` | `"system"` | `"system"` (match your computer), `"en"`, `"ja"` or `"ko"` (**Appearance** in Settings) |
 | `display.custom_colours` | `{}` | Your own store colours, as `#rrggbb` by store (`booth`, `gumroad`, `jinxxy`, `payhip`, `itch`, `local`), used when `colours` is `"custom"` |
-| `check_for_updates` | `true` | Ask GitHub, in the background each time Hoard starts and once a day while it's open, whether there's a newer version (the **Updates** checkbox in Settings) |
+| `check_for_updates` | `true` | Ask GitHub, in the background each time Hoard starts and once a day while it's open, whether there's a newer version (the **Check for updates automatically** checkbox, under **Hoard updates** in Settings) |
 | `beta_updates` | `false` | Count betas (pre-releases tagged `v<version>-beta.<n>`) as updates too (**Get beta updates** in Settings) |
 | `close_to_taskbar` | `true` | Closing Hoard's window minimizes it to the taskbar, and Hoard carries on (**Closing the window minimizes Hoard to the taskbar** in Settings) |
 | `local_copy` | `true` | Whether **Add your own** offers to copy into Hoard (`true`) or to list where it is (`false`). Set by your last choice |

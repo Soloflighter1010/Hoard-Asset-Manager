@@ -27,7 +27,7 @@ Without it, Hoard says so and opens in your web browser instead; quit it from **
 
 ### Updating
 
-In **Settings**, under **Updates**, choose **Check now**. When there's a newer version, **Update to** it: Hoard
+In **Settings**, under **Hoard updates**, choose **Check now**. When there's a newer version, **Update to** it: Hoard
 downloads its installer from the release on GitHub, checks it, closes (a download in progress resumes next time),
 installs it and opens again. It only runs an installer whose SHA-256 matches both the release's
 `SHA256SUMS-windows.txt` and the checksum GitHub lists for the file; one that doesn't is deleted. Hoard won't
@@ -35,7 +35,7 @@ update in the middle of a refresh or download: wait for it, or **Stop** it.
 
 **Check for updates automatically** (on unless you turn it off, from 5.1; a Hoard you had before keeps your choice)
 makes Hoard ask GitHub, in the background, each time it starts and once a day while it's open; a newer version then
-shows as **Update to** at the bottom of the page. A check sends GitHub nothing but
+shows as **Update to** at the top of the page, beside Hoard's version. A check sends GitHub nothing but
 the request itself: see [Security and privacy](Security-and-Privacy).
 
 Hoard installs updates itself only when it was installed with `Hoard-Setup`. A copy from the portable zip, the

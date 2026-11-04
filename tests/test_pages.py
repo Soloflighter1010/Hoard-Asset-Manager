@@ -2411,7 +2411,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
         q.focus()
         guide.wait_for()
         self.assertEqual(guide.locator(".qopt code").first.inner_text(), "creator:")
-        self.assertEqual(guide.locator(".qopt").count(), 7, "every prefix")
+        self.assertEqual(guide.locator(".qopt").count(), 12, "every prefix, and each other site's")
+        self.assertEqual(guide.locator(".qmenu-h").all_inner_texts(), ["Search for one kind of thing", "Search another site, in your browser"])
         self.assertEqual(q.get_attribute("aria-expanded"), "true")
         page.keyboard.press("ArrowDown")
         page.keyboard.press("Enter")   # creator:, and then the creators
@@ -2443,6 +2444,33 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(q.input_value(), "", "gone there: the box is empty again")
         finally:
             page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])
+        # issue #271: another site's own search, for everything after its prefix, opened in your browser (a new
+        # window: the app hands those to your browser), never filtering your products
+        opened = []
+        page.context.on("page", lambda p: opened.append(p.url if p.url != "about:blank" else (p.wait_for_event("framenavigated").url)))
+        page.context.route(re_any_site := __import__("re").compile(r"^https://(nexyy\.com|booth\.pm|gumroad\.com|jinxxy\.com|itch\.io)/"),
+                           lambda route: (opened.append(route.request.url), route.fulfill(status=200, body="ok"))[1])
+        for text, want in (('nexyy:soft hoodie', "https://nexyy.com/browse?q=soft%20hoodie"),
+                           ('booth:"ケモノ 衣装"', "https://booth.pm/en/search/%E3%82%B1%E3%83%A2%E3%83%8E%20%E8%A1%A3%E8%A3%85"),
+                           ("gumroad:shader", "https://gumroad.com/discover?query=shader"),
+                           ("Jinxxy:visor", "https://jinxxy.com/market/browse?search_query=visor"),
+                           ("itch:", "https://itch.io/game-assets")):
+            with self.subTest(text):
+                opened.clear()
+                q.focus()
+                q.fill(text)
+                guide.locator(".qopt", has_text="Opens in your browser").wait_for()
+                self.assertEqual(guide.locator(".qopt").count(), 1)
+                self.assertEqual(page.evaluate("t => Object.values(parseSearch(t)).flat()", text), [], "your products aren't filtered by it")
+                page.keyboard.press("Enter")
+                for _ in range(50):
+                    if want in opened:
+                        break
+                    page.wait_for_timeout(100)
+                self.assertIn(want, opened)
+                self.assertTrue(page.url.startswith(self.srv.url), "Hoard stays where it was")
+        for extra in page.context.pages[1:]:
+            extra.close()
         q.focus()
         q.fill("settings:langu")
         guide.locator(".qopt", has_text="Language").first.wait_for()
@@ -2749,41 +2777,48 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
-    def test_the_bar_reads_logo_search_then_the_buttons(self):
-        """Issues #203, #236: the bar reads the logo with the search beside it, then on the other side the pages
-        (Library, Downloads, Local, Sets and Wishlists, Tasks, Projects), Menu and Sync, at every width, text size and
-        style; in a wide window the search is in the middle of it; when there isn't room, the search goes under them,
-        and nothing hides or overlaps."""
+    def test_the_bar_reads_logo_and_pages_search_then_hoards_links_and_the_buttons(self):
+        """Issues #203, #236, #270: the bar reads the logo and the pages beside it (Library, Downloads, Local, Sets and
+        Wishlists, Tasks, Projects), the search, then Hoard's own links (its version, GitHub, Discord, Hoard updates,
+        Report a problem), Menu and Sync, at every width, text size and style; in a wide window the search is in the
+        middle of it; when there isn't room, Hoard's links go in the Menu, then the search goes under the rest, and
+        nothing else hides or overlaps. The footer keeps the rest."""
         page = self.open()
         check = """() => {
           const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
-          const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .tools > *')]
-            .filter(el => el.getClientRects().length).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
+          const shown = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
+          const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .bar-links > *, .bar .tools > *')]
+            .filter(shown).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
           const over = [];
           for (const [i, [a, ra]] of parts.entries()) {
             if (ra.left < bar.left - 1 || ra.right > bar.right + 1) over.push(a + ' is out of the bar');
             for (const [b, rb] of parts.slice(i + 1))
               if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
           }
-          const r = sel => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
+          const r = sel => [...document.querySelectorAll(sel)].filter(shown).map(el => el.getBoundingClientRect());
           const fit = document.querySelector('.bar').dataset.fit || 'one', one = fit === 'one' || fit === 'centre';
-          const pages = r('.bar .apptabs > *'), tools = r('.bar .tools > *');
-          const brand = document.querySelector('.bar .brand').getBoundingClientRect();
-          const end = document.querySelector('.bar > .bar-end');
-          const sides = { left: [...document.querySelector('.bar > .bar-side').querySelectorAll('a, button')].map(e => e.className),
-                          right: [...end.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
+          const before = r('.bar .brand, .bar .apptabs > *'), after = r('.bar .bar-links > *, .bar .tools > *');
+          const first = document.querySelector('.bar > .bar-side'), end = document.querySelector('.bar > .bar-end');
+          const sides = { pages: [...first.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
+                          links: [...end.querySelectorAll('.bar-links > *')].filter(shown).map(e => e.id === 'version' ? 'version' : e.textContent.trim()),
+                          menu: getComputedStyle(document.querySelector('.barmenu-links')).display !== 'none'
+                            ? [...document.querySelectorAll('.barmenu-links > *')].map(e => e.textContent.trim()) : [],
                           tools: [...end.querySelectorAll('.tools button, .tools a')].filter(e => e.getClientRects().length && !e.closest('.barmenu')).map(e => e.id) };
-          const order = one ? brand.right <= search.left + 1 && pages.concat(tools).every(p => p.left >= search.right - 1)
-                            : pages.concat(tools).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
+          const order = one ? before.every(p => p.right <= search.left + 1) && after.every(p => p.left >= search.right - 1)
+                            : before.concat(after).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
           const middle = Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2);
-          return { order, wide: search.width, over, sides, fit, middle };
+          return { order, wide: search.width, over, sides, fit, middle, folded: document.querySelector('.bar').dataset.links === 'menu' };
         }"""
-        seen = set()
+        links = ["GitHub", "Discord", "Hoard updates", "Report a problem"]
+        seen, folded = set(), set()
         for path in ("", "downloads"):
             if path:
                 goto(page, self.srv.url + path)
                 page.locator("#menuBtn").wait_for()   # (nothing downloaded here)
                 page.wait_for_load_state("networkidle")
+            version = page.evaluate("DATA.version")
+            foot = page.locator(".foot-links a").all_inner_texts()
+            self.assertEqual(foot, ["Privacy", "Terms", "Made with AI"], "the footer keeps the rest")
             for style in ("", "treasure", "workbench"):
                 for width, zoom in ((2600, 1), (1800, 1), (1350, 1), (1000, 1), (700, 1), (420, 1), (1800, 1.5), (1000, 1.5)):
                     with self.subTest(path=path or "library", style=style or "standard", width=width, zoom=zoom):
@@ -2793,9 +2828,17 @@ class WindowsTabsAndTasks(unittest.TestCase):
                         page.wait_for_timeout(120)
                         got = page.evaluate(check)
                         seen.add(got["fit"])
+                        folded.add(got["folded"])
                         self.assertTrue(got["order"], got)
-                        self.assertEqual(got["sides"]["left"], ["brand"], "the logo, the search beside it")
-                        self.assertEqual(got["sides"]["right"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
+                        self.assertEqual(got["sides"]["pages"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
+                        if got["folded"]:   # (no room for them: in the Menu, with the version)
+                            self.assertEqual(got["sides"]["links"], [])
+                            self.assertEqual(got["sides"]["menu"], [f"Hoard {version}", *links])
+                        else:
+                            self.assertEqual(got["sides"]["links"], ["version", *links])
+                            self.assertEqual(got["sides"]["menu"], [])
+                        if width == 2600 and zoom == 1:
+                            self.assertFalse(got["folded"], "a wide window has room for them")
                         self.assertEqual([b for b in got["sides"]["tools"] if b != "filtersToggle"], ["menuBtn", "syncBtn"] if not path else ["menuBtn", "downloadNew"])
                         self.assertGreater(got["wide"], 150, got)
                         self.assertEqual(got["over"], [], got)
@@ -2803,6 +2846,20 @@ class WindowsTabsAndTasks(unittest.TestCase):
                             self.assertLess(got["middle"], 3, got)
                             self.assertGreater(got["wide"], 400, got)
         self.assertEqual(seen, {"centre", "one", "rows", "stack"}, "each way the bar fits was tried")
+        self.assertEqual(folded, {True, False})
+        # Hoard updates, and the Menu's links: one Report a problem as the other
+        page.set_viewport_size({"width": 2600, "height": 800})
+        page.evaluate("document.documentElement.style.zoom = '1'")
+        self.assertIn("Updates to your assets are in Downloads", page.locator(".bar-links a", has_text="Hoard updates").get_attribute("title"))
+        page.set_viewport_size({"width": 1000, "height": 800})
+        page.wait_for_function("() => document.querySelector('.bar').dataset.links === 'menu'")
+        page.focus("#menuBtn")
+        page.keyboard.press("ArrowDown")
+        self.assertEqual(page.evaluate("document.activeElement.textContent"), "Tags")
+        page.keyboard.press("End")
+        self.assertEqual(page.evaluate("document.activeElement.textContent"), "Report a problem", "the keys reach them")
+        page.keyboard.press("Enter")
+        page.locator("#supportDialog[open]").wait_for()
         self.assertEqual(self.errors, [])
         page.close()
 

@@ -135,7 +135,7 @@ class Tour(unittest.TestCase):
         self.title(page, "Mix and match")
         self.nxt(page)
         page.wait_for_function("() => !inSets()")   # back to every store on the way out
-        self.title(page, "Updates")
+        self.title(page, "Asset updates")
         self.nxt(page)
         self.title(page, "Disk space")
         page.click('#views [data-view="space"]')

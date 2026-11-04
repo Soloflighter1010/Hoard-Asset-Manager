@@ -90,7 +90,6 @@
  "{0}, by {1}, from {2}, new": "{0}({1}, {2}), 새것",
  "{0}, by {1}, from {2}, downloaded, new": "{0}({1}, {2}), 다운로드함, 새것",
  "About Hoard": "Hoard 정보",
- "Updates": "업데이트",
  "Report a problem": "문제 신고",
  "Privacy": "개인정보",
  "Terms": "이용약관",
@@ -2243,5 +2242,18 @@
  "Add assets you've downloaded, and Hoard puts them in the project, with the packages they need.": "다운로드한 에셋을 추가하면 Hoard가 필요한 패키지와 함께 프로젝트에 넣어요.",
  "Last opened": "마지막으로 연 것",
  "{0} in Apprise's documentation": "Apprise 문서의 {0}",
- "a gift from {0}": "{0} 님이 보낸 선물"
+ "a gift from {0}": "{0} 님이 보낸 선물",
+ "Hoard updates": "Hoard 업데이트",
+ "Asset updates": "에셋 업데이트",
+ "The version of Hoard you have": "사용 중인 Hoard 버전",
+ "New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.": "Hoard 자체의 새 버전이에요. 에셋 업데이트는 다운로드의 에셋 업데이트에 있어요.",
+ "Search another site, in your browser": "다른 사이트에서 검색(브라우저에서 열려요)",
+ "Search Nexyy, which searches the stores": "Nexyy에서 검색(스토어를 한꺼번에 검색해요)",
+ "Search Booth": "Booth에서 검색",
+ "Search Gumroad": "Gumroad에서 검색",
+ "Search Jinxxy": "Jinxxy에서 검색",
+ "Search itch.io": "itch.io에서 검색",
+ "Search {0} for {1}": "{0}에서 “{1}” 검색",
+ "Search {0}": "{0}에서 검색",
+ "Opens in your browser": "브라우저에서 열려요"
 }

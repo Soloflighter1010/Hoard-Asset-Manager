@@ -6,8 +6,8 @@ with no accounts, ads or tracking. If it's useful to you, you can leave a tip: S
 
 ## Where can I ask a question?
 
-On Hoard's [Discord](https://discord.gg/psNsAGj75Q) (it's in the footer of Hoard's pages, the website and this wiki), or in a GitHub
-[issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) (**Report a problem** in Hoard's footer).
+On Hoard's [Discord](https://discord.gg/psNsAGj75Q) (it's at the top of Hoard's pages, and in the footer of the website and this wiki), or in a GitHub
+[issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) (**Report a problem** at the top of Hoard's pages, or in its **Menu** in a narrow window).
 A security problem goes privately, as [SECURITY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/SECURITY.md) says.
 
 ## Does Hoard see my store passwords?
@@ -85,10 +85,10 @@ Hoard: see [Using Hoard on other devices](Using-Hoard-on-Other-Devices).
 
 ## Does Hoard update itself?
 
-When you ask it to. In **Settings**, **Updates**: **Check now** asks GitHub whether there's a newer version, and
+When you ask it to. In **Settings**, **Hoard updates**: **Check now** asks GitHub whether there's a newer version, and
 in the installed Windows app **Update to** downloads it, checks it, closes Hoard, installs it and opens Hoard
 again. With **Check for updates automatically** on, Hoard checks in the background each time it starts and once a
-day while it's open, and shows **Update to** at the bottom of the page when there's a new version. From 5.1 it's on
+day while it's open, and shows **Update to** at the top of the page, beside Hoard's version, when there's a new version. From 5.1 it's on
 to begin with in a new Hoard (one you had before keeps your choice). See
 [Installing Hoard](Installing-Hoard#updating).
 

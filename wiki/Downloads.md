@@ -196,9 +196,10 @@ along.
 
 ### Checking for updates without downloading
 
-**Check for updates** (in Downloads, under **Updates** on the left) reads your stores the way a download
+**Check for updates** (in Downloads, under **Asset updates** on the left) reads your stores the way a download
 would, but downloads nothing. It lists each thing you've downloaded that has newer files on its store: files
-the creator **added** since you downloaded it, and files they **changed**. They show in the **Updates** view,
+the creator **added** since you downloaded it, and files they **changed**. They show in the **Asset updates** view (so named from
+5.2.0 beta 4, apart from **Hoard updates**, which are new versions of Hoard itself),
 and with an **Update** badge on the card. Choose **Update all** there, or open one and choose **Update** to
 download just that one. Each item's details also have **Check for updates**, to check only it. In the Library,
 an item with updates says **Update available**, with a link to it in Downloads.

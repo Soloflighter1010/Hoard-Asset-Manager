@@ -1001,12 +1001,15 @@ function openBarMenu(first = false) {
   m.hidden = false;
   $("#menuBtn").setAttribute("aria-expanded", "true");
   $(".bar").classList.add("menu-up");   // (above an open panel and its shade, which the menu drops over)
-  if (first) m.querySelector("button").focus();
+  if (first) menuItems()[0].focus();
 }
-/** Which way the bar fits: "centre" (a wide window: the search in the middle of it), "" (the search beside the logo,
- *  the pages and tools on the other side), "rows" (the sides on one row, the search under them) or "stack" (each side
- *  on a row of its own, then the search). Worked out from how wide each side is on one line, which doesn't change with
- *  the way it's laid out, so it doesn't flip back and forth. */
+// The Menu's items, as shown (Hoard's links are among them only when the bar has no room for them).
+const menuItems = () => [...$("#barMenu").querySelectorAll("button, a")].filter(el => el.getClientRects().length);
+/** Which way the bar fits: "centre" (a wide window: the search in the middle of it), "" (the search beside the logo
+ *  and the pages, Hoard's links and the tools on the other side), "rows" (the sides on one row, the search under them)
+ *  or "stack" (each side on a row of its own, then the search). Hoard's links (issue #270) go in the Menu
+ *  (data-links="menu") when the bar has no room for them beside the search. Worked out from how wide each side is on
+ *  one line, which doesn't change with the way it's laid out, so it doesn't flip back and forth. */
 function fitBar() {
   const bar = $(".bar");
   if (!bar || !bar.offsetWidth) return;
@@ -1016,18 +1019,28 @@ function fitBar() {
   // How wide an element needs to be: a group of the bar's, its parts added up.
   const wide = el => {
     if (el.hidden || getComputedStyle(el).display === "none") return 0;
-    if (!el.matches(".bar-side, .apptabs, .tools")) return el.getBoundingClientRect().width + px(el, "marginLeft", "marginRight");
+    if (!el.matches(".bar-side, .apptabs, .tools, .bar-links")) return el.getBoundingClientRect().width + px(el, "marginLeft", "marginRight");
     const parts = [...el.children].map(wide).filter(w => w > 0);
     return parts.reduce((n, w) => n + w, 0) + px(el, "columnGap") * Math.max(0, parts.length - 1);
   };
   const [left, right] = [...bar.querySelectorAll(":scope > .bar-side")].map(wide);
+  const links = bar.querySelector(".bar-links"), linksWide = links ? wide(links) : 0;   // (measured in the Menu too)
+  const sideGap = links && linksWide ? px(links.parentElement, "columnGap") : 0;
   const room = bar.getBoundingClientRect().width - px(bar, "paddingLeft", "paddingRight"), gap = px(bar, "columnGap");
   // a wide window: the search in the middle of it (both sides as wide as the wider one, the search what's left, up to
   // its whole width); else beside the logo, as wide as there's room for
-  const middle = Math.min(560 * scale, room - 2 * Math.max(left, right) - 2 * gap);
-  const fit = middle >= 420 * scale ? "centre" : left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
+  const fitOf = right => {
+    const middle = Math.min(560 * scale, room - 2 * Math.max(left, right) - 2 * gap);
+    return [middle >= 420 * scale ? "centre" : left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack", middle];
+  };
+  let [fit, middle] = fitOf(right), folded = false;
+  if (linksWide && fit !== "centre" && fit !== "") {   // (no room beside the search: Hoard's links go in the Menu)
+    [fit, middle] = fitOf(right - linksWide - sideGap);
+    folded = true;
+  }
   bar.style.setProperty("--bar-middle", `${Math.floor(Math.max(0, middle) / scale)}px`);
   if ((bar.dataset.fit || "") !== fit) { if (fit) bar.dataset.fit = fit; else delete bar.dataset.fit; }
+  if ((bar.dataset.links === "menu") !== folded) { if (folded) bar.dataset.links = "menu"; else delete bar.dataset.links; }
 }
 // The top bar's menu button and its keys, and fitting the bar to the window.
 function wireBar() {
@@ -1037,9 +1050,9 @@ function wireBar() {
     if (e.key === "ArrowDown") { e.preventDefault(); openBarMenu(true); }
     else if (e.key === "Escape" && !menu.hidden) { e.preventDefault(); e.stopPropagation(); closeBarMenu(); }
   });
-  menu.addEventListener("click", e => { if (e.target.closest("button")) closeBarMenu(true); });   // (after the item's own)
+  menu.addEventListener("click", e => { if (e.target.closest("button, a")) closeBarMenu(true); });   // (after the item's own)
   menu.addEventListener("keydown", e => {
-    const all = [...menu.querySelectorAll("button")], i = all.indexOf(document.activeElement);
+    const all = menuItems(), i = all.indexOf(document.activeElement);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1)) % all.length].focus(); }
     else if (e.key === "Home" || e.key === "End") { e.preventDefault(); all[e.key === "Home" ? 0 : all.length - 1].focus(); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeBarMenu(true); }
@@ -1051,7 +1064,7 @@ function wireBar() {
   // Fit the bar again, on the next frame.
   const refit = () => { cancelAnimationFrame(soon); soon = requestAnimationFrame(fitBar); };
   const sizes = new ResizeObserver(refit);
-  for (const el of [$(".bar"), ...document.querySelectorAll(".bar .brand, .bar .apptabs, .bar .tools")]) sizes.observe(el);
+  for (const el of [$(".bar"), ...document.querySelectorAll(".bar .brand, .bar .apptabs, .bar .tools, .bar .bar-links")]) sizes.observe(el);
   if (document.fonts) document.fonts.ready.then(refit);
   fitBar();
 }
@@ -1080,12 +1093,24 @@ const SEARCH_KINDS = [   // [kind, its prefixes (the first is the one shown), wh
   ["project", ["project", "pj"], "A project, to open", "project:my avatar"],
   ["settings", ["settings", "s"], "A setting, to change", "settings:language"],
 ];
+// Another site's own search, for what's typed after its prefix (issue #271): the sites a wishlist's Find more to add
+// offers (STORE_SEARCHES), opened in your browser. Hoard never reads them itself.
+const SITE_KINDS = [   // [the site, its prefix, what it does, an example]
+  ["nexyy", "nexyy", "Search Nexyy, which searches the stores", "nexyy:hoodie"],
+  ["booth", "booth", "Search Booth", "booth:hoodie"],
+  ["gumroad", "gumroad", "Search Gumroad", "gumroad:hoodie"],
+  ["jinxxy", "jinxxy", "Search Jinxxy", "jinxxy:hoodie"],
+  ["itch", "itch", "Search itch.io", "itch:shader"]];
+// A box that starts with a site's prefix: everything after it is what to search that site for.
+const SITE_SEARCH = new RegExp(`^\\s*(${SITE_KINDS.map(k => k[1]).join("|")}):(.*)$`, "is");
 const SEARCH_PREFIX = new Map(SEARCH_KINDS.flatMap(([kind, names]) => names.map(n => [n, kind])));
 const SEARCH_TOKEN = /([a-z]+):("([^"]*)"?|(\S*))|"([^"]*)"?|(\S+)/gi;
-/** What a search asks for: its plain words, and each kind's values (all lower case, as norm has them). */
+/** What a search asks for: its plain words, and each kind's values (all lower case, as norm has them). A search of
+ *  another site (nexyy:...) asks nothing of your products. */
 function parseSearch(q) {
   const out = { words: [] };
   for (const [kind] of SEARCH_KINDS) out[kind] = [];
+  if (SITE_SEARCH.test(String(q || ""))) return out;
   for (const m of String(q || "").matchAll(SEARCH_TOKEN)) {
     const kind = m[1] && SEARCH_PREFIX.get(m[1].toLowerCase());
     if (kind) { const v = norm(m[3] ?? m[4]).trim(); if (v) out[kind].push(v); continue; }
@@ -1095,8 +1120,11 @@ function parseSearch(q) {
   }
   return out;
 }
-/** The prefixed part being typed at the end of the box, if any: { kind, value, at (where it starts) }. */
+/** The prefixed part being typed at the end of the box, if any: { kind, value, at (where it starts) }; for another
+ *  site's search, kind "site:<site>" and raw, the words as typed. */
 function searchTail(q) {
+  const site = String(q).match(SITE_SEARCH);
+  if (site) return { kind: "site:" + site[1].toLowerCase(), value: "", raw: site[2].trim().replace(/^"(.*?)"?$/s, "$1").trim(), at: 0 };
   let last = null;
   for (const m of String(q).matchAll(SEARCH_TOKEN)) last = m;
   if (!last || last.index + last[0].length !== q.length || /\s$/.test(q)) return null;
@@ -1178,6 +1206,11 @@ async function searchOffers(tail) {   // [{ text, sub, fill (the box's new text)
   const quote = s => /\s/.test(s) ? `"${s}"` : s;
   // A search term as typed in the box (creator:Name).
   const fill = (kind, value) => SEARCH_KINDS.find(k => k[0] === kind)[1][0] + ":" + quote(value) + " ";
+  if (tail.kind.startsWith("site:")) {   // another site's search, in your browser
+    const site = tail.kind.slice(5), name = STORE_SEARCHES.find(x => x[0] === site)[1];
+    return [{ text: tail.raw ? tr("Search {0} for {1}", name, tail.raw) : tr("Search {0}", name), raw: true, site: true,
+              sub: tr("Opens in your browser"), go: () => openOutside(storeSearch(site, tail.raw)) }];
+  }
   const items = T.all();
   if (tail.kind === "creator") return counted(items.map(a => a.creator)).map(([c, n]) => ({ text: c, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("creator", c) }));
   if (tail.kind === "tag") return counted(items.flatMap(a => [...new Set([...(a.tags || []), ...(a.suggested || [])])])).map(([t, n]) => ({ text: "#" + t, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("tag", t) }));
@@ -1223,6 +1256,7 @@ function drawSearchMenu(head, offers) {
   $("#q").removeAttribute("aria-activedescendant");
   if (!offers.length && !head) return closeSearchMenu();
   m.innerHTML = (head ? `<p class="qmenu-h">${esc(tr(head))}</p>` : "") + offers.map((o, i) =>
+    (o.head ? `<p class="qmenu-h">${esc(tr(o.head))}</p>` : "") +
     `<div class="qopt" role="option" id="qOpt${i}" aria-selected="false" data-i="${i}">` +
     `<span class="qopt-t"${o.raw ? ' translate="no"' : ""}>${(o.code || []).map(c => `<code>${esc(c)}</code> `).join("")}${esc(o.text)}</span>` +
     `<span class="qopt-s">${esc(o.sub || "")}</span></div>`).join("") +
@@ -1236,8 +1270,11 @@ async function showSearchMenu() {
   const q = $("#q"), text = q.value, asked = ++QM.asked;
   if (document.activeElement !== q) return closeSearchMenu();
   if (!text.trim()) {   // the guide: each prefix, with an example (issue #221)
-    return drawSearchMenu("Search for one kind of thing", SEARCH_KINDS.map(([kind, names, what, eg]) =>
-      ({ code: names.map(n => n === "#" ? n : n + ":"), text: tr(what), sub: tr("For example, {0}", eg), fill: names[0] + ":" })));
+    return drawSearchMenu("Search for one kind of thing", [
+      ...SEARCH_KINDS.map(([kind, names, what, eg]) =>
+        ({ code: names.map(n => n === "#" ? n : n + ":"), text: tr(what), sub: tr("For example, {0}", eg), fill: names[0] + ":" })),
+      ...SITE_KINDS.map(([site, prefix, what, eg], n) =>   // (issue #271: another site, under a heading of its own)
+        ({ head: n ? "" : "Search another site, in your browser", code: [prefix + ":"], text: tr(what), sub: tr("For example, {0}", eg), fill: prefix + ":" }))]);
   }
   const tail = searchTail(text);
   if (!tail) return closeSearchMenu();
@@ -1293,6 +1330,7 @@ function wireSearch() {
     if (m.hidden) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); markSearchOffer(QM.at + (e.key === "ArrowDown" ? 1 : QM.at < 0 ? 0 : -1)); }
     else if (e.key === "Enter" && QM.at >= 0) { e.preventDefault(); chooseSearchOffer(QM.at); }
+    else if (e.key === "Enter" && QM.offers.length === 1 && QM.offers[0].site) { e.preventDefault(); chooseSearchOffer(0); }   // (another site's search)
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSearchMenu(); }
     else if (e.key === "Tab") closeSearchMenu();
   });
@@ -4391,6 +4429,16 @@ const STORE_SEARCHES = [
   ["gumroad", "Gumroad", q => q ? `https://gumroad.com/discover?query=${q}` : "https://gumroad.com/discover"],
   ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search_query=${q}` : "https://jinxxy.com/market/browse"],
   ["itch", "itch.io", q => q ? `https://itch.io/search?q=${q}` : "https://itch.io/game-assets"]];
+// Open an address on another site in your browser: as a link that opens a new window does (the app hands those to
+// your browser), never inside Hoard.
+function openOutside(url) {
+  const u = safeUrl(url);
+  if (!u) return;
+  const a = Object.assign(document.createElement("a"), { href: u, target: "_blank", rel: "noopener noreferrer" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 // A store's search page for some words.
 const storeSearch = (key, words) => STORE_SEARCHES.find(x => x[0] === key)[2](encodeURIComponent(String(words || "").trim().slice(0, 100)));
 // A wishlist's search box, to find more on each store.
@@ -5329,7 +5377,7 @@ const TOUR_STEPS = [
     body: () => esc(tr("Mix and match picks an avatar and an outfit at random from what you own, by your tags' kinds: an Avatar tag on your bases, and Clothing tags on your clothes. Keep the picks you like, pick the rest again, and make a set of them.")),
     leave: () => { if (inSets()) { state.store = ""; state.set = ""; T.render(); } } },
   { id: "updates", page: "downloads", at: () => $('#views [data-view="updates"]'),
-    title: () => tr("Updates"),
+    title: () => tr("Asset updates"),
     body: () => esc(tr("When a store has newer files for something you downloaded, it's listed here. Settings can keep the previous version too, so you can go back.")) },
   { id: "space", page: "downloads", at: () => $('#views [data-view="space"]'),
     title: () => tr("Disk space"),

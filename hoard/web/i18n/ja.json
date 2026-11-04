@@ -90,7 +90,6 @@
  "{0}, by {1}, from {2}, new": "{0}({1}、{2})、新着",
  "{0}, by {1}, from {2}, downloaded, new": "{0}({1}、{2})、ダウンロード済み、新着",
  "About Hoard": "Hoardについて",
- "Updates": "アップデート",
  "Report a problem": "問題を報告",
  "Privacy": "プライバシー",
  "Terms": "利用規約",
@@ -2243,5 +2242,18 @@
  "Add assets you've downloaded, and Hoard puts them in the project, with the packages they need.": "ダウンロードしたアセットを追加すると、必要なパッケージと一緒にHoardがプロジェクトに入れます。",
  "Last opened": "最後に開いた",
  "{0} in Apprise's documentation": "Appriseのドキュメントの{0}",
- "a gift from {0}": "{0}からのギフト"
+ "a gift from {0}": "{0}からのギフト",
+ "Hoard updates": "Hoardのアップデート",
+ "Asset updates": "アセットのアップデート",
+ "The version of Hoard you have": "お使いのHoardのバージョン",
+ "New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.": "Hoard自体の新しいバージョンです。アセットのアップデートは、ダウンロードの「アセットのアップデート」にあります。",
+ "Search another site, in your browser": "ほかのサイトで検索(ブラウザーで開きます)",
+ "Search Nexyy, which searches the stores": "Nexyyで検索(ストアをまとめて検索します)",
+ "Search Booth": "Boothで検索",
+ "Search Gumroad": "Gumroadで検索",
+ "Search Jinxxy": "Jinxxyで検索",
+ "Search itch.io": "itch.ioで検索",
+ "Search {0} for {1}": "{0}で「{1}」を検索",
+ "Search {0}": "{0}で検索",
+ "Opens in your browser": "ブラウザーで開きます"
 }
