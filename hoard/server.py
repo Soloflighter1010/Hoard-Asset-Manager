@@ -68,7 +68,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite", "/api/vpm/organize",
            "/api/vpm/rename", "/api/vpm/git/init", "/api/vpm/git/ignore", "/api/vpm/git/stage", "/api/vpm/git/unstage",
            "/api/vpm/git/commit", "/api/vpm/git/identity", "/api/vpm/git/remote", "/api/vpm/git/branch", "/api/vpm/git/abort",
-           "/api/vpm/git/open-app", "/api/vpm/git/app", "/api/vpm/git/sync", "/api/vpm/git/clone",
+           "/api/vpm/git/open-app", "/api/vpm/git/app", "/api/vpm/git/sync", "/api/vpm/git/clone", "/api/vpm/git/trust",
            "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
            "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
            "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show", "/api/vpm/delete-project")
@@ -431,7 +431,7 @@ VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading
                "/api/vpm/git/commit": "Commit", "/api/vpm/git/identity": "Who commits", "/api/vpm/git/diff": "A file's changes",
                "/api/vpm/git/history": "History", "/api/vpm/git/files": "A commit's files", "/api/vpm/git/remote": "Remotes",
                "/api/vpm/git/branch": "Branches", "/api/vpm/git/abort": "Abort the merge", "/api/vpm/git/open-app": "Open in your Git app",
-               "/api/vpm/git/app": "Your Git app", "/api/vpm/git/sync": "Fetch, pull or push", "/api/vpm/git/clone": "A project from a Git address", "/api/vpm/repos/add": "Add a repository",
+               "/api/vpm/git/app": "Your Git app", "/api/vpm/git/trust": "Trust its Git settings", "/api/vpm/git/sync": "Fetch, pull or push", "/api/vpm/git/clone": "A project from a Git address", "/api/vpm/repos/add": "Add a repository",
                "/api/vpm/repos/remove": "Remove a repository", "/api/vpm/settings": "Unity and folders",
                "/api/vpm/presets": "Presets", "/api/vpm/backups": "Backups", "/api/vpm/backups/settings": "Backups",
                "/api/vpm/backups/show": "Backups", "/api/vpm/backups/delete": "Delete backups",

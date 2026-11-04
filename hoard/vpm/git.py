@@ -15,9 +15,17 @@ they're shown before anything is written.
 
 Writes to one repository never overlap (repo_lock). What changes your files while Unity has the project open
 (switching branches, pulling, aborting a merge) waits until Unity is closed; reading never does.
+
+A repository's own settings can have Git run a program of theirs (a filter as files are read, a hook as you commit,
+a remote's helper): a project made by someone else could carry them, and Git would run them as soon as it looks at
+the project. So before Git runs in a repository Hoard didn't make, its own settings and hooks are read (reading them
+runs nothing), and any that run a program are shown; Git isn't used there until you trust them (concerns, trust).
+Git LFS's own filter and hooks don't count. What Hoard runs by itself (a project's details) never runs a repository's
+hooks or filters at all.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import queue
@@ -482,12 +490,115 @@ def examples(folder) -> dict:
     return {"kept": keep[:12], "left_out": leave[:12]}
 
 
+# ---- a repository's settings that run a program (see the module's note)
+
+# its own settings (local or worktree: the repository's, not yours) that have Git run a program, or fetch with one
+RUNS_PROGRAM = re.compile(
+    r"filter\..+\.(clean|smudge|process)|diff\..+\.(command|textconv)|merge\..+\.driver|(diff|merge)tool\..+\.cmd|"
+    r"core\.(hookspath|fsmonitor|sshcommand|gitproxy|askpass|editor|pager|alternaterefscommand)|sequence\.editor|"
+    r"pager\..+|credential\.(.+\.)?helper|gpg\.(.+\.)?(program|defaultkeycommand)|remote\..+\.(uploadpack|receivepack|proxy)|"
+    r"protocol\..+|include\.path|includeif\..+\.path|submodule\..+\.update|url\..*::.*\.(insteadof|pushinsteadof)", re.I)
+# Git LFS's own filter, as git lfs install writes it (into a repository's settings too, with --local)
+LFS_FILTER = re.compile(r"git-lfs (clean|smudge)( --skip)? -- %f|git-lfs filter-process( --skip)?")
+# Git LFS's own hooks: a shebang, its "git-lfs isn't installed" line, and git lfs <hook> "$@"
+LFS_HOOK_LINE = re.compile(r'#!/bin/sh|command -v git-lfs >/dev/null 2>&1 \|\| \{ .*; exit 2; \}|git lfs [a-z-]+ "\$@"')
+
+
+def _settings(folder) -> list[tuple[str, str, str]]:
+    """Every setting Git reads for this repository: (scope, key, value). Reading them runs nothing."""
+    r = run(folder, ["config", "--list", "--show-scope", "-z"], check=False)
+    fields, out = r.out.split("\0"), []
+    for scope, entry in zip(fields[0::2], fields[1::2]):
+        key, _, value = entry.partition("\n")
+        out.append((scope, key, value))
+    return out
+
+
+def _hooks(folder) -> Path | None:
+    """The repository's hooks folder (its own, or where core.hooksPath points)."""
+    r = run(folder, ["rev-parse", "--git-path", "hooks"], check=False)
+    where = r.out.strip()
+    return (Path(where) if os.path.isabs(where) else Path(folder) / where) if r.code == 0 and where else None
+
+
+def concerns(folder) -> list[dict]:
+    """What in the repository's own settings and hooks runs a program: [{"kind" ("setting" or "hook"), "name",
+    "value" (what it runs, a few lines at most)}]; none for a repository with none (Git LFS's own aren't counted)."""
+    found = []
+    for scope, key, value in _settings(folder):
+        if scope not in ("local", "worktree"):   # (yours, or the computer's: not the repository's)
+            continue
+        low = key.lower()
+        risky = bool(RUNS_PROGRAM.fullmatch(key))
+        if re.fullmatch(r"remote\..+\.(url|pushurl)", low) and "::" in value.split("/", 1)[0]:
+            risky = True   # (a remote reached through a transport that runs a program, ext:: say)
+        if re.fullmatch(r"filter\.lfs\.(clean|smudge|process)", low) and LFS_FILTER.fullmatch(value.strip()):
+            risky = False
+        if risky:
+            found.append({"kind": "setting", "name": key, "value": redact(value)[:300]})
+    hooks = _hooks(folder)
+    try:
+        listed = sorted(hooks.iterdir()) if hooks and hooks.is_dir() else []
+    except OSError:
+        listed = []
+    for f in listed[:100]:
+        if f.name.endswith(".sample") or not f.is_file():
+            continue
+        try:
+            text = f.read_text("utf-8", "replace")[:20000]
+        except OSError:
+            text = ""
+        lines = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("# ")]
+        if lines and all(LFS_HOOK_LINE.fullmatch(l) for l in lines) and any(l.startswith("git lfs ") for l in lines):
+            continue   # (Git LFS's own)
+        found.append({"kind": "hook", "name": f.name, "value": redact("\n".join(lines[:6]))[:300],
+                      "hash": hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()})
+    return found
+
+
+def _fingerprint(found: list[dict]) -> str:
+    """What the concerns were when they were trusted: any change to them asks again."""
+    return hashlib.sha256(json.dumps(found, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def is_trusted(folder, found: list[dict] | None = None) -> bool:
+    """Whether Git may run in this repository: it has nothing that runs a program, or you trusted what it has."""
+    found = concerns(folder) if found is None else found
+    if not found:
+        return True
+    from . import listing
+    return listing.git_trusted(str(folder)) == _fingerprint(found)
+
+
+def trust(folder) -> None:
+    """Trust what the repository's settings and hooks run, as they are now (Trust it, or a repository Hoard made)."""
+    from . import listing
+    found = concerns(folder)
+    listing.trust_git(str(folder), _fingerprint(found) if found else None)
+
+
+def _gate(folder) -> None:
+    """Refuse to run Git in a repository whose own settings run a program you haven't trusted."""
+    if not is_trusted(folder):
+        raise GitError("This project's Git settings run programs. Look at them in its Source control tab, and trust "
+                       "them there first.", "untrusted")
+
+
 # ---- what's there
 
-def _status(folder) -> dict:
+def _status(folder, guard: bool = False) -> dict:
     """The repository's state, from git status (porcelain v2, NUL-separated): its branch, upstream and how far ahead
-    and behind, and each changed file."""
-    r = run(folder, ["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=normal", "--ignore-submodules=dirty"])
+    and behind, and each changed file. Only in a trusted repository (_gate); guard: run no hook or filter of the
+    repository's at all (what Hoard looks at by itself, as for a project's details)."""
+    _gate(folder)
+    off = []
+    if guard:   # (no hooks; each filter the repository's own settings name, with nothing to run)
+        off = ["-c", f"core.hooksPath={os.devnull}"]
+        for scope, key, _ in _settings(folder):
+            m = re.fullmatch(r"filter\.(.+)\.(clean|smudge|process)", key, re.I)
+            if m and scope in ("local", "worktree") and m.group(1).lower() != "lfs":
+                off += ["-c", f"filter.{m.group(1)}.{m.group(2)}=", "-c", f"filter.{m.group(1)}.required=false"]
+    r = run(folder, [*off, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=normal", "--ignore-submodules=dirty"])
     out = {"branch": None, "detached": False, "initial": False, "upstream": None, "ahead": 0, "behind": 0, "files": [], "more": 0}
     fields = r.out.split("\0")
     i = 0
@@ -610,6 +721,9 @@ def state(folder, again: bool = False) -> dict:
         return {**out, "state": "error", "error": str(e), "code": e.code}
     if not w["repo"]:
         return {**out, "state": "none", "parent": w["parent"]}
+    found = concerns(folder)
+    if not is_trusted(folder, found):   # (its own settings run programs: shown, and Git not run further)
+        return {**out, "state": "untrusted", "concerns": found}
     st = _status(folder)
     files = st["files"]
     counts = {"staged": sum(f["staged"] for f in files), "changed": sum(f["unstaged"] and not f["untracked"] and not f["conflict"] for f in files),
@@ -629,7 +743,9 @@ def summary(folder) -> dict:
     if not g["found"] or not g["ok"]:
         return {"state": "missing" if not g["found"] else "old"}
     try:
-        st = _status(folder)
+        if not is_trusted(folder):
+            return {"state": "untrusted"}
+        st = _status(folder, guard=True)
     except GitError:
         return {"state": "error"}
     conflicts = any(f["conflict"] for f in st["files"])
@@ -652,6 +768,7 @@ def set_up(folder, nested: bool = False) -> dict:
                            "mean it to have a repository of its own inside that one.", "nested")
         written = write_ignore(folder, ignore_plan(folder))
         run(folder, ["init"], timeout=WRITE_TIMEOUT)
+        trust(folder)   # (made here, from your own Git's templates)
         return {"written": written, **looked_over(folder)}
 
 
@@ -737,6 +854,7 @@ def commit(folder, message: str) -> dict:
 
 def history(folder, skip: int = 0, limit: int = HISTORY) -> list[dict]:
     """The newest commits, skip of them passed by: {"hash", "short", "author", "email", "when", "refs", "subject"}."""
+    _gate(folder)   # (a repository's own settings can have git log run a program: log.showSignature, gpg.program)
     skip, limit = max(0, int(skip)), max(1, min(int(limit), 200))
     r = run(folder, ["log", f"--max-count={limit}", f"--skip={skip}", "--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1e"],
             check=False)
@@ -752,6 +870,7 @@ def commit_files(folder, ref: str) -> list[dict]:
     """The files one commit changed: {"path", "status" (A, M, D, R...), "from"}."""
     if not isinstance(ref, str) or not HASH.fullmatch(ref):
         raise GitError("That isn't a commit.")
+    _gate(folder)
     r = run(folder, ["show", "--format=", "--name-status", "-z", "-M", "--no-ext-diff", ref])
     fields, out, i = r.out.split("\0"), [], 0
     while i < len(fields) and len(out) < MAX_FILES:
@@ -778,6 +897,7 @@ def diff(folder, path: str, staged: bool = False, ref: str | None = None) -> dic
     "removed", "size" (a binary file's, in bytes)}: in what's staged, in what isn't, or in a commit (ref). Only a
     file among the changes (or the commit's files) is read."""
     folder = Path(folder)
+    _gate(folder)
     if ref is not None:
         changed = commit_files(folder, ref)
         if path not in {f["path"] for f in changed} | {f["from"] for f in changed if f["from"]}:
@@ -902,6 +1022,7 @@ def _remote(folder, name: str | None) -> str:
 
 def fetch(folder, remote: str | None = None, progress=None) -> str:
     """Fetch from a remote: only looks, and changes nothing in your files or your branches."""
+    _gate(folder)
     with repo_lock(folder):
         name = _remote(folder, remote)
         run(folder, ["fetch", "--prune", "--progress", "--", name], timeout=NETWORK_TIMEOUT, progress=progress)
@@ -956,6 +1077,7 @@ def _branch_name(folder, name) -> str:
 def set_branch(folder, action: str, name: str) -> list[dict]:
     """Make a branch (and switch to it), switch to one, or delete one that's merged; returns the branches now.
     Switching waits until Unity is closed, and until there are no changes it would carry or lose."""
+    _gate(folder)
     with repo_lock(folder):
         have = {b["name"]: b for b in branches(folder)}
         if action == "new":
@@ -986,6 +1108,7 @@ def set_branch(folder, action: str, name: str) -> list[dict]:
 
 def abort_merge(folder) -> None:
     """Give up a merge that stopped on conflicts: your files go back to how they were before the pull."""
+    _gate(folder)
     _must_be_closed(folder, "abort the merge")
     with repo_lock(folder):
         if not merging(folder):
@@ -1015,6 +1138,7 @@ def clone(url: str, dest: Path, progress=None) -> None:
     if dest.exists():
         raise GitError("A folder with that name is already there.")
     run(dest.parent, ["clone", "--progress", "--", url, str(dest)], timeout=NETWORK_TIMEOUT, progress=progress)
+    trust(dest)   # (its settings are Git's own, written as it was copied)
 
 
 def open_app(folder, app: str) -> None:

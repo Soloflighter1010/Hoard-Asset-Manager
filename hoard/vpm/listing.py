@@ -63,6 +63,24 @@ def git_app() -> str:
     return app if isinstance(app, str) and len(app) <= 1000 and Path(app).is_absolute() else ""
 
 
+def git_trusted(path: str) -> str | None:
+    """The fingerprint of a repository's settings that run programs, as you trusted them (hoard/vpm/git.py), or None."""
+    got = (load_state().get("git_trusted") or {}).get(_key(path))
+    return got if isinstance(got, str) else None
+
+
+def trust_git(path: str, fingerprint: str | None) -> None:
+    """Trust a repository's settings that run programs, as they are (their fingerprint); None forgets it."""
+    with _lock:
+        state = load_state()
+        kept = state.get("git_trusted") if isinstance(state.get("git_trusted"), dict) else {}
+        kept.pop(_key(path), None)
+        if fingerprint:
+            kept[_key(path)] = fingerprint
+        state["git_trusted"] = dict(list(kept.items())[-500:])
+        save_state(state)
+
+
 def set_git_app(app: str) -> str:
     """Choose the Git app (a program, or a Mac's .app), or none (""); returns it."""
     app = str(app or "").strip().strip('"')

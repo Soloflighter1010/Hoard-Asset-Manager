@@ -392,6 +392,7 @@ class Service:
             "branch": lambda: {"branches": git.set_branch(folder, str(a.get("action") or ""), a.get("name"))},
             "abort": lambda: git.abort_merge(folder) or {"ok": True},
             "open-app": lambda: git.open_app(folder, listing.git_app()) or {"ok": True},
+            "trust": lambda: git.trust(folder) or {"ok": True},   # (its settings that run programs, as shown)
         }
         if action not in actions:
             raise ProjectsError("Hoard doesn't know that.")

@@ -2401,5 +2401,13 @@
  "Not now? Choose Next: nothing is sent until you add an address. You can change this later in Settings, under Notifications through Apprise.": "今はしない場合は、次へを選んでください。アドレスを追加するまで何も送りません。あとから設定の「Appriseで通知」で変えられます。",
  "Quick refresh": "クイック更新",
  "Quick refresh: {0}": "クイック更新:{0}",
- "Quick refresh looks for what's new: it reads only the start of each library and of the wishlists you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was; Refresh reads everything.": "クイック更新は新しいものを探します。各ライブラリと、保管しているほしい物リストの最初の部分だけ(最初の2ページか最初の50商品の、少ないほう)を読み込みます。読み込まなかった部分はそのまま残ります。すべてを読み込むのは更新です。"
+ "Quick refresh looks for what's new: it reads only the start of each library and of the wishlists you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was; Refresh reads everything.": "クイック更新は新しいものを探します。各ライブラリと、保管しているほしい物リストの最初の部分だけ(最初の2ページか最初の50商品の、少ないほう)を読み込みます。読み込まなかった部分はそのまま残ります。すべてを読み込むのは更新です。",
+ "Hook: {0}": "フック:{0}",
+ "Its Git settings run programs": "Gitの設定がプログラムを実行します",
+ "This project's own Git settings have Git run these programs. A project made by someone else can carry settings like these, so Hoard doesn't use Git here until you've looked at them and trust them.": "このプロジェクト自身のGitの設定は、Gitにこれらのプログラムを実行させます。ほかの人が作ったプロジェクトにはこうした設定が入っていることがあるので、内容を確かめて信頼するまで、HoardはここでGitを使いません。",
+ "Trust them...": "信頼する...",
+ "Trust these Git settings? Git runs those programs whenever it works in this project. Only trust a project when you know where it came from.": "これらのGitの設定を信頼しますか?Gitはこのプロジェクトで作業するたびに、それらのプログラムを実行します。出どころが分かっているプロジェクトだけを信頼してください。",
+ "Trust them": "信頼する",
+ "Trusted. Hoard asks again if they change.": "信頼しました。設定が変わったら、Hoardがもう一度確認します。",
+ "Its Git settings need a look": "Gitの設定を確認してください"
 }

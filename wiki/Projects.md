@@ -182,8 +182,15 @@ Hoard needs 2.28 or newer), and it needs no account: a repository online is up t
 - **Get from a Git address...** (above the list) copies a repository into your projects folder and puts it on the list.
 - A project's details say its branch and how many changes it has. **Back up...** leaves its `.git` folder out, and can
   put its history in as a Git bundle (`git-history.bundle` in the zip; `git clone` it to get the history back). A
-  bundle doesn't hold Git LFS files, and a push online isn't a backup of what isn't committed.
+  bundle doesn't hold Git LFS files, and a push online isn't a backup of what isn't committed. The backup made before a
+  project is deleted keeps its `.git` folder, so its history is never lost with it.
 - Hoard never resets or cleans a project, and runs Git only for a project on the list, one named action at a time.
+- **Settings that run programs**: a repository's own Git settings can have Git run a program (a filter as files are
+  read, a hook as you commit), and a project made by someone else could carry them. Before Git runs in a project
+  Hoard didn't set up or get itself, Hoard reads its settings and hooks (reading them runs nothing). If any run a
+  program, the **Source control** tab shows them, and Git isn't used there until you choose **Trust them...**; a change
+  to them asks again. Git LFS's own filter and hooks don't count, and a project's details never run a repository's
+  hooks or filters at all.
 
 ## Projects' tasks
 

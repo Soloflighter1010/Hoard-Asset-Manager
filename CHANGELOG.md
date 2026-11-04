@@ -24,6 +24,8 @@
     project's details say its branch and its changes.
   - Signing in to a remote is Git's own (Git Credential Manager or SSH): Hoard keeps no Git passwords, and refuses an
     address with one in it.
+  - A project's own Git settings that run a program (a filter, a hook) are shown before Git runs there, and Git isn't
+    used in it until you trust them: a project made by someone else can't run a program of theirs through Git.
 - **Rename a project** ([#290](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/290)). **Rename...** in a project's details renames its folder where it is, and its
   favourite, folder, tags and what went in from your library follow it. Not while Unity has it open.
 - **Projects** ([#282](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/282), [#283](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/283), [#294](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/294)). **Add Assets** (it was "Put in products from your library"); a project with

