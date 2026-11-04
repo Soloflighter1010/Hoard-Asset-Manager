@@ -468,3 +468,47 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .setview .sethead { grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: 20px; }
 [data-style="workbench"] .setview .sethead h2 { font-size: 22px; }
 [data-style="workbench"] .setview .card { border-radius: 8px; }
+
+/* Source control (issues #296 to #299): a project's Git, in its Source control tab */
+.pj-git h4 { margin: 22px 0 8px; font: 700 15px var(--body); color: var(--bone); }
+.pj-git h4 .n { font-weight: 400; color: var(--dust); margin-left: 4px; }
+.pj-git-none { max-width: 70ch; }
+.pj-git-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 14px; border-radius: 12px;
+  background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-git-head .row { margin: 0; margin-left: auto; }
+.pj-git-branch { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.pj-git-sync, .pj-git-last { color: var(--dust); font-size: 13px; }
+.pj-git-conflict { margin: 14px 0 0; padding: 10px 14px; border-radius: 12px; box-shadow: inset 0 0 0 2px var(--warn); }
+.pj-git-conflict h4 { margin-top: 2px; color: var(--warn); }
+.pj-note { margin: 12px 0 0; color: var(--dust); }
+.pj-git-files, .pj-git-log, .pj-git-remotes, .pj-git-cfiles, .pj-plan-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.pj-git-files li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 2px; border-top: 1px solid var(--seam); }
+.pj-git-files li.conflict .pj-git-state { color: var(--warn); font-weight: 700; }
+.pj-git-path { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.pj-git-state { color: var(--dust); font-size: 12.5px; }
+.pj-git-files .linkish, .pj-git-log .linkish, .pj-git-cfiles .linkish { font-size: 13px; }
+.pj-git textarea#pjGitMsg { display: block; width: 100%; box-sizing: border-box; min-height: 56px; margin: 0 0 8px; padding: 8px 10px; border: 0;
+  border-radius: 8px; resize: vertical; background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 13.5px/1.45 var(--body); }
+.pj-git input#pjGitName, .pj-git input#pjGitEmail { height: var(--btn-h-sm); padding: 0 10px; border: 0; border-radius: 8px; background: var(--cave);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-git-log > li { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 2px; border-top: 1px solid var(--seam); }
+.pj-git-log .linkish { text-align: left; }
+.pj-git-log > li.on { background: color-mix(in srgb, var(--gold) 8%, transparent); }
+.pj-git-log .muted { font-size: 12.5px; color: var(--dust); }
+.pj-git-cfiles { margin: 6px 0 2px 14px; }
+.pj-git-cfiles li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+.pj-git-st { display: inline-block; min-width: 1.4em; font: 700 12px ui-monospace, Menlo, Consolas, monospace; color: var(--dust); }
+.pj-git-remotes li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 2px; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.pj-diff { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-diff-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow-wrap: anywhere; }
+.pj-diff-text { margin: 8px 0 0; max-height: 420px; overflow: auto; padding: 8px 0; border-radius: 8px; background: var(--cave);
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; color: var(--bone); }
+.pj-diff-text > span { display: block; padding: 0 10px; min-height: 1.5em; }
+.pj-diff-text .add { background: color-mix(in srgb, var(--gold) 16%, transparent); }
+.pj-diff-text .del { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.pj-diff-text .hunk { color: var(--dust); }
+.pj-plan { max-height: 180px; padding: 8px 10px; }
+.pj-plan-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pj-plan-cols h4 { margin: 6px 0 4px; font: 700 13px var(--body); }
+.pj-plan-list li { font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .pj-plan-cols { grid-template-columns: 1fr; } .pj-git-head .row { margin-left: 0; } }

@@ -57,6 +57,24 @@ def save_state(state: dict) -> None:
     write_file_safely(_state_path(), json.dumps(state, indent=1, ensure_ascii=False))
 
 
+def git_app() -> str:
+    """The Git app you chose to open repositories in (its program's path), or "" (issue #299)."""
+    app = load_state().get("git_app")
+    return app if isinstance(app, str) and len(app) <= 1000 and Path(app).is_absolute() else ""
+
+
+def set_git_app(app: str) -> str:
+    """Choose the Git app (a program, or a Mac's .app), or none (""); returns it."""
+    app = str(app or "").strip().strip('"')
+    if app and (len(app) > 1000 or not Path(app).is_absolute() or not (Path(app).is_file() or (app.endswith(".app") and Path(app).is_dir()))):
+        raise ValueError("That isn't a program on this computer: choose the app itself (its .exe, or a Mac's .app).")
+    with _lock:
+        state = load_state()
+        state["git_app"] = app
+        save_state(state)
+    return app
+
+
 def backup_prefs() -> dict:
     """How the backups panel decides which backups are old, and where old ones were last moved to."""
     from . import backup
@@ -173,6 +191,7 @@ def projects(progress=None) -> list[dict]:
             "favorite": bool(mine["favorite"]) if "favorite" in mine else record.get("Favorite") is True,
             "created": _ms(record.get("CreatedAt")) or None, "opened": opened or None,
             "preloaded": len(mine.get("preloaded") or []),
+            "git": info["exists"] and os.path.exists(os.path.join(path, ".git")),   # (its own repository: issue #296)
             "folder": clean_text(mine.get("folder") if isinstance(mine.get("folder"), str) else "", 60) or None,   # (#190)
             "tags": [t for t in mine.get("tags") or [] if isinstance(t, str)][:MAX_PROJECT_TAGS] if isinstance(mine.get("tags"), list) else [],
         })

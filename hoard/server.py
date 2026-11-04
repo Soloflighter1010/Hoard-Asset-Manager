@@ -66,7 +66,9 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
            "/api/vpm/preview", "/api/vpm/apply", "/api/vpm/create", "/api/vpm/preload", "/api/vpm/backup",
            "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite", "/api/vpm/organize",
-           "/api/vpm/rename",
+           "/api/vpm/rename", "/api/vpm/git/init", "/api/vpm/git/ignore", "/api/vpm/git/stage", "/api/vpm/git/unstage",
+           "/api/vpm/git/commit", "/api/vpm/git/identity", "/api/vpm/git/remote", "/api/vpm/git/branch", "/api/vpm/git/abort",
+           "/api/vpm/git/open-app", "/api/vpm/git/app", "/api/vpm/git/sync", "/api/vpm/git/clone",
            "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
            "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
            "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show", "/api/vpm/delete-project")
@@ -422,7 +424,13 @@ VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading
                "/api/vpm/refresh": "Refreshing the repositories", "/api/vpm/open": "Open in Unity",
                "/api/vpm/open-folder": "Open folder", "/api/vpm/add-project": "Add a project",
                "/api/vpm/remove-project": "Take off the list", "/api/vpm/delete-project": "Delete from this computer",
-               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/rename": "Rename a project", "/api/vpm/repos/add": "Add a repository",
+               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/rename": "Rename a project",
+               "/api/vpm/git": "Source control", "/api/vpm/git/plan": "Set up Git", "/api/vpm/git/init": "Set up Git",
+               "/api/vpm/git/ignore": "Git's ignore rules", "/api/vpm/git/stage": "Stage", "/api/vpm/git/unstage": "Unstage",
+               "/api/vpm/git/commit": "Commit", "/api/vpm/git/identity": "Who commits", "/api/vpm/git/diff": "A file's changes",
+               "/api/vpm/git/history": "History", "/api/vpm/git/files": "A commit's files", "/api/vpm/git/remote": "Remotes",
+               "/api/vpm/git/branch": "Branches", "/api/vpm/git/abort": "Abort the merge", "/api/vpm/git/open-app": "Open in your Git app",
+               "/api/vpm/git/app": "Your Git app", "/api/vpm/git/sync": "Fetch, pull or push", "/api/vpm/git/clone": "A project from a Git address", "/api/vpm/repos/add": "Add a repository",
                "/api/vpm/repos/remove": "Remove a repository", "/api/vpm/settings": "Unity and folders",
                "/api/vpm/presets": "Presets", "/api/vpm/backups": "Backups", "/api/vpm/backups/settings": "Backups",
                "/api/vpm/backups/show": "Backups", "/api/vpm/backups/delete": "Delete backups",
@@ -1631,6 +1639,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**found, "report": report}, compress=True)
             if path == "/api/vpm/updates":   # issue #253: each project's packages with newer versions, for the list
                 return self._json({"projects": srv.vpm.updates()}, compress=True)
+            if path in ("/api/vpm/git", "/api/vpm/git/plan", "/api/vpm/git/diff", "/api/vpm/git/history", "/api/vpm/git/files"):
+                action = {"/api/vpm/git": "state"}.get(path, path.rsplit("/", 1)[-1])   # source control (issues #296 to #299)
+                return self._vpm_git(one("path"), action, {"again": one("again") == "1", "file": one("file"), "staged": one("staged") == "1",
+                                                         "ref": one("ref") or None, "skip": one("skip") if one("skip").isdigit() else 0})
             if path == "/api/vpm/about":   # a project's details beside the list: its size on disk, packages, backups
                 found = srv.vpm.about(one("path"))
                 hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
@@ -1653,6 +1665,13 @@ class Handler(BaseHTTPRequestHandler):
         except vpm_api.ProjectsError as e:
             return self._json({"error": str(e)}, 400)
         return self._send(404, b"Not found", "text/plain")
+
+    def _vpm_git(self, path, action: str, args: dict):
+        """A source control action on a listed project, answered with what it says, or its error and Git's code."""
+        try:
+            return self._json(self.server.vpm.git(path, action, args), compress=True)
+        except vpm_api.ProjectsError as e:
+            return self._json({"error": str(e), "code": getattr(e, "git_code", "")}, 400)
 
     def _vpm_job(self, what: dict):
         """Queue a Projects task, saying whether it waits its turn."""
@@ -1677,6 +1696,7 @@ class Handler(BaseHTTPRequestHandler):
                     what.update({k: body.get(k) for k in ("add", "remove", "repair", "upgrade_all", "prerelease")})
                 elif path == "/api/vpm/backup":
                     what["leave_out_packages"] = body.get("leave_out_packages") is True
+                    what["git_bundle"] = body.get("git_bundle") is True   # (its Git history in it: issue #299)
                 else:
                     what["picks"] = self._picks(body.get("picks"))
                 return self._vpm_job(what)
@@ -1766,6 +1786,32 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "Type the project's name to delete it."}, 400)
                 srv.vpm.deletable(where)   # (said now when it can't be: Unity has it open, say)
                 return self._vpm_job({"op": "delete", "path": where, "name": Path(where).name, "backup": body.get("backup") is not False})
+            if path == "/api/vpm/git/sync":   # fetch, pull or push: a task, as it talks to a remote (issue #298)
+                where = srv.vpm.listed(body.get("path"))
+                op = {"fetch": "git-fetch", "pull": "git-pull", "push": "git-push"}.get(str(body.get("op") or ""))
+                if not op:
+                    return self._json({"error": "Hoard doesn't know that."}, 400)
+                return self._vpm_job({"op": op, "path": where, "name": Path(where).name, "merge": body.get("merge") is True,
+                                      "remote": str(body.get("remote") or "")[:40] or None})
+            if path == "/api/vpm/git/clone":   # a project from a Git address (issue #299): a task, then it's on the list
+                from .vpm import git as vpm_git
+                try:
+                    url = vpm_git.check_url(body.get("url"))
+                except vpm_git.GitError as e:
+                    return self._json({"error": str(e)}, 400)
+                name = str(body.get("name") or "").strip()[:255] or vpm_git.clone_name(url)
+                location = str(body.get("location") or "")[:1000]
+                problem, _ = vpm_templates.check_name(Path(location), name) if location else ("Choose where it goes.", None)
+                if problem:
+                    return self._json({"error": problem}, 400)
+                return self._vpm_job({"op": "git-clone", "url": url, "name": name, "location": location})
+            if path == "/api/vpm/git/app":   # the Git app to open repositories in (issue #299)
+                try:
+                    return self._json({"ok": True, "app": listing.set_git_app(body.get("app"))})
+                except ValueError as e:
+                    return self._json({"error": str(e)}, 400)
+            if path.startswith("/api/vpm/git/"):   # each one a named action (hoard/vpm/api.py Service.git)
+                return self._vpm_git(body.get("path"), path.rsplit("/", 1)[-1], body)
             if path == "/api/vpm/rename":   # its folder, where it is (issue #290): the list and Hoard's notes follow it
                 where = srv.vpm.listed(body.get("path"))
                 renamed = srv.vpm.rename(where, str(body.get("name") or "")[:300])

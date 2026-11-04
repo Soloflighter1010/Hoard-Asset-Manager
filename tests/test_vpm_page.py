@@ -191,6 +191,63 @@ class ProjectsPanel(unittest.TestCase):
         row("Rusk Avatar").drag_to(chip)
         page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').folder === 'Duo'")
 
+    @unittest.skipUnless(__import__("shutil").which("git"), "needs Git installed")
+    def test_source_control(self):
+        """Issues #296, #297: a project's Source control tab: Git missing says how to get it; set up after its ignore
+        rules are shown; changes chosen, staged and committed; the history, a commit's files and a file's changes."""
+        from hoard.vpm import git
+        conf = self.tmp / "gitconfig"
+        conf.write_text("[user]\n\tname = Kitsu\n\temail = kitsu@example.com\n[init]\n\tdefaultBranch = main\n")
+        env = mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(conf), "GIT_CONFIG_NOSYSTEM": "1"})
+        env.start()
+        self.addCleanup(env.stop)
+        page = self.page
+        pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
+        tab = page.locator(".pj-subs [data-sub=git]")
+        self.assertEqual(tab.inner_text(), "Source control")
+        with mock.patch.object(git, "_candidates", lambda: []):
+            git.find(again=True)
+            tab.click()
+            page.locator(".pj-git-none h4", has_text="Git isn't installed").wait_for()
+            self.assertEqual(page.locator(".pj-git-none a").get_attribute("href"), "https://git-scm.com/downloads")
+        page.click("[data-pj=gitagain]")
+        page.locator(".pj-git-none h4", has_text="Not set up").wait_for()
+        page.click("[data-pj=gitsetup]")
+        dlg = page.locator("dialog.pj-dlg", has_text="Set up Git for Rusk Avatar?")
+        dlg.wait_for()
+        self.assertIn(".gitignore", dlg.inner_text())
+        self.assertIn("/[Ll]ibrary/", dlg.locator(".pj-plan").first.inner_text())
+        self.assertIn("Assets", dlg.locator(".pj-plan-cols").inner_text())
+        dlg.locator("button[value=yes]").click()
+        page.locator(".pj-git-files li").first.wait_for()
+        self.assertTrue((self.tmp / "Unity" / "Rusk Avatar" / ".git").is_dir())
+        self.assertTrue(page.locator("[data-pj=gitcommit]").is_disabled(), "nothing staged yet")
+        page.check("[data-gitall]")
+        page.click("[data-pj=gitstage]")
+        page.wait_for_function("() => PJG.data && PJG.data.counts && PJG.data.counts.staged > 0")
+        page.fill("#pjGitMsg", "First: the avatar")
+        page.click("[data-pj=gitcommit]")
+        page.locator(".toast", has_text="Committed: First: the avatar").wait_for()
+        page.locator(".pj-git-files + *, .pj-git .none", has_text="No changes").first.wait_for()
+        self.assertIn("Last commit: First: the avatar", page.locator(".pj-git-head").inner_text())
+        # a change, and its lines; the history, and a commit's files
+        (self.tmp / "Unity" / "Rusk Avatar" / "Packages" / "manifest.json").write_text('{"dependencies": {"x": "1"}}')
+        page.click("[data-pj=gitreload]")
+        page.locator(".pj-git-files li", has_text="Packages/manifest.json").wait_for()
+        page.locator(".pj-git-files li", has_text="Packages/manifest.json").locator("[data-pj=gitdiff]").click()
+        page.locator(".pj-diff-text .add", has_text='"x": "1"').wait_for()
+        page.click("[data-pj=githistory]")
+        page.locator(".pj-git-log li", has_text="First: the avatar").locator("[data-pj=gitref]").click()
+        page.locator(".pj-git-cfiles li", has_text="Packages/manifest.json").wait_for()
+        # its details say so
+        page.click("[data-pj=back]")
+        page.locator("#pjFind").wait_for()
+        page.wait_for_timeout(300)   # (the list drawn, with its details still open)
+        pj_details(page, "Rusk Avatar")
+        page.wait_for_function("() => PJ.about && PJ.about.git")
+        facts = dict(zip(*(pj_details(page, "Rusk Avatar").locator(f".pj-facts {t}").all_inner_texts() for t in ("dt", "dd"))))
+        self.assertEqual(facts["Source control"], "main · 1 change")
+
     def test_rename_a_project(self):
         """Issue #290: Rename... in a project's details renames its folder, and its details stay open under the new
         name; a name that can't be used is refused, and nothing changes."""
@@ -495,7 +552,7 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.locator(".pj-pk tr[data-name='com.vrchat.avatars'] td.from").inner_text(), "Official")
         # its tabs: Packages, Add packages, From your library, and what Hoard for Unity reported of it
         tabs = page.locator(".pj-subs .pj-tab")
-        self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report"])
+        self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report", "git"])
         page.click(".pj-subs [data-sub=report]")
         page.locator(".proj", has_text="What Hoard for Unity found in it").wait_for()
         # what it found: as their library tiles, with how each is in it; choosing one shows it in the library

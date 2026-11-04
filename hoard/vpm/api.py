@@ -17,7 +17,7 @@ from pathlib import Path
 from .. import loading
 from ..common import log
 from ..safety import DataFileError
-from . import backup, environment, imports, listing, logbook, presets, repos, resolve, templates, unity
+from . import backup, environment, git, imports, listing, logbook, presets, repos, resolve, templates, unity
 from .logbook import Warn
 from .manifest import valid_name
 from .preload import apply as put_in
@@ -140,6 +140,7 @@ class Service:
         away = [b for b in backup.found(moved) if b["project"].lower() == name] if moved else []
         out["backups"] = {"count": len(mine), "size": sum(b["size"] for b in mine), "newest": mine[0]["when"] if mine else None,
                           "moved": len(away)}
+        out["git"] = git.summary(path)   # (its source control, in a few words: issue #296)
         return out
 
     @staticmethod
@@ -326,6 +327,8 @@ class Service:
                 log(Warn(f"Not moved: {why}"))
             done = f"Moved {count} {'backup' if count == 1 else 'backups'} to {to}, {freed / (1 << 30):.1f} GB freed."
             return done + (" Not moved: " + "; ".join(problems[:10]) if problems else "")
+        if op in ("git-fetch", "git-pull", "git-push", "git-clone"):
+            return self._git_task(op, what)
         path = self.listed(what.get("path"))
         if op in ("change", "preload"):
             self._fetch_missing()
@@ -342,12 +345,92 @@ class Service:
         if op == "backup":
             project = UnityProject.load(path)
             leave_out = set(project.locked) if what.get("leave_out_packages") else set()
-            out = backup.back_up(Path(path), self.backups_folder(), leave_out)
+            history = None
+            if what.get("git_bundle"):   # (issue #299: its Git history, as a bundle in the zip)
+                self.backups_folder().mkdir(parents=True, exist_ok=True)
+                history = self.backups_folder() / f".{Path(path).name}-{os.getpid()}.bundle.part"
+                log(f"Putting {Path(path).name}'s Git history in a bundle")
+                if not git.bundle(path, history):
+                    history = None
+            try:
+                out = backup.back_up(Path(path), self.backups_folder(), leave_out, history=history)
+            finally:
+                if history is not None and history.exists():
+                    history.unlink()
             listing.note(path, backed_up=time.strftime("%Y-%m-%dT%H:%M:%S"))
-            return f"Backed up {Path(path).name} to {out}."
+            return f"Backed up {Path(path).name} to {out}." + (" Its Git history is in it, as a bundle." if history else "")
         if op == "delete":
             return self._delete(path, backup_first=what.get("backup") is not False)
         raise ProjectsError("Hoard doesn't know that project task.")
+
+    # ---- source control (hoard/vpm/git.py, issues #296 to #299): only for a project on the list
+
+    def git(self, path: str, action: str, args: dict | None = None):
+        """One named source control action on a listed project (never a command of the page's own): what it says.
+        A GitError is a ProjectsError with Git's code (git_code) for the page."""
+        folder = self.listed(path)
+        if not Path(folder).is_dir():
+            raise ProjectsError("Its folder isn't there any more.")
+        a = args or {}
+        actions = {
+            "state": lambda: {**git.state(folder, again=a.get("again") is True), "app": listing.git_app()},
+            "plan": lambda: {"plan": git.ignore_plan(folder), "examples": git.examples(folder), "where": git.where(folder)},
+            "init": lambda: git.set_up(folder, nested=a.get("nested") is True),
+            "ignore": lambda: {"written": git.update_ignore(folder)},
+            "stage": lambda: {"staged": git.stage(folder, a.get("files"))},
+            "unstage": lambda: {"unstaged": git.unstage(folder, a.get("files"))},
+            "commit": lambda: {"commit": self._git_commit(folder, a.get("message"))},
+            "identity": lambda: git.set_identity(folder, a.get("name"), a.get("email")),
+            "diff": lambda: git.diff(folder, str(a.get("file") or ""), staged=a.get("staged") is True, ref=a.get("ref") or None),
+            "history": lambda: {"commits": git.history(folder, skip=int(a.get("skip") or 0))},
+            "files": lambda: {"files": git.commit_files(folder, a.get("ref"))},
+            "remote": lambda: {"remotes": git.set_remote(folder, str(a.get("action") or ""), a.get("name"), a.get("url"))},
+            "branch": lambda: {"branches": git.set_branch(folder, str(a.get("action") or ""), a.get("name"))},
+            "abort": lambda: git.abort_merge(folder) or {"ok": True},
+            "open-app": lambda: git.open_app(folder, listing.git_app()) or {"ok": True},
+        }
+        if action not in actions:
+            raise ProjectsError("Hoard doesn't know that.")
+        try:
+            return actions[action]()
+        except git.GitError as e:
+            err = ProjectsError(str(e))
+            err.git_code = e.code
+            raise err from None
+
+    @staticmethod
+    def _git_commit(folder: str, message) -> dict:
+        """Commit what's staged, saying so in Projects' log."""
+        done = git.commit(folder, message)
+        log(f"Committed {Path(folder).name}: {done['short']} {done['subject']}")
+        return done
+
+    def _git_task(self, op: str, what: dict) -> str:
+        """A source control task that talks to a remote, as Projects' tasks run (Stop ends Git): fetch, pull, push, or
+        getting a project from a Git address (clone), which then goes on the list."""
+        from ..common import tick
+        try:
+            if op == "git-clone":
+                url, name = str(what.get("url") or ""), str(what.get("name") or "").strip()
+                location = Path(str(what.get("location") or ""))
+                why, _ = templates.check_name(location, name)
+                if why or not location.is_absolute() or not location.is_dir():
+                    raise ProjectsError(why or "Choose the folder it goes in, by its full path.")
+                dest = location / name
+                log(f"Getting {name} from {git.redact(url)}")
+                git.clone(url, dest, progress=tick)
+                if not is_project(dest):
+                    return f"Copied it to {dest}, but it isn't a Unity project, so it isn't on the list."
+                listing.add(str(dest))
+                return f"Got {name}: it's on the list. Open it in Unity and its VPM packages are restored."
+            path = self.listed(what.get("path"))
+            if op == "git-fetch":
+                return git.fetch(path, what.get("remote") or None, progress=tick)
+            if op == "git-pull":
+                return git.pull(path, merge=what.get("merge") is True, progress=tick)
+            return git.push(path, what.get("remote") or None, progress=tick)
+        except git.GitError as e:
+            raise ProjectsError(str(e)) from None
 
     def deletable(self, path: str, doing: str = "delete") -> Path:
         """The project's folder, when it's safe to delete (or, doing "rename", to rename): on the list, a Unity project,

@@ -25,7 +25,8 @@ DAYS_CHOICES = (7, 14, 30, 90, 180, 365)
 LOW_SHARE, LOW_BYTES = 0.10, 10 << 30   # a drive with less than 10% or 10 GB free is low on room
 MAX_LISTED = 5000
 
-SKIPPED_TOP = {"library", "logs", "obj", "temp"}
+SKIPPED_TOP = {"library", "logs", "obj", "temp", ".git"}   # (.git: its history goes in as a bundle, when asked: issue #299)
+BUNDLE_NAME = "git-history.bundle"   # a backup's Git history, in its zip (git clone it to get the history back)
 
 
 def default_folder() -> Path:
@@ -51,13 +52,15 @@ def files(project: Path, leave_out_packages: set[str] = frozenset(), skip: Path 
         dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
         for n in names:
             full = os.path.join(root, n)
-            if os.path.islink(full):
+            if os.path.islink(full) or (not parts and n.lower() == ".git"):   # (a worktree's .git is a file)
                 continue
             yield full, "/".join(parts + [n])
 
 
-def back_up(project: Path, folder: Path, leave_out_packages: set[str] = frozenset(), fast: bool = True) -> Path:
-    """Write the backup, returning its path. A failure leaves no half-made zip behind."""
+def back_up(project: Path, folder: Path, leave_out_packages: set[str] = frozenset(), fast: bool = True,
+            history: Path | None = None) -> Path:
+    """Write the backup, returning its path. A failure leaves no half-made zip behind. A project's .git folder is
+    left out (it could be most of it); history, when given, is its Git history as a bundle, put in as BUNDLE_NAME."""
     project = Path(project)
     folder.mkdir(parents=True, exist_ok=True)
     out = folder / f"{project.name}-{time.strftime('%Y-%m-%dT%H-%M-%S')}.zip"
@@ -74,6 +77,8 @@ def back_up(project: Path, folder: Path, leave_out_packages: set[str] = frozense
                 if time.monotonic() - said > 0.5:
                     said = time.monotonic()
                     tick(f"Backing up {project.name}: {count} files")
+            if history is not None:
+                zf.write(history, BUNDLE_NAME)
         os.replace(part, out)
     finally:
         if part.exists():

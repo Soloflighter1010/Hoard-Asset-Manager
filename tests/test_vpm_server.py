@@ -8,12 +8,14 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
 import unittest
 import zipfile
 from pathlib import Path
+import urllib.parse
 from urllib.parse import quote
 from unittest import mock
 
@@ -442,6 +444,75 @@ class Server(unittest.TestCase):
         self.assertFalse(project.exists())
         self.assertEqual([z.name.startswith("Old Idea-") for z in backups.glob("*.zip")], [True], "backed up first")
         self.assertNotIn(str(project), [p["path"] for p in self.call("GET", "/api/vpm")[1]["projects"]])
+
+    @unittest.skipUnless(shutil.which("git"), "needs Git installed")
+    def test_source_control(self):
+        """Issues #296 to #299, through the server: only a listed project; set up with its ignore rules, files staged
+        and committed, the history read; pushed to a remote as a task; a backup without .git, with its history as a
+        bundle; and a project got from a Git address, then on the list."""
+        import zipfile
+        from tests.test_git import unity_project
+        conf = self.tmp / "gitconfig"
+        conf.write_text("[user]\n\tname = Kitsu\n\temail = kitsu@example.com\n[init]\n\tdefaultBranch = main\n")
+        env = mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(conf), "GIT_CONFIG_NOSYSTEM": "1"})
+        env.start()
+        self.addCleanup(env.stop)
+        project = unity_project(self.tmp / "Unity" / "Rusk Avatar")
+        q = f"/api/vpm/git?path={urllib.parse.quote(str(project))}"
+        self.assertEqual(self.call("GET", q)[0], 400, "not on the list")
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(project)})[0], 200)
+        status, st = self.call("GET", q)
+        self.assertEqual((status, st["state"], st["git"]["found"]), (200, "none", True))
+        status, plan = self.call("GET", q.replace("/git?", "/git/plan?"))
+        self.assertEqual([f["path"] for f in plan["plan"]], [".gitignore", "Packages/.gitignore"])
+        status, done = self.call("POST", "/api/vpm/git/init", {"path": str(project)})
+        self.assertEqual(status, 200, done)
+        self.assertTrue((project / ".git").is_dir())
+        self.assertTrue(next(p for p in self.call("GET", "/api/vpm")[1]["projects"] if p["name"] == "Rusk Avatar")["git"])
+        files = [f["path"] for f in self.call("GET", q)[1]["files"]]
+        status, answer = self.call("POST", "/api/vpm/git/commit", {"path": str(project), "message": "First"})
+        self.assertEqual((status, answer["error"]), (400, "Nothing is staged: choose the files to commit, and Stage them, first."))
+        self.assertEqual(self.call("POST", "/api/vpm/git/stage", {"path": str(project), "files": files})[1], {"staged": len(files)})
+        self.assertEqual(self.call("POST", "/api/vpm/git/stage", {"path": str(project), "files": ["--all"]})[0], 400, "only its changes")
+        status, answer = self.call("POST", "/api/vpm/git/commit", {"path": str(project), "message": "First"})
+        self.assertEqual((status, answer["commit"]["subject"]), (200, "First"), answer)
+        self.assertEqual([c["subject"] for c in self.call("GET", q.replace("/git?", "/git/history?"))[1]["commits"]], ["First"])
+        self.assertEqual(self.call("POST", "/api/vpm/git/nonsense", {"path": str(project)})[0], 404, "only the actions there are")
+        # pushed, as a task
+        remote = self.tmp / "remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        status, answer = self.call("POST", "/api/vpm/git/remote", {"path": str(project), "action": "add", "name": "origin",
+                                                                   "url": "https://kitsu:secret@example.com/r.git"})
+        self.assertEqual(status, 400)
+        self.assertIn("password or token", answer["error"])
+        self.call("POST", "/api/vpm/git/remote", {"path": str(project), "action": "add", "name": "origin", "url": str(remote)})
+        self.assertEqual(self.call("POST", "/api/vpm/git/sync", {"path": str(project), "op": "push"})[1], {"ok": True, "queued": False})
+        done = self.wait()
+        self.assertEqual((done["outcome"], done["label"]), ("done", "Projects: Push Rusk Avatar"), done["message"])
+        self.assertEqual(self.call("GET", q)[1]["upstream"], "origin/main")
+        # a backup: .git left out, its history in it as a bundle
+        backups = self.tmp / "Backups"
+        settings = json.loads((self.vcc / "settings.json").read_text())
+        (self.vcc / "settings.json").write_text(json.dumps({**settings, "projectBackupPath": str(backups)}))
+        self.call("POST", "/api/vpm/backup", {"path": str(project), "git_bundle": True})
+        done = self.wait()
+        self.assertIn("Its Git history is in it", done["message"])
+        (zipped,) = backups.glob("Rusk Avatar-*.zip")
+        names = zipfile.ZipFile(zipped).namelist()
+        self.assertIn("git-history.bundle", names)
+        self.assertFalse([n for n in names if n.startswith(".git/")], "no .git folder")
+        self.assertIn(".gitignore", names, "its ignore rules, though")
+        self.assertIn("Assets/Scenes/Main.unity", names)
+        self.assertEqual(list(backups.glob("*.part")), [], "nothing left behind")
+        # a project from a Git address: copied, then on the list
+        status, answer = self.call("POST", "/api/vpm/git/clone", {"url": "ext::sh -c id", "location": str(self.tmp / "Unity")})
+        self.assertEqual(status, 400)
+        status, answer = self.call("POST", "/api/vpm/git/clone", {"url": str(remote), "name": "Rusk Copy", "location": str(self.tmp / "Unity")})
+        self.assertEqual(status, 200, answer)
+        done = self.wait()
+        self.assertEqual(done["outcome"], "done", done["message"])
+        self.assertIn("it's on the list", done["message"])
+        self.assertIn("Rusk Copy", [p["name"] for p in self.call("GET", "/api/vpm")[1]["projects"]])
 
     def test_rename_a_project(self):
         """Issue #290: its folder is renamed where it is, and it's listed where it was under its new name, with Hoard's

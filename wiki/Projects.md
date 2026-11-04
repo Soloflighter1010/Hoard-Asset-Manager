@@ -151,6 +151,40 @@ Hoard says so: close it first, so nothing it has open is replaced under it.
 Each package download is checked against the SHA-256 its repository lists for it, and downloads are kept where ALCOM
 keeps them, so neither downloads one twice.
 
+## Source control (Git)
+
+From 5.2.0 beta 4, a project's **Source control** tab keeps its history with Git: what changed, and when, to look
+back on or go back to. Hoard uses the Git you have installed (get it from [git-scm.com](https://git-scm.com/downloads);
+Hoard needs 2.28 or newer), and it needs no account: a repository online is up to you.
+
+- **Set up Git...** shows first what it writes: GitHub's Unity ignore rules in `.gitignore`, and VRChat's in
+  `Packages/.gitignore`, as [VRChat recommends](https://vcc.docs.vrchat.com/vpm/source-control/). The project's own
+  files are kept (its assets with their `.meta` files, its settings, its package manifests and the VPM resolver);
+  what Unity makes again (`Library`, `Temp`, `Logs`, `obj`) and the VPM packages the resolver restores are left out.
+  An ignore file that's there already is never replaced: only the rules it lacks are added at its end. A project
+  inside another repository is only set up if you tick that you mean it to be. A copy of it made from Git opens
+  without its VPM packages: Unity's resolver offers to restore them.
+- **Changes** lists what's new, changed, deleted and renamed. Choose files and **Stage** them (nothing is staged for
+  you), or **Unstage** them; a file's **Changes** shows its lines added and taken out (a binary file, such as a
+  texture, says so instead). Write what changed and **Commit**: Git needs a name and email to sign commits with, asked
+  for the first time if Git hasn't one. **Look again** reads the changes again (Unity may have saved some since).
+- **History** shows the latest commits: choose one for the files it changed, and a file for its changes.
+- **Remotes**: **Add a remote...** (its address, without a password or token in it: signing in is Git's own, with Git
+  Credential Manager or your SSH key, and Hoard keeps no Git passwords). Then **Fetch** (only looks), **Pull** (brings
+  its commits into your files) and **Push** (sends yours) run as Projects' tasks, which **Stop** stops; how far ahead
+  and behind you are shows by the branch.
+- **Branch**: choose one to switch to, or **New branch...**; other branches can be deleted once their commits are on
+  another one. Switching and pulling wait until Unity is closed, and switching until your changes are committed.
+- **Conflicts**: a pull that found files changed both here and on the remote lists them; sort them out in your Git
+  app, or **Abort the merge...** to put your files back as they were.
+- **Open in your Git app** opens the project in the one you choose (GitHub Desktop, Fork, SourceTree...). A project
+  that uses Git LFS, with Git LFS not installed, says so.
+- **Get from a Git address...** (above the list) copies a repository into your projects folder and puts it on the list.
+- A project's details say its branch and how many changes it has. **Back up...** leaves its `.git` folder out, and can
+  put its history in as a Git bundle (`git-history.bundle` in the zip; `git clone` it to get the history back). A
+  bundle doesn't hold Git LFS files, and a push online isn't a backup of what isn't committed.
+- Hoard never resets or cleans a project, and runs Git only for a project on the list, one named action at a time.
+
 ## Projects' tasks
 
 Making a project, changing its packages, putting products in it, backing it up or deleting it, and refreshing the

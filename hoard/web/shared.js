@@ -2938,6 +2938,7 @@ function pjList() {
   const top = pjTabs() + `<div class="pj-top"><input type="search" id="pjFind" placeholder="${esc(tr("Find a project"))}" aria-label="${esc(tr("Find a project"))}">` +
     `<button class="primary sm" data-pj="new">${esc(tr("New project"))}</button>` +
     `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button>` +
+    `<button class="ghost sm" data-pj="gitclone">${esc(tr("Get from a Git address..."))}</button>` +   // (issue #299)
     `<span class="pj-layout" role="radiogroup" aria-label="${esc(tr("Show projects as"))}">` +
     [["list", "List"], ["tiles", "Tiles"]].map(([v, label]) => `<button class="ghost sm" role="radio" data-pj="layout" data-v="${v}" ` +
       `aria-checked="${(v === "tiles") === tiles}">${esc(tr(label))}</button>`).join("") + `</span></div>`;
@@ -3042,8 +3043,17 @@ function pjFacts(p) {
   const size = !a ? reading : a.size.complete ? sizeText(a.size.total) : tr("over {0}", sizeText(a.size.total));
   return `<dl class="pj-facts">` + [["Size on disk", size],
     ["Opened", p.opened ? ago(new Date(p.opened).toISOString()) : "—"], ["Made", p.created ? shortDay(new Date(p.created).toISOString()) : "—"],
-    ["Packages", a ? String(a.packages.length + a.own_packages) : reading], ["Backups", a ? String(a.backups.count) : reading]]
+    ["Packages", a ? String(a.packages.length + a.own_packages) : reading], ["Backups", a ? String(a.backups.count) : reading],
+    ["Source control", a ? pjGitWords(a.git) : reading]]
     .map(([k, v]) => `<div><dt>${esc(tr(k))}</dt><dd>${esc(v)}</dd></div>`).join("") + `</dl>`;
+}
+// A project's source control, in a few words (issue #296): not set up, Git missing, or its branch and changes.
+function pjGitWords(g) {
+  if (!g || g.state === "none") return tr("Not set up");
+  if (g.state === "missing") return tr("Git isn't installed");
+  if (g.state === "old" || g.state === "error") return tr("Git can't read it");
+  const sync = g.ahead || g.behind ? ` · ${tr("{0} ahead, {1} behind", g.ahead, g.behind)}` : "";
+  return `${g.branch || tr("(no branch)")} · ${g.state === "conflicts" ? tr("Conflicts") : g.changes ? tr(g.changes === 1 ? "1 change" : "{0} changes", g.changes) : tr("No changes")}${sync}`;
 }
 // The rest of a project's details, once they're read: what takes its room, its packages, what Hoard put in it from your
 // library (and what Hoard for Unity found there), and its backups.
@@ -3192,7 +3202,7 @@ function pjProject() {
     `<th scope="col" class="v"><span class="visually-hidden">${esc(tr("Remove"))}</span></th></tr></thead>`;
   const pre = (p.preloaded || []).slice().reverse();
   const subs = [["packages", tr("Packages")], ["add", tr("Add packages")], ["library", tr("From your library")],
-                ...(p.report ? [["report", tr("What Hoard for Unity found")]] : [])];
+                ...(p.report ? [["report", tr("What Hoard for Unity found")]] : []), ["git", tr("Source control")]];
   if (!subs.some(([k]) => k === PJ.sub)) PJ.sub = "packages";
   const part = {
     packages: () => (p.needs_repair ? `<p class="pj-warn">${esc(tr("Some packages aren't installed the way the project says."))} <button class="ghost sm" data-pj="repair">${esc(tr("Put it right"))}</button></p>` : "") +
@@ -3202,7 +3212,8 @@ function pjProject() {
     library: () => pre.length ? `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Add Assets"))}</button>` +
       `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button></div>` + pjPutInTiles(pre)
       : pjNothingYet(),   // (issue #283: empty, it reads as the Library does)
-    report: () => pjReport(p.report) };
+    report: () => pjReport(p.report),
+    git: () => pjGitHTML(p) };   // (issues #296 to #299)
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-facts">${pjChips(p)}</p>` +
     (p.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it before changing packages, so nothing it has open is replaced under it."))}</p>` : "") +
@@ -3906,6 +3917,295 @@ async function pjWatch() {
   PJ.watching = false;
   if ((changed || PJ.ran) && !$("#projectsWin").hidden) { PJ.ran = false; PJ.pkgs = null; loadProjects(); }
 }
+/* ---------- source control (issues #296 to #299): a project's Git, in its Source control tab. Hoard runs the Git you
+   have, one named action at a time; each button says what it changes (your files, your history here, or a repository
+   online), and a task that talks to a remote runs as Projects' tasks do (Stop stops it). */
+const PJG = { for: "", data: null, loading: false, pick: new Set(), diff: null, commits: null, ref: "", refFiles: null, msg: "" };
+// Read a project's source control (again: Git looked for again, after it's installed), then draw it.
+async function pjGitLoad(path, again = false) {
+  if (PJG.loading) return;
+  PJG.loading = true;
+  try {
+    const r = await api(`/api/vpm/git?path=${encodeURIComponent(path)}${again ? "&again=1" : ""}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (PJG.for !== path) Object.assign(PJG, { pick: new Set(), diff: null, commits: null, ref: "", refFiles: null, msg: "" });
+    PJG.for = path;
+    PJG.data = r.ok ? d : { state: "error", error: d.error || tr("That can't be read.") };
+    const there = new Set((PJG.data.files || []).map(f => f.path));
+    for (const f of [...PJG.pick]) if (!there.has(f)) PJG.pick.delete(f);
+    if (PJG.diff && !PJG.diff.ref && !there.has(PJG.diff.path)) PJG.diff = null;
+  } finally { PJG.loading = false; }
+  if (PJ.view === "project" && PJ.sub === "git") drawProjects();
+}
+// What one file's state is, in words: staged, not staged, new, in conflict.
+function pjGitFileState(f) {
+  if (f.conflict) return tr("In conflict");
+  if (f.untracked) return tr("New, not staged");
+  const what = { M: tr("Changed"), A: tr("Added"), D: tr("Deleted"), R: tr("Renamed"), C: tr("Copied"), T: tr("Changed") };
+  const parts = [];
+  if (f.staged) parts.push(tr("{0}, staged", what[f.x] || tr("Changed")));
+  if (f.unstaged) parts.push(tr("{0}, not staged", what[f.y] || tr("Changed")));
+  return parts.join(" · ");
+}
+// A file's changes, as Git shows them: lines added and taken out, or what a binary file is.
+function pjGitDiffHTML() {
+  const d = PJG.diff;
+  if (!d) return "";
+  const head = `<div class="pj-diff-head"><b translate="no">${esc(d.path)}</b><button class="ghost sm" data-pj="gitdiffclose">${esc(tr("Close"))}</button></div>`;
+  if (!d.data) return `<div class="pj-diff">${head}<p class="none">${esc(tr("Reading its changes..."))}</p></div>`;
+  const x = d.data;
+  if (x.error) return `<div class="pj-diff">${head}<p class="pj-warn">${esc(x.error)}</p></div>`;
+  if (x.binary) return `<div class="pj-diff">${head}<p class="none">${esc(tr(x.size != null ? "A binary file ({0}): Git doesn't show its changes line by line." : "A binary file: Git doesn't show its changes line by line.", x.size != null ? sizeText(x.size) : ""))}</p></div>`;
+  if (x.folder) return `<div class="pj-diff">${head}<p class="none">${esc(tr("A new folder, with:"))}</p><pre class="pj-diff-text" translate="no">${esc(x.folder.join("\n"))}</pre></div>`;
+  // (Git's own header lines left out: the file's name is above)
+  const shown = x.text.replace(/\n$/, "").split("\n").filter(l => !/^(diff --git |index |--- |\+\+\+ |new file mode |deleted file mode |similarity index |rename (from|to) )/.test(l));
+  const lines = shown.map(l => `<span class="${l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : ""}">${esc(l) || " "}</span>`).join("");
+  return `<div class="pj-diff">${head}<p class="muted">${esc(tr("{0} lines added, {1} taken out", x.added, x.removed))}</p>` +
+    `<pre class="pj-diff-text" translate="no">${lines}</pre>${x.truncated ? `<p class="none">${esc(tr("Only the first part is shown."))}</p>` : ""}</div>`;
+}
+// Show one file's changes: in what's staged, in what isn't, or in a commit.
+async function pjGitDiff(path, file, staged, ref) {
+  PJG.diff = { path: file, staged, ref, data: null };
+  drawProjects();
+  const q = `path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}${staged ? "&staged=1" : ""}${ref ? `&ref=${encodeURIComponent(ref)}` : ""}`;
+  const r = await api(`/api/vpm/git/diff?${q}`, { cache: "no-store" });
+  const d = await r.json().catch(() => ({}));
+  if (PJG.diff && PJG.diff.path === file) { PJG.diff.data = r.ok ? d : { error: d.error || tr("That can't be read.") }; drawProjects(); }
+}
+// The Source control tab: Git missing, a project not set up, or a repository's branch, changes, commits and remotes.
+function pjGitHTML(p) {
+  const g = PJG.for === p.path ? PJG.data : null;
+  if (!g) { pjGitLoad(p.path); return `<p class="none">${esc(tr("Reading its source control..."))}</p>`; }
+  // A link to a site (Git's, Git LFS's), opened in your browser.
+  const link = (href, text) => `<a href="${esc(safeUrl(href))}" target="_blank" rel="noopener noreferrer">${esc(text)}<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span></a>`;
+  const missing = g.state === "missing";
+  if (missing || g.state === "old") {
+    return `<div class="pj-git-none"><h4>${esc(tr(missing ? "Git isn't installed" : "This Git is too old"))}</h4>` +
+      `<p>${esc(tr(missing ? "Hoard uses the Git you have installed, for a project's history: what changed, and when. Get Git, then check again." : "Hoard needs Git 2.28 or newer. Get a newer one, then check again."))}</p>` +
+      `<div class="row">${link(g.git.get, tr("Get Git"))}<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
+  }
+  if (g.state === "error") return `<p class="pj-warn">${esc(g.error)}</p><div class="row"><button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div>`;
+  if (g.state === "none") {
+    return `<div class="pj-git-none"><h4>${esc(tr("Not set up"))}</h4>` +
+      `<p>${esc(tr("Git keeps the project's history on this computer: what changed, and when, to look back on or go back to. It needs no account; a repository online (GitHub, GitLab...) is up to you, later."))}</p>` +
+      (g.parent ? `<p class="pj-warn">${esc(tr("This project is inside another Git repository ({0}).", g.parent))}</p>` : "") +
+      `<div class="row"><button class="primary sm" data-pj="gitsetup">${esc(tr("Set up Git..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
+  }
+  const files = g.files || [], picked = files.filter(f => PJG.pick.has(f.path));
+  const remote = (g.remotes || [])[0];
+  const warn = [
+    g.open_in_unity && tr("Unity has this project open: what's shown can change as it saves. Switching branches and pulling wait until it's closed."),
+    g.lfs && g.lfs.used && !g.lfs.installed && tr("This project uses Git LFS for its big files, and Git LFS isn't installed: get it before you pull or push."),
+    g.worktree && tr("This folder is a worktree of another repository: commits here are that repository's too."),
+  ].filter(Boolean).map(t => `<p class="pj-warn">${esc(t)}${t.includes("Git LFS") ? " " + link(g.lfs.get, tr("Get Git LFS")) : ""}</p>`).join("");
+  const head = `<div class="pj-git-head">` +
+    `<label class="pj-git-branch">${esc(tr("Branch"))} <select id="pjGitBranch" aria-label="${esc(tr("Branch"))}">` +
+      (g.detached ? `<option value="" selected>${esc(tr("(no branch)"))}</option>` : "") +
+      (g.branches || []).map(b => `<option value="${esc(b.name)}"${b.current ? " selected" : ""} translate="no">${esc(b.name)}</option>`).join("") +
+      (!(g.branches || []).length && g.branch ? `<option selected translate="no">${esc(g.branch)}</option>` : "") +
+      `<option value="+" data-new>${esc(tr("New branch..."))}</option></select></label>` +
+    `<span class="pj-git-sync">${g.upstream ? esc(tr("{0}: {1} ahead, {2} behind", g.upstream, g.ahead, g.behind)) : esc(tr(remote ? "Not linked to a branch on {0} yet" : "Only on this computer", remote ? remote.name : ""))}</span>` +
+    (g.last ? `<span class="pj-git-last">${esc(tr("Last commit: {0}", g.last.subject))} · ${esc(g.last.author)} · ${esc(ago(g.last.when))}</span>` : `<span class="pj-git-last">${esc(tr("No commits yet"))}</span>`) +
+    `<span class="row">` + (remote ? `<button class="ghost sm" data-pj="gitsync" data-op="fetch" title="${esc(tr("Only looks: it changes nothing here"))}">${esc(tr("Fetch"))}</button>` +
+      `<button class="ghost sm" data-pj="gitsync" data-op="pull" title="${esc(tr("Brings the remote's commits into your branch and your files"))}">${esc(tr("Pull"))}</button>` +
+      `<button class="ghost sm" data-pj="gitsync" data-op="push" title="${esc(tr("Sends your commits to {0}", remote.name))}">${esc(tr("Push"))}</button>` : "") +
+      `<button class="ghost sm" data-pj="gitapp">${esc(tr(g.app ? "Open in your Git app" : "Choose your Git app..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitreload" title="${esc(tr("Reads the project's changes again (Unity may have saved some since)"))}">${esc(tr("Look again"))}</button></span></div>`;
+  const conflicts = g.state === "conflicts" || g.merging ? `<div class="pj-git-conflict"><h4>${esc(tr("Conflicts"))}</h4>` +
+    `<p>${esc(tr("Some files changed both here and on the remote. Sort them out in your Git app (or Unity), stage them, and commit; or give up the merge, and your files go back to how they were before the pull."))}</p>` +
+    `<div class="row"><button class="ghost sm" data-pj="gitapp">${esc(tr("Open in your Git app"))}</button><button class="ghost sm danger" data-pj="gitabort">${esc(tr("Abort the merge..."))}</button></div></div>` : "";
+  const ignore = (g.ignore_missing || []).length ? `<p class="pj-note">${esc(tr("Some of what's installed since it was set up isn't in its ignore rules yet."))} ` +
+    `<button class="linkish" data-pj="gitignore">${esc(tr("Add them..."))}</button></p>` : "";
+  const list = files.length ? `<ul class="pj-git-files">${files.map(f => `<li class="${f.conflict ? "conflict" : ""}">` +
+      `<input type="checkbox" data-gitpick value="${esc(f.path)}"${PJG.pick.has(f.path) ? " checked" : ""} aria-label="${esc(tr("Choose {0}", f.path))}">` +
+      `<span class="pj-git-path" translate="no">${f.from ? `${esc(f.from)} → ` : ""}${esc(f.path)}</span>` +
+      `<span class="pj-git-state">${esc(pjGitFileState(f))}</span>` +
+      (f.staged ? `<button class="linkish" data-pj="gitdiff" data-file="${esc(f.path)}" data-staged="1">${esc(tr("Staged changes"))}</button>` : "") +
+      (f.unstaged ? `<button class="linkish" data-pj="gitdiff" data-file="${esc(f.path)}">${esc(tr(f.untracked ? "See it" : "Changes"))}</button>` : "") +
+      `</li>`).join("")}</ul>${g.more ? `<p class="none">${esc(tr("And {0} more.", g.more))}</p>` : ""}`
+    : `<p class="none">${esc(tr("No changes: everything is committed."))}</p>`;
+  const changes = `<h4>${esc(tr("Changes"))} <span class="n">${files.length}</span></h4>` +
+    (files.length ? `<div class="row"><label class="check"><input type="checkbox" data-gitall${picked.length === files.length ? " checked" : ""}> ${esc(tr("Choose all"))}</label>` +
+      `<button class="ghost sm" data-pj="gitstage"${picked.some(f => f.unstaged) ? "" : " disabled"} title="${esc(tr("Puts the chosen files in the next commit (nothing else is staged)"))}">${esc(tr("Stage"))}</button>` +
+      `<button class="ghost sm" data-pj="gitunstage"${picked.some(f => f.staged) ? "" : " disabled"} title="${esc(tr("Takes them out of the next commit: their changes are kept"))}">${esc(tr("Unstage"))}</button></div>` : "") +
+    list + pjGitDiffHTML();
+  const who = g.identity || {};
+  const commitBox = `<h4>${esc(tr("Commit"))}</h4>` + (!who.name || !who.email
+    ? `<p>${esc(tr("Git needs a name and email to sign this project's commits with (they're in each commit, and seen by anyone you share it with)."))}</p>` +
+      `<div class="row"><input id="pjGitName" placeholder="${esc(tr("Name"))}" aria-label="${esc(tr("Name"))}" value="${esc(who.name || "")}">` +
+      `<input id="pjGitEmail" type="email" placeholder="${esc(tr("Email"))}" aria-label="${esc(tr("Email"))}" value="${esc(who.email || "")}">` +
+      `<button class="ghost sm" data-pj="gitwho">${esc(tr("Save"))}</button></div>` : "") +
+    `<textarea id="pjGitMsg" rows="2" maxlength="10000" placeholder="${esc(tr("What changed, in a few words"))}" aria-label="${esc(tr("Commit message"))}">${esc(PJG.msg)}</textarea>` +
+    `<div class="row"><button class="primary sm" data-pj="gitcommit"${g.counts && g.counts.staged ? "" : " disabled"} title="${esc(tr("Saves what's staged in the project's history, on this computer"))}">` +
+      `${esc(tr(g.counts && g.counts.staged ? (g.counts.staged === 1 ? "Commit 1 file" : "Commit {0} files") : "Commit", g.counts ? g.counts.staged : 0))}</button></div>`;
+  const history = `<h4>${esc(tr("History"))}</h4>` + (PJG.commits == null
+    ? `<div class="row"><button class="ghost sm" data-pj="githistory">${esc(tr("Show the history"))}</button></div>`
+    : PJG.commits.length ? `<ul class="pj-git-log">${PJG.commits.map(c => `<li${PJG.ref === c.hash ? ' class="on"' : ""}>` +
+        `<button class="linkish" data-pj="gitref" data-ref="${esc(c.hash)}" translate="no">${esc(c.subject)}</button>` +
+        `<span class="muted"><code translate="no">${esc(c.short)}</code> · ${esc(c.author)} · ${esc(ago(c.when))}${c.refs ? ` · <span translate="no">${esc(c.refs)}</span>` : ""}</span>` +
+        (PJG.ref === c.hash && PJG.refFiles ? `<ul class="pj-git-cfiles">${PJG.refFiles.map(f => `<li><span class="pj-git-st">${esc(f.status)}</span>` +
+          `<button class="linkish" data-pj="gitdiff" data-file="${esc(f.path)}" data-ref="${esc(c.hash)}" translate="no">${esc(f.path)}</button></li>`).join("")}</ul>` : "") +
+        `</li>`).join("")}</ul>` +
+      (PJG.commits.length % 50 === 0 ? `<div class="row"><button class="ghost sm" data-pj="githistory" data-more="1">${esc(tr("Older commits"))}</button></div>` : "")
+    : `<p class="none">${esc(tr("No commits yet."))}</p>`);
+  const remotes = `<h4>${esc(tr("Remotes"))}</h4>` +
+    `<p class="hint">${esc(tr("A repository online to sync with: GitHub, GitLab, Gitea or your own. Signing in is Git's own (Git Credential Manager, or your SSH key): Hoard keeps no Git passwords."))}</p>` +
+    ((g.remotes || []).length ? `<ul class="pj-git-remotes">${g.remotes.map(r => `<li data-remote="${esc(r.name)}"><b translate="no">${esc(r.name)}</b> <span translate="no">${esc(r.url)}</span>` +
+      `<button class="ghost sm" data-pj="gitremote" data-act="set">${esc(tr("Change..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitremote" data-act="remove">${esc(tr("Remove"))}</button></li>`).join("")}</ul>` : "") +
+    `<div class="row"><button class="ghost sm" data-pj="gitremote" data-act="add">${esc(tr("Add a remote..."))}</button></div>`;
+  const others = (g.branches || []).filter(b => !b.current);
+  const branchList = others.length ? `<h4>${esc(tr("Other branches"))}</h4><ul class="pj-git-remotes">${others.map(b => `<li data-branch="${esc(b.name)}"><b translate="no">${esc(b.name)}</b>` +
+    (b.track ? ` <span class="muted" translate="no">${esc(b.track)}</span>` : "") +
+    `<button class="ghost sm" data-pj="gitbranch" data-act="switch">${esc(tr("Switch to it"))}</button>` +
+    `<button class="ghost sm" data-pj="gitbranch" data-act="delete">${esc(tr("Delete"))}</button></li>`).join("")}</ul>` : "";
+  return `<div class="pj-git">${warn}${head}${conflicts}${ignore}${changes}${commitBox}${history}${remotes}${branchList}</div>`;
+}
+// What the Source control tab's buttons do.
+async function pjGitAct(act, b, path) {
+  // A change made, answered: said if it failed, and the tab read again either way.
+  const done = async (r, said) => { if (!r.ok) toast(r.data.error || tr("That can't be done.")); else if (said) toast(said); await pjGitLoad(path); return r.ok; };
+  if (act === "gitclone") {   // a project from a Git address: copied into your projects folder, then on the list
+    const where = (PJ.data.settings || {}).projects_folder || "";
+    const res = await pjDialog(`<p><b>${esc(tr("Get a project from a Git address"))}</b></p>` +
+      `<p class="hint">${esc(tr("Copies the repository, its files and history, into a new folder, and puts it on the list. Opening it in Unity lets the VPM resolver restore its packages."))}</p>` +
+      `<div class="pj-field"><label for="pjCloneUrl">${esc(tr("Address"))}</label><input id="pjCloneUrl" spellcheck="false" autocomplete="off" placeholder="https://github.com/you/project.git" translate="no"></div>` +
+      `<div class="pj-field"><label for="pjCloneName">${esc(tr("Its folder's name"))}</label><input id="pjCloneName" spellcheck="false" autocomplete="off" translate="no"></div>` +
+      `<p class="hint">${esc(tr("In {0}", where))}</p>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Get it"))}</button></div>`);
+    if (!res.ok) return;
+    const url = res.dlg.querySelector("#pjCloneUrl").value.trim();
+    const name = res.dlg.querySelector("#pjCloneName").value.trim() || url.replace(/[\\/]+$/, "").split(/[\\/:]/).pop().replace(/\.git$/, "");
+    if (!url) return;
+    return pjRun("/api/vpm/git/clone", { url, name, location: where });
+  }
+  if (act === "gitagain") return pjGitLoad(path, true);
+  if (act === "gitreload") return pjGitLoad(path);
+  if (act === "gitsetup") {
+    const r = await api(`/api/vpm/git/plan?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || tr("That can't be done.")); return; }
+    const parent = d.where && d.where.parent;
+    const files = d.plan.map(f => `<p><b translate="no">${esc(f.path)}</b>: ${esc(tr(f.exists ? "these lines are added at its end (it's never replaced):" : "a new file, with:"))}</p>` +
+      `<pre class="pj-diff-text pj-plan" translate="no">${esc(f.exists ? f.add.join("\n") : f.text)}</pre>`).join("");
+    // Some of the project's folders and files, as a list.
+    const list = xs => xs.length ? `<ul class="pj-plan-list" translate="no">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="none">${esc(tr("None here."))}</p>`;
+    const res = await pjDialog(`<p><b>${esc(tr("Set up Git for {0}?", pjNamed(path)))}</b></p>` +
+      `<p>${esc(tr("It changes only the project's folder: its ignore rules are written first, then Git starts keeping its history there. Nothing is committed yet, and nothing goes online."))}</p>` +
+      `<p>${esc(tr("Kept: the project's own files, as VRChat recommends. Left out: what Unity makes again, and the VPM packages the resolver restores when the project is opened in Unity."))}</p>` +
+      `<div class="pj-plan-cols"><div><h4>${esc(tr("Kept, for example"))}</h4>${list(d.examples.kept)}</div><div><h4>${esc(tr("Left out, for example"))}</h4>${list(d.examples.left_out)}</div></div>` +
+      (files || `<p>${esc(tr("Its ignore rules have everything already."))}</p>`) +
+      `<p class="hint">${esc(tr("A copy of it made from Git (on another computer, say) opens without its VPM packages: Unity's resolver offers to restore them."))}</p>` +
+      (parent ? `<p class="pj-warn">${esc(tr("This project is inside another Git repository ({0}): it would have a repository of its own inside that one.", parent))}</p>` +
+        `<label class="check"><input type="checkbox" id="pjGitNested"> ${esc(tr("Set it up inside that repository anyway"))}</label>` : "") +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Set up Git"))}</button></div>`, "wide");
+    if (!res.ok) return;
+    const nested = !!(parent && res.dlg.querySelector("#pjGitNested").checked);
+    if (parent && !nested) { toast(tr("It's inside another repository: tick the box to set it up anyway.")); return; }
+    return done(await apiPost("/api/vpm/git/init", { path, nested }), tr("Git is set up. Choose what to commit first, and Stage it."));
+  }
+  if (act === "gitignore") {
+    const r = await api(`/api/vpm/git/plan?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({ plan: [] }));
+    const res = await pjDialog(`<p><b>${esc(tr("Add these to its ignore rules?"))}</b></p>` + d.plan.map(f => `<p><b translate="no">${esc(f.path)}</b></p>` +
+      `<pre class="pj-diff-text pj-plan" translate="no">${esc(f.add.join("\n"))}</pre>`).join("") +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Add them"))}</button></div>`);
+    return res.ok ? done(await apiPost("/api/vpm/git/ignore", { path })) : undefined;
+  }
+  if (act === "gitstage" || act === "gitunstage") {
+    const files = (PJG.data.files || []).filter(f => PJG.pick.has(f.path) && (act === "gitstage" ? f.unstaged : f.staged)).map(f => f.path);
+    if (!files.length) return;
+    const r = await apiPost(`/api/vpm/git/${act.slice(3)}`, { path, files });
+    if (r.ok) PJG.pick.clear();
+    return done(r);
+  }
+  if (act === "gitdiff") return pjGitDiff(path, b.dataset.file, b.dataset.staged === "1", b.dataset.ref || "");
+  if (act === "gitdiffclose") { PJG.diff = null; return drawProjects(); }
+  if (act === "gitwho") return done(await apiPost("/api/vpm/git/identity", { path, name: $("#pjGitName").value, email: $("#pjGitEmail").value }));
+  if (act === "gitcommit") {
+    const message = $("#pjGitMsg").value;
+    if (g_unityOpen() && !await ask(tr("Unity has this project open, and may still be saving. Commit what's staged now?"), tr("Commit"))) return;
+    const r = await apiPost("/api/vpm/git/commit", { path, message });
+    if (r.ok) { PJG.commits = null; PJG.diff = null; PJG.msg = ""; }
+    return done(r, r.ok ? tr("Committed: {0}", r.data.commit.subject) : "");
+  }
+  if (act === "githistory") {
+    const skip = b.dataset.more ? (PJG.commits || []).length : 0;
+    const r = await api(`/api/vpm/git/history?path=${encodeURIComponent(path)}&skip=${skip}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || tr("That can't be read.")); return; }
+    PJG.commits = skip ? [...(PJG.commits || []), ...d.commits] : d.commits;
+    return drawProjects();
+  }
+  if (act === "gitref") {
+    if (PJG.ref === b.dataset.ref) { PJG.ref = ""; PJG.refFiles = null; return drawProjects(); }
+    const r = await api(`/api/vpm/git/files?path=${encodeURIComponent(path)}&ref=${encodeURIComponent(b.dataset.ref)}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || tr("That can't be read.")); return; }
+    PJG.ref = b.dataset.ref; PJG.refFiles = d.files;
+    return drawProjects();
+  }
+  if (act === "gitsync") {
+    const op = b.dataset.op;
+    if (op === "pull" && g_unityOpen()) { toast(tr("Unity has this project open. Close it before you pull, so nothing it has open is changed under it.")); return; }
+    if (op === "push" && !await ask(tr("Send this branch's commits to {0}? Anyone who can see that repository sees them.", (PJG.data.remotes[0] || {}).name || ""), tr("Push"))) return;
+    return pjRun("/api/vpm/git/sync", { path, op });
+  }
+  if (act === "gitremote") {
+    const row = b.closest("[data-remote]"), name = row ? row.dataset.remote : "";
+    if (b.dataset.act === "remove") {
+      if (!await ask(tr("Remove the remote {0}? The repository online is left as it is; this project just stops syncing with it.", name), tr("Remove"))) return;
+      return done(await apiPost("/api/vpm/git/remote", { path, action: "remove", name }));
+    }
+    const named = name || (await askName("Name the remote (origin, usually)", (PJG.data.remotes || []).length ? "" : "origin", { max: 40 }) || "").trim();
+    if (!named) return;
+    const url = (await askName("The repository's address (https://... or git@...), without a password or token in it", row ? row.querySelector("span").textContent : "", { max: 2000 }) || "").trim();
+    if (!url) return;
+    return done(await apiPost("/api/vpm/git/remote", { path, action: b.dataset.act, name: named, url }));
+  }
+  if (act === "gitbranch") {
+    const name = b.closest("[data-branch]").dataset.branch;
+    if (b.dataset.act === "delete" && !await ask(tr("Delete the branch {0}? Only a branch whose commits are on another one can be deleted.", name), tr("Delete"))) return;
+    const r = await apiPost("/api/vpm/git/branch", { path, action: b.dataset.act, name });
+    if (r.ok) PJG.commits = null;
+    return done(r);
+  }
+  if (act === "gitabort") {
+    if (!await ask(tr("Give up the merge? Your files go back to how they were before the pull."), tr("Abort the merge"))) return;
+    return done(await apiPost("/api/vpm/git/abort", { path }));
+  }
+  if (act === "gitapp") {
+    if (PJG.data.app) { const r = await apiPost("/api/vpm/git/open-app", { path }); if (!r.ok) toast(r.data.error || tr("That app couldn't be started.")); return; }
+    let app = "";
+    if (canPick()) {
+      const r = await apiPost("/api/pick", { kind: "file" });
+      if (!r.ok) { toast(r.data.error || tr("The picker didn't open. Type the path instead.")); return; }
+      app = r.data.path || "";
+    } else app = (await askName("Your Git app's program (its full path: GitHub Desktop, Fork, SourceTree...)", "", { max: 1000 }) || "").trim();
+    if (!app) return;
+    return done(await apiPost("/api/vpm/git/app", { app }), tr("Chosen. Open in your Git app opens the project in it."));
+  }
+}
+// Whether Unity has the project shown open (as its source control last read).
+const g_unityOpen = () => !!(PJG.data && PJG.data.open_in_unity);
+// A branch chosen, or a new one named, in the Source control tab.
+async function pjGitBranchChosen(sel, path) {
+  const now = (PJG.data.branches || []).find(b => b.current);
+  if (sel.selectedOptions[0].hasAttribute("data-new")) {
+    const name = (await askName("Name the new branch (it starts from where you are now)", "", { max: 100 }) || "").trim();
+    sel.value = now ? now.name : "";
+    if (!name) return;
+    const r = await apiPost("/api/vpm/git/branch", { path, action: "new", name });
+    if (!r.ok) toast(r.data.error || tr("That can't be done."));
+    return pjGitLoad(path);
+  }
+  if (now && sel.value === now.name) return;
+  const r = await apiPost("/api/vpm/git/branch", { path, action: "switch", name: sel.value });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); sel.value = now ? now.name : ""; return; }
+  PJG.commits = null;
+  return pjGitLoad(path);
+}
 // A repository's headers, typed one per line as "Name: value".
 function pjHeaders(text) {
   const out = {};
@@ -3915,10 +4215,13 @@ function pjHeaders(text) {
   }
   return out;
 }
+// Whether a listed project has a Git repository of its own (as Projects' list says).
+const pjGitOf = path => !!((PJ.data && PJ.data.projects || []).find(p => p.path === path) || PJ.project || {}).git;
 let afterSetMade = null;   // set by a page that shows sets, to show the new one
 // Do what one of Projects' buttons says.
 async function pjAct(b) {
   const act = b.dataset.pj, row = b.closest("[data-path]"), path = row ? row.dataset.path : (PJ.project || {}).path;
+  if (act.startsWith("git")) return pjGitAct(act, b, path);   // (the Source control tab)
   const f = PJ.form;
   if (act === "back") { PJ.view = "list"; PJ.project = null; return loadProjects(); }
   if (act === "new") { PJ.form = pjNewForm(); PJ.view = "new"; PJ.pick.clear(); return drawProjects(); }
@@ -4055,8 +4358,11 @@ async function pjAct(b) {
   if (act === "backup") {
     const res = await pjDialog(`<p>${esc(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path)))}</p>` +
       `<label class="check"><input type="checkbox" id="pjLeaveOut"> ${esc(tr("Leave out packages from repositories (they're downloaded again when it's opened)"))}</label>` +
+      (pjGitOf(path) ? `<p class="hint">${esc(tr("Its .git folder is left out: it can be most of a project."))}</p>` +
+        `<label class="check"><input type="checkbox" id="pjBundle"> ${esc(tr("Put its Git history in, as a bundle (its commits, branches and tags in one file; not Git LFS files)"))}</label>` : "") +
       `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Back up"))}</button></div>`);
-    if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.dlg.querySelector("#pjLeaveOut").checked });
+    const bundle = res.dlg.querySelector("#pjBundle");
+    if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.dlg.querySelector("#pjLeaveOut").checked, git_bundle: !!(bundle && bundle.checked) });
     return;
   }
   if (act === "repair") return pjShowChanges({ path, repair: true });
@@ -4206,6 +4512,12 @@ function wireProjects() {
   win.addEventListener("change", async e => {
     if (e.target.matches(".pj-addlist input[type=checkbox]")) return pjPickChanged(e.target);   // Add packages
     if (e.target.matches(".pj-addlist .pj-pick-ver")) { PJ.pick.set(e.target.dataset.name, e.target.value); return; }
+    if (e.target.matches("[data-gitpick]")) { PJG.pick[e.target.checked ? "add" : "delete"](e.target.value); return drawProjects(); }   // (Source control)
+    if (e.target.matches("[data-gitall]")) {
+      PJG.pick = new Set(e.target.checked ? (PJG.data.files || []).map(f => f.path) : []);
+      return drawProjects();
+    }
+    if (e.target.id === "pjGitBranch") return pjGitBranchChosen(e.target, PJ.project.path);
     if (e.target.id === "pjDFolder") {   // a project's folder, chosen in its details (or a new one named)
       const path = e.target.closest("[data-path]").dataset.path, p = (PJ.data.projects || []).find(x => x.path === path);
       const named = e.target.selectedOptions[0].hasAttribute("data-new");   // (New folder...)
@@ -4247,6 +4559,7 @@ function wireProjects() {
     PJ.busy = true;
     try { await pjAct(b); } finally { PJ.busy = false; }
   });
+  win.addEventListener("input", e => { if (e.target.id === "pjGitMsg") PJG.msg = e.target.value; });   // (kept when it's drawn again)
   win.addEventListener("keydown", e => {
     if (e.key !== "Enter" || e.isComposing) return;
     if (e.target.id === "pjRepoUrl") { e.preventDefault(); $("[data-pj=addrepo]").click(); }
