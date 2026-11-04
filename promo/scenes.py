@@ -418,6 +418,26 @@ def _chip(rec: dict, lang: str) -> dict:
             "glows": [colours["gold"], colours["gumroad"], colours["jinxxy"], colours["payhip"]]}
 
 
+def wipe_boxes() -> list[str]:
+    """The boxes that tumble past between scenes: each one the Heap's own box, drawn as the logo draws it (its outline
+    as thick, its corners as round, the cube on the Projects box and the sparkle on the gold one)."""
+    out = []
+    for box in (*heap.ORDER, "gold"):
+        side = heap.GOLD_BOX if box == "gold" else heap.BOX
+        half = side / 2 + heap.LINE / 2
+        fill = heap.GOLD if box == "gold" else heap.COLOURS[box]
+        extra = ""
+        if box == "gold":
+            extra = f'<path d="{heap._sparkle(side)}" fill="{heap.SPARK}"/>'
+        elif box == "projects":
+            extra = (f'<path d="{heap._cube(side)}" fill="none" stroke="{heap.CAVE}" stroke-width="1.5" '
+                     f'stroke-linejoin="round" stroke-linecap="round"/>')
+        out.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{-half:g} {-half:g} {2 * half:g} {2 * half:g}">'
+                   f'<rect x="{-side / 2:g}" y="{-side / 2:g}" width="{side:g}" height="{side:g}" rx="{heap.ROUND:g}" fill="{fill}" '
+                   f'stroke="{heap.CAVE}" stroke-width="{heap.LINE:g}"/>{extra}</svg>')
+    return out
+
+
 def _wordmark() -> str:
     """The word "hoard", light, on its own."""
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="72 0 154 64"><g fill="#F2EDE4">{heap.word()}</g></svg>'
@@ -499,7 +519,8 @@ def build(scenes, lang: str, layout: str, screens: Path, library: Path) -> dict:
             d["names"] = credit_names(library)
             d["body"] = say(CREDITS_NOTE, lang)
         out.append(d)
-    return {"lang": lang, "w": w, "h": h, "shots": out, "logo": heap.logo(), "mark": heap.mark(), "word": _wordmark()}
+    return {"lang": lang, "w": w, "h": h, "shots": out, "logo": heap.logo(), "mark": heap.mark(), "word": _wordmark(),
+            "wipes": wipe_boxes()}
 
 
 def build_poster(poster: dict, lang: str, layout: str, screens: Path) -> dict:
@@ -508,7 +529,8 @@ def build_poster(poster: dict, lang: str, layout: str, screens: Path) -> dict:
     shot = {"kind": "poster", "dur": 1, "title": say(poster["title"], lang), "body": say(poster["body"], lang),
             "points": [say(p, lang) for p in poster["points"]], "src": (screens / f"{poster['shot']}-{lang}.png").resolve().as_uri(),
             "url": SITE, "small": say(FREE, lang)}
-    return {"lang": lang, "w": w, "h": h, "shots": [shot], "logo": heap.logo(), "mark": heap.mark(), "word": _wordmark()}
+    return {"lang": lang, "w": w, "h": h, "shots": [shot], "logo": heap.logo(), "mark": heap.mark(), "word": _wordmark(),
+            "wipes": []}
 
 
 def total(scenes) -> float:

@@ -52,7 +52,8 @@ html[lang="ja"] #frame { word-break: auto-phrase; line-break: strict; }
 .credits h2 { margin: 0 0 26px; font: 400 44px var(--head); text-align: center; }
 .credits .names { columns: 4; column-gap: 40px; font: 500 21px/1.55 var(--body); color: #E6DCCF; }
 .credits .note { margin-top: 26px; text-align: center; font: 500 20px var(--body); color: var(--dust); }
-.wipe { position: absolute; z-index: 30; border-radius: 22%; box-shadow: 0 0 0 10px #211C18, 0 20px 40px rgba(0, 0, 0, .35); }
+.wipe { position: absolute; z-index: 30; filter: drop-shadow(0 20px 30px rgba(0, 0, 0, .35)); }
+.wipe svg { display: block; width: 100%; height: 100%; overflow: visible; }
 /* drawn windows: an app's warning, a store's sign-in, a browser with a tab for each store (troubleshooting, the sketch) */
 .dlg { position: absolute; border-radius: 16px; background: #F4F4F6; color: #1E1E24; box-shadow: 0 30px 80px rgba(0, 0, 0, .55); overflow: hidden; font-family: var(--body); }
 .dlg .bar { height: 54px; display: flex; align-items: center; padding: 0 22px; gap: 10px; background: #E2E2E8; font: 700 20px var(--body); color: #444; }
@@ -119,8 +120,7 @@ function load(video) {
   PARTS = V.shots.map((s, i) => { const p = make(s, L); p.start = at; at += s.dur; p.end = at; p.i = i; return p; });
   V.total = at;
   BOUNDS = PARTS.slice(1).map(p => p.start);
-  const colours = ["#56D1DC", "#FF8AD8", "#95A0FF", "#FF6259", "#7ED67A", "#EDE4D3", "#F0B429"];
-  WIPES = colours.map(c => { const w = el("div", "wipe", FR); w.style.background = c; return w; });
+  WIPES = (V.wipes || []).map(svg => el("div", "wipe", FR, svg));   // (the Heap's own boxes, as the logo draws them)
   return Promise.all([...document.images].map(img => img.decode().catch(() => null))).then(() => document.fonts.ready)
     .then(() => { document.querySelectorAll("h1, .center p").forEach(fitText); return V.total; });
 }
@@ -316,7 +316,7 @@ function draw(t) {
     const b = BOUNDS.find(x => t > x - .62 && t < x + .62);
     if (b == null) { w.style.display = "none"; return; }
     const u = span(t, b - .6 + k * .035, 1.05), size = L.H * (L.portrait ? .2 : .34);
-    const x = (k / (WIPES.length - 1)) * (L.W + size) - size + (L.portrait ? 0 : (k % 2) * 40);
+    const x = -.25 * size + (k / (WIPES.length - 1)) * (L.W - .5 * size) + (L.portrait ? 0 : (k % 2) * 40);   // (all seven in view)
     const y = -size * 1.3 + u * (L.H + size * 2.6);
     Object.assign(w.style, { display: "block", width: size + "px", height: size + "px", left: x + "px", top: y + "px",
       transform: `rotate(${(k % 2 ? 1 : -1) * (12 + 90 * u)}deg)` });

@@ -3,11 +3,11 @@ frame handed to ffmpeg, with the looping track (promo/music.py) under it, faded 
 Hoard's own screens, the Heap, words and shapes drawn in code.
 
     python3 promo/render.py SCREENS LIBRARY OUT [--only=promo-short,troubleshooting-pin] [--lang=en] [--layout=landscape]
-                            [--fps=30] [--check]
+                            [--fps=30] [--jobs=3] [--check]
 
 SCREENS is promo/capture.py's folder, LIBRARY the products it was given (for the sketch's tabs and the credits), OUT
 where the videos go: <video>-<layout>-<lang>.mp4 (a video in one layout only leaves its layout out). --check draws one
-frame of each scene as a PNG instead, to look over.
+frame of each scene as a PNG instead, to look over. --jobs=3 films each language side by side.
 
 The Japanese words use the fonts Hoard has (Dela Gothic One, Zen Maru Gothic); the Korean ones Black Han
 Sans and Gowun Dodum, from Google Fonts (just the letters the videos use), kept in OUT/fonts. All are under the SIL
@@ -164,6 +164,13 @@ def main(argv: list[str]) -> int:
     fps = int(opts.get("fps", 30))
     if not shutil.which("ffmpeg") and "check" not in opts:
         sys.exit("ffmpeg is needed")
+    if int(opts.get("jobs", 1)) > 1 and not langs:   # (a language to each, side by side)
+        player(out)   # (once, before they start: the fonts, and the music)
+        if "check" not in opts:
+            music(out)
+        rest = [a for a in argv if not a.startswith("--jobs")]
+        procs = [subprocess.Popen([sys.executable, __file__, *rest, f"--lang={lang}"]) for lang in scenes.LANGS]
+        return max(p.wait() for p in procs)
     page_file = player(out)
     wav = None if "check" in opts else music(out)
     made = []
