@@ -164,7 +164,9 @@ class Drawn(unittest.TestCase):
     """Both pages, stepped through their panels and views (scripts/i18n_strings.py): what's left untranslated is only
     the sample's names, stores, paths and file names, and Hoard's own name."""
     NAMES = {"Booth", "Gumroad", "Jinxxy", "Payhip", "itch.io", "Hoard", "GitHub", "Microsoft Edge", "Google Chrome",
-             "PIN", "OK", ".unitypackage", "rusk.unitypackage", "D:\\Packages\\My Textures"}
+             "PIN", "OK", ".unitypackage", "rusk.unitypackage", "D:\\Packages\\My Textures",
+             # Apprise's services, and the example address in Discord's field (the setup assistant's notifications)
+             "Discord", "Telegram", "ntfy", "Pushover", "Slack", "Matrix", "Gotify", "https://discord.com/api/webhooks/..."}
     SAMPLE = re.compile(r"^(Rusk|Mochi|Anko|Yuzu|Kinako)\(|^/|^[A-Z]:\\")
 
     def test_nothing_left_in_english(self):

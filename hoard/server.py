@@ -256,7 +256,8 @@ def public_settings(cfg: dict) -> dict:
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "notify_found": cfg.get("notify_found", True) is not False,
         # notifications through Apprise (issue #230): how many addresses are kept (never the addresses), and what's sent
-        "apprise": {"available": alerts.available(), "kept": alerts.kept(cfg), "events": sorted(alerts.chosen(cfg))},
+        "apprise": {"available": alerts.available(), "kept": alerts.kept(cfg), "addresses": alerts.described(cfg),
+                    "events": sorted(alerts.chosen(cfg))},
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -493,7 +494,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # news, sent through Apprise as you chose (issue #230): counts, never a product's name
         self.jobs.on_news = self.project_jobs.on_news = self._news
         self.updates.on_available = lambda version: alerts.send(
-            self.cfg, "other", f"Hoard {version} is available. Open Hoard to update.")
+            self.cfg, "other", f"**Hoard {version}** is available. Open Hoard to update.", title="A new version of Hoard",
+            link=f"{alerts.HOARD_URL}/releases")
         self.schedule = Schedule(cfg, self.jobs)
         previous.set_keep(keep_previous(cfg))
         # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
@@ -645,24 +647,31 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
     def _news(self, kind: str, what) -> None:
         """Issue #230: news from the tasks, sent through Apprise as you chose (hoard/alerts.py): how many, never names."""
         if kind == "found":
-            for event in ("new", "updates"):
+            for event, title in (("new", "New products to download"), ("updates", "Updates to download")):
                 text = alerts.found_text(what, event)
                 if text:
-                    alerts.send(self.cfg, event, text)
-        elif kind == "cheaper":
-            alerts.send(self.cfg, "prices", f"{alerts.plural(what, 'product')} on your wishlists "
-                                            f"{'is' if what == 1 else 'are'} cheaper than before.")
+                    alerts.send(self.cfg, event, text, title=title)
+        elif kind == "cheaper":   # (issue #285: a wishlist's products, which are a store's, with their picture and link)
+            count, items = (what.get("count", 0), what.get("items") or []) if isinstance(what, dict) else (what, [])
+            hidden = MarkStore().keys("hidden")
+            items = [i for i in items if isinstance(i, dict) and i.get("key") not in hidden]
+            text, link = alerts.cheaper_text(count, items)
+            first = next((i for i in items if i.get("thumbnail") and i.get("store") in STORES), None)
+            pic_url = sets.product_picture(first["store"], first["thumbnail"]) if first else None
+            picture = (lambda: fetch_picture(pic_url, STORES[first["store"]]["referer"])) if pic_url else None   # (fetched as it's sent)
+            alerts.send(self.cfg, "prices", text, title="Cheaper on your wishlists", link=link, picture=picture)
         elif kind == "checked":
             parts = [alerts.plural(what[k], f"file {k}", f"files {k}") for k in ("changed", "missing") if what.get(k)]
-            alerts.send(self.cfg, "other", f"The check of your downloads found {' and '.join(parts)}. "
-                                           "Open Hoard to see what it found.")
+            alerts.send(self.cfg, "other", f"The check of your downloads found **{' and '.join(parts)}**. "
+                                           "Open Hoard to see what it found.", title="The check of your downloads")
         elif kind == "finished" and what.get("task") == "routine":
             counts = (what.get("report") or {}).get("routine") or {}
             found = [alerts.plural(counts[k], one) for k, one in (("new", "new product"), ("updates", "update")) if counts.get(k)]
-            alerts.send(self.cfg, "routine", "The routine check failed." if what.get("outcome") == "failed" else
-                        f"The routine check found {' and '.join(found)}." if found else "The routine check found nothing new.")
+            alerts.send(self.cfg, "routine", "The routine check **failed**." if what.get("outcome") == "failed" else
+                        f"The routine check found **{' and '.join(found)}**." if found else "The routine check found nothing new.",
+                        title="The routine check")
         elif kind == "finished" and what.get("task") not in ("list-files",):
-            alerts.send(self.cfg, "tasks", alerts.task_text(what))
+            alerts.send(self.cfg, "tasks", alerts.task_text(what), title="A task finished")
 
     def index(self, rescan: bool = False, stale_ok: bool = False) -> dict:
         """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan.
@@ -1067,7 +1076,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"version": __version__, "releases": whats_new(betas)}, compress=True)
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
-                               "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
+                               "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True)),
+                               # issue #288: its notifications step (the addresses described, as Settings has them)
+                               "apprise": {"available": alerts.available(), "addresses": alerts.described(srv.cfg),
+                                           "events": sorted(alerts.chosen(srv.cfg))}})
         if path == "/api/sets":   # the Sets tab: every set, each product as it is here (hoard/sets.py)
             return self._json(self._sets_view(), compress=True)
         if path.startswith("/setpic/"):   # a set's product's picture, from its store, when it isn't in your library
@@ -2361,24 +2373,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})
-        if path == "/api/apprise":   # issue #230: Apprise's addresses, kept as API keys are; none, or forget, forgets them
-            try:
-                addresses = [] if body.get("forget") is True else alerts.clean_urls(body.get("urls"))
-                if not addresses and body.get("forget") is not True:   # (forgetting them is asked for, and asked first)
-                    raise ValueError("Type an address first, one a line.")
-                alerts.save_urls(srv.cfg, addresses)
+        if path == "/api/apprise":   # issues #230, #287: Apprise's addresses, kept as API keys are, one at a time
+            try:   # (add, replace or remove one; forget forgets them all; the page only ever sees them described)
+                if body.get("forget") is True:
+                    alerts.save_urls(srv.cfg, [])
+                elif body.get("action") in ("add", "replace", "remove"):
+                    alerts.change(srv.cfg, body["action"], str(body.get("id") or ""), body.get("urls"))
+                else:
+                    addresses = alerts.clean_urls(body.get("urls"))
+                    if not addresses:
+                        raise ValueError("Type an address first, one a line.")
+                    alerts.save_urls(srv.cfg, addresses)
             except (ValueError, SigninsUnprotected) as e:
                 return self._json({"error": str(e)}, 400)
             except OSError as e:
                 return self._json({"error": f"They couldn't be kept: {e}"}, 500)
-            return self._json({"ok": True, "kept": len(addresses)})
-        if path == "/api/apprise/test":   # a test notification, to every address kept, now
+            shown = alerts.described(srv.cfg)
+            return self._json({"ok": True, "kept": len(shown), "addresses": shown})
+        if path == "/api/apprise/test":   # a test notification, now: to one address (its id), or to every one kept
             if not alerts.available():
                 return self._json({"error": "Apprise isn't installed. Run Setup again to install it."}, 400)
-            addresses = alerts.urls(srv.cfg)
+            addresses = alerts.by_id(srv.cfg, str(body.get("id"))) if body.get("id") else alerts.urls(srv.cfg)
             if not addresses:
-                return self._json({"error": "Add an Apprise address first."}, 400)
-            problem = alerts.deliver(addresses, "This is a test from Hoard: notifications through Apprise work.")
+                return self._json({"error": "Add an Apprise address first." if not body.get("id") else "That address isn't kept any more."}, 400)
+            problem = alerts.deliver(addresses, "This is a test from **Hoard**: notifications through Apprise work.",
+                                     title="A test from Hoard", link=alerts.HOARD_URL)
             return self._json({"ok": problem is None, "error": problem})
         if path == "/api/integrity/resolve":   # issue #231: deal with what the last check found
             return self._resolve_integrity(body)

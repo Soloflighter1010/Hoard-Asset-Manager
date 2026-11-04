@@ -1247,7 +1247,7 @@ class Jobs:
             raise stopped
         cheaper = done.get("cheaper") or []
         if cheaper:
-            self._news("cheaper", len(cheaper))
+            self._news("cheaper", {"count": len(cheaper), "items": (done.get("cheaper_items") or [])[:10]})
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])

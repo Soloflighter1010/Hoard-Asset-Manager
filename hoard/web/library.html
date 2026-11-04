@@ -1595,20 +1595,26 @@ body.less-motion .tour-try::before { animation: none; }
   <h3 id="part-apprise">Notifications through Apprise</h3>
   <p class="hint">Send the news you choose to Discord, Telegram, ntfy, email and many more, through
     <a href="https://appriseit.com/services/" target="_blank" rel="noopener noreferrer">Apprise</a>: an address
-    for each, one a line. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in
-    config.json. What's sent says how many, never a product's name.</p>
+    for each. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in config.json, and shows
+    each one only by its service and what tells it apart, never its token. What's sent says how many, never the name
+    of a product in your library; on Discord it's a rich message, in Hoard's colour.</p>
   <p id="appriseKept" class="hint" aria-live="polite"></p>
-  <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
-    placeholder="discord://..."></textarea>
-  <details id="appriseBuild" class="apprise-build"><summary>Build an address</summary>
+  <ul id="appriseList" class="apprise-list" aria-label="Addresses kept"></ul>
+  <details id="appriseBuild" class="apprise-build"><summary>Add an address</summary>
+    <p class="hint" id="appriseReplacing" hidden></p>
     <label class="check">Service <select id="appriseService" aria-label="Service"></select></label>
     <div id="appriseFields" class="apprise-fields"></div>
-    <div class="row"><button class="ghost sm" id="appriseAdd">Put it in the box</button></div>
+    <div class="row"><button class="ghost sm" id="appriseAdd">Add it</button>
+      <button class="linkish" id="appriseNoReplace" hidden>Cancel</button></div>
     <p class="hint" id="appriseBuilt" aria-live="polite"></p>
+    <details class="apprise-paste"><summary>Or paste addresses</summary>
+      <textarea id="setApprise" rows="3" spellcheck="false" autocomplete="off" aria-label="Apprise addresses, one a line"
+        placeholder="discord://..."></textarea>
+      <div class="row"><button class="ghost sm" id="appriseSave">Add these</button></div>
+    </details>
   </details>
-  <div class="apprise-acts"><button class="ghost sm" id="appriseSave">Keep these addresses</button>
-    <button class="ghost sm" id="appriseTest">Send a test</button>
-    <button class="linkish" id="appriseForget">Forget them</button></div>
+  <div class="apprise-acts"><button class="ghost sm" id="appriseTest">Send a test to them all</button>
+    <button class="linkish" id="appriseForget">Forget them all</button></div>
   <div id="appriseEvents" class="apprise-events" role="group" aria-label="What to send">
     <label class="check"><input type="checkbox" data-apprise-event="new"> New products the routine check finds</label>
     <label class="check"><input type="checkbox" data-apprise-event="updates"> Updates the routine check finds</label>
@@ -3031,9 +3037,10 @@ function setupPicked(st, s) {
   if (SETUP.picked || !SETUP.firstRun) return !!st.stores[s].enabled;
   return !!((DATA.stores || {})[s] || {}).count;
 }
-// The setup assistant's steps (Payhip's and closing only when they apply).
+// The setup assistant's steps (Payhip's, notifications and closing only when they apply).
 const setupSteps = () => ["language", "access", "look", "welcome", "browser", "older", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
+  ...(SETUP.st && (SETUP.st.apprise || {}).available ? ["notifications"] : []),   // (issue #288: Apprise, where it's installed)
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
 // What the setup assistant needs to know (the stores, the browser, the folders...).
 async function setupStatus() {
@@ -3152,6 +3159,27 @@ const SETUP_VIEWS = {
     <p>Hoard keeps local copies of what you own, in folders by store, creator and product.</p>
     <div class="field"><input id="setupRoot" spellcheck="false" aria-label="Downloads folder" value="${esc(st.root)}"><button class="ghost sm" id="setupRootBrowse" data-browse ${canPick() ? "" : "hidden"}>Browse…</button><button class="ghost sm" id="setupRootDefault">Default</button></div>
     <p class="muted">Pick a drive with room to spare; VRChat assets add up. You can change this later in Settings.</p>`,
+  // Issue #288: where Hoard can send its news, through Apprise (a service, its fields, a test); nothing until one's added.
+  notifications: st => {
+    const chosen = new Set(st.apprise.events.length ? st.apprise.events : ["new", "updates", "prices"]);
+    // One of what can be sent, ticked as chosen (or, the first time, the routine check's finds and cheaper wishes).
+    const event = (id, label) => `<label class="check"><input type="checkbox" data-setup-event="${id}"${chosen.has(id) ? " checked" : ""}> ${label}</label>`;
+    return `<h2 id="setupTitle">Get Hoard's news where you are</h2>
+    <p>Hoard can tell you what it finds on Discord, Telegram, ntfy, by email and more, through Apprise. Choose a
+    service, fill in what it gives you, and add it. Hoard keeps the address as it keeps API keys, never in config.json.</p>
+    <ul id="setupNotifyList" class="apprise-list" aria-label="Addresses kept"></ul>
+    <div class="apprise-fields"><label class="field-row"><span>Service</span>
+      <select id="setupNotifyService" aria-label="Service">${appriseServiceOptions()}</select></label></div>
+    <div id="setupNotifyFields" class="apprise-fields"></div>
+    <div class="row"><button class="ghost sm" id="setupNotifyAdd">Add it</button></div>
+    <p class="progress" id="setupNotifyNote" aria-live="polite"></p>
+    <div class="apprise-events" role="group" aria-label="What to send">
+      ${event("new", "New products the routine check finds")}${event("updates", "Updates the routine check finds")}
+      ${event("prices", "Products on my wishlists that got cheaper")}${event("tasks", "Tasks that finish or fail")}
+    </div>
+    <p class="muted">Not now? Choose Next: nothing is sent until you add an address. You can change this later in
+    Settings, under Notifications through Apprise.</p>`;
+  },
   closing: st => `<h2 id="setupTitle">When you close Hoard's window</h2>
     <div class="closepick" role="radiogroup" aria-labelledby="setupTitle">
       <label><input type="radio" name="setupClose" value="background"${st.close_to_taskbar !== false ? " checked" : ""}>
@@ -3244,6 +3272,35 @@ const SETUP_WIRES = {
       if (r.ok) $("#signinLink").value = "";
     });
   },
+  notifications: st => {
+    const pick = $("#setupNotifyService"), fields = $("#setupNotifyFields"), note = $("#setupNotifyNote");
+    // The addresses kept, each with its own Send a test.
+    const list = () => { $("#setupNotifyList").innerHTML = st.apprise.addresses.map(x => `<li data-apprise-id="${esc(x.id)}"><b>${esc(tr(x.service))}</b>` +
+      (x.label ? ` <span class="muted" translate="no">${esc(x.label)}</span>` : "") +
+      `<span class="row"><button class="ghost sm" data-setup-test="${esc(x.id)}">${esc(tr("Send a test"))}</button></span></li>`).join(""); };
+    // The chosen service's fields.
+    const fill = () => { fields.innerHTML = appriseFieldsHTML(pick.value); note.textContent = ""; };
+    pick.addEventListener("change", fill);
+    fill(); list();
+    $("#setupNotifyAdd").addEventListener("click", async () => {
+      const made = appriseBuilt(pick.value, fields);
+      if (!made) { note.textContent = tr("Fill in its fields as the service gives them: that isn't an address yet."); return; }
+      const r = await apiPost("/api/apprise", { action: "add", urls: made });
+      if (!r.ok) { note.textContent = r.data.error || tr("That can't be done."); return; }
+      st.apprise.addresses = r.data.addresses;
+      fill(); list();
+      note.textContent = tr("Added. Send it a test to check it.");
+    });
+    $("#setupNotifyList").addEventListener("click", async e => {
+      const b = e.target.closest("[data-setup-test]");
+      if (!b) return;
+      b.disabled = true;
+      note.textContent = tr("Sending a test...");
+      const r = await apiPost("/api/apprise/test", { id: b.dataset.setupTest });
+      b.disabled = false;
+      note.textContent = r.ok && r.data.ok ? tr("Sent. Check that it came.") : (r.data.error || tr("That can't be done."));
+    });
+  },
   folder: st => {
     $("#setupRootDefault").addEventListener("click", () => { $("#setupRoot").value = st.default_root; });
     $("#setupRootBrowse").addEventListener("click", () => browseInto($("#setupRoot")));
@@ -3291,6 +3348,12 @@ async function setupSave(name) {   // what leaving a step saves; false keeps you
     body = { root: root === SETUP.st.default_root ? "" : root };
   } else if (name === "closing") {
     body = { close_to_taskbar: !!$('#setupBody input[name="setupClose"][value="background"]').checked };
+  } else if (name === "notifications") {   // what's sent, once there's somewhere to send it (skipped: nothing changes)
+    if (!SETUP.st.apprise.addresses.length) return true;
+    const chosen = new Set([...document.querySelectorAll("#setupBody [data-setup-event]")].filter(c => c.checked).map(c => c.dataset.setupEvent));
+    // (the ones it doesn't show, routine and other, stay as Settings has them)
+    const kept = SETUP.st.apprise.events.filter(e => e === "routine" || e === "other");
+    body = { apprise_events: [...new Set([...kept, ...chosen])] };
   }
   if (!body) return true;
   const r = await apiPost("/api/settings", body);

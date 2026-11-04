@@ -332,19 +332,24 @@ class AccessKey(unittest.TestCase):
         page.close()
 
     def test_building_an_apprise_address(self):
-        """Issue #239: Build an address makes a service's Apprise address from its fields and puts it in the box with
-        the others (nothing is sent, or kept, until Keep these addresses)."""
-        from unittest import mock
-        from hoard import alerts
-        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None):
+        """Issues #239, #287: Add an address makes a service's Apprise address from its fields and keeps it on its own;
+        Settings then lists it by its service and what tells it apart, never its token, and the page is never sent
+        one. Each service links its own page in Apprise's documentation (issue #286)."""
+        from hoard import alerts, vault
+        self.srv.cfg["allow_unprotected_signins"] = True
+        self.addCleanup(self.srv.cfg.pop, "allow_unprotected_signins", None)
+        self.addCleanup(vault.forget_key, self.srv.cfg, alerts.SECRET)
+        secrets = ["AbC-dEf_123", "ABC-def_ghi", "app%20pass", "you:app", "fakeapptoken", "notarealtoken", "AbCdEf123", "abc%2Fd"]
+        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None), \
+                mock.patch.object(alerts, "_described", None), mock.patch.object(server, "save_config"):
             page, refused = self.open(self.srv.entry_url())
+            seen = []
+            page.on("response", lambda r: seen.append(r) if "/api/" in r.url else None)
             page.get_by_text("Rusk").first.wait_for()
             menu(page, "#settingsBtn")
             page.locator("#settingsPanel:not([hidden])").wait_for()
-            page.locator("#appriseBuild summary").click()
-            sent = []
-            page.on("request", lambda r: sent.append(r.url) if r.method == "POST" else None)
-            for service, fields, want in APPRISE_BUILT:
+            page.locator("#appriseBuild > summary").click()
+            for n, (service, fields, want) in enumerate(APPRISE_BUILT, 1):
                 page.select_option("#appriseService", service)
                 # issue #286: each service's own page in Apprise's documentation
                 doc = page.locator("#appriseFields a")
@@ -353,35 +358,65 @@ class AccessKey(unittest.TestCase):
                 for k, v in fields.items():
                     page.fill(f'[data-apprise-field="{k}"]', v)
                 page.click("#appriseAdd")
-                self.assertIn(want, page.input_value("#setApprise").split("\n"), service)
-            self.assertEqual(page.input_value("#setApprise").split("\n"), [w for _, _, w in APPRISE_BUILT], "one a line")
+                page.wait_for_function("n => document.querySelectorAll('#appriseList li').length === n", arg=min(n, len({w for _, _, w in APPRISE_BUILT[:n]})))
+                self.assertIn(want, alerts.urls(self.srv.cfg), service)
+            self.assertEqual(alerts.urls(self.srv.cfg), [w for _, _, w in APPRISE_BUILT], "each kept, in order")
+            listed = page.locator("#appriseList li b").all_inner_texts()
+            self.assertEqual(listed[:3], ["Discord", "Telegram", "ntfy"])
             page.select_option("#appriseService", "discord")
             page.fill('[data-apprise-field="hook"]', "https://example.com/not-discord")
             page.click("#appriseAdd")
             self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
-            self.assertFalse([u for u in sent if "/api/apprise" in u], "nothing kept or sent")
+            text = page.content()
+            bodies = " ".join(r.text() for r in seen if r.status == 200 and "json" in (r.headers.get("content-type") or ""))
+            for secret in secrets:
+                self.assertFalse(secret in text, f"{secret} never on the page")
+                self.assertFalse(secret in bodies, f"{secret} never sent to it")
             page.close()
+        self.assertEqual(refused, [])
 
     def test_notifications_through_apprise(self):
-        """Issue #230: Settings keeps Apprise's addresses (and then only says how many), and what's sent is ticked."""
+        """Issues #230, #287: addresses pasted are kept (and never shown again), each listed on its own with Send a
+        test, Change... and Remove; what's sent is ticked."""
         from hoard import alerts, vault
         self.srv.cfg["allow_unprotected_signins"] = True
         self.addCleanup(self.srv.cfg.pop, "allow_unprotected_signins", None)
         self.addCleanup(vault.forget_key, self.srv.cfg, alerts.SECRET)
         self.addCleanup(self.srv.cfg.update, {"apprise_events": []})
+        sent = []
         with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None), \
-                mock.patch.object(server, "save_config"):
+                mock.patch.object(alerts, "_described", None), mock.patch.object(server, "save_config"), \
+                mock.patch.object(alerts, "deliver", lambda addresses, *a, **k: sent.append(addresses)):
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.wait_for()
             menu(page, "#settingsBtn")
             page.locator("#settingsPanel:not([hidden])").wait_for()
             self.assertEqual(page.locator("#appriseKept").inner_text(), "No addresses yet: nothing is sent.")
             self.assertTrue(page.locator("#appriseTest").is_disabled())
-            page.fill("#setApprise", "json://example.com/hook\nntfys://ntfy.example/hoard")
+            page.locator("#appriseBuild > summary").click()
+            page.locator(".apprise-paste > summary").click()
+            page.fill("#setApprise", "json://example.com/hook?token=SECRET1\nntfys://ntfy.example/hoard")
             page.click("#appriseSave")
             page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()
             self.assertEqual(page.input_value("#setApprise"), "", "never shown again")
-            self.assertEqual(alerts.urls(self.srv.cfg), ["json://example.com/hook", "ntfys://ntfy.example/hoard"])
+            self.assertEqual(alerts.urls(self.srv.cfg), ["json://example.com/hook?token=SECRET1", "ntfys://ntfy.example/hoard"])
+            rows = page.locator("#appriseList li")
+            self.assertEqual([" ".join(t.split()) for t in rows.locator("b").all_inner_texts()], ["Webhook", "ntfy"])
+            self.assertEqual(rows.nth(0).locator(".muted").inner_text(), "example.com")
+            self.assertFalse("SECRET1" in page.content(), "its token never on the page")
+            # one tested on its own, one changed, one removed
+            rows.nth(1).locator("[data-apprise-do=test]").click()
+            page.locator(".toast", has_text="Sent. Check that it came.").wait_for()
+            self.assertEqual(sent, [["ntfys://ntfy.example/hoard"]])
+            rows.nth(0).locator("[data-apprise-do=replace]").click()
+            self.assertIn("The new address for Webhook (example.com)", page.locator("#appriseReplacing").inner_text())
+            self.assertEqual(page.locator("#appriseAdd").inner_text(), "Put it in its place")
+            page.select_option("#appriseService", "ntfy")
+            page.fill('[data-apprise-field="topic"]', "hoard-two")
+            page.click("#appriseAdd")
+            page.locator(".toast", has_text="Changed.").wait_for()
+            self.assertEqual(alerts.urls(self.srv.cfg), ["ntfy://hoard-two", "ntfys://ntfy.example/hoard"], "in its place")
+            self.assertEqual(page.locator("#appriseAdd").inner_text(), "Add it")
             with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
                 page.check("[data-apprise-event='tasks']")
             self.assertEqual(self.srv.cfg["apprise_events"], ["tasks"])
@@ -390,13 +425,13 @@ class AccessKey(unittest.TestCase):
             menu(page, "#settingsBtn")
             page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()   # (Settings, filled in)
             self.assertTrue(page.is_checked("[data-apprise-event='tasks']"), "kept")
-            page.click("#appriseSave")   # nothing typed: not a way to forget them
-            page.locator(".toast", has_text="Type an address first").wait_for()
-            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
+            page.locator("#appriseList li", has_text="hoard-two").locator("[data-apprise-do=remove]").count()
+            page.locator("#appriseList li").first.locator("[data-apprise-do=remove]").click()
+            page.locator("dialog.ask .primary").click()
+            page.locator("#appriseKept", has_text="1 address is kept").wait_for()
+            self.assertEqual(alerts.urls(self.srv.cfg), ["ntfys://ntfy.example/hoard"])
             self.assertEqual(page.evaluate("api('/api/apprise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
                                            "body: JSON.stringify({ urls: '' }) }).then(r => r.status)"), 400)
-            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
-            page.on("dialog", lambda d: d.accept())
             page.click("#appriseForget")
             page.locator("dialog.ask .primary").click()
             page.locator("#appriseKept", has_text="No addresses yet").wait_for()
@@ -2235,6 +2270,64 @@ class SetupAssistant(unittest.TestCase):
             self.assertTrue(page.locator('input[name="setupClose"][value="quit"]').is_checked(), "and shown as chosen")
             browser.close()
 
+    def test_notifications_in_the_setup_assistant(self):
+        """Issue #288: where Apprise is installed, the assistant has a notifications step: a service, its fields made
+        into an address and added, a test sent to it, and what's sent ticked. Skipped (Next with nothing added), it
+        changes nothing; without Apprise, there's no step."""
+        from hoard import alerts, vault
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": True,
+                                                   "allow_unprotected_signins": True, "apprise_events": []}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        self.addCleanup(vault.forget_key, srv.cfg, alerts.SECRET)
+        sent = []
+        with sync_playwright() as p, mock.patch.object(server, "save_config"), \
+                mock.patch.object(alerts, "_kept", None), mock.patch.object(alerts, "_described", None), \
+                mock.patch.object(alerts, "deliver", lambda addresses, *a, **k: sent.append(addresses)):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            goto(page, srv.entry_url())
+            page.wait_for_function("() => DATA && DATA.version")
+            with mock.patch.object(alerts, "available", lambda: False):
+                page.evaluate("openSetup()")
+                page.locator("#setup:not([hidden])").wait_for()
+                self.assertNotIn("notifications", page.evaluate("setupSteps()"), "no Apprise: no step")
+                page.evaluate("closeSetup()")
+            with mock.patch.object(alerts, "available", lambda: True):
+                page.evaluate("openSetup().then(() => { SETUP.step = setupSteps().indexOf('notifications'); renderSetup(); })")
+                page.locator("#setupTitle", has_text="Get Hoard's news where you are").wait_for()
+                self.assertEqual(page.locator("#setupNotifyList li").count(), 0)
+                self.assertTrue(page.is_checked("[data-setup-event='new']"), "the routine check's finds, to start with")
+                self.assertFalse(page.is_checked("[data-setup-event='tasks']"))
+                page.click("#setupNext")   # skipped: nothing added, nothing chosen
+                page.locator("#setupTitle", has_text="Hoard's ready").wait_for()
+                self.assertEqual(srv.cfg["apprise_events"], [])
+                self.assertEqual(alerts.urls(srv.cfg), [])
+                page.click("#setupBack")
+                page.locator("#setupTitle", has_text="Get Hoard's news where you are").wait_for()
+                page.select_option("#setupNotifyService", "discord")
+                self.assertEqual(page.locator("#setupNotifyFields a").get_attribute("href"), "https://appriseit.com/services/discord/")
+                page.fill('#setupNotifyFields [data-apprise-field="hook"]', "https://example.com/not-discord")
+                page.click("#setupNotifyAdd")
+                self.assertIn("isn't an address yet", page.locator("#setupNotifyNote").inner_text())
+                page.fill('#setupNotifyFields [data-apprise-field="hook"]', "https://discord.com/api/webhooks/123/AbC-dEf_123")
+                page.click("#setupNotifyAdd")
+                page.locator("#setupNotifyList li", has_text="Discord").wait_for()
+                self.assertNotIn("AbC-dEf_123", page.content(), "its token is never shown")
+                self.assertEqual(alerts.urls(srv.cfg), ["discord://123/AbC-dEf_123"])
+                page.click("#setupNotifyList [data-setup-test]")
+                page.locator("#setupNotifyNote", has_text="Sent. Check that it came.").wait_for()
+                self.assertEqual(sent, [["discord://123/AbC-dEf_123"]])
+                page.check("[data-setup-event='tasks']")
+                page.uncheck("[data-setup-event='prices']")
+                page.click("#setupNext")
+                page.locator("#setupTitle", has_text="Hoard's ready").wait_for()
+                self.assertEqual(sorted(srv.cfg["apprise_events"]), ["new", "tasks", "updates"])
+            browser.close()
+
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -2490,7 +2583,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
         # window: the app hands those to your browser), never filtering your products
         opened = []
         page.context.on("page", lambda p: opened.append(p.url if p.url != "about:blank" else (p.wait_for_event("framenavigated").url)))
-        page.context.route(re_any_site := __import__("re").compile(r"^https://(nexyy\.com|booth\.pm|gumroad\.com|jinxxy\.com|itch\.io)/"),
+        page.context.route(__import__("re").compile(r"^https://(nexyy\.com|booth\.pm|gumroad\.com|jinxxy\.com|itch\.io)/"),
                            lambda route: (opened.append(route.request.url), route.fulfill(status=200, body="ok"))[1])
         for text, want in (('nexyy:soft hoodie', "https://nexyy.com/browse?q=soft%20hoodie"),
                            ('booth:"ケモノ 衣装"', "https://booth.pm/en/search/%E3%82%B1%E3%83%A2%E3%83%8E%20%E8%A1%A3%E8%A3%85"),

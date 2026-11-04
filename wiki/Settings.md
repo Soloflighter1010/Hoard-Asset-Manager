@@ -59,16 +59,24 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   **Tell me when it finds something to download** (on unless you turn it off, from 3.1) shows a notification from
   your system when it finds new products or updates while Hoard is open in the background.
 - **Notifications through Apprise** (5.2.0): send the news you choose to Discord, Telegram, ntfy, email and
-  [many more](https://appriseit.com/services/), through Apprise. Type an address for each service, one a
-  line, or **Build an address** (5.2.0 beta 2): choose the service (Discord, Telegram, ntfy, email, Pushover, Slack,
-  Matrix, Gotify or a webhook), fill in what it gives you, and **Put it in the box**. Then **Keep these addresses**,
-  and **Send a test** to check it comes. Each address holds its service's
-  token, so Hoard keeps them as it keeps API keys (see [Security and Privacy](Security-and-Privacy)), never in
-  config.json; Settings only says how many are kept, and **Forget them** deletes them. Then tick what to send: new
-  products and updates the routine check finds, products on your wishlists that got cheaper, tasks that finish or
-  fail, the routine check when it's done, and other news (a new version of Hoard, files the check of your downloads
-  found changed or missing). Nothing is sent unless you tick it, and what's sent says how many, never a product's
-  name.
+  [many more](https://appriseit.com/services/), through Apprise. **Add an address**: choose the service (Discord,
+  Telegram, ntfy, email, Pushover, Slack, Matrix, Gotify or a webhook), fill in what it gives you, and **Add it**.
+  Each service links its own page in Apprise's documentation. Already have addresses? **Or paste addresses**, one a
+  line, and **Add these**. Each address holds its service's token, so Hoard keeps them as it keeps API keys (see
+  [Security and Privacy](Security-and-Privacy)), never in config.json.
+  Settings lists each address on its own (5.2.0 beta 4), by its service and what tells it apart (a Discord
+  webhook's number, an ntfy topic, an email address), never its token: **Send a test** to check it comes,
+  **Change...** to put a new address in its place, or **Remove** it. **Send a test to them all** and **Forget them
+  all** do every one at once. Then tick what to send: new products and updates the routine check finds, products on
+  your wishlists that got cheaper, tasks that finish or fail, the routine check when it's done, and other news (a
+  new version of Hoard, files the check of your downloads found changed or missing). Nothing is sent unless you
+  tick it. What's sent says how many, never the name of a product in your library.
+  The messages read well where they land (5.2.0 beta 4): on Discord, a card in Hoard's gold with Hoard's name and
+  icon and a link; on services that show formatting, bold and links; elsewhere, plain text. Products on your
+  wishlists that got cheaper are named, each with its old price struck out, its new one and a link to its store
+  page (the first five, then how many more), with the first one's picture where the service shows pictures. A new
+  version of Hoard links its releases page.
+  The [setup assistant](Getting-Started) has a step for this too.
 - **Appearance** (from 3.2):
   - **Language** (from 3.3): **Match my computer**, **English**, **日本語** (Japanese) or **한국어** (Korean). Match
     my computer uses the first of these your system or browser asks for, and English if it asks for none of them.

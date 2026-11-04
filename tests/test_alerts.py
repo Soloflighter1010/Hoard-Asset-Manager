@@ -28,7 +28,7 @@ class FakeService:
     def __init__(self, url):
         self.url, self.service_name = url, url.split("://")[0].title()
 
-    def notify(self, body, title):
+    def notify(self, body, title, body_format=None, attach=None):
         FakeApprise.sent.append(([self.url], title, body))
         if not FakeApprise.accept:
             logging.getLogger("apprise").warning(f"Failed to send {self.service_name} notification to {self.url}: "
@@ -41,8 +41,8 @@ class FakeApprise:
     sent: list = []
     accept = True
 
-    def __init__(self):
-        self.added = []
+    def __init__(self, asset=None):
+        self.added, self.asset = [], asset
 
     def add(self, url):
         ok = "://" in url and not url.startswith("nope://")
@@ -54,6 +54,21 @@ class FakeApprise:
         return iter(self.added)
 
 
+class FakeAsset:
+    """Apprise's AppriseAsset, as Hoard sets it: its name, colours and icon."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw, html_notify_map={"info": "#3AA3E3"})
+
+
+def fake_apprise() -> types.ModuleType:
+    """A stand-in apprise module."""
+    fake = types.ModuleType("apprise")
+    fake.Apprise, fake.AppriseAsset, fake.AppriseAttachment = FakeApprise, FakeAsset, lambda path: path
+    fake.NotifyFormat = types.SimpleNamespace(MARKDOWN="markdown", TEXT="text")
+    return fake
+
+
 class Alerts(unittest.TestCase):
 
     def setUp(self):
@@ -63,8 +78,7 @@ class Alerts(unittest.TestCase):
         self.addCleanup(env.stop)
         self.cfg = {**config.load_config(), "allow_unprotected_signins": True, "apprise_events": ["new", "tasks"]}
         FakeApprise.sent, FakeApprise.accept = [], True
-        fake = types.ModuleType("apprise")
-        fake.Apprise = FakeApprise
+        fake = fake_apprise()
         for patch in (mock.patch.dict(sys.modules, {"apprise": fake}), mock.patch.object(alerts, "available", lambda: True)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -103,7 +117,7 @@ class Alerts(unittest.TestCase):
         self.assertIsNone(alerts.found_text({"new": 3, "updates": 0}, "updates"), "nothing to say")
         self.wait_sent(1)
         self.assertEqual(FakeApprise.sent, [(["json://example.com/hook"], "Hoard",
-                                             "The routine check found 3 new products. Open Hoard to choose what to download.")])
+                                             "The routine check found **3 new products**. Open Hoard to choose what to download.")])
         alerts.save_urls(self.cfg, [])
         self.assertFalse(alerts.send(self.cfg, "new", "x"), "no addresses: nothing sent")
 
@@ -141,7 +155,7 @@ class Alerts(unittest.TestCase):
         #237), is said in Hoard's words; the background worker carries on with the next notification."""
         logged = []
 
-        def broken(self, body, title):
+        def broken(self, body, title, **kw):
             raise ConnectionError("https://example.com/hook?token=SECRET1234 refused")
         with mock.patch.object(alerts, "log", logged.append):
             with mock.patch.object(FakeService, "notify", broken):
@@ -166,10 +180,10 @@ class Alerts(unittest.TestCase):
         record = {"task": "download", "outcome": "partial", "label": "Download Secret Product",
                   "report": {"new_assets": 2, "updated": 1, "failed": 1, "problems": ["Secret Product: gone"]}}
         text = alerts.task_text(record)
-        self.assertEqual(text, "Download: partly done (2 new, 1 updated, 1 couldn't be downloaded).")
+        self.assertEqual(text, "**Download**: partly done (2 new, 1 updated, 1 couldn't be downloaded).")
         self.assertNotIn("Secret", text, "never a product's name")
         self.assertEqual(alerts.task_text({"task": "check-updates", "outcome": "done", "report": {"updates": 1}}),
-                         "Check for updates: done (1 product with updates).")
+                         "**Check for updates**: done (1 product with updates).")
 
     def test_tasks_pass_their_news_on(self):
         job = jobs.Jobs(self.cfg, library.Library(self.tmp / "library.json"))
@@ -223,8 +237,7 @@ class AlertsInHoard(unittest.TestCase):
                       mock.patch.object(alerts, "_kept", None)):
             patch.start()
             self.addCleanup(patch.stop)
-        fake = types.ModuleType("apprise")
-        fake.Apprise = FakeApprise
+        fake = fake_apprise()
         patch = mock.patch.dict(sys.modules, {"apprise": fake})
         patch.start()
         self.addCleanup(patch.stop)
@@ -245,20 +258,35 @@ class AlertsInHoard(unittest.TestCase):
         self.call = call
 
     def test_addresses_kept_and_tested(self):
-        self.assertEqual(self.call("GET", "/api/settings")[1]["apprise"], {"available": True, "kept": 0, "events": []})
+        """Issue #287: added, tested, changed and removed one at a time; the page only ever sees each one's service and
+        what tells it apart, never a token."""
+        self.assertEqual(self.call("GET", "/api/settings")[1]["apprise"], {"available": True, "kept": 0, "addresses": [], "events": []})
         self.assertEqual(self.call("POST", "/api/apprise/test", {})[0], 400, "nothing kept yet")
         self.assertEqual(self.call("POST", "/api/apprise", {"urls": "not an address"})[0], 400)
-        self.assertEqual(self.call("POST", "/api/apprise", {"urls": "json://example.com/hook?token=SECRET123\ntgram://bot/chat"}),
-                         (200, {"ok": True, "kept": 2}))
+        hook, chat = "json://example.com/hook?token=SECRET123", "tgram://123456:BOTSECRET99/-1001234567890"
+        status, answer = self.call("POST", "/api/apprise", {"action": "add", "urls": hook})
+        self.assertEqual((status, answer["kept"]), (200, 1))
+        status, answer = self.call("POST", "/api/apprise", {"action": "add", "urls": chat + "\n" + hook})
+        self.assertEqual([(a["service"], a["label"]) for a in answer["addresses"]], [("Webhook", "example.com"), ("Telegram", "chat …7890")])
         status, settings = self.call("GET", "/api/settings")
-        self.assertEqual(settings["apprise"]["kept"], 2)
-        self.assertNotIn("SECRET123", json.dumps(settings), "never sent back")
-        self.assertNotIn("SECRET123", json.dumps(self.srv.cfg), "never in config.json")
+        for secret in ("SECRET123", "BOTSECRET99", "123456:"):
+            self.assertNotIn(secret, json.dumps(settings), "never sent back")
+            self.assertNotIn(secret, json.dumps(answer))
+            self.assertNotIn(secret, json.dumps(self.srv.cfg), "never in config.json")
+        hook_id, chat_id = (a["id"] for a in answer["addresses"])
+        self.assertEqual(self.call("POST", "/api/apprise/test", {"id": chat_id}), (200, {"ok": True, "error": None}))
+        self.assertEqual(FakeApprise.sent[-1][0], [chat], "only that one")
+        self.assertEqual(FakeApprise.sent[-1][2], "This is a test from **Hoard**: notifications through Apprise work.")
+        self.assertEqual(self.call("POST", "/api/apprise/test", {"id": "nonsense"})[0], 400)
+        status, answer = self.call("POST", "/api/apprise", {"action": "replace", "id": hook_id, "urls": "ntfys://ntfy.example.com/hoard-news"})
+        self.assertEqual([a["service"] for a in answer["addresses"]], ["ntfy", "Telegram"], "in its place")
+        self.assertEqual(self.call("POST", "/api/apprise", {"action": "remove", "id": hook_id})[0], 400, "gone already")
+        status, answer = self.call("POST", "/api/apprise", {"action": "remove", "id": chat_id})
+        self.assertEqual(alerts.urls(self.srv.cfg), ["ntfys://ntfy.example.com/hoard-news"])
         self.assertEqual(self.call("POST", "/api/apprise/test", {}), (200, {"ok": True, "error": None}))
-        self.assertEqual(FakeApprise.sent[-1][2], "This is a test from Hoard: notifications through Apprise work.")
         self.assertEqual(self.call("POST", "/api/settings", {"apprise_events": ["tasks", "nonsense", "new"]})[0], 200)
         self.assertEqual(self.srv.cfg["apprise_events"], ["new", "tasks"], "known ones only, in order")
-        self.assertEqual(self.call("POST", "/api/apprise", {"forget": True}), (200, {"ok": True, "kept": 0}))
+        self.assertEqual(self.call("POST", "/api/apprise", {"forget": True}), (200, {"ok": True, "kept": 0, "addresses": []}))
         self.assertEqual(alerts.urls(self.srv.cfg), [])
 
     def test_the_tasks_news(self):
@@ -277,18 +305,56 @@ class AlertsInHoard(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertEqual([body for _, _, body in FakeApprise.sent], [
-            "The routine check found 2 new products. Open Hoard to choose what to download.",
-            "The routine check found 1 update. Open Hoard to choose what to download.",
-            "1 product on your wishlists is cheaper than before.",
-            "The check of your downloads found 1 file changed and 3 files missing. Open Hoard to see what it found.",
-            "The routine check found 2 new products.",
-            "Download: done (1 new).",
-            "Hoard 5.2.0 is available. Open Hoard to update."])
+            "The routine check found **2 new products**. Open Hoard to choose what to download.",
+            "The routine check found **1 update**. Open Hoard to choose what to download.",
+            "**1 product** on your wishlists is cheaper than before.",
+            "The check of your downloads found **1 file changed and 3 files missing**. Open Hoard to see what it found.",
+            "The routine check found **2 new products**.",
+            "**Download**: done (1 new).",
+            "**Hoard 5.2.0** is available. Open Hoard to update."])
+        self.assertEqual([title for _, title, _ in FakeApprise.sent][:3], ["New products to download", "Updates to download",
+                                                                            "Cheaper on your wishlists"], "each its title")
         FakeApprise.sent.clear()
         self.srv.cfg["apprise_events"] = ["prices"]
         self.srv._news("finished", {"task": "download", "outcome": "failed", "report": {}})
         time.sleep(0.1)
         self.assertEqual(FakeApprise.sent, [], "tasks aren't ticked: nothing sent")
+
+
+class Addresses(unittest.TestCase):
+    """Issues #285, #287: what Settings is shown of an address (never a secret), and how one is sent to."""
+
+    def test_described_without_secrets(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_pages import APPRISE_BUILT
+        secrets = {"discord": ["AbC-dEf_123"], "telegram": ["ABC-def_ghi", "123456:"], "ntfy": ["my-hoard"],
+                   "email": ["app%20pass", "app pass", "you:"], "pushover": ["fakeapptoken", "fakeuserkey"],
+                   "slack": ["BFAKE", "notarealtoken"], "matrix": ["pw@", "bot:"], "gotify": ["AbCdEf123"], "webhook": ["abc%2Fd", "token"]}
+        for service, _, address in APPRISE_BUILT:
+            d = alerts.describe(address)
+            self.assertRegex(d["id"], r"^[0-9a-f]{16}$")
+            for secret in secrets[service]:
+                self.assertNotIn(secret, json.dumps(d), f"{service}: {d}")
+        self.assertEqual(alerts.describe("discord://123456789012345678/AbC")["label"], "webhook …5678")
+        self.assertEqual(alerts.describe("mailtos://you:pw@gmail.com?to=me%40example.org")["label"], "to m•••@example.org")
+        self.assertEqual(alerts.describe("weird://user:pass@example.com/x")["label"], "example.com", "never its user and password")
+
+    def test_a_discord_address_asks_for_an_embed(self):
+        self.assertEqual(alerts.rich("discord://1/abc", "https://booth.pm/en/items/1"),
+                         "discord://1/abc?format=markdown&footer=yes&image=yes&href=https%3A%2F%2Fbooth.pm%2Fen%2Fitems%2F1")
+        self.assertEqual(alerts.rich("discord://1/abc?format=text&footer=no"), "discord://1/abc?format=text&footer=no&image=yes",
+                         "what you set on it stays")
+        self.assertEqual(alerts.rich("https://discord.com/api/webhooks/1/abc"), "https://discord.com/api/webhooks/1/abc?format=markdown&footer=yes&image=yes")
+        self.assertEqual(alerts.rich("tgram://1:a/2", "https://booth.pm/x"), "tgram://1:a/2", "others as they are")
+        self.assertEqual(alerts.rich("discord://1/abc", "javascript:alert(1)"), "discord://1/abc?format=markdown&footer=yes&image=yes")
+
+    def test_a_wishlists_cheaper_products_named(self):
+        text, link = alerts.cheaper_text(7, [{"store": "booth", "name": "Fox [Ears]", "url": "https://booth.pm/en/items/1", "was": "¥1,500", "now": "¥1,200"},
+                                             {"store": "booth", "name": "Tail", "url": "https://evil.example/x", "was": "¥900", "now": "¥800"}])
+        self.assertEqual(text.splitlines(), ["**7 products** on your wishlists are cheaper than before.",
+                                             "- [Fox \\[Ears\\]](https://booth.pm/en/items/1): ~~¥1,500~~ **¥1,200**",
+                                             "- Tail: ~~¥900~~ **¥800**", "- and 5 more"])
+        self.assertEqual(link, "https://booth.pm/en/items/1", "only a store's own page")
 
 
 @unittest.skipUnless(importlib.util.find_spec("apprise"), "Apprise isn't installed here")
@@ -321,6 +387,64 @@ class RealApprise(unittest.TestCase):
         self.assertIn("didn't take it", said)
         self.assertIn("401", said, "what the service answered")
         self.assertNotIn("SECRET1234", said)
+
+    def test_discord_gets_an_embed_and_a_plain_service_text(self):
+        """Issue #285: a stand-in Discord webhook is sent an embed in Hoard's colour, with its title, what happened and
+        the link; a plain webhook gets the same as text."""
+        posted, heard = [], []
+
+        class Answer:
+            status_code, content, text, headers = 204, b"", "", {}
+
+        def post(url, data=None, json=None, headers=None, **kw):
+            posted.append((url, json if json is not None else data))
+            return Answer()
+
+        class Hook(http.server.BaseHTTPRequestHandler):
+            """A plain webhook."""
+            def do_POST(self):
+                heard.append(json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0))))
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+        hook = http.server.HTTPServer(("127.0.0.1", 0), Hook)
+        threading.Thread(target=hook.serve_forever, daemon=True).start()
+        self.addCleanup(hook.server_close)
+        self.addCleanup(hook.shutdown)
+        body, link = alerts.cheaper_text(1, [{"store": "booth", "name": "Fox Ears", "url": "https://booth.pm/en/items/1", "was": "¥1,500", "now": "¥1,200"}])
+        with mock.patch("requests.post", post), mock.patch.object(alerts, "log"):
+            said = alerts.deliver(["discord://123456789012345678/WebhookToken_abc", f"json://127.0.0.1:{hook.server_port}/ok"],
+                                  body, title="Cheaper on your wishlists", event="prices", link=link)
+        self.assertIsNone(said)
+        (url, payload), = [x for x in posted if "discord" in x[0]]
+        payload = payload if isinstance(payload, dict) else json.loads(payload)
+        (embed,) = payload["embeds"]
+        self.assertEqual((embed["title"], embed["color"], embed["url"]), ("Cheaper on your wishlists", int("F0B429", 16), link))
+        self.assertIn("Fox Ears", embed["description"])
+        self.assertEqual(embed["author"]["name"], "Hoard")
+        self.assertIn("hoard-256.png", embed["thumbnail"]["url"])
+        self.assertEqual(heard[0]["title"], "Cheaper on your wishlists")
+        self.assertIn("Fox Ears", heard[0]["message"], "a webhook gets it too (as Markdown, which it takes)")
+        # a service that shows only plain text gets it as text
+        sent = []
+
+        class TextOnly:
+            service_name = "Text"
+
+            def resolve_format(self, wanted):
+                return types.SimpleNamespace(value="text")
+
+            def notify(self, body, title, body_format=None, **kw):
+                sent.append((body, body_format))
+                return True
+        import apprise
+        with mock.patch.object(apprise.Apprise, "__iter__", lambda self: iter([TextOnly()])), \
+                mock.patch.object(apprise.Apprise, "add", lambda self, u: True), mock.patch.object(alerts, "log"):
+            alerts.deliver(["text://x"], body, title="Cheaper on your wishlists")
+        self.assertEqual(sent[0][0].splitlines()[1], "- Fox Ears (https://booth.pm/en/items/1): ¥1,500 → ¥1,200")
+        self.assertNotIn("**", sent[0][0])
 
     def test_built_addresses_are_ones_apprise_takes(self):
         """Issue #239: every address Build an address makes (tests/test_pages.py's APPRISE_BUILT) is one Apprise takes."""

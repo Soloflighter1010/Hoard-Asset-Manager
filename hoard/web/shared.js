@@ -2397,16 +2397,40 @@ function wireSidebar() {
   setFold(!!UI.side_folded, false);
 }
 
-// Notifications through Apprise (issue #230): its addresses go to /api/apprise (kept as API keys are, and never shown
-// again: Settings only learns how many), and what's sent is a setting like any other
+// Notifications through Apprise (issues #230, #287): its addresses go to /api/apprise (kept as API keys are, and never
+// shown again: Settings learns each one's service and what tells it apart, and an id to name it by), each tested,
+// changed or removed on its own; what's sent is a setting like any other
+let APPRISE_REPLACING = "";   // the id of the address being changed (the builder's Add it puts the new one in its place)
+// Settings' notifications as they are: each address kept with its buttons, what's sent ticked, and Change...'s note.
 function fillApprise() {
-  const a = SETTINGS.apprise || {}, chosen = new Set(a.events || []);
+  const a = SETTINGS.apprise || {}, chosen = new Set(a.events || []), list = a.addresses || [];
   for (const b of document.querySelectorAll("[data-apprise-event]")) b.checked = chosen.has(b.dataset.appriseEvent);
   $("#appriseKept").textContent = !a.available ? tr("Apprise isn't installed. Run Setup again to install it.")
-    : a.kept ? tr(a.kept === 1 ? "1 address is kept. Type new ones to replace it." : "{0} addresses are kept. Type new ones to replace them.", a.kept)
+    : list.length ? tr(list.length === 1 ? "1 address is kept." : "{0} addresses are kept.", list.length)
     : tr("No addresses yet: nothing is sent.");
-  $("#appriseTest").disabled = $("#appriseForget").hidden = !a.kept;
-  $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
+  $("#appriseList").innerHTML = list.map(x => `<li data-apprise-id="${esc(x.id)}"><b>${esc(tr(x.service))}</b>` +
+    (x.label ? ` <span class="muted" translate="no">${esc(x.label)}</span>` : "") +
+    `<span class="row"><button class="ghost sm" data-apprise-do="test">${esc(tr("Send a test"))}</button>` +
+    `<button class="ghost sm" data-apprise-do="replace">${esc(tr("Change..."))}</button>` +
+    `<button class="ghost sm" data-apprise-do="remove">${esc(tr("Remove"))}</button></span></li>`).join("");
+  $("#appriseTest").disabled = $("#appriseForget").hidden = !list.length;
+  $("#appriseTest").hidden = list.length < 2;   // (one: its own Send a test)
+  $("#appriseEvents").setAttribute("aria-disabled", String(!list.length));
+  const was = list.find(x => x.id === APPRISE_REPLACING);
+  if (!was) APPRISE_REPLACING = "";
+  $("#appriseReplacing").hidden = $("#appriseNoReplace").hidden = !was;
+  if (was) $("#appriseReplacing").textContent = tr("The new address for {0} ({1}): Add it puts it in that one's place.", tr(was.service), was.label || "");
+  $("#appriseAdd").textContent = tr(was ? "Put it in its place" : "Add it");
+}
+// Keep a change to the addresses (add, replace or remove one), then show them as they are now.
+async function appriseChange(body, said) {
+  const r = await apiPost("/api/apprise", body);
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return false; }
+  SETTINGS.apprise = { ...(SETTINGS.apprise || {}), kept: r.data.kept, addresses: r.data.addresses };
+  if (body.action !== "remove" || body.id === APPRISE_REPLACING) APPRISE_REPLACING = "";
+  fillApprise();
+  if (said) toast(said);
+  return true;
 }
 /* Building an Apprise address (issue #239): a service and its fields, made into the address Apprise takes (as its
    documentation has each one: https://appriseit.com/services/), and put in the box with the others. Nothing it builds
@@ -2458,33 +2482,72 @@ const APPRISE_SERVICES = [   // {id, name, doc: its page, fields: [[field, label
 function urlOf(text) {
   try { const u = new URL(String(text).trim()); return /^https?:$/.test(u.protocol) && u.hostname ? u : null; } catch (e) { return null; }
 }
+// The services to choose from, as a select's options.
+const appriseServiceOptions = () => APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
+// A service's fields, and its page in Apprise's documentation (the builder in Settings, and the setup assistant's).
+function appriseFieldsHTML(id) {
+  const sv = APPRISE_SERVICES.find(x => x.id === id) || APPRISE_SERVICES[0];
+  return sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
+    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("") +
+    `<p class="hint"><a href="${APPRISE_DOCS}${sv.doc}/" target="_blank" rel="noopener noreferrer">${esc(tr("{0} in Apprise's documentation", tr(sv.name)))}</a></p>`;
+}
+// The address a service's fields (in box) make, or null.
+function appriseBuilt(id, box) {
+  const sv = APPRISE_SERVICES.find(x => x.id === id);
+  const f = Object.fromEntries([...box.querySelectorAll("[data-apprise-field]")].map(i => [i.dataset.appriseField, i.value.trim()]));
+  return sv ? sv.build(f) || null : null;
+}
 // The builder's fields, for the service chosen.
 function fillAppriseBuilder() {
   const pick = $("#appriseService");
   if (!pick) return;
-  if (!pick.options.length) pick.innerHTML = APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
-  const sv = APPRISE_SERVICES.find(x => x.id === pick.value) || APPRISE_SERVICES[0];
-  $("#appriseFields").innerHTML = sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
-    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("") +
-    `<p class="hint"><a href="${APPRISE_DOCS}${sv.doc}/" target="_blank" rel="noopener noreferrer">${esc(tr("{0} in Apprise's documentation", tr(sv.name)))}</a></p>`;
+  if (!pick.options.length) pick.innerHTML = appriseServiceOptions();
+  $("#appriseFields").innerHTML = appriseFieldsHTML(pick.value);
   $("#appriseBuilt").textContent = "";
 }
-// The address the builder's fields make, or null (and a word on what's missing).
-function buildApprise() {
-  const sv = APPRISE_SERVICES.find(x => x.id === $("#appriseService").value);
-  const f = Object.fromEntries([...document.querySelectorAll("[data-apprise-field]")].map(i => [i.dataset.appriseField, i.value.trim()]));
-  return sv ? sv.build(f) || null : null;
-}
+// The address Settings' builder makes, or null.
+const buildApprise = () => appriseBuilt($("#appriseService").value, $("#appriseFields"));
 document.addEventListener("change", e => { if (e.target.id === "appriseService") fillAppriseBuilder(); });
 document.addEventListener("toggle", e => { if (e.target.id === "appriseBuild" && e.target.open) fillAppriseBuilder(); }, true);
-document.addEventListener("click", e => {
+document.addEventListener("click", async e => {   // the builder's Add it: kept at once, on its own (issue #287)
   if (!e.target.closest("#appriseAdd")) return;
-  const made = buildApprise(), box = $("#setApprise");
+  const made = buildApprise();
   if (!made) { $("#appriseBuilt").textContent = tr("Fill in its fields as the service gives them: that isn't an address yet."); return; }
-  const lines = box.value.split("\n").map(x => x.trim()).filter(Boolean);
-  if (!lines.includes(made)) box.value = [...lines, made].join("\n");
-  for (const i of document.querySelectorAll("[data-apprise-field]")) i.value = "";
-  $("#appriseBuilt").textContent = tr("It's in the box. Keep these addresses to use it.");
+  const replacing = APPRISE_REPLACING;
+  const ok = await appriseChange(replacing ? { action: "replace", id: replacing, urls: made } : { action: "add", urls: made },
+                                 tr(replacing ? "Changed. Send it a test to check it." : "Added. Send it a test to check it."));
+  if (!ok) return;
+  for (const i of $("#appriseFields").querySelectorAll("[data-apprise-field]")) i.value = "";
+  $("#appriseBuilt").textContent = "";
+});
+document.addEventListener("click", e => {   // Change...'s Cancel: the builder adds again
+  if (!e.target.closest("#appriseNoReplace")) return;
+  APPRISE_REPLACING = "";
+  fillApprise();
+});
+document.addEventListener("click", async e => {   // one address's Send a test, Change... or Remove
+  const b = e.target.closest("[data-apprise-do]");
+  if (!b) return;
+  const li = b.closest("[data-apprise-id]"), id = li.dataset.appriseId, x = ((SETTINGS.apprise || {}).addresses || []).find(a => a.id === id) || {};
+  const named = `${tr(x.service || "")}${x.label ? ` (${x.label})` : ""}`;
+  if (b.dataset.appriseDo === "test") {
+    winNote("settingsPanel", tr("Sending a test..."));
+    const r = await apiPost("/api/apprise/test", { id });
+    winNote("settingsPanel", "");
+    toast(r.ok && r.data.ok ? tr("Sent. Check that it came.") : (r.data.error || tr("That can't be done.")));
+  } else if (b.dataset.appriseDo === "remove") {
+    if (!await ask(tr("Remove {0}? Nothing more is sent to it.", named), tr("Remove"))) return;
+    appriseChange({ action: "remove", id }, tr("Removed."));
+  } else {   // Change...: the builder makes the new one, to put in its place
+    APPRISE_REPLACING = id;
+    const svc = { Discord: "discord", Telegram: "telegram", ntfy: "ntfy", Email: "email", Pushover: "pushover", Slack: "slack",
+                  Matrix: "matrix", Gotify: "gotify", Webhook: "webhook" }[x.service];
+    $("#appriseBuild").open = true;
+    if (svc) { $("#appriseService").value = svc; fillAppriseBuilder(); }
+    fillApprise();
+    const first = $("#appriseFields input");
+    if (first) first.focus();
+  }
 });
 // Acknowledgements (issue #227): everything Hoard uses or ships, with its license (/api/credits), read the first time
 // it's opened; a license's text where Hoard has it, in a dialog
@@ -2519,15 +2582,14 @@ async function appriseAct(id) {
     return;
   }
   const forget = id === "appriseForget";
-  // (the box is empty once they're kept, as they're never shown: Keep with nothing typed isn't a way to forget them)
+  // (pasted ones are added to those kept; the box is empty once they are, as they're never shown)
   if (!forget && !$("#setApprise").value.trim()) { toast(tr("Type an address first, one a line.")); $("#setApprise").focus(); return; }
   if (forget && !await ask(tr("Forget the Apprise addresses? Nothing is sent until you add one again."), tr("Forget"))) return;
-  const r = await apiPost("/api/apprise", forget ? { forget: true } : { urls: $("#setApprise").value });
-  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  const ok = await appriseChange(forget ? { forget: true } : { action: "add", urls: $("#setApprise").value });
+  if (!ok) return;
   $("#setApprise").value = "";
-  SETTINGS.apprise = { ...(SETTINGS.apprise || {}), kept: r.data.kept };
-  fillApprise();
-  toast(forget ? tr("Forgotten.") : tr(r.data.kept === 1 ? "Kept 1 address." : "Kept {0} addresses.", r.data.kept));
+  const n = ((SETTINGS.apprise || {}).addresses || []).length;
+  toast(forget ? tr("Forgotten.") : tr(n === 1 ? "Kept 1 address." : "Kept {0} addresses.", n));
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("#appriseSave, #appriseTest, #appriseForget");
