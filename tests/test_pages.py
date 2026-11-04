@@ -170,8 +170,9 @@ class AccessKey(unittest.TestCase):
             page.close()
 
     def test_an_update_is_offered(self):
-        """A newer version from the last check shows in the footer and in Settings; this copy (not the installed
-        app) links to the release instead of offering to install it."""
+        """A newer version from the last check shows in the bar and in Settings; this copy (not the installed app)
+        links to the release instead of offering to install it. With Hoard's links in the Menu (no room for them in
+        the bar), the Menu has it."""
         self.srv.updates.state["latest"] = {"version": "99.0.0", "url": "https://github.com/Soloflighter1010/"
                                             "Hoard-Asset-Manager/releases/tag/v99.0.0", "notes": "", "published": "",
                                             "has_installer": True}
@@ -179,12 +180,19 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(self.srv.cfg.update, check_for_updates=bool(self.srv.cfg.get("check_for_updates")))
         self.srv.cfg["check_for_updates"] = True   # (not whatever another test's settings left in the shared folder)
         page, refused = self.open(self.srv.entry_url())
-        page.get_by_role("button", name="Update to 99.0.0").wait_for()
+        page.set_viewport_size({"width": 1800, "height": 900})   # (room for Hoard's links in the bar)
+        page.locator("#updateNote", has_text="Update to 99.0.0").wait_for()
         page.click("#updateNote")
         page.get_by_text("Hoard 99.0.0 is available").wait_for()
         self.assertTrue(page.locator("#updInstall").is_hidden(), "only the installed app installs it")
         self.assertTrue(page.locator("#updLink").is_visible())
         self.assertTrue(page.locator("#setUpdates").is_checked(), "Settings shows automatic checks as they are")
+        page.evaluate("closeSettings()")
+        page.set_viewport_size({"width": 1000, "height": 900})
+        page.wait_for_function("() => document.querySelector('.bar').dataset.links === 'menu'")
+        page.click("#menuBtn")
+        page.locator("#barMenu [data-update-note]", has_text="Update to 99.0.0").click()
+        page.get_by_text("Hoard 99.0.0 is available").wait_for()
         self.assertEqual(refused, [])
         page.close()
 
@@ -229,7 +237,7 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(st.change, "archived", {rusk}, False)
         goto(page, f"{self.srv.url}downloads")
         page.locator("#views [data-view='archive']").wait_for()
-        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Updates\n0", "Archive\n1", "Disk space\n3 bytes"],
+        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Asset updates\n0", "Archive\n1", "Disk space\n3 bytes"],
                          "Disk space counts what's archived too: it's still on disk")
         self.assertEqual(page.locator("#grid .slot").count(), 0, "not among the other downloads")
         self.assertEqual(page.locator("#creators li").count(), 0, "nor counted under its creator here")
@@ -266,7 +274,7 @@ class AccessKey(unittest.TestCase):
             page.get_by_role("link", name="See the update").wait_for()   # issue #108: beside Show in Downloads
             goto(page, f"{self.srv.url}downloads")
             page.locator("#views [data-view='updates']").wait_for()
-            self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Updates\n1")
+            self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Asset updates\n1")
             page.click("#views [data-view='updates']")
             self.assertIn("1 download has newer files", page.locator("#viewBar").inner_text())
             self.assertIn("Last checked", page.locator("#viewBar").inner_text())
@@ -790,14 +798,14 @@ class AccessKey(unittest.TestCase):
         shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
         self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Stores", "Settings"])
+        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Stores", "Settings"])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
         self.assertEqual(page.locator("#syncBtn").count(), 0)
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
+        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
         page.close()
 
     def test_search_prefixes_in_downloads(self):
@@ -2961,7 +2969,7 @@ class WindowsTabsAndTasks(unittest.TestCase):
           const sides = { pages: [...first.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
                           links: [...end.querySelectorAll('.bar-links > *')].filter(shown).map(e => e.id === 'version' ? 'version' : e.textContent.trim()),
                           menu: getComputedStyle(document.querySelector('.barmenu-links')).display !== 'none'
-                            ? [...document.querySelectorAll('.barmenu-links > *')].map(e => e.textContent.trim()) : [],
+                            ? [...document.querySelectorAll('.barmenu-links > *')].filter(e => !e.hidden).map(e => e.textContent.trim()) : [],
                           tools: [...end.querySelectorAll('.tools button, .tools a')].filter(e => e.getClientRects().length && !e.closest('.barmenu')).map(e => e.id) };
           const order = one ? before.every(p => p.right <= search.left + 1) && after.every(p => p.left >= search.right - 1)
                             : before.concat(after).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);

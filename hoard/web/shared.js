@@ -2122,8 +2122,10 @@ async function showUpdate(u) {
   $("#updCheck").disabled = !!u.busy;
   $("#updLink").hidden = !u.available;
   $("#updLink").href = u.available ? u.latest.url : u.releases_page;
-  const note = $("#updateNote");   // the header's "Update to ..." link, on the Library page
-  if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : ""; }
+  // the bar's "Update to ..." (and the Menu's, when Hoard's links are in the Menu: the bar has no room for them)
+  for (const note of document.querySelectorAll("#updateNote, [data-update-note]")) {
+    note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : "";
+  }
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
 }
