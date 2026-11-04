@@ -263,13 +263,14 @@ function poster(s, root, L) {
   // left, the screen on the right
   const col = el("div", "", root);
   Object.assign(col.style, port ? { position: "absolute", inset: "100px 70px 90px", display: "flex", flexDirection: "column", justifyContent: "space-between" }
-    : { position: "absolute", left: "110px", top: "90px", bottom: "70px", width: "720px", display: "flex", flexDirection: "column", justifyContent: "space-between" });
+    : { position: "absolute", left: "110px", top: "90px", bottom: "150px", width: "720px", display: "flex", flexDirection: "column", justifyContent: "flex-start" });
   const head = el("div", "", col);
   Object.assign(head.style, { display: "flex", alignItems: "center", gap: "26px" });
   const m = el("div", "heapbox", head, V.mark); m.style.width = (port ? 170 : 150) + "px";
   const w = el("div", "heapbox", head, V.word); w.style.width = (port ? 400 : 340) + "px";
   const words = el("div", "cap", col);
   words.style.position = "static";
+  if (!port) words.style.margin = "auto 0";   // (landscape: in the middle of the room under the logo, beside the screen)
   const h = el("h1", "", words, s.title); h.style.fontSize = (port ? (V.lang === "en" ? 84 : 72) : (V.lang === "en" ? 70 : 60)) + "px";
   if (s.body) { const b = el("p", "", words, s.body); b.style.fontSize = (port ? 34 : 28) + "px"; }
   if (s.points) {
