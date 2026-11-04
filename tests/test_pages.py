@@ -346,6 +346,10 @@ class AccessKey(unittest.TestCase):
             page.on("request", lambda r: sent.append(r.url) if r.method == "POST" else None)
             for service, fields, want in APPRISE_BUILT:
                 page.select_option("#appriseService", service)
+                # issue #286: each service's own page in Apprise's documentation
+                doc = page.locator("#appriseFields a")
+                slug = "json" if service == "webhook" else service
+                self.assertEqual(doc.get_attribute("href"), f"https://appriseit.com/services/{slug}/", service)
                 for k, v in fields.items():
                     page.fill(f'[data-apprise-field="{k}"]', v)
                 page.click("#appriseAdd")

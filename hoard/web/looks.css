@@ -91,6 +91,13 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 .pj-d-list li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .pj-d-list .v { flex: none; color: var(--dust); }
 .pj-d-list .pj-up { margin-left: 4px; }
+/* the project opened last (issue #294): marked, and its row or tile a little warmer */
+.pj-last { display: inline-block; width: fit-content; padding: 0 8px; border-radius: 999px; font: 700 11.5px/1.6 var(--body);
+  color: var(--gold-ink); background: var(--gold); white-space: nowrap; }
+.pj-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.pj-row.last { background-color: color-mix(in srgb, var(--gold) 9%, var(--ledge)); }
+.pj-tile.last .pj-tile-art { box-shadow: inset 0 -5px 0 var(--c, var(--seam)), 0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent); }
+.pj-detail .pj-last { margin: 0 0 6px; }
 /* issue #250's tiles, twice as wide as they're tall: a project's tile, and a folder's */
 .pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 16px; }
 .pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
@@ -167,13 +174,11 @@ body.less-motion .pj-tile-art { transition: none; }
    it shows (the sidebar, the footer, a tile's name and creator, a Workbench row) sits on the page's own colour with the
    glow faint through it, never on the glow itself: tests/test_themes.py checks it reads at 4.5:1 over the brightest
    glow, in every theme. (Where there's no glow, it's the page's colour on itself: nothing shows.) A tile's name and
-   creator share one box, the tile's width, under its picture. */
+   creator have no box (issue #284): a drop shadow in the page's colour, close around each letter, does it. */
 .side, .foot, [data-style="workbench"] .grid .slot:not(:hover):not([aria-current="true"]) {
   background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
 html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm, .cr) {
-  padding-inline: 8px; background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
-html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm) { padding-top: 3px; border-radius: 8px 8px 0 0; }
-html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot .cr { margin-top: -7px; padding-block: 1px 4px; border-radius: 0 0 8px 8px; }
+  text-shadow: 0 1px 2px var(--cave), 0 0 3px var(--cave), 0 1px 7px color-mix(in srgb, var(--cave) 85%, transparent); }
 .foot { padding: 18px 18px 20px; border-top: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--seam); }
 
 /* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */

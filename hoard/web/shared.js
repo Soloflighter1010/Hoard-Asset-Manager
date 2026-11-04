@@ -2277,22 +2277,23 @@ function fillApprise() {
   $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
 }
 /* Building an Apprise address (issue #239): a service and its fields, made into the address Apprise takes (as its
-   wiki has each one: https://github.com/caronc/apprise/wiki), and put in the box with the others. Nothing it builds
-   goes anywhere until you keep the addresses, as one typed there. */
-const APPRISE_SERVICES = [   // {id, name, fields: [[field, label, example, "password"?]], build(the fields) -> address or null}
-  { id: "discord", name: "Discord", fields: [["hook", "Webhook URL", "https://discord.com/api/webhooks/..."]],
+   documentation has each one: https://appriseit.com/services/), and put in the box with the others. Nothing it builds
+   goes anywhere until you keep the addresses, as one typed there. Each service links its page there (issue #286). */
+const APPRISE_DOCS = "https://appriseit.com/services/";
+const APPRISE_SERVICES = [   // {id, name, doc: its page, fields: [[field, label, example, "password"?]], build(the fields) -> address or null}
+  { id: "discord", name: "Discord", doc: "discord", fields: [["hook", "Webhook URL", "https://discord.com/api/webhooks/..."]],
     build: f => { const m = f.hook.match(/^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([\w-]+)/);
                   return m && `discord://${m[1]}/${m[2]}`; } },
-  { id: "telegram", name: "Telegram", fields: [["token", "Bot token", "123456:ABC-def..."], ["chat", "Chat ID", "123456789"]],
+  { id: "telegram", name: "Telegram", doc: "telegram", fields: [["token", "Bot token", "123456:ABC-def..."], ["chat", "Chat ID", "123456789"]],
     build: f => /^\d+:[\w-]+$/.test(f.token) && /^(-?\d+|@\w+)$/.test(f.chat) ? `tgram://${f.token}/${f.chat}` : null },
-  { id: "ntfy", name: "ntfy", fields: [["topic", "Topic", "my-hoard"], ["server", "Your own server (empty for ntfy.sh)", "https://ntfy.example.com"]],
+  { id: "ntfy", name: "ntfy", doc: "ntfy", fields: [["topic", "Topic", "my-hoard"], ["server", "Your own server (empty for ntfy.sh)", "https://ntfy.example.com"]],
     build: f => {
       if (!/^[\w-]{1,64}$/.test(f.topic)) return null;
       if (!f.server) return `ntfy://${f.topic}`;
       const u = urlOf(f.server);
       return u && `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}`;
     } },
-  { id: "email", name: "Email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
+  { id: "email", name: "Email", doc: "email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
       ["to", "Send to (empty for yourself)", "me@example.com"], ["smtp", "Mail server (empty to let Apprise find it)", "smtp.example.com"]],
     build: f => {
       const m = f.from.match(/^([^@\s]+)@([^@\s]+\.[^@\s]+)$/);
@@ -2300,20 +2301,20 @@ const APPRISE_SERVICES = [   // {id, name, fields: [[field, label, example, "pas
       const q = [f.to && "to=" + encodeURIComponent(f.to), f.smtp && "smtp=" + encodeURIComponent(f.smtp)].filter(Boolean);
       return `mailtos://${encodeURIComponent(m[1])}:${encodeURIComponent(f.password)}@${m[2]}` + (q.length ? "?" + q.join("&") : "");
     } },
-  { id: "pushover", name: "Pushover", fields: [["user", "User key", ""], ["token", "Application token", ""]],
+  { id: "pushover", name: "Pushover", doc: "pushover", fields: [["user", "User key", ""], ["token", "Application token", ""]],
     build: f => /^\w+$/.test(f.user) && /^\w+$/.test(f.token) ? `pover://${f.user}@${f.token}` : null },
-  { id: "slack", name: "Slack", fields: [["hook", "Webhook URL", "https://hooks.slack.com/services/..."]],
+  { id: "slack", name: "Slack", doc: "slack", fields: [["hook", "Webhook URL", "https://hooks.slack.com/services/..."]],
     build: f => { const m = f.hook.match(/^https:\/\/hooks\.slack\.com\/services\/(\w+)\/(\w+)\/(\w+)/); return m && `slack://${m[1]}/${m[2]}/${m[3]}`; } },
-  { id: "matrix", name: "Matrix", fields: [["server", "Homeserver", "matrix.org"], ["user", "User", "hoard-bot"],
+  { id: "matrix", name: "Matrix", doc: "matrix", fields: [["server", "Homeserver", "matrix.org"], ["user", "User", "hoard-bot"],
       ["password", "Password", "", "password"], ["room", "Room", "#hoard:matrix.org"]],
     build: f => {
       const host = (urlOf(/^https?:/.test(f.server) ? f.server : "https://" + f.server) || {}).host;
       return host && f.user && f.password && /^[#!]\S+:\S+$/.test(f.room)
         ? `matrixs://${encodeURIComponent(f.user)}:${encodeURIComponent(f.password)}@${host}/${encodeURIComponent(f.room)}` : null;
     } },
-  { id: "gotify", name: "Gotify", fields: [["server", "Server", "https://gotify.example.com"], ["token", "Application token", ""]],
+  { id: "gotify", name: "Gotify", doc: "gotify", fields: [["server", "Server", "https://gotify.example.com"], ["token", "Application token", ""]],
     build: f => { const u = urlOf(f.server); return u && /^[\w.-]+$/.test(f.token) ? `${u.protocol === "https:" ? "gotifys" : "gotify"}://${u.host}${u.pathname.replace(/\/$/, "")}/${f.token}` : null; } },
-  { id: "webhook", name: "A webhook (JSON)", fields: [["url", "Its address", "https://example.com/hook"]],
+  { id: "webhook", name: "A webhook (JSON)", doc: "json", fields: [["url", "Its address", "https://example.com/hook"]],
     build: f => {   // (its own ?parameters go to it as they are: Apprise's -name=value)
       const u = urlOf(f.url);
       if (!u) return null;
@@ -2332,7 +2333,8 @@ function fillAppriseBuilder() {
   if (!pick.options.length) pick.innerHTML = APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
   const sv = APPRISE_SERVICES.find(x => x.id === pick.value) || APPRISE_SERVICES[0];
   $("#appriseFields").innerHTML = sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
-    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("");
+    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("") +
+    `<p class="hint"><a href="${APPRISE_DOCS}${sv.doc}/" target="_blank" rel="noopener noreferrer">${esc(tr("{0} in Apprise's documentation", tr(sv.name)))}</a></p>`;
   $("#appriseBuilt").textContent = "";
 }
 // The address the builder's fields make, or null (and a word on what's missing).
@@ -2713,6 +2715,10 @@ const pjChips = p => `<span class="pj-chip k-${pjHue(p.type)}">${esc(pjKind(p.ty
   (p.unity ? ` <span class="pj-chip unity" translate="no">Unity ${esc(p.unity)}</span>` : "");
 // A project's path, for a request's address.
 const pjQ = path => `?path=${encodeURIComponent(path)}`;
+// The project opened last (issue #294): the one with the latest time opened, from Hoard, the Creator Companion or ALCOM.
+const pjLastOpened = () => (PJ.data && PJ.data.projects || []).reduce((a, p) => p.opened && (!a || p.opened > a.opened) ? p : a, null);
+// Its mark: "Last opened", beside its name.
+const pjLastMark = p => p === pjLastOpened() ? `<span class="pj-last">${esc(tr("Last opened"))}</span>` : "";
 // A project's name, by its path (the list's, or the project open).
 const pjNamed = path => ((PJ.data && PJ.data.projects || []).find(x => x.path === path) || PJ.project || {}).name || "";
 function openProjects(open) {   // Projects takes the whole window below the bar, until it's closed
@@ -2827,17 +2833,17 @@ function pjList() {
           `<i class="k-${pjHue(p.type)}">${esc(initials(p.name))}</i>`).join("")}</span></span>` +
         `<span class="nm-t" translate="no">${esc(f)}</span><span class="cr">${esc(tr(n === 1 ? "1 project" : "{0} projects", n))}` +
         `${ups ? ` · ${esc(tr("updates inside"))}` : ""}</span></button>`;
-    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
+    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
         `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}">` +
         `<span class="pj-tile-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></span>` +
-        `<span class="nm-t" translate="no">${esc(p.name)}</span><span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
+        `<span class="nm-t" translate="no">${esc(p.name)}</span>${pjLastMark(p)}<span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
         pjUpdateMarks(p) + `</button>`).join("") + `</div>`;
   } else {   // issue #246: a row says what you need at a glance; choosing it opens its details
-    body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
+    body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
       `data-path="${esc(p.path)}" data-hay="${hay(p)}">` +
       `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
       `<button class="pj-open" data-pj="details" aria-pressed="${PJ.selected === p.path}">` +
-      `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span></span>` +
+      `<span class="pj-main"><span class="pj-name"><b translate="no">${esc(p.name)}</b>${pjLastMark(p)}</span><span class="meta" translate="no">${esc(p.path)}</span></span>` +
       `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
         `${p.exists ? `${pjChips(p)}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
       pjUpdateMarks(p) + `</button></li>`).join("")}</ul>`;
@@ -2873,7 +2879,7 @@ function pjDetail(p) {
   return `<aside class="pj-detail k-${pjHue(p.type)}" data-path="${esc(p.path)}"${rep ? ` data-report="${esc(rep.id)}"` : ""} aria-label="${esc(p.name)}">` +
     `<button class="win-x" data-pj="undetail" aria-label="${esc(tr("Close details"))}">×</button>` +
     `<div class="pj-d-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></div>` +
-    `<h2 class="pj-d-name" translate="no">${esc(p.name)}</h2><p class="pj-d-path" translate="no">${esc(p.path)}</p>` +
+    `<h2 class="pj-d-name" translate="no">${esc(p.name)}</h2>${pjLastMark(p)}<p class="pj-d-path" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-d-kind">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</p>` +
     pjFacts(p) +
     (u.packages ? `<p class="pj-d-new"><button class="linkish pj-up-go" data-pj="manage">${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}</button></p>` : "") +
@@ -3060,9 +3066,9 @@ function pjProject() {
       (updates ? `<div class="row"><button class="ghost sm" data-pj="updateall">${esc(tr(updates === 1 ? "Update {0} package" : "Update {0} packages", updates))}</button></div>` : "") +
       (pk.length ? `<table class="pj-pk">${head}<tbody>${rows}</tbody></table>` : `<p class="none">${esc(tr("No VPM packages in it yet. Add some in Add packages."))}</p>`),
     add: () => pjAddList(p.unity, new Set(pk.map(x => x.name))),
-    library: () => `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
-      (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
-      (pre.length ? pjPutInTiles(pre) : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`),
+    library: () => pre.length ? `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Add Assets"))}</button>` +
+      `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button></div>` + pjPutInTiles(pre)
+      : pjNothingYet(),   // (issue #283: empty, it reads as the Library does)
     report: () => pjReport(p.report) };
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-facts">${pjChips(p)}</p>` +
@@ -3236,7 +3242,7 @@ function pjNew() {
     `<h4>${esc(tr("From your library"))}</h4>` +
     (f.picks.length ? `<ul class="pj-pre">${f.picks.map((x, i) => `<li><b translate="no">${esc(x.product || "")}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span> ` +
       `<button class="linkish" data-pj="unpick" data-i="${i}">${esc(tr("Leave out"))}</button></li>`).join("")}</ul>` : `<p class="none">${esc(tr("Nothing yet."))}</p>`) +
-    `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
+    `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Add Assets"))}</button>` +
     `<button class="ghost sm" data-pj="addset">${esc(tr("Put in a set"))}</button></div>` +
     `<div class="row pj-go"><button class="ghost sm" data-pj="savepreset">${esc(tr("Save as a preset"))}</button>` +
     (f.preset ? `<button class="ghost sm" data-pj="exportpreset">${esc(tr("Save it for ALCOM too"))}</button><button class="ghost sm" data-pj="delpreset">${esc(tr("Delete the preset"))}</button>` : "") +
@@ -3499,7 +3505,12 @@ async function pjProductContents(key) {
   if (!r.ok) { toast(data.error || tr("That product couldn't be read.")); return null; }
   return data;
 }
-// ---- Put in products from your library (a project's From your library, and New project's): the Downloads page, in
+// A project's From your library, with nothing put in from Hoard yet: as the Library reads with nothing to show (issue #283),
+// a heading in the middle, what goes there, and Add Assets.
+const pjNothingYet = () => `<div class="empty pj-empty"><h2>${esc(tr("Nothing from your library in it yet"))}</h2>` +
+  `<p>${esc(tr("Add assets you've downloaded, and Hoard puts them in the project, with the packages they need."))}</p>` +
+  `<button class="primary" data-pj="addprod">${esc(tr("Add Assets"))}</button></div>`;
+// ---- Add Assets (a project's From your library, and New project's; issue #282): the Downloads page, in
 // Select mode for that project, with nothing to do there but Add to project or Cancel. What's chosen goes in as Put in a
 // project... puts it; both go back to the project. From the Library page it's Downloads that opens (sessionStorage
 // carries what it's for, and a new project's form as far as it's filled in).

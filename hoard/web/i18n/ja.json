@@ -1512,8 +1512,6 @@
  "Update {0} packages": "{0}個のパッケージをアップデート",
  "No VPM packages in it yet.": "まだVPMパッケージは入っていません。",
  "From your library": "ライブラリから",
- "Put in products from your library": "ライブラリの商品を入れる",
- "Nothing from your library has been put in from Hoard yet.": "まだHoardからライブラリのものは入れていません。",
  "What Hoard for Unity found in it": "Hoard for Unityが見つけたもの",
  "Start from a preset": "プリセットから始める",
  "None": "なし",
@@ -2239,5 +2237,10 @@
  "(and 1 moved to another drive)": "(ほかに別のドライブへ移したものが1件)",
  "(and {0} moved to another drive)": "(ほかに別のドライブへ移したものが{0}件)",
  "See backups": "バックアップを見る",
- "Name the new folder": "新しいフォルダーの名前"
+ "Name the new folder": "新しいフォルダーの名前",
+ "Add Assets": "アセットを追加",
+ "Nothing from your library in it yet": "ライブラリからはまだ何も入っていません",
+ "Add assets you've downloaded, and Hoard puts them in the project, with the packages they need.": "ダウンロードしたアセットを追加すると、必要なパッケージと一緒にHoardがプロジェクトに入れます。",
+ "Last opened": "最後に開いた",
+ "{0} in Apprise's documentation": "Appriseのドキュメントの{0}"
 }

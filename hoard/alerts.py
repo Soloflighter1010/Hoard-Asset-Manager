@@ -1,5 +1,5 @@
 """Notifications through Apprise (issue #230): the news you choose, sent to the services you give Hoard Apprise
-addresses for (Discord, Telegram, ntfy, email and many more: https://github.com/caronc/apprise/wiki).
+addresses for (Discord, Telegram, ntfy, email and many more: https://appriseit.com/services/).
 
 What can be sent (EVENTS), each only when you tick it in Settings:
 - new: the routine check found new products to download

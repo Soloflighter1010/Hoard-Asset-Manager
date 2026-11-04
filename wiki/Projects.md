@@ -12,8 +12,8 @@ ALCOM or the Creator Companion installed: it chooses the same package versions, 
 
 ## The list
 
-Each project shows its kind (avatars or worlds), its Unity version, and when you last opened it. **★** makes it a
-favourite, at the top of the list. From 5.2.0 beta 2, a project also shows what's new for it, two ways apart: how many
+Each project shows its kind (avatars or worlds), its Unity version, and when you last opened it; the one you opened
+last is marked **Last opened**. **★** makes it a favourite, at the top of the list. From 5.2.0 beta 2, a project also shows what's new for it, two ways apart: how many
 of its packages have newer versions (outlined), and how many products from your library in it have updates (filled,
 from what [Hoard for Unity](Hoard-for-Unity) reported of it).
 
@@ -64,7 +64,7 @@ name, one already there).
 got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
 that works in the project's Unity, in groups by the repository it comes from (VRChat's own first, your package folders
 last; each folds away, and what you find opens its group), to tick (with a version, if you'd rather not have the newest), then **Add the
-chosen packages**. **Put in products from your library** opens Downloads in **Select** mode, for this project: tick
+chosen packages**. **Add Assets** opens Downloads in **Select** mode, for this project: tick
 the products you want, then **Add to project**, and you're back at the new project as you left it, with them in
 (**Cancel** goes back without them). A product with several packages (one for PC, one for Quest, a few variants)
 asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
@@ -112,7 +112,7 @@ what it found. From there:
   version that works in the project's Unity, newest first, and install any of them, an older one too. The packages
   it needs change to match. **Add packages** can choose a version as well, instead of the newest.
 - **Put it right**, when the project's packages aren't installed the way it says (after cloning it from Git, say).
-- **Put in products from your library**, later: Downloads opens in **Select** mode for this project, with nothing to
+- **Add Assets**, later: Downloads opens in **Select** mode for this project, with nothing to
   do there but **Add to project** or **Cancel**. What's chosen is shown before it goes in, with what it needs.
   Nothing already in the project is replaced: a file that's there (with the same asset ID, or at the same path) is
   left as it is. **From your library** shows what Hoard has put in the project, each product as its library tile, with

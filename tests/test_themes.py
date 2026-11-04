@@ -75,8 +75,10 @@ class EveryTheme(unittest.TestCase):
         dark, light = map(int, re.search(r"const strength = light \? (\d+) : (\d+);", (root / "shared.js").read_text("utf-8")).groups()[::-1])
         looks = (root / "looks.css").read_text("utf-8")
         backdrop = int(re.search(r"\.side, \.foot, [^{]+\{\s*background-color: color-mix\(in srgb, var\(--cave\) (\d+)%", looks).group(1)) / 100
-        self.assertIn(f"var(--cave) {round(backdrop * 100)}%", looks.split(".slot :is(.nm-t, .nm, .cr)")[1].split("}")[0],
-                      "tiles' names on the same")
+        tiles = looks.split(".slot :is(.nm-t, .nm, .cr)")[1].split("}")[0]
+        self.assertIn(f"var(--cave) {round(backdrop * 100)}%", tiles, "tiles' names on the same")
+        self.assertIn("text-shadow", tiles, "issue #284: a drop shadow, not a box")
+        self.assertNotIn("background", tiles)
 
         def mix(base, top, a):
             return "#" + "".join(f"{round(b * (1 - a) + t * a):02X}" for b, t in zip(_rgb(base), _rgb(top)))

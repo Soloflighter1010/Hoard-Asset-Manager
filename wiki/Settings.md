@@ -59,7 +59,7 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   **Tell me when it finds something to download** (on unless you turn it off, from 3.1) shows a notification from
   your system when it finds new products or updates while Hoard is open in the background.
 - **Notifications through Apprise** (5.2.0): send the news you choose to Discord, Telegram, ntfy, email and
-  [many more](https://github.com/caronc/apprise/wiki), through Apprise. Type an address for each service, one a
+  [many more](https://appriseit.com/services/), through Apprise. Type an address for each service, one a
   line, or **Build an address** (5.2.0 beta 2): choose the service (Discord, Telegram, ntfy, email, Pushover, Slack,
   Matrix, Gotify or a webhook), fill in what it gives you, and **Put it in the box**. Then **Keep these addresses**,
   and **Send a test** to check it comes. Each address holds its service's

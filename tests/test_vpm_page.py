@@ -100,6 +100,21 @@ class ProjectsPanel(unittest.TestCase):
         self.assertIn("The folder isn't there", rows.nth(1).inner_text(), "a project whose folder has gone")
         self.assertIn("Opened in Unity with Hoard, not on the list", page.locator("#projectsBody").inner_text())
         self.assertIn("1 asset from Hoard", rows.nth(2).inner_text())
+        # issue #294: the project opened last is marked, on its row and in its details (none before one's opened)
+        self.assertEqual(page.locator(".pj-last").count(), 0)
+        from hoard.vpm import listing
+        listing.note(str(self.tmp / "Unity" / "Old World"), opened="2026-10-01T10:00:00+00:00")
+        listing.note(str(self.tmp / "Unity" / "Rusk Avatar"), opened="2026-10-30T10:00:00+00:00")
+        page.evaluate("loadProjects()")
+        page.locator(".pj-row.last").wait_for()
+        last = page.evaluate("pjLastOpened().name")
+        self.assertEqual(last, "Rusk Avatar")
+        self.assertEqual(page.locator(".pj-row.last").count(), 1)
+        self.assertEqual(page.locator(".pj-row.last .pj-name b").inner_text(), last)
+        self.assertEqual(page.locator(".pj-row.last .pj-last").inner_text(), "Last opened")
+        self.assertEqual(page.locator(".pj-row:not(.last) .pj-last").count(), 0)
+        self.assertEqual(pj_details(page, last).locator(".pj-last").inner_text(), "Last opened")
+        page.locator("[data-pj=undetail]").click()
         page.fill("#pjFind", "mochi")
         self.assertEqual(page.locator("#projectsBody .pj-row:visible").count(), 1)
         page.fill("#pjFind", "")
@@ -490,6 +505,7 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => document.querySelector('#pjNameNote').textContent.includes(\"can't be used\")")
         # a product from the library: chosen in Downloads (from the Library page, it goes there), then back to the
         # new project as it was, with it in
+        self.assertEqual(page.locator("[data-pj=addprod]").inner_text(), "Add Assets")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")
         page.locator("#bulk [data-main]", has_text="Add to project").wait_for()
@@ -528,13 +544,18 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.input_value("#pjName"), "CON", "what was typed is kept")
 
     def test_put_in_products_from_your_library(self):
-        """A project's Put in products from your library opens Downloads (from the Library page, it goes there) in
-        Select mode for that project, where all there is to do is Add to project or Cancel; both go back to it."""
+        """A project's Add Assets (issue #282) opens Downloads (from the Library page, it goes there) in Select mode for
+        that project, where all there is to do is Add to project or Cancel; both go back to it. With nothing in it
+        yet, its tab reads as an empty Library does (issue #283)."""
         page = self.page
         ran = []
         self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
         pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
         page.click("[data-pj=sub][data-sub=library]")
+        empty = page.locator("#projectsWin .pj-empty")
+        self.assertEqual(empty.locator("h2").inner_text(), "Nothing from your library in it yet")
+        self.assertIn("Hoard puts them in the project", empty.inner_text())
+        self.assertEqual(empty.locator("button.primary").inner_text(), "Add Assets")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")
         bar = page.locator("#bulk")

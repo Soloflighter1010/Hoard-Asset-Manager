@@ -1512,8 +1512,6 @@
  "Update {0} packages": "패키지 {0}개 업데이트",
  "No VPM packages in it yet.": "아직 VPM 패키지가 없어요.",
  "From your library": "라이브러리에서",
- "Put in products from your library": "라이브러리의 상품 넣기",
- "Nothing from your library has been put in from Hoard yet.": "아직 Hoard에서 라이브러리의 것을 넣지 않았어요.",
  "What Hoard for Unity found in it": "Hoard for Unity가 찾은 것",
  "Start from a preset": "프리셋에서 시작",
  "None": "없음",
@@ -2239,5 +2237,10 @@
  "(and 1 moved to another drive)": "(그리고 다른 드라이브로 옮긴 것 1개)",
  "(and {0} moved to another drive)": "(그리고 다른 드라이브로 옮긴 것 {0}개)",
  "See backups": "백업 보기",
- "Name the new folder": "새 폴더 이름"
+ "Name the new folder": "새 폴더 이름",
+ "Add Assets": "에셋 추가",
+ "Nothing from your library in it yet": "아직 라이브러리에서 넣은 것이 없어요",
+ "Add assets you've downloaded, and Hoard puts them in the project, with the packages they need.": "다운로드한 에셋을 추가하면 Hoard가 필요한 패키지와 함께 프로젝트에 넣어요.",
+ "Last opened": "마지막으로 연 것",
+ "{0} in Apprise's documentation": "Apprise 문서의 {0}"
 }
