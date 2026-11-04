@@ -2262,5 +2262,9 @@
  "Make a set with these": "これでセットを作る",
  "Add to a set...": "セットに追加...",
  "Move into {0}": "{0}に移動",
- "Make a folder with these": "これでフォルダーを作る"
+ "Make a folder with these": "これでフォルダーを作る",
+ "none yet": "まだありません",
+ "More for this set": "このセットのそのほかの操作",
+ "More for this wishlist": "このほしい物リストのそのほかの操作",
+ "Find more, and narrow the list": "さらに探す、一覧を絞り込む"
 }

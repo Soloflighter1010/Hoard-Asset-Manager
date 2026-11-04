@@ -2262,5 +2262,9 @@
  "Make a set with these": "이것들로 세트 만들기",
  "Add to a set...": "세트에 추가...",
  "Move into {0}": "{0}(으)로 옮기기",
- "Make a folder with these": "이것들로 폴더 만들기"
+ "Make a folder with these": "이것들로 폴더 만들기",
+ "none yet": "아직 없어요",
+ "More for this set": "이 세트의 다른 작업",
+ "More for this wishlist": "이 위시리스트의 다른 작업",
+ "Find more, and narrow the list": "더 찾기, 목록 좁히기"
 }

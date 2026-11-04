@@ -4435,7 +4435,7 @@ const SET_ACTIONS = () => ({ name: "Sets", items: [
   ...((DATA.sets || []).length > SETS_IN_MENU ? [{ label: "Add to another set...", run: addToAnotherSet }] : [])] });
 
 let SETS = null;   // the sets as /api/sets has them, each product as it is here (downloaded, yours, or where to buy it)
-let setExtraOpen = true, setViewShown = "", setMoreShown = "", setKeysFor = null, setKeys = new Set();
+let setExtraOpen = null, setExtraDrawnOpen = null, setViewShown = "", setMoreShown = "", setKeysFor = null, setKeys = new Set();
 // Whether Sets and Wishlists is showing.
 const inSets = () => state.store === "Sets";
 function setHas(a) {   // the open set has this product (by the key tags use); a wishlist's are in its own groups
@@ -4557,23 +4557,42 @@ function wishFindHTML() {
 }
 // An open set's heading: where you are, its counts and its buttons.
 function setHead(s) {
-  const c = setCounts(s);
+  const c = setCounts(s), saved = !!(s.note || s.photos.length), editing = !!(SETEDIT && SETEDIT.id === s.id);
+  const open = editing || (setExtraOpen ?? saved);   // (issue #272: folded away while there's nothing in it)
+  setExtraDrawnOpen = open;
+  // the rest of what's done with it, gathered together and quieter than Share (issue #272)
+  const quiet = [
+    isWish(s) && `<button class="linkish" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>`,   // (a set: from your library, #208)
+    setDownloaded(s).length && `<button class="linkish" data-setx="project">${esc(tr("New project with this set..."))}</button>`,
+    c.owned && `<button class="linkish" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>`,
+    `<button class="linkish" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>`,
+    s.cover && `<button class="linkish" data-setx="unpicture">${esc(tr("Take the picture off"))}</button>`,
+    `<button class="linkish" data-setx="rename">${esc(tr("Rename"))}</button>`,
+    `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
     `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
       (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +
         `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
-      (s.note ? `<p class="setnote" translate="no">${esc(s.note)}</p>` : "") +
-      `<div class="row"><button class="primary sm" data-setx="share">Share...</button>` +
-      (isWish(s) ? `<button class="ghost sm" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>` : "") +   // (a set: from your library, #208)
-      (setDownloaded(s).length ? `<button class="ghost sm" data-setx="project">${esc(tr("New project with this set..."))}</button>` : "") +
-      (c.owned ? `<button class="ghost sm" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>` : "") +
-      `<button class="ghost sm" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>` +
-      (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
-      `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div>` +
-      (isWish(s) ? wishFindHTML() : "") + `</div></div>` +
-    `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>${setExtraHTML(s)}</details>`;
+      `<div class="set-main"><button class="primary" data-setx="share">${esc(tr("Share..."))}</button></div>` +
+      `<div class="set-quiet" role="group" aria-label="${esc(tr(isWish(s) ? "More for this wishlist" : "More for this set"))}">${quiet.join("")}</div>` +
+    `</div></div>` +
+    `<details class="setextra card"${open ? " open" : ""}><summary>${esc(tr("Note and photos"))}` +
+      (saved ? "" : `<span class="setextra-none">${esc(tr("none yet"))}</span>`) + `</summary>${setExtraHTML(s)}</details>` +
+    (isWish(s) ? `<section class="set-tools card" aria-label="${esc(tr("Find more, and narrow the list"))}">${wishFindHTML()}${wishBar(s)}</section>` : "");
+}
+// What's typed in a wishlist's tools, put back once they're drawn again: they're drawn without it, so that typing in
+// them never makes the page draw them again.
+function wishToolsNow() {
+  for (const x of document.querySelectorAll("#setView input[data-wish]")) x.value = WISH[x.dataset.wish] || "";
+  const clear = $('#setView [data-setx="wclear"]');
+  if (clear) clear.hidden = !(WISH.min || WISH.max);
+  const find = $("#setView [data-wishfind]");
+  if (find) {
+    find.value = WISH.find || "";
+    for (const a of document.querySelectorAll("#setView [data-findon]")) a.href = storeSearch(a.dataset.findon, find.value);
+  }
 }
 /* A set's note and photos (issue #256): once saved, shown as they're shared, and changed only after Edit, which opens
    the note's box and the photos' × with Save and Cancel; nothing's sent until Save. With none saved yet, it's open
@@ -4606,7 +4625,7 @@ document.addEventListener("input", e => { if (e.target.matches("#setView [data-s
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
 // Downloads); in Downloads, ones not downloaded. Each says where it is, or where to buy it.
 function setMoreHTML(s) {
-  if (isWish(s)) return wishBar(s) + `<div id="wishGroups">${wishGroups(s)}</div>`;
+  if (isWish(s)) return `<div id="wishGroups">${wishGroups(s)}</div>`;   // (its tools: above, with its head)
   const here = new Set(T.all().map(a => a.tag_key)), words = norm(state.q).split(/\s+/).filter(Boolean);
   const rest = s.items.filter(i => !here.has(i.key) && words.every(w => norm([i.name, i.creator, i.store].join(" ")).includes(w)));
   const groups = [[tr("In your library, not downloaded"), rest.filter(i => i.owned)], [tr("Not yours yet"), rest.filter(i => !i.owned && !i.local)],
@@ -4618,7 +4637,7 @@ function setMoreHTML(s) {
 // A wishlist open: its products in two groups that fold away, what isn't yours yet and what is, in the page's sort,
 // narrowed by the filters beside it (its suggested tags, words its products' names share, your tags on the ones you
 // have, and its creators), the search and a price range above it, in one of its currencies
-const WISH = { set: "", cur: "", min: "", max: "" };
+const WISH = { set: "", cur: "", min: "", max: "", find: "" };
 // The wishlist open, or null.
 const openWish = () => { const s = inSets() && state.set && SETS && !SETS.error ? SETS.sets.find(x => x.id === state.set) : null; return s && isWish(s) ? s : null; };
 let wishScoped;   // the wishlist the filters were last for ("" none, undefined not known yet)
@@ -4626,7 +4645,7 @@ function wishScope() {   // into a wishlist or out of one, the tags and creator 
   if (inSets() && state.set && !SETS) return false;   // (not read yet: once it is, it's where the page was opened)
   const w = openWish(), id = w ? w.id : "";
   // its price range too, before anything of it is counted: another list's would empty its filters (issue #180)
-  if (w && WISH.set !== id) Object.assign(WISH, { set: id, cur: "", min: "", max: "" });
+  if (w && WISH.set !== id) Object.assign(WISH, { set: id, cur: "", min: "", max: "", find: "" });
   const changed = wishScoped !== undefined && id !== wishScoped && !!(id || wishScoped);
   if (changed) { state.tags.clear(); state.creator = ""; }
   wishScoped = id;
@@ -4673,17 +4692,17 @@ function wishFits(i, words, skip) {
 }
 // A wishlist's price filter: a currency, and the lowest and highest price.
 function wishBar(s) {
-  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, cur: "", min: "", max: "" });
+  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, cur: "", min: "", max: "", find: "" });
   const curs = wishCurrencies(s);
   if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
   // A price field.
-  const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" value="${esc(WISH[k])}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
+  const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
   return !curs.length ? "" : `<div class="wishbar">` +
     (`<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
       num("min", tr("From"), tr("Lowest price")) + `<span aria-hidden="true">–</span>` + num("max", tr("To"), tr("Highest price")) +
       (curs.length > 1 ? `<select data-wish="cur" aria-label="${esc(tr("Currency"))}">${curs.map(c => `<option value="${esc(c)}"${c === WISH.cur ? " selected" : ""} translate="no">${esc(c)}</option>`).join("")}</select>`
         : `<span translate="no">${esc(curs[0])}</span>`) +
-      `<button class="linkish" data-setx="wclear"${WISH.min || WISH.max ? "" : " hidden"}>${esc(tr("Clear"))}</button></div>`) + `</div>`;
+      `<button class="linkish" data-setx="wclear" hidden>${esc(tr("Clear"))}</button></div>`) + `</div>`;
 }
 // A wishlist's products in groups: to buy, owned and downloaded, each folded open or closed.
 function wishGroups(s) {
@@ -4703,7 +4722,7 @@ function wishChanged() {   // the price range changed: the groups and filters ag
   box.innerHTML = wishGroups(s);
   setMoreShown = null;   // (drawn again whole next time, or emptied: "" is what the list of sets has there)
   T.facets();
-  const clear = $('#setMore [data-setx="wclear"]');
+  const clear = $('#setView [data-setx="wclear"]');
   if (clear) clear.hidden = !(WISH.min || WISH.max);
 }
 // A product's page on a site that isn't one of the stores (a Jinxxy list can send you to one): plain https on a
@@ -4748,7 +4767,7 @@ function drawSets() {
     head = !SETS || (state.set && !s) ? `<p class="none">${esc(tr("Reading your sets..."))}</p>` : s ? setHead(s) : setsRoot();
     rest = s ? setMoreHTML(s) : "";
   }
-  if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; }
+  if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; wishToolsNow(); }
   if (rest !== setMoreShown) { more.innerHTML = rest; setMoreShown = rest; }
 }
 // How many sets you have, in words.
@@ -4989,7 +5008,7 @@ async function setAct(e) {
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
   if (act === "wclear") {   // a wishlist's price range
     Object.assign(WISH, { min: "", max: "" });
-    for (const x of document.querySelectorAll("#setMore input[data-wish]")) x.value = "";
+    for (const x of document.querySelectorAll("#setView input[data-wish]")) x.value = "";
     return wishChanged();
   }
   if (act === "addlinks") return addByLinks(s);
@@ -5113,9 +5132,12 @@ function wireSets() {
       e.target.outerHTML = tile && !e.target.closest(".collage") ? setPlaceholder((tile.querySelector(".nm-t, h2") || {}).textContent || "?") : "";
     }, true);
   }
-  $("#setView").addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.setextra")) setExtraOpen = e.target.open; }, true);
+  $("#setView").addEventListener("toggle", e => {   // (folded or opened by you, not as it was drawn: kept for the next set)
+    if (e.target.matches && e.target.matches("details.setextra") && e.target.open !== setExtraDrawnOpen) setExtraOpen = setExtraDrawnOpen = e.target.open;
+  }, true);
   $("#setView").addEventListener("input", e => {   // a wishlist's Find more to add: each site's search, with your words
     if (!e.target.matches("[data-wishfind]")) return;
+    WISH.find = e.target.value;
     for (const a of document.querySelectorAll("#setView [data-findon]")) a.href = storeSearch(a.dataset.findon, e.target.value);
   });
   $("#setView").addEventListener("keydown", e => {   // Enter: Nexyy, which searches them all
@@ -5126,7 +5148,7 @@ function wireSets() {
     if (!d.matches || !d.matches("details.wishgroup") || ((UI.sections || {})[d.dataset.fold] !== false) === d.open) return;
     uiSave({ sections: { [d.dataset.fold]: d.open } });
   }, true);
-  $("#setMore").addEventListener("input", e => {   // a wishlist's price range
+  $("#setView").addEventListener("input", e => {   // a wishlist's price range (with its other tools, issue #272)
     const k = e.target.dataset && e.target.dataset.wish;
     if (!k) return;
     WISH[k] = e.target.value.trim();
