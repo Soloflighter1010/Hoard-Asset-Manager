@@ -2249,7 +2249,7 @@ function showDetail(a, focus = true) {
   unwrap(a);   // (a gift, opened for the first time)
   markCurrent(`.slot[data-key="${CSS.escape(a.key)}"]`);
   const by = storeUrl(a.store, a.creator_url) ? `<a href="${esc(storeUrl(a.store, a.creator_url))}" target="_blank" rel="noopener noreferrer">${esc(a.creator)}</a>` : esc(a.creator);
-  const extra = [a.variants && esc(a.variants), a.gift && tr("gift"), a.archived && tr("archived on Gumroad")].filter(Boolean).join(", ");
+  const extra = [a.variants && esc(a.variants), a.gift && esc(a.gift_from ? tr("a gift from {0}", a.gift_from) : tr("gift")), a.archived && tr("archived on Gumroad")].filter(Boolean).join(", ");
   const store = label(a.store);
   // issue #108: one thing to do, in gold (download it, or see it in Downloads); the store's own pages, which open in
   // your browser, beside it and named for the store; archiving and the like under their own heading

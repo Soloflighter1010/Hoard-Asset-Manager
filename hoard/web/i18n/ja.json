@@ -2242,5 +2242,6 @@
  "Nothing from your library in it yet": "ライブラリからはまだ何も入っていません",
  "Add assets you've downloaded, and Hoard puts them in the project, with the packages they need.": "ダウンロードしたアセットを追加すると、必要なパッケージと一緒にHoardがプロジェクトに入れます。",
  "Last opened": "最後に開いた",
- "{0} in Apprise's documentation": "Appriseのドキュメントの{0}"
+ "{0} in Apprise's documentation": "Appriseのドキュメントの{0}",
+ "a gift from {0}": "{0}からのギフト"
 }

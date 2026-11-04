@@ -81,9 +81,13 @@ person to sign in on this computer never sees what you bought. Your downloaded f
 
 - Hoard reads your inventory, then downloads each file by clicking its download button in the browser,
   because that's the only way Jinxxy hands files out.
-- Your inventory only links each product's creator, so a refresh also opens each item's own page once, to find
-  the product's public page (what a [set you share](Sets#sharing-a-set) links to). A page it found is kept, so
-  only new items are opened later, at most 150 in one refresh, with the usual pause between pages.
+- Each product's public page (what a [set you share](Sets#sharing-a-set) links to) comes from what your inventory
+  page loads about each item as it shows it, so a refresh no longer opens each item's own page (5.2.0 beta 4).
+  Only an item that data leaves out is opened, once, at most 150 in one refresh, with the usual pause between
+  pages; a page it found is kept.
+- **Gifts:** a refresh also reads your inventory's **Gifts** tab. A gift is marked as one in your library (wrapped
+  until you first open it), its details say who sent it, and a gift that's only on the Gifts tab is added too
+  (5.2.0 beta 4). A page saved from the Gifts tab can be imported as well.
 - Jinxxy shows its own banner where a product has no picture. Hoard doesn't keep that banner as the
   product's picture.
 - Hoard never sends Jinxxy more than 120 requests a minute, the limit Jinxxy's API sets for creators: the requests

@@ -2242,5 +2242,6 @@
  "Nothing from your library in it yet": "아직 라이브러리에서 넣은 것이 없어요",
  "Add assets you've downloaded, and Hoard puts them in the project, with the packages they need.": "다운로드한 에셋을 추가하면 Hoard가 필요한 패키지와 함께 프로젝트에 넣어요.",
  "Last opened": "마지막으로 연 것",
- "{0} in Apprise's documentation": "Apprise 문서의 {0}"
+ "{0} in Apprise's documentation": "Apprise 문서의 {0}",
+ "a gift from {0}": "{0} 님이 보낸 선물"
 }

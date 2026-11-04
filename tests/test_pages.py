@@ -635,8 +635,9 @@ class AccessKey(unittest.TestCase):
         it's remembered (Hoard's config, by its key: never its name)."""
         from unittest import mock
         item = self.srv.lib.data["items"][0]
-        item["gift"] = True
+        item["gift"], item["gift_from"] = True, "Puzzle Cat"
         self.addCleanup(item.update, gift=False)
+        self.addCleanup(item.pop, "gift_from", None)
         self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("unwrapped", None))
         with mock.patch.object(server, "save_config"):
             page, refused = self.open(self.srv.entry_url())
@@ -648,6 +649,7 @@ class AccessKey(unittest.TestCase):
             self.assertIn("repeating-linear-gradient", paper)
             tile.click()
             page.locator("#detail.open").wait_for()
+            self.assertIn("a gift from Puzzle Cat", page.locator("#detail").inner_text(), "issue #276: who sent it")
             self.assertNotIn(" wrapped", tile.get_attribute("class"))
             page.evaluate("uiFlush()")
             page.wait_for_function("() => !uiPending")
