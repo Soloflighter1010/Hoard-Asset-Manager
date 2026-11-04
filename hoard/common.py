@@ -57,6 +57,18 @@ def stoppable(stop: threading.Event):
             del _stops[lane]
 
 
+# A quick refresh (issue #300) reads only the start of each library and list: its first QUICK_PAGES pages, or its first
+# QUICK_ITEMS products, whichever comes first. The readers learn of it from their settings' "_quick" (a refresh's own
+# copy, never saved); what they don't reach is kept as it was.
+QUICK_PAGES, QUICK_ITEMS = 2, 50
+
+
+def quick_done(cfg: dict, pages: int, found: int) -> bool:
+    """Has a quick refresh read enough of one library or list (pages of it read, found products in it)? Never, in a
+    full one."""
+    return bool(cfg.get("_quick")) and (pages >= QUICK_PAGES or found >= QUICK_ITEMS)
+
+
 def pause(seconds: float) -> None:
     """Wait seconds, as time.sleep does: between a store's pages, before trying a download again. In a running job's
     own thread, Stop or Force stop chosen meanwhile ends the job straight away (raising Cancelled, as a progress

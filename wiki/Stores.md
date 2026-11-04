@@ -18,6 +18,13 @@ Each store you use has a row:
 At the top, **Refresh all stores** and **Download everything new** do every store at once. **Sync** (top
 right in the Library, outside the panel) does both in one go: it reads what you own, then downloads anything new.
 
+**Quick refresh** (5.2.0 beta 4) looks for what's new without reading every page. It reads only the start of each
+library: the first 2 pages, or the first 50 products, whichever is fewer. Each listing counts on its own, such as
+Booth's gifts, each Payhip shop or Jinxxy's Gifts tab. Then it reads the start of the wishlists you keep from those
+stores the same way. A store whose wishlists you've never read isn't started on. What it doesn't reach stays as it
+was, so it never takes a product out of your library or a wishlist: only **Refresh** does that, when a product is
+gone from the store. It's a task of its own in Tasks, **Quick refresh**.
+
 Hoard only shows and reads the stores you use. Switch stores on or off in [Settings](Settings).
 
 ## Signing in

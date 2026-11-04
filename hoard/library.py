@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
 from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check, has_password_field, hops_text, settle
-from .common import NotLoggedIn, log, now_iso, pause
+from .common import QUICK_ITEMS, NotLoggedIn, log, now_iso, pause, quick_done
 from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, is_video_address, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
@@ -112,20 +112,25 @@ def script_tags(text: str):
         start = text.find("<script", close + len("</script>"))
 
 
-def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None):
+def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None, cfg: dict | None = None):
     """Every purchase card in your Gumroad library, page by page (and the archived ones, when wanted). read_props
     gets a page's query (page, sort, archived) and returns that page's props; on_page(archived, page, pages) is
-    told as each is read. Listing the library and downloading both read it this way."""
+    told as each is read. Listing the library and downloading both read it this way. A quick refresh's cfg (issue
+    #300): only the start of each, the newest purchases."""
+    quick = bool((cfg or {}).get("_quick"))
     for archived in ([False, True] if include_archived else [False]):
-        page_no = 1
+        page_no, given = 1, 0
         while True:
             params = {"page": page_no, "sort": "purchase_date"} | ({"show_archived_only": "true"} if archived else {})
             props = read_props(params) or {}
-            yield from props.get("results") or []
+            cards = props.get("results") or []
+            cards = cards[:max(0, QUICK_ITEMS - given)] if quick else cards
+            given += len(cards)
+            yield from cards
             pages = (props.get("pagination") or {}).get("pages") or 1
             if on_page:
                 on_page(archived, page_no, pages)
-            if page_no >= pages:
+            if page_no >= pages or quick_done(cfg or {}, page_no, given):
                 break
             page_no += 1
             pause(delay)
@@ -174,7 +179,7 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         """Say which page of the library is being read."""
         progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
     for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
-                              float(cfg.get("request_delay", 0.8)), on_page):
+                              float(cfg.get("request_delay", 0.8)), on_page, cfg):
         prod, pur = card.get("product") or {}, card.get("purchase") or {}
         creator = prod.get("creator") or {}
         variants = (pur.get("variants") or "").strip() or None
@@ -268,8 +273,9 @@ def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[
     cards: dict[str, tuple[dict, bool, str]] = {}
     sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
         + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
+    quick = bool(cfg.get("_quick"))   # (a quick refresh, issue #300: the start of each)
     for path, gift in sources:
-        base = f"https://accounts.booth.pm/library{path}"
+        base, here = f"https://accounts.booth.pm/library{path}", 0
         for page_no in range(1, 500):
             goto(page, f"{base}?page={page_no}")
             page.wait_for_timeout(400)
@@ -280,11 +286,12 @@ def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[
                 break
             new = 0
             for b in page.evaluate(BOOTH_JS):
-                if b["id"] not in cards:
+                if b["id"] not in cards and not (quick and here >= QUICK_ITEMS):
                     cards[b["id"]] = (b, gift, base)
                     new += 1
+                    here += 1
             progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
-            if not new:   # past the last page
+            if not new or quick_done(cfg, page_no, here):   # past the last page (or, quickly, far enough)
                 break
             pause(delay)
     return list(cards.values())
@@ -435,13 +442,15 @@ def jinxxy_product_page(hrefs, creator_url=None) -> str | None:
     return None
 
 
-def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300) -> None:
+def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300, most: int = 0) -> None:
     """Show all of a Jinxxy inventory page: read() what's shown (it returns how many it has found in all), then
-    choose "Load more" or scroll down, until three rounds in a row find nothing new. Reading the library and
-    downloading both go through an inventory this way."""
+    choose "Load more" or scroll down, until three rounds in a row find nothing new (or, given most, once that many
+    are found). Reading the library and downloading both go through an inventory this way."""
     count, quiet = -1, 0
     for _ in range(rounds):
         now = read()
+        if most and now >= most:
+            break
         more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
         if more.count() and more.first.is_visible() and more.first.is_enabled():
             more.first.click()
@@ -472,7 +481,8 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
         if "login" in urlparse(page.url).path.lower() or has_password_field(page):
             raise NotLoggedIn()
         visited, pending = {page.url}, []
-        for _ in range(100):  # numbered pages
+        most = QUICK_ITEMS if cfg.get("_quick") else 0   # (a quick refresh, issue #300: the start of it)
+        for page_no in range(1, 101):  # numbered pages
             def read() -> int:
                 """Note the products now on the inventory page, and its other pages to visit; returns how many are
                 known."""
@@ -485,15 +495,17 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
                         pending.append(href)
                 progress(f"Inventory, {len(found)} items")
                 return len(found)
-            scroll_inventory(page, read)
+            scroll_inventory(page, read, most=most)
             loaded.append(jinxxy_page_data(page))
-            if not pending:
+            if not pending or quick_done(cfg, page_no, len(found)):
                 break
             nxt = pending.pop(0)
             visited.add(nxt)
             goto(page, nxt)
             settle(page)
-        gifts = jinxxy_gifts(page, pattern, progress)
+        if most:
+            found = dict(list(found.items())[:most])
+        gifts = jinxxy_gifts(page, pattern, progress, most)
         loaded.append(jinxxy_page_data(page))
         page.remove_listener("response", heard)
         jinxxy_merge(found, gifts, jinxxy_data(loaded))
@@ -719,9 +731,10 @@ def jinxxy_gift_sender(c: dict) -> str | None:
     return None
 
 
-def jinxxy_gifts(page, pattern: str, progress) -> dict:
+def jinxxy_gifts(page, pattern: str, progress, most: int = 0) -> dict:
     """The cards on your inventory's Gifts tab (Jinxxy keeps gifts you've accepted there as well as with your
-    products), by their key, each with "gift_from"; none when there's no Gifts tab."""
+    products), by their key, each with "gift_from"; none when there's no Gifts tab. most: only the first that many
+    (a quick refresh)."""
     tab = page.locator('[role="tab"][id$="-trigger-gifts"]')
     if not tab.count():
         tab = page.get_by_role("tab", name=re.compile(r"^\s*gifts?\b", re.I))
@@ -745,8 +758,8 @@ def jinxxy_gifts(page, pattern: str, progress) -> dict:
                 gifts.setdefault(c["key"], {**c, "gift_from": sender})
         progress(f"Gifts, {len(gifts)}")
         return len(gifts)
-    scroll_inventory(page, read)
-    return gifts
+    scroll_inventory(page, read, most=most)
+    return dict(list(gifts.items())[:most]) if most else gifts
 
 
 def jinxxy_merge(found: dict, gifts: dict, known: dict) -> None:
@@ -927,10 +940,12 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
             raise NotLoggedIn(f"not signed in to {urlparse(shop).hostname}{urlparse(shop).path}")
         result = page.evaluate(PAYHIP_SHOP_JS)
         for c in result["cards"]:
+            if cfg.get("_quick") and len(cards) >= QUICK_ITEMS:   # (a quick refresh, issue #300: the start of it)
+                break
             cards.setdefault(c["id"], c)
         progress(f"{result['shop']}: {len(cards)} products" + (" (your own shop: it lists what you bought everywhere "
                  "on Payhip without saying who made it, so those show as Unknown creator)" if result.get("own") else ""))
-        if not result["next"] or result["next"] == url:
+        if not result["next"] or result["next"] == url or quick_done(cfg, page_no, len(cards)):
             break
         url = result["next"]
         pause(float(cfg.get("request_delay", 0.8)))
@@ -1142,7 +1157,7 @@ def fetch_itch(ctx, cfg, progress) -> list[dict]:
         raise NotLoggedIn("No itch.io API key yet")
     sess = itch.session(key)
     try:
-        keys = itch.owned_keys(sess, float(cfg.get("request_delay", 1.0)), progress)
+        keys = itch.owned_keys(sess, float(cfg.get("request_delay", 1.0)), progress, cfg)
     finally:
         sess.close()
     items = []

@@ -2398,5 +2398,8 @@
  "Webhook": "Webhook",
  "Get Hoard's news where you are": "Hoardのお知らせを受け取る場所",
  "Hoard can tell you what it finds on Discord, Telegram, ntfy, by email and more, through Apprise. Choose a service, fill in what it gives you, and add it. Hoard keeps the address as it keeps API keys, never in config.json.": "Hoardは見つけたものを、Apprise経由でDiscord、Telegram、ntfy、メールなどで知らせられます。サービスを選び、サービスから受け取った内容を入れて、追加してください。HoardはアドレスをAPIキーと同じように保管し、config.jsonには書きません。",
- "Not now? Choose Next: nothing is sent until you add an address. You can change this later in Settings, under Notifications through Apprise.": "今はしない場合は、次へを選んでください。アドレスを追加するまで何も送りません。あとから設定の「Appriseで通知」で変えられます。"
+ "Not now? Choose Next: nothing is sent until you add an address. You can change this later in Settings, under Notifications through Apprise.": "今はしない場合は、次へを選んでください。アドレスを追加するまで何も送りません。あとから設定の「Appriseで通知」で変えられます。",
+ "Quick refresh": "クイック更新",
+ "Quick refresh: {0}": "クイック更新:{0}",
+ "Quick refresh looks for what's new: it reads only the start of each library and of the wishlists you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was; Refresh reads everything.": "クイック更新は新しいものを探します。各ライブラリと、保管しているほしい物リストの最初の部分だけ(最初の2ページか最初の50商品の、少ないほう)を読み込みます。読み込まなかった部分はそのまま残ります。すべてを読み込むのは更新です。"
 }

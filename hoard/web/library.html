@@ -1423,7 +1423,11 @@ body.less-motion .tour-try::before { animation: none; }
   <p>Sign in to each store once. Refresh reads what you've bought; nothing is downloaded.</p>
   <div id="storeRows"></div>
   <div class="stores-go"><button id="refreshAll" class="primary">Refresh all stores</button>
+    <button id="quickRefresh" class="ghost">Quick refresh</button>
     <button id="downloadAll" class="ghost">Download everything new</button></div>
+  <p class="hint">Quick refresh looks for what's new: it reads only the start of each library and of the wishlists
+    you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was;
+    Refresh reads everything.</p>
   <p class="hint safe"><span id="signinsText">Your sign-ins stay on this computer, a separate one for each store,
     <span id="signinsNote">encrypted by your operating system</span>, in a folder only Hoard uses<span id="signinsPath"></span>.
     Hoard never keeps your store passwords. Never share that folder.</span>
@@ -2060,7 +2064,7 @@ function renderStores() {
         `<button class="linkish" data-review-shops>Review</button></span>` : "") +
       `</div>`;
   }).join("");
-  $("#refreshAll").disabled = !!job.running;
+  $("#refreshAll").disabled = $("#quickRefresh").disabled = !!job.running;
   $("#downloadAll").hidden = !usedStores().some(downloadable);
   $("#importPages").disabled = $("#importFolder").disabled = !!importing;
   $("#signOutAll").disabled = !!job.running;
@@ -2213,13 +2217,13 @@ function startPolling() {
   }, 1000);
 }
 // Start a sign-in, refresh or sign-out for some stores (all: every product, not only what's new).
-async function runJob(url, stores, all = false) {
+async function runJob(url, stores, all = false, more = {}) {   // more: what else the job's asked (a quick refresh's quick)
   if (!navigator.onLine && !url.endsWith("logout")) {
     toast(url.endsWith("/login") ? "You're offline. Signing in needs a connection." : "You're offline. Refreshing needs a connection.");
     return;
   }
   try {
-    const answer = await post(url, { stores, all });
+    const answer = await post(url, { ...more, stores, all });
     if (answer.queued) { toast("Queued: it starts when what's running now is done. See Tasks."); startPolling(); return; }
     DATA.job = { running: true, message: url.endsWith("/login") ? "Opening a browser window" : url.endsWith("logout") ? "Signing out" : "Starting" };
     showJob(DATA.job); renderStores(); startPolling();
@@ -2366,6 +2370,7 @@ $("#creatorFind").addEventListener("input", e => { state.creatorFind = e.target.
 $("#moreTags").addEventListener("click", () => { state.allTags = !state.allTags; render(); });
 $("#storesBtn").addEventListener("click", () => openStores());
 $("#refreshAll").addEventListener("click", () => runJob("/api/refresh", usedStores(), true));
+$("#quickRefresh").addEventListener("click", () => runJob("/api/refresh", usedStores(), true, { quick: true }));   // (issue #300)
 // Download what's new from some stores (choosing what, in the downloads dialog).
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
 $("#downloadAll").addEventListener("click", () => downloadNew(usedStores().filter(downloadable)));

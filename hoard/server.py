@@ -2492,6 +2492,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "No stores are switched on in Settings." if path == "/api/sync" or bulk else "Unknown store."}, 400)
         task = {"/api/login": "login", "/api/logout": "logout", "/api/download": "download",
                 "/api/sync": "sync", "/api/check-updates": "check-updates"}.get(path, "refresh")
+        if task == "refresh" and body.get("quick") is True:   # issue #300: only the start of each library and list
+            task = "quick-refresh"
         only = str(body.get("only") or "").strip()[:200] or None
         # products chosen on the Downloads page (to update, or to check), by their tag_key
         keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:5000]

@@ -2398,5 +2398,8 @@
  "Webhook": "Webhook",
  "Get Hoard's news where you are": "Hoard 소식을 받을 곳",
  "Hoard can tell you what it finds on Discord, Telegram, ntfy, by email and more, through Apprise. Choose a service, fill in what it gives you, and add it. Hoard keeps the address as it keeps API keys, never in config.json.": "Hoard는 찾은 것을 Apprise를 통해 Discord, Telegram, ntfy, 이메일 등으로 알려 줄 수 있어요. 서비스를 고르고, 서비스가 알려 준 내용을 채운 뒤 추가하세요. Hoard는 주소를 API 키처럼 보관하고 config.json에는 쓰지 않아요.",
- "Not now? Choose Next: nothing is sent until you add an address. You can change this later in Settings, under Notifications through Apprise.": "지금은 안 하려면 다음을 고르세요. 주소를 추가할 때까지 아무것도 보내지 않아요. 나중에 설정의 'Apprise로 알림'에서 바꿀 수 있어요."
+ "Not now? Choose Next: nothing is sent until you add an address. You can change this later in Settings, under Notifications through Apprise.": "지금은 안 하려면 다음을 고르세요. 주소를 추가할 때까지 아무것도 보내지 않아요. 나중에 설정의 'Apprise로 알림'에서 바꿀 수 있어요.",
+ "Quick refresh": "빠른 새로고침",
+ "Quick refresh: {0}": "빠른 새로고침: {0}",
+ "Quick refresh looks for what's new: it reads only the start of each library and of the wishlists you keep, the first 2 pages or the first 50 products, whichever is fewer. What it doesn't reach stays as it was; Refresh reads everything.": "빠른 새로고침은 새로 생긴 것을 찾아요. 각 라이브러리와 보관 중인 위시리스트의 앞부분만(처음 2페이지 또는 처음 50개 상품 중 적은 쪽) 읽어요. 읽지 않은 부분은 그대로 남아요. 전부 읽는 건 새로고침이에요."
 }

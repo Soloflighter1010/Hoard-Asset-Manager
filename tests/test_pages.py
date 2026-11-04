@@ -331,6 +331,30 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_quick_refresh_in_stores(self):
+        """Issue #300: Stores' Quick refresh starts a quick refresh of every store you use (the start of each library
+        and list), as Refresh all stores starts a full one."""
+        started = []
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#storesBtn")
+            page.click("#quickRefresh")
+            for _ in range(50):
+                if started:
+                    break
+                page.wait_for_timeout(100)
+            page.click("#refreshAll")
+            for _ in range(50):
+                if len(started) == 2:
+                    break
+                page.wait_for_timeout(100)
+        self.assertEqual([t for t, _s, _k in started], ["quick-refresh", "refresh"])
+        self.assertIn("booth", started[0][1])
+        self.assertEqual(started[0][1], started[1][1], "the same stores")
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_building_an_apprise_address(self):
         """Issues #239, #287: Add an address makes a service's Apprise address from its fields and keeps it on its own;
         Settings then lists it by its service and what tells it apart, never its token, and the page is never sent
