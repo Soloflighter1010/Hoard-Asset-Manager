@@ -838,7 +838,7 @@ class JinxxyGifts(unittest.TestCase):
         ctx = browser.new_context(viewport={"width": 1400, "height": 950})
         ctx.route("**/*", answer)
         real = library.scroll_inventory
-        with mock.patch.object(library, "scroll_inventory", lambda page, read: real(page, read, settle_ms=50, wait_ms=80)), \
+        with mock.patch.object(library, "scroll_inventory", lambda page, read, **kw: real(page, read, settle_ms=50, wait_ms=80, **kw)), \
                 mock.patch.object(library, "settle", lambda page, ms=0: page.wait_for_timeout(min(ms, 300))):
             items = {i["id"]: i for i in library.fetch_jinxxy(ctx, {**config.DEFAULT_CONFIG, "request_delay": 0}, lambda m: None)}
         self.assertEqual(sorted(items), ["1001", "1002", "1003", "1004"], "the gift only on the Gifts tab, too")
