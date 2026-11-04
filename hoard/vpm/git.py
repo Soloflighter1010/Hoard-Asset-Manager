@@ -68,10 +68,11 @@ class GitError(Exception):
 
 
 def redact(text) -> str:
-    """Text Git printed, with any password or token in it taken out: an address's user:password@, and anything shaped
-    like an access token."""
+    """Text Git printed, with any password or token in it taken out: an address's password (user:***@; a user's name
+    alone, as in ssh://git@..., is kept, so an address shown can be used as it is), and anything shaped like an access
+    token."""
     text = str(text or "")
-    text = re.sub(r"([A-Za-z][A-Za-z0-9+.-]*://)[^/@\s]+@", r"\1***@", text)
+    text = re.sub(r"([A-Za-z][A-Za-z0-9+.-]*://[^/@\s:]*):[^/@\s]+@", r"\1:***@", text)
     return TOKENS.sub("[token]", text)
 
 
@@ -778,7 +779,8 @@ def diff(folder, path: str, staged: bool = False, ref: str | None = None) -> dic
     file among the changes (or the commit's files) is read."""
     folder = Path(folder)
     if ref is not None:
-        if path not in {f["path"] for f in commit_files(folder, ref)} | {f["from"] for f in commit_files(folder, ref) if f["from"]}:
+        changed = commit_files(folder, ref)
+        if path not in {f["path"] for f in changed} | {f["from"] for f in changed if f["from"]}:
             raise GitError("That file isn't in that commit.")
         base = ["show", "--format=", "-M", "--no-ext-diff", "--no-textconv", ref]
     else:

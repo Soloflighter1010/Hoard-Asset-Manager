@@ -447,9 +447,9 @@ def credit_names(library: Path) -> list[str]:
     """The creators of the products shown: the products' own (not the made-up ones promo/art.py draws)."""
     sys.path.insert(0, str(HERE))
     import art
-    made_up = {p[1] for p in art.PRODUCTS}
+    made_up = {(p[0], p[1]) for p in art.PRODUCTS}
     items = json.loads((library / "products.json").read_text("utf-8"))
-    names = {i["creator"].strip() for i in items if i.get("creator") and i["creator"].strip() not in made_up}
+    names = {i["creator"].strip() for i in items if i.get("creator") and (i.get("name"), i["creator"]) not in made_up}
     return sorted(names, key=str.casefold)
 
 

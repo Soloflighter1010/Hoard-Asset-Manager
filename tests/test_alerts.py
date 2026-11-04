@@ -336,6 +336,8 @@ class Addresses(unittest.TestCase):
             for secret in secrets[service]:
                 self.assertNotIn(secret, json.dumps(d), f"{service}: {d}")
         self.assertEqual(alerts.describe("discord://123456789012345678/AbC")["label"], "webhook …5678")
+        native = alerts.describe("https://discord.com/api/webhooks/123456789012345678/AbCdEf")   # (pasted as it is)
+        self.assertEqual((native["service"], native["label"]), ("Discord", "webhook …5678"))
         self.assertEqual(alerts.describe("mailtos://you:pw@gmail.com?to=me%40example.org")["label"], "to m•••@example.org")
         self.assertEqual(alerts.describe("weird://user:pass@example.com/x")["label"], "example.com", "never its user and password")
 

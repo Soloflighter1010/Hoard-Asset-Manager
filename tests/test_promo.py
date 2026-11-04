@@ -144,13 +144,17 @@ class Build(unittest.TestCase):
 
     def test_credits_leave_out_the_made_up(self):
         import art
-        made_up = art.PRODUCTS[0][1]
+        name, made_up = art.PRODUCTS[0][0], art.PRODUCTS[0][1]
         items = json.loads((self.library / "products.json").read_text("utf-8"))
-        items.append({"image": "x.png", "name": "Drawn", "creator": made_up, "store": "booth", "tags": []})
+        items.append({"image": "x.png", "name": name, "creator": made_up, "store": "booth", "tags": []})
         (self.library / "products.json").write_text(json.dumps(items), "utf-8")
         names = scenes.credit_names(self.library)
         self.assertIn("Maker 0", names)
         self.assertNotIn(made_up, names)
+        # a real product by a creator who happens to share a made-up one's name is credited
+        items.append({"image": "y.jpg", "name": "A real product", "creator": made_up, "store": "booth", "tags": []})
+        (self.library / "products.json").write_text(json.dumps(items), "utf-8")
+        self.assertIn(made_up, scenes.credit_names(self.library))
 
     def test_posters(self):
         for p in scenes.POSTERS:

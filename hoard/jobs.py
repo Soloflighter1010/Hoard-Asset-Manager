@@ -1282,7 +1282,8 @@ class Jobs:
         except Exception as e:   # (the library is read all the same)
             print(f"Couldn't read the wishlists kept: {e}", flush=True)
             return
-        lists = [s for s in stores if s in kept and s in READERS and s not in unread]
+        imported = {s for s in stores if self.lib.data["stores"].get(s, {}).get("source") == "import"}   # (not read: skipped)
+        lists = [s for s in stores if s in kept and s in READERS and s not in unread and s not in imported]
         if not lists:
             return
         said, partial = self.state.get("message") or "Library updated", self.state.get("partial")

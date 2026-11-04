@@ -2520,8 +2520,8 @@ const APPRISE_SERVICES = [   // {id, name, doc: its page, fields: [[field, label
     build: f => {
       if (!/^[\w-]{1,64}$/.test(f.topic)) return null;
       if (!f.server) return `ntfy://${f.topic}`;
-      const u = urlOf(f.server);
-      return u && `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}`;
+      const u = urlOf(f.server);   // (a server under a path can't be one: Apprise reads an address's path as its topics)
+      return u && !u.pathname.replace(/\/$/, "") ? `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}` : null;
     } },
   { id: "email", name: "Email", doc: "email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
       ["to", "Send to (empty for yourself)", "me@example.com"], ["smtp", "Mail server (empty to let Apprise find it)", "smtp.example.com"]],
@@ -2549,7 +2549,8 @@ const APPRISE_SERVICES = [   // {id, name, doc: its page, fields: [[field, label
       const u = urlOf(f.url);
       if (!u) return null;
       const q = [...u.searchParams].map(([k, v]) => `-${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
-      return `${u.protocol === "https:" ? "jsons" : "json"}://${u.host}${u.pathname}` + (q ? "?" + q : "");
+      const login = u.username ? `${u.username}${u.password ? ":" + u.password : ""}@` : "";   // (a webhook behind a sign-in)
+      return `${u.protocol === "https:" ? "jsons" : "json"}://${login}${u.host}${u.pathname}` + (q ? "?" + q : "");
     } },
 ];
 // An http(s) address as typed, or null.

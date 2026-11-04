@@ -489,9 +489,13 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
             for n in range(1, MAX_PAGES + 1):
                 new = 0
                 for c in page.evaluate(BOOTH_JS)["cards"]:
-                    if c["id"] not in found and not (cfg.get("_quick") and len(found) >= QUICK_ITEMS):
-                        found[c["id"]] = c
-                        new += 1
+                    if c["id"] in found:
+                        continue
+                    if cfg.get("_quick") and len(found) >= QUICK_ITEMS:   # (one past the limit: the rest left)
+                        short = True
+                        break
+                    found[c["id"]] = c
+                    new += 1
                 progress(f"{label}, page {n}: {len(found)} items")
                 first = page.evaluate(BOOTH_FIRST_JS)
                 if not new or not page.evaluate(BOOTH_NEXT_JS):   # the last page
@@ -505,7 +509,7 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
                     break
                 settle(page, 600)
                 time.sleep(delay)
-            return booth_products(found.values()), short or (cfg.get("_quick") and len(found) >= QUICK_ITEMS)
+            return booth_products(found.values()), short
         everything, short = read_all(BOOTH_WISHES, LIST_NAMES["booth"])
         out = [{"store": "booth", "list": LIST_NAMES["booth"], "url": BOOTH_WISHES, "products": everything,
                 **({"partial": True} if short else {})}]

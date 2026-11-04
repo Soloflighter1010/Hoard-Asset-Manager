@@ -30,6 +30,15 @@ from hoard.safety import ACCESS_HEADER  # noqa: E402
 from test_vpm_projects import SAMPLE, make_unitypackage  # noqa: E402
 
 
+
+def _same_folder_here(a, b) -> bool:
+    """Whether two paths are one folder (a drive that doesn't tell case apart)."""
+    import os
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
 class _Repo(http.server.BaseHTTPRequestHandler):
     files: dict = {}
 
@@ -564,6 +573,23 @@ class Server(unittest.TestCase):
         status, answer = self.call("POST", "/api/vpm/rename", {"path": str(fresh), "name": "fresh idea"})
         self.assertEqual((status, answer.get("name")), (200, "fresh idea"), answer)
         self.assertEqual(sorted(p.name for p in unity.iterdir()), ["Other", "Taken", "fresh idea"])
+        # a change of case whose second step fails: put back as it was, never left under the step's name
+        real_rename = Path.rename
+
+        def failing(self_, target):
+            if ".renaming-" in self_.name and Path(target).name == "OTHER":
+                raise PermissionError(13, "Access is denied")
+            return real_rename(self_, target)
+        with mock.patch.object(Path, "rename", failing):
+            status, answer = self.call("POST", "/api/vpm/rename", {"path": str(other), "name": "OTHER"})
+        self.assertEqual(status, 400, answer)
+        self.assertEqual(sorted(p.name for p in unity.iterdir()), ["Other", "Taken", "fresh idea"])
+        # on a drive that tells case apart, another folder named the same but for its case is another folder
+        (unity / "OTHER").mkdir()
+        if not _same_folder_here(unity / "OTHER", other):
+            status, answer = self.call("POST", "/api/vpm/rename", {"path": str(other), "name": "OTHER"})
+            self.assertEqual((status, answer.get("error")), (400, "A folder with that name is already there."))
+            self.assertTrue(other.is_dir() and (unity / "OTHER").is_dir())
 
     def test_a_deleted_project_listed_by_another_name_comes_off_the_list(self):
         """On Windows the list can hold a short name (C:\\Users\\RUNNER~1\\...) that resolves to a longer one: the

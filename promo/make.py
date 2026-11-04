@@ -1,11 +1,11 @@
 """Make all of Hoard's videos, posters and music in one go (issues #273, #274, #289, #291, #292).
 
-    python3 promo/make.py [PRODUCTS] [OUT] [--lang=en,ja,ko]
+    python3 promo/make.py [PRODUCTS] [OUT] [--lang=en,ja,ko] [--jobs=3]
 
 PRODUCTS is a library of products to show, as scripts/screenshots.py takes one (a folder of pictures and its
 products.json): promo/products, or your own from scripts/export_screenshot_products.py, with the made-up ones
 promo/art.py draws added for any store it has few of. Without it, only made-up products are shown. OUT (promo/out
-unless given) gets:
+unless given) gets (PRODUCTS "-": made-up ones only, with OUT given):
 
     hoard-loop.wav, .m4a, .ogg     the music
     screens/                       Hoard's own screens, in each language (promo/capture.py)
@@ -56,7 +56,10 @@ def library(products: Path | None, out: Path) -> Path:
 def main(argv: list[str]) -> int:
     given = [a for a in argv if not a.startswith("--")]
     flags = [a for a in argv if a.startswith("--")]
-    products = Path(given[0]) if given else (HERE / "products" if (HERE / "products" / "products.json").exists() else None)
+    if given and given[0] == "-":   # (made-up products only)
+        products = None
+    else:
+        products = Path(given[0]) if given else (HERE / "products" if (HERE / "products" / "products.json").exists() else None)
     out = Path(given[1]) if len(given) > 1 else HERE / "out"
     out.mkdir(parents=True, exist_ok=True)
     lib = library(products, out)

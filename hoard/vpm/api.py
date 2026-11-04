@@ -350,7 +350,11 @@ class Service:
                 self.backups_folder().mkdir(parents=True, exist_ok=True)
                 history = self.backups_folder() / f".{Path(path).name}-{os.getpid()}.bundle.part"
                 log(f"Putting {Path(path).name}'s Git history in a bundle")
-                if not git.bundle(path, history):
+                try:
+                    if not git.bundle(path, history):
+                        history = None
+                except git.GitError as e:   # (Git missing, say: backed up all the same, without its history)
+                    log(Warn(f"Its Git history couldn't be put in: {e}"))
                     history = None
             try:
                 out = backup.back_up(Path(path), self.backups_folder(), leave_out, history=history)
@@ -473,7 +477,7 @@ class Service:
             raise ProjectsError("That's its name already.")
         case_only = name.lower() == folder.name.lower()
         why, _warning = templates.check_name(folder.parent, name)
-        if why and not (case_only and (folder.parent / name).exists()):
+        if why and not (case_only and _same_folder(folder, folder.parent / name)):   # (a case-insensitive drive: itself)
             raise ProjectsError(why)
         listed = self.listed(path)
         to = Path(listed).parent / name
@@ -481,7 +485,11 @@ class Service:
             if case_only:   # (Windows and macOS don't see a change of case alone: by way of another name)
                 step = folder.with_name(f"{folder.name}.renaming-{os.getpid()}")
                 folder.rename(step)
-                step.rename(folder.parent / name)
+                try:
+                    step.rename(folder.parent / name)
+                except OSError:
+                    step.rename(folder)   # (back as it was: never left under the step's name)
+                    raise
             else:
                 folder.rename(folder.parent / name)
         except OSError as e:
@@ -499,7 +507,7 @@ class Service:
         folder = self.deletable(path)
         if backup_first:
             log(f"Backing up {name} first")
-            out = backup.back_up(folder, self.backups_folder(), set())
+            out = backup.back_up(folder, self.backups_folder(), set(), keep_git=True)   # (its Git history too: never lost)
             log(f"Backed up to {out}")
         log(f"Deleting {name}")   # (the last word Stop can come at)
         listed = self.listed(path)   # (as the list has it: on Windows, a short name like RUNNER~1 resolves to another)
@@ -599,6 +607,14 @@ class Service:
         if done["failed"]:
             message += " Not put in: " + "; ".join(f"{f['what']} ({f['why']})" for f in done["failed"][:5]) + "."
         return message
+
+
+def _same_folder(a, b) -> bool:
+    """Whether two paths are the very same folder (as a name differing only in case is, on Windows and macOS)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
 
 
 def _writable_then_again(func, path, _exc):

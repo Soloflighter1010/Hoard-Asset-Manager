@@ -297,6 +297,19 @@ class Backups(Temp):
         self.assertTrue(out.name.startswith("Project-") and out.suffix == ".zip")
         self.assertEqual([b["path"] for b in backup.found(self.tmp / "Backups")], [str(out)], "a new backup is listed")
 
+    def test_git_history_left_out_unless_kept(self):
+        """A backup leaves .git out (it can be most of a project), but one made before a delete keeps it: the
+        project's history is never lost with it (and a worktree's .git file likewise)."""
+        p = self.project()
+        (p / ".git" / "refs").mkdir(parents=True)
+        (p / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        out = backup.back_up(p, self.tmp / "Backups")
+        with zipfile.ZipFile(out) as zf:
+            self.assertFalse([n for n in zf.namelist() if n.startswith(".git")])
+        kept = backup.back_up(p, self.tmp / "Kept", keep_git=True)
+        with zipfile.ZipFile(kept) as zf:
+            self.assertIn(".git/HEAD", zf.namelist())
+
     def test_a_backups_folder_in_the_project_is_left_out(self):
         p = self.project()
         (p / "Assets" / "a.txt").write_text("a")

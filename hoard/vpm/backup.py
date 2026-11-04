@@ -34,9 +34,10 @@ def default_folder() -> Path:
     return Path.home() / "ALCOM" / "Backups"
 
 
-def files(project: Path, leave_out_packages: set[str] = frozenset(), skip: Path | None = None):
+def files(project: Path, leave_out_packages: set[str] = frozenset(), skip: Path | None = None, keep_git: bool = False):
     """Every file to back up, as (path, its name in the zip), skipping links, and the folder skip (the backups
-    folder, should it be inside the project: a backup never takes in itself or the backups before it)."""
+    folder, should it be inside the project: a backup never takes in itself or the backups before it). keep_git: the
+    project's .git too (a backup before it's deleted: its history is never lost)."""
     project = Path(project)
     skip_packages = {n.lower() for n in leave_out_packages}
     skip_real = os.path.normcase(os.path.realpath(skip)) if skip else None
@@ -46,21 +47,23 @@ def files(project: Path, leave_out_packages: set[str] = frozenset(), skip: Path 
         rel_root = os.path.relpath(root, project)
         parts = [] if rel_root == "." else rel_root.replace(os.sep, "/").split("/")
         if not parts:
-            dirs[:] = [d for d in dirs if d.lower() not in SKIPPED_TOP and not d.lower().startswith("library")]
+            dirs[:] = [d for d in dirs if (d.lower() not in SKIPPED_TOP or (keep_git and d.lower() == ".git"))
+                       and not d.lower().startswith("library")]
         elif len(parts) == 1 and parts[0].lower() == "packages":
             dirs[:] = [d for d in dirs if d.lower() not in skip_packages]
         dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
         for n in names:
             full = os.path.join(root, n)
-            if os.path.islink(full) or (not parts and n.lower() == ".git"):   # (a worktree's .git is a file)
+            if os.path.islink(full) or (not parts and n.lower() == ".git" and not keep_git):   # (a worktree's .git is a file)
                 continue
             yield full, "/".join(parts + [n])
 
 
 def back_up(project: Path, folder: Path, leave_out_packages: set[str] = frozenset(), fast: bool = True,
-            history: Path | None = None) -> Path:
+            history: Path | None = None, keep_git: bool = False) -> Path:
     """Write the backup, returning its path. A failure leaves no half-made zip behind. A project's .git folder is
-    left out (it could be most of it); history, when given, is its Git history as a bundle, put in as BUNDLE_NAME."""
+    left out (it could be most of it) unless keep_git; history, when given, is its Git history as a bundle, put in as
+    BUNDLE_NAME."""
     project = Path(project)
     folder.mkdir(parents=True, exist_ok=True)
     out = folder / f"{project.name}-{time.strftime('%Y-%m-%dT%H-%M-%S')}.zip"
@@ -68,7 +71,7 @@ def back_up(project: Path, folder: Path, leave_out_packages: set[str] = frozense
     count, said = 0, 0.0
     try:
         with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=1 if fast else 9, allowZip64=True) as zf:
-            for full, name in files(project, leave_out_packages, skip=folder):
+            for full, name in files(project, leave_out_packages, skip=folder, keep_git=keep_git):
                 try:
                     zf.write(full, name)
                 except (OSError, ValueError):

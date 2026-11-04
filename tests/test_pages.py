@@ -91,6 +91,7 @@ APPRISE_BUILT = [
      "matrixs://bot:pw@matrix.org/%23hoard%3Amatrix.org"),
     ("gotify", {"server": "https://gotify.example.com", "token": "AbCdEf123"}, "gotifys://gotify.example.com/AbCdEf123"),
     ("webhook", {"url": "https://example.com/hook?token=abc/d"}, "jsons://example.com/hook?-token=abc%2Fd"),
+    ("webhook", {"url": "https://bot:s3cret@hooks.example.com/hoard"}, "jsons://bot:s3cret@hooks.example.com/hoard"),   # (its sign-in kept)
 ]
 
 
@@ -397,6 +398,11 @@ class AccessKey(unittest.TestCase):
             self.assertEqual(listed[:3], ["Discord", "Telegram", "ntfy"])
             page.select_option("#appriseService", "discord")
             page.fill('[data-apprise-field="hook"]', "https://example.com/not-discord")
+            page.click("#appriseAdd")
+            self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
+            page.select_option("#appriseService", "ntfy")   # (a server under a path: Apprise would read it as topics)
+            page.fill('[data-apprise-field="topic"]', "my-hoard")
+            page.fill('[data-apprise-field="server"]', "https://example.com/ntfy")
             page.click("#appriseAdd")
             self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
             text = page.content()

@@ -279,6 +279,18 @@ class TheTask(unittest.TestCase):
         self.assertEqual(self.job.state["task"], "quick-refresh")
         self.assertFalse(self.job.state.get("partial"))
 
+    def test_not_the_wishlists_of_a_store_kept_by_importing(self):
+        """A store whose library comes from pages you import isn't read by a quick refresh, and nor are its lists."""
+        tmp = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {"HOARD_DATA_DIR": tmp}):
+            sets.SetStore().put_wishlists([{"store": "booth", "list": "Loved items", "products": [product(1)]}])
+            self.lib.data["stores"].setdefault("booth", {})["source"] = "import"
+            asked = []
+            with mock.patch.object(self.job, "_refresh", lambda *a, **k: self.job._set(message="Library updated") or []), \
+                    mock.patch.object(self.job, "_wishlists", lambda *a, **k: asked.append(a)):
+                self.job._quick_refresh(["booth"])
+        self.assertEqual(asked, [])
+
     def test_a_refresh_that_failed_goes_no_further(self):
         tmp = tempfile.mkdtemp()
         with mock.patch.dict(os.environ, {"HOARD_DATA_DIR": tmp}):

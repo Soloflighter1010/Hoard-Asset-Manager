@@ -116,6 +116,9 @@ def _host(part: str) -> str:
 def describe(url: str) -> dict:
     """An address as Settings shows it (issue #287): {"id", "service", "label"}, the label only what tells two of a
     service apart (a server's name, the end of a chat's or a webhook's number), never a token, password or key."""
+    native = re.match(r"https://(?:\w+\.)?discord(?:app)?\.com/api/webhooks/(\d+)/", url, re.I)
+    if native:   # (a Discord webhook's own address, pasted as it is: Apprise takes it)
+        return {"id": address_id(url), "service": "Discord", "label": f"webhook {_tail(native.group(1))}"}
     scheme, _, rest = url.partition("://")
     s = scheme.lower()
     path, _, query = rest.partition("?")

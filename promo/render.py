@@ -16,6 +16,7 @@ Open Font License.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import shutil
 import subprocess
@@ -93,7 +94,9 @@ def fonts_css(out: Path) -> str:
 def player(out: Path) -> Path:
     """The player, with its fonts, beside the videos."""
     page = out / ".player.html"
-    page.write_text((HERE / "player.html").read_text("utf-8").replace("/*FONTS*/", fonts_css(out)), "utf-8")
+    part = out / f".player-{os.getpid()}.part"
+    part.write_text((HERE / "player.html").read_text("utf-8").replace("/*FONTS*/", fonts_css(out)), "utf-8")
+    os.replace(part, page)
     return page
 
 

@@ -314,7 +314,9 @@ class Addresses(unittest.TestCase):
 
     def test_whats_taken_out(self):
         self.assertEqual(git.redact("fatal: unable to access 'https://kitsu:hunter2@github.com/k/r.git/'"),
-                         "fatal: unable to access 'https://***@github.com/k/r.git/'")
+                         "fatal: unable to access 'https://kitsu:***@github.com/k/r.git/'")
+        # (a user's name alone isn't a secret: kept, so the address shown works as it is in Change...)
+        self.assertEqual(git.redact("ssh://git@github.com/k/r.git"), "ssh://git@github.com/k/r.git")
         self.assertEqual(git.redact("token ghp_abcdefghijklmnopqrstuvwxyz0123 refused"), "token [token] refused")
 
 

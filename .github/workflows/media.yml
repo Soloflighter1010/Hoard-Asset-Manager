@@ -38,9 +38,9 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Make the videos, the posters and the music
         run: |
-          products=""
+          products=-   # (none: made-up products only)
           if [ -f promo/products/products.json ]; then products=promo/products; fi
-          python promo/make.py $products promo/out --jobs=3
+          python promo/make.py "$products" promo/out --jobs=3
       - name: Put them on the media release
         env:
           GH_TOKEN: ${{ github.token }}
