@@ -164,8 +164,11 @@ jobs:
 
       - name: Make the installer
         working-directory: shell
+        env:   # (Linux: linuxdeploy's strip can't read newer libraries, and its tools run unpacked, without FUSE)
+          NO_STRIP: "true"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
-          npx tauri bundle --bundles ${{ matrix.bundles }} --config "{\"version\": \"$NUMBERS\"}"
+          npx tauri bundle --verbose --bundles ${{ matrix.bundles }} --config "{\"version\": \"$NUMBERS\"}"
 
       - name: Name the files, and list their checksums
         run: |
