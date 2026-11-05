@@ -3,6 +3,9 @@
  "wiki": "Troubleshooting#not-signed-in-to-booth-or-session-expired",
  "style": "help",
  "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
  "bpm": 100,
  "music": {
   "start_bar": 0,

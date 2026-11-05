@@ -3,6 +3,9 @@
  "wiki": "Troubleshooting#payhip-keeps-showing-a-bot-check",
  "style": "help",
  "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
  "bpm": 100,
  "music": {
   "start_bar": 0,

@@ -3,6 +3,9 @@
  "wiki": "Troubleshooting#the-hidden-library",
  "style": "help",
  "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
  "bpm": 100,
  "music": {
   "start_bar": 0,

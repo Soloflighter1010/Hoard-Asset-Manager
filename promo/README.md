@@ -25,8 +25,23 @@ python scripts/screenshots.py PRODUCTS_FOLDER build/shots --themes=dark,light --
 python scripts/screenshots.py PRODUCTS_FOLDER build/shots --themes=dark,light --lang=ja --regions=promo/regions.json
 python scripts/screenshots.py PRODUCTS_FOLDER build/shots --themes=dark,light --lang=ko --regions=promo/regions.json
 python promo/music/loop.py
-python promo/build.py promo-short help-booth-signed-out --lang=en,ja,ko --shape=landscape,portrait
+python promo/build.py promo-short promo-long help-booth-signed-out ... --lang=en,ja,ko --shape=landscape,portrait
 ```
+
+## The videos
+
+| Film | Length | Shapes |
+|---|---|---|
+| `promo-short` | 40 seconds: the Library, downloads and updates, sets and wishlists | landscape (1920 × 1080), portrait (1080 × 1920) |
+| `promo-long` | 2 minutes: every part of Hoard, each explained | landscape, portrait |
+| `help-…` | under a minute each: one problem the wiki's Troubleshooting page explains, and its fix | landscape |
+
+There's a help video for each problem in issue #274: `help-windows-warning`, `help-social-signin`,
+`help-booth-signed-out`, `help-payhip-check`, `help-itch-key`, `help-download-fails`, `help-notifications`,
+`help-unrecognised-page` and `help-hidden-pin`. Each is linked from the wiki section that explains its problem
+(Troubleshooting, and the FAQ), in each language, at its address on the `media` release:
+`https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-<film>-<lang>-<shape>.mp4`.
+A help video says what its wiki section says: change both together.
 
 `PRODUCTS_FOLDER` is the products the website's screenshots show, the ones listed on its
 [credits page](https://hoard.furryup.link/credits.html) (`scripts/export_screenshot_products.py` makes such a folder
@@ -50,5 +65,10 @@ an element draws, what sticks out of it too), with a little of the screen round 
 hard cut. A few screens are taken for the videos alone (`wishlist-prices`, `downloads-files`), scrolled so what
 they look at closely isn't cut off by the page's edge. `tests/test_promo.py` checks every name a film uses is there.
 
-Only made-up data is shown: a data folder `scripts/screenshots.py` makes, never yours, with the products given. A
-store's own pages are never shown: a step outside Hoard (a store's sign-in window) is a plain drawing of a window.
+A help video's step outside Hoard (a store's page, Windows' warning, a Save as dialog, a terminal) is a plain drawing
+(`"type": "hwindow"`, with its words under `"win"`: a browser's page, a dialog, a search for an app or a terminal),
+clicked through by the pointer: never a picture of anyone's own page or design. `scripts/screenshots.py --regions`
+takes the screens the videos alone use after the website's (its `VIDEO_SHOTS`): Hoard as it is in each help video's
+problem, and the parts the long promo shows, Hoard's looks among them.
+
+Only made-up data is shown: a data folder `scripts/screenshots.py` makes, never yours, with the products given.

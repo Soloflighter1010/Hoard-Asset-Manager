@@ -3,6 +3,9 @@
  "wiki": "Troubleshooting#itchio-didnt-accept-the-api-key",
  "style": "help",
  "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
  "bpm": 100,
  "music": {
   "start_bar": 0,

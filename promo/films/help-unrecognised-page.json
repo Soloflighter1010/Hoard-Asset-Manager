@@ -3,6 +3,9 @@
  "wiki": "Troubleshooting#hoard-didnt-recognise-this-page",
  "style": "help",
  "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
  "bpm": 100,
  "music": {
   "start_bar": 0,

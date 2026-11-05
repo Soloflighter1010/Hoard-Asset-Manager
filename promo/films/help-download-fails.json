@@ -3,6 +3,9 @@
  "wiki": "Troubleshooting#a-download-keeps-failing-or-is-skipped",
  "style": "help",
  "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
  "bpm": 100,
  "music": {
   "start_bar": 0,
