@@ -23,6 +23,13 @@ VERSION = re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py")
 NUMBERS = ".".join(re.findall(r"\d+", VERSION)[:3])   # (Windows' file version takes numbers only)
 
 
+# What Hoard imports (and Apprise's services do), which Nuitka follows by itself: only the rest are put in by name.
+# (Putting all of Playwright in by name compiles its async API too, which Hoard never uses, and whose one huge module
+# runs Windows' compiler out of memory.)
+FOLLOWED = {"playwright", "greenlet", "pyee", "requests", "urllib3", "certifi", "charset_normalizer", "idna", "tqdm",
+            "apprise", "requests_oauthlib", "oauthlib", "markdown", "yaml", "_yaml"}
+
+
 def metadata() -> list[str]:
     """Each library's own details, with its license files, for Acknowledgements (as the PyInstaller spec ships), and
     its code: Nuitka ships a library's details only with the library (one Hoard doesn't import on this system, as
@@ -43,7 +50,7 @@ def metadata() -> list[str]:
                     continue
                 for top in sorted(set(tops.get(name.lower().replace("_", "-"), []))):
                     spec = importlib.util.find_spec(top)
-                    if spec and not top.startswith("__"):
+                    if spec and not top.startswith("__") and top not in FOLLOWED:
                         kind = "package" if spec.submodule_search_locations is not None else "module"
                         out.append(f"--include-{kind}={top}")
                 out.append(f"--include-distribution-metadata={name}")
@@ -65,6 +72,7 @@ def command() -> list[str]:
            "--nofollow-import-to=webview", "--nofollow-import-to=pythonnet", "--nofollow-import-to=clr_loader",
            "--nofollow-import-to=tkinter", "--nofollow-import-to=pydoc",
            "--nofollow-import-to=*.tests",   # (a library's own tests: greenlet's, say)
+           "--nofollow-import-to=playwright.async_api",   # (Hoard uses its sync API)
            *metadata()]
     if WINDOWS:
         cmd += ["--windows-console-mode=attach", f"--windows-icon-from-ico={REPO / 'packaging' / 'hoard.ico'}",
