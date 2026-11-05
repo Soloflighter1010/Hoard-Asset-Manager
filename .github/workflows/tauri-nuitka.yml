@@ -4,11 +4,13 @@ name: Tauri and Nuitka build
 # pywebview, and its server compiled by Nuitka (scripts/build_nuitka.py) instead of packed by PyInstaller, for
 # Windows, macOS and Linux, to compare with the usual build.
 #
-# Every push to claude/tauri-nuitka builds it (the files are kept with the run, under Artifacts). Pushing a
-# tauri-nuitka-beta.<n> tag releases it, as release.yml releases the app: a draft, each file attached, VirusTotal's
-# scan, then a pre-release, never Latest. A file VirusTotal flags leaves the draft for a person to look at. Hoard's
-# updates only look at its version tags (v...), and Tidy releases leaves other tags alone, so this build is never
-# offered to anyone: it's downloaded from its release.
+# Every push to claude/tauri-nuitka builds it. shell/RELEASE says which experiment it is (n): while
+# tauri-nuitka-beta.<n> isn't published yet, the push releases it, as release.yml releases the app: a draft, each
+# file attached, VirusTotal's scan, then a pre-release, never Latest, its tag made on this push's commit as it's
+# published (a tag pushed by hand releases too). A file VirusTotal flags leaves the draft for a person to look at.
+# Once it's published, pushes only build (the files are kept with the run, under Artifacts); the next number in
+# shell/RELEASE makes the next one. Hoard's updates only look at its version tags (v...), and Tidy releases leaves
+# other tags alone, so this build is never offered to anyone: it's downloaded from its release.
 #
 # Windows' programs and setup are signed as release.yml signs them (Azure Artifact Signing, in the release-signing
 # environment), for a release only. The Mac's aren't signed, as the usual Mac app isn't. Every action is pinned to
@@ -26,21 +28,45 @@ concurrency:
   group: tauri-nuitka-${{ github.ref }}
 
 jobs:
+  # Whether this push releases, and as which tag: a tag pushed by hand, or shell/RELEASE's while it isn't published
   release:
-    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write        # the draft release
-    env:
-      TAG: ${{ github.ref_name }}
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      tag: ${{ steps.plan.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Make the release (a draft until every file is attached)
+      - name: Is this a release?
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            n=$(tr -dc '0-9' < shell/RELEASE)
+            [ -n "$n" ] || { echo "::error::shell/RELEASE should hold the experiment's number."; exit 1; }
+            tag="tauri-nuitka-beta.$n"
+          fi
+          draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          if [ "$draft" = "false" ]; then
+            echo "$tag is published already: this push only builds (the next number in shell/RELEASE makes the next)."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Make the release (a draft until every file is attached)
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
         run: |
           version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' hoard/__init__.py)
           words=$(echo "$version" | sed 's/-beta\./ beta /')
@@ -48,14 +74,16 @@ jobs:
           title="Hoard $words, Tauri and Nuitka (experiment ${TAG##*.})"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release edit "$TAG" --title "$title" --notes-file notes.md --prerelease --repo "$GITHUB_REPOSITORY"
-          else
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file notes.md \
               --prerelease --latest=false --verify-tag --draft
+          else   # (the tag is made on this commit when the draft is published)
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file notes.md \
+              --prerelease --latest=false --target "$GITHUB_SHA" --draft
           fi
 
   build:
     needs: release
-    if: ${{ !failure() && !cancelled() }}   # (a push to the branch has no release: it builds all the same)
     strategy:
       fail-fast: false
       matrix:
@@ -65,16 +93,16 @@ jobs:
           - { os: macos-15-intel, name: macos-intel, bundles: "app,dmg" }
           - { os: ubuntu-22.04, name: linux, bundles: "appimage,deb" }   # (22.04: the AppImage runs on older systems too)
     runs-on: ${{ matrix.os }}
-    environment: ${{ (matrix.name == 'windows' && startsWith(github.ref, 'refs/tags/')) && 'release-signing' || '' }}
+    environment: ${{ (matrix.name == 'windows' && needs.release.outputs.release == 'true') && 'release-signing' || '' }}
     permissions:
       contents: write        # add the files to the release
       id-token: write        # sign the build provenance, and sign in to Azure to sign the programs
       attestations: write   # store the provenance with the repository
     env:
-      TAG: ${{ github.ref_name }}
-      RELEASE: ${{ startsWith(github.ref, 'refs/tags/') }}
+      TAG: ${{ needs.release.outputs.tag }}
+      RELEASE: ${{ needs.release.outputs.release }}
       # (not SIGN: linuxdeploy's AppImage plugin reads that, and signs the AppImage with GPG if it's set to anything)
-      SIGN_WINDOWS: ${{ matrix.name == 'windows' && startsWith(github.ref, 'refs/tags/') && vars.AZURE_SIGNING_ACCOUNT != '' }}
+      SIGN_WINDOWS: ${{ matrix.name == 'windows' && needs.release.outputs.release == 'true' && vars.AZURE_SIGNING_ACCOUNT != '' }}
     defaults:
       run:
         shell: bash
@@ -247,13 +275,13 @@ jobs:
   # notes. A file an engine flags fails this, and the release stays a draft for a person to look at.
   virustotal:
     needs: [release, build]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: needs.release.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write        # read the draft's files, and add the results to its notes
     env:
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ needs.release.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -297,12 +325,12 @@ jobs:
   # Last: publishing makes the release immutable. A pre-release, never Latest.
   publish:
     needs: [release, build, virustotal]
-    if: startsWith(github.ref, 'refs/tags/') && !failure() && !cancelled()
+    if: needs.release.outputs.release == 'true' && !failure() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
       contents: write        # publish the draft
     env:
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ needs.release.outputs.tag }}
     steps:
       - name: Publish the release
         env:

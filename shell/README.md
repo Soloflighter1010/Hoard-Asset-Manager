@@ -31,6 +31,8 @@ to run it from there.
 ## Releasing it
 
 `.github/workflows/tauri-nuitka.yml` builds it for Windows, macOS (Apple silicon and Intel) and Linux on every push
-to its branch (the files are kept with the run), and releases it when a `tauri-nuitka-beta.<n>` tag is pushed: a
-draft, VirusTotal's scan, then a pre-release, never Latest. Hoard's updates only look at version tags (`v...`), so
-nobody is offered this build; it says so in Hoard's updates (`hoard/updater.py`).
+to its branch. `RELEASE` holds the experiment's number, n: while `tauri-nuitka-beta.<n>` isn't published, a push
+releases it (a draft, VirusTotal's scan, then a pre-release, never Latest, tagged on that push's commit). After that,
+pushes only build, with the files kept with the run; put the next number in `RELEASE` for the next one. Hoard's
+updates only look at version tags (`v...`), so nobody is offered this build; it says so in Hoard's updates
+(`hoard/updater.py`).
