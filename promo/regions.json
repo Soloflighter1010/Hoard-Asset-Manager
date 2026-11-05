@@ -53,10 +53,8 @@
   "products": "#setView"
  },
  "wishlist": {
-  "cheaper": ".price.down",
   "products": "#setView",
   "share": "#setView [data-setx=share]",
-  "card": ".slot:has(.price.down)",
   "buttons": "#setView .sethead-text"
  },
  "wishlist-prices": {
