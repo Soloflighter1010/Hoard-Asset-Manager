@@ -16,8 +16,8 @@
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge" alt="라이선스"></a>
 </p>
 
-<p align="center"><b>구매한 아바타 에셋을 전부 한곳에.</b><br>
-Booth, Gumroad, Jinxxy, Payhip, itch.io에서 구매한 것을 검색하고, 거르고, 보관할 수 있는 하나의 라이브러리로 모아요.</p>
+<p align="center"><b>구매한 아바타 에셋도, 그걸로 만드는 프로젝트도 전부 한곳에.</b><br>
+Booth, Gumroad, Jinxxy, Payhip, itch.io에서 구매한 것을 검색하고, 거르고, 보관할 수 있는 하나의 라이브러리로 모으고, 그걸로 만드는 Unity 프로젝트도 관리해요.</p>
 
 그 후드티, Booth에서 샀나요, Gumroad에서 샀나요? 제작자가 업데이트했나요? 파일은 아직 가지고 있나요?
 Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
@@ -28,6 +28,7 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 
 - **라이브러리:** Booth, Gumroad, Jinxxy, Payhip, itch.io에서 가진 모든 것을 검색하고, 거르고, 태그를 붙일 수 있는 한 페이지에. 여러 스토어에서 가진 상품도 찾아내요.
 - **다운로드:** `<스토어>/<제작자>/<상품>`으로 깔끔하게 정리된 폴더에 로컬 사본을 저장하고, 제작자가 파일을 업데이트하면 최신으로 유지해요. (Payhip은 목록만 보여주고 다운로드하지 않아요. 아래를 보세요.)
+- **프로젝트:** Creator Companion, ALCOM과 같은 목록의 내 Unity 프로젝트. VRChat 템플릿으로 라이브러리의 상품을 넣어 만들고, 패키지를 업데이트하고, 백업하고, Git으로 기록을 남겨요.
 - 앱도, 로그인도, 태그도 하나뿐이고, 오프라인에서도 돼요.
 
 <p align="center">
@@ -40,12 +41,20 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
   <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoard 다운로드 페이지: 타일 옆에 상품 상세가 열리고, 스토어, 사용하는 Unity 프로젝트, 폴더 열기 버튼과 편집용 사본 만들기 버튼이 있어요.">
 </picture>
 <picture>
+  <source srcset="site/img/project-details-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-details-dark.webp" width="49%" alt="Hoard의 프로젝트: Creator Companion 목록에 있는 Unity 프로젝트와, 옆에 프로젝트 상세 정보(크기, 패키지, 백업, 브랜치).">
+</picture>
+<picture>
+  <source srcset="site/img/project-git-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-git-dark.webp" width="49%" alt="프로젝트의 소스 관리 탭: 브랜치, 스테이지할 변경, 커밋 메시지 칸, 기록, 리모트.">
+</picture>
+<picture>
   <source srcset="site/img/project-manage-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/project-manage-dark.webp" width="49%" alt="Hoard에서 Unity 프로젝트 관리: VRChat 패키지와 업데이트, 고를 수 있는 다른 버전, 라이브러리에서 넣은 상품과 각각이 추가한 폴더, Hoard for Unity가 찾은 것이 있어요.">
 </picture>
 <picture>
   <source srcset="site/img/inside-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/inside-dark.webp" width="49%" alt="Unity 패키지 내용 보기: 폴더와 파일을 Unity의 미리보기와 함께, 풀지 않고 보여 줘요.">
+  <img src="site/img/inside-dark.webp" width="49%" alt="Unity 패키지 내용 보기: 폴더와 파일을 풀지 않고 보여 줘요.">
 </picture>
 <picture>
   <source srcset="site/img/sets-light.webp" media="(prefers-color-scheme: light)">
@@ -65,7 +74,7 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 </picture>
 </p>
 
-<sub>라이브러리, 다운로드의 상품 상세, 프로젝트의 Unity 프로젝트, 내용 보기, 세트, 위시리스트, 조합하기, 내 것 추가하기 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://hoard.furryup.link/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
+<sub>라이브러리, 다운로드의 상품 상세, 프로젝트의 상세 정보·소스 관리·패키지, 내용 보기, 세트, 위시리스트, 조합하기, 내 것 추가하기 화면이에요. 관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 그림과 함께 보여줘요. <a href="https://hoard.furryup.link/credits.html">각각 누가 만들었고 어디서 구할 수 있는지</a>. 멋진 작품을 만들어 주셔서 고마워요.</sub>
 
 설치부터 문제 해결까지 모든 안내는 **[wiki](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/홈)**에 있어요(한국어. [영어판](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki)도 있어요).
 
@@ -261,4 +270,4 @@ Hoard가 어떻게 만들어졌는지(스토어 읽기, 로그인, 로컬 서버
 - [SECURITY.md](SECURITY.md): 보안 문제 신고
 - [CODE_SIGNING.md](CODE_SIGNING.md): 코드 서명 정책
 
-법적 문서는 영어판이 정식이에요. 로고 파일은 `brand/`에 있어요. 워드마크는 Dela Gothic One을 윤곽선으로 바꾼 것이라 글꼴을 설치할 필요가 없어요.
+법적 문서는 영어판이 정식이에요. 로고 파일은 `brand/`에 있어요. 로고는 '더미(Heap)'로, 스토어마다 하나씩인 상자, 프로젝트를 뜻하는 정육면체 상자, 맨 위의 금색 상자로 되어 있고 `hoard/heap.py`가 그려요. 워드마크는 Dela Gothic One을 윤곽선으로 바꾼 것이라 글꼴을 설치할 필요가 없어요.

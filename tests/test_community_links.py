@@ -21,10 +21,14 @@ PAGES = [REPO / "hoard" / "web" / n for n in ("library.html", "downloads.html")]
 
 class CommunityLinks(unittest.TestCase):
 
-    def test_discord_in_the_pages_footers(self):
+    def test_discord_in_the_pages_bars(self):
+        # (#270: Hoard's own links are in the bar, before Menu and Sync, and in the Menu when the bar has no room)
         for page in PAGES:
-            footer = page.read_text("utf-8").split('<footer class="foot">', 1)[1].split("</footer>", 1)[0]
-            self.assertRegex(footer, DISCORD, page.name)
+            text = page.read_text("utf-8")
+            bar = text.split('<nav class="bar-links"', 1)[1].split("</nav>", 1)[0]
+            menu = text.split('<div class="barmenu-links"', 1)[1].split("</div>", 1)[0]
+            self.assertRegex(bar, DISCORD, page.name)
+            self.assertRegex(menu, DISCORD, page.name)
 
     def test_discord_on_the_website_and_the_wiki(self):
         self.assertTrue(site_chrome.DISCORD.startswith("https://discord.gg/"))

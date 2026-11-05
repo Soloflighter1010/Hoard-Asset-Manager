@@ -66,6 +66,9 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
            "/api/vpm/preview", "/api/vpm/apply", "/api/vpm/create", "/api/vpm/preload", "/api/vpm/backup",
            "/api/vpm/refresh", "/api/vpm/open", "/api/vpm/add-project", "/api/vpm/remove-project", "/api/vpm/favorite", "/api/vpm/organize",
+           "/api/vpm/rename", "/api/vpm/git/init", "/api/vpm/git/ignore", "/api/vpm/git/stage", "/api/vpm/git/unstage",
+           "/api/vpm/git/commit", "/api/vpm/git/identity", "/api/vpm/git/remote", "/api/vpm/git/branch", "/api/vpm/git/abort",
+           "/api/vpm/git/open-app", "/api/vpm/git/app", "/api/vpm/git/sync", "/api/vpm/git/clone", "/api/vpm/git/trust",
            "/api/vpm/repos/add", "/api/vpm/repos/remove", "/api/vpm/settings", "/api/vpm/check-name",
            "/api/vpm/presets", "/api/vpm/open-folder", "/api/vpm/backups", "/api/vpm/backups/settings",
            "/api/vpm/backups/delete", "/api/vpm/backups/move", "/api/vpm/backups/show", "/api/vpm/delete-project")
@@ -253,7 +256,8 @@ def public_settings(cfg: dict) -> dict:
         "close_to_taskbar": bool(cfg.get("close_to_taskbar", True)),
         "notify_found": cfg.get("notify_found", True) is not False,
         # notifications through Apprise (issue #230): how many addresses are kept (never the addresses), and what's sent
-        "apprise": {"available": alerts.available(), "kept": alerts.kept(cfg), "events": sorted(alerts.chosen(cfg))},
+        "apprise": {"available": alerts.available(), "kept": alerts.kept(cfg), "addresses": alerts.described(cfg),
+                    "events": sorted(alerts.chosen(cfg))},
         "routine_hours": routine_hours(cfg),
         "new_days": cfg.get("new_days") if cfg.get("new_days") in NEW_DAYS and not isinstance(cfg.get("new_days"), bool) else 7,
         "download_retries": download_retries(cfg),
@@ -421,7 +425,13 @@ VPM_ACTIONS = {"/api/vpm": "Reading your projects", "/api/vpm/project": "Reading
                "/api/vpm/refresh": "Refreshing the repositories", "/api/vpm/open": "Open in Unity",
                "/api/vpm/open-folder": "Open folder", "/api/vpm/add-project": "Add a project",
                "/api/vpm/remove-project": "Take off the list", "/api/vpm/delete-project": "Delete from this computer",
-               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/repos/add": "Add a repository",
+               "/api/vpm/favorite": "Favourite", "/api/vpm/organize": "Folders and tags", "/api/vpm/rename": "Rename a project",
+               "/api/vpm/git": "Source control", "/api/vpm/git/plan": "Set up Git", "/api/vpm/git/init": "Set up Git",
+               "/api/vpm/git/ignore": "Git's ignore rules", "/api/vpm/git/stage": "Stage", "/api/vpm/git/unstage": "Unstage",
+               "/api/vpm/git/commit": "Commit", "/api/vpm/git/identity": "Who commits", "/api/vpm/git/diff": "A file's changes",
+               "/api/vpm/git/history": "History", "/api/vpm/git/files": "A commit's files", "/api/vpm/git/remote": "Remotes",
+               "/api/vpm/git/branch": "Branches", "/api/vpm/git/abort": "Abort the merge", "/api/vpm/git/open-app": "Open in your Git app",
+               "/api/vpm/git/app": "Your Git app", "/api/vpm/git/trust": "Trust its Git settings", "/api/vpm/git/sync": "Fetch, pull or push", "/api/vpm/git/clone": "A project from a Git address", "/api/vpm/repos/add": "Add a repository",
                "/api/vpm/repos/remove": "Remove a repository", "/api/vpm/settings": "Unity and folders",
                "/api/vpm/presets": "Presets", "/api/vpm/backups": "Backups", "/api/vpm/backups/settings": "Backups",
                "/api/vpm/backups/show": "Backups", "/api/vpm/backups/delete": "Delete backups",
@@ -484,7 +494,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # news, sent through Apprise as you chose (issue #230): counts, never a product's name
         self.jobs.on_news = self.project_jobs.on_news = self._news
         self.updates.on_available = lambda version: alerts.send(
-            self.cfg, "other", f"Hoard {version} is available. Open Hoard to update.")
+            self.cfg, "other", f"**Hoard {version}** is available. Open Hoard to update.", title="A new version of Hoard",
+            link=f"{alerts.HOARD_URL}/releases")
         self.schedule = Schedule(cfg, self.jobs)
         previous.set_keep(keep_previous(cfg))
         # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
@@ -636,24 +647,31 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
     def _news(self, kind: str, what) -> None:
         """Issue #230: news from the tasks, sent through Apprise as you chose (hoard/alerts.py): how many, never names."""
         if kind == "found":
-            for event in ("new", "updates"):
+            for event, title in (("new", "New products to download"), ("updates", "Updates to download")):
                 text = alerts.found_text(what, event)
                 if text:
-                    alerts.send(self.cfg, event, text)
-        elif kind == "cheaper":
-            alerts.send(self.cfg, "prices", f"{alerts.plural(what, 'product')} on your wishlists "
-                                            f"{'is' if what == 1 else 'are'} cheaper than before.")
+                    alerts.send(self.cfg, event, text, title=title)
+        elif kind == "cheaper":   # (issue #285: a wishlist's products, which are a store's, with their picture and link)
+            count, items = (what.get("count", 0), what.get("items") or []) if isinstance(what, dict) else (what, [])
+            hidden = MarkStore().keys("hidden")
+            items = [i for i in items if isinstance(i, dict) and i.get("key") not in hidden]
+            text, link = alerts.cheaper_text(count, items)
+            first = next((i for i in items if i.get("thumbnail") and i.get("store") in STORES), None)
+            pic_url = sets.product_picture(first["store"], first["thumbnail"]) if first else None
+            picture = (lambda: fetch_picture(pic_url, STORES[first["store"]]["referer"])) if pic_url else None   # (fetched as it's sent)
+            alerts.send(self.cfg, "prices", text, title="Cheaper on your wishlists", link=link, picture=picture)
         elif kind == "checked":
             parts = [alerts.plural(what[k], f"file {k}", f"files {k}") for k in ("changed", "missing") if what.get(k)]
-            alerts.send(self.cfg, "other", f"The check of your downloads found {' and '.join(parts)}. "
-                                           "Open Hoard to see what it found.")
+            alerts.send(self.cfg, "other", f"The check of your downloads found **{' and '.join(parts)}**. "
+                                           "Open Hoard to see what it found.", title="The check of your downloads")
         elif kind == "finished" and what.get("task") == "routine":
             counts = (what.get("report") or {}).get("routine") or {}
             found = [alerts.plural(counts[k], one) for k, one in (("new", "new product"), ("updates", "update")) if counts.get(k)]
-            alerts.send(self.cfg, "routine", "The routine check failed." if what.get("outcome") == "failed" else
-                        f"The routine check found {' and '.join(found)}." if found else "The routine check found nothing new.")
+            alerts.send(self.cfg, "routine", "The routine check **failed**." if what.get("outcome") == "failed" else
+                        f"The routine check found **{' and '.join(found)}**." if found else "The routine check found nothing new.",
+                        title="The routine check")
         elif kind == "finished" and what.get("task") not in ("list-files",):
-            alerts.send(self.cfg, "tasks", alerts.task_text(what))
+            alerts.send(self.cfg, "tasks", alerts.task_text(what), title="A task finished")
 
     def index(self, rescan: bool = False, stale_ok: bool = False) -> dict:
         """What's on disk, rebuilt from the records on the first call, after a download, and on every rescan.
@@ -1033,6 +1051,8 @@ class Handler(BaseHTTPRequestHandler):
                      "updates_checked": updates["checked"], "integrity": integrity_view(srv.cfg),
                      "needs_reading": dict(srv.needs_reader.state), "sets": grouped}
             return self._json({**index, "version": __version__, "job": public_job(srv.jobs.state, self._hidden_names()), "store_sites": store_sites(),
+                               # the logo's boxes: the stores you use (issue #278)
+                               "enabled": {s: bool(srv.cfg[s].get("enabled", True)) for s in STORES},
                                "can_quit": srv.quit_app is not None, "can_background": srv.hide_window is not None, "can_notify": srv.can_notify, "can_pick": srv.pick_path is not None, "display": display_settings(srv.cfg), "ask_files": bool(srv.cfg.get("ask_files", True)),
                                "ui": ui_settings(srv.cfg), "routine": routine_record()["found"]}, compress=True)
         if path == "/api/projects":   # the Unity projects that use your assets (issue #86)
@@ -1058,7 +1078,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"version": __version__, "releases": whats_new(betas)}, compress=True)
         if path == "/api/setup":
             return self._json({**setup_status(srv.cfg), "job": public_job(srv.jobs.state, self._hidden_names()),
-                               "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True))})
+                               "close_to_taskbar": bool(srv.cfg.get("close_to_taskbar", True)),
+                               # issue #288: its notifications step (the addresses described, as Settings has them)
+                               "apprise": {"available": alerts.available(), "addresses": alerts.described(srv.cfg),
+                                           "events": sorted(alerts.chosen(srv.cfg))}})
         if path == "/api/sets":   # the Sets tab: every set, each product as it is here (hoard/sets.py)
             return self._json(self._sets_view(), compress=True)
         if path.startswith("/setpic/"):   # a set's product's picture, from its store, when it isn't in your library
@@ -1630,6 +1653,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({**found, "report": report}, compress=True)
             if path == "/api/vpm/updates":   # issue #253: each project's packages with newer versions, for the list
                 return self._json({"projects": srv.vpm.updates()}, compress=True)
+            if path in ("/api/vpm/git", "/api/vpm/git/plan", "/api/vpm/git/diff", "/api/vpm/git/history", "/api/vpm/git/files"):
+                action = {"/api/vpm/git": "state"}.get(path, path.rsplit("/", 1)[-1])   # source control (issues #296 to #299)
+                return self._vpm_git(one("path"), action, {"again": one("again") == "1", "file": one("file"), "staged": one("staged") == "1",
+                                                         "ref": one("ref") or None, "skip": one("skip") if one("skip").isdigit() else 0})
             if path == "/api/vpm/about":   # a project's details beside the list: its size on disk, packages, backups
                 found = srv.vpm.about(one("path"))
                 hidden = set() if self._unlocked() else set(MarkStore().keys("hidden"))
@@ -1652,6 +1679,13 @@ class Handler(BaseHTTPRequestHandler):
         except vpm_api.ProjectsError as e:
             return self._json({"error": str(e)}, 400)
         return self._send(404, b"Not found", "text/plain")
+
+    def _vpm_git(self, path, action: str, args: dict):
+        """A source control action on a listed project, answered with what it says, or its error and Git's code."""
+        try:
+            return self._json(self.server.vpm.git(path, action, args), compress=True)
+        except vpm_api.ProjectsError as e:
+            return self._json({"error": str(e), "code": getattr(e, "git_code", "")}, 400)
 
     def _vpm_job(self, what: dict):
         """Queue a Projects task, saying whether it waits its turn."""
@@ -1676,6 +1710,7 @@ class Handler(BaseHTTPRequestHandler):
                     what.update({k: body.get(k) for k in ("add", "remove", "repair", "upgrade_all", "prerelease")})
                 elif path == "/api/vpm/backup":
                     what["leave_out_packages"] = body.get("leave_out_packages") is True
+                    what["git_bundle"] = body.get("git_bundle") is True   # (its Git history in it: issue #299)
                 else:
                     what["picks"] = self._picks(body.get("picks"))
                 return self._vpm_job(what)
@@ -1765,6 +1800,37 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "Type the project's name to delete it."}, 400)
                 srv.vpm.deletable(where)   # (said now when it can't be: Unity has it open, say)
                 return self._vpm_job({"op": "delete", "path": where, "name": Path(where).name, "backup": body.get("backup") is not False})
+            if path == "/api/vpm/git/sync":   # fetch, pull or push: a task, as it talks to a remote (issue #298)
+                where = srv.vpm.listed(body.get("path"))
+                op = {"fetch": "git-fetch", "pull": "git-pull", "push": "git-push"}.get(str(body.get("op") or ""))
+                if not op:
+                    return self._json({"error": "Hoard doesn't know that."}, 400)
+                return self._vpm_job({"op": op, "path": where, "name": Path(where).name, "merge": body.get("merge") is True,
+                                      "remote": str(body.get("remote") or "")[:40] or None})
+            if path == "/api/vpm/git/clone":   # a project from a Git address (issue #299): a task, then it's on the list
+                from .vpm import git as vpm_git
+                try:
+                    url = vpm_git.check_url(body.get("url"))
+                except vpm_git.GitError as e:
+                    return self._json({"error": str(e)}, 400)
+                name = str(body.get("name") or "").strip()[:255] or vpm_git.clone_name(url)
+                location = str(body.get("location") or "")[:1000]
+                problem, _ = vpm_templates.check_name(Path(location), name) if location else ("Choose where it goes.", None)
+                if problem:
+                    return self._json({"error": problem}, 400)
+                return self._vpm_job({"op": "git-clone", "url": url, "name": name, "location": location})
+            if path == "/api/vpm/git/app":   # the Git app to open repositories in (issue #299)
+                try:
+                    return self._json({"ok": True, "app": listing.set_git_app(body.get("app"))})
+                except ValueError as e:
+                    return self._json({"error": str(e)}, 400)
+            if path.startswith("/api/vpm/git/"):   # each one a named action (hoard/vpm/api.py Service.git)
+                return self._vpm_git(body.get("path"), path.rsplit("/", 1)[-1], body)
+            if path == "/api/vpm/rename":   # its folder, where it is (issue #290): the list and Hoard's notes follow it
+                where = srv.vpm.listed(body.get("path"))
+                renamed = srv.vpm.rename(where, str(body.get("name") or "")[:300])
+                vpm_log.info(f"Renamed {Path(where).name} to {Path(renamed).name} ({renamed})")
+                return self._json({"ok": True, "path": renamed, "name": Path(renamed).name})
             if path == "/api/vpm/favorite":
                 listing.note(srv.vpm.listed(body.get("path")), favorite=body.get("on") is True)
                 return self._json({"ok": True})
@@ -2309,24 +2375,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/routine/seen":   # issue #113: you've looked at what the routine check found
             save_routine(found=None)
             return self._json({"ok": True})
-        if path == "/api/apprise":   # issue #230: Apprise's addresses, kept as API keys are; none, or forget, forgets them
-            try:
-                addresses = [] if body.get("forget") is True else alerts.clean_urls(body.get("urls"))
-                if not addresses and body.get("forget") is not True:   # (forgetting them is asked for, and asked first)
-                    raise ValueError("Type an address first, one a line.")
-                alerts.save_urls(srv.cfg, addresses)
+        if path == "/api/apprise":   # issues #230, #287: Apprise's addresses, kept as API keys are, one at a time
+            try:   # (add, replace or remove one; forget forgets them all; the page only ever sees them described)
+                if body.get("forget") is True:
+                    alerts.save_urls(srv.cfg, [])
+                elif body.get("action") in ("add", "replace", "remove"):
+                    alerts.change(srv.cfg, body["action"], str(body.get("id") or ""), body.get("urls"))
+                else:
+                    addresses = alerts.clean_urls(body.get("urls"))
+                    if not addresses:
+                        raise ValueError("Type an address first, one a line.")
+                    alerts.save_urls(srv.cfg, addresses)
             except (ValueError, SigninsUnprotected) as e:
                 return self._json({"error": str(e)}, 400)
             except OSError as e:
                 return self._json({"error": f"They couldn't be kept: {e}"}, 500)
-            return self._json({"ok": True, "kept": len(addresses)})
-        if path == "/api/apprise/test":   # a test notification, to every address kept, now
+            shown = alerts.described(srv.cfg)
+            return self._json({"ok": True, "kept": len(shown), "addresses": shown})
+        if path == "/api/apprise/test":   # a test notification, now: to one address (its id), or to every one kept
             if not alerts.available():
                 return self._json({"error": "Apprise isn't installed. Run Setup again to install it."}, 400)
-            addresses = alerts.urls(srv.cfg)
+            addresses = alerts.by_id(srv.cfg, str(body.get("id"))) if body.get("id") else alerts.urls(srv.cfg)
             if not addresses:
-                return self._json({"error": "Add an Apprise address first."}, 400)
-            problem = alerts.deliver(addresses, "This is a test from Hoard: notifications through Apprise work.")
+                return self._json({"error": "Add an Apprise address first." if not body.get("id") else "That address isn't kept any more."}, 400)
+            problem = alerts.deliver(addresses, "This is a test from **Hoard**: notifications through Apprise work.",
+                                     title="A test from Hoard", link=alerts.HOARD_URL)
             return self._json({"ok": problem is None, "error": problem})
         if path == "/api/integrity/resolve":   # issue #231: deal with what the last check found
             return self._resolve_integrity(body)
@@ -2421,6 +2494,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "No stores are switched on in Settings." if path == "/api/sync" or bulk else "Unknown store."}, 400)
         task = {"/api/login": "login", "/api/logout": "logout", "/api/download": "download",
                 "/api/sync": "sync", "/api/check-updates": "check-updates"}.get(path, "refresh")
+        if task == "refresh" and body.get("quick") is True:   # issue #300: only the start of each library and list
+            task = "quick-refresh"
         only = str(body.get("only") or "").strip()[:200] or None
         # products chosen on the Downloads page (to update, or to check), by their tag_key
         keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:5000]

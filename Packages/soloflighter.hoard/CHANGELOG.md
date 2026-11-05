@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1
+
+- **The Heap, Hoard's new logo.** The window's bar shows the Heap: a box in each store's colour and one with a cube for
+  Projects, the gold box with its sparkle on top, as the Hoard app and the website do now.
+
 ## 0.10.0
 
 - **A stray file isn't a product.** A file or two of a big package no longer marks its product as in the project

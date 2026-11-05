@@ -22,6 +22,7 @@
 - [Security and privacy](Security-and-Privacy)
 - [Troubleshooting](Troubleshooting)
 - [FAQ](FAQ)
+- [Hoard and other tools](Hoard-and-Other-Tools)
 
 **Working on Hoard**
 - [Development](Development)

@@ -21,7 +21,7 @@ OUT = SITE / "img"
 
 # file: (the tab it shows, the title, the line under it). "" is the home page's card, social.jpg.
 CARDS = {
-    "": ("Library", "Every VRChat asset you own, in one hoard", "Lists, downloads and updates what you've bought. Free and open source."),
+    "": ("Library", "Your assets and projects, in one hoard", "Downloads what you've bought, and manages your Unity projects. Free."),
     "docs": ("Docs", "Hoard docs", "Installing, signing in, every setting, Hoard for Unity, and answers to common questions."),
     "how-it-works": ("How it works", "How Hoard works", "From signing in to your stores to bringing your assets into Unity."),
     "trust": ("Trust", "How you can trust Hoard", "Your sign-ins stay on your computer. Check every point for yourself."),

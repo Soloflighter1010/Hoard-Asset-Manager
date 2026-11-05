@@ -86,6 +86,13 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   to a project. Each sees your IP address, and that it's Hoard asking (its version, with a link to its page), as with
   any website. Headers you give a private repository go to its own address only. Nothing about your library or your
   projects is sent.
+- **The Git remotes you add to a project, only when you use them** (5.2.0: **Git**, in a project's details). Hoard
+  runs the Git you have installed, which talks to a remote (GitHub, say, or your own server) when you choose
+  **Fetch**, **Pull** or **Push**, or **Get from a Git address...**, under that remote's own privacy policy.
+  Signing in to it is Git's own, and Hoard keeps no Git passwords. The name and email you give for your commits
+  are kept in that project's own Git settings, and go with your commits to wherever you push them (an email that
+  isn't real, such as `you@example.com`, is fine). **Set up Git...** writes ignore rules that come with Hoard,
+  and fetches nothing.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
   day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A
@@ -95,7 +102,7 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
 
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
 has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading,
-checking for updates, short links and Projects' packages.
+checking for updates, short links, Projects' packages and Git's remotes.
 
 ## Using Hoard on your network
 

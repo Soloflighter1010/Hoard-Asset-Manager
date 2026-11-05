@@ -100,6 +100,21 @@ class ProjectsPanel(unittest.TestCase):
         self.assertIn("The folder isn't there", rows.nth(1).inner_text(), "a project whose folder has gone")
         self.assertIn("Opened in Unity with Hoard, not on the list", page.locator("#projectsBody").inner_text())
         self.assertIn("1 asset from Hoard", rows.nth(2).inner_text())
+        # issue #294: the project opened last is marked, on its row and in its details (none before one's opened)
+        self.assertEqual(page.locator(".pj-last").count(), 0)
+        from hoard.vpm import listing
+        listing.note(str(self.tmp / "Unity" / "Old World"), opened="2026-10-01T10:00:00+00:00")
+        listing.note(str(self.tmp / "Unity" / "Rusk Avatar"), opened="2026-10-30T10:00:00+00:00")
+        page.evaluate("loadProjects()")
+        page.locator(".pj-row.last").wait_for()
+        last = page.evaluate("pjLastOpened().name")
+        self.assertEqual(last, "Rusk Avatar")
+        self.assertEqual(page.locator(".pj-row.last").count(), 1)
+        self.assertEqual(page.locator(".pj-row.last .pj-name b").inner_text(), last)
+        self.assertEqual(page.locator(".pj-row.last .pj-last").inner_text(), "Last opened")
+        self.assertEqual(page.locator(".pj-row:not(.last) .pj-last").count(), 0)
+        self.assertEqual(pj_details(page, last).locator(".pj-last").inner_text(), "Last opened")
+        page.locator("[data-pj=undetail]").click()
         page.fill("#pjFind", "mochi")
         self.assertEqual(page.locator("#projectsBody .pj-row:visible").count(), 1)
         page.fill("#pjFind", "")
@@ -125,7 +140,7 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(panel.locator(".pj-d-art b").inner_text(), "RA")
         self.assertIn("k-avatars", panel.get_attribute("class"))
         self.assertEqual(panel.locator(".actions button").all_inner_texts(), ["Open in Unity", "Manage", "Show in folder"])
-        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(), ["Make it a favourite", "Back up...", "Take off the list"])
+        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(), ["Make it a favourite", "Back up...", "Rename...", "Take off the list"])
         self.assertIn("Unity 2022.3.22f1", panel.inner_text())
         self.assertEqual(row.locator(".pj-open").get_attribute("aria-pressed"), "true")
         # what's read once it's open: its size on disk (Unity's cache apart), its packages, and its backups
@@ -148,6 +163,113 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(gone.locator(".actions button").count(), 0)
         self.assertEqual(gone.locator(".marks button").all_inner_texts(), ["Make it a favourite", "Take off the list"])
         self.assertEqual(gone.locator(".pj-d-about").inner_text(), "")
+
+    def test_drag_projects_into_folders(self):
+        """Issue #281: a project dropped on another makes a folder of them, named as it's made; one dropped on a folder
+        (its tile, or its button above the list) goes in it. What a drop will do shows as you drag."""
+        page = self.page
+        row = lambda name: page.locator("#projectsBody .pj-row", has_text=name)  # noqa: E731
+        self.assertEqual(row("Rusk Avatar").get_attribute("draggable"), "true")
+        row("Rusk Avatar").drag_to(row("Old World"))
+        page.locator("dialog[open] #askName").wait_for()
+        page.fill("dialog[open] #askName", "Duo")
+        page.keyboard.press("Enter")
+        page.wait_for_function("() => PJ.data.projects.filter(p => p.folder === 'Duo').length === 2")
+        # out of it, then dropped on its button above the list: in it again
+        pj_folder(page, "Rusk Avatar", "")
+        chip = page.locator('#projectsBody .pj-folders [data-folder="Duo"]')
+        chip.wait_for()
+        page.wait_for_timeout(300)   # (the list drawn again once it's out)
+        hint = page.evaluate("""() => { const dt = new DataTransfer(), from = [...document.querySelectorAll('#projectsBody .pj-row')].find(r => r.textContent.includes('Rusk Avatar'));
+          const to = document.querySelector('#projectsBody .pj-folders [data-folder="Duo"]');
+          from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          const said = to.dataset.dropHint;
+          document.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+          return said; }""")
+        self.assertEqual(hint, "Move into Duo")
+        row("Rusk Avatar").drag_to(chip)
+        page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').folder === 'Duo'")
+
+    @unittest.skipUnless(__import__("shutil").which("git"), "needs Git installed")
+    def test_source_control(self):
+        """Issues #296, #297: a project's Source control tab: Git missing says how to get it; set up after its ignore
+        rules are shown; changes chosen, staged and committed; the history, a commit's files and a file's changes."""
+        from hoard.vpm import git
+        conf = self.tmp / "gitconfig"
+        conf.write_text("[user]\n\tname = Kitsu\n\temail = kitsu@example.com\n[init]\n\tdefaultBranch = main\n")
+        env = mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(conf), "GIT_CONFIG_NOSYSTEM": "1"})
+        env.start()
+        self.addCleanup(env.stop)
+        page = self.page
+        pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
+        tab = page.locator(".pj-subs [data-sub=git]")
+        self.assertEqual(tab.inner_text(), "Source control")
+        with mock.patch.object(git, "_candidates", lambda: []):
+            git.find(again=True)
+            tab.click()
+            page.locator(".pj-git-none h4", has_text="Git isn't installed").wait_for()
+            self.assertEqual(page.locator(".pj-git-none a").get_attribute("href"), "https://git-scm.com/downloads")
+        page.click("[data-pj=gitagain]")
+        page.locator(".pj-git-none h4", has_text="Not set up").wait_for()
+        page.click("[data-pj=gitsetup]")
+        dlg = page.locator("dialog.pj-dlg", has_text="Set up Git for Rusk Avatar?")
+        dlg.wait_for()
+        self.assertIn(".gitignore", dlg.inner_text())
+        self.assertIn("/[Ll]ibrary/", dlg.locator(".pj-plan").first.inner_text())
+        self.assertIn("Assets", dlg.locator(".pj-plan-cols").inner_text())
+        dlg.locator("button[value=yes]").click()
+        page.locator(".pj-git-files li").first.wait_for()
+        self.assertTrue((self.tmp / "Unity" / "Rusk Avatar" / ".git").is_dir())
+        self.assertTrue(page.locator("[data-pj=gitcommit]").is_disabled(), "nothing staged yet")
+        page.check("[data-gitall]")
+        page.click("[data-pj=gitstage]")
+        page.wait_for_function("() => PJG.data && PJG.data.counts && PJG.data.counts.staged > 0")
+        page.fill("#pjGitMsg", "First: the avatar")
+        page.click("[data-pj=gitcommit]")
+        page.locator(".toast", has_text="Committed: First: the avatar").wait_for()
+        page.locator(".pj-git-files + *, .pj-git .none", has_text="No changes").first.wait_for()
+        self.assertIn("Last commit: First: the avatar", page.locator(".pj-git-head").inner_text())
+        # a change, and its lines; the history, and a commit's files
+        (self.tmp / "Unity" / "Rusk Avatar" / "Packages" / "manifest.json").write_text('{"dependencies": {"x": "1"}}')
+        page.click("[data-pj=gitreload]")
+        page.locator(".pj-git-files li", has_text="Packages/manifest.json").wait_for()
+        page.locator(".pj-git-files li", has_text="Packages/manifest.json").locator("[data-pj=gitdiff]").click()
+        page.locator(".pj-diff-text .add", has_text='"x": "1"').wait_for()
+        page.click("[data-pj=githistory]")
+        page.locator(".pj-git-log li", has_text="First: the avatar").locator("[data-pj=gitref]").click()
+        page.locator(".pj-git-cfiles li", has_text="Packages/manifest.json").wait_for()
+        # its details say so
+        page.click("[data-pj=back]")
+        page.locator("#pjFind").wait_for()
+        page.wait_for_timeout(300)   # (the list drawn, with its details still open)
+        pj_details(page, "Rusk Avatar")
+        page.wait_for_function("() => PJ.about && PJ.about.git")
+        facts = dict(zip(*(pj_details(page, "Rusk Avatar").locator(f".pj-facts {t}").all_inner_texts() for t in ("dt", "dd"))))
+        self.assertEqual(facts["Source control"], "main · 1 change")
+
+    def test_rename_a_project(self):
+        """Issue #290: Rename... in a project's details renames its folder, and its details stay open under the new
+        name; a name that can't be used is refused, and nothing changes."""
+        page = self.page
+        panel = pj_details(page, "Rusk Avatar")
+        self.assertEqual(panel.locator(".marks").first.locator("button").all_inner_texts(),
+                         ["Make it a favourite", "Back up...", "Rename...", "Take off the list"])
+        panel.locator("[data-pj=rename]").click()
+        page.locator("dialog[open] #askName").wait_for()
+        self.assertEqual(page.input_value("dialog[open] #askName"), "Rusk Avatar")
+        page.fill("dialog[open] #askName", "CON")
+        page.keyboard.press("Enter")
+        page.locator(".toast", has_text="can't be used as a folder name").wait_for()
+        self.assertTrue((self.tmp / "Unity" / "Rusk Avatar").is_dir())
+        pj_details(page, "Rusk Avatar").locator("[data-pj=rename]").click()
+        page.fill("dialog[open] #askName", "Rusk Avatar 2")
+        page.keyboard.press("Enter")
+        page.locator(".toast", has_text="Renamed it Rusk Avatar 2.").wait_for()
+        page.locator("#projectsBody .pj-detail .pj-d-name", has_text="Rusk Avatar 2").wait_for()
+        self.assertTrue((self.tmp / "Unity" / "Rusk Avatar 2").is_dir())
+        self.assertFalse((self.tmp / "Unity" / "Rusk Avatar").exists())
+        self.assertIn("Rusk Avatar 2", page.locator(".pj-row b").all_inner_texts())
 
     def test_projects_as_tiles_with_folder_tiles(self):
         """Issue #250: projects as tiles (remembered), and a folder of them as one folder tile that opens to them."""
@@ -201,6 +323,19 @@ class ProjectsPanel(unittest.TestCase):
         pj_details(page, "Rusk Avatar").locator(".pj-up-go", has_text="newer version").click()
         page.wait_for_function("() => PJ.view === 'project'")
 
+    def test_a_tag_being_typed_stays_when_the_list_is_drawn_again(self):
+        """The list is drawn again as its updates and a project's details come in, which emptied a tag being typed in
+        the details (and, on a slow computer, the next one typed just after adding one)."""
+        page = self.page
+        pj_details(page, "Rusk Avatar")
+        page.fill("#pjTagInput", "half-typed")
+        page.evaluate("drawProjects()")
+        self.assertEqual(page.input_value("#pjTagInput"), "half-typed")
+        self.assertTrue(page.evaluate("document.activeElement.id === 'pjTagInput'"), "where you were typing")
+        page.press("#pjTagInput", "Enter")
+        page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.includes('half-typed') && !PJ.busy")
+        self.assertEqual(page.input_value("#pjTagInput"), "", "added, so not kept as typed")
+
     def test_folders_and_tags(self):
         """Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have
         only a favourite): one folder shown at a time, a project's folder and tags changed in its details, and each tag
@@ -211,7 +346,8 @@ class ProjectsPanel(unittest.TestCase):
         for typed in ("Quest", "poiyomi", "quest"):   # (Enter adds one; a tag it has already isn't added twice)
             page.fill("#pjTagInput", typed)
             page.press("#pjTagInput", "Enter")
-            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n", arg=1 if typed == "Quest" else 2)
+            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n && !PJ.busy",
+                                   arg=1 if typed == "Quest" else 2)   # (saved: one action at a time, as you'd see it)
         bar = page.locator("#projectsBody .pj-folders")
         bar.wait_for()
         self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])
@@ -430,7 +566,7 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.locator(".pj-pk tr[data-name='com.vrchat.avatars'] td.from").inner_text(), "Official")
         # its tabs: Packages, Add packages, From your library, and what Hoard for Unity reported of it
         tabs = page.locator(".pj-subs .pj-tab")
-        self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report"])
+        self.assertEqual(tabs.evaluate_all("l => l.map(b => b.dataset.sub)"), ["packages", "add", "library", "report", "git"])
         page.click(".pj-subs [data-sub=report]")
         page.locator(".proj", has_text="What Hoard for Unity found in it").wait_for()
         # what it found: as their library tiles, with how each is in it; choosing one shows it in the library
@@ -490,6 +626,7 @@ class ProjectsPanel(unittest.TestCase):
         page.wait_for_function("() => document.querySelector('#pjNameNote').textContent.includes(\"can't be used\")")
         # a product from the library: chosen in Downloads (from the Library page, it goes there), then back to the
         # new project as it was, with it in
+        self.assertEqual(page.locator("[data-pj=addprod]").inner_text(), "Add Assets")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")
         page.locator("#bulk [data-main]", has_text="Add to project").wait_for()
@@ -528,13 +665,18 @@ class ProjectsPanel(unittest.TestCase):
         self.assertEqual(page.input_value("#pjName"), "CON", "what was typed is kept")
 
     def test_put_in_products_from_your_library(self):
-        """A project's Put in products from your library opens Downloads (from the Library page, it goes there) in
-        Select mode for that project, where all there is to do is Add to project or Cancel; both go back to it."""
+        """A project's Add Assets (issue #282) opens Downloads (from the Library page, it goes there) in Select mode for
+        that project, where all there is to do is Add to project or Cancel; both go back to it. With nothing in it
+        yet, its tab reads as an empty Library does (issue #283)."""
         page = self.page
         ran = []
         self.srv.project_jobs.project_runner = lambda what: ran.append(what) or "Done."
         pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
         page.click("[data-pj=sub][data-sub=library]")
+        empty = page.locator("#projectsWin .pj-empty")
+        self.assertEqual(empty.locator("h2").inner_text(), "Nothing from your library in it yet")
+        self.assertIn("Hoard puts them in the project", empty.inner_text())
+        self.assertEqual(empty.locator("button.primary").inner_text(), "Add Assets")
         page.click("[data-pj=addprod]")
         page.wait_for_url("**/downloads*")
         bar = page.locator("#bulk")

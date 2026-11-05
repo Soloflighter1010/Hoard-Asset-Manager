@@ -91,6 +91,7 @@ APPRISE_BUILT = [
      "matrixs://bot:pw@matrix.org/%23hoard%3Amatrix.org"),
     ("gotify", {"server": "https://gotify.example.com", "token": "AbCdEf123"}, "gotifys://gotify.example.com/AbCdEf123"),
     ("webhook", {"url": "https://example.com/hook?token=abc/d"}, "jsons://example.com/hook?-token=abc%2Fd"),
+    ("webhook", {"url": "https://bot:s3cret@hooks.example.com/hoard"}, "jsons://bot:s3cret@hooks.example.com/hoard"),   # (its sign-in kept)
 ]
 
 
@@ -170,8 +171,9 @@ class AccessKey(unittest.TestCase):
             page.close()
 
     def test_an_update_is_offered(self):
-        """A newer version from the last check shows in the footer and in Settings; this copy (not the installed
-        app) links to the release instead of offering to install it."""
+        """A newer version from the last check shows in the bar and in Settings; this copy (not the installed app)
+        links to the release instead of offering to install it. With Hoard's links in the Menu (no room for them in
+        the bar), the Menu has it."""
         self.srv.updates.state["latest"] = {"version": "99.0.0", "url": "https://github.com/Soloflighter1010/"
                                             "Hoard-Asset-Manager/releases/tag/v99.0.0", "notes": "", "published": "",
                                             "has_installer": True}
@@ -179,12 +181,19 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(self.srv.cfg.update, check_for_updates=bool(self.srv.cfg.get("check_for_updates")))
         self.srv.cfg["check_for_updates"] = True   # (not whatever another test's settings left in the shared folder)
         page, refused = self.open(self.srv.entry_url())
-        page.get_by_role("button", name="Update to 99.0.0").wait_for()
+        page.set_viewport_size({"width": 1800, "height": 900})   # (room for Hoard's links in the bar)
+        page.locator("#updateNote", has_text="Update to 99.0.0").wait_for()
         page.click("#updateNote")
         page.get_by_text("Hoard 99.0.0 is available").wait_for()
         self.assertTrue(page.locator("#updInstall").is_hidden(), "only the installed app installs it")
         self.assertTrue(page.locator("#updLink").is_visible())
         self.assertTrue(page.locator("#setUpdates").is_checked(), "Settings shows automatic checks as they are")
+        page.evaluate("closeSettings()")
+        page.set_viewport_size({"width": 1000, "height": 900})
+        page.wait_for_function("() => document.querySelector('.bar').dataset.links === 'menu'")
+        page.click("#menuBtn")
+        page.locator("#barMenu [data-update-note]", has_text="Update to 99.0.0").click()
+        page.get_by_text("Hoard 99.0.0 is available").wait_for()
         self.assertEqual(refused, [])
         page.close()
 
@@ -229,7 +238,7 @@ class AccessKey(unittest.TestCase):
         self.addCleanup(st.change, "archived", {rusk}, False)
         goto(page, f"{self.srv.url}downloads")
         page.locator("#views [data-view='archive']").wait_for()
-        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Updates\n0", "Archive\n1", "Disk space\n3 bytes"],
+        self.assertEqual(page.locator("#views [data-view]").all_inner_texts(), ["Downloads\n0", "Asset updates\n0", "Archive\n1", "Disk space\n3 bytes"],
                          "Disk space counts what's archived too: it's still on disk")
         self.assertEqual(page.locator("#grid .slot").count(), 0, "not among the other downloads")
         self.assertEqual(page.locator("#creators li").count(), 0, "nor counted under its creator here")
@@ -266,7 +275,7 @@ class AccessKey(unittest.TestCase):
             page.get_by_role("link", name="See the update").wait_for()   # issue #108: beside Show in Downloads
             goto(page, f"{self.srv.url}downloads")
             page.locator("#views [data-view='updates']").wait_for()
-            self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Updates\n1")
+            self.assertEqual(page.locator("#views [data-view='updates']").inner_text(), "Asset updates\n1")
             page.click("#views [data-view='updates']")
             self.assertIn("1 download has newer files", page.locator("#viewBar").inner_text())
             self.assertIn("Last checked", page.locator("#viewBar").inner_text())
@@ -331,53 +340,121 @@ class AccessKey(unittest.TestCase):
         self.assertEqual(refused, [])
         page.close()
 
-    def test_building_an_apprise_address(self):
-        """Issue #239: Build an address makes a service's Apprise address from its fields and puts it in the box with
-        the others (nothing is sent, or kept, until Keep these addresses)."""
-        from unittest import mock
-        from hoard import alerts
-        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None):
+    def test_quick_refresh_in_stores(self):
+        """Issue #300: Stores' Quick refresh starts a quick refresh of every store you use (the start of each library
+        and list), as Refresh all stores starts a full one."""
+        started = []
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"):
             page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#storesBtn")
+            page.click("#quickRefresh")
+            for _ in range(50):
+                if started:
+                    break
+                page.wait_for_timeout(100)
+            page.click("#refreshAll")
+            for _ in range(50):
+                if len(started) == 2:
+                    break
+                page.wait_for_timeout(100)
+        self.assertEqual([t for t, _s, _k in started], ["quick-refresh", "refresh"])
+        self.assertIn("booth", started[0][1])
+        self.assertEqual(started[0][1], started[1][1], "the same stores")
+        self.assertEqual(refused, [])
+        page.close()
+
+    def test_building_an_apprise_address(self):
+        """Issues #239, #287: Add an address makes a service's Apprise address from its fields and keeps it on its own;
+        Settings then lists it by its service and what tells it apart, never its token, and the page is never sent
+        one. Each service links its own page in Apprise's documentation (issue #286)."""
+        from hoard import alerts, vault
+        self.srv.cfg["allow_unprotected_signins"] = True
+        self.addCleanup(self.srv.cfg.pop, "allow_unprotected_signins", None)
+        self.addCleanup(vault.forget_key, self.srv.cfg, alerts.SECRET)
+        secrets = ["AbC-dEf_123", "ABC-def_ghi", "app%20pass", "you:app", "fakeapptoken", "notarealtoken", "AbCdEf123", "abc%2Fd"]
+        with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None), \
+                mock.patch.object(alerts, "_described", None), mock.patch.object(server, "save_config"):
+            page, refused = self.open(self.srv.entry_url())
+            seen = []
+            page.on("response", lambda r: seen.append(r) if "/api/" in r.url else None)
             page.get_by_text("Rusk").first.wait_for()
             menu(page, "#settingsBtn")
             page.locator("#settingsPanel:not([hidden])").wait_for()
-            page.locator("#appriseBuild summary").click()
-            sent = []
-            page.on("request", lambda r: sent.append(r.url) if r.method == "POST" else None)
-            for service, fields, want in APPRISE_BUILT:
+            page.locator("#appriseBuild > summary").click()
+            for n, (service, fields, want) in enumerate(APPRISE_BUILT, 1):
                 page.select_option("#appriseService", service)
+                # issue #286: each service's own page in Apprise's documentation
+                doc = page.locator("#appriseFields a")
+                slug = "json" if service == "webhook" else service
+                self.assertEqual(doc.get_attribute("href"), f"https://appriseit.com/services/{slug}/", service)
                 for k, v in fields.items():
                     page.fill(f'[data-apprise-field="{k}"]', v)
                 page.click("#appriseAdd")
-                self.assertIn(want, page.input_value("#setApprise").split("\n"), service)
-            self.assertEqual(page.input_value("#setApprise").split("\n"), [w for _, _, w in APPRISE_BUILT], "one a line")
+                page.wait_for_function("n => document.querySelectorAll('#appriseList li').length === n", arg=min(n, len({w for _, _, w in APPRISE_BUILT[:n]})))
+                self.assertIn(want, alerts.urls(self.srv.cfg), service)
+            self.assertEqual(alerts.urls(self.srv.cfg), [w for _, _, w in APPRISE_BUILT], "each kept, in order")
+            listed = page.locator("#appriseList li b").all_inner_texts()
+            self.assertEqual(listed[:3], ["Discord", "Telegram", "ntfy"])
             page.select_option("#appriseService", "discord")
             page.fill('[data-apprise-field="hook"]', "https://example.com/not-discord")
             page.click("#appriseAdd")
             self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
-            self.assertFalse([u for u in sent if "/api/apprise" in u], "nothing kept or sent")
+            page.select_option("#appriseService", "ntfy")   # (a server under a path: Apprise would read it as topics)
+            page.fill('[data-apprise-field="topic"]', "my-hoard")
+            page.fill('[data-apprise-field="server"]', "https://example.com/ntfy")
+            page.click("#appriseAdd")
+            self.assertIn("isn't an address yet", page.locator("#appriseBuilt").inner_text())
+            text = page.content()
+            bodies = " ".join(r.text() for r in seen if r.status == 200 and "json" in (r.headers.get("content-type") or ""))
+            for secret in secrets:
+                self.assertFalse(secret in text, f"{secret} never on the page")
+                self.assertFalse(secret in bodies, f"{secret} never sent to it")
             page.close()
+        self.assertEqual(refused, [])
 
     def test_notifications_through_apprise(self):
-        """Issue #230: Settings keeps Apprise's addresses (and then only says how many), and what's sent is ticked."""
+        """Issues #230, #287: addresses pasted are kept (and never shown again), each listed on its own with Send a
+        test, Change... and Remove; what's sent is ticked."""
         from hoard import alerts, vault
         self.srv.cfg["allow_unprotected_signins"] = True
         self.addCleanup(self.srv.cfg.pop, "allow_unprotected_signins", None)
         self.addCleanup(vault.forget_key, self.srv.cfg, alerts.SECRET)
         self.addCleanup(self.srv.cfg.update, {"apprise_events": []})
+        sent = []
         with mock.patch.object(alerts, "available", lambda: True), mock.patch.object(alerts, "_kept", None), \
-                mock.patch.object(server, "save_config"):
+                mock.patch.object(alerts, "_described", None), mock.patch.object(server, "save_config"), \
+                mock.patch.object(alerts, "deliver", lambda addresses, *a, **k: sent.append(addresses)):
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.wait_for()
             menu(page, "#settingsBtn")
             page.locator("#settingsPanel:not([hidden])").wait_for()
             self.assertEqual(page.locator("#appriseKept").inner_text(), "No addresses yet: nothing is sent.")
             self.assertTrue(page.locator("#appriseTest").is_disabled())
-            page.fill("#setApprise", "json://example.com/hook\nntfys://ntfy.example/hoard")
+            page.locator("#appriseBuild > summary").click()
+            page.locator(".apprise-paste > summary").click()
+            page.fill("#setApprise", "json://example.com/hook?token=SECRET1\nntfys://ntfy.example/hoard")
             page.click("#appriseSave")
             page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()
             self.assertEqual(page.input_value("#setApprise"), "", "never shown again")
-            self.assertEqual(alerts.urls(self.srv.cfg), ["json://example.com/hook", "ntfys://ntfy.example/hoard"])
+            self.assertEqual(alerts.urls(self.srv.cfg), ["json://example.com/hook?token=SECRET1", "ntfys://ntfy.example/hoard"])
+            rows = page.locator("#appriseList li")
+            self.assertEqual([" ".join(t.split()) for t in rows.locator("b").all_inner_texts()], ["Webhook", "ntfy"])
+            self.assertEqual(rows.nth(0).locator(".muted").inner_text(), "example.com")
+            self.assertFalse("SECRET1" in page.content(), "its token never on the page")
+            # one tested on its own, one changed, one removed
+            rows.nth(1).locator("[data-apprise-do=test]").click()
+            page.locator(".toast", has_text="Sent. Check that it came.").wait_for()
+            self.assertEqual(sent, [["ntfys://ntfy.example/hoard"]])
+            rows.nth(0).locator("[data-apprise-do=replace]").click()
+            self.assertIn("The new address for Webhook (example.com)", page.locator("#appriseReplacing").inner_text())
+            self.assertEqual(page.locator("#appriseAdd").inner_text(), "Put it in its place")
+            page.select_option("#appriseService", "ntfy")
+            page.fill('[data-apprise-field="topic"]', "hoard-two")
+            page.click("#appriseAdd")
+            page.locator(".toast", has_text="Changed.").wait_for()
+            self.assertEqual(alerts.urls(self.srv.cfg), ["ntfy://hoard-two", "ntfys://ntfy.example/hoard"], "in its place")
+            self.assertEqual(page.locator("#appriseAdd").inner_text(), "Add it")
             with page.expect_response(lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"):
                 page.check("[data-apprise-event='tasks']")
             self.assertEqual(self.srv.cfg["apprise_events"], ["tasks"])
@@ -386,13 +463,13 @@ class AccessKey(unittest.TestCase):
             menu(page, "#settingsBtn")
             page.locator("#appriseKept", has_text="2 addresses are kept").wait_for()   # (Settings, filled in)
             self.assertTrue(page.is_checked("[data-apprise-event='tasks']"), "kept")
-            page.click("#appriseSave")   # nothing typed: not a way to forget them
-            page.locator(".toast", has_text="Type an address first").wait_for()
-            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
+            page.locator("#appriseList li", has_text="hoard-two").locator("[data-apprise-do=remove]").count()
+            page.locator("#appriseList li").first.locator("[data-apprise-do=remove]").click()
+            page.locator("dialog.ask .primary").click()
+            page.locator("#appriseKept", has_text="1 address is kept").wait_for()
+            self.assertEqual(alerts.urls(self.srv.cfg), ["ntfys://ntfy.example/hoard"])
             self.assertEqual(page.evaluate("api('/api/apprise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
                                            "body: JSON.stringify({ urls: '' }) }).then(r => r.status)"), 400)
-            self.assertEqual(len(alerts.urls(self.srv.cfg)), 2)
-            page.on("dialog", lambda d: d.accept())
             page.click("#appriseForget")
             page.locator("dialog.ask .primary").click()
             page.locator("#appriseKept", has_text="No addresses yet").wait_for()
@@ -631,8 +708,9 @@ class AccessKey(unittest.TestCase):
         it's remembered (Hoard's config, by its key: never its name)."""
         from unittest import mock
         item = self.srv.lib.data["items"][0]
-        item["gift"] = True
+        item["gift"], item["gift_from"] = True, "Puzzle Cat"
         self.addCleanup(item.update, gift=False)
+        self.addCleanup(item.pop, "gift_from", None)
         self.addCleanup(lambda: self.srv.cfg.get("ui", {}).pop("unwrapped", None))
         with mock.patch.object(server, "save_config"):
             page, refused = self.open(self.srv.entry_url())
@@ -644,6 +722,7 @@ class AccessKey(unittest.TestCase):
             self.assertIn("repeating-linear-gradient", paper)
             tile.click()
             page.locator("#detail.open").wait_for()
+            self.assertIn("a gift from Puzzle Cat", page.locator("#detail").inner_text(), "issue #276: who sent it")
             self.assertNotIn(" wrapped", tile.get_attribute("class"))
             page.evaluate("uiFlush()")
             page.wait_for_function("() => !uiPending")
@@ -725,14 +804,14 @@ class AccessKey(unittest.TestCase):
         shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
         self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Stores", "Settings"])
+        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Stores", "Settings"])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
         self.assertEqual(page.locator("#syncBtn").count(), 0)
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
+        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
         page.close()
 
     def test_search_prefixes_in_downloads(self):
@@ -2229,6 +2308,64 @@ class SetupAssistant(unittest.TestCase):
             self.assertTrue(page.locator('input[name="setupClose"][value="quit"]').is_checked(), "and shown as chosen")
             browser.close()
 
+    def test_notifications_in_the_setup_assistant(self):
+        """Issue #288: where Apprise is installed, the assistant has a notifications step: a service, its fields made
+        into an address and added, a test sent to it, and what's sent ticked. Skipped (Next with nothing added), it
+        changes nothing; without Apprise, there's no step."""
+        from hoard import alerts, vault
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": True,
+                                                   "allow_unprotected_signins": True, "apprise_events": []}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        self.addCleanup(vault.forget_key, srv.cfg, alerts.SECRET)
+        sent = []
+        with sync_playwright() as p, mock.patch.object(server, "save_config"), \
+                mock.patch.object(alerts, "_kept", None), mock.patch.object(alerts, "_described", None), \
+                mock.patch.object(alerts, "deliver", lambda addresses, *a, **k: sent.append(addresses)):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            goto(page, srv.entry_url())
+            page.wait_for_function("() => DATA && DATA.version")
+            with mock.patch.object(alerts, "available", lambda: False):
+                page.evaluate("openSetup()")
+                page.locator("#setup:not([hidden])").wait_for()
+                self.assertNotIn("notifications", page.evaluate("setupSteps()"), "no Apprise: no step")
+                page.evaluate("closeSetup()")
+            with mock.patch.object(alerts, "available", lambda: True):
+                page.evaluate("openSetup().then(() => { SETUP.step = setupSteps().indexOf('notifications'); renderSetup(); })")
+                page.locator("#setupTitle", has_text="Get Hoard's news where you are").wait_for()
+                self.assertEqual(page.locator("#setupNotifyList li").count(), 0)
+                self.assertTrue(page.is_checked("[data-setup-event='new']"), "the routine check's finds, to start with")
+                self.assertFalse(page.is_checked("[data-setup-event='tasks']"))
+                page.click("#setupNext")   # skipped: nothing added, nothing chosen
+                page.locator("#setupTitle", has_text="Hoard's ready").wait_for()
+                self.assertEqual(srv.cfg["apprise_events"], [])
+                self.assertEqual(alerts.urls(srv.cfg), [])
+                page.click("#setupBack")
+                page.locator("#setupTitle", has_text="Get Hoard's news where you are").wait_for()
+                page.select_option("#setupNotifyService", "discord")
+                self.assertEqual(page.locator("#setupNotifyFields a").get_attribute("href"), "https://appriseit.com/services/discord/")
+                page.fill('#setupNotifyFields [data-apprise-field="hook"]', "https://example.com/not-discord")
+                page.click("#setupNotifyAdd")
+                self.assertIn("isn't an address yet", page.locator("#setupNotifyNote").inner_text())
+                page.fill('#setupNotifyFields [data-apprise-field="hook"]', "https://discord.com/api/webhooks/123/AbC-dEf_123")
+                page.click("#setupNotifyAdd")
+                page.locator("#setupNotifyList li", has_text="Discord").wait_for()
+                self.assertNotIn("AbC-dEf_123", page.content(), "its token is never shown")
+                self.assertEqual(alerts.urls(srv.cfg), ["discord://123/AbC-dEf_123"])
+                page.click("#setupNotifyList [data-setup-test]")
+                page.locator("#setupNotifyNote", has_text="Sent. Check that it came.").wait_for()
+                self.assertEqual(sent, [["discord://123/AbC-dEf_123"]])
+                page.check("[data-setup-event='tasks']")
+                page.uncheck("[data-setup-event='prices']")
+                page.click("#setupNext")
+                page.locator("#setupTitle", has_text="Hoard's ready").wait_for()
+                self.assertEqual(sorted(srv.cfg["apprise_events"]), ["new", "tasks", "updates"])
+            browser.close()
+
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -2285,6 +2422,48 @@ class WindowsTabsAndTasks(unittest.TestCase):
         goto(page, self.srv.entry_url())
         page.locator(".slot", has_text="Mochi").wait_for()
         return page
+
+    def test_drag_products_into_a_set(self):
+        """Issue #281: a product dropped on another makes a set of them, named as it's made (and those chosen with it
+        go too); dropped on Sets and Wishlists, it's added to a set you choose. What a drop will do shows as you drag."""
+        page = self.open()
+        post = "([u, b]) => api(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json())"
+        made = []
+        tile = lambda name: page.locator("#grid .slot", has_text=name)  # noqa: E731
+        self.assertEqual(tile("Rusk").get_attribute("draggable"), "true")
+        # what it'll do, under the pointer as you drag
+        page.evaluate("""() => { const dt = new DataTransfer(), from = [...document.querySelectorAll('#grid .slot')].find(s => s.textContent.includes('Rusk'));
+          const to = [...document.querySelectorAll('#grid .slot')].find(s => s.textContent.includes('Anko'));
+          from.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+          to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); }""")
+        self.assertEqual(tile("Anko").get_attribute("data-drop-hint"), "Make a set with these")
+        self.assertIn("drop-on", tile("Anko").get_attribute("class"))
+        page.evaluate("() => document.dispatchEvent(new DragEvent('dragend', { bubbles: true }))")
+        self.assertIsNone(tile("Anko").get_attribute("data-drop-hint"), "let go: nothing marked")
+        # dropped: a set of both, named now
+        tile("Rusk").drag_to(tile("Anko"))
+        page.locator("dialog[open] #askName").wait_for()
+        page.fill("dialog[open] #askName", "Kitsu pair")
+        page.keyboard.press("Enter")
+        page.locator(".toast", has_text="Made the set Kitsu pair, with 2 products in it.").wait_for()
+        sets = page.evaluate("DATA.sets")
+        pair = next(x for x in sets if x["name"] == "Kitsu pair")
+        made.append(pair["id"])
+        keys = page.evaluate("DATA.items.filter(a => a.name === 'Rusk' || a.name === 'Anko').map(a => a.tag_key).sort()")
+        self.assertEqual(sorted(pair["items"]), keys)
+        # on Sets and Wishlists: which set, then yes
+        tile("Mochi").drag_to(page.locator('#storeSeg [data-store="Sets"]'))
+        which = page.locator("dialog.setpick-dlg")
+        which.wait_for()
+        which.locator(".settile", has_text="Kitsu pair").click()
+        page.locator("dialog.ask .primary", has_text="Add").click()
+        page.locator(".toast", has_text="Added it to Kitsu pair.").wait_for()
+        self.assertEqual(len(next(x for x in page.evaluate("DATA.sets") if x["id"] == pair["id"])["items"]), 3)
+        for i in made:   # (the next test starts with no sets)
+            page.evaluate(post, ["/api/sets", {"action": "delete", "id": i}])
+        made.clear()
+        self.assertEqual(self.errors, [])
+        page.close()
 
     def test_one_panel_at_a_time(self):
         """Issue #84: Tags, Stores, Settings and Tasks open in one panel over the page, one at a time, instead of
@@ -2405,7 +2584,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
         q.focus()
         guide.wait_for()
         self.assertEqual(guide.locator(".qopt code").first.inner_text(), "creator:")
-        self.assertEqual(guide.locator(".qopt").count(), 7, "every prefix")
+        self.assertEqual(guide.locator(".qopt").count(), 12, "every prefix, and each other site's")
+        self.assertEqual(guide.locator(".qmenu-h").all_inner_texts(), ["Search for one kind of thing", "Search another site, in your browser"])
         self.assertEqual(q.get_attribute("aria-expanded"), "true")
         page.keyboard.press("ArrowDown")
         page.keyboard.press("Enter")   # creator:, and then the creators
@@ -2437,6 +2617,33 @@ class WindowsTabsAndTasks(unittest.TestCase):
             self.assertEqual(q.input_value(), "", "gone there: the box is empty again")
         finally:
             page.evaluate(post, ["/api/sets", {"action": "delete", "id": made}])
+        # issue #271: another site's own search, for everything after its prefix, opened in your browser (a new
+        # window: the app hands those to your browser), never filtering your products
+        opened = []
+        page.context.on("page", lambda p: opened.append(p.url if p.url != "about:blank" else (p.wait_for_event("framenavigated").url)))
+        page.context.route(__import__("re").compile(r"^https://(nexyy\.com|booth\.pm|gumroad\.com|jinxxy\.com|itch\.io)/"),
+                           lambda route: (opened.append(route.request.url), route.fulfill(status=200, body="ok"))[1])
+        for text, want in (('nexyy:soft hoodie', "https://nexyy.com/browse?q=soft%20hoodie"),
+                           ('booth:"ケモノ 衣装"', "https://booth.pm/en/search/%E3%82%B1%E3%83%A2%E3%83%8E%20%E8%A1%A3%E8%A3%85"),
+                           ("gumroad:shader", "https://gumroad.com/discover?query=shader"),
+                           ("Jinxxy:visor", "https://jinxxy.com/market/browse?search_query=visor"),
+                           ("itch:", "https://itch.io/game-assets")):
+            with self.subTest(text):
+                opened.clear()
+                q.focus()
+                q.fill(text)
+                guide.locator(".qopt", has_text="Opens in your browser").wait_for()
+                self.assertEqual(guide.locator(".qopt").count(), 1)
+                self.assertEqual(page.evaluate("t => Object.values(parseSearch(t)).flat()", text), [], "your products aren't filtered by it")
+                page.keyboard.press("Enter")
+                for _ in range(50):
+                    if want in opened:
+                        break
+                    page.wait_for_timeout(100)
+                self.assertIn(want, opened)
+                self.assertTrue(page.url.startswith(self.srv.url), "Hoard stays where it was")
+        for extra in page.context.pages[1:]:
+            extra.close()
         q.focus()
         q.fill("settings:langu")
         guide.locator(".qopt", has_text="Language").first.wait_for()
@@ -2743,41 +2950,48 @@ class WindowsTabsAndTasks(unittest.TestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
-    def test_the_bar_reads_logo_search_then_the_buttons(self):
-        """Issues #203, #236: the bar reads the logo with the search beside it, then on the other side the pages
-        (Library, Downloads, Local, Sets and Wishlists, Tasks, Projects), Menu and Sync, at every width, text size and
-        style; in a wide window the search is in the middle of it; when there isn't room, the search goes under them,
-        and nothing hides or overlaps."""
+    def test_the_bar_reads_logo_and_pages_search_then_hoards_links_and_the_buttons(self):
+        """Issues #203, #236, #270: the bar reads the logo and the pages beside it (Library, Downloads, Local, Sets and
+        Wishlists, Tasks, Projects), the search, then Hoard's own links (its version, GitHub, Discord, Hoard updates,
+        Report a problem), Menu and Sync, at every width, text size and style; in a wide window the search is in the
+        middle of it; when there isn't room, Hoard's links go in the Menu, then the search goes under the rest, and
+        nothing else hides or overlaps. The footer keeps the rest."""
         page = self.open()
         check = """() => {
           const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
-          const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .tools > *')]
-            .filter(el => el.getClientRects().length).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
+          const shown = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
+          const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .bar-links > *, .bar .tools > *')]
+            .filter(shown).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
           const over = [];
           for (const [i, [a, ra]] of parts.entries()) {
             if (ra.left < bar.left - 1 || ra.right > bar.right + 1) over.push(a + ' is out of the bar');
             for (const [b, rb] of parts.slice(i + 1))
               if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
           }
-          const r = sel => [...document.querySelectorAll(sel)].filter(el => el.getClientRects().length).map(el => el.getBoundingClientRect());
+          const r = sel => [...document.querySelectorAll(sel)].filter(shown).map(el => el.getBoundingClientRect());
           const fit = document.querySelector('.bar').dataset.fit || 'one', one = fit === 'one' || fit === 'centre';
-          const pages = r('.bar .apptabs > *'), tools = r('.bar .tools > *');
-          const brand = document.querySelector('.bar .brand').getBoundingClientRect();
-          const end = document.querySelector('.bar > .bar-end');
-          const sides = { left: [...document.querySelector('.bar > .bar-side').querySelectorAll('a, button')].map(e => e.className),
-                          right: [...end.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
+          const before = r('.bar .brand, .bar .apptabs > *'), after = r('.bar .bar-links > *, .bar .tools > *');
+          const first = document.querySelector('.bar > .bar-side'), end = document.querySelector('.bar > .bar-end');
+          const sides = { pages: [...first.querySelectorAll('.apptabs > *')].map(e => e.textContent.trim().replace(/\\d+$/, '')),
+                          links: [...end.querySelectorAll('.bar-links > *')].filter(shown).map(e => e.id === 'version' ? 'version' : e.textContent.trim()),
+                          menu: getComputedStyle(document.querySelector('.barmenu-links')).display !== 'none'
+                            ? [...document.querySelectorAll('.barmenu-links > *')].filter(e => !e.hidden).map(e => e.textContent.trim()) : [],
                           tools: [...end.querySelectorAll('.tools button, .tools a')].filter(e => e.getClientRects().length && !e.closest('.barmenu')).map(e => e.id) };
-          const order = one ? brand.right <= search.left + 1 && pages.concat(tools).every(p => p.left >= search.right - 1)
-                            : pages.concat(tools).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
+          const order = one ? before.every(p => p.right <= search.left + 1) && after.every(p => p.left >= search.right - 1)
+                            : before.concat(after).every(p => p.bottom <= search.top + 1 || p.top >= search.bottom - 1);
           const middle = Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2);
-          return { order, wide: search.width, over, sides, fit, middle };
+          return { order, wide: search.width, over, sides, fit, middle, folded: document.querySelector('.bar').dataset.links === 'menu' };
         }"""
-        seen = set()
+        links = ["GitHub", "Discord", "Hoard updates", "Report a problem"]
+        seen, folded = set(), set()
         for path in ("", "downloads"):
             if path:
                 goto(page, self.srv.url + path)
                 page.locator("#menuBtn").wait_for()   # (nothing downloaded here)
                 page.wait_for_load_state("networkidle")
+            version = page.evaluate("DATA.version")
+            foot = page.locator(".foot-links a").all_inner_texts()
+            self.assertEqual(foot, ["Privacy", "Terms", "Made with AI"], "the footer keeps the rest")
             for style in ("", "treasure", "workbench"):
                 for width, zoom in ((2600, 1), (1800, 1), (1350, 1), (1000, 1), (700, 1), (420, 1), (1800, 1.5), (1000, 1.5)):
                     with self.subTest(path=path or "library", style=style or "standard", width=width, zoom=zoom):
@@ -2787,9 +3001,17 @@ class WindowsTabsAndTasks(unittest.TestCase):
                         page.wait_for_timeout(120)
                         got = page.evaluate(check)
                         seen.add(got["fit"])
+                        folded.add(got["folded"])
                         self.assertTrue(got["order"], got)
-                        self.assertEqual(got["sides"]["left"], ["brand"], "the logo, the search beside it")
-                        self.assertEqual(got["sides"]["right"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
+                        self.assertEqual(got["sides"]["pages"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
+                        if got["folded"]:   # (no room for them: in the Menu, with the version)
+                            self.assertEqual(got["sides"]["links"], [])
+                            self.assertEqual(got["sides"]["menu"], [f"Hoard {version}", *links])
+                        else:
+                            self.assertEqual(got["sides"]["links"], ["version", *links])
+                            self.assertEqual(got["sides"]["menu"], [])
+                        if width == 2600 and zoom == 1:
+                            self.assertFalse(got["folded"], "a wide window has room for them")
                         self.assertEqual([b for b in got["sides"]["tools"] if b != "filtersToggle"], ["menuBtn", "syncBtn"] if not path else ["menuBtn", "downloadNew"])
                         self.assertGreater(got["wide"], 150, got)
                         self.assertEqual(got["over"], [], got)
@@ -2797,6 +3019,20 @@ class WindowsTabsAndTasks(unittest.TestCase):
                             self.assertLess(got["middle"], 3, got)
                             self.assertGreater(got["wide"], 400, got)
         self.assertEqual(seen, {"centre", "one", "rows", "stack"}, "each way the bar fits was tried")
+        self.assertEqual(folded, {True, False})
+        # Hoard updates, and the Menu's links: one Report a problem as the other
+        page.set_viewport_size({"width": 2600, "height": 800})
+        page.evaluate("document.documentElement.style.zoom = '1'")
+        self.assertIn("Updates to your assets are in Downloads", page.locator(".bar-links a", has_text="Hoard updates").get_attribute("title"))
+        page.set_viewport_size({"width": 1000, "height": 800})
+        page.wait_for_function("() => document.querySelector('.bar').dataset.links === 'menu'")
+        page.focus("#menuBtn")
+        page.keyboard.press("ArrowDown")
+        self.assertEqual(page.evaluate("document.activeElement.textContent"), "Tags")
+        page.keyboard.press("End")
+        self.assertEqual(page.evaluate("document.activeElement.textContent"), "Report a problem", "the keys reach them")
+        page.keyboard.press("Enter")
+        page.locator("#supportDialog[open]").wait_for()
         self.assertEqual(self.errors, [])
         page.close()
 

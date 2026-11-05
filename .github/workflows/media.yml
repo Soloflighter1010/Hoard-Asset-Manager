@@ -1,0 +1,55 @@
+name: Media
+
+# Makes Hoard's videos, posters and music (promo/: issues #273, #274, #289, #291, #292) and puts them on the "media"
+# release, where their addresses stay the same, so the wiki can link them:
+# https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/<file>
+# Run it by hand (Actions > Media > Run workflow) after promo/ changes. It films every video frame by frame, so it
+# takes an hour or two.
+#
+# Everything is made in code: Hoard's own screens, photographed from a made-up data folder (promo/capture.py) with
+# the products in promo/products (nothing is made up or drawn for them), shapes and words, and music synthesised note
+# by note. No diffusion. The release is never marked Latest: that stays on the newest release of the app.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: media
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write        # put the files on the media release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install the locked dependencies (every file hash-checked), ffmpeg, and fonts for Hoard's Korean screens
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg fonts-noto-cjk
+          python -m playwright install --with-deps chromium
+      - name: Make the videos, the posters and the music
+        run: |
+          python promo/make.py promo/products promo/out --jobs=3   # (it says so when there are no products to show)
+      - name: Put them on the media release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=(promo/out/videos/*.mp4 promo/out/posters/*.png promo/out/hoard-loop.wav promo/out/hoard-loop.m4a promo/out/hoard-loop.ogg)
+          (cd promo/out && sha256sum videos/*.mp4 posters/*.png hoard-loop.* | sed 's#  [a-z]*/#  #') > promo/out/SHA256SUMS.txt
+          notes="Hoard's videos, posters and music, made in code from Hoard's own screens (promo/ in the repository). No diffusion: Hoard's screens, shapes, words and music synthesised note by note. Made from ${GITHUB_SHA::12}."
+          if gh release view media --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload media "${files[@]}" promo/out/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit media --notes "$notes" --latest=false --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create media "${files[@]}" promo/out/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" \
+              --title "Hoard's videos, posters and music" --notes "$notes" --latest=false --target "$GITHUB_SHA"
+          fi

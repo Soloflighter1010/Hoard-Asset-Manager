@@ -12,8 +12,8 @@ ALCOM or the Creator Companion installed: it chooses the same package versions, 
 
 ## The list
 
-Each project shows its kind (avatars or worlds), its Unity version, and when you last opened it. **★** makes it a
-favourite, at the top of the list. From 5.2.0 beta 2, a project also shows what's new for it, two ways apart: how many
+Each project shows its kind (avatars or worlds), its Unity version, and when you last opened it; the one you opened
+last is marked **Last opened**. **★** makes it a favourite, at the top of the list. From 5.2.0 beta 2, a project also shows what's new for it, two ways apart: how many
 of its packages have newer versions (outlined), and how many products from your library in it have updates (filled,
 from what [Hoard for Unity](Hoard-for-Unity) reported of it).
 
@@ -21,12 +21,17 @@ Choose a project to open its details beside the list (5.2.0 beta 2), as a produc
 letters in its kind's colour, where it is, its size on disk, when it was last opened and made, how many packages and
 backups it has, and what's new (each leads to it: its packages in **Manage**, its products in what Hoard for Unity
 reported). Then **Open in Unity**, **Manage** (its packages and more) and **Show in folder**; under **Organise**, the
-favourite, **Back up...** and **Take off the list**; its folder and tags, changed right there; what takes its room
+favourite, **Back up...**, **Rename...** and **Take off the list**; its folder and tags, changed right there; what takes its room
 (its assets, its packages, Unity's cache, and everything else); its packages, each with any newer version; what Hoard
 put in it from your library; and its backups, with **Back up...** and **See backups**. Unity's cache (its `Library`
 and `Temp` folders) is made again when the project's opened, and a backup leaves it out. Choose the project again, or
 **×**, to put its details away. A project whose folder has gone (moved, or on a drive that isn't connected) says so,
 with **Take off the list** in its details.
+
+**Rename...** (5.2.0 beta 4) renames the project's folder where it is, and it stays where it was on the list, under
+its new name, with Hoard's notes on it (its favourite, folder and tags, what went in from your library). It's refused
+while Unity has the project open, and for a name that's taken beside it or that a folder can't have. Unity Hub's
+list and the project's backups keep the old name: add it to the Hub again if you use it.
 
 **List** and **Tiles** (beside **Add a project...**, 5.2.0 beta 2) choose how the list shows, as ALCOM's and the
 Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, twice
@@ -38,6 +43,8 @@ a folder**) and give it tags (**Tags**: type one and **Add**, or **×** to take 
 `quest` or `poiyomi`. They're Hoard's own (the Creator Companion and ALCOM have only a favourite). Once a project is in a folder, the folders show above the list: choose one to see just its projects,
 **Not in a folder** for the rest, or **All projects**. Choose a tag in a project's details to see those that have it,
 and choose it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
+Or drag (5.2.0 beta 4): drop a project on another to make a folder of them, named as it's made (on one that's in a
+folder, it goes in that folder), or on a folder's tile or its button above the list to move it in.
 
 **Add a project...** lists one you already have: in Hoard's own window it opens your computer's folder picker, in your
 projects folder (in a web browser, you type the folder's full path). **Take off the list** leaves its folder as it is;
@@ -64,7 +71,7 @@ name, one already there).
 got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
 that works in the project's Unity, in groups by the repository it comes from (VRChat's own first, your package folders
 last; each folds away, and what you find opens its group), to tick (with a version, if you'd rather not have the newest), then **Add the
-chosen packages**. **Put in products from your library** opens Downloads in **Select** mode, for this project: tick
+chosen packages**. **Add Assets** opens Downloads in **Select** mode, for this project: tick
 the products you want, then **Add to project**, and you're back at the new project as you left it, with them in
 (**Cancel** goes back without them). A product with several packages (one for PC, one for Quest, a few variants)
 asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
@@ -112,7 +119,7 @@ what it found. From there:
   version that works in the project's Unity, newest first, and install any of them, an older one too. The packages
   it needs change to match. **Add packages** can choose a version as well, instead of the newest.
 - **Put it right**, when the project's packages aren't installed the way it says (after cloning it from Git, say).
-- **Put in products from your library**, later: Downloads opens in **Select** mode for this project, with nothing to
+- **Add Assets**, later: Downloads opens in **Select** mode for this project, with nothing to
   do there but **Add to project** or **Cancel**. What's chosen is shown before it goes in, with what it needs.
   Nothing already in the project is replaced: a file that's there (with the same asset ID, or at the same path) is
   left as it is. **From your library** shows what Hoard has put in the project, each product as its library tile, with
@@ -143,6 +150,47 @@ Hoard says so: close it first, so nothing it has open is replaced under it.
 
 Each package download is checked against the SHA-256 its repository lists for it, and downloads are kept where ALCOM
 keeps them, so neither downloads one twice.
+
+## Source control (Git)
+
+From 5.2.0 beta 4, a project's **Source control** tab keeps its history with Git: what changed, and when, to look
+back on or go back to. Hoard uses the Git you have installed (get it from [git-scm.com](https://git-scm.com/downloads);
+Hoard needs 2.28 or newer), and it needs no account: a repository online is up to you.
+
+- **Set up Git...** shows first what it writes: GitHub's Unity ignore rules in `.gitignore`, and VRChat's in
+  `Packages/.gitignore`, as [VRChat recommends](https://vcc.docs.vrchat.com/vpm/source-control/). The project's own
+  files are kept (its assets with their `.meta` files, its settings, its package manifests and the VPM resolver);
+  what Unity makes again (`Library`, `Temp`, `Logs`, `obj`) and the VPM packages the resolver restores are left out.
+  An ignore file that's there already is never replaced: only the rules it lacks are added at its end. A project
+  inside another repository is only set up if you tick that you mean it to be. A copy of it made from Git opens
+  without its VPM packages: Unity's resolver offers to restore them.
+- **Changes** lists what's new, changed, deleted and renamed. Choose files and **Stage** them (nothing is staged for
+  you), or **Unstage** them; a file's **Changes** shows its lines added and taken out (a binary file, such as a
+  texture, says so instead). Write what changed and **Commit**: Git needs a name and email to sign commits with, asked
+  for the first time if Git hasn't one. **Look again** reads the changes again (Unity may have saved some since).
+- **History** shows the latest commits: choose one for the files it changed, and a file for its changes.
+- **Remotes**: **Add a remote...** (its address, without a password or token in it: signing in is Git's own, with Git
+  Credential Manager or your SSH key, and Hoard keeps no Git passwords). Then **Fetch** (only looks), **Pull** (brings
+  its commits into your files) and **Push** (sends yours) run as Projects' tasks, which **Stop** stops; how far ahead
+  and behind you are shows by the branch.
+- **Branch**: choose one to switch to, or **New branch...**; other branches can be deleted once their commits are on
+  another one. Switching and pulling wait until Unity is closed, and switching until your changes are committed.
+- **Conflicts**: a pull that found files changed both here and on the remote lists them; sort them out in your Git
+  app, or **Abort the merge...** to put your files back as they were.
+- **Open in your Git app** opens the project in the one you choose (GitHub Desktop, Fork, SourceTree...). A project
+  that uses Git LFS, with Git LFS not installed, says so.
+- **Get from a Git address...** (above the list) copies a repository into your projects folder and puts it on the list.
+- A project's details say its branch and how many changes it has. **Back up...** leaves its `.git` folder out, and can
+  put its history in as a Git bundle (`git-history.bundle` in the zip; `git clone` it to get the history back). A
+  bundle doesn't hold Git LFS files, and a push online isn't a backup of what isn't committed. The backup made before a
+  project is deleted keeps its `.git` folder, so its history is never lost with it.
+- Hoard never resets or cleans a project, and runs Git only for a project on the list, one named action at a time.
+- **Settings that run programs**: a repository's own Git settings can have Git run a program (a filter as files are
+  read, a hook as you commit), and a project made by someone else could carry them. Before Git runs in a project
+  Hoard didn't set up or get itself, Hoard reads its settings and hooks (reading them runs nothing). If any run a
+  program, the **Source control** tab shows them, and Git isn't used there until you choose **Trust them...**; a change
+  to them asks again. Git LFS's own filter and hooks don't count, and a project's details never run a repository's
+  hooks or filters at all.
 
 ## Projects' tasks
 

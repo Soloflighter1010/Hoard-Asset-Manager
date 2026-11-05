@@ -37,7 +37,9 @@ STEPS = {
           "[data-setopen] >> nth=0", ".setextra summary", '#storeSeg [data-store=""]', "#selectBtn", "#selectBtn",
           ".slot >> nth=0", "Escape", '[data-view="archive"]', '[data-view="hidden"]', '[data-view="library"]',
           # the setup assistant, each step up to the last (not Finish, which would start reading the stores)
-          "#settingsBtn", "#setupAgain", *["#setupNext"] * 8, "Escape"],
+          "js:openSetup()", *["#setupNext"] * 8,
+          # and the steps after, from where downloads go (notifications, Apprise as Hoard's apps have it) to Hoard's ready
+          "js:SETUP.step = setupSteps().indexOf('folder'); renderSetup()", "#setupNext", "#setupNext", "Escape"],
     "/downloads": ["", ".slot >> nth=0", "Escape", '[data-view="updates"]', '[data-view="archive"]', '[data-view="removed"]',
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
                    # a project's Put in products from your library: Downloads, choosing for it, and Cancel
@@ -132,7 +134,9 @@ def collect(lang: str) -> list[str]:
     from unittest import mock
     # the setup assistant saves settings on its way through: kept in memory, so the sample's never become yours; and
     # the sample's own files (its set) go in a data folder of its own
+    from hoard import alerts
     with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server, "save_config"), \
+            mock.patch.object(alerts, "available", lambda: True), \
             mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(Path(tmp) / "data"), "HOARD_VCC_DIR": ""}):
         srv = sample_server(Path(tmp) / "library", lang)
         os.environ.update(sample_projects(Path(tmp)))
@@ -147,6 +151,9 @@ def collect(lang: str) -> list[str]:
                     for step in steps:
                         if step == "Escape":
                             page.keyboard.press("Escape")
+                            page.wait_for_timeout(300)
+                        elif step.startswith("js:"):   # (a step there's nothing to click for)
+                            page.evaluate(step[3:])
                             page.wait_for_timeout(300)
                         elif step:
                             try:

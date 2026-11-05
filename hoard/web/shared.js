@@ -943,7 +943,101 @@ function allActions() {
   return [...(main.length ? [{ name: "", items: main }] : []), ...groups];
 }
 // The selection bar's buttons and menus, and selecting with a click, Shift, Ctrl and the keys.
+/* ---------- drag and drop (issue #281). A product dropped on another makes a set of them (those chosen with it go
+   too), and on Sets and Wishlists it's added to a set you choose; a project dropped on another makes a folder of
+   them (or goes in the other's folder), and on a folder it goes in it. What a drop will do shows on what's under it
+   as you drag; Escape (the browser's own) or letting go anywhere else does nothing. Right-click does it all too. */
+const DRAG = { what: "", ids: [], over: null };
+// The products a tile drags: those chosen with it, or it alone.
+function dragProducts(slot) {
+  const id = tileId(slot);
+  if (sel.kind === "items" && sel.ids.has(id)) return chosenItems();
+  const a = T.byId(id);
+  return a ? [a] : [];
+}
+// What dropping here would do: { el (what's under it), hint (said on it), run }, or null for nothing.
+function dropTarget(el) {
+  if (!el || !el.closest) return null;
+  if (DRAG.what === "products") {
+    const list = DRAG.ids.map(T.byId).filter(Boolean);
+    const slot = el.closest("#grid .slot[draggable=true]");
+    if (slot && !DRAG.ids.includes(tileId(slot)) && T.byId(tileId(slot)))
+      return { el: slot, hint: tr("Make a set with these"), run: () => addToSet([...list, T.byId(tileId(slot))], "new") };
+    const sets = el.closest('#storeSeg [data-store="Sets"], .apptabs a[href="/#store=Sets"]');
+    if (sets) return { el: sets, hint: tr("Add to a set..."), run: () => addToAnotherSet(list) };
+    return null;
+  }
+  if (DRAG.what === "project") {
+    const path = DRAG.ids[0], mine = (PJ.data.projects || []).find(p => p.path === path) || {};
+    const folder = el.closest("#projectsBody [data-folder]");
+    if (folder && folder.dataset.folder !== (mine.folder || ""))
+      return { el: folder, hint: tr("Move into {0}", folder.dataset.folder), run: () => pjOrganizeSome(path, { folder: folder.dataset.folder }) };
+    const other = el.closest("#projectsBody [data-path][draggable=true]");
+    const them = other && (PJ.data.projects || []).find(p => p.path === other.dataset.path);
+    if (!them || them.path === path) return null;
+    if (them.folder && them.folder !== mine.folder)   // (already in a folder: this one goes in it too)
+      return { el: other, hint: tr("Move into {0}", them.folder), run: () => pjOrganizeSome(path, { folder: them.folder }) };
+    if (them.folder) return null;
+    return { el: other, hint: tr("Make a folder with these"), run: () => pjFolderOf([path, them.path]) };
+  }
+  return null;
+}
+// Two projects dropped on each other: a new folder, named now, with both in it.
+async function pjFolderOf(paths) {
+  const name = (await askName("Name the new folder", "", { max: 60 })).trim();
+  if (!name) return;
+  for (const path of paths) {
+    const r = await apiPost("/api/vpm/organize", { path, folder: name });
+    if (!r.ok) { toast(r.data.error || tr("That can't be done.")); break; }
+  }
+  return loadProjects();
+}
+// Show what a drop would do on what's under the pointer (and nothing on what it's left).
+function dropShow(t) {
+  if (DRAG.over === (t && t.el)) return;
+  if (DRAG.over) { DRAG.over.classList.remove("drop-on"); delete DRAG.over.dataset.dropHint; }
+  DRAG.over = t ? t.el : null;
+  if (t) { t.el.classList.add("drop-on"); t.el.dataset.dropHint = t.hint; }
+}
+// The drag is over: nothing marked any more.
+function dragDone() { dropShow(null); DRAG.what = ""; DRAG.ids = []; }
+// Dragging products and projects, and dropping them on each other (issue #281).
+function wireDragging() {
+  document.addEventListener("dragstart", e => {
+    const el = e.target.closest ? e.target : e.target.parentElement;
+    const slot = el && el.closest("#grid .slot[draggable=true]"), project = !slot && el && el.closest("#projectsBody [data-path][draggable=true]");
+    if (slot) {
+      const list = dragProducts(slot);
+      if (!list.length) return;
+      Object.assign(DRAG, { what: "products", ids: list.map(T.id) });
+      e.dataTransfer.effectAllowed = "copy";
+      e.dataTransfer.setData("text/plain", list.map(a => a.name).join("\n"));
+    } else if (project) {
+      Object.assign(DRAG, { what: "project", ids: [project.dataset.path] });
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", pjNamed(project.dataset.path));
+    }
+  });
+  document.addEventListener("dragover", e => {
+    if (!DRAG.what) return;
+    const t = dropTarget(e.target);
+    dropShow(t);
+    if (t) { e.preventDefault(); e.dataTransfer.dropEffect = DRAG.what === "products" ? "copy" : "move"; }
+  });
+  document.addEventListener("drop", e => {
+    if (!DRAG.what) return;
+    const t = dropTarget(e.target);
+    dragDone();
+    if (!t) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();   // (not a page dropped to import)
+    t.run();
+  }, true);
+  document.addEventListener("dragend", dragDone);
+}
+// Choosing several products or sets, and what's done with them (the bar, its menus and a right-click).
 function wireSelection() {
+  wireDragging();
   $("#bulk").addEventListener("click", e => {
     const m = e.target.closest("[data-main]"), g = e.target.closest("[data-group]");
     if (e.target.closest("[data-pickcancel]")) pickEnd();
@@ -1001,12 +1095,15 @@ function openBarMenu(first = false) {
   m.hidden = false;
   $("#menuBtn").setAttribute("aria-expanded", "true");
   $(".bar").classList.add("menu-up");   // (above an open panel and its shade, which the menu drops over)
-  if (first) m.querySelector("button").focus();
+  if (first) menuItems()[0].focus();
 }
-/** Which way the bar fits: "centre" (a wide window: the search in the middle of it), "" (the search beside the logo,
- *  the pages and tools on the other side), "rows" (the sides on one row, the search under them) or "stack" (each side
- *  on a row of its own, then the search). Worked out from how wide each side is on one line, which doesn't change with
- *  the way it's laid out, so it doesn't flip back and forth. */
+// The Menu's items, as shown (Hoard's links are among them only when the bar has no room for them).
+const menuItems = () => [...$("#barMenu").querySelectorAll("button, a")].filter(el => el.getClientRects().length);
+/** Which way the bar fits: "centre" (a wide window: the search in the middle of it), "" (the search beside the logo
+ *  and the pages, Hoard's links and the tools on the other side), "rows" (the sides on one row, the search under them)
+ *  or "stack" (each side on a row of its own, then the search). Hoard's links (issue #270) go in the Menu
+ *  (data-links="menu") when the bar has no room for them beside the search. Worked out from how wide each side is on
+ *  one line, which doesn't change with the way it's laid out, so it doesn't flip back and forth. */
 function fitBar() {
   const bar = $(".bar");
   if (!bar || !bar.offsetWidth) return;
@@ -1016,18 +1113,28 @@ function fitBar() {
   // How wide an element needs to be: a group of the bar's, its parts added up.
   const wide = el => {
     if (el.hidden || getComputedStyle(el).display === "none") return 0;
-    if (!el.matches(".bar-side, .apptabs, .tools")) return el.getBoundingClientRect().width + px(el, "marginLeft", "marginRight");
+    if (!el.matches(".bar-side, .apptabs, .tools, .bar-links")) return el.getBoundingClientRect().width + px(el, "marginLeft", "marginRight");
     const parts = [...el.children].map(wide).filter(w => w > 0);
     return parts.reduce((n, w) => n + w, 0) + px(el, "columnGap") * Math.max(0, parts.length - 1);
   };
   const [left, right] = [...bar.querySelectorAll(":scope > .bar-side")].map(wide);
+  const links = bar.querySelector(".bar-links"), linksWide = links ? wide(links) : 0;   // (measured in the Menu too)
+  const sideGap = links && linksWide ? px(links.parentElement, "columnGap") : 0;
   const room = bar.getBoundingClientRect().width - px(bar, "paddingLeft", "paddingRight"), gap = px(bar, "columnGap");
   // a wide window: the search in the middle of it (both sides as wide as the wider one, the search what's left, up to
   // its whole width); else beside the logo, as wide as there's room for
-  const middle = Math.min(560 * scale, room - 2 * Math.max(left, right) - 2 * gap);
-  const fit = middle >= 420 * scale ? "centre" : left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack";
+  const fitOf = right => {
+    const middle = Math.min(560 * scale, room - 2 * Math.max(left, right) - 2 * gap);
+    return [middle >= 420 * scale ? "centre" : left + right + 2 * gap + 220 * scale <= room ? "" : left + right + gap <= room ? "rows" : "stack", middle];
+  };
+  let [fit, middle] = fitOf(right), folded = false;
+  if (linksWide && fit !== "centre" && fit !== "") {   // (no room beside the search: Hoard's links go in the Menu)
+    [fit, middle] = fitOf(right - linksWide - sideGap);
+    folded = true;
+  }
   bar.style.setProperty("--bar-middle", `${Math.floor(Math.max(0, middle) / scale)}px`);
   if ((bar.dataset.fit || "") !== fit) { if (fit) bar.dataset.fit = fit; else delete bar.dataset.fit; }
+  if ((bar.dataset.links === "menu") !== folded) { if (folded) bar.dataset.links = "menu"; else delete bar.dataset.links; }
 }
 // The top bar's menu button and its keys, and fitting the bar to the window.
 function wireBar() {
@@ -1037,9 +1144,9 @@ function wireBar() {
     if (e.key === "ArrowDown") { e.preventDefault(); openBarMenu(true); }
     else if (e.key === "Escape" && !menu.hidden) { e.preventDefault(); e.stopPropagation(); closeBarMenu(); }
   });
-  menu.addEventListener("click", e => { if (e.target.closest("button")) closeBarMenu(true); });   // (after the item's own)
+  menu.addEventListener("click", e => { if (e.target.closest("button, a")) closeBarMenu(true); });   // (after the item's own)
   menu.addEventListener("keydown", e => {
-    const all = [...menu.querySelectorAll("button")], i = all.indexOf(document.activeElement);
+    const all = menuItems(), i = all.indexOf(document.activeElement);
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1)) % all.length].focus(); }
     else if (e.key === "Home" || e.key === "End") { e.preventDefault(); all[e.key === "Home" ? 0 : all.length - 1].focus(); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeBarMenu(true); }
@@ -1051,7 +1158,7 @@ function wireBar() {
   // Fit the bar again, on the next frame.
   const refit = () => { cancelAnimationFrame(soon); soon = requestAnimationFrame(fitBar); };
   const sizes = new ResizeObserver(refit);
-  for (const el of [$(".bar"), ...document.querySelectorAll(".bar .brand, .bar .apptabs, .bar .tools")]) sizes.observe(el);
+  for (const el of [$(".bar"), ...document.querySelectorAll(".bar .brand, .bar .apptabs, .bar .tools, .bar .bar-links")]) sizes.observe(el);
   if (document.fonts) document.fonts.ready.then(refit);
   fitBar();
 }
@@ -1080,12 +1187,24 @@ const SEARCH_KINDS = [   // [kind, its prefixes (the first is the one shown), wh
   ["project", ["project", "pj"], "A project, to open", "project:my avatar"],
   ["settings", ["settings", "s"], "A setting, to change", "settings:language"],
 ];
+// Another site's own search, for what's typed after its prefix (issue #271): the sites a wishlist's Find more to add
+// offers (STORE_SEARCHES), opened in your browser. Hoard never reads them itself.
+const SITE_KINDS = [   // [the site, its prefix, what it does, an example]
+  ["nexyy", "nexyy", "Search Nexyy, which searches the stores", "nexyy:hoodie"],
+  ["booth", "booth", "Search Booth", "booth:hoodie"],
+  ["gumroad", "gumroad", "Search Gumroad", "gumroad:hoodie"],
+  ["jinxxy", "jinxxy", "Search Jinxxy", "jinxxy:hoodie"],
+  ["itch", "itch", "Search itch.io", "itch:shader"]];
+// A box that starts with a site's prefix: everything after it is what to search that site for.
+const SITE_SEARCH = new RegExp(`^\\s*(${SITE_KINDS.map(k => k[1]).join("|")}):(.*)$`, "is");
 const SEARCH_PREFIX = new Map(SEARCH_KINDS.flatMap(([kind, names]) => names.map(n => [n, kind])));
 const SEARCH_TOKEN = /([a-z]+):("([^"]*)"?|(\S*))|"([^"]*)"?|(\S+)/gi;
-/** What a search asks for: its plain words, and each kind's values (all lower case, as norm has them). */
+/** What a search asks for: its plain words, and each kind's values (all lower case, as norm has them). A search of
+ *  another site (nexyy:...) asks nothing of your products. */
 function parseSearch(q) {
   const out = { words: [] };
   for (const [kind] of SEARCH_KINDS) out[kind] = [];
+  if (SITE_SEARCH.test(String(q || ""))) return out;
   for (const m of String(q || "").matchAll(SEARCH_TOKEN)) {
     const kind = m[1] && SEARCH_PREFIX.get(m[1].toLowerCase());
     if (kind) { const v = norm(m[3] ?? m[4]).trim(); if (v) out[kind].push(v); continue; }
@@ -1095,8 +1214,11 @@ function parseSearch(q) {
   }
   return out;
 }
-/** The prefixed part being typed at the end of the box, if any: { kind, value, at (where it starts) }. */
+/** The prefixed part being typed at the end of the box, if any: { kind, value, at (where it starts) }; for another
+ *  site's search, kind "site:<site>" and raw, the words as typed. */
 function searchTail(q) {
+  const site = String(q).match(SITE_SEARCH);
+  if (site) return { kind: "site:" + site[1].toLowerCase(), value: "", raw: site[2].trim().replace(/^"(.*?)"?$/s, "$1").trim(), at: 0 };
   let last = null;
   for (const m of String(q).matchAll(SEARCH_TOKEN)) last = m;
   if (!last || last.index + last[0].length !== q.length || /\s$/.test(q)) return null;
@@ -1178,6 +1300,11 @@ async function searchOffers(tail) {   // [{ text, sub, fill (the box's new text)
   const quote = s => /\s/.test(s) ? `"${s}"` : s;
   // A search term as typed in the box (creator:Name).
   const fill = (kind, value) => SEARCH_KINDS.find(k => k[0] === kind)[1][0] + ":" + quote(value) + " ";
+  if (tail.kind.startsWith("site:")) {   // another site's search, in your browser
+    const site = tail.kind.slice(5), name = STORE_SEARCHES.find(x => x[0] === site)[1];
+    return [{ text: tail.raw ? tr("Search {0} for {1}", name, tail.raw) : tr("Search {0}", name), raw: true, site: true,
+              sub: tr("Opens in your browser"), go: () => openOutside(storeSearch(site, tail.raw)) }];
+  }
   const items = T.all();
   if (tail.kind === "creator") return counted(items.map(a => a.creator)).map(([c, n]) => ({ text: c, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("creator", c) }));
   if (tail.kind === "tag") return counted(items.flatMap(a => [...new Set([...(a.tags || []), ...(a.suggested || [])])])).map(([t, n]) => ({ text: "#" + t, sub: tr(n === 1 ? "1 product" : "{0} products", n), fill: fill("tag", t) }));
@@ -1223,6 +1350,7 @@ function drawSearchMenu(head, offers) {
   $("#q").removeAttribute("aria-activedescendant");
   if (!offers.length && !head) return closeSearchMenu();
   m.innerHTML = (head ? `<p class="qmenu-h">${esc(tr(head))}</p>` : "") + offers.map((o, i) =>
+    (o.head ? `<p class="qmenu-h">${esc(tr(o.head))}</p>` : "") +
     `<div class="qopt" role="option" id="qOpt${i}" aria-selected="false" data-i="${i}">` +
     `<span class="qopt-t"${o.raw ? ' translate="no"' : ""}>${(o.code || []).map(c => `<code>${esc(c)}</code> `).join("")}${esc(o.text)}</span>` +
     `<span class="qopt-s">${esc(o.sub || "")}</span></div>`).join("") +
@@ -1236,8 +1364,11 @@ async function showSearchMenu() {
   const q = $("#q"), text = q.value, asked = ++QM.asked;
   if (document.activeElement !== q) return closeSearchMenu();
   if (!text.trim()) {   // the guide: each prefix, with an example (issue #221)
-    return drawSearchMenu("Search for one kind of thing", SEARCH_KINDS.map(([kind, names, what, eg]) =>
-      ({ code: names.map(n => n === "#" ? n : n + ":"), text: tr(what), sub: tr("For example, {0}", eg), fill: names[0] + ":" })));
+    return drawSearchMenu("Search for one kind of thing", [
+      ...SEARCH_KINDS.map(([kind, names, what, eg]) =>
+        ({ code: names.map(n => n === "#" ? n : n + ":"), text: tr(what), sub: tr("For example, {0}", eg), fill: names[0] + ":" })),
+      ...SITE_KINDS.map(([site, prefix, what, eg], n) =>   // (issue #271: another site, under a heading of its own)
+        ({ head: n ? "" : "Search another site, in your browser", code: [prefix + ":"], text: tr(what), sub: tr("For example, {0}", eg), fill: prefix + ":" }))]);
   }
   const tail = searchTail(text);
   if (!tail) return closeSearchMenu();
@@ -1293,6 +1424,7 @@ function wireSearch() {
     if (m.hidden) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); markSearchOffer(QM.at + (e.key === "ArrowDown" ? 1 : QM.at < 0 ? 0 : -1)); }
     else if (e.key === "Enter" && QM.at >= 0) { e.preventDefault(); chooseSearchOffer(QM.at); }
+    else if (e.key === "Enter" && QM.offers.length === 1 && QM.offers[0].site) { e.preventDefault(); chooseSearchOffer(0); }   // (another site's search)
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSearchMenu(); }
     else if (e.key === "Tab") closeSearchMenu();
   });
@@ -1990,10 +2122,84 @@ async function showUpdate(u) {
   $("#updCheck").disabled = !!u.busy;
   $("#updLink").hidden = !u.available;
   $("#updLink").href = u.available ? u.latest.url : u.releases_page;
-  const note = $("#updateNote");   // the header's "Update to ..." link, on the Library page
-  if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : ""; }
+  // the bar's "Update to ..." (and the Menu's, when Hoard's links are in the Menu: the bar has no room for them)
+  for (const note of document.querySelectorAll("#updateNote, [data-update-note]")) {
+    note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : "";
+  }
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
+}
+/* ---------- the Heap, Hoard's logo (issues #277, #278): the gold box with its sparkle on a box for each store you use,
+   in its colour, and the Projects box (a small cube on it), always. Drawn as hoard/heap.py draws it (the
+   same text: a test holds the two to it), so the logo the page starts with is the one it draws. Each box is placed
+   where it lands, around a <g class="hb"> that the animations move: stacking up, falling over, building up again. */
+const HEAP = { gold: "#F0B429", spark: "#FFF8E6", cave: "#211C18",
+  colours: { jinxxy: "#56D1DC", gumroad: "#FF8AD8", payhip: "#95A0FF", booth: "#FF6259", itch: "#7ED67A", projects: "#EDE4D3" },
+  order: ["jinxxy", "gumroad", "payhip", "booth", "itch", "projects"],   // nearest the gold first
+  tilt: { jinxxy: -9, gumroad: 7, payhip: -8, booth: 3, itch: -5, projects: 5, gold: -4 },
+  box: 17, goldBox: 18, line: 2.6, round: 4.6, pitch: 18.8, rise: 15.4, most: 1.6 };
+// How many boxes in each row, the bottom first, for n under the gold one: a pyramid, each row one fewer; a box that
+// would be alone on top falls down beside the bottom row instead (heap.py's rows).
+function heapRows(n) {
+  let bottom = 1;
+  while (bottom * (bottom + 1) / 2 - 1 < n) bottom += 1;
+  let out = [];
+  for (let left = n, size = bottom; left > 0; size -= 1) { out.push(Math.min(size, left)); left -= out[out.length - 1]; }
+  if (out.length > 1 && out[out.length - 1] === 1) out = [out[0] + 1, ...out.slice(1, -1)];
+  return out;
+}
+// Where each box lands in the 64 x 64 square, the bottom row first and the gold one last.
+function heapLayout(boxes) {
+  const chosen = HEAP.order.filter(b => boxes.includes(b)), sizes = heapRows(chosen.length), placed = [];
+  const byRow = sizes.map(() => []);
+  for (let r = sizes.length - 1, taken = 0; r >= 0; r -= 1) { byRow[r] = chosen.slice(taken, taken + sizes[r]); taken += sizes[r]; }
+  byRow.forEach((row, r) => row.forEach((b, j) =>
+    placed.push({ box: b, x: (j - (row.length - 1) / 2) * HEAP.pitch, y: -r * HEAP.rise, size: HEAP.box, tilt: HEAP.tilt[b] })));
+  placed.push({ box: "gold", x: 0, y: -sizes.length * HEAP.rise - (HEAP.goldBox - HEAP.box) / 2, size: HEAP.goldBox, tilt: HEAP.tilt.gold });
+  // Half a box's width as it's tilted, with its outline.
+  const reach = p => { const t = p.tilt * (Math.PI / 180); return p.size / 2 * (Math.abs(Math.cos(t)) + Math.abs(Math.sin(t))) + HEAP.line / 2; };
+  const left = Math.min(...placed.map(p => p.x - reach(p))), right = Math.max(...placed.map(p => p.x + reach(p)));
+  const top = Math.min(...placed.map(p => p.y - reach(p))), bottom = Math.max(...placed.map(p => p.y + reach(p)));
+  const scale = Math.min(60 / (right - left), 60 / (bottom - top), HEAP.most), midX = (left + right) / 2, midY = (top + bottom) / 2;
+  return placed.map(p => ({ ...p, x: 32 + (p.x - midX) * scale, y: 32 + (p.y - midY) * scale, size: p.size * scale, scale }));
+}
+// A number as the SVG has it: two places at most, no trailing zeros.
+const heapN = v => { const s = v.toFixed(2).replace(/\.?0+$/, ""); return s === "-0" ? "0" : s; };
+// The gold box's sparkle, in the box's own coordinates.
+function heapSparkle(s) {
+  const cx = 0.2 * s, cy = -0.12 * s, a = 0.2 * s, w = 0.055 * s;
+  const pts = [[cx, cy - a], [cx + w, cy - w], [cx + a, cy], [cx + w, cy + w], [cx, cy + a], [cx - w, cy + w], [cx - a, cy], [cx - w, cy - w]];
+  return "M" + pts.map(([x, y]) => `${heapN(x)} ${heapN(y)}`).join(" L") + "Z";
+}
+// The small cube on the Projects box.
+function heapCube(s) {
+  const r = 0.27 * s, h = 0.27 * s * Math.cos(30 * (Math.PI / 180));
+  const ring = [[0, -r], [h, -r / 2], [h, r / 2], [0, r], [-h, r / 2], [-h, -r / 2]].map(([x, y]) => `${heapN(x)} ${heapN(y)}`).join(" L");
+  return `M${ring}Z M${heapN(-h)} ${heapN(-r / 2)} L0 0 L${heapN(h)} ${heapN(-r / 2)} M0 0 L0 ${heapN(r)}`;
+}
+// The heap's boxes as SVG, with these boxes (store names, and "projects"), outlined in the page's background.
+function heapMarkup(boxes) {
+  return heapLayout(boxes).map((p, i) => {
+    const s = p.size, drift = p.x < 31 ? -1 : 1, stroke = ' style="stroke: var(--cave)"';
+    const extra = p.box === "gold" ? `<path class="spark" d="${heapSparkle(s)}" fill="${HEAP.spark}"/>`
+      : p.box === "projects" ? `<path d="${heapCube(s)}" fill="none" stroke="${HEAP.cave}" stroke-width="${heapN(1.5 * p.scale)}" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+    return `<g transform="translate(${heapN(p.x)} ${heapN(p.y)}) rotate(${p.tilt})">` +
+      `<g class="hb" data-box="${p.box}" style="--i:${i};--fx:${drift * 9}px;--fr:${drift * 55}deg">` +
+      `<rect x="${heapN(-s / 2)}" y="${heapN(-s / 2)}" width="${heapN(s)}" height="${heapN(s)}" rx="${heapN(HEAP.round * p.scale)}" ` +
+      `fill="${p.box === "gold" ? HEAP.gold : HEAP.colours[p.box]}"${stroke} stroke-width="${heapN(HEAP.line * p.scale)}"/>${extra}</g></g>`;
+  }).join("\n");
+}
+// The boxes the logo has: the stores you use (switched on in Settings), and Projects.
+const heapBoxes = () => HEAP.order.filter(b => b === "projects" || (DATA.enabled || {})[b] !== false);
+// Draw the logo (the bar's, and Projects' splash) with your boxes, when they've changed.
+function drawHeap() {
+  if (!DATA || !DATA.version) return;
+  const want = heapBoxes().join(",");
+  for (const g of document.querySelectorAll(".heap[data-live]")) {
+    if (g.dataset.boxes === want) continue;
+    g.dataset.boxes = want;
+    g.innerHTML = heapMarkup(want ? want.split(",") : []);
+  }
 }
 /* The logo glows, and shakes now and then, while an update to Hoard is waiting; choosing it then opens Updates */
 function markBrand() {
@@ -2265,34 +2471,59 @@ function wireSidebar() {
   setFold(!!UI.side_folded, false);
 }
 
-// Notifications through Apprise (issue #230): its addresses go to /api/apprise (kept as API keys are, and never shown
-// again: Settings only learns how many), and what's sent is a setting like any other
+// Notifications through Apprise (issues #230, #287): its addresses go to /api/apprise (kept as API keys are, and never
+// shown again: Settings learns each one's service and what tells it apart, and an id to name it by), each tested,
+// changed or removed on its own; what's sent is a setting like any other
+let APPRISE_REPLACING = "";   // the id of the address being changed (the builder's Add it puts the new one in its place)
+// Settings' notifications as they are: each address kept with its buttons, what's sent ticked, and Change...'s note.
 function fillApprise() {
-  const a = SETTINGS.apprise || {}, chosen = new Set(a.events || []);
+  const a = SETTINGS.apprise || {}, chosen = new Set(a.events || []), list = a.addresses || [];
   for (const b of document.querySelectorAll("[data-apprise-event]")) b.checked = chosen.has(b.dataset.appriseEvent);
   $("#appriseKept").textContent = !a.available ? tr("Apprise isn't installed. Run Setup again to install it.")
-    : a.kept ? tr(a.kept === 1 ? "1 address is kept. Type new ones to replace it." : "{0} addresses are kept. Type new ones to replace them.", a.kept)
+    : list.length ? tr(list.length === 1 ? "1 address is kept." : "{0} addresses are kept.", list.length)
     : tr("No addresses yet: nothing is sent.");
-  $("#appriseTest").disabled = $("#appriseForget").hidden = !a.kept;
-  $("#appriseEvents").setAttribute("aria-disabled", String(!a.kept));
+  $("#appriseList").innerHTML = list.map(x => `<li data-apprise-id="${esc(x.id)}"><b>${esc(tr(x.service))}</b>` +
+    (x.label ? ` <span class="muted" translate="no">${esc(x.label)}</span>` : "") +
+    `<span class="row"><button class="ghost sm" data-apprise-do="test">${esc(tr("Send a test"))}</button>` +
+    `<button class="ghost sm" data-apprise-do="replace">${esc(tr("Change..."))}</button>` +
+    `<button class="ghost sm" data-apprise-do="remove">${esc(tr("Remove"))}</button></span></li>`).join("");
+  $("#appriseTest").disabled = $("#appriseForget").hidden = !list.length;
+  $("#appriseTest").hidden = list.length < 2;   // (one: its own Send a test)
+  $("#appriseEvents").setAttribute("aria-disabled", String(!list.length));
+  const was = list.find(x => x.id === APPRISE_REPLACING);
+  if (!was) APPRISE_REPLACING = "";
+  $("#appriseReplacing").hidden = $("#appriseNoReplace").hidden = !was;
+  if (was) $("#appriseReplacing").textContent = tr("The new address for {0} ({1}): Add it puts it in that one's place.", tr(was.service), was.label || "");
+  $("#appriseAdd").textContent = tr(was ? "Put it in its place" : "Add it");
+}
+// Keep a change to the addresses (add, replace or remove one), then show them as they are now.
+async function appriseChange(body, said) {
+  const r = await apiPost("/api/apprise", body);
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return false; }
+  SETTINGS.apprise = { ...(SETTINGS.apprise || {}), kept: r.data.kept, addresses: r.data.addresses };
+  if (body.action !== "remove" || body.id === APPRISE_REPLACING) APPRISE_REPLACING = "";
+  fillApprise();
+  if (said) toast(said);
+  return true;
 }
 /* Building an Apprise address (issue #239): a service and its fields, made into the address Apprise takes (as its
-   wiki has each one: https://github.com/caronc/apprise/wiki), and put in the box with the others. Nothing it builds
-   goes anywhere until you keep the addresses, as one typed there. */
-const APPRISE_SERVICES = [   // {id, name, fields: [[field, label, example, "password"?]], build(the fields) -> address or null}
-  { id: "discord", name: "Discord", fields: [["hook", "Webhook URL", "https://discord.com/api/webhooks/..."]],
+   documentation has each one: https://appriseit.com/services/), and put in the box with the others. Nothing it builds
+   goes anywhere until you keep the addresses, as one typed there. Each service links its page there (issue #286). */
+const APPRISE_DOCS = "https://appriseit.com/services/";
+const APPRISE_SERVICES = [   // {id, name, doc: its page, fields: [[field, label, example, "password"?]], build(the fields) -> address or null}
+  { id: "discord", name: "Discord", doc: "discord", fields: [["hook", "Webhook URL", "https://discord.com/api/webhooks/..."]],
     build: f => { const m = f.hook.match(/^https:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/api\/webhooks\/(\d+)\/([\w-]+)/);
                   return m && `discord://${m[1]}/${m[2]}`; } },
-  { id: "telegram", name: "Telegram", fields: [["token", "Bot token", "123456:ABC-def..."], ["chat", "Chat ID", "123456789"]],
+  { id: "telegram", name: "Telegram", doc: "telegram", fields: [["token", "Bot token", "123456:ABC-def..."], ["chat", "Chat ID", "123456789"]],
     build: f => /^\d+:[\w-]+$/.test(f.token) && /^(-?\d+|@\w+)$/.test(f.chat) ? `tgram://${f.token}/${f.chat}` : null },
-  { id: "ntfy", name: "ntfy", fields: [["topic", "Topic", "my-hoard"], ["server", "Your own server (empty for ntfy.sh)", "https://ntfy.example.com"]],
+  { id: "ntfy", name: "ntfy", doc: "ntfy", fields: [["topic", "Topic", "my-hoard"], ["server", "Your own server (empty for ntfy.sh)", "https://ntfy.example.com"]],
     build: f => {
       if (!/^[\w-]{1,64}$/.test(f.topic)) return null;
       if (!f.server) return `ntfy://${f.topic}`;
-      const u = urlOf(f.server);
-      return u && `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}`;
+      const u = urlOf(f.server);   // (a server under a path can't be one: Apprise reads an address's path as its topics)
+      return u && !u.pathname.replace(/\/$/, "") ? `${u.protocol === "https:" ? "ntfys" : "ntfy"}://${u.host}/${f.topic}` : null;
     } },
-  { id: "email", name: "Email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
+  { id: "email", name: "Email", doc: "email", fields: [["from", "Your address", "you@gmail.com"], ["password", "Password (for Gmail, an app password)", "", "password"],
       ["to", "Send to (empty for yourself)", "me@example.com"], ["smtp", "Mail server (empty to let Apprise find it)", "smtp.example.com"]],
     build: f => {
       const m = f.from.match(/^([^@\s]+)@([^@\s]+\.[^@\s]+)$/);
@@ -2300,57 +2531,98 @@ const APPRISE_SERVICES = [   // {id, name, fields: [[field, label, example, "pas
       const q = [f.to && "to=" + encodeURIComponent(f.to), f.smtp && "smtp=" + encodeURIComponent(f.smtp)].filter(Boolean);
       return `mailtos://${encodeURIComponent(m[1])}:${encodeURIComponent(f.password)}@${m[2]}` + (q.length ? "?" + q.join("&") : "");
     } },
-  { id: "pushover", name: "Pushover", fields: [["user", "User key", ""], ["token", "Application token", ""]],
+  { id: "pushover", name: "Pushover", doc: "pushover", fields: [["user", "User key", ""], ["token", "Application token", ""]],
     build: f => /^\w+$/.test(f.user) && /^\w+$/.test(f.token) ? `pover://${f.user}@${f.token}` : null },
-  { id: "slack", name: "Slack", fields: [["hook", "Webhook URL", "https://hooks.slack.com/services/..."]],
+  { id: "slack", name: "Slack", doc: "slack", fields: [["hook", "Webhook URL", "https://hooks.slack.com/services/..."]],
     build: f => { const m = f.hook.match(/^https:\/\/hooks\.slack\.com\/services\/(\w+)\/(\w+)\/(\w+)/); return m && `slack://${m[1]}/${m[2]}/${m[3]}`; } },
-  { id: "matrix", name: "Matrix", fields: [["server", "Homeserver", "matrix.org"], ["user", "User", "hoard-bot"],
+  { id: "matrix", name: "Matrix", doc: "matrix", fields: [["server", "Homeserver", "matrix.org"], ["user", "User", "hoard-bot"],
       ["password", "Password", "", "password"], ["room", "Room", "#hoard:matrix.org"]],
     build: f => {
       const host = (urlOf(/^https?:/.test(f.server) ? f.server : "https://" + f.server) || {}).host;
       return host && f.user && f.password && /^[#!]\S+:\S+$/.test(f.room)
         ? `matrixs://${encodeURIComponent(f.user)}:${encodeURIComponent(f.password)}@${host}/${encodeURIComponent(f.room)}` : null;
     } },
-  { id: "gotify", name: "Gotify", fields: [["server", "Server", "https://gotify.example.com"], ["token", "Application token", ""]],
+  { id: "gotify", name: "Gotify", doc: "gotify", fields: [["server", "Server", "https://gotify.example.com"], ["token", "Application token", ""]],
     build: f => { const u = urlOf(f.server); return u && /^[\w.-]+$/.test(f.token) ? `${u.protocol === "https:" ? "gotifys" : "gotify"}://${u.host}${u.pathname.replace(/\/$/, "")}/${f.token}` : null; } },
-  { id: "webhook", name: "A webhook (JSON)", fields: [["url", "Its address", "https://example.com/hook"]],
+  { id: "webhook", name: "A webhook (JSON)", doc: "json", fields: [["url", "Its address", "https://example.com/hook"]],
     build: f => {   // (its own ?parameters go to it as they are: Apprise's -name=value)
       const u = urlOf(f.url);
       if (!u) return null;
       const q = [...u.searchParams].map(([k, v]) => `-${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
-      return `${u.protocol === "https:" ? "jsons" : "json"}://${u.host}${u.pathname}` + (q ? "?" + q : "");
+      const login = u.username ? `${u.username}${u.password ? ":" + u.password : ""}@` : "";   // (a webhook behind a sign-in)
+      return `${u.protocol === "https:" ? "jsons" : "json"}://${login}${u.host}${u.pathname}` + (q ? "?" + q : "");
     } },
 ];
 // An http(s) address as typed, or null.
 function urlOf(text) {
   try { const u = new URL(String(text).trim()); return /^https?:$/.test(u.protocol) && u.hostname ? u : null; } catch (e) { return null; }
 }
+// The services to choose from, as a select's options.
+const appriseServiceOptions = () => APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
+// A service's fields, and its page in Apprise's documentation (the builder in Settings, and the setup assistant's).
+function appriseFieldsHTML(id) {
+  const sv = APPRISE_SERVICES.find(x => x.id === id) || APPRISE_SERVICES[0];
+  return sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
+    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("") +
+    `<p class="hint"><a href="${APPRISE_DOCS}${sv.doc}/" target="_blank" rel="noopener noreferrer">${esc(tr("{0} in Apprise's documentation", tr(sv.name)))}</a></p>`;
+}
+// The address a service's fields (in box) make, or null.
+function appriseBuilt(id, box) {
+  const sv = APPRISE_SERVICES.find(x => x.id === id);
+  const f = Object.fromEntries([...box.querySelectorAll("[data-apprise-field]")].map(i => [i.dataset.appriseField, i.value.trim()]));
+  return sv ? sv.build(f) || null : null;
+}
 // The builder's fields, for the service chosen.
 function fillAppriseBuilder() {
   const pick = $("#appriseService");
   if (!pick) return;
-  if (!pick.options.length) pick.innerHTML = APPRISE_SERVICES.map(x => `<option value="${x.id}">${esc(tr(x.name))}</option>`).join("");
-  const sv = APPRISE_SERVICES.find(x => x.id === pick.value) || APPRISE_SERVICES[0];
-  $("#appriseFields").innerHTML = sv.fields.map(([k, label, eg, kind]) => `<label class="field-row"><span>${esc(tr(label))}</span>` +
-    `<input data-apprise-field="${k}" type="${kind || "text"}" autocomplete="off" spellcheck="false"${eg ? ` placeholder="${esc(eg)}"` : ""}></label>`).join("");
+  if (!pick.options.length) pick.innerHTML = appriseServiceOptions();
+  $("#appriseFields").innerHTML = appriseFieldsHTML(pick.value);
   $("#appriseBuilt").textContent = "";
 }
-// The address the builder's fields make, or null (and a word on what's missing).
-function buildApprise() {
-  const sv = APPRISE_SERVICES.find(x => x.id === $("#appriseService").value);
-  const f = Object.fromEntries([...document.querySelectorAll("[data-apprise-field]")].map(i => [i.dataset.appriseField, i.value.trim()]));
-  return sv ? sv.build(f) || null : null;
-}
+// The address Settings' builder makes, or null.
+const buildApprise = () => appriseBuilt($("#appriseService").value, $("#appriseFields"));
 document.addEventListener("change", e => { if (e.target.id === "appriseService") fillAppriseBuilder(); });
 document.addEventListener("toggle", e => { if (e.target.id === "appriseBuild" && e.target.open) fillAppriseBuilder(); }, true);
-document.addEventListener("click", e => {
+document.addEventListener("click", async e => {   // the builder's Add it: kept at once, on its own (issue #287)
   if (!e.target.closest("#appriseAdd")) return;
-  const made = buildApprise(), box = $("#setApprise");
+  const made = buildApprise();
   if (!made) { $("#appriseBuilt").textContent = tr("Fill in its fields as the service gives them: that isn't an address yet."); return; }
-  const lines = box.value.split("\n").map(x => x.trim()).filter(Boolean);
-  if (!lines.includes(made)) box.value = [...lines, made].join("\n");
-  for (const i of document.querySelectorAll("[data-apprise-field]")) i.value = "";
-  $("#appriseBuilt").textContent = tr("It's in the box. Keep these addresses to use it.");
+  const replacing = APPRISE_REPLACING;
+  const ok = await appriseChange(replacing ? { action: "replace", id: replacing, urls: made } : { action: "add", urls: made },
+                                 tr(replacing ? "Changed. Send it a test to check it." : "Added. Send it a test to check it."));
+  if (!ok) return;
+  for (const i of $("#appriseFields").querySelectorAll("[data-apprise-field]")) i.value = "";
+  $("#appriseBuilt").textContent = "";
+});
+document.addEventListener("click", e => {   // Change...'s Cancel: the builder adds again
+  if (!e.target.closest("#appriseNoReplace")) return;
+  APPRISE_REPLACING = "";
+  fillApprise();
+});
+document.addEventListener("click", async e => {   // one address's Send a test, Change... or Remove
+  const b = e.target.closest("[data-apprise-do]");
+  if (!b) return;
+  const li = b.closest("[data-apprise-id]"), id = li.dataset.appriseId, x = ((SETTINGS.apprise || {}).addresses || []).find(a => a.id === id) || {};
+  const named = `${tr(x.service || "")}${x.label ? ` (${x.label})` : ""}`;
+  if (b.dataset.appriseDo === "test") {
+    winNote("settingsPanel", tr("Sending a test..."));
+    const r = await apiPost("/api/apprise/test", { id });
+    winNote("settingsPanel", "");
+    toast(r.ok && r.data.ok ? tr("Sent. Check that it came.") : (r.data.error || tr("That can't be done.")));
+  } else if (b.dataset.appriseDo === "remove") {
+    if (!await ask(tr("Remove {0}? Nothing more is sent to it.", named), tr("Remove"))) return;
+    appriseChange({ action: "remove", id }, tr("Removed."));
+  } else {   // Change...: the builder makes the new one, to put in its place
+    APPRISE_REPLACING = id;
+    const svc = { Discord: "discord", Telegram: "telegram", ntfy: "ntfy", Email: "email", Pushover: "pushover", Slack: "slack",
+                  Matrix: "matrix", Gotify: "gotify", Webhook: "webhook" }[x.service];
+    $("#appriseBuild").open = true;
+    if (svc) { $("#appriseService").value = svc; fillAppriseBuilder(); }
+    fillApprise();
+    const first = $("#appriseFields input");
+    if (first) first.focus();
+  }
 });
 // Acknowledgements (issue #227): everything Hoard uses or ships, with its license (/api/credits), read the first time
 // it's opened; a license's text where Hoard has it, in a dialog
@@ -2385,15 +2657,14 @@ async function appriseAct(id) {
     return;
   }
   const forget = id === "appriseForget";
-  // (the box is empty once they're kept, as they're never shown: Keep with nothing typed isn't a way to forget them)
+  // (pasted ones are added to those kept; the box is empty once they are, as they're never shown)
   if (!forget && !$("#setApprise").value.trim()) { toast(tr("Type an address first, one a line.")); $("#setApprise").focus(); return; }
   if (forget && !await ask(tr("Forget the Apprise addresses? Nothing is sent until you add one again."), tr("Forget"))) return;
-  const r = await apiPost("/api/apprise", forget ? { forget: true } : { urls: $("#setApprise").value });
-  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  const ok = await appriseChange(forget ? { forget: true } : { action: "add", urls: $("#setApprise").value });
+  if (!ok) return;
   $("#setApprise").value = "";
-  SETTINGS.apprise = { ...(SETTINGS.apprise || {}), kept: r.data.kept };
-  fillApprise();
-  toast(forget ? tr("Forgotten.") : tr(r.data.kept === 1 ? "Kept 1 address." : "Kept {0} addresses.", r.data.kept));
+  const n = ((SETTINGS.apprise || {}).addresses || []).length;
+  toast(forget ? tr("Forgotten.") : tr(n === 1 ? "Kept 1 address." : "Kept {0} addresses.", n));
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("#appriseSave, #appriseTest, #appriseForget");
@@ -2713,6 +2984,10 @@ const pjChips = p => `<span class="pj-chip k-${pjHue(p.type)}">${esc(pjKind(p.ty
   (p.unity ? ` <span class="pj-chip unity" translate="no">Unity ${esc(p.unity)}</span>` : "");
 // A project's path, for a request's address.
 const pjQ = path => `?path=${encodeURIComponent(path)}`;
+// The project opened last (issue #294): the one with the latest time opened, from Hoard, the Creator Companion or ALCOM.
+const pjLastOpened = () => (PJ.data && PJ.data.projects || []).reduce((a, p) => p.opened && (!a || p.opened > a.opened) ? p : a, null);
+// Its mark: "Last opened", beside its name.
+const pjLastMark = p => p === pjLastOpened() ? `<span class="pj-last">${esc(tr("Last opened"))}</span>` : "";
 // A project's name, by its path (the list's, or the project open).
 const pjNamed = path => ((PJ.data && PJ.data.projects || []).find(x => x.path === path) || PJ.project || {}).name || "";
 function openProjects(open) {   // Projects takes the whole window below the bar, until it's closed
@@ -2764,12 +3039,16 @@ function drawProjects() {
   const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
     ? [...body.querySelectorAll("input[id], textarea[id]")].filter(el => pjTicks(el) ? el.checked !== el.defaultChecked : el.value !== el.defaultValue)
       .map(el => [el.id, pjTicks(el) ? el.checked : el.value]) : [];
+  // a tag being typed in a project's details, too: the list is drawn again as updates and details come in
+  const tagBox = $("#pjTagInput"), tagTyped = tagBox && tagBox.value ? [tagBox.value, document.activeElement === tagBox] : null;
   body.innerHTML = (views[PJ.view] || pjList)();
   pjDrawn = PJ.view;
   for (const [id, v] of typed) {
     const el = document.getElementById(id);
     if (el) pjTicks(el) ? (el.checked = v) : (el.value = v);
   }
+  const tagAgain = tagTyped && $("#pjTagInput");
+  if (tagAgain) { tagAgain.value = tagTyped[0]; if (tagTyped[1]) tagAgain.focus(); }
   if (PJ.view === "new") pjFillNew();
   if (PJ.view === "logs") pjLogWire();
   const find = $("#pjFind");
@@ -2800,6 +3079,7 @@ function pjList() {
   const top = pjTabs() + `<div class="pj-top"><input type="search" id="pjFind" placeholder="${esc(tr("Find a project"))}" aria-label="${esc(tr("Find a project"))}">` +
     `<button class="primary sm" data-pj="new">${esc(tr("New project"))}</button>` +
     `<button class="ghost sm" data-pj="add">${esc(tr("Add a project..."))}</button>` +
+    `<button class="ghost sm" data-pj="gitclone">${esc(tr("Get from a Git address..."))}</button>` +   // (issue #299)
     `<span class="pj-layout" role="radiogroup" aria-label="${esc(tr("Show projects as"))}">` +
     [["list", "List"], ["tiles", "Tiles"]].map(([v, label]) => `<button class="ghost sm" role="radio" data-pj="layout" data-v="${v}" ` +
       `aria-checked="${(v === "tiles") === tiles}">${esc(tr(label))}</button>`).join("") + `</span></div>`;
@@ -2821,23 +3101,23 @@ function pjList() {
     const loose = grouped ? ordered.filter(p => !p.folder) : ordered;
     body = `<div class="pj-tiles">` + folders.map(([f, n]) => {
       const inside = list.filter(p => p.folder === f), ups = inside.reduce((t, p) => t + pjUpdateCount(p), 0);
-      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" ` +
+      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" data-folder="${esc(f)}" ` +
         `data-hay="${esc(norm([f, ...inside.map(p => p.name)].join(" ")))}" aria-label="${esc(tr("Folder {0}, {1} projects", f, n))}">` +
         `<span class="pj-tile-art folder">${FOLDER_ICON}<span class="pj-mini">${inside.slice(0, 4).map(p =>
           `<i class="k-${pjHue(p.type)}">${esc(initials(p.name))}</i>`).join("")}</span></span>` +
         `<span class="nm-t" translate="no">${esc(f)}</span><span class="cr">${esc(tr(n === 1 ? "1 project" : "{0} projects", n))}` +
         `${ups ? ` · ${esc(tr("updates inside"))}` : ""}</span></button>`;
-    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
-        `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}">` +
+    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
+        `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}" draggable="true">` +
         `<span class="pj-tile-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></span>` +
-        `<span class="nm-t" translate="no">${esc(p.name)}</span><span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
+        `<span class="nm-t" translate="no">${esc(p.name)}</span>${pjLastMark(p)}<span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
         pjUpdateMarks(p) + `</button>`).join("") + `</div>`;
   } else {   // issue #246: a row says what you need at a glance; choosing it opens its details
-    body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}" ` +
-      `data-path="${esc(p.path)}" data-hay="${hay(p)}">` +
+    body = `<ul class="pj-list">${ordered.map(p => `<li class="pj-row k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
+      `data-path="${esc(p.path)}" data-hay="${hay(p)}" draggable="true">` +
       `<button class="pj-star" data-pj="star" aria-pressed="${p.favorite}" title="${esc(tr("Favourite"))}" aria-label="${esc(tr("Favourite"))}">★</button>` +
       `<button class="pj-open" data-pj="details" aria-pressed="${PJ.selected === p.path}">` +
-      `<span class="pj-main"><b translate="no">${esc(p.name)}</b><span class="meta" translate="no">${esc(p.path)}</span></span>` +
+      `<span class="pj-main"><span class="pj-name"><b translate="no">${esc(p.name)}</b>${pjLastMark(p)}</span><span class="meta" translate="no">${esc(p.path)}</span></span>` +
       `<span class="pj-what">${p.folder && PJ.folder == null ? `<span class="pj-in">${FOLDER_ICON}<span translate="no">${esc(p.folder)}</span></span> · ` : ""}` +
         `${p.exists ? `${pjChips(p)}${p.opened ? ` · ${esc(tr("opened {0}", ago(new Date(p.opened).toISOString())))}` : ""}` : esc(tr("The folder isn't there"))}</span>` +
       pjUpdateMarks(p) + `</button></li>`).join("")}</ul>`;
@@ -2873,7 +3153,7 @@ function pjDetail(p) {
   return `<aside class="pj-detail k-${pjHue(p.type)}" data-path="${esc(p.path)}"${rep ? ` data-report="${esc(rep.id)}"` : ""} aria-label="${esc(p.name)}">` +
     `<button class="win-x" data-pj="undetail" aria-label="${esc(tr("Close details"))}">×</button>` +
     `<div class="pj-d-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></div>` +
-    `<h2 class="pj-d-name" translate="no">${esc(p.name)}</h2><p class="pj-d-path" translate="no">${esc(p.path)}</p>` +
+    `<h2 class="pj-d-name" translate="no">${esc(p.name)}</h2>${pjLastMark(p)}<p class="pj-d-path" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-d-kind">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</p>` +
     pjFacts(p) +
     (u.packages ? `<p class="pj-d-new"><button class="linkish pj-up-go" data-pj="manage">${esc(tr(u.packages === 1 ? "1 package has a newer version" : "{0} packages have newer versions", u.packages))}</button></p>` : "") +
@@ -2883,7 +3163,8 @@ function pjDetail(p) {
       `<button class="ghost" data-pj="folder">${esc(tr("Show in folder"))}</button>` : ""}</div>` +
     `<h3>${esc(tr("Organise"))}</h3><div class="marks">` +
       `<button class="ghost sm" data-pj="star" aria-pressed="${p.favorite}">${esc(tr(p.favorite ? "Favourite" : "Make it a favourite"))}</button>` +
-      (p.exists ? `<button class="ghost sm" data-pj="backup">${esc(tr("Back up..."))}</button>` : "") +
+      (p.exists ? `<button class="ghost sm" data-pj="backup">${esc(tr("Back up..."))}</button>` +
+        `<button class="ghost sm" data-pj="rename">${esc(tr("Rename..."))}</button>` : "") +
       `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button></div>` +
     `<h3><label for="pjDFolder">${esc(tr("Folder"))}</label></h3>` +
     `<select id="pjDFolder" class="pj-d-folder"><option value="">${esc(tr("Not in a folder"))}</option>` +
@@ -2903,8 +3184,18 @@ function pjFacts(p) {
   const size = !a ? reading : a.size.complete ? sizeText(a.size.total) : tr("over {0}", sizeText(a.size.total));
   return `<dl class="pj-facts">` + [["Size on disk", size],
     ["Opened", p.opened ? ago(new Date(p.opened).toISOString()) : "—"], ["Made", p.created ? shortDay(new Date(p.created).toISOString()) : "—"],
-    ["Packages", a ? String(a.packages.length + a.own_packages) : reading], ["Backups", a ? String(a.backups.count) : reading]]
+    ["Packages", a ? String(a.packages.length + a.own_packages) : reading], ["Backups", a ? String(a.backups.count) : reading],
+    ["Source control", a ? pjGitWords(a.git) : reading]]
     .map(([k, v]) => `<div><dt>${esc(tr(k))}</dt><dd>${esc(v)}</dd></div>`).join("") + `</dl>`;
+}
+// A project's source control, in a few words (issue #296): not set up, Git missing, or its branch and changes.
+function pjGitWords(g) {
+  if (!g || g.state === "none") return tr("Not set up");
+  if (g.state === "missing") return tr("Git isn't installed");
+  if (g.state === "old" || g.state === "error") return tr("Git can't read it");
+  if (g.state === "untrusted") return tr("Its Git settings need a look");
+  const sync = g.ahead || g.behind ? ` · ${tr("{0} ahead, {1} behind", g.ahead, g.behind)}` : "";
+  return `${g.branch || tr("(no branch)")} · ${g.state === "conflicts" ? tr("Conflicts") : g.changes ? tr(g.changes === 1 ? "1 change" : "{0} changes", g.changes) : tr("No changes")}${sync}`;
 }
 // The rest of a project's details, once they're read: what takes its room, its packages, what Hoard put in it from your
 // library (and what Hoard for Unity found there), and its backups.
@@ -2948,11 +3239,12 @@ async function pjLoadAbout(path) {
   panel.querySelector(".pj-d-about").innerHTML = pjAboutHTML(p);
 }
 // A project's folder or tags, changed in its details: saved, and the list drawn again.
-async function pjOrganizeSome(path, change) {
+async function pjOrganizeSome(path, change) {   // (true once it's saved and the list read again)
   const r = await apiPost("/api/vpm/organize", { path, ...change });
-  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return false; }
   if (r.data.folder && PJ.folder != null && PJ.folder !== r.data.folder) PJ.folder = r.data.folder;   // (shown where it went)
-  return loadProjects();
+  await loadProjects();
+  return true;
 }
 // Read each project's packages with newer versions, once the list is shown (then draw it again with them).
 async function pjLoadUpdates() {
@@ -2979,7 +3271,7 @@ function pjFolderBar(list) {
   if (!folders.length && !PJ.tag) return "";
   // A folder's button.
   const chip = (i, label, n, on, raw) => `<button class="chip" data-pj="folderpick" data-i="${i}" aria-pressed="${on}"` +
-    `${raw ? ' translate="no"' : ""}>${esc(label)}<span class="n">${n}</span></button>`;
+    `${raw ? ` translate="no" data-folder="${esc(label)}"` : ""}>${esc(label)}<span class="n">${n}</span></button>`;   // (a folder's takes a project dropped on it)
   return `<div class="pj-folders chips" role="group" aria-label="${esc(tr("Folders"))}">` +
     (folders.length ? chip(-1, tr("All projects"), list.length, PJ.folder == null) +
       folders.map(([f, n], i) => chip(i, f, n, PJ.folder === f, true)).join("") +
@@ -3053,17 +3345,18 @@ function pjProject() {
     `<th scope="col" class="v"><span class="visually-hidden">${esc(tr("Remove"))}</span></th></tr></thead>`;
   const pre = (p.preloaded || []).slice().reverse();
   const subs = [["packages", tr("Packages")], ["add", tr("Add packages")], ["library", tr("From your library")],
-                ...(p.report ? [["report", tr("What Hoard for Unity found")]] : [])];
+                ...(p.report ? [["report", tr("What Hoard for Unity found")]] : []), ["git", tr("Source control")]];
   if (!subs.some(([k]) => k === PJ.sub)) PJ.sub = "packages";
   const part = {
     packages: () => (p.needs_repair ? `<p class="pj-warn">${esc(tr("Some packages aren't installed the way the project says."))} <button class="ghost sm" data-pj="repair">${esc(tr("Put it right"))}</button></p>` : "") +
       (updates ? `<div class="row"><button class="ghost sm" data-pj="updateall">${esc(tr(updates === 1 ? "Update {0} package" : "Update {0} packages", updates))}</button></div>` : "") +
       (pk.length ? `<table class="pj-pk">${head}<tbody>${rows}</tbody></table>` : `<p class="none">${esc(tr("No VPM packages in it yet. Add some in Add packages."))}</p>`),
     add: () => pjAddList(p.unity, new Set(pk.map(x => x.name))),
-    library: () => `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
-      (pre.length ? `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button>` : "") + `</div>` +
-      (pre.length ? pjPutInTiles(pre) : `<p class="none">${esc(tr("Nothing from your library has been put in from Hoard yet."))}</p>`),
-    report: () => pjReport(p.report) };
+    library: () => pre.length ? `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Add Assets"))}</button>` +
+      `<button class="ghost sm" data-pj="importlist">${esc(tr("Show the list in the project"))}</button></div>` + pjPutInTiles(pre)
+      : pjNothingYet(),   // (issue #283: empty, it reads as the Library does)
+    report: () => pjReport(p.report),
+    git: () => pjGitHTML(p) };   // (issues #296 to #299)
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
     `<p class="pj-facts">${pjChips(p)}</p>` +
     (p.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it before changing packages, so nothing it has open is replaced under it."))}</p>` : "") +
@@ -3236,7 +3529,7 @@ function pjNew() {
     `<h4>${esc(tr("From your library"))}</h4>` +
     (f.picks.length ? `<ul class="pj-pre">${f.picks.map((x, i) => `<li><b translate="no">${esc(x.product || "")}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span> ` +
       `<button class="linkish" data-pj="unpick" data-i="${i}">${esc(tr("Leave out"))}</button></li>`).join("")}</ul>` : `<p class="none">${esc(tr("Nothing yet."))}</p>`) +
-    `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Put in products from your library"))}</button>` +
+    `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Add Assets"))}</button>` +
     `<button class="ghost sm" data-pj="addset">${esc(tr("Put in a set"))}</button></div>` +
     `<div class="row pj-go"><button class="ghost sm" data-pj="savepreset">${esc(tr("Save as a preset"))}</button>` +
     (f.preset ? `<button class="ghost sm" data-pj="exportpreset">${esc(tr("Save it for ALCOM too"))}</button><button class="ghost sm" data-pj="delpreset">${esc(tr("Delete the preset"))}</button>` : "") +
@@ -3499,7 +3792,12 @@ async function pjProductContents(key) {
   if (!r.ok) { toast(data.error || tr("That product couldn't be read.")); return null; }
   return data;
 }
-// ---- Put in products from your library (a project's From your library, and New project's): the Downloads page, in
+// A project's From your library, with nothing put in from Hoard yet: as the Library reads with nothing to show (issue #283),
+// a heading in the middle, what goes there, and Add Assets.
+const pjNothingYet = () => `<div class="empty pj-empty"><h2>${esc(tr("Nothing from your library in it yet"))}</h2>` +
+  `<p>${esc(tr("Add assets you've downloaded, and Hoard puts them in the project, with the packages they need."))}</p>` +
+  `<button class="primary" data-pj="addprod">${esc(tr("Add Assets"))}</button></div>`;
+// ---- Add Assets (a project's From your library, and New project's; issue #282): the Downloads page, in
 // Select mode for that project, with nothing to do there but Add to project or Cancel. What's chosen goes in as Put in a
 // project... puts it; both go back to the project. From the Library page it's Downloads that opens (sessionStorage
 // carries what it's for, and a new project's form as far as it's filled in).
@@ -3762,6 +4060,308 @@ async function pjWatch() {
   PJ.watching = false;
   if ((changed || PJ.ran) && !$("#projectsWin").hidden) { PJ.ran = false; PJ.pkgs = null; loadProjects(); }
 }
+/* ---------- source control (issues #296 to #299): a project's Git, in its Source control tab. Hoard runs the Git you
+   have, one named action at a time; each button says what it changes (your files, your history here, or a repository
+   online), and a task that talks to a remote runs as Projects' tasks do (Stop stops it). */
+const PJG = { for: "", data: null, loading: false, pick: new Set(), diff: null, commits: null, ref: "", refFiles: null, msg: "" };
+// Read a project's source control (again: Git looked for again, after it's installed), then draw it.
+async function pjGitLoad(path, again = false) {
+  if (PJG.loading) return;
+  PJG.loading = true;
+  try {
+    const r = await api(`/api/vpm/git?path=${encodeURIComponent(path)}${again ? "&again=1" : ""}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (PJG.for !== path) Object.assign(PJG, { pick: new Set(), diff: null, commits: null, ref: "", refFiles: null, msg: "" });
+    PJG.for = path;
+    PJG.data = r.ok ? d : { state: "error", error: d.error || tr("That can't be read.") };
+    const there = new Set((PJG.data.files || []).map(f => f.path));
+    for (const f of [...PJG.pick]) if (!there.has(f)) PJG.pick.delete(f);
+    if (PJG.diff && !PJG.diff.ref && !there.has(PJG.diff.path)) PJG.diff = null;
+  } finally { PJG.loading = false; }
+  if (PJ.view === "project" && PJ.sub === "git") drawProjects();
+}
+// What one file's state is, in words: staged, not staged, new, in conflict.
+function pjGitFileState(f) {
+  if (f.conflict) return tr("In conflict");
+  if (f.untracked) return tr("New, not staged");
+  const what = { M: tr("Changed"), A: tr("Added"), D: tr("Deleted"), R: tr("Renamed"), C: tr("Copied"), T: tr("Changed") };
+  const parts = [];
+  if (f.staged) parts.push(tr("{0}, staged", what[f.x] || tr("Changed")));
+  if (f.unstaged) parts.push(tr("{0}, not staged", what[f.y] || tr("Changed")));
+  return parts.join(" · ");
+}
+// A file's changes, as Git shows them: lines added and taken out, or what a binary file is.
+function pjGitDiffHTML() {
+  const d = PJG.diff;
+  if (!d) return "";
+  const head = `<div class="pj-diff-head"><b translate="no">${esc(d.path)}</b><button class="ghost sm" data-pj="gitdiffclose">${esc(tr("Close"))}</button></div>`;
+  if (!d.data) return `<div class="pj-diff">${head}<p class="none">${esc(tr("Reading its changes..."))}</p></div>`;
+  const x = d.data;
+  if (x.error) return `<div class="pj-diff">${head}<p class="pj-warn">${esc(x.error)}</p></div>`;
+  if (x.binary) return `<div class="pj-diff">${head}<p class="none">${esc(tr(x.size != null ? "A binary file ({0}): Git doesn't show its changes line by line." : "A binary file: Git doesn't show its changes line by line.", x.size != null ? sizeText(x.size) : ""))}</p></div>`;
+  if (x.folder) return `<div class="pj-diff">${head}<p class="none">${esc(tr("A new folder, with:"))}</p><pre class="pj-diff-text" translate="no">${esc(x.folder.join("\n"))}</pre></div>`;
+  // (Git's own header lines left out: the file's name is above)
+  const shown = x.text.replace(/\n$/, "").split("\n").filter(l => !/^(diff --git |index |--- |\+\+\+ |new file mode |deleted file mode |similarity index |rename (from|to) )/.test(l));
+  const lines = shown.map(l => `<span class="${l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : ""}">${esc(l) || " "}</span>`).join("");
+  return `<div class="pj-diff">${head}<p class="muted">${esc(tr("{0} lines added, {1} taken out", x.added, x.removed))}</p>` +
+    `<pre class="pj-diff-text" translate="no">${lines}</pre>${x.truncated ? `<p class="none">${esc(tr("Only the first part is shown."))}</p>` : ""}</div>`;
+}
+// Show one file's changes: in what's staged, in what isn't, or in a commit.
+async function pjGitDiff(path, file, staged, ref) {
+  PJG.diff = { path: file, staged, ref, data: null };
+  drawProjects();
+  const q = `path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}${staged ? "&staged=1" : ""}${ref ? `&ref=${encodeURIComponent(ref)}` : ""}`;
+  const r = await api(`/api/vpm/git/diff?${q}`, { cache: "no-store" });
+  const d = await r.json().catch(() => ({}));
+  if (PJG.diff && PJG.diff.path === file) { PJG.diff.data = r.ok ? d : { error: d.error || tr("That can't be read.") }; drawProjects(); }
+}
+// The Source control tab: Git missing, a project not set up, or a repository's branch, changes, commits and remotes.
+function pjGitHTML(p) {
+  const g = PJG.for === p.path ? PJG.data : null;
+  if (!g) { pjGitLoad(p.path); return `<p class="none">${esc(tr("Reading its source control..."))}</p>`; }
+  // A link to a site (Git's, Git LFS's), opened in your browser.
+  const link = (href, text) => `<a href="${esc(safeUrl(href))}" target="_blank" rel="noopener noreferrer">${esc(text)}<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span></a>`;
+  const missing = g.state === "missing";
+  if (missing || g.state === "old") {
+    return `<div class="pj-git-none"><h4>${esc(tr(missing ? "Git isn't installed" : "This Git is too old"))}</h4>` +
+      `<p>${esc(tr(missing ? "Hoard uses the Git you have installed, for a project's history: what changed, and when. Get Git, then check again." : "Hoard needs Git 2.28 or newer. Get a newer one, then check again."))}</p>` +
+      `<div class="row">${link(g.git.get, tr("Get Git"))}<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
+  }
+  if (g.state === "error") return `<p class="pj-warn">${esc(g.error)}</p><div class="row"><button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div>`;
+  if (g.state === "untrusted") {   // its own settings run programs: shown, and Git not used here until you trust them
+    const items = (g.concerns || []).map(c => `<li><b translate="no">${esc(c.kind === "hook" ? tr("Hook: {0}", c.name) : c.name)}</b>` +
+      `<pre class="pj-diff-text pj-plan" translate="no">${esc(c.value)}</pre></li>`).join("");
+    return `<div class="pj-git-none"><h4>${esc(tr("Its Git settings run programs"))}</h4>` +
+      `<p>${esc(tr("This project's own Git settings have Git run these programs. A project made by someone else can carry settings like these, so Hoard doesn't use Git here until you've looked at them and trust them."))}</p>` +
+      `<ul class="pj-plan-list pj-git-concerns">${items}</ul>` +
+      `<div class="row"><button class="ghost sm" data-pj="gittrust">${esc(tr("Trust them..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
+  }
+  if (g.state === "none") {
+    return `<div class="pj-git-none"><h4>${esc(tr("Not set up"))}</h4>` +
+      `<p>${esc(tr("Git keeps the project's history on this computer: what changed, and when, to look back on or go back to. It needs no account; a repository online (GitHub, GitLab...) is up to you, later."))}</p>` +
+      (g.parent ? `<p class="pj-warn">${esc(tr("This project is inside another Git repository ({0}).", g.parent))}</p>` : "") +
+      `<div class="row"><button class="primary sm" data-pj="gitsetup">${esc(tr("Set up Git..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitagain">${esc(tr("Check again"))}</button></div></div>`;
+  }
+  const files = g.files || [], picked = files.filter(f => PJG.pick.has(f.path));
+  const remote = (g.remotes || [])[0];
+  const warn = [
+    g.open_in_unity && tr("Unity has this project open: what's shown can change as it saves. Switching branches and pulling wait until it's closed."),
+    g.lfs && g.lfs.used && !g.lfs.installed && tr("This project uses Git LFS for its big files, and Git LFS isn't installed: get it before you pull or push."),
+    g.worktree && tr("This folder is a worktree of another repository: commits here are that repository's too."),
+  ].filter(Boolean).map(t => `<p class="pj-warn">${esc(t)}${t.includes("Git LFS") ? " " + link(g.lfs.get, tr("Get Git LFS")) : ""}</p>`).join("");
+  const head = `<div class="pj-git-head">` +
+    `<label class="pj-git-branch">${esc(tr("Branch"))} <select id="pjGitBranch" aria-label="${esc(tr("Branch"))}">` +
+      (g.detached ? `<option value="" selected>${esc(tr("(no branch)"))}</option>` : "") +
+      (g.branches || []).map(b => `<option value="${esc(b.name)}"${b.current ? " selected" : ""} translate="no">${esc(b.name)}</option>`).join("") +
+      (!(g.branches || []).length && g.branch ? `<option selected translate="no">${esc(g.branch)}</option>` : "") +
+      `<option value="+" data-new>${esc(tr("New branch..."))}</option></select></label>` +
+    `<span class="pj-git-sync">${g.upstream ? esc(tr("{0}: {1} ahead, {2} behind", g.upstream, g.ahead, g.behind)) : esc(tr(remote ? "Not linked to a branch on {0} yet" : "Only on this computer", remote ? remote.name : ""))}</span>` +
+    (g.last ? `<span class="pj-git-last">${esc(tr("Last commit: {0}", g.last.subject))} · ${esc(g.last.author)} · ${esc(ago(g.last.when))}</span>` : `<span class="pj-git-last">${esc(tr("No commits yet"))}</span>`) +
+    `<span class="row">` + (remote ? `<button class="ghost sm" data-pj="gitsync" data-op="fetch" title="${esc(tr("Only looks: it changes nothing here"))}">${esc(tr("Fetch"))}</button>` +
+      `<button class="ghost sm" data-pj="gitsync" data-op="pull" title="${esc(tr("Brings the remote's commits into your branch and your files"))}">${esc(tr("Pull"))}</button>` +
+      `<button class="ghost sm" data-pj="gitsync" data-op="push" title="${esc(tr("Sends your commits to {0}", remote.name))}">${esc(tr("Push"))}</button>` : "") +
+      `<button class="ghost sm" data-pj="gitapp">${esc(tr(g.app ? "Open in your Git app" : "Choose your Git app..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitreload" title="${esc(tr("Reads the project's changes again (Unity may have saved some since)"))}">${esc(tr("Look again"))}</button></span></div>`;
+  const conflicts = g.state === "conflicts" || g.merging ? `<div class="pj-git-conflict"><h4>${esc(tr("Conflicts"))}</h4>` +
+    `<p>${esc(tr("Some files changed both here and on the remote. Sort them out in your Git app (or Unity), stage them, and commit; or give up the merge, and your files go back to how they were before the pull."))}</p>` +
+    `<div class="row"><button class="ghost sm" data-pj="gitapp">${esc(tr("Open in your Git app"))}</button><button class="ghost sm danger" data-pj="gitabort">${esc(tr("Abort the merge..."))}</button></div></div>` : "";
+  const ignore = (g.ignore_missing || []).length ? `<p class="pj-note">${esc(tr("Some of what's installed since it was set up isn't in its ignore rules yet."))} ` +
+    `<button class="linkish" data-pj="gitignore">${esc(tr("Add them..."))}</button></p>` : "";
+  const list = files.length ? `<ul class="pj-git-files">${files.map(f => `<li class="${f.conflict ? "conflict" : ""}">` +
+      `<input type="checkbox" data-gitpick value="${esc(f.path)}"${PJG.pick.has(f.path) ? " checked" : ""} aria-label="${esc(tr("Choose {0}", f.path))}">` +
+      `<span class="pj-git-path" translate="no">${f.from ? `${esc(f.from)} → ` : ""}${esc(f.path)}</span>` +
+      `<span class="pj-git-state">${esc(pjGitFileState(f))}</span>` +
+      (f.staged ? `<button class="linkish" data-pj="gitdiff" data-file="${esc(f.path)}" data-staged="1">${esc(tr("Staged changes"))}</button>` : "") +
+      (f.unstaged ? `<button class="linkish" data-pj="gitdiff" data-file="${esc(f.path)}">${esc(tr(f.untracked ? "See it" : "Changes"))}</button>` : "") +
+      `</li>`).join("")}</ul>${g.more ? `<p class="none">${esc(tr("And {0} more.", g.more))}</p>` : ""}`
+    : `<p class="none">${esc(tr("No changes: everything is committed."))}</p>`;
+  const changes = `<h4>${esc(tr("Changes"))} <span class="n">${files.length}</span></h4>` +
+    (files.length ? `<div class="row"><label class="check"><input type="checkbox" data-gitall${picked.length === files.length ? " checked" : ""}> ${esc(tr("Choose all"))}</label>` +
+      `<button class="ghost sm" data-pj="gitstage"${picked.some(f => f.unstaged) ? "" : " disabled"} title="${esc(tr("Puts the chosen files in the next commit (nothing else is staged)"))}">${esc(tr("Stage"))}</button>` +
+      `<button class="ghost sm" data-pj="gitunstage"${picked.some(f => f.staged) ? "" : " disabled"} title="${esc(tr("Takes them out of the next commit: their changes are kept"))}">${esc(tr("Unstage"))}</button></div>` : "") +
+    list + pjGitDiffHTML();
+  const who = g.identity || {};
+  const commitBox = `<h4>${esc(tr("Commit"))}</h4>` + (!who.name || !who.email
+    ? `<p>${esc(tr("Git needs a name and email to sign this project's commits with (they're in each commit, and seen by anyone you share it with)."))}</p>` +
+      `<div class="row"><input id="pjGitName" placeholder="${esc(tr("Name"))}" aria-label="${esc(tr("Name"))}" value="${esc(who.name || "")}">` +
+      `<input id="pjGitEmail" type="email" placeholder="${esc(tr("Email"))}" aria-label="${esc(tr("Email"))}" value="${esc(who.email || "")}">` +
+      `<button class="ghost sm" data-pj="gitwho">${esc(tr("Save"))}</button></div>` : "") +
+    `<textarea id="pjGitMsg" rows="2" maxlength="10000" placeholder="${esc(tr("What changed, in a few words"))}" aria-label="${esc(tr("Commit message"))}">${esc(PJG.msg)}</textarea>` +
+    `<div class="row"><button class="primary sm" data-pj="gitcommit"${g.counts && g.counts.staged ? "" : " disabled"} title="${esc(tr("Saves what's staged in the project's history, on this computer"))}">` +
+      `${esc(tr(g.counts && g.counts.staged ? (g.counts.staged === 1 ? "Commit 1 file" : "Commit {0} files") : "Commit", g.counts ? g.counts.staged : 0))}</button></div>`;
+  const history = `<h4>${esc(tr("History"))}</h4>` + (PJG.commits == null
+    ? `<div class="row"><button class="ghost sm" data-pj="githistory">${esc(tr("Show the history"))}</button></div>`
+    : PJG.commits.length ? `<ul class="pj-git-log">${PJG.commits.map(c => `<li${PJG.ref === c.hash ? ' class="on"' : ""}>` +
+        `<button class="linkish" data-pj="gitref" data-ref="${esc(c.hash)}" translate="no">${esc(c.subject)}</button>` +
+        `<span class="muted"><code translate="no">${esc(c.short)}</code> · ${esc(c.author)} · ${esc(ago(c.when))}${c.refs ? ` · <span translate="no">${esc(c.refs)}</span>` : ""}</span>` +
+        (PJG.ref === c.hash && PJG.refFiles ? `<ul class="pj-git-cfiles">${PJG.refFiles.map(f => `<li><span class="pj-git-st">${esc(f.status)}</span>` +
+          `<button class="linkish" data-pj="gitdiff" data-file="${esc(f.path)}" data-ref="${esc(c.hash)}" translate="no">${esc(f.path)}</button></li>`).join("")}</ul>` : "") +
+        `</li>`).join("")}</ul>` +
+      (PJG.commits.length % 50 === 0 ? `<div class="row"><button class="ghost sm" data-pj="githistory" data-more="1">${esc(tr("Older commits"))}</button></div>` : "")
+    : `<p class="none">${esc(tr("No commits yet."))}</p>`);
+  const remotes = `<h4>${esc(tr("Remotes"))}</h4>` +
+    `<p class="hint">${esc(tr("A repository online to sync with: GitHub, GitLab, Gitea or your own. Signing in is Git's own (Git Credential Manager, or your SSH key): Hoard keeps no Git passwords."))}</p>` +
+    ((g.remotes || []).length ? `<ul class="pj-git-remotes">${g.remotes.map(r => `<li data-remote="${esc(r.name)}"><b translate="no">${esc(r.name)}</b> <span translate="no">${esc(r.url)}</span>` +
+      `<button class="ghost sm" data-pj="gitremote" data-act="set">${esc(tr("Change..."))}</button>` +
+      `<button class="ghost sm" data-pj="gitremote" data-act="remove">${esc(tr("Remove"))}</button></li>`).join("")}</ul>` : "") +
+    `<div class="row"><button class="ghost sm" data-pj="gitremote" data-act="add">${esc(tr("Add a remote..."))}</button></div>`;
+  const others = (g.branches || []).filter(b => !b.current);
+  const branchList = others.length ? `<h4>${esc(tr("Other branches"))}</h4><ul class="pj-git-remotes">${others.map(b => `<li data-branch="${esc(b.name)}"><b translate="no">${esc(b.name)}</b>` +
+    (b.track ? ` <span class="muted" translate="no">${esc(b.track)}</span>` : "") +
+    `<button class="ghost sm" data-pj="gitbranch" data-act="switch">${esc(tr("Switch to it"))}</button>` +
+    `<button class="ghost sm" data-pj="gitbranch" data-act="delete">${esc(tr("Delete"))}</button></li>`).join("")}</ul>` : "";
+  return `<div class="pj-git">${warn}${head}${conflicts}${ignore}${changes}${commitBox}${history}${remotes}${branchList}</div>`;
+}
+// What the Source control tab's buttons do.
+async function pjGitAct(act, b, path) {
+  // A change made, answered: said if it failed, and the tab read again either way.
+  const done = async (r, said) => { if (!r.ok) toast(r.data.error || tr("That can't be done.")); else if (said) toast(said); await pjGitLoad(path); return r.ok; };
+  if (act === "gitclone") {   // a project from a Git address: copied into your projects folder, then on the list
+    const where = (PJ.data.settings || {}).projects_folder || "";
+    const res = await pjDialog(`<p><b>${esc(tr("Get a project from a Git address"))}</b></p>` +
+      `<p class="hint">${esc(tr("Copies the repository, its files and history, into a new folder, and puts it on the list. Opening it in Unity lets the VPM resolver restore its packages."))}</p>` +
+      `<div class="pj-field"><label for="pjCloneUrl">${esc(tr("Address"))}</label><input id="pjCloneUrl" spellcheck="false" autocomplete="off" placeholder="https://github.com/you/project.git" translate="no"></div>` +
+      `<div class="pj-field"><label for="pjCloneName">${esc(tr("Its folder's name"))}</label><input id="pjCloneName" spellcheck="false" autocomplete="off" translate="no"></div>` +
+      `<p class="hint">${esc(tr("In {0}", where))}</p>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Get it"))}</button></div>`);
+    if (!res.ok) return;
+    const url = res.dlg.querySelector("#pjCloneUrl").value.trim();
+    const name = res.dlg.querySelector("#pjCloneName").value.trim() || url.replace(/[\\/]+$/, "").split(/[\\/:]/).pop().replace(/\.git$/, "");
+    if (!url) return;
+    return pjRun("/api/vpm/git/clone", { url, name, location: where });
+  }
+  if (act === "gitagain") return pjGitLoad(path, true);
+  if (act === "gittrust") {
+    if (!await ask(tr("Trust these Git settings? Git runs those programs whenever it works in this project. Only trust a project when you know where it came from."), tr("Trust them"))) return;
+    return done(await apiPost("/api/vpm/git/trust", { path }), tr("Trusted. Hoard asks again if they change."));
+  }
+  if (act === "gitreload") return pjGitLoad(path);
+  if (act === "gitsetup") {
+    const r = await api(`/api/vpm/git/plan?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || tr("That can't be done.")); return; }
+    const parent = d.where && d.where.parent;
+    const files = d.plan.map(f => `<p><b translate="no">${esc(f.path)}</b>: ${esc(tr(f.exists ? "these lines are added at its end (it's never replaced):" : "a new file, with:"))}</p>` +
+      `<pre class="pj-diff-text pj-plan" translate="no">${esc(f.exists ? f.add.join("\n") : f.text)}</pre>`).join("");
+    // Some of the project's folders and files, as a list.
+    const list = xs => xs.length ? `<ul class="pj-plan-list" translate="no">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="none">${esc(tr("None here."))}</p>`;
+    const res = await pjDialog(`<p><b>${esc(tr("Set up Git for {0}?", pjNamed(path)))}</b></p>` +
+      `<p>${esc(tr("It changes only the project's folder: its ignore rules are written first, then Git starts keeping its history there. Nothing is committed yet, and nothing goes online."))}</p>` +
+      `<p>${esc(tr("Kept: the project's own files, as VRChat recommends. Left out: what Unity makes again, and the VPM packages the resolver restores when the project is opened in Unity."))}</p>` +
+      `<div class="pj-plan-cols"><div><h4>${esc(tr("Kept, for example"))}</h4>${list(d.examples.kept)}</div><div><h4>${esc(tr("Left out, for example"))}</h4>${list(d.examples.left_out)}</div></div>` +
+      (files || `<p>${esc(tr("Its ignore rules have everything already."))}</p>`) +
+      `<p class="hint">${esc(tr("A copy of it made from Git (on another computer, say) opens without its VPM packages: Unity's resolver offers to restore them."))}</p>` +
+      (parent ? `<p class="pj-warn">${esc(tr("This project is inside another Git repository ({0}): it would have a repository of its own inside that one.", parent))}</p>` +
+        `<label class="check"><input type="checkbox" id="pjGitNested"> ${esc(tr("Set it up inside that repository anyway"))}</label>` : "") +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Set up Git"))}</button></div>`, "wide");
+    if (!res.ok) return;
+    const nested = !!(parent && res.dlg.querySelector("#pjGitNested").checked);
+    if (parent && !nested) { toast(tr("It's inside another repository: tick the box to set it up anyway.")); return; }
+    return done(await apiPost("/api/vpm/git/init", { path, nested }), tr("Git is set up. Choose what to commit first, and Stage it."));
+  }
+  if (act === "gitignore") {
+    const r = await api(`/api/vpm/git/plan?path=${encodeURIComponent(path)}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({ plan: [] }));
+    const res = await pjDialog(`<p><b>${esc(tr("Add these to its ignore rules?"))}</b></p>` + d.plan.map(f => `<p><b translate="no">${esc(f.path)}</b></p>` +
+      `<pre class="pj-diff-text pj-plan" translate="no">${esc(f.add.join("\n"))}</pre>`).join("") +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Add them"))}</button></div>`);
+    return res.ok ? done(await apiPost("/api/vpm/git/ignore", { path })) : undefined;
+  }
+  if (act === "gitstage" || act === "gitunstage") {
+    const files = (PJG.data.files || []).filter(f => PJG.pick.has(f.path) && (act === "gitstage" ? f.unstaged : f.staged)).map(f => f.path);
+    if (!files.length) return;
+    const r = await apiPost(`/api/vpm/git/${act.slice(3)}`, { path, files });
+    if (r.ok) PJG.pick.clear();
+    return done(r);
+  }
+  if (act === "gitdiff") return pjGitDiff(path, b.dataset.file, b.dataset.staged === "1", b.dataset.ref || "");
+  if (act === "gitdiffclose") { PJG.diff = null; return drawProjects(); }
+  if (act === "gitwho") return done(await apiPost("/api/vpm/git/identity", { path, name: $("#pjGitName").value, email: $("#pjGitEmail").value }));
+  if (act === "gitcommit") {
+    const message = $("#pjGitMsg").value;
+    if (g_unityOpen() && !await ask(tr("Unity has this project open, and may still be saving. Commit what's staged now?"), tr("Commit"))) return;
+    const r = await apiPost("/api/vpm/git/commit", { path, message });
+    if (r.ok) { PJG.commits = null; PJG.diff = null; PJG.msg = ""; }
+    return done(r, r.ok ? tr("Committed: {0}", r.data.commit.subject) : "");
+  }
+  if (act === "githistory") {
+    const skip = b.dataset.more ? (PJG.commits || []).length : 0;
+    const r = await api(`/api/vpm/git/history?path=${encodeURIComponent(path)}&skip=${skip}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || tr("That can't be read.")); return; }
+    PJG.commits = skip ? [...(PJG.commits || []), ...d.commits] : d.commits;
+    return drawProjects();
+  }
+  if (act === "gitref") {
+    if (PJG.ref === b.dataset.ref) { PJG.ref = ""; PJG.refFiles = null; return drawProjects(); }
+    const r = await api(`/api/vpm/git/files?path=${encodeURIComponent(path)}&ref=${encodeURIComponent(b.dataset.ref)}`, { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(d.error || tr("That can't be read.")); return; }
+    PJG.ref = b.dataset.ref; PJG.refFiles = d.files;
+    return drawProjects();
+  }
+  if (act === "gitsync") {
+    const op = b.dataset.op;
+    if (op === "pull" && g_unityOpen()) { toast(tr("Unity has this project open. Close it before you pull, so nothing it has open is changed under it.")); return; }
+    if (op === "push" && !await ask(tr("Send this branch's commits to {0}? Anyone who can see that repository sees them.", (PJG.data.remotes[0] || {}).name || ""), tr("Push"))) return;
+    return pjRun("/api/vpm/git/sync", { path, op });
+  }
+  if (act === "gitremote") {
+    const row = b.closest("[data-remote]"), name = row ? row.dataset.remote : "";
+    if (b.dataset.act === "remove") {
+      if (!await ask(tr("Remove the remote {0}? The repository online is left as it is; this project just stops syncing with it.", name), tr("Remove"))) return;
+      return done(await apiPost("/api/vpm/git/remote", { path, action: "remove", name }));
+    }
+    const named = name || (await askName("Name the remote (origin, usually)", (PJG.data.remotes || []).length ? "" : "origin", { max: 40 }) || "").trim();
+    if (!named) return;
+    const url = (await askName("The repository's address (https://... or git@...), without a password or token in it", row ? row.querySelector("span").textContent : "", { max: 2000 }) || "").trim();
+    if (!url) return;
+    return done(await apiPost("/api/vpm/git/remote", { path, action: b.dataset.act, name: named, url }));
+  }
+  if (act === "gitbranch") {
+    const name = b.closest("[data-branch]").dataset.branch;
+    if (b.dataset.act === "delete" && !await ask(tr("Delete the branch {0}? Only a branch whose commits are on another one can be deleted.", name), tr("Delete"))) return;
+    const r = await apiPost("/api/vpm/git/branch", { path, action: b.dataset.act, name });
+    if (r.ok) PJG.commits = null;
+    return done(r);
+  }
+  if (act === "gitabort") {
+    if (!await ask(tr("Give up the merge? Your files go back to how they were before the pull."), tr("Abort the merge"))) return;
+    return done(await apiPost("/api/vpm/git/abort", { path }));
+  }
+  if (act === "gitapp") {
+    if (PJG.data.app) { const r = await apiPost("/api/vpm/git/open-app", { path }); if (!r.ok) toast(r.data.error || tr("That app couldn't be started.")); return; }
+    let app = "";
+    if (canPick()) {
+      const r = await apiPost("/api/pick", { kind: "file" });
+      if (!r.ok) { toast(r.data.error || tr("The picker didn't open. Type the path instead.")); return; }
+      app = r.data.path || "";
+    } else app = (await askName("Your Git app's program (its full path: GitHub Desktop, Fork, SourceTree...)", "", { max: 1000 }) || "").trim();
+    if (!app) return;
+    return done(await apiPost("/api/vpm/git/app", { app }), tr("Chosen. Open in your Git app opens the project in it."));
+  }
+}
+// Whether Unity has the project shown open (as its source control last read).
+const g_unityOpen = () => !!(PJG.data && PJG.data.open_in_unity);
+// A branch chosen, or a new one named, in the Source control tab.
+async function pjGitBranchChosen(sel, path) {
+  const now = (PJG.data.branches || []).find(b => b.current);
+  if (sel.selectedOptions[0].hasAttribute("data-new")) {
+    const name = (await askName("Name the new branch (it starts from where you are now)", "", { max: 100 }) || "").trim();
+    sel.value = now ? now.name : "";
+    if (!name) return;
+    const r = await apiPost("/api/vpm/git/branch", { path, action: "new", name });
+    if (!r.ok) toast(r.data.error || tr("That can't be done."));
+    return pjGitLoad(path);
+  }
+  if (now && sel.value === now.name) return;
+  const r = await apiPost("/api/vpm/git/branch", { path, action: "switch", name: sel.value });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); sel.value = now ? now.name : ""; return; }
+  PJG.commits = null;
+  return pjGitLoad(path);
+}
 // A repository's headers, typed one per line as "Name: value".
 function pjHeaders(text) {
   const out = {};
@@ -3771,10 +4371,13 @@ function pjHeaders(text) {
   }
   return out;
 }
+// Whether a listed project has a Git repository of its own (as Projects' list says).
+const pjGitOf = path => !!((PJ.data && PJ.data.projects || []).find(p => p.path === path) || PJ.project || {}).git;
 let afterSetMade = null;   // set by a page that shows sets, to show the new one
 // Do what one of Projects' buttons says.
 async function pjAct(b) {
   const act = b.dataset.pj, row = b.closest("[data-path]"), path = row ? row.dataset.path : (PJ.project || {}).path;
+  if (act.startsWith("git")) return pjGitAct(act, b, path);   // (the Source control tab)
   const f = PJ.form;
   if (act === "back") { PJ.view = "list"; PJ.project = null; return loadProjects(); }
   if (act === "new") { PJ.form = pjNewForm(); PJ.view = "new"; PJ.pick.clear(); return drawProjects(); }
@@ -3850,9 +4453,13 @@ async function pjAct(b) {
     const typed = act === "tagadd" ? (input ? input.value.trim() : "") : "";
     if (act === "tagadd" && !typed) { if (input) input.focus(); return; }
     const tags = act === "untag" ? (p.tags || []).filter(t => t !== b.dataset.tag) : [...(p.tags || []), typed];
-    await pjOrganizeSome(path, { tags });
+    if (act === "tagadd") input.value = "";   // (added: not kept as typed when the list is drawn again)
+    const saved = await pjOrganizeSome(path, { tags });
     const again = $("#pjTagInput");
-    if (act === "tagadd" && again) again.focus();   // (another one can be typed straight away)
+    if (act === "tagadd" && again) {   // (another one can be typed straight away; one that wasn't saved is still there)
+      if (!saved && !again.value) again.value = typed;
+      again.focus();
+    }
     return;
   }
   if (act === "undetail") {
@@ -3878,6 +4485,17 @@ async function pjAct(b) {
     if (!r.ok) toast(r.data.error || tr("That can't be done."));
     return;
   }
+  if (act === "rename") {   // its folder, where it is (issue #290): the list and Hoard's notes follow it
+    const was = pjNamed(path);
+    const name = (await askName(tr("Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.", was), was, { max: 255 })).trim();
+    if (!name || name === was) return;
+    const r = await apiPost("/api/vpm/rename", { path, name });
+    if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+    if (PJ.selected === path) PJ.selected = r.data.path;
+    if (PJ.project && PJ.project.path === path) PJ.project = { ...PJ.project, path: r.data.path, name: r.data.name };
+    toast(tr("Renamed it {0}.", r.data.name));
+    return loadProjects();
+  }
   if (act === "forget") {
     if (!await ask(tr("Take {0} off the list? Its folder is left as it is, and you can add it again.", pjNamed(path)), tr("Take off"))) return;
     const r = await apiPost("/api/vpm/remove-project", { path });
@@ -3900,8 +4518,11 @@ async function pjAct(b) {
   if (act === "backup") {
     const res = await pjDialog(`<p>${esc(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path)))}</p>` +
       `<label class="check"><input type="checkbox" id="pjLeaveOut"> ${esc(tr("Leave out packages from repositories (they're downloaded again when it's opened)"))}</label>` +
+      (pjGitOf(path) ? `<p class="hint">${esc(tr("Its .git folder is left out: it can be most of a project."))}</p>` +
+        `<label class="check"><input type="checkbox" id="pjBundle"> ${esc(tr("Put its Git history in, as a bundle (its commits, branches and tags in one file; not Git LFS files)"))}</label>` : "") +
       `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Back up"))}</button></div>`);
-    if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.dlg.querySelector("#pjLeaveOut").checked });
+    const bundle = res.dlg.querySelector("#pjBundle");
+    if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.dlg.querySelector("#pjLeaveOut").checked, git_bundle: !!(bundle && bundle.checked) });
     return;
   }
   if (act === "repair") return pjShowChanges({ path, repair: true });
@@ -4051,6 +4672,12 @@ function wireProjects() {
   win.addEventListener("change", async e => {
     if (e.target.matches(".pj-addlist input[type=checkbox]")) return pjPickChanged(e.target);   // Add packages
     if (e.target.matches(".pj-addlist .pj-pick-ver")) { PJ.pick.set(e.target.dataset.name, e.target.value); return; }
+    if (e.target.matches("[data-gitpick]")) { PJG.pick[e.target.checked ? "add" : "delete"](e.target.value); return drawProjects(); }   // (Source control)
+    if (e.target.matches("[data-gitall]")) {
+      PJG.pick = new Set(e.target.checked ? (PJG.data.files || []).map(f => f.path) : []);
+      return drawProjects();
+    }
+    if (e.target.id === "pjGitBranch") return pjGitBranchChosen(e.target, PJ.project.path);
     if (e.target.id === "pjDFolder") {   // a project's folder, chosen in its details (or a new one named)
       const path = e.target.closest("[data-path]").dataset.path, p = (PJ.data.projects || []).find(x => x.path === path);
       const named = e.target.selectedOptions[0].hasAttribute("data-new");   // (New folder...)
@@ -4092,6 +4719,7 @@ function wireProjects() {
     PJ.busy = true;
     try { await pjAct(b); } finally { PJ.busy = false; }
   });
+  win.addEventListener("input", e => { if (e.target.id === "pjGitMsg") PJG.msg = e.target.value; });   // (kept when it's drawn again)
   win.addEventListener("keydown", e => {
     if (e.key !== "Enter" || e.isComposing) return;
     if (e.target.id === "pjRepoUrl") { e.preventDefault(); $("[data-pj=addrepo]").click(); }
@@ -4280,7 +4908,7 @@ const SET_ACTIONS = () => ({ name: "Sets", items: [
   ...((DATA.sets || []).length > SETS_IN_MENU ? [{ label: "Add to another set...", run: addToAnotherSet }] : [])] });
 
 let SETS = null;   // the sets as /api/sets has them, each product as it is here (downloaded, yours, or where to buy it)
-let setExtraOpen = true, setViewShown = "", setMoreShown = "", setKeysFor = null, setKeys = new Set();
+let setExtraOpen = null, setExtraDrawnOpen = null, setViewShown = "", setMoreShown = "", setKeysFor = null, setKeys = new Set();
 // Whether Sets and Wishlists is showing.
 const inSets = () => state.store === "Sets";
 function setHas(a) {   // the open set has this product (by the key tags use); a wishlist's are in its own groups
@@ -4380,6 +5008,16 @@ const STORE_SEARCHES = [
   ["gumroad", "Gumroad", q => q ? `https://gumroad.com/discover?query=${q}` : "https://gumroad.com/discover"],
   ["jinxxy", "Jinxxy", q => q ? `https://jinxxy.com/market/browse?search_query=${q}` : "https://jinxxy.com/market/browse"],
   ["itch", "itch.io", q => q ? `https://itch.io/search?q=${q}` : "https://itch.io/game-assets"]];
+// Open an address on another site in your browser: as a link that opens a new window does (the app hands those to
+// your browser), never inside Hoard.
+function openOutside(url) {
+  const u = safeUrl(url);
+  if (!u) return;
+  const a = Object.assign(document.createElement("a"), { href: u, target: "_blank", rel: "noopener noreferrer" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 // A store's search page for some words.
 const storeSearch = (key, words) => STORE_SEARCHES.find(x => x[0] === key)[2](encodeURIComponent(String(words || "").trim().slice(0, 100)));
 // A wishlist's search box, to find more on each store.
@@ -4392,23 +5030,42 @@ function wishFindHTML() {
 }
 // An open set's heading: where you are, its counts and its buttons.
 function setHead(s) {
-  const c = setCounts(s);
+  const c = setCounts(s), saved = !!(s.note || s.photos.length), editing = !!(SETEDIT && SETEDIT.id === s.id);
+  const open = editing || (setExtraOpen ?? saved);   // (issue #272: folded away while there's nothing in it)
+  setExtraDrawnOpen = open;
+  // the rest of what's done with it, gathered together and quieter than Share (issue #272)
+  const quiet = [
+    isWish(s) && `<button class="linkish" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>`,   // (a set: from your library, #208)
+    setDownloaded(s).length && `<button class="linkish" data-setx="project">${esc(tr("New project with this set..."))}</button>`,
+    c.owned && `<button class="linkish" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>`,
+    `<button class="linkish" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>`,
+    s.cover && `<button class="linkish" data-setx="unpicture">${esc(tr("Take the picture off"))}</button>`,
+    `<button class="linkish" data-setx="rename">${esc(tr("Rename"))}</button>`,
+    `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
     `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
       (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +
         `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
-      (s.note ? `<p class="setnote" translate="no">${esc(s.note)}</p>` : "") +
-      `<div class="row"><button class="primary sm" data-setx="share">Share...</button>` +
-      (isWish(s) ? `<button class="ghost sm" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>` : "") +   // (a set: from your library, #208)
-      (setDownloaded(s).length ? `<button class="ghost sm" data-setx="project">${esc(tr("New project with this set..."))}</button>` : "") +
-      (c.owned ? `<button class="ghost sm" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>` : "") +
-      `<button class="ghost sm" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>` +
-      (s.cover ? `<button class="ghost sm" data-setx="unpicture">Take the picture off</button>` : "") +
-      `<button class="ghost sm" data-setx="rename">Rename</button><button class="ghost sm" data-setx="delete">Delete</button></div>` +
-      (isWish(s) ? wishFindHTML() : "") + `</div></div>` +
-    `<details class="setextra"${setExtraOpen ? " open" : ""}><summary>Note and photos</summary>${setExtraHTML(s)}</details>`;
+      `<div class="set-main"><button class="primary" data-setx="share">${esc(tr("Share..."))}</button></div>` +
+      `<div class="set-quiet" role="group" aria-label="${esc(tr(isWish(s) ? "More for this wishlist" : "More for this set"))}">${quiet.join("")}</div>` +
+    `</div></div>` +
+    `<details class="setextra card"${open ? " open" : ""}><summary>${esc(tr("Note and photos"))}` +
+      (saved ? "" : `<span class="setextra-none">${esc(tr("none yet"))}</span>`) + `</summary>${setExtraHTML(s)}</details>` +
+    (isWish(s) ? `<section class="set-tools card" aria-label="${esc(tr("Find more, and narrow the list"))}">${wishFindHTML()}${wishBar(s)}</section>` : "");
+}
+// What's typed in a wishlist's tools, put back once they're drawn again: they're drawn without it, so that typing in
+// them never makes the page draw them again.
+function wishToolsNow() {
+  for (const x of document.querySelectorAll("#setView input[data-wish]")) x.value = WISH[x.dataset.wish] || "";
+  const clear = $('#setView [data-setx="wclear"]');
+  if (clear) clear.hidden = !(WISH.min || WISH.max);
+  const find = $("#setView [data-wishfind]");
+  if (find) {
+    find.value = WISH.find || "";
+    for (const a of document.querySelectorAll("#setView [data-findon]")) a.href = storeSearch(a.dataset.findon, find.value);
+  }
 }
 /* A set's note and photos (issue #256): once saved, shown as they're shared, and changed only after Edit, which opens
    the note's box and the photos' × with Save and Cancel; nothing's sent until Save. With none saved yet, it's open
@@ -4441,7 +5098,7 @@ document.addEventListener("input", e => { if (e.target.matches("#setView [data-s
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
 // Downloads); in Downloads, ones not downloaded. Each says where it is, or where to buy it.
 function setMoreHTML(s) {
-  if (isWish(s)) return wishBar(s) + `<div id="wishGroups">${wishGroups(s)}</div>`;
+  if (isWish(s)) return `<div id="wishGroups">${wishGroups(s)}</div>`;   // (its tools: above, with its head)
   const here = new Set(T.all().map(a => a.tag_key)), words = norm(state.q).split(/\s+/).filter(Boolean);
   const rest = s.items.filter(i => !here.has(i.key) && words.every(w => norm([i.name, i.creator, i.store].join(" ")).includes(w)));
   const groups = [[tr("In your library, not downloaded"), rest.filter(i => i.owned)], [tr("Not yours yet"), rest.filter(i => !i.owned && !i.local)],
@@ -4453,7 +5110,7 @@ function setMoreHTML(s) {
 // A wishlist open: its products in two groups that fold away, what isn't yours yet and what is, in the page's sort,
 // narrowed by the filters beside it (its suggested tags, words its products' names share, your tags on the ones you
 // have, and its creators), the search and a price range above it, in one of its currencies
-const WISH = { set: "", cur: "", min: "", max: "" };
+const WISH = { set: "", cur: "", min: "", max: "", find: "" };
 // The wishlist open, or null.
 const openWish = () => { const s = inSets() && state.set && SETS && !SETS.error ? SETS.sets.find(x => x.id === state.set) : null; return s && isWish(s) ? s : null; };
 let wishScoped;   // the wishlist the filters were last for ("" none, undefined not known yet)
@@ -4461,7 +5118,7 @@ function wishScope() {   // into a wishlist or out of one, the tags and creator 
   if (inSets() && state.set && !SETS) return false;   // (not read yet: once it is, it's where the page was opened)
   const w = openWish(), id = w ? w.id : "";
   // its price range too, before anything of it is counted: another list's would empty its filters (issue #180)
-  if (w && WISH.set !== id) Object.assign(WISH, { set: id, cur: "", min: "", max: "" });
+  if (w && WISH.set !== id) Object.assign(WISH, { set: id, cur: "", min: "", max: "", find: "" });
   const changed = wishScoped !== undefined && id !== wishScoped && !!(id || wishScoped);
   if (changed) { state.tags.clear(); state.creator = ""; }
   wishScoped = id;
@@ -4508,17 +5165,17 @@ function wishFits(i, words, skip) {
 }
 // A wishlist's price filter: a currency, and the lowest and highest price.
 function wishBar(s) {
-  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, cur: "", min: "", max: "" });
+  if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, cur: "", min: "", max: "", find: "" });
   const curs = wishCurrencies(s);
   if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
   // A price field.
-  const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" value="${esc(WISH[k])}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
+  const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
   return !curs.length ? "" : `<div class="wishbar">` +
     (`<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
       num("min", tr("From"), tr("Lowest price")) + `<span aria-hidden="true">–</span>` + num("max", tr("To"), tr("Highest price")) +
       (curs.length > 1 ? `<select data-wish="cur" aria-label="${esc(tr("Currency"))}">${curs.map(c => `<option value="${esc(c)}"${c === WISH.cur ? " selected" : ""} translate="no">${esc(c)}</option>`).join("")}</select>`
         : `<span translate="no">${esc(curs[0])}</span>`) +
-      `<button class="linkish" data-setx="wclear"${WISH.min || WISH.max ? "" : " hidden"}>${esc(tr("Clear"))}</button></div>`) + `</div>`;
+      `<button class="linkish" data-setx="wclear" hidden>${esc(tr("Clear"))}</button></div>`) + `</div>`;
 }
 // A wishlist's products in groups: to buy, owned and downloaded, each folded open or closed.
 function wishGroups(s) {
@@ -4538,7 +5195,7 @@ function wishChanged() {   // the price range changed: the groups and filters ag
   box.innerHTML = wishGroups(s);
   setMoreShown = null;   // (drawn again whole next time, or emptied: "" is what the list of sets has there)
   T.facets();
-  const clear = $('#setMore [data-setx="wclear"]');
+  const clear = $('#setView [data-setx="wclear"]');
   if (clear) clear.hidden = !(WISH.min || WISH.max);
 }
 // A product's page on a site that isn't one of the stores (a Jinxxy list can send you to one): plain https on a
@@ -4583,7 +5240,7 @@ function drawSets() {
     head = !SETS || (state.set && !s) ? `<p class="none">${esc(tr("Reading your sets..."))}</p>` : s ? setHead(s) : setsRoot();
     rest = s ? setMoreHTML(s) : "";
   }
-  if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; }
+  if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; wishToolsNow(); }
   if (rest !== setMoreShown) { more.innerHTML = rest; setMoreShown = rest; }
 }
 // How many sets you have, in words.
@@ -4824,7 +5481,7 @@ async function setAct(e) {
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
   if (act === "wclear") {   // a wishlist's price range
     Object.assign(WISH, { min: "", max: "" });
-    for (const x of document.querySelectorAll("#setMore input[data-wish]")) x.value = "";
+    for (const x of document.querySelectorAll("#setView input[data-wish]")) x.value = "";
     return wishChanged();
   }
   if (act === "addlinks") return addByLinks(s);
@@ -4948,9 +5605,12 @@ function wireSets() {
       e.target.outerHTML = tile && !e.target.closest(".collage") ? setPlaceholder((tile.querySelector(".nm-t, h2") || {}).textContent || "?") : "";
     }, true);
   }
-  $("#setView").addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.setextra")) setExtraOpen = e.target.open; }, true);
+  $("#setView").addEventListener("toggle", e => {   // (folded or opened by you, not as it was drawn: kept for the next set)
+    if (e.target.matches && e.target.matches("details.setextra") && e.target.open !== setExtraDrawnOpen) setExtraOpen = setExtraDrawnOpen = e.target.open;
+  }, true);
   $("#setView").addEventListener("input", e => {   // a wishlist's Find more to add: each site's search, with your words
     if (!e.target.matches("[data-wishfind]")) return;
+    WISH.find = e.target.value;
     for (const a of document.querySelectorAll("#setView [data-findon]")) a.href = storeSearch(a.dataset.findon, e.target.value);
   });
   $("#setView").addEventListener("keydown", e => {   // Enter: Nexyy, which searches them all
@@ -4961,7 +5621,7 @@ function wireSets() {
     if (!d.matches || !d.matches("details.wishgroup") || ((UI.sections || {})[d.dataset.fold] !== false) === d.open) return;
     uiSave({ sections: { [d.dataset.fold]: d.open } });
   }, true);
-  $("#setMore").addEventListener("input", e => {   // a wishlist's price range
+  $("#setView").addEventListener("input", e => {   // a wishlist's price range (with its other tools, issue #272)
     const k = e.target.dataset && e.target.dataset.wish;
     if (!k) return;
     WISH[k] = e.target.value.trim();
@@ -5114,14 +5774,15 @@ function queuedToast(r) {   // a job started while another runs waits its turn
 
 /* ---------- a few things to find. Nothing here reads or changes your library; each stays still with reduced motion */
 const motionOk = () => !document.body.classList.contains("less-motion") && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-function confetti(n = 90) {   // every store's colour, falling
+function confetti(n = 90) {   // the heap's boxes (issue #279): each store's colour, and the gold, falling
   if (!motionOk()) return;
   const box = document.createElement("div");
-  box.className = "confetti"; box.setAttribute("aria-hidden", "true");
+  box.className = "confetti heap-confetti"; box.setAttribute("aria-hidden", "true");
+  const colours = [...Object.values(HEAP.colours).slice(0, 5), HEAP.gold];
   for (let i = 0; i < n; i++) {
     const p = document.createElement("i");
     p.style.left = `${Math.random() * 100}vw`;
-    p.style.background = `var(--${STRIPE_STORES[i % STRIPE_STORES.length]})`;
+    p.style.background = colours[i % colours.length];
     p.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
     p.style.animationDelay = `${Math.random() * 0.9}s`;
     p.style.setProperty("--spin", `${Math.round(Math.random() * 1080 - 540)}deg`);
@@ -5140,7 +5801,7 @@ document.addEventListener("keydown", e => {
   if (konami === KONAMI.length) { konami = 0; confetti(); toast("Every store at once. A fine hoard."); }
 });
 // the logo: while an update waits, it opens Updates; on the Library with nothing filtered, poking it five times...
-let pokes = [];
+let pokes = [], tumbled = 0;
 document.addEventListener("click", e => {
   const b = e.target.closest(".brand");
   if (!b || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
@@ -5150,8 +5811,10 @@ document.addEventListener("click", e => {
   const now = Date.now();
   pokes = [...pokes.filter(t => now - t < 2500), now];
   if (pokes.length < 5) return;
-  pokes = [];
+  pokes = [];   // (issue #279: the heap topples one box at a time and builds itself back up, the gold one last)
+  clearTimeout(tumbled);
   b.classList.remove("tumble"); void b.offsetWidth; b.classList.add("tumble");
+  tumbled = setTimeout(() => b.classList.remove("tumble"), 3600);   // (then pointing at it plays its loop again)
   toast("Careful: everything in here is somebody's treasure.");
 });
 // a few words in the search box
@@ -5318,7 +5981,7 @@ const TOUR_STEPS = [
     body: () => esc(tr("Mix and match picks an avatar and an outfit at random from what you own, by your tags' kinds: an Avatar tag on your bases, and Clothing tags on your clothes. Keep the picks you like, pick the rest again, and make a set of them.")),
     leave: () => { if (inSets()) { state.store = ""; state.set = ""; T.render(); } } },
   { id: "updates", page: "downloads", at: () => $('#views [data-view="updates"]'),
-    title: () => tr("Updates"),
+    title: () => tr("Asset updates"),
     body: () => esc(tr("When a store has newer files for something you downloaded, it's listed here. Settings can keep the previous version too, so you can go back.")) },
   { id: "space", page: "downloads", at: () => $('#views [data-view="space"]'),
     title: () => tr("Disk space"),

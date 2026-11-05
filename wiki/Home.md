@@ -33,6 +33,7 @@ New here? Start with [Installing Hoard](Installing-Hoard), then [Getting started
 | Know where my files and data are | [Where Hoard keeps things](Where-Hoard-Keeps-Things) |
 | Know how Hoard keeps me safe | [Security and privacy](Security-and-Privacy) |
 | Fix a problem | [Troubleshooting](Troubleshooting) and the [FAQ](FAQ) |
+| See how Hoard compares with the Creator Companion, ALCOM and KonoAsset | [Hoard and other tools](Hoard-and-Other-Tools) |
 | Work on Hoard itself | [Development](Development) and [Releasing](Releasing) |
 
 ## What Hoard does

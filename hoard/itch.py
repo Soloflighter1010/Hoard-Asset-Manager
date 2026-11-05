@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urlparse
 import requests
 
 from . import __version__, egress
-from .common import NotLoggedIn, pause
+from .common import QUICK_ITEMS, NotLoggedIn, pause, quick_done
 
 API = "https://api.itch.io"
 KEYS_PAGE = "https://itch.io/user/settings/api-keys"   # where you make one
@@ -74,13 +74,15 @@ def profile(sess: requests.Session) -> dict:
     return user if isinstance(user, dict) else {}
 
 
-def owned_keys(sess: requests.Session, delay: float = 0.0, progress=lambda m: None) -> list[dict]:
-    """Everything you own on itch.io, bought or claimed: one download key per project."""
+def owned_keys(sess: requests.Session, delay: float = 0.0, progress=lambda m: None, cfg: dict | None = None) -> list[dict]:
+    """Everything you own on itch.io, bought or claimed: one download key per project. A quick refresh's cfg (issue
+    #300): only the first pages, or the first products."""
     found: dict = {}
+    quick = bool((cfg or {}).get("_quick"))
     for page in range(1, 2000):
         data = call(sess, "/profile/owned-keys", page=page)
         keys = [k for k in (data.get("owned_keys") or []) if isinstance(k, dict) and isinstance(k.get("game"), dict)]
-        new = [k for k in keys if k.get("id") not in found]
+        new = [k for k in keys if k.get("id") not in found][:max(0, QUICK_ITEMS - len(found)) if quick else None]
         for k in new:
             found[k.get("id")] = k
         progress(f"Library, {len(found)} items")
@@ -88,7 +90,7 @@ def owned_keys(sess: requests.Session, delay: float = 0.0, progress=lambda m: No
             per_page = int(data.get("per_page") or 50)
         except (TypeError, ValueError):
             per_page = 50
-        if not new or len(data.get("owned_keys") or []) < per_page:
+        if not new or len(data.get("owned_keys") or []) < per_page or quick_done(cfg or {}, page, len(found)):
             break
         pause(delay)
     return list(found.values())

@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g transform="translate(0 0) scale(1.0)">
-  <rect x="5" y="30" width="27" height="27" rx="7" fill="#56D1DC" stroke="#211C18" stroke-width="3" transform="rotate(-9 18.5 43.5)"/>
-  <rect x="31" y="31" width="27" height="27" rx="7" fill="#FF8AD8" stroke="#211C18" stroke-width="3" transform="rotate(7 44.5 44.5)"/>
-  <rect x="17.5" y="8" width="28" height="28" rx="7" fill="#F0B429" stroke="#211C18" stroke-width="3" transform="rotate(-4 31.5 22)"/>
-  <path d="M38 13.5 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6z" fill="#FFF8E6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><g>
+  <g transform="translate(10.41 44.07) rotate(-8)"><g><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#95A0FF" stroke="#211C18" stroke-width="2"/></g></g>
+  <g transform="translate(24.9 44.07) rotate(3)"><g><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#FF6259" stroke="#211C18" stroke-width="2"/></g></g>
+  <g transform="translate(39.4 44.07) rotate(-5)"><g><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#7ED67A" stroke="#211C18" stroke-width="2"/></g></g>
+  <g transform="translate(53.9 44.07) rotate(5)"><g><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#EDE4D3" stroke="#211C18" stroke-width="2"/><path d="M0 -3.54 L3.07 -1.77 L3.07 1.77 L0 3.54 L-3.07 1.77 L-3.07 -1.77Z M-3.07 -1.77 L0 0 L3.07 -1.77 M0 0 L0 3.54" fill="none" stroke="#211C18" stroke-width="1.16" stroke-linejoin="round" stroke-linecap="round"/></g></g>
+  <g transform="translate(24.9 32.19) rotate(-9)"><g><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#56D1DC" stroke="#211C18" stroke-width="2"/></g></g>
+  <g transform="translate(39.4 32.19) rotate(7)"><g><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#FF8AD8" stroke="#211C18" stroke-width="2"/></g></g>
+  <g transform="translate(32.15 19.93) rotate(-4)"><g><rect x="-6.94" y="-6.94" width="13.88" height="13.88" rx="3.55" fill="#F0B429" stroke="#211C18" stroke-width="2"/><path class="spark" d="M2.78 -4.44 L3.54 -2.43 L5.55 -1.67 L3.54 -0.9 L2.78 1.11 L2.01 -0.9 L0 -1.67 L2.01 -2.43Z" fill="#FFF8E6"/></g></g>
 </g></svg>

@@ -18,6 +18,13 @@ Each store you use has a row:
 At the top, **Refresh all stores** and **Download everything new** do every store at once. **Sync** (top
 right in the Library, outside the panel) does both in one go: it reads what you own, then downloads anything new.
 
+**Quick refresh** (5.2.0 beta 4) looks for what's new without reading every page. It reads only the start of each
+library: the first 2 pages, or the first 50 products, whichever is fewer. Each listing counts on its own, such as
+Booth's gifts, each Payhip shop or Jinxxy's Gifts tab. Then it reads the start of the wishlists you keep from those
+stores the same way. A store whose wishlists you've never read isn't started on. What it doesn't reach stays as it
+was, so it never takes a product out of your library or a wishlist: only **Refresh** does that, when a product is
+gone from the store. It's a task of its own in Tasks, **Quick refresh**.
+
 Hoard only shows and reads the stores you use. Switch stores on or off in [Settings](Settings).
 
 ## Signing in
@@ -81,9 +88,13 @@ person to sign in on this computer never sees what you bought. Your downloaded f
 
 - Hoard reads your inventory, then downloads each file by clicking its download button in the browser,
   because that's the only way Jinxxy hands files out.
-- Your inventory only links each product's creator, so a refresh also opens each item's own page once, to find
-  the product's public page (what a [set you share](Sets#sharing-a-set) links to). A page it found is kept, so
-  only new items are opened later, at most 150 in one refresh, with the usual pause between pages.
+- Each product's public page (what a [set you share](Sets#sharing-a-set) links to) comes from what your inventory
+  page loads about each item as it shows it, so a refresh no longer opens each item's own page (5.2.0 beta 4).
+  Only an item that data leaves out is opened, once, at most 150 in one refresh, with the usual pause between
+  pages; a page it found is kept.
+- **Gifts:** a refresh also reads your inventory's **Gifts** tab. A gift is marked as one in your library (wrapped
+  until you first open it), its details say who sent it, and a gift that's only on the Gifts tab is added too
+  (5.2.0 beta 4). A page saved from the Gifts tab can be imported as well.
 - Jinxxy shows its own banner where a product has no picture. Hoard doesn't keep that banner as the
   product's picture.
 - Hoard never sends Jinxxy more than 120 requests a minute, the limit Jinxxy's API sets for creators: the requests

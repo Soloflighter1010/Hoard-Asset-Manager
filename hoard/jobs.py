@@ -209,7 +209,7 @@ def download_skip(cfg: dict) -> set[str]:
 
 # ----------------------------------------------------------------------------- background jobs
 
-TASK_NAMES = {"refresh": "Refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
+TASK_NAMES = {"refresh": "Refresh", "quick-refresh": "Quick refresh", "sync": "Sync", "download": "Download", "check-updates": "Check for updates",
               "login": "Sign in", "logout": "Sign out", "install-browser": "Install Hoard's browser",
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
@@ -220,7 +220,7 @@ MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
 FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped answering is ended
 STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
-WATCHED = ("download", "check-updates", "sync", "refresh", "verify", "routine")   # jobs that never wait on you (sign-ins do)
+WATCHED = ("download", "check-updates", "sync", "refresh", "quick-refresh", "verify", "routine")   # jobs that never wait on you (sign-ins do)
 
 
 # How a finished job went, in the Tasks tab. Partly done: it finished, but a store couldn't be read or a file
@@ -254,7 +254,8 @@ PROJECTS = "projects"   # Projects' lane: its tasks run on a thread of their own
 
 PROJECT_WORK = {"create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
                 "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}",
-                "delete": "Delete {0} from this computer"}
+                "delete": "Delete {0} from this computer", "git-fetch": "Fetch {0}", "git-pull": "Pull {0}",
+                "git-push": "Push {0}", "git-clone": "Get {0} from its Git address"}
 
 
 def describe_job(task: str, stores: list[str], only: str | None = None, keys: list | None = None,
@@ -484,6 +485,8 @@ class Jobs:
             target = self._logout
         elif task == "wishlists":
             target = self._wishlists
+        elif task == "quick-refresh":
+            target = self._quick_refresh
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
@@ -1083,13 +1086,14 @@ class Jobs:
         else:
             self._set(message="Signed out. " + done.split(": ", 1)[-1])
 
-    def _refresh(self, stores: list[str], skip_imported: bool = False) -> list[str]:
+    def _refresh(self, stores: list[str], skip_imported: bool = False, quick: bool = False) -> list[str]:
         """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty.
         Returns the stores that couldn't be read. When none could, the job has failed: it says which, and why is on
-        each store's row in Stores (a Sync used to say Done here)."""
+        each store's row in Stores (a Sync used to say Done here). quick: only the start of each (issue #300), so
+        what it doesn't reach is kept, and products' pages aren't read for their tags."""
         if skip_imported:
             stores = [s for s in stores if self.lib.data["stores"].get(s, {}).get("source") != "import"]
-        self._set(task="refresh", message="Checking your connection")
+        self._set(task="quick-refresh" if quick else "refresh", message="Checking your connection")
         online = [s for s in stores if reachable(s)]
         for store in stores:
             if store not in online:
@@ -1109,7 +1113,7 @@ class Jobs:
                 if store == "payhip" and not payhip_shops(self.cfg):   # no shop to read: no window opened for nothing
                     self.lib.set_error(store, PAYHIP_NO_SHOPS)
                     continue
-                self._set(task="refresh", store=store, message=f"Reading {label}")
+                self._set(task="quick-refresh" if quick else "refresh", store=store, message=f"Reading {label}")
                 try:
                     # each store has its own sign-in; Payhip checks for automated browsers, so it gets a visible
                     # window you can complete its check in. itch.io is read through its API: no browser at all.
@@ -1126,7 +1130,8 @@ class Jobs:
                             run_cfg = {**self.cfg, "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
                                                                     if i["store"] == store and i.get("page")},
                                        "_known_pictures": {i["key"]: i["thumbnail"] for i in self.lib.data["items"]
-                                                           if i["store"] == store and i.get("thumbnail")}}
+                                                           if i["store"] == store and i.get("thumbnail")},
+                                       **({"_quick": True} if quick else {})}
                         items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
                         shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
@@ -1134,8 +1139,9 @@ class Jobs:
                             self.lib.set_error(store, f"Found no items this time (last time: {before}), so the old list was kept. "
                                                       f"Try again, or run the command: debug {store}")
                         else:
-                            # a Payhip shop that couldn't be read keeps what Hoard had from it
-                            self.lib.replace_store(store, items, keep_others=bool(shops_unread))
+                            # a Payhip shop that couldn't be read keeps what Hoard had from it, as a quick refresh
+                            # keeps all it didn't reach
+                            self.lib.replace_store(store, items, keep_others=bool(shops_unread) or quick)
                             if store == "payhip":   # shops on their own domains, found in your library, to review
                                 with self.lib.lock:
                                     self.lib.data["stores"]["payhip"]["found_shops"] = run_cfg.pop("_found_payhip_shops", [])[:200]
@@ -1167,7 +1173,7 @@ class Jobs:
             with self.lib.lock:
                 keys = [i["key"] for i in self.lib.data["items"] if i["store"] in refreshed]
             cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
-        if refreshed and self.cfg.get("store_tags", True) and not self._forced:   # the tags creators gave them (#206)
+        if refreshed and self.cfg.get("store_tags", True) and not self._forced and not quick:   # creators' tags (#206)
             from .library import store_tags_from_pages
             from .wishlists import read_store_page
             for store in refreshed:
@@ -1195,9 +1201,10 @@ class Jobs:
             self._set(message="Library updated")
         return unread
 
-    def _wishlists(self, stores: list[str]) -> None:
+    def _wishlists(self, stores: list[str], quick: bool = False) -> None:
         """Read your wishlists from each store (issue #158), in its own signed-in browser as a refresh reads your
-        library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists)."""
+        library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists). quick: only the start of
+        each list (issue #300), the rest kept."""
         from .sets import SetStore
         from .wishlists import READERS, pictures_from_pages, read_store_page
         stores = [s for s in stores if s in READERS]
@@ -1222,7 +1229,7 @@ class Jobs:
                     continue
                 try:
                     said = lambda m, l=label: self._set(message=f"{l}: {m}")   # noqa: E731
-                    lists = READERS[store](ctx, self.cfg, said)
+                    lists = READERS[store](ctx, {**self.cfg, "_quick": True} if quick else self.cfg, said)
                     for one in lists:   # a product with no picture on the list (a video first): its page's (issue #212)
                         pictures_from_pages(one.get("products") or [], read_store_page, said,
                                             float(self.cfg.get("request_delay", 0.8)))
@@ -1246,7 +1253,7 @@ class Jobs:
             raise stopped
         cheaper = done.get("cheaper") or []
         if cheaper:
-            self._news("cheaper", len(cheaper))
+            self._news("cheaper", {"count": len(cheaper), "items": (done.get("cheaper_items") or [])[:10]})
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])
@@ -1259,6 +1266,31 @@ class Jobs:
             self._set(message=f"{read}, except {_names(list(failed))}'s: " + " ".join(failed.values()), partial=True)
         else:
             self._set(message=read)
+
+    def _quick_refresh(self, stores: list[str]) -> None:
+        """Issue #300: a quick look at each store for what's new: the start of its library (each listing's first
+        QUICK_PAGES pages, or its first QUICK_ITEMS products, whichever comes first), then of the wishlists you keep
+        from it (a store you've never read wishlists from isn't started on). What it doesn't reach stays as it was:
+        only a full refresh drops what's gone."""
+        from .sets import SetStore
+        from .wishlists import READERS
+        unread = self._refresh(stores, skip_imported=True, quick=True)
+        if self._forced or self.state.get("error"):
+            return
+        try:
+            kept = {(s.get("source") or {}).get("store") for s in SetStore().load()["sets"] if s.get("kind") == "wishlist"}
+        except Exception as e:   # (the library is read all the same)
+            print(f"Couldn't read the wishlists kept: {e}", flush=True)
+            return
+        imported = {s for s in stores if self.lib.data["stores"].get(s, {}).get("source") == "import"}   # (not read: skipped)
+        lists = [s for s in stores if s in kept and s in READERS and s not in unread and s not in imported]
+        if not lists:
+            return
+        said, partial = self.state.get("message") or "Library updated", self.state.get("partial")
+        self._wishlists(lists, quick=True)
+        wished, failed = self.state.get("message") or "", self.state.get("error")
+        self._set(task="quick-refresh", message=f"{said.rstrip('.')}. {wished}".strip(), error=None,
+                  partial=bool(partial or failed or self.state.get("partial")) or None)
 
     def _login_then_refresh(self, stores: list[str]) -> None:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""

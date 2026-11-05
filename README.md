@@ -16,8 +16,9 @@
   <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Soloflighter1010/Hoard-Asset-Manager?style=for-the-badge" alt="License"></a>
 </p>
 
-<p align="center"><b>Every avatar asset you've bought, in one pile.</b><br>
-Booth, Gumroad, Jinxxy, Payhip and itch.io purchases in a single library you can search, filter and keep.</p>
+<p align="center"><b>Every avatar asset you've bought, and the projects you make with them, in one pile.</b><br>
+Booth, Gumroad, Jinxxy, Payhip and itch.io purchases in a single library you can search, filter and keep, and the
+Unity projects you build with them.</p>
 
 You bought that hoodie. Was it on Booth or Gumroad? Did the creator update it? Do you still have the
 files? Hoard answers those without opening four tabs.
@@ -26,6 +27,8 @@ files? Hoard answers those without opening four tabs.
   filter and tag. It spots products you own on more than one store.
 - **Downloads:** keep local copies, in tidy `<Store>/<Creator>/<Product>` folders, kept up to date when
   creators update their files. (Payhip is listed, not downloaded: see below.)
+- **Projects:** your Unity projects, the same list as the Creator Companion and ALCOM. Make one from VRChat's
+  templates with products from your library in it, update its packages, back it up, and keep its history with Git.
 - One app, one set of sign-ins, one set of tags, and it works offline.
 
 <p align="center">
@@ -38,12 +41,20 @@ files? Hoard answers those without opening four tabs.
   <img src="site/img/downloads-details-dark.webp" width="49%" alt="Hoard's Downloads page, with a product's details open beside the tiles: its store, the Unity project that uses it, and buttons to open its folder or make an editable copy.">
 </picture>
 <picture>
+  <source srcset="site/img/project-details-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-details-dark.webp" width="49%" alt="Hoard's Projects: the Unity projects on the Creator Companion's list, with a project's details beside them: its size, packages, backups and branch.">
+</picture>
+<picture>
+  <source srcset="site/img/project-git-light.webp" media="(prefers-color-scheme: light)">
+  <img src="site/img/project-git-dark.webp" width="49%" alt="A project's Source control tab: its branch, its changes to stage, a box for the commit's message, its history and its remotes.">
+</picture>
+<picture>
   <source srcset="site/img/project-manage-light.webp" media="(prefers-color-scheme: light)">
   <img src="site/img/project-manage-dark.webp" width="49%" alt="Managing a Unity project in Hoard: its VRChat packages with updates and other versions to choose, the products put in from the library and the folders each added, and what Hoard for Unity found in it.">
 </picture>
 <picture>
   <source srcset="site/img/inside-light.webp" media="(prefers-color-scheme: light)">
-  <img src="site/img/inside-dark.webp" width="49%" alt="Look inside a Unity package: its folders and files with Unity's own previews, read without unpacking it.">
+  <img src="site/img/inside-dark.webp" width="49%" alt="Look inside a Unity package: its folders and files, read without unpacking it.">
 </picture>
 <picture>
   <source srcset="site/img/sets-light.webp" media="(prefers-color-scheme: light)">
@@ -63,7 +74,7 @@ files? Hoard answers those without opening four tabs.
 </picture>
 </p>
 
-<sub>The Library, a product's details in Downloads, a Unity project in Projects, Look inside, Sets, a wishlist, Mix and match and adding your own, with real products from the maintainer's own library, shown with their creators' pictures. <a href="https://hoard.furryup.link/credits.html">Who made
+<sub>The Library, a product's details in Downloads, a project's details, its source control and its packages in Projects, Look inside, Sets, a wishlist, Mix and match and adding your own, with real products from the maintainer's own library, shown with their creators' pictures. <a href="https://hoard.furryup.link/credits.html">Who made
 each one, and where to get it</a>. Thank you for making them.</sub>
 
 Guides for everything, from installing to fixing a problem, are in the
@@ -400,5 +411,7 @@ it, raise `version` in its `package.json` and add a section to its `CHANGELOG.md
 - [SECURITY.md](SECURITY.md): reporting security problems
 - [CODE_SIGNING.md](CODE_SIGNING.md): code signing policy
 
-The logo files are in `brand/`. The wordmark is outlined from Dela Gothic One, so the files need no fonts
-installed.
+The logo files are in `brand/`. The logo is the Heap: a box for each store, one with a cube for Projects, and the
+gold one on top, drawn by `hoard/heap.py`. `python3 scripts/heap_files.py --write` puts it in the brand files and the
+app's pages, and `scripts/make_icons.py` makes the apps' icons from it. The wordmark is outlined from Dela Gothic One,
+so the files need no fonts installed.

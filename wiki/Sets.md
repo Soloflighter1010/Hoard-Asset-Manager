@@ -29,14 +29,22 @@ Open a set and it's a folder of its products. **Sets** above its name goes back 
 
 A set also has **Share...**, **Download the N not downloaded** (every product of it that's yours and not downloaded,
 at once, as **Download** does in the Library), **New project with this set...**, **Choose a picture...**, **Rename** and **Delete** (deleting a set
-leaves its products as they are), and under **Note and photos** (open to begin with) a **Note** (what it's for, or
+leaves its products as they are), and under **Note and photos** (folded away while there's nothing in them) a **Note** (what it's for, or
 how to put it together) and **Photos** (below). Once they're saved, they show as they're shared, with **Edit** to
 change them: it opens the note's box and the photos' **×**, and nothing is sent until **Save** (**Cancel** leaves
 them as they were) (5.2.0 beta 2).
 
+From 5.2.0 beta 4 an open set or wishlist reads like a product's details: its picture large beside its name, what's in
+it and where it's from, **Share...** on its own, and the rest of what's done with it in a quieter row under it. Its
+**Note and photos** are a card of their own, and a wishlist's **Find more to add** and price range are together in
+another, just above its products.
+
 ## Making a set
 
 - **New set**, in the Sets tab, then add products to it.
+- **Drag and drop** (5.2.0 beta 4): drop a product on another to make a set of them, named as it's made (the
+  products chosen with it go too), or on **Sets and Wishlists** (the tab above the tiles, or in the bar) to add it
+  to a set you choose. What a drop will do shows on what's under the pointer as you drag; Escape cancels.
 - Choose products in the **Library** or in **Downloads** (tick their boxes, Ctrl- or Shift-click, or **Select**
   on a touch screen), then **Sets** in the selection bar (or right-click): **New set from these...**, or **Add to**
   a set you have: the five you added to last (or the newest), and **Add to another set...** for the rest (5.2.0):

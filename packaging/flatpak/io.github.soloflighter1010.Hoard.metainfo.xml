@@ -5,20 +5,23 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Hoard</name>
-  <summary>Your VRChat assets from every store, in one library</summary>
+  <summary>Your VRChat assets and Unity projects, in one place</summary>
   <developer id="io.github.soloflighter1010">
     <name>SoloFlighter</name>
   </developer>
   <description>
     <p>
       Hoard lists everything you've bought for VRChat on Booth, Gumroad, Jinxxy, Payhip and itch.io in one
-      library, and keeps local copies of your files up to date when creators update them.
+      library, and keeps local copies of your files up to date when creators update them. Then it looks after the
+      Unity projects you make with them.
     </p>
     <ul>
       <li>Search and filter your whole library, by store, creator, tag or file type</li>
       <li>Download everything new with one sync, or just what you choose</li>
       <li>See when creators update what you've downloaded</li>
       <li>Tag your assets, and hide or archive the ones you don't want to see</li>
+      <li>Make Unity projects, add VRChat's packages and your products to them, and back them up</li>
+      <li>Keep a project's history with Git: changes, commits, branches and remotes</li>
     </ul>
     <p>
       Hoard runs only on your computer. You sign in to each store on its own page, in a browser that belongs to
@@ -41,6 +44,8 @@
     <keyword>Booth</keyword>
     <keyword>Gumroad</keyword>
     <keyword>Jinxxy</keyword>
+    <keyword>Unity</keyword>
+    <keyword>projects</keyword>
   </keywords>
   <content_rating type="oars-1.1"/>
   <supports>

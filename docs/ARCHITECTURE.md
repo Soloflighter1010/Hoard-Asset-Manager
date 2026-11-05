@@ -49,7 +49,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
                        styleguide.html (every part of the pages, at /styleguide) and the bundled fonts
 Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
-brand/                 logo files (the wordmark is outlined, so no font is needed)
+brand/                 logo files, from hoard/heap.py (the wordmark is outlined, so no font is needed)
 scripts/build_release.py   builds the release zip
 packaging/             the apps: hoard.spec (PyInstaller: Hoard.exe and hoard-cli.exe on Windows; Hoard.app on
                        macOS), hoard.iss (Inno Setup installer), the icons; flatpak/ (the Linux Flatpak's

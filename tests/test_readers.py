@@ -679,6 +679,191 @@ class SigningInPlainly(unittest.TestCase):
                          f"cookies in the database after the window closed: {on_disk}; Hoard's window read: {sorted(got)}")
 
 
+# Jinxxy's own data about your inventory (issues #275, #276), made up in the shapes its pages use (November 2026):
+# getInventoryItems' items (each with its listing, and a gift's sender) and getGiftsReceived's gifts.
+def jx_listing(name, user, slug, shown=None, public=True):
+    return {"__typename": "ProductListing", "id": "9" + slug, "service": "jinxxy", "name": name, "url": slug,
+            "has_public_page": public, "thumbnails": [{"url": "https://jinxxy-c.jinxxy-cdn.com/a/v.mp4", "content_type": "video/mp4"},
+                                                       {"url": f"https://jinxxy-c.jinxxy-cdn.com/a/{slug}.webp", "content_type": "image/webp"}],
+            "seller_name": shown or user, "user_username": user,
+            "user": {"__typename": "User", "id": "7", "name": shown or user, "username": user}}
+
+
+def jx_item(id_, listing, sender=None, revoked=False):
+    gift = {"order_id": "5", "gifted_at": "2026-10-30T04:11:18Z", "sender": {"id": "3", "username": sender},
+            "is_revoked": revoked} if sender else None
+    return {"__typename": "InventoryItem", "id": id_, "listing": listing, "gift": gift,
+            "item": {"id": "9", "name": listing["name"], "url": listing["url"], "user": {"id": "7", "username": listing["user_username"]}}}
+
+
+def jx_gift(id_, listing, sender, status="ACCEPTED"):
+    return {"__typename": "Gift", "id": "g" + id_, "status": status, "product": listing,
+            "sender": {"__typename": "GiftUser", "id": "3", "name": sender, "username": sender.replace(" ", "")},
+            "inventory_item": {"__typename": "InventoryItem", "id": id_} if status == "ACCEPTED" else None}
+
+
+def jx_ssr(data):
+    """The script a Jinxxy page hands its first data to Apollo with (JavaScript, not JSON: undefined in it)."""
+    import json
+    return ('<script>(window[Symbol.for("ApolloSSRDataTransport")] ??= []).push({"rehydrate":{"_R_a_":{"data":undefined,'
+            '"loading":true}},"events":[{"type":"next","value":' + json.dumps(data).replace("<", "\\u003c") + '}]})</script>')
+
+
+PAW = jx_listing("Paw Suit", "hyroe", "PawSuit", "Hyroe")
+VISOR = jx_listing("Protogen Visor", "kitsustudio", "Visor", "Kitsu Studio")
+HOODIE = jx_listing("Cozy Hoodie", "nova", "CozyHoodie", "Nova")
+SCARF = jx_listing("Warm Scarf", "nova2", "Scarf", "Nova Two")
+
+
+class JinxxyData(unittest.TestCase):
+    """What Jinxxy's pages load about your inventory: read as data, and only what's checked."""
+
+    def test_the_data_a_page_came_with(self):
+        script = jx_ssr({"data": {"inventory_items": {"payload": [jx_item("1001", PAW)]}}})
+        tricky = script.replace('"loading":true', '"note":"a } and undefined, ] in a string","loading":true')
+        values = library.jinxxy_ssr([tricky + script.replace("1001", "1002"), "no data here", 3])
+        self.assertEqual(len(values), 2)
+        self.assertIsNone(values[0]["rehydrate"]["_R_a_"]["data"], "JavaScript's undefined, as nothing")
+        self.assertEqual(values[0]["rehydrate"]["_R_a_"]["note"], "a } and undefined, ] in a string")
+        self.assertEqual(library.jinxxy_ssr(['(window[Symbol.for("ApolloSSRDataTransport")] ??= []).push(alert(1))']), [],
+                         "only data, never anything to run")
+        self.assertEqual(library.jinxxy_ssr(['(window[Symbol.for("ApolloSSRDataTransport")] ??= []).push({"a": [1, 2']), [],
+                         "nor something cut off")
+
+    def test_what_it_says_about_each_item(self):
+        known = library.jinxxy_data([
+            {"data": {"inventory_items": {"payload": [
+                jx_item("1001", PAW), jx_item("1002", jx_listing("Hidden", "kitsustudio", "Hidden", public=False)),
+                jx_item("1003", HOODIE, sender="kitsu"), jx_item("1005", VISOR, sender="kitsu", revoked=True),
+                jx_item("1006", jx_listing("Odd", "../evil", "x")), jx_item("1007", jx_listing("Odd", "kitsu", "a/../../b"))]}}},
+            {"data": {"auth_user": {"gifts_received": {"payload": [
+                jx_gift("1004", SCARF, "Puzzle Cat"), jx_gift("1008", SCARF, "Not Yet", status="PENDING")]}}}}])
+        self.assertEqual(known["1001"], {"name": "Paw Suit", "creator": "Hyroe", "creator_url": "https://jinxxy.com/hyroe",
+                                         "page": "https://jinxxy.com/hyroe/PawSuit",
+                                         "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/a/PawSuit.webp"}, "its picture, not its video")
+        self.assertIsNone(known["1002"].get("page"), "a product without a public page has none")
+        self.assertEqual((known["1003"]["gift"], known["1003"]["gift_from"]), (True, "kitsu"))
+        self.assertNotIn("gift", known["1005"], "a gift taken back isn't one")
+        self.assertEqual((known["1004"]["creator"], known["1004"]["page"], known["1004"]["gift_from"]),
+                         ("Nova Two", "https://jinxxy.com/nova2/Scarf", "Puzzle Cat"))
+        self.assertNotIn("1008", known, "a gift not accepted isn't in your inventory")
+        self.assertIsNone(known["1006"].get("creator_url"))
+        self.assertIsNone(known["1006"].get("page"), "never an address made from something that isn't a name")
+        self.assertIsNone(known["1007"].get("page"))
+
+    def test_put_into_the_cards(self):
+        """A card gets its page, its creator and its gift from the data; a gift only on the Gifts tab is added, and
+        a gift card's profile link (who sent it) is never its creator."""
+        found = {"/my/inventory/1001": {"key": "/my/inventory/1001", "url": "https://jinxxy.com/my/inventory/1001", "name": "Paw Suit",
+                                        "creator": "Hyroe", "creator_url": "https://jinxxy.com/hyroe", "thumbnail": "t1", "page": ""},
+                 "/my/inventory/1003": {"key": "/my/inventory/1003", "url": "https://jinxxy.com/my/inventory/1003", "name": "Cozy Hoodie",
+                                        "creator": "Nova", "creator_url": "https://jinxxy.com/nova", "thumbnail": "t3", "page": ""}}
+        gift_card = lambda n, name: {"key": f"/my/inventory/{n}", "url": f"https://jinxxy.com/my/inventory/{n}", "name": name,  # noqa: E731
+                                     "creator": "Puzzle Cat", "creator_url": "https://jinxxy.com/PuzzleCat", "thumbnail": f"t{n}",
+                                     "page": "", "gift_from": "Puzzle Cat"}
+        gifts = {"/my/inventory/1004": gift_card(1004, "Warm Scarf"), "/my/inventory/1009": gift_card(1009, "Mystery Box")}
+        known = library.jinxxy_data([{"payload": [jx_item("1001", PAW), jx_item("1003", HOODIE, sender="kitsu"),
+                                                  jx_gift("1004", SCARF, "Puzzle Cat")]}])
+        library.jinxxy_merge(found, gifts, known)
+        items = {i["id"]: i for i in (library.jinxxy_item(c) for c in found.values())}
+        self.assertEqual(sorted(items), ["1001", "1003", "1004", "1009"])
+        self.assertEqual((items["1001"]["page"], items["1001"]["gift"]), ("https://jinxxy.com/hyroe/PawSuit", False))
+        self.assertNotIn("gift_from", items["1001"])
+        self.assertEqual((items["1003"]["creator"], items["1003"]["gift"], items["1003"]["gift_from"]), ("Nova", True, "kitsu"))
+        self.assertEqual((items["1004"]["creator"], items["1004"]["creator_url"], items["1004"]["page"], items["1004"]["gift_from"]),
+                         ("Nova Two", "https://jinxxy.com/nova2", "https://jinxxy.com/nova2/Scarf", "Puzzle Cat"))
+        self.assertEqual((items["1009"]["creator"], items["1009"]["creator_url"], items["1009"]["gift"]), ("Unknown creator", None, True),
+                         "without Jinxxy's data, a gift's creator is unknown, never who sent it")
+        self.assertNotIn("gift_from", library.item("jinxxy", "1", gift_from="Someone"), "only a gift has a sender")
+
+    def test_who_a_gift_card_is_from(self):
+        self.assertEqual(library.jinxxy_gift_sender({"lines": ["Cozy Hoodie", "A gift from Puzzle Cat", "Gifted on", "10/30/2026"]}), "Puzzle Cat")
+        self.assertEqual(library.jinxxy_gift_sender({"lines": ["Cozy Hoodie", "A gift from", "Puzzle Cat"]}), "Puzzle Cat")
+        self.assertIsNone(library.jinxxy_gift_sender({"lines": ["Cozy Hoodie", "Nova"]}))
+
+
+def jx_card(n, name, creator=None, sender=None):
+    """A card on Jinxxy's inventory: a product's, or (with sender) one on its Gifts tab."""
+    by = f'<a href="/{creator.lower().replace(" ", "")}">{creator}</a>' if creator else ""
+    gift = f'<p>A gift from <a href="/{sender.replace(" ", "")}">{sender}</a></p><p>Gifted on</p><p>10/30/2026</p>' if sender else ""
+    return (f'<div class="card"><a href="/my/inventory/{n}"><img src="https://cdn.jinxxy.com/p{n}.png" width="220" height="220" alt="{name}"></a>'
+            f'<a href="/my/inventory/{n}"><h3>{name}</h3></a>{by}{gift}</div>')
+
+
+def jx_inventory(products, gifts, first_data, more_data, gifts_data):
+    """Jinxxy's inventory, as its page behaves: its first items' data in a script, more asked of its API as it loads,
+    and a Gifts tab that, chosen, shows the gifts and asks the API for them."""
+    import json
+    return (f'<html>{HEAD}<body>{TOP}<div>{SIDE}<main><h1>Inventory</h1>'
+            '<div role="tablist"><button role="tab" id="radix-_r_1_-trigger-products" aria-selected="true">Products</button>'
+            '<button role="tab" id="radix-_r_1_-trigger-gifts" aria-selected="false" onclick="gifts()">Gifts</button></div>'
+            f'<div id="panel" role="tabpanel" class="grid">{"".join(products)}</div></main></div>'
+            + jx_ssr(first_data) +
+            '<script>const ask = q => fetch("https://api.jinxxy.com/graphql", {method: "POST", body: JSON.stringify({query: q})});'
+            'ask("getInventoryItems");'
+            f'function gifts() {{ document.getElementById("panel").innerHTML = {json.dumps("".join(gifts))}; ask("getGiftsReceived"); }}</script>'
+            '</body></html>'), {"getInventoryItems": more_data, "getGiftsReceived": gifts_data}
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class JinxxyGifts(unittest.TestCase):
+    """Issues #275, #276: a refresh reads Jinxxy's own data as its pages load it, so gifts are gifts (and who sent
+    them), and each product's page is known without opening its item's page."""
+
+    def test_a_refresh(self):
+        import json
+        pw = sync_playwright().start()
+        self.addCleanup(pw.stop)
+        browser = pw.chromium.launch()
+        self.addCleanup(browser.close)
+        page_html, api = jx_inventory(
+            [jx_card(1001, "Paw Suit", "Hyroe"), jx_card(1002, "Protogen Visor", "Kitsu Studio"), jx_card(1003, "Cozy Hoodie", "Nova")],
+            [jx_card(1003, "Cozy Hoodie", sender="kitsu"), jx_card(1004, "Warm Scarf", sender="Puzzle Cat")],
+            {"data": {"inventory_items": {"payload": [jx_item("1001", PAW), jx_item("1003", HOODIE, sender="kitsu")]}}},
+            {"data": {"inventory_items": {"payload": [jx_item("1002", VISOR)]}}},
+            {"data": {"auth_user": {"gifts_received": {"payload": [jx_gift("1004", SCARF, "Puzzle Cat")]}}}})
+        asked = []
+
+        def answer(route):
+            url = route.request.url
+            asked.append(url)
+            if url.startswith("https://api.jinxxy.com/"):
+                q = json.loads(route.request.post_data or "{}").get("query")
+                route.fulfill(status=200, content_type="application/graphql-response+json",
+                              headers={"access-control-allow-origin": "https://jinxxy.com"}, body=json.dumps(api.get(q, {})))
+            elif "cdn." in url or url.endswith(".png"):
+                route.fulfill(status=200, content_type="image/png", body=b"\x89PNG\r\n\x1a\n")
+            else:
+                route.fulfill(status=200, content_type="text/html; charset=utf-8", body=page_html)
+        ctx = browser.new_context(viewport={"width": 1400, "height": 950})
+        ctx.route("**/*", answer)
+        real = library.scroll_inventory
+        with mock.patch.object(library, "scroll_inventory", lambda page, read, **kw: real(page, read, settle_ms=50, wait_ms=80, **kw)), \
+                mock.patch.object(library, "settle", lambda page, ms=0: page.wait_for_timeout(min(ms, 300))):
+            items = {i["id"]: i for i in library.fetch_jinxxy(ctx, {**config.DEFAULT_CONFIG, "request_delay": 0}, lambda m: None)}
+        self.assertEqual(sorted(items), ["1001", "1002", "1003", "1004"], "the gift only on the Gifts tab, too")
+        self.assertEqual({k: (i["page"], i["gift"]) for k, i in items.items()},
+                         {"1001": ("https://jinxxy.com/hyroe/PawSuit", False), "1002": ("https://jinxxy.com/kitsustudio/Visor", False),
+                          "1003": ("https://jinxxy.com/nova/CozyHoodie", True), "1004": ("https://jinxxy.com/nova2/Scarf", True)})
+        self.assertEqual((items["1003"]["creator"], items["1003"]["gift_from"]), ("Nova", "kitsu"))
+        self.assertEqual((items["1004"]["creator"], items["1004"]["gift_from"]), ("Nova Two", "Puzzle Cat"))
+        self.assertEqual([u for u in asked if "/my/inventory/" in u], [], "no item's own page opened")
+
+    def test_a_saved_gifts_page(self):
+        """A page saved from the Gifts tab: its links left relative, its cards where its scripts would have put them
+        (hidden, as Jinxxy streams them), and its data in a script; read offline, with none of it run."""
+        html = (f'<html>{HEAD}<body>{TOP}<div>{SIDE}<main><h1>Inventory</h1><div id="panel"></div></main></div>'
+                f'<div hidden id="S:1">{jx_card(1004, "Warm Scarf", sender="Puzzle Cat")}{jx_card(1010, "Bell Collar", sender="kitsu")}</div>'
+                + jx_ssr({"data": {"auth_user": {"gifts_received": {"payload": [jx_gift("1004", SCARF, "Puzzle Cat"),
+                                                                                  jx_gift("1010", jx_listing("Bell Collar", "kitsu", "Bell"), "kitsu")]}}}})
+                + "</body></html>")
+        (result,) = library.import_saved_pages(config.DEFAULT_CONFIG, [("Inventory - Jinxxy.html", html)], "jinxxy")
+        items = {i["id"]: i for i in result["items"]}
+        self.assertEqual({k: (i["name"], i["creator"], i["gift"], i.get("gift_from"), i["page"]) for k, i in items.items()},
+                         {"1004": ("Warm Scarf", "Nova Two", True, "Puzzle Cat", "https://jinxxy.com/nova2/Scarf"),
+                          "1010": ("Bell Collar", "kitsu", True, "kitsu", "https://jinxxy.com/kitsu/Bell")})
+
+
 class JinxxyPaging(unittest.TestCase):
 
     def test_only_jinxxys_own_pages_are_followed(self):

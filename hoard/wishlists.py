@@ -5,6 +5,8 @@ lists, and each Payhip shop's wishlists. Each list the store has becomes a wishl
 They're read as a refresh reads your library: in each store's own signed-in browser window (read_lists), or from
 pages you saved from your own browser (from_saved_pages), read offline with scripts off. Every reader returns the
 same shape: [{"store", "list", "url", "products": [{"store", "id"?, "name", "creator", "url", "thumbnail", "price"}]}].
+A quick refresh (issue #300) reads only the start of each list; one it stopped short in says "partial": True, and
+keeps the products it didn't reach.
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
 from .browser import goto, goto_past_check, has_password_field, settle
-from .common import NotLoggedIn, pause
+from .common import QUICK_ITEMS, NotLoggedIn, pause, quick_done
 from .config import payhip_shops
 from .safety import clean_text, fetch_public, inert_html, is_video_address, offline_page, safe_url
 
@@ -477,21 +479,29 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
     page = ctx.new_page()
     delay = float(cfg.get("request_delay", 0.8))
     try:
-        def read_all(url: str, label: str) -> list[dict]:
-            """Every product on one of your Booth lists, page by page."""
+        def read_all(url: str, label: str) -> tuple[list[dict], bool]:
+            """Every product on one of your Booth lists, page by page; and whether a quick refresh stopped short."""
             found: dict[str, dict] = {}
             goto(page, url)
             settle(page, 900)
             _signed_in(page, "accounts.booth.pm")
+            short = False
             for n in range(1, MAX_PAGES + 1):
                 new = 0
                 for c in page.evaluate(BOOTH_JS)["cards"]:
-                    if c["id"] not in found:
-                        found[c["id"]] = c
-                        new += 1
+                    if c["id"] in found:
+                        continue
+                    if cfg.get("_quick") and len(found) >= QUICK_ITEMS:   # (one past the limit: the rest left)
+                        short = True
+                        break
+                    found[c["id"]] = c
+                    new += 1
                 progress(f"{label}, page {n}: {len(found)} items")
                 first = page.evaluate(BOOTH_FIRST_JS)
                 if not new or not page.evaluate(BOOTH_NEXT_JS):   # the last page
+                    break
+                if quick_done(cfg, n, len(found)):
+                    short = True
                     break
                 try:   # the next page's cards in place of these (Booth reads them as you turn the page)
                     page.wait_for_function(f"() => ({BOOTH_FIRST_JS})() !== {first!r}", timeout=20000)
@@ -499,9 +509,10 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
                     break
                 settle(page, 600)
                 time.sleep(delay)
-            return booth_products(found.values())
-        everything = read_all(BOOTH_WISHES, LIST_NAMES["booth"])
-        out = [{"store": "booth", "list": LIST_NAMES["booth"], "url": BOOTH_WISHES, "products": everything}]
+            return booth_products(found.values()), short
+        everything, short = read_all(BOOTH_WISHES, LIST_NAMES["booth"])
+        out = [{"store": "booth", "list": LIST_NAMES["booth"], "url": BOOTH_WISHES, "products": everything,
+                **({"partial": True} if short else {})}]
         goto(page, BOOTH_WISHES)
         settle(page, 900)
         names = [x["name"] for x in page.evaluate(BOOTH_JS)["lists"]][2:MAX_LISTS + 2]   # after "all" and "uncategorized"
@@ -512,7 +523,9 @@ def read_booth(ctx, cfg, progress) -> list[dict]:
             except Exception:
                 continue
             url = page.url
-            out.append({"store": "booth", "list": clean_text(name, 60), "url": url, "products": read_all(url, name)})
+            products, short = read_all(url, name)
+            out.append({"store": "booth", "list": clean_text(name, 60), "url": url, "products": products,
+                        **({"partial": True} if short else {})})
             goto(page, BOOTH_WISHES)
             settle(page, 600)
         return out
@@ -533,6 +546,7 @@ def read_gumroad(ctx, cfg, progress) -> list[dict]:
         out = []
         for w in list(found.values())[:MAX_LISTS]:
             products: dict[str, dict] = {}
+            short = False   # (a quick refresh stopped before its end: issue #300)
             for n in range(1, MAX_PAGES + 1):
                 r = ctx.request.get(_with_page(w["url"], n), timeout=60000)
                 data = extract_page_json(r.text()) if r.ok else None
@@ -546,13 +560,20 @@ def read_gumroad(ctx, cfg, progress) -> list[dict]:
                         products.setdefault(p["url"], p)
                     break
                 for p in gumroad_products(props["items"]):
+                    if cfg.get("_quick") and len(products) >= QUICK_ITEMS:
+                        short = True
+                        break
                     products.setdefault(p.get("url") or p["name"], p)
                 progress(f"{w['name']}, page {n}: {len(products)} products")
                 pages = (props.get("pagination") or {}).get("pages") or 1
                 if n >= pages:
                     break
+                if quick_done(cfg, n, len(products)):
+                    short = True
+                    break
                 time.sleep(delay)
-            out.append({"store": "gumroad", "list": clean_text(w["name"], 60), "url": w["url"], "products": list(products.values())})
+            out.append({"store": "gumroad", "list": clean_text(w["name"], 60), "url": w["url"], "products": list(products.values()),
+                        **({"partial": True} if short else {})})
         return out
     finally:
         page.close()
@@ -563,11 +584,12 @@ def read_jinxxy(ctx, cfg, progress) -> list[dict]:
     page = ctx.new_page()
     delay = float(cfg.get("request_delay", 0.8))
     try:
-        def read_all(url: str, label: str) -> tuple[list[dict], list[dict]]:
-            """Every product on one of your Jinxxy lists, page by page, and the other lists it links to."""
+        def read_all(url: str, label: str) -> tuple[list[dict], list[dict], bool]:
+            """Every product on one of your Jinxxy lists, page by page, the other lists it links to, and whether a
+            quick refresh stopped short of its end (issue #300)."""
             cards: dict[str, dict] = {}
             lists: dict[str, dict] = {}
-            visited = set()
+            visited, short = set(), False
             for n in range(1, MAX_PAGES + 1):
                 goto(page, url)
                 settle(page, 1500)
@@ -575,23 +597,30 @@ def read_jinxxy(ctx, cfg, progress) -> list[dict]:
                 visited.add(url)
                 got = page.evaluate(JINXXY_JS, page.url)
                 for c in got["cards"]:
+                    if cfg.get("_quick") and len(cards) >= QUICK_ITEMS:
+                        short = True
+                        break
                     cards.setdefault(c["url"], c)
                 for x in got["lists"]:
                     lists.setdefault(x["url"], x)
                 progress(f"{label}, page {n}: {len(cards) or len(lists)}")
                 if not got["next"] or got["next"] in visited:
                     break
+                if quick_done(cfg, n, len(cards)):
+                    short = True
+                    break
                 url = got["next"]
                 time.sleep(delay)
-            return jinxxy_products(cards.values()), list(lists.values())
+            return jinxxy_products(cards.values()), list(lists.values()), short
         out = []
         for url, name in ((JX_WISHLIST, LIST_NAMES["jinxxy-wishlist"]), (JX_LIKES, LIST_NAMES["jinxxy-likes"])):
-            products, _ = read_all(url, name)
-            out.append({"store": "jinxxy", "list": name, "url": url, "products": products})
-        _, lists = read_all(JX_LISTS, "Lists")
+            products, _, short = read_all(url, name)
+            out.append({"store": "jinxxy", "list": name, "url": url, "products": products, **({"partial": True} if short else {})})
+        _, lists, _ = read_all(JX_LISTS, "Lists")
         for x in lists[:MAX_LISTS]:
-            products, _ = read_all(x["url"], x["name"])
-            out.append({"store": "jinxxy", "list": clean_text(x["name"], 60), "url": x["url"], "products": products})
+            products, _, short = read_all(x["url"], x["name"])
+            out.append({"store": "jinxxy", "list": clean_text(x["name"], 60), "url": x["url"], "products": products,
+                        **({"partial": True} if short else {})})
         return out
     finally:
         page.close()
@@ -607,20 +636,23 @@ def read_payhip(ctx, cfg, progress) -> list[dict]:
             goto_past_check(page, url, float(cfg.get("payhip", {}).get("check_wait", 60)), progress)
             settle(page, 1000)
             cards = page.evaluate(PAYHIP_JS)["cards"]
-            out.extend(_payhip_lists(cards, shop, url))
+            out.extend(_payhip_lists(cards, shop, url, bool(cfg.get("_quick"))))
             progress(f"{urlparse(shop).hostname}: {len(cards)} products")
         return out
     finally:
         page.close()
 
 
-def _payhip_lists(cards, shop: str, url: str) -> list[dict]:
-    """A Payhip shop's wishlists, one list for each name the shop gives them, named with the shop."""
+def _payhip_lists(cards, shop: str, url: str, quick: bool = False) -> list[dict]:
+    """A Payhip shop's wishlists, one list for each name the shop gives them, named with the shop (in a quick refresh,
+    each list's first QUICK_ITEMS products: issue #300)."""
     by: dict[str, list] = {}
     for c in cards:
         by.setdefault(c.get("list") or "Wishlist", []).append(c)
     host = urlparse(shop).hostname or shop
-    return [{"store": "payhip", "list": clean_text(f"{host}: {name}", 60), "url": url, "products": payhip_products(cs)}
+    return [{"store": "payhip", "list": clean_text(f"{host}: {name}", 60), "url": url,
+             "products": payhip_products(cs[:QUICK_ITEMS] if quick else cs),
+             **({"partial": True} if quick and len(cs) > QUICK_ITEMS else {})}
             for name, cs in (by.items() or [("Wishlist", [])])]
 
 

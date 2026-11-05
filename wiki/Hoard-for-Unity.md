@@ -59,7 +59,7 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   project, or after you last imported the product through Hoard. Its details have **Import update**, which opens
   Unity's import dialog on it. A product whose creator updated it since Hoard last downloaded (what Hoard's last
   **Check for updates** found, in `asset-updates.json` in Hoard's own folder) shows **Update in Hoard**: download
-  the update in Hoard (**Downloads**, **Updates**), then import it here. **Updates** above the tiles shows just
+  the update in Hoard (**Downloads**, **Asset updates**), then import it here. **Updates** above the tiles shows just
   those products.
 
 Imports made this way are recorded in `ProjectSettings/Hoard/imports.json`, so a project remembers where its

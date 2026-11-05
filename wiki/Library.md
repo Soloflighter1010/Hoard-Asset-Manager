@@ -1,15 +1,30 @@
 The **Library** shows everything you own on the stores you use, whether or not you've downloaded it.
 **Downloads** (the other tab) shows what's on your computer: see [Downloads](Downloads).
 
+The bar at the top has the pages beside the logo (**Library**, **Downloads**, **Local**, **Sets and Wishlists**,
+**Tasks**, **Projects**), then the search, then Hoard's own links before **Menu** and **Sync**: its version,
+**GitHub**, **Discord**, **Hoard updates** (new versions of Hoard itself; your assets' updates are **Asset updates**,
+in Downloads) and **Report a problem**. In a window without room for them, they're in the **Menu** (5.2.0 beta 4).
+**Privacy**, **Terms** and **Made with AI** stay at the bottom of the page.
+
+The logo is the Heap (5.2.0 beta 4): a box for each store you use, in its colour, the Projects box with a small cube on
+it, and Hoard's gold box with its sparkle on top. It stacks itself again when you switch a store on or off in
+[Settings](Settings). Point at it and its boxes fall over and build themselves up again. With **Reduce motion**, it
+stays still.
+
 ## Finding things
 
-- **Search** (at the top: beside the logo, or in the middle of a wide window) matches names, creators, stores, variants and tags. A prefix
+- **Search** (at the top: after the logo and the pages, or in the middle of a wide window) matches names, creators, stores, variants and tags. A prefix
   searches one kind of thing (5.2.0): `creator:` (or `by:`), `tag:` (or `#`), `store:` (or `on:`) and `type:` (or
   `kind:`: a tag's kind, such as avatar, or in Downloads a kind of file) narrow the products; `set:` (or `in:`)
   narrows them to a set's and offers to go to it; `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)
   a setting: `settings:language` opens Settings at Language. Put a name with spaces in quotes, as in
   `creator:"Kitsu Studio"`. Click in the empty box, or press **/**, to see them all with an example: choose one and
   it goes in the box, then what it could be is offered under it (the arrow keys and Enter work there too).
+- **Another site's search** (5.2.0 beta 4): `nexyy:` searches [Nexyy](https://nexyy.com) (which searches the stores
+  at once), and `booth:`, `gumroad:`, `jinxxy:` and `itch:` each store's own search, for everything typed after it
+  (`nexyy:soft hoodie`). Press Enter, or choose it under the box: it opens in your browser, and your own products
+  aren't filtered by it. They're the sites a wishlist's **Find more to add** offers.
 - **The store tabs** above the grid narrow it to one store, with a count for each. The tab you're looking at is
   raised, and the page glows up from the bottom in that store's colour (on **Everything**, the colours of the
   stores you're signed in to drift through it).

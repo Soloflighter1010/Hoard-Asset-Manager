@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from .config import NewShop, apply_store_sites, clean_payhip_shop, payhip_shops
 from . import itch, vault
 from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check, has_password_field, hops_text, settle
-from .common import NotLoggedIn, log, now_iso, pause
+from .common import QUICK_ITEMS, NotLoggedIn, log, now_iso, pause, quick_done
 from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, is_video_address, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
@@ -60,6 +60,10 @@ def item(store: str, id_, **fields) -> dict:
     d["creator"] = clean_text(d["creator"], 200) or "Unknown creator"
     d["variants"] = clean_text(d["variants"], 300) or None
     d["archived"], d["gift"] = d["archived"] is True, d["gift"] is True
+    if "gift_from" in d:   # who gave it you (issue #276: Jinxxy says), on a gift only
+        d["gift_from"] = clean_text(d["gift_from"], 120) if d["gift"] and isinstance(d["gift_from"], str) else ""
+        if not d["gift_from"]:
+            del d["gift_from"]
     added = d.get("added")
     d["added"] = added if isinstance(added, str) and ADDED_TIME.fullmatch(added) else None
     if "store_tags" in d:   # the tags its creator gave it on its store's page (issue #206): read, even if none
@@ -108,20 +112,25 @@ def script_tags(text: str):
         start = text.find("<script", close + len("</script>"))
 
 
-def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None):
+def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None, cfg: dict | None = None):
     """Every purchase card in your Gumroad library, page by page (and the archived ones, when wanted). read_props
     gets a page's query (page, sort, archived) and returns that page's props; on_page(archived, page, pages) is
-    told as each is read. Listing the library and downloading both read it this way."""
+    told as each is read. Listing the library and downloading both read it this way. A quick refresh's cfg (issue
+    #300): only the start of each, the newest purchases."""
+    quick = bool((cfg or {}).get("_quick"))
     for archived in ([False, True] if include_archived else [False]):
-        page_no = 1
+        page_no, given = 1, 0
         while True:
             params = {"page": page_no, "sort": "purchase_date"} | ({"show_archived_only": "true"} if archived else {})
             props = read_props(params) or {}
-            yield from props.get("results") or []
+            cards = props.get("results") or []
+            cards = cards[:max(0, QUICK_ITEMS - given)] if quick else cards
+            given += len(cards)
+            yield from cards
             pages = (props.get("pagination") or {}).get("pages") or 1
             if on_page:
                 on_page(archived, page_no, pages)
-            if page_no >= pages:
+            if page_no >= pages or quick_done(cfg or {}, page_no, given):
                 break
             page_no += 1
             pause(delay)
@@ -170,7 +179,7 @@ def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         """Say which page of the library is being read."""
         progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
     for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
-                              float(cfg.get("request_delay", 0.8)), on_page):
+                              float(cfg.get("request_delay", 0.8)), on_page, cfg):
         prod, pur = card.get("product") or {}, card.get("purchase") or {}
         creator = prod.get("creator") or {}
         variants = (pur.get("variants") or "").strip() or None
@@ -264,8 +273,9 @@ def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[
     cards: dict[str, tuple[dict, bool, str]] = {}
     sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
         + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
+    quick = bool(cfg.get("_quick"))   # (a quick refresh, issue #300: the start of each)
     for path, gift in sources:
-        base = f"https://accounts.booth.pm/library{path}"
+        base, here = f"https://accounts.booth.pm/library{path}", 0
         for page_no in range(1, 500):
             goto(page, f"{base}?page={page_no}")
             page.wait_for_timeout(400)
@@ -276,11 +286,12 @@ def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[
                 break
             new = 0
             for b in page.evaluate(BOOTH_JS):
-                if b["id"] not in cards:
+                if b["id"] not in cards and not (quick and here >= QUICK_ITEMS):
                     cards[b["id"]] = (b, gift, base)
                     new += 1
+                    here += 1
             progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
-            if not new:   # past the last page
+            if not new or quick_done(cfg, page_no, here):   # past the last page (or, quickly, far enough)
                 break
             pause(delay)
     return list(cards.values())
@@ -431,13 +442,15 @@ def jinxxy_product_page(hrefs, creator_url=None) -> str | None:
     return None
 
 
-def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300) -> None:
+def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300, most: int = 0) -> None:
     """Show all of a Jinxxy inventory page: read() what's shown (it returns how many it has found in all), then
-    choose "Load more" or scroll down, until three rounds in a row find nothing new. Reading the library and
-    downloading both go through an inventory this way."""
+    choose "Load more" or scroll down, until three rounds in a row find nothing new (or, given most, once that many
+    are found). Reading the library and downloading both go through an inventory this way."""
     count, quiet = -1, 0
     for _ in range(rounds):
         now = read()
+        if most and now >= most:
+            break
         more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
         if more.count() and more.first.is_visible() and more.first.is_enabled():
             more.first.click()
@@ -453,17 +466,23 @@ def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, roun
 
 
 def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
-    """Every item in your Jinxxy inventory, scrolling and following pages until nothing new appears."""
+    """Every item in your Jinxxy inventory, scrolling and following pages until nothing new appears; then its Gifts
+    tab. What the pages loaded about each item as they did (jinxxy_data) says which are gifts, who from, and each
+    product's public page, so few items' own pages need opening (issues #275, #276)."""
     page = ctx.new_page()
     pattern = cfg["jinxxy"]["item_link_pattern"]
     found: dict[str, dict] = {}
+    loaded: list = []   # (what the pages loaded from Jinxxy's API, and the data each page came with)
+    heard = jinxxy_listener(loaded)
+    page.on("response", heard)
     try:
         goto(page, JX_INVENTORY)
         settle(page, 1500)
         if "login" in urlparse(page.url).path.lower() or has_password_field(page):
             raise NotLoggedIn()
         visited, pending = {page.url}, []
-        for _ in range(100):  # numbered pages
+        most = QUICK_ITEMS if cfg.get("_quick") else 0   # (a quick refresh, issue #300: the start of it)
+        for page_no in range(1, 101):  # numbered pages
             def read() -> int:
                 """Note the products now on the inventory page, and its other pages to visit; returns how many are
                 known."""
@@ -476,13 +495,21 @@ def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
                         pending.append(href)
                 progress(f"Inventory, {len(found)} items")
                 return len(found)
-            scroll_inventory(page, read)
-            if not pending:
+            scroll_inventory(page, read, most=most)
+            loaded.append(jinxxy_page_data(page))
+            if not pending or quick_done(cfg, page_no, len(found)):
                 break
             nxt = pending.pop(0)
             visited.add(nxt)
             goto(page, nxt)
             settle(page)
+        if most:
+            found = dict(list(found.items())[:most])
+        gifts = jinxxy_gifts(page, pattern, progress, most)
+        loaded.append(jinxxy_page_data(page))
+        page.remove_listener("response", heard)
+        jinxxy_merge(found, gifts, jinxxy_data(loaded))
+        loaded.clear()
         if found:
             jinxxy_product_pages(page, found, cfg, progress)
     finally:
@@ -530,6 +557,239 @@ STILL_JS = r"""() => {
 }"""
 
 
+# ---- What Jinxxy's pages load about your inventory (issues #275, #276)
+#
+# Jinxxy's inventory page comes with its first items' data in its scripts (Apollo's "SSR data transport"), and asks
+# Jinxxy's API for more as you scroll. Each item there has its product's listing (its creator, and its public page,
+# jinxxy.com/<creator>/<product>) and, for a gift, who sent it. Hoard reads what the page loaded, and asks Jinxxy
+# for nothing more: the data is read as JSON, never run, and only what's checked below is kept.
+
+JX_API_HOST = "api.jinxxy.com"
+JX_DATA_MAX = 16 << 20   # characters of data read from one response, or from one page's scripts, at most
+JX_DATA_JS = r"""() => {
+  let room = 16 << 20;
+  const out = [];
+  for (const s of document.scripts) {
+    const t = s.textContent || '';
+    if (!t.includes('ApolloSSRDataTransport') || t.length > room) continue;
+    out.push(t); room -= t.length;
+  }
+  return out;
+}"""
+JX_NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")    # a Jinxxy username, as its addresses use it
+JX_SLUG = re.compile(r"[A-Za-z0-9_.~-]{1,200}")  # a product's own part of its address
+JX_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")       # an inventory item's id (/my/inventory/<id>)
+_JS_TOKEN = re.compile(r'[{}\[\]]|undefined\b|[^"{}\[\]u]+|u')   # (and strings: json's own scanner reads them)
+
+
+def js_data(text: str, start: int) -> tuple[object, int]:
+    """The object or array written at text[start:] as a page writes its data for itself (JSON, but for JavaScript's
+    undefined), and where it ends. Read as JSON: nothing in it is run. ValueError when it isn't one."""
+    i = start
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    if i >= len(text) or text[i] not in "{[":
+        raise ValueError("not an object")
+    parts, depth = [], 0
+    while i < len(text):
+        if text[i] == '"':   # a string, to its closing quote (JSON's escapes: anything else isn't JSON anyway)
+            end = json.decoder.scanstring(text, i + 1, True)[1]   # (ValueError when it doesn't end, or isn't JSON)
+            tok, i = text[i:end], end
+            parts.append(tok)
+            continue
+        m = _JS_TOKEN.match(text, i)
+        if not m:
+            raise ValueError("unreadable")
+        tok, i = m.group(), m.end()
+        if tok in ("{", "["):
+            depth += 1
+        elif tok in ("}", "]"):
+            depth -= 1
+        parts.append("null" if tok == "undefined" else tok)
+        if depth == 0:
+            return json.loads("".join(parts)), i
+    raise ValueError("unfinished")
+
+
+def jinxxy_ssr(texts) -> list:
+    """The data Jinxxy's pages came with: each value its scripts hand to Apollo's SSR data transport (the
+    `...ApolloSSRDataTransport")] ??= []).push({...})` it writes), from a page's scripts or a page saved whole."""
+    out, room = [], JX_DATA_MAX
+    for text in texts if isinstance(texts, list) else []:
+        if not isinstance(text, str) or len(text) > room:
+            continue
+        room -= len(text)
+        at = 0
+        while (at := text.find("ApolloSSRDataTransport", at)) >= 0:
+            push = text.find(".push(", at)
+            at += 22
+            if push < 0 or push - at > 40:
+                continue
+            try:
+                value, end = js_data(text, push + 6)
+            except ValueError:
+                continue
+            out.append(value)
+            at = max(at, end)
+    return out
+
+
+def jinxxy_listener(into: list):
+    """A page's response listener that keeps what Jinxxy's API sent the page (JSON only, JX_DATA_MAX at most each,
+    and eight times that in all) in into, for jinxxy_data. A response it can't read is passed by."""
+    room = [8 * JX_DATA_MAX]
+
+    def heard(r):
+        """Keep one response from Jinxxy's API."""
+        try:
+            if urlparse(r.url).hostname != JX_API_HOST or r.status != 200 or room[0] <= 0:
+                return
+            if "json" not in (r.headers.get("content-type") or "").lower():
+                return
+            body = r.body()
+            if len(body) <= min(JX_DATA_MAX, room[0]):
+                room[0] -= len(body)
+                into.append(json.loads(body))
+        except Exception:   # (a response gone, or not JSON: nothing to keep)
+            pass
+    return heard
+
+
+def jinxxy_page_data(page) -> list:
+    """The data the page now shown came with (jinxxy_ssr), or none."""
+    try:
+        return jinxxy_ssr(page.evaluate(JX_DATA_JS))
+    except Exception:
+        return []
+
+
+def _jx_image(files) -> str | None:
+    """The first picture (not a video) among a listing's thumbnails, or its cover's."""
+    for f in (files if isinstance(files, list) else [files])[:20]:
+        if isinstance(f, dict) and isinstance(f.get("url"), str) and str(f.get("content_type") or "image/").startswith("image/"):
+            u = safe_url(f["url"])
+            if u and not is_video_address(u):
+                return u
+    return None
+
+
+def _jx_note(out: dict, id_, listing, product, gift) -> None:
+    """Note what one inventory item's data says (jinxxy_data)."""
+    if not isinstance(id_, str) or not JX_ID.fullmatch(id_):
+        return
+    listing = listing if isinstance(listing, dict) else {}
+    product = product if isinstance(product, dict) else {}
+    seller = listing.get("user") if isinstance(listing.get("user"), dict) else {}
+    maker = product.get("user") if isinstance(product.get("user"), dict) else {}
+    user = next((u for u in (listing.get("user_username"), seller.get("username"), maker.get("username"))
+                 if isinstance(u, str) and JX_NAME.fullmatch(u)), None)
+    slug = next((u for u in (listing.get("url"), product.get("url")) if isinstance(u, str) and JX_SLUG.fullmatch(u)), None)
+    note = {"name": next((n for n in (listing.get("name"), product.get("name")) if isinstance(n, str) and n.strip()), None),
+            "creator": next((n for n in (seller.get("name"), listing.get("seller_name"), user)
+                             if isinstance(n, str) and n.strip()), None),
+            "creator_url": f"https://jinxxy.com/{user}" if user else None,
+            "page": f"https://jinxxy.com/{user}/{slug}" if user and slug and listing.get("has_public_page") is True else None,
+            "thumbnail": _jx_image(listing.get("thumbnails")) or _jx_image(product.get("cover"))}
+    if isinstance(gift, dict) and gift.get("is_revoked") is not True:
+        sender = gift.get("sender") if isinstance(gift.get("sender"), dict) else {}
+        note["gift"] = True
+        note["gift_from"] = next((n for n in (sender.get("name"), sender.get("username")) if isinstance(n, str) and n.strip()), None)
+    old = out.setdefault(id_, {})
+    for k, v in note.items():
+        if v and not old.get(k):
+            old[k] = v
+
+
+def jinxxy_data(values) -> dict:
+    """What Jinxxy's own data (jinxxy_ssr, jinxxy_listener) says about inventory items, by item id: "name",
+    "creator", "creator_url", "page" (its product's public page, when it has one), "thumbnail", and "gift" with
+    "gift_from" (who sent it). Inventory items (getInventoryItems: an item's listing, and its gift) and received gifts
+    (getGiftsReceived: the gift's product, sender and inventory item) are read; anything else is passed by."""
+    out: dict[str, dict] = {}
+    stack, looked = [values], 0
+    while stack and looked < 2_000_000:
+        o = stack.pop()
+        looked += 1
+        if isinstance(o, list):
+            stack.extend(o[:20000])
+            continue
+        if not isinstance(o, dict):
+            continue
+        kind = o.get("__typename")
+        if kind == "InventoryItem" or (kind is None and "listing" in o and "item" in o):
+            _jx_note(out, o.get("id"), o.get("listing"), o.get("item"), o.get("gift"))
+        elif (kind == "Gift" or (kind is None and "inventory_item" in o and "sender" in o)) \
+                and isinstance(o.get("inventory_item"), dict) and o.get("status") in (None, "ACCEPTED"):
+            _jx_note(out, o["inventory_item"].get("id"), o.get("product"), None, {"sender": o.get("sender")})
+        stack.extend(v for v in o.values() if isinstance(v, (dict, list)))
+    return out
+
+
+def jinxxy_gift_sender(c: dict) -> str | None:
+    """Who a card on the inventory's Gifts tab says sent it ("A gift from <name>"), or None for any other card."""
+    lines = c.get("lines") if isinstance(c.get("lines"), list) else []
+    for n, line in enumerate(lines[:40]):
+        m = re.match(r"(?i)a gift from\b:?\s*(.*)$", line) if isinstance(line, str) else None
+        if m:
+            name = m.group(1).strip() or (lines[n + 1] if n + 1 < len(lines) and isinstance(lines[n + 1], str) else "")
+            return clean_text(name, 120) or ""
+    return None
+
+
+def jinxxy_gifts(page, pattern: str, progress, most: int = 0) -> dict:
+    """The cards on your inventory's Gifts tab (Jinxxy keeps gifts you've accepted there as well as with your
+    products), by their key, each with "gift_from"; none when there's no Gifts tab. most: only the first that many
+    (a quick refresh)."""
+    tab = page.locator('[role="tab"][id$="-trigger-gifts"]')
+    if not tab.count():
+        tab = page.get_by_role("tab", name=re.compile(r"^\s*gifts?\b", re.I))
+    if not tab.count():
+        return {}
+    from . import pace
+    pace.before(JX_INVENTORY, 6)   # (the tab asks Jinxxy's API for its gifts: a few requests)
+    try:
+        tab.first.click()
+        settle(page, 1500)
+    except Exception as e:   # (no Gifts tab to show: the products are read all the same)
+        print(f"Jinxxy: couldn't open the Gifts tab: {str(e)[:200]}", flush=True)
+        return {}
+    gifts: dict[str, dict] = {}
+
+    def read() -> int:
+        """Note the gifts now shown; returns how many are known."""
+        for c in page.evaluate(JX_CARDS_JS, pattern):
+            sender = jinxxy_gift_sender(c)
+            if sender is not None:
+                gifts.setdefault(c["key"], {**c, "gift_from": sender})
+        progress(f"Gifts, {len(gifts)}")
+        return len(gifts)
+    scroll_inventory(page, read, most=most)
+    return dict(list(gifts.items())[:most]) if most else gifts
+
+
+def jinxxy_merge(found: dict, gifts: dict, known: dict) -> None:
+    """Put what Jinxxy's data says (jinxxy_data) into the items read from the inventory's cards: each product's
+    public page, a creator or picture a card didn't show, and which are gifts and who from. A gift found only on the
+    Gifts tab is added. A gift card's profile link is who sent it, never taken for its creator."""
+    for key, c in gifts.items():
+        mine = found.get(key)
+        if mine is None:
+            mine = found[key] = {k: c.get(k) for k in ("key", "url", "name", "thumbnail", "page", "video")}
+            mine["creator"], mine["creator_url"] = "", None
+        mine["gift"], mine["gift_from"] = True, mine.get("gift_from") or c.get("gift_from") or None
+    for key, c in found.items():
+        k = known.get(key.rsplit("/", 1)[-1]) or {}
+        if k.get("gift"):
+            c["gift"], c["gift_from"] = True, c.get("gift_from") or k.get("gift_from")
+        if c.get("gift") and (k.get("creator") or (c.get("gift_from") and c.get("creator") == c["gift_from"])):
+            c["creator"], c["creator_url"] = k.get("creator") or "", k.get("creator_url")
+        for f in ("page", "creator", "creator_url", "name"):
+            c[f] = c.get(f) or k.get(f)
+        if not c.get("thumbnail") or (c.get("video") and is_video_address(c["thumbnail"])):
+            c["thumbnail"] = k.get("thumbnail") or c.get("thumbnail")
+        c["creator"] = c.get("creator") or ""
+
+
 def jinxxy_key(c: dict) -> str:
     """A Jinxxy product's key in your library (jinxxy:<its id>)."""
     return "jinxxy:" + c["key"].rsplit("/", 1)[-1]
@@ -540,7 +800,8 @@ def jinxxy_item(c: dict) -> dict:
     page = c.get("page")
     return item("jinxxy", c["key"].rsplit("/", 1)[-1], name=c["name"], creator=c["creator"],
                 creator_url=c.get("creator_url"), thumbnail=c["thumbnail"], url=c["url"], download_url=c["url"],
-                page=page if isinstance(page, str) and jinxxy_product_page([page], c.get("creator_url")) else None)
+                page=page if isinstance(page, str) and jinxxy_product_page([page], c.get("creator_url")) else None,
+                gift=c.get("gift") is True, gift_from=c.get("gift_from"))
 
 
 # ----------------------------------------------------------------------------- Payhip
@@ -684,10 +945,12 @@ def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
             raise NotLoggedIn(f"not signed in to {urlparse(shop).hostname}{urlparse(shop).path}")
         result = page.evaluate(PAYHIP_SHOP_JS)
         for c in result["cards"]:
+            if cfg.get("_quick") and len(cards) >= QUICK_ITEMS:   # (a quick refresh, issue #300: the start of it)
+                break
             cards.setdefault(c["id"], c)
         progress(f"{result['shop']}: {len(cards)} products" + (" (your own shop: it lists what you bought everywhere "
                  "on Payhip without saying who made it, so those show as Unknown creator)" if result.get("own") else ""))
-        if not result["next"] or result["next"] == url:
+        if not result["next"] or result["next"] == url or quick_done(cfg, page_no, len(cards)):
             break
         url = result["next"]
         pause(float(cfg.get("request_delay", 0.8)))
@@ -899,7 +1162,7 @@ def fetch_itch(ctx, cfg, progress) -> list[dict]:
         raise NotLoggedIn("No itch.io API key yet")
     sess = itch.session(key)
     try:
-        keys = itch.owned_keys(sess, float(cfg.get("request_delay", 1.0)), progress)
+        keys = itch.owned_keys(sess, float(cfg.get("request_delay", 1.0)), progress, cfg)
     finally:
         sess.close()
     items = []
@@ -1001,7 +1264,10 @@ def _prepare_import(cfg: dict, store: str | None, filename: str, text: str, trus
     # inert_html removes every script (and every <base>) from the saved page. The readers get the page's address
     # as prep["base"]; a <base> tag here would be removed by inert_html along with any the page brought, so none
     # is added (earlier versions added one that was then always removed).
-    return {"store": store, "html": inert_html(page_html), "base": base, "shop_page": shop_page, "images": images}
+    # (Jinxxy's page came with its items' data in its scripts, read as data before they're taken out: issue #276)
+    data = jinxxy_data(jinxxy_ssr([t for _, t in script_tags(page_html) if "ApolloSSRDataTransport" in t])) if store == "jinxxy" else {}
+    return {"store": store, "html": inert_html(page_html), "base": base, "shop_page": shop_page, "images": images,
+            "jinxxy_data": data}
 
 
 def _read_import(browser, cfg: dict, prep: dict) -> list[dict]:
@@ -1009,14 +1275,26 @@ def _read_import(browser, cfg: dict, prep: dict) -> list[dict]:
     store = prep["store"]
     page = offline_page(browser)   # scripts off, no network: read the file, run nothing, contact nobody
     try:
-        page.set_content(prep["html"], wait_until="domcontentloaded")
+        # at its own address, so that links the page left relative (/my/inventory/...) are its store's: the page is
+        # handed over from here, never fetched (offline_page refuses everything else)
+        at = (store_link(store, prep["base"]) or "").split("#")[0]
+        if at:
+            page.route(lambda u: u == at, lambda r: r.fulfill(status=200, content_type="text/html; charset=utf-8", body=prep["html"]))
+            page.goto(at, wait_until="domcontentloaded")
+        else:
+            page.set_content(prep["html"], wait_until="domcontentloaded")
         if store == "booth":
             gift = "/gifts" in urlparse(prep["base"]).path
             items = [booth_item(b, gift, prep["base"].split("?")[0]) for b in page.evaluate(BOOTH_JS)]
         elif store == "jinxxy":
-            seen = {}
+            seen, gifts = {}, {}
             for c in page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"]):
-                seen.setdefault(c["key"], c)
+                sender = jinxxy_gift_sender(c)   # (a page saved from the Gifts tab: its cards are gifts)
+                if sender is not None:
+                    gifts.setdefault(c["key"], {**c, "gift_from": sender})
+                else:
+                    seen.setdefault(c["key"], c)
+            jinxxy_merge(seen, gifts, prep.get("jinxxy_data") or {})
             items = [jinxxy_item(c) for c in seen.values()]
         elif store == "itch":
             items = [itch_item(c) for c in page.evaluate(ITCH_JS)["cards"]]
@@ -1161,7 +1439,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift", "added", "page", "store_tags")}
+                                             "variants", "archived", "gift", "gift_from", "added", "page", "store_tags")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:

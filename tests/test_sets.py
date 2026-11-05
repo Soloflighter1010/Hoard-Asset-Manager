@@ -857,11 +857,20 @@ class Tab(unittest.TestCase):
             self.assertIn("Not yours yet", page.locator("#setMore").inner_text())
             self.assertEqual(ears.locator("a").get_attribute("href"), "https://jinxxy.com/tails/foxears")
             self.assertIn("Buy on Jinxxy", ears.inner_text())
-            # a note and a photo, kept with the set and shared with it
-            self.assertIsNotNone(page.locator("#setView details.setextra").get_attribute("open"), "open to begin with")
+            # issue #272: one main button (Share), the rest quieter, together
+            head = page.locator("#setView .sethead")
+            self.assertEqual(head.locator(".set-main button").all_inner_texts(), ["Share..."])
+            self.assertEqual(head.locator(".set-quiet button").all_inner_texts()[-2:], ["Rename", "Delete"])
+            # a note and a photo, kept with the set and shared with it: a card of their own, folded away while
+            # there's nothing in them (issue #272)
+            extra = page.locator("#setView details.setextra")
+            self.assertIsNone(extra.get_attribute("open"), "nothing in it yet: folded away")
+            self.assertIn("none yet", extra.locator("summary").inner_text())
+            extra.locator("summary").click()
             page.fill("#setView [data-setnote]", "Cozy fox look")
             page.click('#setView [data-setx="save"]')
             page.get_by_text("Saved the note and photos.").wait_for()
+            self.assertNotIn("none yet", extra.locator("summary").inner_text())
             # saved: shown as it's shared, and changed only after Edit (issue #256)
             self.assertEqual(page.locator("#setView [data-setnote]").count(), 0)
             self.assertEqual(page.locator("#setView .setnote-full").inner_text(), "Cozy fox look")

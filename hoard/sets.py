@@ -520,10 +520,12 @@ class SetStore:
     def put_wishlists(self, lists: list[dict], when: str | None = None) -> dict:
         """Wishlists read from the stores (wishlists.py's shape): each store list becomes, or updates, the wishlist
         read from it, holding what the list does now, in its order. A product whose price changed since the last
-        read keeps the old one as "was". A name, note, photos or picture you gave a wishlist stay. Returns
-        {"lists", "added", "cheaper": [(wishlist name, product name, was, now)]} and the sets after it."""
+        read keeps the old one as "was". A name, note, photos or picture you gave a wishlist stay. A list read only
+        partly ("partial": a quick refresh, issue #300) keeps the products it didn't reach, after the ones it did. Returns
+        {"lists", "added", "cheaper": [(wishlist name, product name, was, now)], "cheaper_items": each of those as
+        {"key", "store", "name", "url", "thumbnail", "was", "now"} (for the news: issue #285)} and the sets after it."""
         when = when or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        added, cheaper = 0, []
+        added, cheaper, cheaper_items = 0, [], []
         with _lock:
             data = self.load()
             sets = data["sets"]
@@ -557,15 +559,23 @@ class SetStore:
                         clean["was"] = old["price"]
                         if clean["price"]["currency"] == old["price"]["currency"] and clean["price"]["amount"] < old["price"]["amount"]:
                             cheaper.append((s["name"], clean["name"], old["price"]["text"], clean["price"]["text"]))
+                            cheaper_items.append({"key": k, "store": clean["store"], "name": clean["name"], "url": clean.get("url"),
+                                                  "thumbnail": clean.get("thumbnail"), "was": old["price"]["text"],
+                                                  "now": clean["price"]["text"]})
                     elif old.get("was") and clean.get("price"):
                         clean["was"] = old["was"]
                     added += k not in s["items"]
                     keys.append(k)
                     products[k] = clean
+                if got.get("partial") is True:   # (only its start was read: the rest is as it was)
+                    for k in s["items"]:
+                        if k not in products and k in before:
+                            keys.append(k)
+                            products[k] = before[k]
                 s["items"], s["products"], s["read"] = keys[:MAX_WISH_ITEMS], products, when
             data = self.sanitize(data)
             self._save(data)
-        return {**data, "lists": len(lists), "added": added, "cheaper": cheaper}
+        return {**data, "lists": len(lists), "added": added, "cheaper": cheaper, "cheaper_items": cheaper_items}
 
 
     def split(self, sid: str, parts) -> dict:

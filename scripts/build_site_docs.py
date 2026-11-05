@@ -26,7 +26,7 @@ from urllib.parse import quote
 REPO = Path(__file__).resolve().parent.parent
 WIKI = REPO / "wiki"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from site_chrome import GITHUB, footer, header, preloads  # noqa: E402
+from site_chrome import COMPARE, GITHUB, footer, header, preloads  # noqa: E402
 from wiki_translations import FIRST, ISSUE, LANGS  # noqa: E402
 
 SITE = "https://hoard.furryup.link/docs/"
@@ -410,7 +410,8 @@ def _build(lang: str, pages: Pages, out: Path, have: dict[str, set[str]]) -> lis
         langs, alternates = languages(lang, page, have)
         edit = ui["edit"].format(wiki=f"{GITHUB}/wiki/{quote(name)}", source=f"{GITHUB}/blob/main/wiki/{where}{quote(name)}.md",
                                  english=f"../{page_file(page)}", issue=html.escape(ISSUE, quote=True))
-        text = (PAGE.replace("{header}", header("docs/", up=up)).replace("{footer}", footer(up=up))
+        tab = COMPARE if page == "Hoard-and-Other-Tools" else "docs/"   # (the comparison has a tab of its own)
+        text = (PAGE.replace("{header}", header(tab, up=up)).replace("{footer}", footer(up=up))
                 .replace("{preloads}", preloads(up)).replace("{alternates}", alternates).replace("{up}", up)
                 .replace("{langs}", langs).replace("{sidebar}", side).replace("{tocs}", toc).replace("{edit}", edit)
                 .replace("{lang}", lang).replace("{skip}", ui["skip"]).replace("{docs}", ui["docs"])

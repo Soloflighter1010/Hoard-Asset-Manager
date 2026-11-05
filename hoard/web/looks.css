@@ -91,6 +91,13 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 .pj-d-list li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .pj-d-list .v { flex: none; color: var(--dust); }
 .pj-d-list .pj-up { margin-left: 4px; }
+/* the project opened last (issue #294): marked, and its row or tile a little warmer */
+.pj-last { display: inline-block; width: fit-content; padding: 0 8px; border-radius: 999px; font: 700 11.5px/1.6 var(--body);
+  color: var(--gold-ink); background: var(--gold); white-space: nowrap; }
+.pj-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.pj-row.last { background-color: color-mix(in srgb, var(--gold) 9%, var(--ledge)); }
+.pj-tile.last .pj-tile-art { box-shadow: inset 0 -5px 0 var(--c, var(--seam)), 0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent); }
+.pj-detail .pj-last { margin: 0 0 6px; }
 /* issue #250's tiles, twice as wide as they're tall: a project's tile, and a folder's */
 .pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 16px; }
 .pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
@@ -116,12 +123,19 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 body.less-motion .pj-tile-art { transition: none; }
 /* building an Apprise address (issue #239): a service, and its fields one under another */
 .apprise-build { margin: 8px 0; }
+.apprise-list { list-style: none; margin: 8px 0; padding: 0; }   /* (issue #287: each address on its own, by its service) */
+.apprise-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 7px 2px; border-top: 1px solid var(--seam); }
+.apprise-list li:last-child { border-bottom: 1px solid var(--seam); }
+.apprise-list .row { margin: 0 0 0 auto; }
+.apprise-paste { margin: 10px 0 0; }
+.apprise-paste summary { cursor: pointer; color: var(--dust); font-size: 13px; }
 .apprise-build summary { cursor: pointer; font-weight: 700; color: var(--dust); }
 .apprise-fields { display: grid; gap: 6px; margin: 8px 0; }
 .apprise-fields .field-row { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
 .apprise-fields input { min-width: 0; height: var(--btn-h-sm); padding: 0 10px; border-radius: 8px; border: 0; background: var(--stone);
   color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
 .apprise-fields input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+.apprise-fields select { min-width: 0; width: 100%; }
 @media (max-width: 560px) { .apprise-fields .field-row { grid-template-columns: minmax(0, 1fr); } }
 /* a set's note, as it's shared (issue #256: changed after Edit) */
 .setnote-full { margin: 10px 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
@@ -167,13 +181,11 @@ body.less-motion .pj-tile-art { transition: none; }
    it shows (the sidebar, the footer, a tile's name and creator, a Workbench row) sits on the page's own colour with the
    glow faint through it, never on the glow itself: tests/test_themes.py checks it reads at 4.5:1 over the brightest
    glow, in every theme. (Where there's no glow, it's the page's colour on itself: nothing shows.) A tile's name and
-   creator share one box, the tile's width, under its picture. */
+   creator have no box (issue #284): a drop shadow in the page's colour, close around each letter, does it. */
 .side, .foot, [data-style="workbench"] .grid .slot:not(:hover):not([aria-current="true"]) {
   background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
 html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm, .cr) {
-  padding-inline: 8px; background-color: color-mix(in srgb, var(--cave) 85%, transparent); }
-html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t, .nm) { padding-top: 3px; border-radius: 8px 8px 0 0; }
-html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot .cr { margin-top: -7px; padding-block: 1px 4px; border-radius: 0 0 8px 8px; }
+  text-shadow: 0 1px 2px var(--cave), 0 0 3px var(--cave), 0 1px 7px color-mix(in srgb, var(--cave) 85%, transparent); }
 .foot { padding: 18px 18px 20px; border-top: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--seam); }
 
 /* ---------- choosing a style (Settings, and the setup assistant): each with a small picture of how it looks */
@@ -430,3 +442,110 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot .cr { marg
 [data-cards="outlined"][data-style="workbench"] .grid .slot { border: 1px solid var(--dust); border-radius: 8px; }
 [data-cards="outlined"][data-style="workbench"] .grid .slot:first-child { border-top: 1px solid var(--dust); }
 [data-cards="outlined"][data-style="workbench"] .grid .slot:hover { background: var(--seam); }
+
+/* Drag and drop (issue #281): what a drop will do, said on what's under the pointer as you drag (a set of these, a
+   set to add to, a folder) */
+.drop-on { outline: 3px dashed var(--gold); outline-offset: 3px; position: relative; }
+.drop-on::after { content: attr(data-drop-hint); position: absolute; left: 50%; top: -10px; transform: translate(-50%, -100%);
+  z-index: 40; padding: 5px 10px; border-radius: 8px; background: var(--gold); color: var(--gold-ink); box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+  font: 700 12px/1.3 var(--body); white-space: nowrap; pointer-events: none; }
+[draggable="true"]:active { cursor: grabbing; }
+
+/* A set's or wishlist's page (issue #272), laid out as a product's details are: its picture large beside its name,
+   what's in it and where it's from, one main button (Share) and the rest of what's done with it gathered together,
+   quieter; then its note and photos as a card of their own (folded away while there's nothing in them), and a
+   wishlist's tools (Find more to add, its price range) together above its products */
+.setview .sethead { grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 26px; align-items: center; }
+.setview .sethead > .art { border-radius: 18px; overflow: hidden; box-shadow: 0 10px 28px color-mix(in srgb, var(--cave) 40%, #000 30%); }
+.setview .sethead h2 { font-size: 32px; margin-bottom: 6px; }
+.setview .sethead .muted { margin-bottom: 4px; }
+.set-main { margin: 16px 0 12px; }
+.set-main .primary { min-width: 128px; }
+.set-quiet { display: flex; flex-wrap: wrap; align-items: center; row-gap: 6px; font-size: 13px; }
+.set-quiet > * + * { margin-left: 12px; padding-left: 12px; box-shadow: -1px 0 0 var(--seam); }
+.set-quiet .linkish { color: var(--dust); text-decoration: none; font-weight: 600; }
+.set-quiet .linkish:hover, .set-quiet .linkish:focus-visible { color: var(--gold-text); text-decoration: underline; }
+.set-quiet .linkish.danger:hover, .set-quiet .linkish.danger:focus-visible { color: var(--warn); }
+.setview .card { margin: 20px 0 0; padding: 12px 16px; border-radius: 14px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.setview .setextra.card summary { color: var(--bone); }
+.setextra-none { margin-left: 8px; font-weight: 500; font-size: 12.5px; color: var(--dust); }
+.set-tools .wish-find { margin-top: 0; }
+.set-tools .wishbar { margin: 12px 0 0; padding-top: 12px; box-shadow: 0 -1px 0 var(--seam); }
+@media (max-width: 640px) { .setview .sethead { grid-template-columns: minmax(0, 1fr); } .setview .sethead > .art { max-width: 240px; } }
+[data-style="workbench"] .setview .sethead { grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: 20px; }
+[data-style="workbench"] .setview .sethead h2 { font-size: 22px; }
+[data-style="workbench"] .setview .card { border-radius: 8px; }
+
+/* Source control (issues #296 to #299): a project's Git, in its Source control tab */
+.pj-git h4 { margin: 22px 0 8px; font: 700 15px var(--body); color: var(--bone); }
+.pj-git h4 .n { font-weight: 400; color: var(--dust); margin-left: 4px; }
+.pj-git-none { max-width: 70ch; }
+.pj-git-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 14px; border-radius: 12px;
+  background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-git-head .row { margin: 0; margin-left: auto; }
+.pj-git-branch { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.pj-git-sync, .pj-git-last { color: var(--dust); font-size: 13px; }
+.pj-git-conflict { margin: 14px 0 0; padding: 10px 14px; border-radius: 12px; box-shadow: inset 0 0 0 2px var(--warn); }
+.pj-git-conflict h4 { margin-top: 2px; color: var(--warn); }
+.pj-note { margin: 12px 0 0; color: var(--dust); }
+.pj-git-files, .pj-git-log, .pj-git-remotes, .pj-git-cfiles, .pj-plan-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.pj-git-files li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 2px; border-top: 1px solid var(--seam); }
+.pj-git-files li.conflict .pj-git-state { color: var(--warn); font-weight: 700; }
+.pj-git-path { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.pj-git-state { color: var(--dust); font-size: 12.5px; }
+.pj-git-files .linkish, .pj-git-log .linkish, .pj-git-cfiles .linkish { font-size: 13px; }
+.pj-git textarea#pjGitMsg { display: block; width: 100%; box-sizing: border-box; min-height: 56px; margin: 0 0 8px; padding: 8px 10px; border: 0;
+  border-radius: 8px; resize: vertical; background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 13.5px/1.45 var(--body); }
+.pj-git input#pjGitName, .pj-git input#pjGitEmail { height: var(--btn-h-sm); padding: 0 10px; border: 0; border-radius: 8px; background: var(--cave);
+  color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-git-log > li { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 2px; border-top: 1px solid var(--seam); }
+.pj-git-log .linkish { text-align: left; }
+.pj-git-log > li.on { background: color-mix(in srgb, var(--gold) 8%, transparent); }
+.pj-git-log .muted { font-size: 12.5px; color: var(--dust); }
+.pj-git-cfiles { margin: 6px 0 2px 14px; }
+.pj-git-cfiles li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+.pj-git-st { display: inline-block; min-width: 1.4em; font: 700 12px ui-monospace, Menlo, Consolas, monospace; color: var(--dust); }
+.pj-git-remotes li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 2px; border-top: 1px solid var(--seam); overflow-wrap: anywhere; }
+.pj-diff { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
+.pj-diff-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow-wrap: anywhere; }
+.pj-diff-text { margin: 8px 0 0; max-height: 420px; overflow: auto; padding: 8px 0; border-radius: 8px; background: var(--cave);
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; color: var(--bone); }
+.pj-diff-text > span { display: block; padding: 0 10px; min-height: 1.5em; }
+.pj-diff-text .add { background: color-mix(in srgb, var(--gold) 16%, transparent); }
+.pj-diff-text .del { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.pj-diff-text .hunk { color: var(--dust); }
+.pj-plan { max-height: 180px; padding: 8px 10px; }
+.pj-plan-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pj-plan-cols h4 { margin: 6px 0 4px; font: 700 13px var(--body); }
+.pj-plan-list li { font: 12.5px/1.5 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .pj-plan-cols { grid-template-columns: 1fr; } .pj-git-head .row { margin-left: 0; } }
+/* The Heap, Hoard's logo (issues #277, #279): its boxes stack up, fall over and build themselves up again, in a loop,
+   on the splash and while you point at the logo. Poked five times (shared.js), they topple one by one and build back
+   up, the gold one landing last with its sparkle. Each box falls the way it leans (--fx, --fr) in its turn (--i),
+   from where it sits (heap.py places it): with Reduce motion, none of it (body.less-motion stops every animation). */
+.heap .hb { transform-box: fill-box; transform-origin: 50% 100%; }
+.splash .heap .hb, .brand:hover .heap .hb { animation: heap-loop 3.6s cubic-bezier(.3, .7, .4, 1) infinite both;
+  animation-delay: calc(var(--i) * 90ms); }
+@keyframes heap-loop {
+  0%, 22% { transform: none; opacity: 1; }
+  38% { transform: translate(var(--fx), 14px) rotate(var(--fr)); opacity: 0; }
+  46% { transform: translateY(-26px); opacity: 0; }
+  60% { transform: none; opacity: 1; }
+  65% { transform: translateY(-2.5px); }
+  70%, 100% { transform: none; opacity: 1; }
+}
+.brand.tumble .heap .hb { animation: heap-tumble 2.6s ease both; animation-delay: calc(var(--i) * 160ms); }
+@keyframes heap-tumble {
+  0% { transform: none; opacity: 1; }
+  16% { transform: translate(var(--fx), 12px) rotate(var(--fr)); opacity: 0; }
+  52% { transform: translateY(-24px); opacity: 0; }
+  72% { transform: none; opacity: 1; }
+  80% { transform: translateY(-3px); }
+  88%, 100% { transform: none; opacity: 1; }
+}
+.heap .spark { transform-box: fill-box; transform-origin: center; }
+.brand.tumble .heap .spark { animation: heap-spark .8s ease both; animation-delay: calc(var(--i) * 160ms + 2s); }
+@keyframes heap-spark { 0%, 100% { transform: none; } 45% { transform: scale(1.9) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) { .heap .hb, .heap .spark { animation: none !important; } }
+/* the Konami code's confetti: the heap's boxes, outlined as the logo's are */
+.heap-confetti i { width: 13px; height: 13px; border-radius: 4px; box-shadow: 0 0 0 2px #211C18; }
